@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Plus, FileText, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { Plus, FileText, Clock, CheckCircle2, Loader2, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -52,6 +52,14 @@ export default function Dashboard() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/")}
+                className="rounded-full"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
               <img src={APP_LOGO} alt={APP_TITLE} className="h-12 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground">{APP_TITLE}</h1>

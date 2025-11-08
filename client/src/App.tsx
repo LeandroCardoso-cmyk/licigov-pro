@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Modules from "./pages/Modules";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -31,7 +32,8 @@ function AuthenticatedRoute({ component: Component }: { component: React.Compone
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={() => <AuthenticatedRoute component={Dashboard} />} />
+      <Route path={"/"} component={() => <AuthenticatedRoute component={Modules} />} />
+      <Route path={"/processos"} component={() => <AuthenticatedRoute component={Dashboard} />} />
       <Route path={"/login"} component={Login} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />

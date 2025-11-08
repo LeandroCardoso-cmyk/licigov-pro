@@ -85,3 +85,8 @@
 - [ ] Testes automatizados
 - [ ] Documentação de API
 - [ ] Otimização de performance
+
+### Melhorias de Interface Solicitadas
+- [x] Remover fundo branco e sombra 3D do logo
+- [ ] Substituir ícone padrão pelo logo do LiciGov Pro na tela de seleção de conta OAuth (depende de configuração do Manus OAuth)
+- [x] Criar tela inicial com cards de módulos (Geração de Documentos, Contratos, Parecer Jurídico, Contratação Direta, Gestão do Departamento)
