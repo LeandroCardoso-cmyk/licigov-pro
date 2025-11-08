@@ -28,7 +28,7 @@ export default function Login() {
             <img 
               src={APP_LOGO} 
               alt={APP_TITLE}
-              className="h-24 w-auto drop-shadow-lg"
+              className="h-32 sm:h-40 w-auto drop-shadow-2xl"
             />
           </div>
           <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">

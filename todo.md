@@ -90,3 +90,12 @@
 - [x] Remover fundo branco e sombra 3D do logo
 - [ ] Substituir ícone padrão pelo logo do LiciGov Pro na tela de seleção de conta OAuth (depende de configuração do Manus OAuth)
 - [x] Criar tela inicial com cards de módulos (Geração de Documentos, Contratos, Parecer Jurídico, Contratação Direta, Gestão do Departamento)
+
+### Melhorias de UI/UX - Interface Mais Atrativa
+- [x] Processar logo original para remover apenas o fundo branco (manter 3D)
+- [x] Aumentar tamanho da logo no header (64-80px)
+- [x] Adicionar background com gradiente ou imagem na tela de módulos
+- [x] Redesenhar cards dos módulos (maiores, sombras pronunciadas, ícones coloridos)
+- [x] Adicionar animações de hover nos cards
+- [x] Melhorar header com gradiente sutil e mais espaçamento)
+- [x] Revisar e garantir responsividade mobile/desktop

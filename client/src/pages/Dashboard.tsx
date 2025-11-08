@@ -48,8 +48,8 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-4">
+      <header className="border-b border-border bg-gradient-to-r from-card via-card to-primary/5">
+        <div className="container mx-auto px-4 sm:px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
@@ -60,7 +60,7 @@ export default function Dashboard() {
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <img src={APP_LOGO} alt={APP_TITLE} className="h-12 w-auto" />
+              <img src={APP_LOGO} alt={APP_TITLE} className="h-16 sm:h-20 w-auto drop-shadow-lg" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground">{APP_TITLE}</h1>
                 <p className="text-sm text-muted-foreground">Automação de Processos Licitatórios</p>
