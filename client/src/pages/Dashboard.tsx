@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Plus, FileText, Clock, CheckCircle2, Loader2, ArrowLeft } from "lucide-react";
+import { useState } from "react";
+import NewProcessDialog from "@/components/NewProcessDialog";
 import { useLocation } from "wouter";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -30,9 +32,11 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { data: processes, isLoading } = trpc.processes.list.useQuery();
   const { theme, toggleTheme } = useTheme();
+  const [newProcessDialogOpen, setNewProcessDialogOpen] = useState(false);
+  const utils = trpc.useUtils();
 
   const handleNewProcess = () => {
-    navigate("/novo-processo");
+    setNewProcessDialogOpen(true);
   };
 
   const formatDate = (date: Date) => {
@@ -165,6 +169,15 @@ export default function Dashboard() {
           </Card>
         )}
       </main>
+
+      {/* Dialog de Novo Processo */}
+      <NewProcessDialog
+        open={newProcessDialogOpen}
+        onOpenChange={setNewProcessDialogOpen}
+        onSuccess={() => {
+          utils.processes.list.invalidate();
+        }}
+      />
     </div>
   );
 }

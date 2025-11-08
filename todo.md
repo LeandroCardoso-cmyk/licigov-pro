@@ -103,3 +103,33 @@
 ### Ajustes Finais da Logo
 - [x] Aumentar ainda mais o tamanho da logo no header após login (96-112px)
 - [x] Remover drop-shadow da logo no header
+
+## Fase 2 - Funcionalidades Core do MVP
+
+### Formulário "Novo Processo"
+- [x] Criar modal ou página para novo processo
+- [x] Campo: Nome do processo
+- [x] Campo: Objeto da contratação (textarea)
+- [x] Campo: Valor estimado (currency input)
+- [x] Campo: Modalidade (select: Pregão, Concorrência, Tomada de Preços, etc.)
+- [x] Campo: Categoria (select: Obras, Serviços, Compras)
+- [x] Validação de formulário
+- [x] Integração com backend para criar processo
+
+### Integração com IA (Google Gemini)
+- [x] Configurar cliente Gemini no backend
+- [x] Criar prompt estruturado para geração de ETP baseado na Lei 14.133/21
+- [ ] Implementar streaming de resposta da IA (geração em background implementada)
+- [x] Salvar documento ETP gerado no banco de dados
+- [ ] Permitir edição do documento gerado (interface criada, funcionalidade pendente)
+- [x] Adicionar feedback visual durante geração
+
+### Tela de Detalhes do Processo
+- [x] Criar página de detalhes do processo
+- [x] Timeline visual interativa (ETP → TR → DFD → Edital)
+- [x] Preview do documento gerado
+- [ ] Botão para download em PDF (interface criada, funcionalidade pendente)
+- [ ] Botão para download em DOCX (interface criada, funcionalidade pendente)
+- [x] Sistema de versionamento de documentos
+- [ ] Botão para editar documento (interface criada, funcionalidade pendente)
+- [ ] Botão para avançar para próximo documento (TR) (pendente)

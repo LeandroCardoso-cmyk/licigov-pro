@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { generateETP } from "./services/gemini";
 
 export const appRouter = router({
   system: systemRouter,
@@ -30,12 +31,21 @@ export const appRouter = router({
         name: z.string().min(1),
         description: z.string().optional(),
         object: z.string().min(1),
+        estimatedValue: z.number().positive(),
+        modality: z.string().min(1),
+        category: z.string().min(1),
       }))
       .mutation(async ({ ctx, input }) => {
+        // Converter valor para centavos
+        const valueInCents = Math.round(input.estimatedValue * 100);
+        
         const result = await db.createProcess({
           name: input.name,
           description: input.description,
           object: input.object,
+          estimatedValue: valueInCents,
+          modality: input.modality,
+          category: input.category,
           ownerId: ctx.user.id,
           status: "em_etp",
         });
@@ -48,6 +58,36 @@ export const appRouter = router({
           action: "criou o processo",
           details: JSON.stringify({ name: input.name }),
         });
+
+        // Gerar ETP automaticamente em background
+        generateETP({
+          processName: input.name,
+          object: input.object,
+          estimatedValue: valueInCents,
+          modality: input.modality,
+          category: input.category,
+        })
+          .then(async (etpContent) => {
+            // Salvar ETP no banco de dados
+            await db.createDocument({
+              processId,
+              type: "etp",
+              content: etpContent,
+              version: 1,
+            });
+
+            // Registrar atividade
+            await db.createActivityLog({
+              processId,
+              userId: ctx.user.id,
+              action: "gerou o ETP automaticamente",
+              details: JSON.stringify({ generatedBy: "AI" }),
+            });
+          })
+          .catch((error) => {
+            console.error("Erro ao gerar ETP:", error);
+            // Não falhar a criação do processo se a geração do ETP falhar
+          });
 
         return { success: true, processId };
       }),
@@ -79,6 +119,14 @@ export const appRouter = router({
   }),
 
   documents: router({
+    // Listar documentos de um processo
+    listByProcess: protectedProcedure
+      .input(z.object({ processId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getDocumentsByProcess(input.processId);
+      }),
+
+    // Listar documentos de um processo (alias para compatibilidade)
     // Listar documentos de um processo
     list: protectedProcedure
       .input(z.object({ processId: z.number() }))
@@ -166,6 +214,15 @@ export const appRouter = router({
   activityLogs: router({
     // Listar atividades de um processo
     list: protectedProcedure
+      .input(z.object({ processId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getActivityLogsByProcess(input.processId);
+      }),
+  }),
+
+  activities: router({
+    // Listar atividades de um processo
+    listByProcess: protectedProcedure
       .input(z.object({ processId: z.number() }))
       .query(async ({ input }) => {
         return await db.getActivityLogsByProcess(input.processId);

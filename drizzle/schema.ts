@@ -26,6 +26,9 @@ export const processes = mysqlTable("processes", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   object: text("object"), // Objeto da contratação
+  estimatedValue: int("estimatedValue"), // Valor estimado em centavos
+  modality: varchar("modality", { length: 100 }), // Modalidade: pregão, concorrência, etc
+  category: varchar("category", { length: 100 }), // Categoria: obras, serviços, compras
   status: mysqlEnum("status", ["em_etp", "em_tr", "em_dfd", "em_edital", "concluido"]).default("em_etp").notNull(),
   ownerId: int("ownerId").notNull(), // Usuário que criou o processo
   createdAt: timestamp("createdAt").defaultNow().notNull(),
