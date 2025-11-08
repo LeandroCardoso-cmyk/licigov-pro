@@ -107,7 +107,7 @@ export default function Modules() {
           <div className="container mx-auto px-4 sm:px-6 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <img src={APP_LOGO} alt={APP_TITLE} className="h-16 sm:h-20 w-auto drop-shadow-lg" />
+                <img src={APP_LOGO} alt={APP_TITLE} className="h-20 sm:h-28 w-auto" />
                 <div className="hidden sm:block">
                   <h1 className="text-2xl sm:text-3xl font-bold text-foreground bg-gradient-to-r from-primary to-cyan-600 bg-clip-text text-transparent">
                     {APP_TITLE}

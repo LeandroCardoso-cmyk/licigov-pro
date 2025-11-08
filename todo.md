@@ -99,3 +99,7 @@
 - [x] Adicionar animações de hover nos cards
 - [x] Melhorar header com gradiente sutil e mais espaçamento)
 - [x] Revisar e garantir responsividade mobile/desktop
+
+### Ajustes Finais da Logo
+- [x] Aumentar ainda mais o tamanho da logo no header após login (96-112px)
+- [x] Remover drop-shadow da logo no header

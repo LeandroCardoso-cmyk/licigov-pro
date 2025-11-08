@@ -60,7 +60,7 @@ export default function Dashboard() {
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <img src={APP_LOGO} alt={APP_TITLE} className="h-16 sm:h-20 w-auto drop-shadow-lg" />
+              <img src={APP_LOGO} alt={APP_TITLE} className="h-20 sm:h-28 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground">{APP_TITLE}</h1>
                 <p className="text-sm text-muted-foreground">Automação de Processos Licitatórios</p>
