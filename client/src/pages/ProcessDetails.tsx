@@ -27,6 +27,7 @@ import { DocumentEditor } from "@/components/DocumentEditor";
 import { MembersDialog } from "@/components/MembersDialog";
 import { NotificationBell } from "@/components/NotificationBell";
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
+import { CommentsSection } from "@/components/CommentsSection";
 
 const statusLabels: Record<string, string> = {
   em_etp: "Em ETP",
@@ -482,6 +483,9 @@ export default function ProcessDetails() {
                         <div className="prose prose-sm dark:prose-invert max-w-none">
                           <Streamdown>{etpDocument.content || ""}</Streamdown>
                         </div>
+                        <div className="mt-6">
+                          <CommentsSection documentId={etpDocument.id} processId={process.id} />
+                        </div>
                       </>
                     )}
                   </div>
@@ -522,6 +526,9 @@ export default function ProcessDetails() {
                     <div className="prose prose-sm dark:prose-invert max-w-none">
                       <Streamdown>{trDocument.content || ""}</Streamdown>
                     </div>
+                    <div className="mt-6">
+                      <CommentsSection documentId={trDocument.id} processId={process.id} />
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
@@ -560,6 +567,9 @@ export default function ProcessDetails() {
                     <div className="prose prose-sm dark:prose-invert max-w-none">
                       <Streamdown>{dfdDocument.content || ""}</Streamdown>
                     </div>
+                    <div className="mt-6">
+                      <CommentsSection documentId={dfdDocument.id} processId={process.id} />
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
@@ -597,6 +607,9 @@ export default function ProcessDetails() {
                     </div>
                     <div className="prose prose-sm dark:prose-invert max-w-none">
                       <Streamdown>{editalDocument.content || ""}</Streamdown>
+                    </div>
+                    <div className="mt-6">
+                      <CommentsSection documentId={editalDocument.id} processId={process.id} />
                     </div>
                   </div>
                 ) : (

@@ -10,8 +10,17 @@ import Dashboard from "./pages/Dashboard";
 import Modules from "./pages/Modules";
 import ProcessDetails from "./pages/ProcessDetails";
 import Settings from "./pages/Settings";
+import Analytics from "./pages/Analytics";
+import Admin from "./pages/Admin";
+import TermsOfUse from "./pages/TermsOfUse";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import AuditLogs from "./pages/AuditLogs";
+import Plans from "./pages/Plans";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
+import { ConsentModal } from "./components/ConsentModal";
+import { useState, useEffect } from "react";
+import { trpc } from "./lib/trpc";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -38,6 +47,12 @@ function Router() {
       <Route path={"/processos"} component={() => <AuthenticatedRoute component={Dashboard} />} />
       <Route path="/processo/:id" component={() => <AuthenticatedRoute component={ProcessDetails} />} />
       <Route path={"/configuracoes"} component={() => <AuthenticatedRoute component={Settings} />} />
+      <Route path={"/analytics"} component={() => <AuthenticatedRoute component={Analytics} />} />
+      <Route path={"/admin"} component={() => <AuthenticatedRoute component={Admin} />} />
+      <Route path={"/termos"} component={() => <AuthenticatedRoute component={TermsOfUse} />} />
+      <Route path={"/privacidade"} component={() => <AuthenticatedRoute component={PrivacyPolicy} />} />
+      <Route path={"/audit-logs"} component={() => <AuthenticatedRoute component={AuditLogs} />} />
+      <Route path={"/planos"} component={Plans} />
       <Route path={"/login"} component={Login} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
@@ -46,6 +61,20 @@ function Router() {
 }
 
 function App() {
+  const { isAuthenticated } = useAuth();
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  
+  const { data: hasConsent, isLoading: checkingConsent } = trpc.lgpd.checkConsent.useQuery(
+    { termsVersion: "1.0", privacyVersion: "1.0" },
+    { enabled: isAuthenticated }
+  );
+
+  useEffect(() => {
+    if (isAuthenticated && !checkingConsent && hasConsent !== undefined) {
+      setShowConsentModal(!hasConsent);
+    }
+  }, [isAuthenticated, hasConsent, checkingConsent]);
+
   return (
     <ErrorBoundary>
       <ThemeProvider
@@ -55,6 +84,12 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          {isAuthenticated && (
+            <ConsentModal
+              open={showConsentModal}
+              onConsent={() => setShowConsentModal(false)}
+            />
+          )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

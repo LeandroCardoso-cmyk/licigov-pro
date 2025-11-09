@@ -19,7 +19,15 @@ export async function generateETP(params: {
   email?: string;
   website?: string;
 }): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.0-flash-exp",
+    generationConfig: {
+      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
+      topP: 0.8,
+      topK: 40,
+      maxOutputTokens: 8192,
+    },
+  });
 
   // Converter valor de centavos para reais
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -78,14 +86,19 @@ Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissio
 - Modalidade: ${modalityName}
 - Categoria: ${categoryName}
 
-**INSTRUÇÕES:**
+**INSTRUÇÕES CRÍTICAS (SIGA RIGOROSAMENTE):**
 1. O ETP deve seguir rigorosamente as diretrizes da Lei 14.133/21, especialmente o Art. 18, §1º
 2. O documento deve ser estruturado, formal e tecnicamente preciso
 3. Use linguagem jurídica apropriada para documentos oficiais
 4. Inclua todas as seções obrigatórias de um ETP
-5. Forneça justificativas técnicas e econômicas sólidas
-6. Cite artigos relevantes da Lei 14.133/21 quando apropriado
-7. O documento deve estar pronto para ser apresentado à autoridade competente
+5. Forneça justificativas técnicas e econômicas sólidas baseadas APENAS nas informações fornecidas
+6. **NÃO INVENTE referências legais, artigos ou números que não existem**
+7. **NÃO CITE artigos específicos da Lei 14.133/21 a menos que você tenha CERTEZA ABSOLUTA de que existem**
+8. **Se precisar mencionar a lei, use referências genéricas como "conforme Lei 14.133/21" sem especificar artigos**
+9. **NÃO INVENTE dados técnicos, valores ou especificações que não foram fornecidos**
+10. **Use apenas as informações fornecidas nos DADOS DO PROCESSO acima**
+11. O documento deve estar pronto para ser apresentado à autoridade competente
+12. **AVISO: Este documento será revisado por um jurídico. Seja preciso e factual.**
 
 **ESTRUTURA OBRIGATÓRIA DO ETP:**
 
@@ -161,7 +174,15 @@ export async function generateTR(params: {
   email?: string;
   website?: string;
 }): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.0-flash-exp",
+    generationConfig: {
+      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
+      topP: 0.8,
+      topK: 40,
+      maxOutputTokens: 8192,
+    },
+  });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
     style: "currency",
@@ -238,7 +259,15 @@ export async function generateDFD(params: {
   email?: string;
   website?: string;
 }): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.0-flash-exp",
+    generationConfig: {
+      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
+      topP: 0.8,
+      topK: 40,
+      maxOutputTokens: 8192,
+    },
+  });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
     style: "currency",
@@ -321,7 +350,15 @@ export async function generateEdital(params: {
   email?: string;
   website?: string;
 }): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.0-flash-exp",
+    generationConfig: {
+      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
+      topP: 0.8,
+      topK: 40,
+      maxOutputTokens: 8192,
+    },
+  });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
     style: "currency",

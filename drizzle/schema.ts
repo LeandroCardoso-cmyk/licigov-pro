@@ -200,3 +200,224 @@ export const activityLogs = mysqlTable("activity_logs", {
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type InsertActivityLog = typeof activityLogs.$inferInsert;
+
+/**
+ * Planos de assinatura disponíveis
+ */
+export const subscriptionPlans = mysqlTable("subscription_plans", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(), // Ex: "Individual", "Municipal Básico"
+  slug: varchar("slug", { length: 100 }).notNull().unique(), // Ex: "individual", "municipal-basico"
+  description: text("description"),
+  price: int("price").notNull(), // Preço em centavos (R$ 97,00 = 9700)
+  interval: mysqlEnum("interval", ["monthly", "yearly"]).default("monthly").notNull(),
+  // Limites do plano
+  maxUsers: int("maxUsers").default(1).notNull(), // -1 = ilimitado
+  maxProcessesPerMonth: int("maxProcessesPerMonth").default(10).notNull(), // -1 = ilimitado
+  maxStorageGB: int("maxStorageGB").default(2).notNull(), // -1 = ilimitado
+  // Módulos habilitados
+  hasDocumentGeneration: boolean("hasDocumentGeneration").default(true).notNull(),
+  hasDirectContracting: boolean("hasDirectContracting").default(false).notNull(),
+  hasLegalOpinion: boolean("hasLegalOpinion").default(false).notNull(),
+  hasPCA: boolean("hasPCA").default(false).notNull(),
+  hasContracts: boolean("hasContracts").default(false).notNull(),
+  hasDepartmentManagement: boolean("hasDepartmentManagement").default(false).notNull(),
+  // Recursos
+  hasCollaboration: boolean("hasCollaboration").default(false).notNull(),
+  hasComments: boolean("hasComments").default(false).notNull(),
+  hasVersioning: boolean("hasVersioning").default(false).notNull(),
+  hasPrioritySupport: boolean("hasPrioritySupport").default(false).notNull(),
+  hasSLA: boolean("hasSLA").default(false).notNull(),
+  // Metadata
+  isActive: boolean("isActive").default(true).notNull(),
+  stripeProductId: varchar("stripeProductId", { length: 255 }), // ID do produto no Stripe
+  stripePriceId: varchar("stripePriceId", { length: 255 }), // ID do preço no Stripe
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscriptionPlan = typeof subscriptionPlans.$inferInsert;
+
+/**
+ * Assinaturas dos usuários
+ */
+export const subscriptions = mysqlTable("subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  planId: int("planId").notNull(),
+  status: mysqlEnum("status", [
+    "active",
+    "canceled",
+    "past_due",
+    "unpaid",
+    "trialing",
+    "incomplete"
+  ]).default("active").notNull(),
+  // Stripe
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).unique(),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  // Datas
+  currentPeriodStart: timestamp("currentPeriodStart"),
+  currentPeriodEnd: timestamp("currentPeriodEnd"),
+  trialStart: timestamp("trialStart"),
+  trialEnd: timestamp("trialEnd"),
+  canceledAt: timestamp("canceledAt"),
+  cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;
+
+/**
+ * Rastreamento de uso (para limites)
+ */
+export const usageTracking = mysqlTable("usage_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  month: varchar("month", { length: 7 }).notNull(), // Ex: "2025-01"
+  processesCreated: int("processesCreated").default(0).notNull(),
+  storageUsedMB: int("storageUsedMB").default(0).notNull(),
+  activeUsers: int("activeUsers").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UsageTracking = typeof usageTracking.$inferSelect;
+export type InsertUsageTracking = typeof usageTracking.$inferInsert;
+
+/**
+ * Histórico de pagamentos
+ */
+export const payments = mysqlTable("payments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  subscriptionId: int("subscriptionId").notNull(),
+  amount: int("amount").notNull(), // Valor em centavos
+  currency: varchar("currency", { length: 3 }).default("BRL").notNull(),
+  status: mysqlEnum("status", ["succeeded", "pending", "failed", "refunded"]).default("pending").notNull(),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }).unique(),
+  stripeInvoiceId: varchar("stripeInvoiceId", { length: 255 }),
+  invoiceUrl: text("invoiceUrl"), // URL da nota fiscal
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
+
+/**
+ * Base de conhecimento para RAG (preparada para futuro)
+ */
+export const knowledgeBase = mysqlTable("knowledge_base", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"), // null = conhecimento global (leis, jurisprudência)
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  type: mysqlEnum("type", ["law", "jurisprudence", "template", "user_document"]).notNull(),
+  source: varchar("source", { length: 255 }), // Ex: "Lei 14.133/21 Art. 18"
+  metadata: text("metadata"), // JSON com metadados adicionais
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type KnowledgeBase = typeof knowledgeBase.$inferSelect;
+export type InsertKnowledgeBase = typeof knowledgeBase.$inferInsert;
+
+/**
+ * Embeddings de documentos para RAG (preparada para futuro)
+ */
+export const documentEmbeddings = mysqlTable("document_embeddings", {
+  id: int("id").autoincrement().primaryKey(),
+  knowledgeBaseId: int("knowledgeBaseId").notNull(),
+  embedding: text("embedding").notNull(), // JSON array de vetores
+  chunkIndex: int("chunkIndex").default(0).notNull(), // Índice do chunk (para documentos grandes)
+  chunkText: text("chunkText").notNull(), // Texto do chunk
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DocumentEmbedding = typeof documentEmbeddings.$inferSelect;
+export type InsertDocumentEmbedding = typeof documentEmbeddings.$inferInsert;
+
+/**
+ * Solicitações de proposta comercial
+ */
+export const proposalRequests = mysqlTable("proposal_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  // Dados do órgão solicitante
+  orgaoNome: varchar("orgaoNome", { length: 255 }).notNull(),
+  orgaoCnpj: varchar("orgaoCnpj", { length: 18 }).notNull(),
+  orgaoEndereco: text("orgaoEndereco").notNull(),
+  orgaoCidade: varchar("orgaoCidade", { length: 100 }).notNull(),
+  orgaoEstado: varchar("orgaoEstado", { length: 2 }).notNull(),
+  orgaoCep: varchar("orgaoCep", { length: 9 }).notNull(),
+  // Dados do responsável
+  responsavelNome: varchar("responsavelNome", { length: 255 }).notNull(),
+  responsavelCargo: varchar("responsavelCargo", { length: 100 }),
+  responsavelEmail: varchar("responsavelEmail", { length: 320 }).notNull(),
+  responsavelTelefone: varchar("responsavelTelefone", { length: 20 }).notNull(),
+  // Plano solicitado
+  planSlug: varchar("planSlug", { length: 50 }).notNull(),
+  planName: varchar("planName", { length: 100 }).notNull(),
+  planPrice: int("planPrice").notNull(), // Preço em centavos
+  // Status da solicitação
+  status: mysqlEnum("status", ["pending", "documents_sent", "empenho_received", "activated", "cancelled"])
+    .default("pending")
+    .notNull(),
+  // Observações
+  observacoes: text("observacoes"),
+  // Dados do empenho (preenchido após receber)
+  numeroEmpenho: varchar("numeroEmpenho", { length: 50 }),
+  dataEmpenho: timestamp("dataEmpenho"),
+  valorEmpenho: int("valorEmpenho"), // Valor em centavos
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  activatedAt: timestamp("activatedAt"), // Quando a assinatura foi ativada
+});
+
+export type ProposalRequest = typeof proposalRequests.$inferSelect;
+export type InsertProposalRequest = typeof proposalRequests.$inferInsert;
+
+/**
+ * Documentos da empresa (LiciGov Pro) para envio em propostas
+ */
+export const companyDocuments = mysqlTable("company_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  // Tipo de documento
+  type: mysqlEnum("type", [
+    "contrato_social",
+    "cartao_cnpj",
+    "certidao_federal",
+    "certidao_estadual",
+    "certidao_municipal",
+    "certidao_fgts",
+    "certidao_trabalhista",
+    "alvara_funcionamento",
+    "outros"
+  ]).notNull(),
+  name: varchar("name", { length: 255 }).notNull(), // Nome do documento
+  description: text("description"), // Descrição opcional
+  // Arquivo
+  fileUrl: text("fileUrl").notNull(), // URL do arquivo no S3
+  fileKey: varchar("fileKey", { length: 255 }).notNull(), // Chave do arquivo no S3
+  fileName: varchar("fileName", { length: 255 }).notNull(), // Nome original do arquivo
+  fileSize: int("fileSize").notNull(), // Tamanho em bytes
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  // Validade
+  expiresAt: timestamp("expiresAt"), // null = sem validade (Contrato Social, CNPJ)
+  status: mysqlEnum("status", ["valid", "expiring_soon", "expired"]).default("valid").notNull(),
+  // Versão (para histórico)
+  version: int("version").default(1).notNull(),
+  previousVersionId: int("previousVersionId"), // ID da versão anterior
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  uploadedBy: int("uploadedBy").notNull(), // ID do admin que fez upload
+});
+
+export type CompanyDocument = typeof companyDocuments.$inferSelect;
+export type InsertCompanyDocument = typeof companyDocuments.$inferInsert;

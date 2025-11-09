@@ -13,6 +13,12 @@ import {
   comments,
   userConsents,
   auditLogs,
+  subscriptionPlans,
+  subscriptions,
+  usageTracking,
+  payments,
+  proposalRequests,
+  companyDocuments,
   InsertProcess,
   InsertDocument,
   InsertEditalParameter,
@@ -22,7 +28,13 @@ import {
   InsertNotification,
   InsertComment,
   InsertUserConsent,
-  InsertAuditLog
+  InsertAuditLog,
+  InsertSubscriptionPlan,
+  InsertSubscription,
+  InsertUsageTracking,
+  InsertPayment,
+  InsertProposalRequest,
+  InsertCompanyDocument
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -750,4 +762,341 @@ export async function getMostActiveMembers(limit: number = 10) {
   }
   
   return result;
+}
+
+// ==================== BILLING & SUBSCRIPTIONS ====================
+
+export async function createSubscriptionPlan(plan: InsertSubscriptionPlan) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(subscriptionPlans).values(plan);
+}
+
+export async function getAllSubscriptionPlans() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.isActive, true))
+    .orderBy(subscriptionPlans.price);
+}
+
+export async function getSubscriptionPlanById(planId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.id, planId))
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function getSubscriptionPlanBySlug(slug: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.slug, slug))
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function createSubscription(subscription: InsertSubscription) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(subscriptions).values(subscription);
+  return result;
+}
+
+export async function getUserSubscription(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .orderBy(desc(subscriptions.createdAt))
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function updateSubscription(subscriptionId: number, data: Partial<InsertSubscription>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(subscriptions)
+    .set(data)
+    .where(eq(subscriptions.id, subscriptionId));
+}
+
+export async function getSubscriptionByStripeId(stripeSubscriptionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
+    .limit(1);
+  
+  return result[0];
+}
+
+// ==================== USAGE TRACKING ====================
+
+export async function getCurrentMonthUsage(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  const result = await db
+    .select()
+    .from(usageTracking)
+    .where(
+      and(
+        eq(usageTracking.userId, userId),
+        eq(usageTracking.month, currentMonth)
+      )
+    )
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function incrementProcessCount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  const existing = await getCurrentMonthUsage(userId);
+  
+  if (existing) {
+    await db
+      .update(usageTracking)
+      .set({ processesCreated: existing.processesCreated + 1 })
+      .where(eq(usageTracking.id, existing.id));
+  } else {
+    await db.insert(usageTracking).values({
+      userId,
+      month: currentMonth,
+      processesCreated: 1,
+      storageUsedMB: 0,
+      activeUsers: 1,
+    });
+  }
+}
+
+export async function updateStorageUsage(userId: number, storageMB: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  
+  const existing = await getCurrentMonthUsage(userId);
+  
+  if (existing) {
+    await db
+      .update(usageTracking)
+      .set({ storageUsedMB: storageMB })
+      .where(eq(usageTracking.id, existing.id));
+  } else {
+    await db.insert(usageTracking).values({
+      userId,
+      month: currentMonth,
+      processesCreated: 0,
+      storageUsedMB: storageMB,
+      activeUsers: 1,
+    });
+  }
+}
+
+// ==================== PAYMENTS ====================
+
+export async function createPayment(payment: InsertPayment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(payments).values(payment);
+}
+
+export async function getUserPayments(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(payments)
+    .where(eq(payments.userId, userId))
+    .orderBy(desc(payments.createdAt));
+}
+
+export async function updatePaymentStatus(paymentIntentId: string, status: 'succeeded' | 'failed' | 'refunded', paidAt?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const updateData: any = { status };
+  if (paidAt) {
+    updateData.paidAt = paidAt;
+  }
+  
+  await db
+    .update(payments)
+    .set(updateData)
+    .where(eq(payments.stripePaymentIntentId, paymentIntentId));
+}
+
+// ============================================================================
+// PROPOSAL REQUESTS & COMPANY DOCUMENTS
+// ============================================================================
+
+export async function createProposalRequest(data: InsertProposalRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(proposalRequests).values(data);
+  return result[0].insertId;
+}
+
+export async function getProposalRequestById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db
+    .select()
+    .from(proposalRequests)
+    .where(eq(proposalRequests.id, id))
+    .limit(1);
+    
+  return result[0];
+}
+
+export async function getAllProposalRequests() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db
+    .select()
+    .from(proposalRequests)
+    .orderBy(desc(proposalRequests.createdAt));
+}
+
+export async function updateProposalRequestStatus(
+  id: number,
+  status: 'pending' | 'documents_sent' | 'empenho_received' | 'activated' | 'cancelled'
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(proposalRequests)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(proposalRequests.id, id));
+}
+
+export async function updateProposalWithEmpenho(
+  id: number,
+  numeroEmpenho: string,
+  dataEmpenho: Date,
+  valorEmpenho: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(proposalRequests)
+    .set({
+      numeroEmpenho,
+      dataEmpenho,
+      valorEmpenho,
+      status: 'empenho_received',
+      updatedAt: new Date()
+    })
+    .where(eq(proposalRequests.id, id));
+}
+
+export async function createCompanyDocument(data: InsertCompanyDocument) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(companyDocuments).values(data);
+  return result[0].insertId;
+}
+
+export async function getAllCompanyDocuments() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db
+    .select()
+    .from(companyDocuments)
+    .orderBy(desc(companyDocuments.createdAt));
+}
+
+export async function getCompanyDocumentsByType(type: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db
+    .select()
+    .from(companyDocuments)
+    .where(eq(companyDocuments.type, type as any))
+    .orderBy(desc(companyDocuments.version));
+}
+
+export async function getLatestCompanyDocuments() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Pegar a versão mais recente de cada tipo de documento
+  const allDocs = await db
+    .select()
+    .from(companyDocuments)
+    .orderBy(desc(companyDocuments.version));
+  
+  // Agrupar por tipo e pegar apenas a primeira (mais recente) de cada tipo
+  const latestDocs = new Map();
+  for (const doc of allDocs) {
+    if (!latestDocs.has(doc.type)) {
+      latestDocs.set(doc.type, doc);
+    }
+  }
+  
+  return Array.from(latestDocs.values());
+}
+
+export async function updateCompanyDocumentStatus(id: number, status: 'valid' | 'expiring_soon' | 'expired') {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(companyDocuments)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(companyDocuments.id, id));
+}
+
+export async function deleteCompanyDocument(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .delete(companyDocuments)
+    .where(eq(companyDocuments.id, id));
 }

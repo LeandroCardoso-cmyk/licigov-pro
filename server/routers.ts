@@ -1,7 +1,10 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
+import { proposalRouter } from "./routers/proposalRouter";
+import { companyDocumentsRouter } from "./routers/companyDocumentsRouter";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
 import { generateETP, generateTR, generateDFD, generateEdital } from "./services/gemini";
@@ -742,6 +745,320 @@ export const appRouter = router({
         return await db.getDocumentSettingsByUser(ctx.user.id);
       }),
   }),
+
+  // Comentários
+  comments: router({
+    add: protectedProcedure
+      .input(z.object({
+        documentId: z.number(),
+        processId: z.number(),
+        content: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.createComment({
+          documentId: input.documentId,
+          processId: input.processId,
+          userId: ctx.user.id,
+          content: input.content,
+        });
+        await db.createActivityLog({
+          processId: input.processId,
+          userId: ctx.user.id,
+          action: `adicionou um comentário`,
+        });
+        return { success: true };
+      }),
+
+    list: protectedProcedure
+      .input(z.object({ documentId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getCommentsByDocument(input.documentId);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        commentId: z.number(),
+        content: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const comment = await db.getCommentById(input.commentId);
+        if (!comment || comment.userId !== ctx.user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão' });
+        }
+        await db.updateComment(input.commentId, input.content);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ commentId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const comment = await db.getCommentById(input.commentId);
+        if (!comment || comment.userId !== ctx.user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão' });
+        }
+        await db.deleteComment(input.commentId);
+        return { success: true };
+      }),
+  }),
+
+  // LGPD
+  lgpd: router({
+    recordConsent: protectedProcedure
+      .input(z.object({
+        consentType: z.enum(["terms_of_use", "privacy_policy", "data_processing"]),
+        version: z.string(),
+        ipAddress: z.string().optional(),
+        userAgent: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.createUserConsent({
+          userId: ctx.user.id,
+          consentType: input.consentType,
+          version: input.version,
+          accepted: true,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+        });
+        return { success: true };
+      }),
+
+    checkConsent: protectedProcedure
+      .input(z.object({
+        consentType: z.enum(["terms_of_use", "privacy_policy", "data_processing"]),
+        version: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const hasAccepted = await db.hasUserAcceptedConsent(
+          ctx.user.id,
+          input.consentType,
+          input.version
+        );
+        return { hasAccepted };
+      }),
+
+    exportMyData: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        return await db.exportUserData(ctx.user.id);
+      }),
+
+    deleteMyAccount: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        await db.deleteUserData(ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // Admin
+  admin: router({
+    listUsers: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Apenas administradores' });
+        }
+        return await db.getAllUsers();
+      }),
+
+    promoteToAdmin: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Apenas administradores' });
+        }
+        await db.updateUserRole(input.userId, "admin");
+        await db.createAuditLog({
+          adminId: ctx.user.id,
+          targetUserId: input.userId,
+          action: "promote_to_admin",
+          details: `Promovido a administrador`,
+        });
+        return { success: true };
+      }),
+
+    demoteFromAdmin: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Apenas administradores' });
+        }
+        await db.updateUserRole(input.userId, "user");
+        await db.createAuditLog({
+          adminId: ctx.user.id,
+          targetUserId: input.userId,
+          action: "demote_from_admin",
+          details: `Rebaixado para usuário`,
+        });
+        return { success: true };
+      }),
+
+    getUserStats: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Apenas administradores' });
+        }
+        return await db.getUserStats(input.userId);
+      }),
+
+    getAuditLogs: protectedProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Apenas administradores' });
+        }
+        return await db.getAuditLogs(input.limit);
+      }),
+  }),
+
+  // Analytics
+  analytics: router({
+    getOverview: protectedProcedure
+      .query(async () => {
+        const processesByStatus = await db.getProcessCountByStatus();
+        const documentsByMonth = await db.getDocumentCountByMonth(6);
+        const mostActiveMembers = await db.getMostActiveMembers(10);
+        const allUsers = await db.getAllUsers();
+        const totalProcesses = processesByStatus.reduce((sum, item) => sum + item.count, 0);
+        return {
+          totalUsers: allUsers.length,
+          totalProcesses,
+          processesByStatus,
+          documentsByMonth,
+          mostActiveMembers,
+        };
+      }),
+  }),
+
+  // Billing & Subscriptions
+  billing: router({
+    // Listar todos os planos disponíveis
+    getPlans: publicProcedure
+      .query(async () => {
+        return await db.getAllSubscriptionPlans();
+      }),
+
+    // Obter plano específico
+    getPlan: publicProcedure
+      .input(z.object({ slug: z.string() }))
+      .query(async ({ input }) => {
+        return await db.getSubscriptionPlanBySlug(input.slug);
+      }),
+
+    // Obter assinatura do usuário
+    getMySubscription: protectedProcedure
+      .query(async ({ ctx }) => {
+        const subscription = await db.getUserSubscription(ctx.user.id);
+        if (!subscription) return null;
+        
+        const plan = await db.getSubscriptionPlanById(subscription.planId);
+        return { ...subscription, plan };
+      }),
+
+    // Obter informações de uso e limites
+    getMyLimits: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { checkModuleAccess, getUserLimitsInfo } = await import('./middleware/limitsMiddleware');
+        return await getUserLimitsInfo(ctx.user.id);
+      }),
+
+    // Criar sessão de checkout Stripe
+    createCheckoutSession: protectedProcedure
+      .input(z.object({ 
+        planSlug: z.string(),
+        successUrl: z.string(),
+        cancelUrl: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createStripeCustomer, createCheckoutSession } = await import('./services/stripeService');
+        
+        const plan = await db.getSubscriptionPlanBySlug(input.planSlug);
+        if (!plan || !plan.stripePriceId) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano não encontrado' });
+        }
+
+        // Verificar se usuário já tem Stripe customer ID
+        let subscription = await db.getUserSubscription(ctx.user.id);
+        let customerId = subscription?.stripeCustomerId;
+
+        if (!customerId) {
+          const customer = await createStripeCustomer({
+            email: ctx.user.email || '',
+            name: ctx.user.name || '',
+            metadata: { userId: ctx.user.id.toString() },
+          });
+          customerId = customer.id;
+        }
+
+        const session = await createCheckoutSession({
+          customerId,
+          priceId: plan.stripePriceId,
+          successUrl: input.successUrl,
+          cancelUrl: input.cancelUrl,
+          trialDays: 30, // 30 dias de trial
+          metadata: {
+            userId: ctx.user.id.toString(),
+            planId: plan.id.toString(),
+          },
+        });
+
+        return { sessionUrl: session.url };
+      }),
+
+    // Cancelar assinatura
+    cancelSubscription: protectedProcedure
+      .input(z.object({ immediately: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { cancelStripeSubscription } = await import('./services/stripeService');
+        
+        const subscription = await db.getUserSubscription(ctx.user.id);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Assinatura não encontrada' });
+        }
+
+        await cancelStripeSubscription({
+          subscriptionId: subscription.stripeSubscriptionId,
+          immediately: input.immediately || false,
+        });
+
+        await db.updateSubscription(subscription.id, {
+          status: input.immediately ? 'canceled' : subscription.status,
+          cancelAtPeriodEnd: !input.immediately,
+          canceledAt: new Date(),
+        });
+
+        return { success: true };
+      }),
+
+    // Criar portal de billing (gerenciar assinatura)
+    createBillingPortal: protectedProcedure
+      .input(z.object({ returnUrl: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const { createBillingPortalSession } = await import('./services/stripeService');
+        
+        const subscription = await db.getUserSubscription(ctx.user.id);
+        if (!subscription || !subscription.stripeCustomerId) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Assinatura não encontrada' });
+        }
+
+        const session = await createBillingPortalSession({
+          customerId: subscription.stripeCustomerId,
+          returnUrl: input.returnUrl,
+        });
+
+        return { portalUrl: session.url };
+      }),
+
+    // Listar pagamentos do usuário
+    getMyPayments: protectedProcedure
+      .query(async ({ ctx }) => {
+        return await db.getUserPayments(ctx.user.id);
+      }),
+  }),
+
+  // Rotas de propostas comerciais e pagamento por empenho
+  proposals: proposalRouter,
+
+  // Rotas de documentos da empresa
+  companyDocuments: companyDocumentsRouter,
 });
 
 export type AppRouter = typeof appRouter;

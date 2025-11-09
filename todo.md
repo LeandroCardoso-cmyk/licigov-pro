@@ -412,3 +412,160 @@
 - [ ] Criar página de visualização de logs
 - [ ] Implementar filtros por tipo de ação e período
 - [ ] Adicionar exportação de logs em CSV
+
+## Fase 18 - Integração de Email Real (Resend)
+
+- [ ] Instalar biblioteca resend
+- [ ] Criar variável de ambiente RESEND_API_KEY
+- [ ] Atualizar emailService.ts para usar Resend
+- [ ] Testar envio de email ao adicionar membro
+- [ ] Testar envio de email ao editar documento
+- [ ] Adicionar tratamento de erros de envio
+
+## Fase 19 - Modal de Consentimento LGPD
+
+- [ ] Criar componente ConsentModal
+- [ ] Verificar se usuário já aceitou termos (versão 1.0)
+- [ ] Exibir modal automaticamente no primeiro acesso
+- [ ] Bloquear acesso até aceitar termos
+- [ ] Registrar consentimento com IP e User-Agent
+- [ ] Adicionar links para Termos de Uso e Política de Privacidade
+
+## Fase 20 - Página de Logs de Auditoria
+
+- [ ] Criar página AuditLogs (apenas para admins)
+- [ ] Listar todos os logs de auditoria
+- [ ] Adicionar filtros por tipo de ação
+- [ ] Adicionar filtros por período (data início/fim)
+- [ ] Adicionar busca por usuário
+- [ ] Implementar paginação
+- [ ] Adicionar botão de exportar para CSV
+- [ ] Mostrar detalhes completos de cada log
+
+## Fase 21 - Sistema de Billing e Assinaturas
+
+### Backend de Billing
+- [ ] Criar tabela `subscriptions` no schema
+- [ ] Criar tabela `subscription_plans` no schema
+- [ ] Criar tabela `usage_tracking` no schema (processos, armazenamento)
+- [ ] Instalar biblioteca stripe
+- [ ] Configurar Stripe em modo teste
+- [ ] Criar mutation para criar assinatura
+- [ ] Criar mutation para cancelar assinatura
+- [ ] Criar mutation para upgrade/downgrade de plano
+- [ ] Criar webhook para eventos do Stripe (payment_succeeded, payment_failed)
+- [ ] Implementar lógica de renovação automática
+- [ ] Criar query para obter status da assinatura
+
+### Controle de Limites
+- [ ] Implementar middleware de verificação de limites
+- [ ] Criar contador de processos usados/disponíveis
+- [ ] Criar contador de armazenamento usado/disponível
+- [ ] Criar contador de usuários ativos/disponíveis
+- [ ] Bloquear criação de processo quando atingir limite
+- [ ] Bloquear upload quando atingir limite de armazenamento
+- [ ] Bloquear adição de usuário quando atingir limite
+- [ ] Criar avisos de limite (80%, 90%, 100%)
+- [ ] Implementar reset mensal de contadores
+
+### Interface de Billing
+- [ ] Criar página de planos (/planos)
+- [ ] Criar página de checkout (integração Stripe)
+- [ ] Criar painel de assinatura do usuário (/configuracoes/assinatura)
+- [ ] Mostrar plano atual e limites
+- [ ] Mostrar uso atual (processos, armazenamento, usuários)
+- [ ] Adicionar botão de upgrade de plano
+- [ ] Adicionar botão de cancelar assinatura
+- [ ] Criar modal de confirmação de cancelamento
+- [ ] Mostrar histórico de pagamentos
+- [ ] Adicionar botão de baixar nota fiscal
+
+## Fase 22 - Preparação para RAG (Arquitetura Futura)
+
+### Arquitetura Base
+- [ ] Criar pasta `server/rag/` para código futuro
+- [ ] Criar interface `DocumentRetriever` (abstração)
+- [ ] Criar arquivo de configuração `rag.config.ts`
+- [ ] Documentar arquitetura RAG no README
+- [ ] Criar tabela `document_embeddings` (preparada, não usada ainda)
+- [ ] Criar tabela `knowledge_base` (preparada, não usada ainda)
+
+### Preparação de Dados
+- [ ] Adicionar campo `learn_from_this` em documentos (flag)
+- [ ] Criar mutation para marcar documento como "aprendizado"
+- [ ] Criar estrutura de pastas para corpus (leis, jurisprudência)
+- [ ] Documentar processo de indexação (para implementar depois)
+
+## Fase 23 - Melhoria de Precisão da IA (Anti-Alucinação)
+
+### Prompts Estruturados
+- [ ] Refatorar prompts com instruções explícitas anti-alucinação
+- [ ] Adicionar regra "NÃO invente referências legais"
+- [ ] Adicionar regra "Use apenas informações fornecidas"
+- [ ] Adicionar exemplos de saída esperada (few-shot)
+- [ ] Implementar validação de saída (detectar alucinações)
+
+### Configuração da IA
+- [ ] Reduzir temperature para 0.3 (mais determinístico)
+- [ ] Implementar response_format JSON estruturado
+- [ ] Adicionar campo de confiança na resposta
+- [ ] Criar sistema de fallback (se confiança < 70%, avisar usuário)
+- [ ] Adicionar logs de qualidade das respostas
+
+### Validação de Documentos
+- [ ] Criar função de validação de referências legais
+- [ ] Verificar se artigos citados existem (Lei 14.133/21)
+- [ ] Adicionar aviso "Revise este documento antes de usar oficialmente"
+- [ ] Criar checklist de revisão para o usuário
+- [ ] Implementar sistema de feedback (documento aprovado/rejeitado)
+
+## Fase 24 - Sistema de Proposta Comercial e Pagamento por Empenho
+
+### Backend de Propostas
+- [ ] Criar tabela `proposal_requests` no schema
+- [ ] Criar tabela `company_documents` no schema
+- [ ] Criar função para gerar proposta comercial em PDF
+- [ ] Criar função para gerar minuta de contrato em DOCX
+- [ ] Criar função para gerar Termo de Referência em DOCX
+- [ ] Adicionar justificativa técnica baseada na Lei 14.133/2021
+- [ ] Implementar geração de ZIP com documentos da empresa
+- [ ] Criar mutation para solicitar proposta
+- [ ] Criar query para listar solicitações (admin)
+
+### Gestão de Documentos da Empresa
+- [ ] Criar CRUD de documentos da empresa (admin)
+- [ ] Implementar upload de documentos com data de validade
+- [ ] Criar sistema de alertas de vencimento (30 dias antes)
+- [ ] Implementar histórico de versões de documentos
+- [ ] Adicionar status visual (Válido, Vence em X dias, Vencido)
+- [ ] Criar verificação de documentos vencidos ao gerar proposta
+
+### Interface de Solicitação
+- [ ] Criar página `/solicitar-proposta`
+- [ ] Criar formulário com dados do órgão (nome, CNPJ, endereço, responsável)
+- [ ] Adicionar seleção de plano desejado
+- [ ] Implementar página de download de documentos
+- [ ] Adicionar botão de download da proposta (PDF)
+- [ ] Adicionar botão de download do contrato (DOCX)
+- [ ] Adicionar botão de download do TR (DOCX)
+- [ ] Adicionar botão de download dos documentos da empresa (ZIP)
+
+### Painel de Admin
+- [ ] Criar página `/admin/propostas`
+- [ ] Listar todas as solicitações de proposta
+- [ ] Adicionar filtros (status, plano, data)
+- [ ] Criar página `/admin/documentos-empresa`
+- [ ] Implementar upload de documentos
+- [ ] Mostrar status de validade de cada documento
+- [ ] Implementar sistema de alertas de vencimento
+- [ ] Adicionar ação "Ativar Assinatura" após receber empenho
+
+### Documentos da Empresa Necessários
+- [ ] Contrato Social
+- [ ] Cartão CNPJ
+- [ ] Certidão Federal (Receita Federal e Dívida Ativa da União)
+- [ ] Certidão Estadual (Fazenda Estadual)
+- [ ] Certidão Municipal (Fazenda Municipal)
+- [ ] Certidão FGTS
+- [ ] Certidão Trabalhista (TST)
+- [ ] Alvará de Funcionamento
