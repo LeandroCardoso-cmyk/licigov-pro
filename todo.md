@@ -571,3 +571,28 @@
 - [ ] Certidão FGTS
 - [ ] Certidão Trabalhista (TST)
 - [ ] Alvará de Funcionamento
+
+## Fase 25 - Gestão de Contratos e Renovação
+
+### Upload de Documentos Contratuais
+- [ ] Adicionar campo de upload de nota de empenho no painel de propostas
+- [ ] Adicionar campo de upload de contrato assinado no painel de propostas
+- [ ] Implementar armazenamento de arquivos no S3
+- [ ] Adicionar visualização/download dos arquivos anexados
+- [ ] Validar formato de arquivo (apenas PDF)
+- [ ] Adicionar limite de tamanho de arquivo (10MB)
+
+### Controle de Vigência Contratual
+- [ ] Adicionar campo de data de assinatura do contrato
+- [ ] Adicionar campo de data de início da vigência
+- [ ] Adicionar campo de data de término da vigência
+- [ ] Calcular dias restantes até vencimento
+- [ ] Implementar badge visual de status (Vigente, Vence em X dias, Vencido)
+- [ ] Adicionar filtro por status de vigência no painel de assinaturas
+
+### Alertas de Renovação
+- [ ] Criar sistema de alertas automáticos (30, 60, 90 dias antes)
+- [ ] Enviar email de alerta de renovação para admin
+- [ ] Adicionar notificação in-app de contratos próximos do vencimento
+- [ ] Criar dashboard de contratos a vencer
+- [ ] Implementar botão "Renovar Contrato" (gera nova proposta)

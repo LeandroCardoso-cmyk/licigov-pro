@@ -1100,3 +1100,16 @@ export async function deleteCompanyDocument(id: number) {
     .delete(companyDocuments)
     .where(eq(companyDocuments.id, id));
 }
+
+export async function updateProposalRequest(
+  id: number,
+  data: Partial<InsertProposalRequest>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(proposalRequests)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(proposalRequests.id, id));
+}

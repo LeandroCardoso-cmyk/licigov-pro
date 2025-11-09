@@ -203,4 +203,87 @@ export const proposalRouter = router({
 
       return { success: true };
     }),
+
+  // Upload de nota de empenho
+  uploadEmpenho: adminProcedure
+    .input(
+      z.object({
+        proposalId: z.number(),
+        fileUrl: z.string(),
+        fileKey: z.string(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const proposal = await db.getProposalRequestById(input.proposalId);
+      if (!proposal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Proposta não encontrada",
+        });
+      }
+
+      await db.updateProposalRequest(input.proposalId, {
+        empenhoFileUrl: input.fileUrl,
+        empenhoFileKey: input.fileKey,
+      });
+
+      return { success: true };
+    }),
+
+  // Upload de contrato assinado
+  uploadContrato: adminProcedure
+    .input(
+      z.object({
+        proposalId: z.number(),
+        fileUrl: z.string(),
+        fileKey: z.string(),
+        dataAssinatura: z.date(),
+        dataInicioVigencia: z.date(),
+        dataFimVigencia: z.date(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const proposal = await db.getProposalRequestById(input.proposalId);
+      if (!proposal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Proposta não encontrada",
+        });
+      }
+
+      // Calcular status de vigência
+      const now = new Date();
+      const diffDays = Math.ceil((input.dataFimVigencia.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      let statusVigencia: "vigente" | "vence_30_dias" | "vence_60_dias" | "vence_90_dias" | "vencido" = "vigente";
+      
+      if (diffDays < 0) {
+        statusVigencia = "vencido";
+      } else if (diffDays <= 30) {
+        statusVigencia = "vence_30_dias";
+      } else if (diffDays <= 60) {
+        statusVigencia = "vence_60_dias";
+      } else if (diffDays <= 90) {
+        statusVigencia = "vence_90_dias";
+      }
+
+      await db.updateProposalRequest(input.proposalId, {
+        contratoFileUrl: input.fileUrl,
+        contratoFileKey: input.fileKey,
+        dataAssinatura: input.dataAssinatura,
+        dataInicioVigencia: input.dataInicioVigencia,
+        dataFimVigencia: input.dataFimVigencia,
+        statusVigencia,
+      });
+
+      // Registrar log de auditoria
+      await db.createAuditLog({
+        userId: ctx.user.id,
+        action: "upload_contrato",
+        entityType: "proposal",
+        entityId: input.proposalId,
+        details: `Contrato assinado anexado - Vigência: ${input.dataInicioVigencia.toLocaleDateString('pt-BR')} a ${input.dataFimVigencia.toLocaleDateString('pt-BR')}`,
+      });
+
+      return { success: true };
+    }),
 });

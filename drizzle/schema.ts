@@ -373,6 +373,16 @@ export const proposalRequests = mysqlTable("proposal_requests", {
   numeroEmpenho: varchar("numeroEmpenho", { length: 50 }),
   dataEmpenho: timestamp("dataEmpenho"),
   valorEmpenho: int("valorEmpenho"), // Valor em centavos
+  // Documentos contratuais
+  empenhoFileUrl: text("empenhoFileUrl"), // URL da nota de empenho no S3
+  empenhoFileKey: varchar("empenhoFileKey", { length: 255 }), // Chave do arquivo no S3
+  contratoFileUrl: text("contratoFileUrl"), // URL do contrato assinado no S3
+  contratoFileKey: varchar("contratoFileKey", { length: 255 }), // Chave do arquivo no S3
+  // Vigência contratual
+  dataAssinatura: timestamp("dataAssinatura"), // Data de assinatura do contrato
+  dataInicioVigencia: timestamp("dataInicioVigencia"), // Início da vigência
+  dataFimVigencia: timestamp("dataFimVigencia"), // Término da vigência
+  statusVigencia: mysqlEnum("statusVigencia", ["vigente", "vence_30_dias", "vence_60_dias", "vence_90_dias", "vencido"]).default("vigente"),
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
