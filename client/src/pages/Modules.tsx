@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar } from "lucide-react";
+import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -117,6 +117,16 @@ export default function Modules() {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate("/configuracoes")}
+                  className="rounded-full hover:bg-primary/10"
+                  title="Configurações"
+                >
+                  <Settings className="h-5 w-5" />
+                </Button>
+
                 <Button
                   variant="ghost"
                   size="icon"

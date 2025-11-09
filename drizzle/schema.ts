@@ -72,19 +72,119 @@ export type EditalParameter = typeof editalParameters.$inferSelect;
 export type InsertEditalParameter = typeof editalParameters.$inferInsert;
 
 /**
- * Colaboradores em processos
+ * Configurações de personalização de documentos por usuário
  */
-export const processCollaborators = mysqlTable("process_collaborators", {
+export const documentSettings = mysqlTable("documentSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // Cabeçalho
+  organizationName: text("organizationName"),
+  logoUrl: text("logoUrl"),
+  address: text("address"),
+  cnpj: varchar("cnpj", { length: 18 }),
+  // Rodapé
+  phone: varchar("phone", { length: 20 }),
+  email: varchar("email", { length: 320 }),
+  website: varchar("website", { length: 255 }),
+  footerText: text("footerText"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DocumentSettings = typeof documentSettings.$inferSelect;
+export type InsertDocumentSettings = typeof documentSettings.$inferInsert;
+
+/**
+ * Membros de processos (colaboração)
+ */
+export const processMembers = mysqlTable("process_members", {
   id: int("id").autoincrement().primaryKey(),
   processId: int("processId").notNull(),
   userId: int("userId").notNull(),
-  role: mysqlEnum("role", ["administrador", "editor", "leitor"]).default("leitor").notNull(),
-  invitedBy: int("invitedBy").notNull(), // ID do usuário que fez o convite
+  permission: mysqlEnum("permission", ["viewer", "editor", "approver", "owner"]).default("viewer").notNull(),
+  invitedBy: int("invitedBy").notNull(), // ID do usuário que convidou
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProcessMember = typeof processMembers.$inferSelect;
+export type InsertProcessMember = typeof processMembers.$inferInsert;
+
+/**
+ * Notificações
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: mysqlEnum("type", ["member_added", "document_edited", "document_approved", "comment_added", "general"]).default("general").notNull(),
+  processId: int("processId"), // Opcional: link para processo relacionado
+  documentId: int("documentId"), // Opcional: link para documento relacionado
+  isRead: boolean("isRead").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type ProcessCollaborator = typeof processCollaborators.$inferSelect;
-export type InsertProcessCollaborator = typeof processCollaborators.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Comentários em documentos
+ */
+export const comments = mysqlTable("comments", {
+  id: int("id").autoincrement().primaryKey(),
+  documentId: int("documentId").notNull(),
+  processId: int("processId").notNull(),
+  userId: int("userId").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Comment = typeof comments.$inferSelect;
+export type InsertComment = typeof comments.$inferInsert;
+
+/**
+ * Consentimentos LGPD
+ */
+export const userConsents = mysqlTable("user_consents", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  consentType: mysqlEnum("consentType", ["terms_of_use", "privacy_policy", "data_processing"]).notNull(),
+  version: varchar("version", { length: 20 }).notNull(), // ex: "1.0", "1.1"
+  accepted: boolean("accepted").default(true).notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserConsent = typeof userConsents.$inferSelect;
+export type InsertUserConsent = typeof userConsents.$inferInsert;
+
+/**
+ * Logs de auditoria administrativa
+ */
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  adminId: int("adminId").notNull(), // ID do admin que executou a ação
+  targetUserId: int("targetUserId"), // ID do usuário afetado (se aplicável)
+  action: mysqlEnum("action", [
+    "promote_to_admin",
+    "demote_from_admin",
+    "deactivate_user",
+    "activate_user",
+    "delete_user",
+    "view_user_data",
+    "export_user_data",
+    "other"
+  ]).notNull(),
+  details: text("details"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
 /**
  * Log de atividades

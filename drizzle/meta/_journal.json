@@ -22,6 +22,34 @@
       "when": 1762628837787,
       "tag": "0002_gigantic_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1762630879000,
+      "tag": "0003_flowery_shiver_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1762654146118,
+      "tag": "0004_fantastic_baron_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1762655398027,
+      "tag": "0005_cloudy_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1762655487491,
+      "tag": "0006_youthful_hellion",
+      "breakpoints": true
     }
   ]
 }

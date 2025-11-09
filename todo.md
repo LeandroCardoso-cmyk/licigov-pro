@@ -133,3 +133,282 @@
 - [x] Sistema de versionamento de documentos
 - [ ] Botão para editar documento (interface criada, funcionalidade pendente)
 - [ ] Botão para avançar para próximo documento (TR) (pendente)
+
+## Fase 3 - Geração Completa de Documentos
+
+### Geração de TR (Termo de Referência)
+- [x] Criar função generateTR no serviço Gemini
+- [x] Adicionar botão "Avançar para TR" na tela de detalhes
+- [x] Implementar mutation para gerar TR
+- [x] Atualizar status do processo para "em_tr"
+- [x] Salvar TR gerado no banco de dados
+- [x] Exibir TR na tela de detalhes
+
+### Geração de DFD (Documento Formalizador de Demanda)
+- [x] Criar função generateDFD no serviço Gemini
+- [x] Adicionar botão "Avançar para DFD" 
+- [x] Implementar mutation para gerar DFD
+- [x] Atualizar status do processo para "em_dfd"
+- [x] Salvar DFD gerado no banco de dados
+- [x] Exibir DFD na tela de detalhes
+
+### Geração de Edital
+- [x] Criar função generateEdital no serviço Gemini
+- [x] Adicionar botão "Avançar para Edital"
+- [x] Implementar mutation para gerar Edital
+- [x] Atualizar status do processo para "em_edital"
+- [x] Salvar Edital gerado no banco de dados
+- [x] Exibir Edital na tela de detalhes
+- [x] Marcar processo como "concluído" após gerar Edital
+
+## Fase 4 - Navegação, Edição e Exportação
+
+### Navegação entre Documentos
+- [x] Adicionar abas/botões (ETP | TR | DFD | Edital) na tela de detalhes
+- [x] Implementar navegação entre documentos sem recarregar página
+- [x] Destacar visualmente o documento atual
+- [x] Desabilitar abas de documentos ainda não gerados
+
+### Download de Documentos
+- [x] Instalar biblioteca para geração de PDF (puppeteer ou jsPDF)
+- [x] Instalar biblioteca para geração de DOCX (docx.js)
+- [x] Criar função de conversão Markdown → PDF
+- [x] Criar função de conversão Markdown → DOCX
+- [x] Implementar mutation para download em PDF
+- [x] Implementar mutation para download em DOCX
+- [x] Adicionar cabeçalho/rodapé profissional nos documentos exportados
+- [ ] Testar downloads em diferentes navegadores (pendente de teste)
+
+### Editor de Documentos
+- [x] Instalar biblioteca de editor (Monaco Editor ou TipTap)
+- [x] Criar componente de editor com preview lado a lado
+- [ ] Implementar salvamento automático (debounced) (pendente)
+- [x] Criar sistema de versionamento ao editar
+- [x] Adicionar botão "Salvar alterações"
+- [x] Adicionar botão "Cancelar edição"
+- [x] Implementar mutation para salvar documento editado
+- [x] Adicionar confirmação antes de descartar alterações não salvas
+
+## Fase 5 - Personalização de Documentos
+
+### Configurações de Cabeçalho e Rodapé
+- [x] Criar tabela no banco de dados para armazenar configurações do usuário
+- [x] Adicionar campos: nome do órgão, brasão/logo, endereço, CNPJ, telefone, e-mail, site
+- [x] Criar página de configurações no frontend
+- [ ] Implementar upload de imagem para brasão/logo (URL manual implementada)
+- [x] Criar formulário para editar cabeçalho (nome órgão, endereço, CNPJ)
+- [x] Criar formulário para editar rodapé (telefone, e-mail, site, texto customizável)
+- [x] Implementar mutation para salvar configurações
+- [x] Implementar query para buscar configurações do usuário
+- [ ] Aplicar cabeçalho/rodapé nos documentos gerados pela IA (pendente)
+- [ ] Aplicar cabeçalho/rodapé nos downloads PDF (pendente)
+- [ ] Aplicar cabeçalho/rodapé nos downloads DOCX (pendente)
+- [ ] Adicionar preview das configurações antes de salvar (pendente)
+
+## Fase 6 - Aplicar Personalização e Downloads
+
+### Integração de Cabeçalho/Rodapé nos Documentos
+- [x] Modificar prompts da IA para incluir informações de cabeçalho/rodapé
+- [x] Atualizar função generateETP para buscar e aplicar configurações
+- [x] Atualizar função generateTR para buscar e aplicar configurações
+- [x] Atualizar função generateDFD para buscar e aplicar configurações
+- [x] Atualizar função generateEdital para buscar e aplicar configurações
+- [x] Adicionar seção de cabeçalho no template de visualização dos documentos
+- [x] Adicionar seção de rodapé no template de visualização dos documentos
+
+### Implementação de Downloads
+- [ ] Finalizar conversão para PDF com cabeçalho/rodapé
+- [ ] Finalizar conversão para DOCX com cabeçalho/rodapé
+- [ ] Adicionar botões de download funcionais na tela de detalhes
+- [ ] Testar downloads em diferentes navegadores
+
+## Fase 7 - Downloads em PDF e DOCX
+
+### Implementação de Downloads
+- [x] Implementar conversão de Markdown para PDF usando bibliotecas adequadas
+- [x] Implementar conversão de Markdown para DOCX usando bibliotecas adequadas
+- [x] Adicionar cabeçalho personalizado nos PDFs gerados
+- [x] Adicionar rodapé personalizado nos PDFs gerados
+- [x] Adicionar cabeçalho personalizado nos DOCX gerados
+- [x] Adicionar rodapé personalizado nos DOCX gerados
+- [x] Criar rotas tRPC para download de documentos
+- [x] Adicionar botões de download funcionais na tela de detalhes
+- [ ] Testar downloads em diferentes navegadores (pendente de teste)
+
+## Fase 8 - Editor de Documentos Inline
+
+### Editor de Texto Rico
+- [x] Escolher e instalar biblioteca de editor (TipTap ou Monaco)
+- [x] Criar componente de editor com preview em tempo real
+- [x] Implementar salvamento automático de versões
+- [x] Adicionar botão "Editar" nos documentos
+- [x] Implementar mutation para salvar edições
+- [x] Adicionar histórico de versões
+- [ ] Permitir restaurar versões anteriores (pendente)
+
+## Fase 9 - Sistema de Colaboração
+
+### Colaboração em Processos
+- [ ] Criar tabela de colaboradores no banco de dados
+- [ ] Implementar permissões (visualizar, editar, aprovar)
+- [ ] Criar interface para adicionar membros à equipe
+- [ ] Implementar sistema de notificações de mudanças
+- [ ] Adicionar log de auditoria completo
+- [ ] Criar tela de gerenciamento de colaboradores
+- [ ] Implementar filtros por colaborador no dashboard
+
+## Fase 10 - Sistema de Colaboração Avançado
+
+### Gerenciamento de Membros
+- [x] Criar tabela `process_members` no schema
+- [x] Adicionar enum de permissões (viewer, editor, approver, owner)
+- [x] Criar mutation para adicionar membro ao processo
+- [x] Criar mutation para remover membro do processo
+- [x] Criar mutation para alterar permissão de membro
+- [x] Criar query para listar membros de um processo
+- [x] Implementar validação de permissões no backend
+
+### Interface de Colaboração
+- [x] Criar componente de modal para adicionar membros
+- [x] Criar componente de lista de membros com badges de permissão
+- [x] Adicionar botão "Gerenciar Membros" na tela de detalhes
+- [x] Implementar busca de usuários por email
+- [x] Adicionar confirmação para remover membros
+- [x] Mostrar avatar e nome dos membros
+- [x] Implementar controle de acesso baseado em permissões no frontend
+
+### Notificações de Colaboração
+- [x] Criar tabela `notifications` no schema
+- [x] Criar mutation para criar notificação
+- [x] Criar query para listar notificações do usuário
+- [x] Implementar notificação ao adicionar membro
+- [ ] Implementar notificação ao editar documento (pendente)
+- [ ] Implementar notificação ao aprovar documento (pendente)
+- [x] Criar componente de sino de notificações no header
+- [x] Adicionar badge de contagem de notificações não lidas
+
+## Fase 11 - Salvamento Automático
+
+### Auto-save no Editor
+- [x] Instalar biblioteca de debounce (lodash.debounce ou use-debounce)
+- [x] Implementar hook useAutoSave com debounce de 2 segundos
+- [x] Adicionar indicador visual de "Salvando..." / "Salvo"
+- [x] Implementar salvamento silencioso sem criar nova versão
+- [x] Adicionar timestamp de último salvamento
+- [x] Tratar erros de salvamento automático
+- [ ] Adicionar opção de desabilitar auto-save nas configurações (pendente)
+
+## Fase 12 - Histórico de Versões
+
+### Visualização de Versões
+- [x] Criar componente de modal de histórico
+- [x] Listar todas as versões do documento com timestamp
+- [ ] Mostrar quem criou cada versão (pendente)
+- [ ] Adicionar preview de diferenças entre versões (diff) (pendente)
+- [x] Adicionar botão "Ver Histórico" em cada documento
+- [ ] Implementar paginação para muitas versões (pendente)
+
+### Restauração de Versões
+- [x] Criar mutation para restaurar versão anterior
+- [x] Adicionar botão "Restaurar" em cada versão do histórico
+- [x] Implementar confirmação antes de restaurar
+- [x] Criar nova versão ao restaurar (não sobrescrever)
+- [x] Adicionar log de atividade ao restaurar versão
+- [x] Mostrar mensagem de sucesso após restauração
+
+## Fase 13 - Notificações por Email
+
+### Sistema de Email
+- [ ] Configurar serviço de envio de emails (Resend, SendGrid ou similar)
+- [ ] Criar templates de email em HTML
+- [ ] Implementar envio de email ao adicionar membro
+- [ ] Implementar envio de email ao editar documento
+- [ ] Implementar envio de email ao aprovar documento
+- [ ] Implementar envio de email ao adicionar comentário
+- [ ] Adicionar preferências de notificação (ativar/desativar emails)
+- [ ] Implementar fila de emails para evitar spam
+
+## Fase 14 - Sistema de Comentários
+
+### Backend de Comentários
+- [ ] Criar tabela `comments` no schema
+- [ ] Criar mutation para adicionar comentário
+- [ ] Criar mutation para editar comentário
+- [ ] Criar mutation para deletar comentário
+- [ ] Criar query para listar comentários de um documento
+- [ ] Implementar notificação ao adicionar comentário
+- [ ] Adicionar suporte a menções (@usuario)
+
+### Interface de Comentários
+- [ ] Criar componente de lista de comentários
+- [ ] Criar componente de formulário de novo comentário
+- [ ] Adicionar botão "Comentários" em cada documento
+- [ ] Implementar contador de comentários
+- [ ] Adicionar avatar e nome do autor
+- [ ] Implementar edição e exclusão de comentários próprios
+- [ ] Adicionar timestamp relativo (há X minutos)
+- [ ] Implementar markdown nos comentários
+
+## Fase 15 - Dashboard de Analytics
+
+### Métricas de Backend
+- [ ] Criar query para contar processos por status
+- [ ] Criar query para contar documentos gerados por período
+- [ ] Criar query para calcular tempo médio por documento
+- [ ] Criar query para listar membros mais ativos
+- [ ] Criar query para contar atividades por usuário
+- [ ] Criar query para estatísticas de colaboração
+
+### Interface de Analytics
+- [ ] Criar página de Dashboard de Analytics
+- [ ] Adicionar cards de métricas principais (total processos, documentos, membros)
+- [ ] Criar gráfico de processos por status (pizza)
+- [ ] Criar gráfico de documentos gerados por mês (barras)
+- [ ] Criar tabela de membros mais ativos
+- [ ] Adicionar filtros por período (7 dias, 30 dias, 90 dias, ano)
+- [ ] Implementar exportação de relatórios em PDF
+- [ ] Adicionar comparação com período anterior
+
+## Fase 16 - Conformidade LGPD
+
+### Termos e Consentimento
+- [ ] Criar tabela `user_consents` no schema
+- [ ] Criar página de Termos de Uso
+- [ ] Criar página de Política de Privacidade
+- [ ] Implementar modal de consentimento no primeiro login
+- [ ] Salvar registro de consentimento com timestamp
+- [ ] Adicionar checkbox de aceite obrigatório
+- [ ] Criar rota para visualizar termos aceitos
+
+### Direito ao Esquecimento
+- [ ] Criar mutation para solicitar exclusão de conta
+- [ ] Implementar exclusão em cascata (processos, documentos, comentários)
+- [ ] Criar confirmação de exclusão com senha
+- [ ] Adicionar período de carência (30 dias)
+- [ ] Enviar email de confirmação de exclusão
+- [ ] Criar log de exclusões para auditoria
+
+### Portabilidade de Dados
+- [ ] Criar rota para exportar todos os dados do usuário
+- [ ] Gerar arquivo JSON com todos os dados
+- [ ] Incluir processos, documentos, comentários, atividades
+- [ ] Adicionar botão "Exportar Meus Dados" nas configurações
+
+## Fase 17 - Sistema de Administração
+
+### Gerenciamento de Usuários
+- [ ] Criar página de Admin (apenas para role=admin)
+- [ ] Listar todos os usuários cadastrados
+- [ ] Implementar busca e filtros de usuários
+- [ ] Adicionar botão para promover usuário a admin
+- [ ] Adicionar botão para rebaixar admin a usuário
+- [ ] Implementar desativação de conta (sem deletar)
+- [ ] Mostrar estatísticas de cada usuário (processos, documentos)
+
+### Auditoria e Logs
+- [ ] Criar tabela `audit_logs` para ações administrativas
+- [ ] Registrar todas as alterações de permissões
+- [ ] Registrar acessos administrativos
+- [ ] Criar página de visualização de logs
+- [ ] Implementar filtros por tipo de ação e período
+- [ ] Adicionar exportação de logs em CSV

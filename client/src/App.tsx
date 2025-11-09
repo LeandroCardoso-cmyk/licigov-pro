@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Modules from "./pages/Modules";
 import ProcessDetails from "./pages/ProcessDetails";
+import Settings from "./pages/Settings";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -36,6 +37,7 @@ function Router() {
       <Route path={"/"} component={() => <AuthenticatedRoute component={Modules} />} />
       <Route path={"/processos"} component={() => <AuthenticatedRoute component={Dashboard} />} />
       <Route path="/processo/:id" component={() => <AuthenticatedRoute component={ProcessDetails} />} />
+      <Route path={"/configuracoes"} component={() => <AuthenticatedRoute component={Settings} />} />
       <Route path={"/login"} component={Login} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />

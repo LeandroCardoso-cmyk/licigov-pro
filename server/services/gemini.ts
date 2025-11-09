@@ -12,6 +12,12 @@ export async function generateETP(params: {
   estimatedValue: number; // em centavos
   modality: string;
   category: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
@@ -41,6 +47,25 @@ export async function generateETP(params: {
 
   const modalityName = modalityMap[params.modality] || params.modality;
   const categoryName = categoryMap[params.category] || params.category;
+
+  // Construir cabeçalho se houver configurações
+  let header = "";
+  if (params.organizationName) {
+    header = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) header += `${params.address}\n`;
+    if (params.cnpj) header += `CNPJ: ${params.cnpj}\n`;
+    header += `---\n\n`;
+  }
+
+  // Construir rodapé se houver configurações
+  let footer = "";
+  if (params.phone || params.email || params.website) {
+    footer = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footer += `Telefone: ${params.phone}\n`;
+    if (params.email) footer += `E-mail: ${params.email}\n`;
+    if (params.website) footer += `Website: ${params.website}\n`;
+    footer += `---`;
+  }
 
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21 (Nova Lei de Licitações e Contratos Administrativos).
 
@@ -111,7 +136,8 @@ Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissio
     const response = result.response;
     const text = response.text();
 
-    return text;
+    // Adicionar cabeçalho e rodapé ao documento
+    return `${header}${text}${footer}`;
   } catch (error) {
     console.error("Erro ao gerar ETP com Gemini:", error);
     throw new Error("Falha ao gerar ETP. Por favor, tente novamente.");
@@ -128,6 +154,12 @@ export async function generateTR(params: {
   modality: string;
   category: string;
   etpContent: string; // Conteúdo do ETP para contexto
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
@@ -135,6 +167,25 @@ export async function generateTR(params: {
     style: "currency",
     currency: "BRL",
   });
+
+  // Construir cabeçalho
+  let headerTR = "";
+  if (params.organizationName) {
+    headerTR = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) headerTR += `${params.address}\n`;
+    if (params.cnpj) headerTR += `CNPJ: ${params.cnpj}\n`;
+    headerTR += `---\n\n`;
+  }
+
+  // Construir rodapé
+  let footerTR = "";
+  if (params.phone || params.email || params.website) {
+    footerTR = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footerTR += `Telefone: ${params.phone}\n`;
+    if (params.email) footerTR += `E-mail: ${params.email}\n`;
+    if (params.website) footerTR += `Website: ${params.website}\n`;
+    footerTR += `---`;
+  }
 
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
@@ -161,9 +212,193 @@ Gere um documento profissional em markdown.`;
 
   try {
     const result = await model.generateContent(prompt);
-    return result.response.text();
+    const textTR = result.response.text();
+    return `${headerTR}${textTR}${footerTR}`;
   } catch (error) {
     console.error("Erro ao gerar TR com Gemini:", error);
     throw new Error("Falha ao gerar TR. Por favor, tente novamente.");
+  }
+}
+
+/**
+ * Gera o DFD (Documento Formalizador de Demanda) usando Google Gemini
+ */
+export async function generateDFD(params: {
+  processName: string;
+  object: string;
+  estimatedValue: number;
+  modality: string;
+  category: string;
+  etpContent: string;
+  trContent: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+  const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  // Construir cabeçalho
+  let headerDFD = "";
+  if (params.organizationName) {
+    headerDFD = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) headerDFD += `${params.address}\n`;
+    if (params.cnpj) headerDFD += `CNPJ: ${params.cnpj}\n`;
+    headerDFD += `---\n\n`;
+  }
+
+  // Construir rodapé
+  let footerDFD = "";
+  if (params.phone || params.email || params.website) {
+    footerDFD = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footerDFD += `Telefone: ${params.phone}\n`;
+    if (params.email) footerDFD += `E-mail: ${params.email}\n`;
+    if (params.website) footerDFD += `Website: ${params.website}\n`;
+    footerDFD += `---`;
+  }
+
+  const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
+
+Com base no ETP e TR já elaborados, gere agora um **Documento Formalizador de Demanda (DFD)** completo.
+
+O DFD é o documento que formaliza a necessidade da contratação e dá início ao processo licitatório.
+
+**CONTEXTO - ETP ELABORADO:**
+${params.etpContent}
+
+**CONTEXTO - TR ELABORADO:**
+${params.trContent}
+
+**DADOS DO PROCESSO:**
+- Nome: ${params.processName}
+- Objeto: ${params.object}
+- Valor Estimado: ${valueInReais}
+- Modalidade: ${params.modality}
+- Categoria: ${params.category}
+
+**INSTRUÇÕES:**
+1. O DFD deve ser conciso e objetivo
+2. Deve conter a justificativa da necessidade
+3. Deve referenciar o ETP e TR
+4. Deve indicar a disponibilidade orçamentária
+5. Siga a Lei 14.133/21, especialmente Art. 11
+
+Gere um documento profissional em markdown.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const textDFD = result.response.text();
+    return `${headerDFD}${textDFD}${footerDFD}`;
+  } catch (error) {
+    console.error("Erro ao gerar DFD com Gemini:", error);
+    throw new Error("Falha ao gerar DFD. Por favor, tente novamente.");
+  }
+}
+
+/**
+ * Gera o Edital usando Google Gemini
+ */
+export async function generateEdital(params: {
+  processName: string;
+  object: string;
+  estimatedValue: number;
+  modality: string;
+  category: string;
+  etpContent: string;
+  trContent: string;
+  dfdContent: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+  const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  // Construir cabeçalho
+  let headerEdital = "";
+  if (params.organizationName) {
+    headerEdital = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) headerEdital += `${params.address}\n`;
+    if (params.cnpj) headerEdital += `CNPJ: ${params.cnpj}\n`;
+    headerEdital += `---\n\n`;
+  }
+
+  // Construir rodapé
+  let footerEdital = "";
+  if (params.phone || params.email || params.website) {
+    footerEdital = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footerEdital += `Telefone: ${params.phone}\n`;
+    if (params.email) footerEdital += `E-mail: ${params.email}\n`;
+    if (params.website) footerEdital += `Website: ${params.website}\n`;
+    footerEdital += `---`;
+  }
+
+  const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
+
+Com base em todos os documentos já elaborados (ETP, TR e DFD), gere agora o **Edital de Licitação** completo.
+
+**CONTEXTO - ETP:**
+${params.etpContent}
+
+**CONTEXTO - TR:**
+${params.trContent}
+
+**CONTEXTO - DFD:**
+${params.dfdContent}
+
+**DADOS DO PROCESSO:**
+- Nome: ${params.processName}
+- Objeto: ${params.object}
+- Valor Estimado: ${valueInReais}
+- Modalidade: ${params.modality}
+- Categoria: ${params.category}
+
+**INSTRUÇÕES:**
+1. O Edital deve ser completo e pronto para publicação
+2. Inclua todas as seções obrigatórias de um edital
+3. Defina prazos, critérios de habilitação e julgamento
+4. Estabeleça regras claras de participação
+5. Siga rigorosamente a Lei 14.133/21
+6. Use linguagem jurídica formal e precisa
+
+**ESTRUTURA DO EDITAL:**
+
+# EDITAL DE LICITAÇÃO Nº [NUMERO]/[ANO]
+
+## PREÂMBULO
+## OBJETO
+## CONDIÇÕES DE PARTICIPAÇÃO
+## CREDENCIAMENTO
+## PROPOSTA
+## JULGAMENTO
+## HABILITAÇÃO
+## RECURSOS
+## ADJUDICAÇÃO E HOMOLOGAÇÃO
+## CONTRATAÇÃO
+## ANEXOS
+
+Gere um documento profissional e completo em markdown.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const textEdital = result.response.text();
+    return `${headerEdital}${textEdital}${footerEdital}`;
+  } catch (error) {
+    console.error("Erro ao gerar Edital com Gemini:", error);
+    throw new Error("Falha ao gerar Edital. Por favor, tente novamente.");
   }
 }

@@ -12,13 +12,21 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
 import { APP_LOGO } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
+import { DocumentEditor } from "@/components/DocumentEditor";
+import { MembersDialog } from "@/components/MembersDialog";
+import { NotificationBell } from "@/components/NotificationBell";
+import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 
 const statusLabels: Record<string, string> = {
   em_etp: "Em ETP",
@@ -41,6 +49,8 @@ export default function ProcessDetails() {
   const [, navigate] = useLocation();
   const params = useParams();
   const processId = parseInt(params.id || "0");
+  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState<string>("");
 
   const { data: process, isLoading: processLoading } = trpc.processes.getById.useQuery({
     id: processId,
@@ -53,6 +63,29 @@ export default function ProcessDetails() {
   const { data: activities } = trpc.activities.listByProcess.useQuery({
     processId,
   });
+
+  const generateNextMutation = trpc.documents.generateNext.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.documentType.toUpperCase()} gerado com sucesso!`, {
+        description: "O documento foi gerado automaticamente pela IA.",
+      });
+      // Invalidar queries para atualizar a interface
+      utils.processes.getById.invalidate({ id: processId });
+      utils.documents.listByProcess.invalidate({ processId });
+      utils.activities.listByProcess.invalidate({ processId });
+    },
+    onError: (error) => {
+      toast.error("Erro ao gerar documento", {
+        description: error.message,
+      });
+    },
+  });
+
+  const utils = trpc.useUtils();
+
+  const handleGenerateNext = () => {
+    generateNextMutation.mutate({ processId });
+  };
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("pt-BR", {
@@ -72,12 +105,107 @@ export default function ProcessDetails() {
     });
   };
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingDocx, setDownloadingDocx] = useState(false);
+
+  const downloadPdfMutation = trpc.documents.downloadPdf.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Download do PDF iniciado!');
+      setDownloadingPdf(false);
+    },
+    onError: (error) => {
+      toast.error('Erro ao gerar PDF', { description: error.message });
+      setDownloadingPdf(false);
+    },
+  });
+
+  const updateDocumentMutation = trpc.documents.updateDocument.useMutation({
+    onSuccess: (data) => {
+      toast.success('Documento atualizado com sucesso!', {
+        description: `Nova versão ${data.version} criada.`,
+      });
+      setEditingDocumentId(null);
+      setEditingContent('');
+      utils.documents.listByProcess.invalidate({ processId });
+      utils.activities.listByProcess.invalidate({ processId });
+    },
+    onError: (error) => {
+      toast.error('Erro ao salvar documento', { description: error.message });
+    },
+  });
+
+  const handleEditDocument = (documentId: number, content: string) => {
+    setEditingDocumentId(documentId);
+    setEditingContent(content);
+  };
+
+  const handleSaveEdit = (content: string) => {
+    if (editingDocumentId) {
+      updateDocumentMutation.mutate({ documentId: editingDocumentId, content });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDocumentId(null);
+    setEditingContent('');
+  };
+
+  const handleAutoSave = async (content: string) => {
+    if (editingDocumentId) {
+      // Auto-save silencioso sem criar nova versão
+      // Por enquanto, vamos apenas atualizar o conteúdo localmente
+      // Em produção, você pode criar uma rota separada para auto-save
+      setEditingContent(content);
+    }
+  };
+
+  const downloadDocxMutation = trpc.documents.downloadDocx.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Download do DOCX iniciado!');
+      setDownloadingDocx(false);
+    },
+    onError: (error) => {
+      toast.error('Erro ao gerar DOCX', { description: error.message });
+      setDownloadingDocx(false);
+    },
+  });
+
   const handleDownloadPDF = (documentId: number) => {
-    toast.info("Funcionalidade de download em desenvolvimento");
+    setDownloadingPdf(true);
+    downloadPdfMutation.mutate({ documentId });
   };
 
   const handleDownloadDOCX = (documentId: number) => {
-    toast.info("Funcionalidade de download em desenvolvimento");
+    setDownloadingDocx(true);
+    downloadDocxMutation.mutate({ documentId });
   };
 
   if (processLoading || documentsLoading) {
@@ -99,6 +227,31 @@ export default function ProcessDetails() {
   }
 
   const etpDocument = documents?.find((doc) => doc.type === "etp");
+  const trDocument = documents?.find((doc) => doc.type === "tr");
+  const dfdDocument = documents?.find((doc) => doc.type === "dfd");
+  const editalDocument = documents?.find((doc) => doc.type === "edital");
+
+  // Determinar qual documento exibir
+  // Estado para controlar qual documento está sendo visualizado
+  const [activeTab, setActiveTab] = useState<"etp" | "tr" | "dfd" | "edital">("etp");
+
+  // Determinar qual documento exibir baseado na aba ativa
+  const currentDocument = 
+    activeTab === "etp" ? etpDocument :
+    activeTab === "tr" ? trDocument :
+    activeTab === "dfd" ? dfdDocument :
+    activeTab === "edital" ? editalDocument : null;
+
+  // Verificar se pode avançar
+  const canAdvance = 
+    (process.status === "em_etp" && etpDocument) ||
+    (process.status === "em_tr" && trDocument) ||
+    (process.status === "em_dfd" && dfdDocument);
+
+  const nextDocumentLabel = 
+    process.status === "em_etp" ? "TR" :
+    process.status === "em_tr" ? "DFD" :
+    process.status === "em_dfd" ? "Edital" : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -119,6 +272,7 @@ export default function ProcessDetails() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium text-foreground">{user?.name}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
@@ -150,9 +304,12 @@ export default function ProcessDetails() {
               <h1 className="text-3xl font-bold text-foreground mb-2">{process.name}</h1>
               <p className="text-muted-foreground">{process.object}</p>
             </div>
-            <Badge variant="secondary" className="text-sm px-4 py-2">
-              {statusLabels[process.status]}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <MembersDialog processId={processId} processName={process.name} />
+              <Badge variant="secondary" className="text-sm px-4 py-2">
+                {statusLabels[process.status]}
+              </Badge>
+            </div>
           </div>
 
           {/* Process Info Cards */}
@@ -243,40 +400,218 @@ export default function ProcessDetails() {
           </CardContent>
         </Card>
 
-        {/* Document Content */}
-        {etpDocument ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>{documentLabels[etpDocument.type]}</CardTitle>
-                  <CardDescription>
-                    Gerado em {formatDate(etpDocument.createdAt)} • Versão {etpDocument.version}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(etpDocument.id)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    PDF
+        {/* Document Content with Tabs */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between mb-4">
+              <CardTitle>Documentos do Processo</CardTitle>
+              <div className="flex gap-2">
+                {canAdvance && nextDocumentLabel && (
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={handleGenerateNext}
+                    disabled={generateNextMutation.isPending}
+                  >
+                    {generateNextMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-4 w-4" />
+                    )}
+                    Gerar {nextDocumentLabel}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(etpDocument.id)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    DOCX
-                  </Button>
-                  <Button variant="default" size="sm">
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </Button>
-                </div>
+                )}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <Streamdown>{etpDocument.content || ""}</Streamdown>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="etp" disabled={!etpDocument}>
+                  ETP
+                </TabsTrigger>
+                <TabsTrigger value="tr" disabled={!trDocument}>
+                  TR
+                </TabsTrigger>
+                <TabsTrigger value="dfd" disabled={!dfdDocument}>
+                  DFD
+                </TabsTrigger>
+                <TabsTrigger value="edital" disabled={!editalDocument}>
+                  Edital
+                </TabsTrigger>
+              </TabsList>
+
+              {/* ETP Tab */}
+              <TabsContent value="etp" className="mt-6">
+                {etpDocument ? (
+                  <div>
+                    {editingDocumentId === etpDocument.id ? (
+                      <DocumentEditor
+                        initialContent={editingContent}
+                        onSave={handleSaveEdit}
+                        onCancel={handleCancelEdit}
+                        isSaving={updateDocumentMutation.isPending}
+                        autoSave={true}
+                        onAutoSave={handleAutoSave}
+                      />
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="text-lg font-semibold">{documentLabels.etp}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Gerado em {formatDate(etpDocument.createdAt)} • Versão {etpDocument.version}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(etpDocument.id)} disabled={downloadingPdf}>
+                              <Download className="mr-2 h-4 w-4" />
+                              {downloadingPdf ? 'Gerando...' : 'PDF'}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(etpDocument.id)} disabled={downloadingDocx}>
+                              <Download className="mr-2 h-4 w-4" />
+                              {downloadingDocx ? 'Gerando...' : 'DOCX'}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleEditDocument(etpDocument.id, etpDocument.content || '')}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
+                            </Button>
+                            <VersionHistoryDialog documentId={etpDocument.id} documentType="etp" />
+                          </div>
+                        </div>
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                          <Streamdown>{etpDocument.content || ""}</Streamdown>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>ETP ainda não foi gerado</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* TR Tab */}
+              <TabsContent value="tr" className="mt-6">
+                {trDocument ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{documentLabels.tr}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Gerado em {formatDate(trDocument.createdAt)} • Versão {trDocument.version}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(trDocument.id)} disabled={downloadingPdf}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingPdf ? 'Gerando...' : 'PDF'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(trDocument.id)} disabled={downloadingDocx}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingDocx ? 'Gerando...' : 'DOCX'}
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <Streamdown>{trDocument.content || ""}</Streamdown>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>TR ainda não foi gerado</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* DFD Tab */}
+              <TabsContent value="dfd" className="mt-6">
+                {dfdDocument ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{documentLabels.dfd}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Gerado em {formatDate(dfdDocument.createdAt)} • Versão {dfdDocument.version}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(dfdDocument.id)} disabled={downloadingPdf}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingPdf ? 'Gerando...' : 'PDF'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(dfdDocument.id)} disabled={downloadingDocx}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingDocx ? 'Gerando...' : 'DOCX'}
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <Streamdown>{dfdDocument.content || ""}</Streamdown>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>DFD ainda não foi gerado</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Edital Tab */}
+              <TabsContent value="edital" className="mt-6">
+                {editalDocument ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{documentLabels.edital}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Gerado em {formatDate(editalDocument.createdAt)} • Versão {editalDocument.version}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(editalDocument.id)} disabled={downloadingPdf}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingPdf ? 'Gerando...' : 'PDF'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(editalDocument.id)} disabled={downloadingDocx}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {downloadingDocx ? 'Gerando...' : 'DOCX'}
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <Streamdown>{editalDocument.content || ""}</Streamdown>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>Edital ainda não foi gerado</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* Empty state (not needed anymore) */}
+        {false && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />

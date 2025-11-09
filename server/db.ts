@@ -6,13 +6,23 @@ import {
   processes,
   documents,
   editalParameters,
-  processCollaborators,
+  documentSettings,
   activityLogs,
+  processMembers,
+  notifications,
+  comments,
+  userConsents,
+  auditLogs,
   InsertProcess,
   InsertDocument,
   InsertEditalParameter,
-  InsertProcessCollaborator,
-  InsertActivityLog
+  InsertDocumentSettings,
+  InsertActivityLog,
+  InsertProcessMember,
+  InsertNotification,
+  InsertComment,
+  InsertUserConsent,
+  InsertAuditLog
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -100,6 +110,22 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 // Process queries
 export async function createProcess(process: InsertProcess) {
   const db = await getDb();
@@ -155,6 +181,14 @@ export async function getDocumentsByProcess(processId: number) {
     .orderBy(desc(documents.createdAt));
 }
 
+export async function getDocumentById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function getDocumentByProcessAndType(processId: number, type: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -171,6 +205,20 @@ export async function getDocumentByProcessAndType(processId: number, type: strin
     .limit(1);
   
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getDocumentVersions(processId: number, type: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(documents)
+    .where(and(
+      eq(documents.processId, processId),
+      eq(documents.type, type as any)
+    ))
+    .orderBy(desc(documents.version));
 }
 
 // Edital parameters queries
@@ -220,20 +268,486 @@ export async function getActivityLogsByProcess(processId: number) {
     .orderBy(desc(activityLogs.createdAt));
 }
 
-// Collaborator queries
-export async function addCollaborator(collaborator: InsertProcessCollaborator) {
+// Document Settings queries
+export async function upsertDocumentSettings(settings: InsertDocumentSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  await db.insert(processCollaborators).values(collaborator);
+  await db.insert(documentSettings).values(settings).onDuplicateKeyUpdate({
+    set: {
+      organizationName: settings.organizationName,
+      logoUrl: settings.logoUrl,
+      address: settings.address,
+      cnpj: settings.cnpj,
+      phone: settings.phone,
+      email: settings.email,
+      website: settings.website,
+      footerText: settings.footerText,
+    },
+  });
 }
 
-export async function getCollaboratorsByProcess(processId: number) {
+export async function getDocumentSettingsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(documentSettings)
+    .where(eq(documentSettings.userId, userId))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// Process Members (Collaboration) queries
+export async function addProcessMember(member: InsertProcessMember) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(processMembers).values(member);
+}
+
+export async function removeProcessMember(processId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .delete(processMembers)
+    .where(and(
+      eq(processMembers.processId, processId),
+      eq(processMembers.userId, userId)
+    ));
+}
+
+export async function updateProcessMemberPermission(
+  processId: number, 
+  userId: number, 
+  permission: "viewer" | "editor" | "approver" | "owner"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(processMembers)
+    .set({ permission })
+    .where(and(
+      eq(processMembers.processId, processId),
+      eq(processMembers.userId, userId)
+    ));
+}
+
+export async function getProcessMembers(processId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select({
+      id: processMembers.id,
+      userId: processMembers.userId,
+      permission: processMembers.permission,
+      invitedBy: processMembers.invitedBy,
+      createdAt: processMembers.createdAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(processMembers)
+    .leftJoin(users, eq(processMembers.userId, users.id))
+    .where(eq(processMembers.processId, processId))
+    .orderBy(desc(processMembers.createdAt));
+}
+
+export async function getProcessMember(processId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(processMembers)
+    .where(and(
+      eq(processMembers.processId, processId),
+      eq(processMembers.userId, userId)
+    ))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserProcesses(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get processes where user is owner OR member
+  const ownedProcesses = await db
+    .select()
+    .from(processes)
+    .where(eq(processes.ownerId, userId))
+    .orderBy(desc(processes.updatedAt));
+  
+  const memberProcessIds = await db
+    .select({ processId: processMembers.processId })
+    .from(processMembers)
+    .where(eq(processMembers.userId, userId));
+  
+  if (memberProcessIds.length === 0) {
+    return ownedProcesses;
+  }
+  
+  const memberProcesses = await db
+    .select()
+    .from(processes)
+    .where(
+      and(
+        ...memberProcessIds.map(m => eq(processes.id, m.processId))
+      )
+    )
+    .orderBy(desc(processes.updatedAt));
+  
+  // Merge and deduplicate
+  const allProcesses = [...ownedProcesses, ...memberProcesses];
+  const uniqueProcesses = Array.from(
+    new Map(allProcesses.map(p => [p.id, p])).values()
+  );
+  
+  return uniqueProcesses;
+}
+
+// Notifications queries
+export async function createNotification(notification: InsertNotification) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(notifications).values(notification);
+}
+
+export async function getUserNotifications(userId: number, limit: number = 50) {
   const db = await getDb();
   if (!db) return [];
   
   return await db
     .select()
-    .from(processCollaborators)
-    .where(eq(processCollaborators.processId, processId));
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+}
+
+export async function getUnreadNotificationsCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  
+  const result = await db
+    .select()
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, userId),
+      eq(notifications.isRead, false)
+    ));
+  
+  return result.length;
+}
+
+export async function markNotificationAsRead(notificationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(eq(notifications.id, notificationId));
+}
+
+export async function markAllNotificationsAsRead(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(and(
+      eq(notifications.userId, userId),
+      eq(notifications.isRead, false)
+    ));
+}
+
+// ==================== COMENTÁRIOS ====================
+
+export async function createComment(comment: InsertComment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(comments).values(comment);
+}
+
+export async function getCommentsByDocument(documentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(comments)
+    .where(eq(comments.documentId, documentId))
+    .orderBy(desc(comments.createdAt));
+}
+
+export async function updateComment(commentId: number, content: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(comments)
+    .set({ content, updatedAt: new Date() })
+    .where(eq(comments.id, commentId));
+}
+
+export async function deleteComment(commentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(comments).where(eq(comments.id, commentId));
+}
+
+export async function getCommentById(commentId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// ==================== LGPD - CONSENTIMENTOS ====================
+
+export async function createUserConsent(consent: InsertUserConsent) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(userConsents).values(consent);
+}
+
+export async function getUserConsents(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(userConsents)
+    .where(eq(userConsents.userId, userId))
+    .orderBy(desc(userConsents.createdAt));
+}
+
+export async function hasUserAcceptedConsent(userId: number, consentType: string, version: string) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const result = await db
+    .select()
+    .from(userConsents)
+    .where(and(
+      eq(userConsents.userId, userId),
+      eq(userConsents.consentType, consentType as any),
+      eq(userConsents.version, version),
+      eq(userConsents.accepted, true)
+    ))
+    .limit(1);
+  
+  return result.length > 0;
+}
+
+// ==================== LGPD - EXCLUSÃO DE DADOS ====================
+
+export async function deleteUserData(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Deletar em cascata: comentários, notificações, membros, atividades, documentos, processos
+  await db.delete(comments).where(eq(comments.userId, userId));
+  await db.delete(notifications).where(eq(notifications.userId, userId));
+  await db.delete(processMembers).where(eq(processMembers.userId, userId));
+  await db.delete(activityLogs).where(eq(activityLogs.userId, userId));
+  
+  // Deletar processos e seus documentos
+  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  for (const process of userProcesses) {
+    await db.delete(documents).where(eq(documents.processId, process.id));
+    await db.delete(editalParameters).where(eq(editalParameters.processId, process.id));
+  }
+  await db.delete(processes).where(eq(processes.userId, userId));
+  
+  // Deletar consentimentos
+  await db.delete(userConsents).where(eq(userConsents.userId, userId));
+  
+  // Deletar usuário
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+export async function exportUserData(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const user = await getUserById(userId);
+  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  const userComments = await db.select().from(comments).where(eq(comments.userId, userId));
+  const userNotifications = await db.select().from(notifications).where(eq(notifications.userId, userId));
+  const userConsentsData = await getUserConsents(userId);
+  const userActivities = await db.select().from(activityLogs).where(eq(activityLogs.userId, userId));
+  
+  // Buscar documentos de todos os processos
+  const allDocuments = [];
+  for (const process of userProcesses) {
+    const docs = await db.select().from(documents).where(eq(documents.processId, process.id));
+    allDocuments.push(...docs);
+  }
+  
+  return {
+    user,
+    processes: userProcesses,
+    documents: allDocuments,
+    comments: userComments,
+    notifications: userNotifications,
+    consents: userConsentsData,
+    activities: userActivities,
+    exportedAt: new Date().toISOString(),
+  };
+}
+
+// ==================== ADMIN - GERENCIAMENTO DE USUÁRIOS ====================
+
+export async function getAllUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(users).orderBy(desc(users.createdAt));
+}
+
+export async function updateUserRole(userId: number, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(users).set({ role }).where(eq(users.id, userId));
+}
+
+export async function getUserStats(userId: number) {
+  const db = await getDb();
+  if (!db) return { processCount: 0, documentCount: 0, commentCount: 0 };
+  
+  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  const processIds = userProcesses.map(p => p.id);
+  
+  let documentCount = 0;
+  for (const processId of processIds) {
+    const docs = await db.select().from(documents).where(eq(documents.processId, processId));
+    documentCount += docs.length;
+  }
+  
+  const userComments = await db.select().from(comments).where(eq(comments.userId, userId));
+  
+  return {
+    processCount: userProcesses.length,
+    documentCount,
+    commentCount: userComments.length,
+  };
+}
+
+// ==================== ADMIN - AUDITORIA ====================
+
+export async function createAuditLog(log: InsertAuditLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(auditLogs).values(log);
+}
+
+export async function getAuditLogs(limit: number = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(auditLogs)
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+}
+
+export async function getAuditLogsByAdmin(adminId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(auditLogs)
+    .where(eq(auditLogs.adminId, adminId))
+    .orderBy(desc(auditLogs.createdAt));
+}
+
+// ==================== ANALYTICS ====================
+
+export async function getProcessCountByStatus() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const allProcesses = await db.select().from(processes);
+  
+  const statusCounts: Record<string, number> = {};
+  for (const process of allProcesses) {
+    statusCounts[process.status] = (statusCounts[process.status] || 0) + 1;
+  }
+  
+  return Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+}
+
+export async function getDocumentCountByMonth(months: number = 6) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const allDocuments = await db.select().from(documents);
+  
+  const monthCounts: Record<string, number> = {};
+  const now = new Date();
+  
+  for (const doc of allDocuments) {
+    const docDate = new Date(doc.createdAt);
+    const monthDiff = (now.getFullYear() - docDate.getFullYear()) * 12 + (now.getMonth() - docDate.getMonth());
+    
+    if (monthDiff < months) {
+      const monthKey = `${docDate.getFullYear()}-${String(docDate.getMonth() + 1).padStart(2, '0')}`;
+      monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+    }
+  }
+  
+  return Object.entries(monthCounts)
+    .map(([month, count]) => ({ month, count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export async function getMostActiveMembers(limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const allActivities = await db.select().from(activityLogs);
+  
+  const userActivityCounts: Record<number, number> = {};
+  for (const activity of allActivities) {
+    userActivityCounts[activity.userId] = (userActivityCounts[activity.userId] || 0) + 1;
+  }
+  
+  const sortedUsers = Object.entries(userActivityCounts)
+    .map(([userId, count]) => ({ userId: parseInt(userId), activityCount: count }))
+    .sort((a, b) => b.activityCount - a.activityCount)
+    .slice(0, limit);
+  
+  // Buscar dados dos usuários
+  const result = [];
+  for (const { userId, activityCount } of sortedUsers) {
+    const user = await getUserById(userId);
+    if (user) {
+      result.push({
+        userId: user.id,
+        userName: user.name || 'Usuário sem nome',
+        userEmail: user.email || '',
+        activityCount,
+      });
+    }
+  }
+  
+  return result;
 }

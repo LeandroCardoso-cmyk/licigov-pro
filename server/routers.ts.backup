@@ -297,19 +297,19 @@ export const appRouter = router({
     updateDocument: protectedProcedure
       .input(z.object({ documentId: z.number(), content: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        const document = await db.getDocumentById(input.documentId);
+        const document = await getDocumentById(input.documentId);
         if (!document) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Documento não encontrado' });
         }
 
-        const process = await db.getProcessById(document.processId);
+        const process = await getProcessById(document.processId);
         if (!process || process.userId !== ctx.user.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para editar este documento' });
         }
 
         // Criar nova versão do documento
         const newVersion = document.version + 1;
-        await db.createDocument({
+        await createDocument({
           processId: document.processId,
           type: document.type,
           content: input.content,
@@ -740,6 +740,221 @@ export const appRouter = router({
     get: protectedProcedure
       .query(async ({ ctx }) => {
         return await db.getDocumentSettingsByUser(ctx.user.id);
+      }),
+  }),
+
+  // ==================== COMENTÁRIOS ====================
+  comments: router({
+    // Adicionar comentário
+    add: protectedProcedure
+      .input(z.object({
+        documentId: z.number(),
+        processId: z.number(),
+        content: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.createComment({
+          documentId: input.documentId,
+          processId: input.processId,
+          userId: ctx.user.id,
+          content: input.content,
+        });
+
+        // Registrar atividade
+        await db.createActivityLog({
+          processId: input.processId,
+          userId: ctx.user.id,
+          action: `adicionou um comentário`,
+        });
+
+        // Notificar membros do processo (implementar depois)
+        return { success: true };
+      }),
+
+    // Listar comentários de um documento
+    list: protectedProcedure
+      .input(z.object({ documentId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getCommentsByDocument(input.documentId);
+      }),
+
+    // Editar comentário
+    update: protectedProcedure
+      .input(z.object({
+        commentId: z.number(),
+        content: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const comment = await db.getCommentById(input.commentId);
+        if (!comment || comment.userId !== ctx.user.id) {
+          throw new Error("Sem permissão para editar este comentário");
+        }
+
+        await db.updateComment(input.commentId, input.content);
+        return { success: true };
+      }),
+
+    // Deletar comentário
+    delete: protectedProcedure
+      .input(z.object({ commentId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const comment = await db.getCommentById(input.commentId);
+        if (!comment || comment.userId !== ctx.user.id) {
+          throw new Error("Sem permissão para deletar este comentário");
+        }
+
+        await db.deleteComment(input.commentId);
+        return { success: true };
+      }),
+  }),
+
+  // ==================== LGPD ====================
+  lgpd: router({
+    // Registrar consentimento
+    recordConsent: protectedProcedure
+      .input(z.object({
+        consentType: z.enum(["terms_of_use", "privacy_policy", "data_processing"]),
+        version: z.string(),
+        ipAddress: z.string().optional(),
+        userAgent: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.createUserConsent({
+          userId: ctx.user.id,
+          consentType: input.consentType,
+          version: input.version,
+          accepted: true,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+        });
+        return { success: true };
+      }),
+
+    // Verificar se usuário aceitou consentimento
+    checkConsent: protectedProcedure
+      .input(z.object({
+        consentType: z.enum(["terms_of_use", "privacy_policy", "data_processing"]),
+        version: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const hasAccepted = await db.hasUserAcceptedConsent(
+          ctx.user.id,
+          input.consentType,
+          input.version
+        );
+        return { hasAccepted };
+      }),
+
+    // Exportar dados do usuário
+    exportMyData: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const data = await db.exportUserData(ctx.user.id);
+        return data;
+      }),
+
+    // Solicitar exclusão de conta
+    deleteMyAccount: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        await db.deleteUserData(ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // ==================== ADMIN ====================
+  admin: router({
+    // Listar todos os usuários (apenas admin)
+    listUsers: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new Error("Acesso negado: apenas administradores");
+        }
+        return await db.getAllUsers();
+      }),
+
+    // Promover usuário a admin
+    promoteToAdmin: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new Error("Acesso negado: apenas administradores");
+        }
+
+        await db.updateUserRole(input.userId, "admin");
+
+        // Registrar auditoria
+        await db.createAuditLog({
+          adminId: ctx.user.id,
+          targetUserId: input.userId,
+          action: "promote_to_admin",
+          details: `Usuário promovido a administrador`,
+        });
+
+        return { success: true };
+      }),
+
+    // Rebaixar admin para usuário
+    demoteFromAdmin: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new Error("Acesso negado: apenas administradores");
+        }
+
+        await db.updateUserRole(input.userId, "user");
+
+        // Registrar auditoria
+        await db.createAuditLog({
+          adminId: ctx.user.id,
+          targetUserId: input.userId,
+          action: "demote_from_admin",
+          details: `Administrador rebaixado para usuário`,
+        });
+
+        return { success: true };
+      }),
+
+    // Obter estatísticas de um usuário
+    getUserStats: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new Error("Acesso negado: apenas administradores");
+        }
+        return await db.getUserStats(input.userId);
+      }),
+
+    // Listar logs de auditoria
+    getAuditLogs: protectedProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new Error("Acesso negado: apenas administradores");
+        }
+        return await db.getAuditLogs(input.limit);
+      }),
+  }),
+
+  // ==================== ANALYTICS ====================
+  analytics: router({
+    // Estatísticas gerais
+    getOverview: protectedProcedure
+      .query(async ({ ctx }) => {
+        const processesByStatus = await db.getProcessCountByStatus();
+        const documentsByMonth = await db.getDocumentCountByMonth(6);
+        const mostActiveMembers = await db.getMostActiveMembers(10);
+
+        // Totais
+        const allUsers = await db.getAllUsers();
+        const allProcesses = await db.getProcessCountByStatus();
+        const totalProcesses = allProcesses.reduce((sum, item) => sum + item.count, 0);
+
+        return {
+          totalUsers: allUsers.length,
+          totalProcesses,
+          processesByStatus,
+          documentsByMonth,
+          mostActiveMembers,
+        };
       }),
   }),
 });
