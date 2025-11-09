@@ -16,6 +16,7 @@ import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AuditLogs from "./pages/AuditLogs";
 import Plans from "./pages/Plans";
+import SolicitarProposta from "./pages/SolicitarProposta";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { ConsentModal } from "./components/ConsentModal";
@@ -53,6 +54,7 @@ function Router() {
       <Route path={"/privacidade"} component={() => <AuthenticatedRoute component={PrivacyPolicy} />} />
       <Route path={"/audit-logs"} component={() => <AuthenticatedRoute component={AuditLogs} />} />
       <Route path={"/planos"} component={Plans} />
+      <Route path={"/solicitar-proposta"} component={SolicitarProposta} />
       <Route path={"/login"} component={Login} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />

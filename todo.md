@@ -551,14 +551,16 @@
 - [ ] Adicionar botão de download dos documentos da empresa (ZIP)
 
 ### Painel de Admin
-- [ ] Criar página `/admin/propostas`
+- [ ] Criar página `/admin/assinaturas` (todas as assinaturas: Stripe + Empenho)
+- [ ] Criar página `/admin/propostas` (gerenciar solicitações de empenho)
 - [ ] Listar todas as solicitações de proposta
 - [ ] Adicionar filtros (status, plano, data)
+- [ ] Adicionar ação "Registrar Empenho"
+- [ ] Adicionar ação "Ativar Assinatura" após receber empenho
 - [ ] Criar página `/admin/documentos-empresa`
 - [ ] Implementar upload de documentos
-- [ ] Mostrar status de validade de cada documento
-- [ ] Implementar sistema de alertas de vencimento
-- [ ] Adicionar ação "Ativar Assinatura" após receber empenho
+- [ ] Mostrar status de validade de cada documento (Válido, Vence em X dias, Vencido)
+- [ ] Adicionar botão "Atualizar" para substituir documento
 
 ### Documentos da Empresa Necessários
 - [ ] Contrato Social
