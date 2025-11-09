@@ -94,13 +94,44 @@ export default function Admin() {
           <div>
             <h1 className="text-3xl font-bold mb-2">Painel de Administração</h1>
             <p className="text-muted-foreground">
-              Gerencie usuários e permissões do sistema
+              Gerencie usuários, assinaturas, propostas e documentos
             </p>
           </div>
           <Button onClick={() => setLocation("/audit-logs")} variant="outline">
             <FileText className="mr-2 h-4 w-4" />
             Ver Logs de Auditoria
           </Button>
+        </div>
+
+        {/* Cards de Navegação */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/assinaturas")}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Assinaturas
+              </CardTitle>
+              <CardDescription>Visualize e gerencie todas as assinaturas (Stripe + Empenho)</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/propostas")}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Propostas
+              </CardTitle>
+              <CardDescription>Gerencie solicitações, registre empenhos e ative assinaturas</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/documentos")}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documentos
+              </CardTitle>
+              <CardDescription>Gerencie certidões e documentos da empresa</CardDescription>
+            </CardHeader>
+          </Card>
         </div>
 
         <Card>

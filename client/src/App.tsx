@@ -17,6 +17,9 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AuditLogs from "./pages/AuditLogs";
 import Plans from "./pages/Plans";
 import SolicitarProposta from "./pages/SolicitarProposta";
+import AdminSubscriptions from "./pages/AdminSubscriptions";
+import AdminProposals from "./pages/AdminProposals";
+import AdminDocuments from "./pages/AdminDocuments";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { ConsentModal } from "./components/ConsentModal";
@@ -50,6 +53,9 @@ function Router() {
       <Route path={"/configuracoes"} component={() => <AuthenticatedRoute component={Settings} />} />
       <Route path={"/analytics"} component={() => <AuthenticatedRoute component={Analytics} />} />
       <Route path={"/admin"} component={() => <AuthenticatedRoute component={Admin} />} />
+      <Route path={"/admin/assinaturas"} component={() => <AuthenticatedRoute component={AdminSubscriptions} />} />
+      <Route path={"/admin/propostas"} component={() => <AuthenticatedRoute component={AdminProposals} />} />
+      <Route path={"/admin/documentos"} component={() => <AuthenticatedRoute component={AdminDocuments} />} />
       <Route path={"/termos"} component={() => <AuthenticatedRoute component={TermsOfUse} />} />
       <Route path={"/privacidade"} component={() => <AuthenticatedRoute component={PrivacyPolicy} />} />
       <Route path={"/audit-logs"} component={() => <AuthenticatedRoute component={AuditLogs} />} />

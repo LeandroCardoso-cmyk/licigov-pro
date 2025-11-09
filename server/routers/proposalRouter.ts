@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router, adminProcedure } from "../_core/trpc";
 import * as db from "../db";
 import { generatePropostaComercial, generateMinutaContrato, generateTermoReferencia } from "../services/proposalGenerator";
 import { TRPCError } from "@trpc/server";
