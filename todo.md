@@ -1326,5 +1326,13 @@
 - [x] Decreto 11.462/2023 (Regulamenta Lei 14.133/21) - 101 chunks
 - [x] IN SEGES/ME nº 65/2021 (Instrução Normativa de Contratações) - 34 chunks
 - [x] Lei Complementar 123/2006 (Estatuto da ME/EPP) - 749 chunks
-- [ ] Manual de Licitações e Contratos do TCU - Indexando em background (1990/6581 chunks)
+- [x] Manual de Licitações e Contratos do TCU - 6581 chunks
 - [x] Manual de Licitações e Contratos do TCE Paraná - 1116 chunks
+
+
+## 🔧 Correções Necessárias
+
+### Formato de Embeddings no RAG
+- [ ] Corrigir script indexLaw.ts para salvar embeddings como JSON válido
+- [ ] Reindexar todos os documentos com formato correto (estimativa: 2h)
+- [ ] Testar RAG após reindexação para validar citações nos documentos gerados

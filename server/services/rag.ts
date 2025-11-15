@@ -31,18 +31,18 @@ export async function retrieveRelevantLaw(
     const queryEmbedding = await generateEmbedding(query);
     
     // 2. Buscar chunks (com filtro opcional por documentos)
-    let query = db.select().from(lawChunks);
+    let dbQuery = db.select().from(lawChunks);
     
     if (lawNames && lawNames.length > 0) {
       // Filtrar por documentos específicos
-      query = query.where(
+      dbQuery = dbQuery.where(
         lawNames.length === 1
           ? eq(lawChunks.lawName, lawNames[0])
           : (lawChunks.lawName as any) // Simplificado: buscar todos se múltiplos
       ) as any;
     }
     
-    const allChunks = await query;
+    const allChunks = await dbQuery;
     
     if (allChunks.length === 0) {
       const docs = lawNames && lawNames.length > 0 ? lawNames.join(", ") : "todos os documentos";

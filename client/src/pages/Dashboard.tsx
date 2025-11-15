@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Plus, FileText, Clock, CheckCircle2, Loader2, ArrowLeft } from "lucide-react";
+import { Plus, FileText, Clock, CheckCircle2, Loader2, ArrowLeft, DollarSign } from "lucide-react";
 // import { ExportProcesses } from "@/components/ExportProcesses"; // Removido temporariamente
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { useLocation } from "wouter";
@@ -122,6 +122,17 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {user?.role === 'admin' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate("/admin/ai-costs")}
+                  className="rounded-full"
+                  title="Dashboard de Custos de IA"
+                >
+                  <DollarSign className="h-5 w-5" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
