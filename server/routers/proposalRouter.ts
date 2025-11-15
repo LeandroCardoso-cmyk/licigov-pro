@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { publicProcedure, protectedProcedure, router, adminProcedure } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { generatePropostaComercial, generateMinutaContrato, generateTermoReferencia } from "../services/proposalGenerator";
+import { generateProposalZip } from "../services/proposalZipGenerator";
 import { TRPCError } from "@trpc/server";
 
 export const proposalRouter = router({
-  // Criar solicitação de proposta (público - qualquer um pode solicitar)
   create: publicProcedure
     .input(
       z.object({
@@ -24,7 +24,6 @@ export const proposalRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      // Buscar informações do plano
       const plan = await db.getSubscriptionPlanBySlug(input.planSlug);
       if (!plan) {
         throw new TRPCError({
@@ -33,7 +32,6 @@ export const proposalRouter = router({
         });
       }
 
-      // Criar solicitação
       const proposalId = await db.createProposalRequest({
         ...input,
         planName: plan.name,
@@ -41,13 +39,11 @@ export const proposalRouter = router({
         status: "pending",
       });
 
-      // Atualizar status para documents_sent
       await db.updateProposalRequestStatus(proposalId, "documents_sent");
 
       return { proposalId };
     }),
 
-  // Gerar documentos da proposta (público - após criar solicitação)
   generateDocuments: publicProcedure
     .input(z.object({ proposalId: z.number() }))
     .mutation(async ({ input }) => {
@@ -59,22 +55,20 @@ export const proposalRouter = router({
         });
       }
 
-      // Gerar documentos
-      const [propostaBuffer, contratoBuffer, trBuffer] = await Promise.all([
-        generatePropostaComercial(proposal),
-        generateMinutaContrato(proposal),
-        generateTermoReferencia(proposal),
-      ]);
+      const proposalData = {
+        ...proposal,
+        responsavelCargo: proposal.responsavelCargo ?? undefined,
+        observacoes: proposal.observacoes ?? undefined,
+      };
+      
+      // Gerar ZIP com proposta + documentos da empresa
+      const zipBuffer = await generateProposalZip(proposalData);
 
-      // Retornar buffers como base64 para download no frontend
       return {
-        proposta: propostaBuffer.toString("base64"),
-        contrato: contratoBuffer.toString("base64"),
-        termoReferencia: trBuffer.toString("base64"),
+        zip: zipBuffer.toString("base64"),
       };
     }),
 
-  // Listar todas as solicitações (admin)
   list: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== "admin") {
       throw new TRPCError({
@@ -86,7 +80,6 @@ export const proposalRouter = router({
     return await db.getAllProposalRequests();
   }),
 
-  // Atualizar status da proposta (admin)
   updateStatus: protectedProcedure
     .input(
       z.object({
@@ -106,7 +99,6 @@ export const proposalRouter = router({
       return { success: true };
     }),
 
-  // Registrar empenho recebido (admin)
   registerEmpenho: protectedProcedure
     .input(
       z.object({
@@ -134,12 +126,11 @@ export const proposalRouter = router({
       return { success: true };
     }),
 
-  // Ativar assinatura após receber empenho (admin)
   activateSubscription: protectedProcedure
     .input(
       z.object({
         proposalId: z.number(),
-        userId: z.number(), // ID do usuário que terá a assinatura
+        userId: z.number(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -165,7 +156,6 @@ export const proposalRouter = router({
         });
       }
 
-      // Buscar plano
       const plan = await db.getSubscriptionPlanBySlug(proposal.planSlug);
       if (!plan) {
         throw new TRPCError({
@@ -174,38 +164,33 @@ export const proposalRouter = router({
         });
       }
 
-      // Criar assinatura manual (12 meses)
       const startDate = new Date();
       const endDate = new Date();
       endDate.setFullYear(endDate.getFullYear() + 1);
 
-      await db.createSubscription({
+      const subscriptionResult = await db.createSubscription({
         userId: input.userId,
         planId: plan.id,
         status: "active",
         currentPeriodStart: startDate,
         currentPeriodEnd: endDate,
         cancelAtPeriodEnd: false,
-        paymentMethod: "empenho",
       });
 
-      // Atualizar status da proposta
+      const subscriptionId = Number((subscriptionResult as any).insertId);
+
       await db.updateProposalRequestStatus(input.proposalId, "activated");
 
-      // Registrar log de auditoria
       await db.createAuditLog({
-        userId: ctx.user.id,
-        action: "activate_subscription_empenho",
-        entityType: "proposal",
-        entityId: input.proposalId,
-        details: `Assinatura ativada via empenho ${proposal.numeroEmpenho}`,
+        adminId: ctx.user.id,
+        action: "other",
+        details: `Assinatura ativada via empenho ${proposal.numeroEmpenho} para proposta #${input.proposalId}`,
       });
 
       return { success: true };
     }),
 
-  // Upload de nota de empenho
-  uploadEmpenho: adminProcedure
+  uploadEmpenho: protectedProcedure
     .input(
       z.object({
         proposalId: z.number(),
@@ -214,6 +199,13 @@ export const proposalRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Apenas administradores podem fazer upload de empenho",
+        });
+      }
+
       const proposal = await db.getProposalRequestById(input.proposalId);
       if (!proposal) {
         throw new TRPCError({
@@ -230,8 +222,7 @@ export const proposalRouter = router({
       return { success: true };
     }),
 
-  // Upload de contrato assinado
-  uploadContrato: adminProcedure
+  uploadContrato: protectedProcedure
     .input(
       z.object({
         proposalId: z.number(),
@@ -243,6 +234,13 @@ export const proposalRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Apenas administradores podem fazer upload de contrato",
+        });
+      }
+
       const proposal = await db.getProposalRequestById(input.proposalId);
       if (!proposal) {
         throw new TRPCError({
@@ -251,7 +249,6 @@ export const proposalRouter = router({
         });
       }
 
-      // Calcular status de vigência
       const now = new Date();
       const diffDays = Math.ceil((input.dataFimVigencia.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       let statusVigencia: "vigente" | "vence_30_dias" | "vence_60_dias" | "vence_90_dias" | "vencido" = "vigente";
@@ -275,13 +272,10 @@ export const proposalRouter = router({
         statusVigencia,
       });
 
-      // Registrar log de auditoria
       await db.createAuditLog({
-        userId: ctx.user.id,
-        action: "upload_contrato",
-        entityType: "proposal",
-        entityId: input.proposalId,
-        details: `Contrato assinado anexado - Vigência: ${input.dataInicioVigencia.toLocaleDateString('pt-BR')} a ${input.dataFimVigencia.toLocaleDateString('pt-BR')}`,
+        adminId: ctx.user.id,
+        action: "other",
+        details: `Contrato assinado anexado para proposta #${input.proposalId} - Vigência: ${input.dataInicioVigencia.toLocaleDateString('pt-BR')} a ${input.dataFimVigencia.toLocaleDateString('pt-BR')}`,
       });
 
       return { success: true };

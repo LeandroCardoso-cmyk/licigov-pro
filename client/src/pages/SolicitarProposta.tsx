@@ -53,40 +53,18 @@ export default function SolicitarProposta() {
     try {
       const docs = await generateDocumentsMutation.mutateAsync({ proposalId });
 
-      // Download proposta
-      const propostaBlob = new Blob(
-        [Uint8Array.from(atob(docs.proposta), (c) => c.charCodeAt(0))],
-        { type: "application/pdf" }
+      // Download ZIP com proposta + documentos da empresa
+      const zipBlob = new Blob(
+        [Uint8Array.from(atob(docs.zip), (c) => c.charCodeAt(0))],
+        { type: "application/zip" }
       );
-      const propostaUrl = URL.createObjectURL(propostaBlob);
-      const propostaLink = document.createElement("a");
-      propostaLink.href = propostaUrl;
-      propostaLink.download = `Proposta_Comercial_${proposalId}.pdf`;
-      propostaLink.click();
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const zipLink = document.createElement("a");
+      zipLink.href = zipUrl;
+      zipLink.download = `Proposta_Comercial_${proposalId}.zip`;
+      zipLink.click();
 
-      // Download contrato
-      const contratoBlob = new Blob(
-        [Uint8Array.from(atob(docs.contrato), (c) => c.charCodeAt(0))],
-        { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
-      );
-      const contratoUrl = URL.createObjectURL(contratoBlob);
-      const contratoLink = document.createElement("a");
-      contratoLink.href = contratoUrl;
-      contratoLink.download = `Minuta_Contrato_${proposalId}.docx`;
-      contratoLink.click();
-
-      // Download TR
-      const trBlob = new Blob(
-        [Uint8Array.from(atob(docs.termoReferencia), (c) => c.charCodeAt(0))],
-        { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
-      );
-      const trUrl = URL.createObjectURL(trBlob);
-      const trLink = document.createElement("a");
-      trLink.href = trUrl;
-      trLink.download = `Termo_Referencia_${proposalId}.docx`;
-      trLink.click();
-
-      toast.success("Documentos baixados com sucesso!");
+      toast.success("Proposta e documentos baixados com sucesso!");
     } catch (error: any) {
       toast.error(error.message || "Erro ao gerar documentos");
     } finally {

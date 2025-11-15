@@ -167,6 +167,15 @@ export async function generateTR(params: {
   modality: string;
   category: string;
   etpContent: string; // Conteúdo do ETP para contexto
+  catmatItems?: Array<{
+    itemType: 'material' | 'service';
+    catmatCode?: string;
+    catserCode?: string;
+    description: string;
+    unit: string;
+    groupCode?: string;
+    classCode?: string;
+  }>;
   organizationName?: string;
   address?: string;
   cnpj?: string;
@@ -208,6 +217,22 @@ export async function generateTR(params: {
     footerTR += `---`;
   }
 
+  // Construir seção de itens CATMAT/CATSER se houver
+  let catmatSection = "";
+  if (params.catmatItems && params.catmatItems.length > 0) {
+    catmatSection = `\n\n**ITENS DO CATÁLOGO OFICIAL (CATMAT/CATSER):**\n`;
+    params.catmatItems.forEach((item, index) => {
+      const code = item.itemType === 'material' ? item.catmatCode : item.catserCode;
+      const catalog = item.itemType === 'material' ? 'CATMAT' : 'CATSER';
+      catmatSection += `\n${index + 1}. **${item.description}**\n`;
+      catmatSection += `   - Código ${catalog}: ${code}\n`;
+      catmatSection += `   - Unidade: ${item.unit}\n`;
+      if (item.groupCode) catmatSection += `   - Grupo: ${item.groupCode}\n`;
+      if (item.classCode) catmatSection += `   - Classe: ${item.classCode}\n`;
+    });
+    catmatSection += `\n**IMPORTANTE:** Estes itens estão catalogados oficialmente no sistema CATMAT/CATSER do Governo Federal. Use estas descrições padronizadas no TR.\n`;
+  }
+
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base no ETP já elaborado, gere agora um **Termo de Referência (TR)** completo e detalhado.
@@ -220,14 +245,15 @@ ${params.etpContent}
 - Objeto: ${params.object}
 - Valor Estimado: ${valueInReais}
 - Modalidade: ${params.modality}
-- Categoria: ${params.category}
+- Categoria: ${params.category}${catmatSection}
 
 **INSTRUÇÕES:**
 1. O TR deve ser mais detalhado e técnico que o ETP
 2. Inclua especificações técnicas completas
-3. Defina obrigações do contratado e do contratante
-4. Estabeleça critérios de aceitação e fiscalização
-5. Siga a Lei 14.133/21, especialmente Art. 6º, XXIII
+3. ${params.catmatItems && params.catmatItems.length > 0 ? 'OBRIGATÓRIO: Inclua uma seção "ESPECIFICAÇÕES DOS ITENS" detalhando cada item CATMAT/CATSER listado acima, mantendo os códigos oficiais' : 'Defina especificações técnicas baseadas no objeto'}
+4. Defina obrigações do contratado e do contratante
+5. Estabeleça critérios de aceitação e fiscalização
+6. Siga a Lei 14.133/21, especialmente Art. 6º, XXIII
 
 Gere um documento profissional em markdown.`;
 

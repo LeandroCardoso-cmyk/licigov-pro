@@ -4,7 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Modules from "./pages/Modules";
@@ -14,15 +14,28 @@ import Analytics from "./pages/Analytics";
 import Admin from "./pages/Admin";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
-import AuditLogs from "./pages/AuditLogs";
+// import AuditLogs from "./pages/AuditLogs";
 import Plans from "./pages/Plans";
 import SolicitarProposta from "./pages/SolicitarProposta";
-import AdminSubscriptions from "./pages/AdminSubscriptions";
+// import AdminSubscriptions from "./pages/AdminSubscriptions";
 import AdminProposals from "./pages/AdminProposals";
 import AdminDocuments from "./pages/AdminDocuments";
+// import AdminDefaultDashboard from "./pages/AdminDefaultDashboard";
+// import AdminContractsReport from "./pages/AdminContractsReport";
+// import AdminFinancialReports from "./pages/AdminFinancialReports";
+import NewProcess from "./pages/NewProcess";
+import ModuleSelectionDashboard from "./pages/ModuleSelectionDashboard";
+import TestPage from "./pages/TestPage";
+import TestPage2 from "./pages/TestPage2";
+import TestPage3 from "./pages/TestPage3";
+import TestPage4 from "./pages/TestPage4";
+import DocumentSettings from "./pages/DocumentSettings";
+import Templates from "./pages/Templates";
+import ActivityReport from "./pages/ActivityReport";
+import DepartmentManagement from "./pages/DepartmentManagement";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
-import { ConsentModal } from "./components/ConsentModal";
+// import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
 import { useState, useEffect } from "react";
 import { trpc } from "./lib/trpc";
 
@@ -44,23 +57,61 @@ function AuthenticatedRoute({ component: Component }: { component: React.Compone
   return <Component />;
 }
 
+// Wrapper components para evitar re-criação em cada render
+const ModuleSelectionRoute = () => <AuthenticatedRoute component={ModuleSelectionDashboard} />;
+const ModulesRoute = () => <AuthenticatedRoute component={Modules} />;
+const ProcessesRoute = () => <AuthenticatedRoute component={Dashboard} />;
+const NewProcessRoute = () => <AuthenticatedRoute component={NewProcess} />;
+const DocumentSettingsRoute = () => <AuthenticatedRoute component={DocumentSettings} />;
+const ProcessDetailsRoute = () => <AuthenticatedRoute component={ProcessDetails} />;
+const SettingsRoute = () => <AuthenticatedRoute component={Settings} />;
+const AnalyticsRoute = () => <AuthenticatedRoute component={Analytics} />;
+const AdminRoute = () => <AuthenticatedRoute component={Admin} />;
+// const AdminSubscriptionsRoute = () => <AuthenticatedRoute component={AdminSubscriptions} />;
+const AdminProposalsRoute = () => <AuthenticatedRoute component={AdminProposals} />;
+const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments} />;
+// const AdminDefaultDashboardRoute = () => <AuthenticatedRoute component={AdminDefaultDashboard} />;
+// const AdminContractsReportRoute = () => <AuthenticatedRoute component={AdminContractsReport} />;
+// const AdminFinancialReportsRoute = () => <AuthenticatedRoute component={AdminFinancialReports} />;
+const TermsOfUseRoute = () => <AuthenticatedRoute component={TermsOfUse} />;
+const PrivacyPolicyRoute = () => <AuthenticatedRoute component={PrivacyPolicy} />;
+// const AuditLogsRoute = () => <AuthenticatedRoute component={AuditLogs} />;
+const TestPage4Route = () => <AuthenticatedRoute component={TestPage4} />;
+const TemplatesRoute = () => <AuthenticatedRoute component={Templates} />;
+const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport} />;
+const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
+
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={() => <AuthenticatedRoute component={Modules} />} />
-      <Route path={"/processos"} component={() => <AuthenticatedRoute component={Dashboard} />} />
-      <Route path="/processo/:id" component={() => <AuthenticatedRoute component={ProcessDetails} />} />
-      <Route path={"/configuracoes"} component={() => <AuthenticatedRoute component={Settings} />} />
-      <Route path={"/analytics"} component={() => <AuthenticatedRoute component={Analytics} />} />
-      <Route path={"/admin"} component={() => <AuthenticatedRoute component={Admin} />} />
-      <Route path={"/admin/assinaturas"} component={() => <AuthenticatedRoute component={AdminSubscriptions} />} />
-      <Route path={"/admin/propostas"} component={() => <AuthenticatedRoute component={AdminProposals} />} />
-      <Route path={"/admin/documentos"} component={() => <AuthenticatedRoute component={AdminDocuments} />} />
-      <Route path={"/termos"} component={() => <AuthenticatedRoute component={TermsOfUse} />} />
-      <Route path={"/privacidade"} component={() => <AuthenticatedRoute component={PrivacyPolicy} />} />
-      <Route path={"/audit-logs"} component={() => <AuthenticatedRoute component={AuditLogs} />} />
+      <Route path={"/"} component={LandingPage} />
+      <Route path={"/dashboard"} component={ModuleSelectionRoute} />
+      <Route path={"/processos"} component={ProcessesRoute} />
+      <Route path={"/propostas"} component={AdminProposalsRoute} />
+      <Route path={"/novo-processo"} component={NewProcessRoute} />
+      <Route path={"/personalizacao-documentos"} component={DocumentSettingsRoute} />
+      <Route path={"/templates"} component={TemplatesRoute} />
+      <Route path={"/auditoria"} component={ActivityReportRoute} />
+      <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />
+      <Route path="/processo/:id" component={ProcessDetailsRoute} />
+      <Route path={"/configuracoes"} component={SettingsRoute} />
+      <Route path={"/analytics"} component={AnalyticsRoute} />
+      <Route path={"/admin"} component={AdminRoute} />
+      {/* <Route path={"/admin/assinaturas"} component={AdminSubscriptionsRoute} /> */}
+      <Route path={"/admin/propostas"} component={AdminProposalsRoute} />
+      <Route path={"/admin/documentos"} component={AdminDocumentsRoute} />
+      {/* <Route path={"/admin/inadimplencia"} component={AdminDefaultDashboardRoute} /> */}
+      {/* <Route path={"/admin/contratos-limite"} component={AdminContractsReportRoute} /> */}
+      {/* <Route path={"/admin/relatorios-financeiros"} component={AdminFinancialReportsRoute} /> */}
+      <Route path={"/termos"} component={TermsOfUseRoute} />
+      <Route path={"/privacidade"} component={PrivacyPolicyRoute} />
+      {/* <Route path={"/audit-logs"} component={AuditLogsRoute} /> */}
       <Route path={"/planos"} component={Plans} />
       <Route path={"/solicitar-proposta"} component={SolicitarProposta} />
+      <Route path={"/test"} component={TestPage} />
+      <Route path={"/test2"} component={TestPage2} />
+      <Route path={"/test3"} component={TestPage3} />
+      <Route path={"/test4"} component={TestPage4Route} />
       <Route path={"/login"} component={Login} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
@@ -92,7 +143,8 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          {isAuthenticated && (
+          {/* ConsentModal temporariamente desabilitado para debug */}
+          {false && isAuthenticated && (
             <ConsentModal
               open={showConsentModal}
               onConsent={() => setShowConsentModal(false)}

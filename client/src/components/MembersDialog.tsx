@@ -76,9 +76,6 @@ export function MembersDialog({ processId, processName }: MembersDialogProps) {
       setPermission("viewer");
       utils.collaboration.listMembers.invalidate({ processId });
     },
-    onError: (error) => {
-      toast.error(error.message || "Erro ao adicionar membro");
-    },
   });
 
   const removeMemberMutation = trpc.collaboration.removeMember.useMutation({
@@ -87,18 +84,12 @@ export function MembersDialog({ processId, processName }: MembersDialogProps) {
       setMemberToRemove(null);
       utils.collaboration.listMembers.invalidate({ processId });
     },
-    onError: (error) => {
-      toast.error(error.message || "Erro ao remover membro");
-    },
   });
 
   const updatePermissionMutation = trpc.collaboration.updatePermission.useMutation({
     onSuccess: () => {
       toast.success("Permissão atualizada!");
       utils.collaboration.listMembers.invalidate({ processId });
-    },
-    onError: (error) => {
-      toast.error(error.message || "Erro ao atualizar permissão");
     },
   });
 

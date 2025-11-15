@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   // Form state
@@ -28,13 +28,13 @@ export default function Settings() {
   const [footerText, setFooterText] = useState("");
 
   // tRPC queries and mutations
-  const { data: settings, isLoading: loadingSettings } = trpc.documentSettings.get.useQuery();
+  const { data: settings, isLoading: loadingSettings, error } = trpc.documentSettings.get.useQuery(undefined, {
+    retry: false,
+  });
+  
   const saveMutation = trpc.documentSettings.save.useMutation({
     onSuccess: () => {
       toast.success("Configurações salvas com sucesso!");
-    },
-    onError: (error) => {
-      toast.error(`Erro ao salvar configurações: ${error.message}`);
     },
   });
 
@@ -65,7 +65,7 @@ export default function Settings() {
     });
   };
 
-  if (loading || loadingSettings) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -79,168 +79,157 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-blue-950 dark:to-slate-900">
-      {/* Header */}
-      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <img src={APP_LOGO} alt="LiciGov Pro" className="h-20 md:h-24" />
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">LiciGov Pro</h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Automação de Processos Licitatórios</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={toggleTheme}>
-              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-
-            <div className="hidden md:flex flex-col items-end">
-              <span className="text-sm font-medium text-slate-900 dark:text-white">{user.name}</span>
-              <span className="text-xs text-slate-600 dark:text-slate-400">{user.email}</span>
-            </div>
-
-            <Button variant="ghost" size="sm" onClick={logout}>
-              Sair
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <Button variant="ghost" className="mb-6" onClick={() => setLocation("/")}>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-8">
+        <Button variant="ghost" onClick={() => setLocation("/")} className="mb-6">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar aos Módulos
+          Voltar
         </Button>
 
-        <div className="space-y-6">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Configurações de Documentos</h2>
-            <p className="text-slate-600 dark:text-slate-400 mt-2">
-              Personalize o cabeçalho e rodapé dos documentos gerados (ETP, TR, DFD, Edital)
+            <h1 className="text-3xl font-bold mb-2">Configurações</h1>
+            <p className="text-muted-foreground">
+              Personalize as informações da sua organização para documentos
             </p>
           </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+          >
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
+        </div>
 
-          {/* Cabeçalho */}
+        {loadingSettings ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-muted-foreground text-center">
+                Não foi possível carregar as configurações. Você pode preencher os dados abaixo.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Cabeçalho dos Documentos</CardTitle>
+              <CardTitle>Informações da Organização</CardTitle>
               <CardDescription>
-                Informações que aparecerão no topo de todos os documentos gerados
+                Dados que aparecerão nos documentos gerados pelo sistema
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="organizationName">Nome do Órgão *</Label>
-                <Input
-                  id="organizationName"
-                  placeholder="Ex: Prefeitura Municipal de..."
-                  value={organizationName}
-                  onChange={(e) => setOrganizationName(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="logoUrl">URL do Brasão/Logo</Label>
-                <Input
-                  id="logoUrl"
-                  type="url"
-                  placeholder="https://exemplo.com/brasao.png"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                />
-                <p className="text-xs text-slate-500">
-                  Cole a URL de uma imagem hospedada online (PNG, JPG ou SVG)
-                </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="organizationName">Nome da Organização</Label>
+                  <Input
+                    id="organizationName"
+                    value={organizationName}
+                    onChange={(e) => setOrganizationName(e.target.value)}
+                    placeholder="Ex: Prefeitura Municipal"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj">CNPJ</Label>
+                  <Input
+                    id="cnpj"
+                    value={cnpj}
+                    onChange={(e) => setCnpj(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="address">Endereço Completo</Label>
-                <Textarea
+                <Input
                   id="address"
-                  placeholder="Rua, número, bairro, cidade - UF, CEP"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  rows={3}
+                  placeholder="Rua, Número, Bairro, Cidade - UF, CEP"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ</Label>
-                <Input
-                  id="cnpj"
-                  placeholder="00.000.000/0000-00"
-                  value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
-                  maxLength={18}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Rodapé */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Rodapé dos Documentos</CardTitle>
-              <CardDescription>
-                Informações de contato que aparecerão no final de todos os documentos
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <Input
-                  id="phone"
-                  placeholder="(00) 0000-0000"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="contato@orgao.gov.br"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone</Label>
+                  <Input
+                    id="phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(00) 0000-0000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="contato@organizacao.gov.br"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
                 <Input
                   id="website"
-                  type="url"
-                  placeholder="https://www.orgao.gov.br"
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
+                  placeholder="https://www.organizacao.gov.br"
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Personalização Visual</CardTitle>
+              <CardDescription>
+                Logotipo e rodapé dos documentos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="logoUrl">URL do Logotipo</Label>
+                <Input
+                  id="logoUrl"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://exemplo.com/logo.png"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Recomendado: PNG ou SVG transparente, 200x200px
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="footerText">Texto Customizável do Rodapé</Label>
+                <Label htmlFor="footerText">Texto do Rodapé</Label>
                 <Textarea
                   id="footerText"
-                  placeholder="Texto adicional que deseja incluir no rodapé (opcional)"
                   value={footerText}
                   onChange={(e) => setFooterText(e.target.value)}
+                  placeholder="Texto que aparecerá no rodapé dos documentos"
                   rows={3}
                 />
               </div>
             </CardContent>
           </Card>
 
-          {/* Botão Salvar */}
-          <div className="flex justify-end">
-            <Button 
-              size="lg" 
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
-            >
+          <div className="flex justify-end gap-4">
+            <Button variant="outline" onClick={() => setLocation("/")}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -255,7 +244,7 @@ export default function Settings() {
             </Button>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

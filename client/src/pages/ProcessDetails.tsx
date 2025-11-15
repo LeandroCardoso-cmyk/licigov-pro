@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { DocumentEditor } from "@/components/DocumentEditor";
 import { MembersDialog } from "@/components/MembersDialog";
 import { NotificationBell } from "@/components/NotificationBell";
+// import { GlobalSearch } from "@/components/GlobalSearch"; // Removido temporariamente
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { CommentsSection } from "@/components/CommentsSection";
 
@@ -75,11 +76,6 @@ export default function ProcessDetails() {
       utils.documents.listByProcess.invalidate({ processId });
       utils.activities.listByProcess.invalidate({ processId });
     },
-    onError: (error) => {
-      toast.error("Erro ao gerar documento", {
-        description: error.message,
-      });
-    },
   });
 
   const utils = trpc.useUtils();
@@ -128,10 +124,6 @@ export default function ProcessDetails() {
       toast.success('Download do PDF iniciado!');
       setDownloadingPdf(false);
     },
-    onError: (error) => {
-      toast.error('Erro ao gerar PDF', { description: error.message });
-      setDownloadingPdf(false);
-    },
   });
 
   const updateDocumentMutation = trpc.documents.updateDocument.useMutation({
@@ -143,9 +135,6 @@ export default function ProcessDetails() {
       setEditingContent('');
       utils.documents.listByProcess.invalidate({ processId });
       utils.activities.listByProcess.invalidate({ processId });
-    },
-    onError: (error) => {
-      toast.error('Erro ao salvar documento', { description: error.message });
     },
   });
 
@@ -167,10 +156,18 @@ export default function ProcessDetails() {
 
   const handleAutoSave = async (content: string) => {
     if (editingDocumentId) {
-      // Auto-save silencioso sem criar nova versão
-      // Por enquanto, vamos apenas atualizar o conteúdo localmente
-      // Em produção, você pode criar uma rota separada para auto-save
-      setEditingContent(content);
+      // Auto-save silencioso - atualiza conteúdo sem criar nova versão
+      try {
+        await updateDocumentMutation.mutateAsync({
+          documentId: editingDocumentId,
+          content,
+          createNewVersion: false, // Não criar nova versão no auto-save
+        });
+        setEditingContent(content);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        // Não mostrar erro ao usuário para não interromper edição
+      }
     }
   };
 
@@ -191,10 +188,6 @@ export default function ProcessDetails() {
       link.click();
       window.URL.revokeObjectURL(url);
       toast.success('Download do DOCX iniciado!');
-      setDownloadingDocx(false);
-    },
-    onError: (error) => {
-      toast.error('Erro ao gerar DOCX', { description: error.message });
       setDownloadingDocx(false);
     },
   });
@@ -273,6 +266,7 @@ export default function ProcessDetails() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <GlobalSearch />
               <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium text-foreground">{user?.name}</p>

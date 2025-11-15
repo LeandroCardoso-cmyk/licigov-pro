@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar, Settings } from "lucide-react";
+import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar, Settings, Palette } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -30,7 +30,7 @@ export default function Modules() {
       title: "Geração de Documentos",
       description: "Crie ETP, TR, DFD e Editais com auxílio de IA baseada na Lei 14.133/21",
       icon: <FileText className="h-10 w-10" />,
-      route: "/processos",
+      route: "/dashboard",
       available: true,
       badge: "MVP",
       color: "from-blue-500 to-cyan-500",
@@ -117,15 +117,32 @@ export default function Modules() {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate("/configuracoes")}
-                  className="rounded-full hover:bg-primary/10"
-                  title="Configurações"
+                {/* Botão de teste para debug */}
+                <button
+                  onClick={() => alert('Clique funcionou!')}
+                  style={{ padding: '8px', background: 'red', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
                 >
-                  <Settings className="h-5 w-5" />
-                </Button>
+                  TESTE
+                </button>
+                <button
+                  onClick={() => navigate("/personalizacao-documentos")}
+                  style={{ padding: '8px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  title="Personalizar Documentos"
+                >
+                  <Palette className="h-5 w-5" />
+                </button>
+
+                {user?.role === "admin" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => navigate("/configuracoes")}
+                    className="rounded-full hover:bg-primary/10"
+                    title="Configurações"
+                  >
+                    <Settings className="h-5 w-5" />
+                  </Button>
+                )}
 
                 <Button
                   variant="ghost"
@@ -183,9 +200,9 @@ export default function Modules() {
               <Card
                 key={module.id}
                 className={`
-                  relative overflow-hidden cursor-pointer transition-all duration-300 border-2
+                  relative overflow-hidden cursor-pointer transition-all duration-200 ease-in-out border-2
                   ${module.available 
-                    ? "hover:scale-105 hover:shadow-2xl hover:border-primary/50" 
+                    ? "hover:shadow-lg hover:border-primary/50" 
                     : "opacity-75 hover:opacity-90"
                   }
                   ${!module.available && "cursor-not-allowed"}

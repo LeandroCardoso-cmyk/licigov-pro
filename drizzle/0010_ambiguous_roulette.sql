@@ -1,0 +1,20 @@
+CREATE TABLE `invoice_installments` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`subscriptionId` int NOT NULL,
+	`mesReferencia` int NOT NULL,
+	`anoReferencia` int NOT NULL,
+	`valor` int NOT NULL,
+	`dataVencimento` timestamp NOT NULL,
+	`status` enum('pendente','emitida','paga','atrasada','cancelada') NOT NULL DEFAULT 'pendente',
+	`numeroNF` varchar(50),
+	`dataEmissao` timestamp,
+	`nfFileUrl` text,
+	`nfFileKey` varchar(255),
+	`dataPagamento` timestamp,
+	`comprovanteFileUrl` text,
+	`comprovanteFileKey` varchar(255),
+	`observacoes` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `invoice_installments_id` PRIMARY KEY(`id`)
+);

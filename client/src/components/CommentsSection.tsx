@@ -41,9 +41,6 @@ export function CommentsSection({ documentId, processId }: CommentsSectionProps)
       setNewComment("");
       utils.comments.list.invalidate({ documentId });
     },
-    onError: (error) => {
-      toast.error("Erro ao adicionar comentário", { description: error.message });
-    },
   });
 
   const updateCommentMutation = trpc.comments.update.useMutation({
@@ -53,9 +50,6 @@ export function CommentsSection({ documentId, processId }: CommentsSectionProps)
       setEditingContent("");
       utils.comments.list.invalidate({ documentId });
     },
-    onError: (error) => {
-      toast.error("Erro ao atualizar comentário", { description: error.message });
-    },
   });
 
   const deleteCommentMutation = trpc.comments.delete.useMutation({
@@ -63,9 +57,6 @@ export function CommentsSection({ documentId, processId }: CommentsSectionProps)
       toast.success("Comentário excluído!");
       setDeletingCommentId(null);
       utils.comments.list.invalidate({ documentId });
-    },
-    onError: (error) => {
-      toast.error("Erro ao excluir comentário", { description: error.message });
     },
   });
 

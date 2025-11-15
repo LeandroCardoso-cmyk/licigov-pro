@@ -264,6 +264,10 @@ export const subscriptions = mysqlTable("subscriptions", {
   trialEnd: timestamp("trialEnd"),
   canceledAt: timestamp("canceledAt"),
   cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false).notNull(),
+  // Campos de renovação (para contratos via empenho)
+  renewalCount: int("renewalCount").default(0).notNull(), // Número de renovações (máx 9 = 10 anos total)
+  originalStartDate: timestamp("originalStartDate"), // Data inicial do contrato original
+  lastRenewalDate: timestamp("lastRenewalDate"), // Data da última renovação
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -431,3 +435,173 @@ export const companyDocuments = mysqlTable("company_documents", {
 
 export type CompanyDocument = typeof companyDocuments.$inferSelect;
 export type InsertCompanyDocument = typeof companyDocuments.$inferInsert;
+
+/**
+ * Parcelas mensais de assinaturas (para pagamento por empenho)
+ */
+
+/**
+ * Histórico de renovações de contratos (empenho)
+ */
+export const contractRenewals = mysqlTable("contract_renewals", {
+  id: int("id").autoincrement().primaryKey(),
+  subscriptionId: int("subscriptionId").notNull(), // Referência à assinatura
+  renewalNumber: int("renewalNumber").notNull(), // Número da renovação (1, 2, 3... até 9)
+  previousEndDate: timestamp("previousEndDate").notNull(), // Data de fim anterior
+  newEndDate: timestamp("newEndDate").notNull(), // Nova data de fim (+ 12 meses)
+  // Documentos da renovação
+  termoAditivoFileUrl: text("termoAditivoFileUrl"), // URL do termo aditivo
+  termoAditivoFileKey: text("termoAditivoFileKey"), // Chave S3 do termo aditivo
+  numeroEmpenho: varchar("numeroEmpenho", { length: 100 }), // Número do novo empenho (se houver)
+  valorRenovacao: int("valorRenovacao"), // Valor da renovação em centavos
+  // Auditoria
+  renewedBy: int("renewedBy").notNull(), // ID do admin que fez a renovação
+  observacoes: text("observacoes"), // Observações sobre a renovação
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ContractRenewal = typeof contractRenewals.$inferSelect;
+export type InsertContractRenewal = typeof contractRenewals.$inferInsert;
+
+/**
+ * Templates personalizáveis para documentos
+ */
+export const documentTemplates = mysqlTable("document_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // Usuário que criou o template
+  name: varchar("name", { length: 255 }).notNull(), // Nome do template
+  description: text("description"), // Descrição do template
+  type: mysqlEnum("type", ["etp", "tr", "dfd", "edital"]).notNull(), // Tipo de documento
+  content: text("content").notNull(), // Conteúdo do template em markdown
+  isDefault: int("isDefault").default(0).notNull(), // 1 se for template padrão do usuário
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentTemplate = typeof documentTemplates.$inferInsert;
+
+/**
+ * Itens CATMAT/CATSER selecionados para processos
+ */
+export const processItems = mysqlTable("process_items", {
+  id: int("id").autoincrement().primaryKey(),
+  processId: int("processId").notNull(), // Referência ao processo
+  itemType: mysqlEnum("itemType", ["material", "service"]).notNull(), // Material (CATMAT) ou Serviço (CATSER)
+  // Dados do CATMAT/CATSER
+  catmatCode: int("catmatCode"), // Código CATMAT (se material)
+  catserCode: int("catserCode"), // Código CATSER (se serviço)
+  description: text("description").notNull(), // Descrição detalhada do item
+  unit: varchar("unit", { length: 50 }).notNull(), // Unidade de medida/fornecimento
+  // Dados adicionais (opcionais)
+  groupCode: int("groupCode"), // Código do grupo
+  groupDescription: text("groupDescription"), // Descrição do grupo
+  classCode: int("classCode"), // Código da classe
+  classDescription: text("classDescription"), // Descrição da classe
+  // Quantidade e preço (preenchidos pelo usuário)
+  quantity: int("quantity"), // Quantidade estimada
+  estimatedPrice: int("estimatedPrice"), // Preço estimado em centavos
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProcessItem = typeof processItems.$inferSelect;
+export type InsertProcessItem = typeof processItems.$inferInsert;
+
+
+/**
+ * ========================================
+ * MÓDULO DE GESTÃO DO DEPARTAMENTO
+ * ========================================
+ */
+
+/**
+ * Tarefas do departamento de licitações
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(), // Título da tarefa
+  description: text("description"), // Descrição detalhada
+  type: varchar("type", { length: 50 }).notNull(), // Tipo de atividade (Pregão Eletrônico, Análise de Documentação, etc.)
+  status: mysqlEnum("status", [
+    "pendente",
+    "em_andamento",
+    "pausada",
+    "atrasada",
+    "aguardando_informacao",
+    "concluida",
+    "cancelada"
+  ]).default("pendente").notNull(),
+  priority: mysqlEnum("priority", ["baixa", "media", "alta", "urgente"]).default("media").notNull(),
+  assignedTo: int("assignedTo").notNull(), // ID do usuário responsável
+  deadline: timestamp("deadline"), // Prazo final
+  processId: int("processId"), // Vinculação com processo licitatório (opcional)
+  tags: text("tags"), // JSON array de tags personalizadas
+  createdBy: int("createdBy").notNull(), // Usuário que criou
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
+
+/**
+ * Comentários em tarefas
+ */
+export const taskComments = mysqlTable("task_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(), // Referência à tarefa
+  userId: int("userId").notNull(), // Usuário que comentou
+  content: text("content").notNull(), // Conteúdo do comentário
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TaskComment = typeof taskComments.$inferSelect;
+export type InsertTaskComment = typeof taskComments.$inferInsert;
+
+/**
+ * Anexos de tarefas
+ */
+export const taskAttachments = mysqlTable("task_attachments", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(), // Referência à tarefa
+  fileName: varchar("fileName", { length: 255 }).notNull(), // Nome do arquivo
+  fileUrl: varchar("fileUrl", { length: 500 }).notNull(), // URL do arquivo no S3
+  fileSize: int("fileSize"), // Tamanho em bytes
+  uploadedBy: int("uploadedBy").notNull(), // Usuário que fez upload
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+});
+
+export type TaskAttachment = typeof taskAttachments.$inferSelect;
+export type InsertTaskAttachment = typeof taskAttachments.$inferInsert;
+
+/**
+ * Histórico de alterações em tarefas
+ */
+export const taskHistory = mysqlTable("task_history", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(), // Referência à tarefa
+  userId: int("userId").notNull(), // Usuário que fez a alteração
+  action: varchar("action", { length: 100 }).notNull(), // Tipo de ação (criou, editou, comentou, etc.)
+  details: text("details"), // JSON com detalhes da alteração (valores antigos e novos)
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TaskHistory = typeof taskHistory.$inferSelect;
+export type InsertTaskHistory = typeof taskHistory.$inferInsert;
+
+/**
+ * Locks de edição colaborativa
+ */
+export const taskEditLocks = mysqlTable("task_edit_locks", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull().unique(), // Referência à tarefa (único por tarefa)
+  userId: int("userId").notNull(), // Usuário que está editando
+  userName: varchar("userName", { length: 100 }).notNull(), // Nome do usuário (para exibição)
+  expiresAt: timestamp("expiresAt").notNull(), // Quando o lock expira (5 minutos)
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TaskEditLock = typeof taskEditLocks.$inferSelect;
+export type InsertTaskEditLock = typeof taskEditLocks.$inferInsert;

@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Shield, User, TrendingUp, ArrowLeft, FileText } from "lucide-react";
+import { Loader2, Shield, User, TrendingUp, ArrowLeft, FileText, AlertCircle, DollarSign, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
@@ -32,9 +32,6 @@ export default function Admin() {
       setPromotingUserId(null);
       refetch();
     },
-    onError: (error) => {
-      toast.error("Erro ao promover usuário", { description: error.message });
-    },
   });
 
   const demoteFromAdminMutation = trpc.admin.demoteFromAdmin.useMutation({
@@ -42,9 +39,6 @@ export default function Admin() {
       toast.success("Administrador rebaixado para usuário!");
       setDemotingUserId(null);
       refetch();
-    },
-    onError: (error) => {
-      toast.error("Erro ao rebaixar administrador", { description: error.message });
     },
   });
 
@@ -103,35 +97,72 @@ export default function Admin() {
           </Button>
         </div>
 
-        {/* Cards de Navegação */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/assinaturas")}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Assinaturas
-              </CardTitle>
-              <CardDescription>Visualize e gerencie todas as assinaturas (Stripe + Empenho)</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/propostas")}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Propostas
-              </CardTitle>
-              <CardDescription>Gerencie solicitações, registre empenhos e ative assinaturas</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/documentos")}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Documentos
-              </CardTitle>
-              <CardDescription>Gerencie certidões e documentos da empresa</CardDescription>
-            </CardHeader>
-          </Card>
+        {/* Cards de Navegação - Gestão de Assinaturas */}
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">Gestão de Assinaturas</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/assinaturas")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Assinaturas
+                </CardTitle>
+                <CardDescription>Visualize e gerencie todas as assinaturas (Stripe + Empenho)</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/propostas")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Propostas
+                </CardTitle>
+                <CardDescription>Gerencie solicitações, registre empenhos e ative assinaturas</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/documentos")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Documentos
+                </CardTitle>
+                <CardDescription>Gerencie certidões e documentos da empresa</CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+
+        {/* Cards de Navegação - Gestão Financeira */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Gestão Financeira e Relatórios</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/inadimplencia")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-orange-600" />
+                  Inadimplência
+                </CardTitle>
+                <CardDescription>Dashboard de parcelas atrasadas e ações em massa</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/relatorios-financeiros")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-green-600" />
+                  Relatórios Financeiros
+                </CardTitle>
+                <CardDescription>Receita prevista vs recebida, taxa de inadimplência e projeções</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin/contratos-limite")}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-destructive" />
+                  Contratos no Limite
+                </CardTitle>
+                <CardDescription>Contratos com 7+ renovações que precisam de novo processo licitátorio</CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
         </div>
 
         <Card>

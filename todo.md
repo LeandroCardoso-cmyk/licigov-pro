@@ -67,18 +67,24 @@
 - [ ] Inexigibilidade
 
 ### Módulo 5: Gestão do Departamento de Licitações
-- [ ] Visualização em Quadro Kanban (padrão)
-- [ ] Visualização em Lista
-- [ ] Visualização em Calendário
-- [ ] Campos: Nome da Tarefa, Responsável, Status, Prazo Final, Data da Licitação, Prioridade
-- [ ] Status: Pendente, Em Andamento, Pausada, Atrasada, Aguardando Informação, Concluída
-- [ ] Prioridades: Baixa, Média, Alta, Urgente (com cores)
-- [ ] Anexar arquivos às tarefas (limite de 10MB)
+- [x] Visualização em Quadro Kanban (padrão) - 7 colunas com drag & drop
+- [x] Visualização em Lista - tabela com busca em tempo real
+- [x] Visualização em Calendário - estrutura completa
+- [x] Dashboard Analítico - 4 KPIs + 4 gráficos
+- [x] Modal de detalhes integrado (Kanban + Lista)
+- [x] Sistema de comentários (backend completo)
+- [x] Sistema de anexos (backend completo)
+- [x] Vinculação com processos licitatórios
+- [ ] Visualização em Calendário - tarefas nos dias - estrutura criada (grid mensal, navegação, legenda, resumo)
+- [x] Campos: Nome da Tarefa, Responsável, Status, Prazo Final, Tipo, Prioridade, Descrição
+- [x] Status: Pendente, Em Andamento, Pausada, Atrasada, Aguardando Informação, Concluída, Cancelada (7 status)
+- [x] Prioridades: Baixa, Média, Alta, Urgente (com cores diferenciadas)
+- [x] Anexar arquivos às tarefas (limite de 10MB) - backend implementado
 - [ ] Tags personalizadas
-- [ ] Relatório Resumido (Nome, Status, Prazo)
-- [ ] Relatório Completo
+- [ ] Relatório Resumido (Nome, Status, Prazo) - botão PDF criado
+- [ ] Relatório Completo - botão Excel criado
 - [ ] Calendário com datas de licitações
-- [ ] Alertas de prazos
+- [x] Indicadores visuais de prazo (4 cores: verde, amarelo, laranja, vermelho)
 
 ## Melhorias e Otimizações
 - [ ] Responsividade mobile
@@ -596,3 +602,553 @@
 - [ ] Adicionar notificação in-app de contratos próximos do vencimento
 - [ ] Criar dashboard de contratos a vencer
 - [ ] Implementar botão "Renovar Contrato" (gera nova proposta)
+
+## Fase 26 - Gestão de Notas Fiscais Mensais
+
+### Backend de Parcelas
+- [ ] Criar tabela `invoice_installments` no schema
+- [ ] Criar função para gerar parcelas mensais ao ativar assinatura
+- [ ] Criar mutation para registrar NF (número, data, PDF)
+- [ ] Criar mutation para anexar comprovante de pagamento
+- [ ] Criar mutation para marcar parcela como paga
+- [ ] Criar query para listar parcelas de uma assinatura
+- [ ] Implementar cálculo automático de status (pendente, emitida, paga, atrasada)
+
+### Interface de Notas Fiscais
+- [ ] Mover gestão de contratos do painel de propostas para assinaturas
+- [ ] Criar aba "Notas Fiscais" no painel de assinaturas
+- [ ] Criar tabela de parcelas mensais com status
+- [ ] Implementar modal "Registrar NF" (número, data, upload PDF)
+- [ ] Implementar modal "Anexar Comprovante" (upload PDF)
+- [ ] Adicionar botão "Marcar como Paga"
+- [ ] Mostrar resumo financeiro (pago vs pendente)
+
+### Alertas e Dashboard
+- [ ] Criar sistema de alertas de vencimento (5 dias antes, no dia, 5 dias depois)
+- [ ] Implementar dashboard de inadimplência
+- [ ] Adicionar filtro por status de pagamento
+- [ ] Criar relatório de exportação (Excel/PDF)
+- [ ] Implementar badges visuais de status
+
+## Correções e Melhorias Recentes
+
+### Correção de Bugs Críticos
+- [x] Corrigir problema de inputs não permitindo digitação (arrow functions inline causando remontagem do DOM)
+- [x] Corrigir interface tremendo/piscando
+- [x] Corrigir botões precisando múltiplos cliques
+- [x] Tornar campo "Valor Estimado" opcional no formulário de novo processo
+
+## Melhorias de Qualidade e UX
+
+### Limpeza de Código
+- [ ] Corrigir warnings TypeScript em Settings.tsx (tipo do parâmetro err)
+- [ ] Remover código legado de paymentMethod em db.ts
+- [ ] Corrigir demais warnings TypeScript
+
+### Funcionalidades de Produtividade
+- [x] Implementar salvamento automático (debounced) no editor de documentos
+- [x] Adicionar indicador visual de "salvando..." durante auto-save
+
+### Validações
+- [x] Adicionar validação de formato de CNPJ nas configurações
+- [x] Adicionar feedback visual para CNPJ inválido
+
+## Melhorias de Produtividade
+
+### Histórico de Versões
+- [x] Criar componente de timeline interativa para histórico de versões
+- [x] Implementar diff highlighting entre versões de documentos
+- [x] Adicionar botão para restaurar versão anterior
+
+### Busca e Navegação
+- [x] Adicionar campo de busca global no header
+- [x] Implementar busca por nome, objeto e número do processo
+- [x] Adicionar atalho de teclado Cmd/Ctrl+K para busca
+
+### Relatórios e Exportação
+- [x] Implementar exportação de lista de processos em Excel
+- [x] Adicionar filtros para exportação (status, modalidade)
+- [x] Incluir dados completos no relatório (nome, objeto, valor, status, datas)
+
+## Funcionalidades Avançadas
+
+### Dashboard e Métricas
+- [x] Criar cards de estatísticas (total de processos, valor total, processos por status)
+- [x] Implementar gráfico de distribuição por status (pizza)
+- [x] Implementar gráfico de distribuição por modalidade (barras)
+- [x] Adicionar indicadores percentuais
+
+### Notificações por Email
+- [x] Configurar serviço de envio de emails (Resend)
+- [x] Implementar notificação de mudança de status
+- [x] Criar template de email responsivo
+- [ ] Adicionar alertas de prazos próximos (feature futura)
+
+### Templates Personalizáveis
+- [x] Criar tabela de templates no banco de dados
+- [x] Implementar funções CRUD de templates no backend
+- [ ] Criar interface de gerenciamento de templates (UI)
+- [ ] Adicionar seleção de template ao criar novo processo
+- [ ] Permitir salvar documento atual como template
+
+## Prioridade ALTA - Sprint 1
+
+### 1. Interface de Gerenciamento de Templates
+- [x] Criar página de gerenciamento de templates (/templates)
+- [x] Listar todos os templates do usuário
+- [x] Formulário para criar novo template
+- [x] Editar template existente
+- [x] Excluir template com confirmação
+- [x] Marcar/desmarcar template como padrão
+- [ ] Integrar seleção de template no formulário de novo processo (pendente)
+- [ ] Botão "Salvar como template" no editor de documentos (pendente)
+
+### 2. Filtros Avançados no Dashboard
+- [ ] Adicionar filtros por data (criação/atualização) (pendente - requer refatoração)
+- [ ] Filtro por modalidade (dropdown) (pendente)
+- [ ] Filtro por status (dropdown) (pendente)
+- [ ] Filtro por categoria (pendente)
+- [ ] Persistir filtros na URL (query params) (pendente)
+- [ ] Botão "Limpar filtros" (pendente)
+- [ ] Contador de resultados filtrados (pendente)
+
+### 3. Relatório de Atividades/Auditoria
+- [x] Criar página de relatório de atividades (/auditoria)
+- [x] Listar todas as atividades
+- [x] Filtros por data e ação
+- [x] Busca por texto livre
+- [x] Exportar relatório em HTML (conversão para PDF via navegador)
+- [x] Cards visuais de atividades
+
+## Refatoração e Landing Page
+
+### Remover Módulo de Faturas
+- [x] Remover rotas de invoices do backend (server/routers.ts)
+- [x] Remover invoiceRouter.ts
+- [x] Remover tabela invoiceInstallments do schema
+- [ ] Remover páginas relacionadas a faturas no frontend (se houver)
+- [x] Limpar imports e referências
+
+### Melhorar Sistema de Propostas
+- [x] Criar função para gerar ZIP com proposta + documentos da empresa
+- [x] Atualizar endpoint de download para retornar ZIP
+- [x] Atualizar frontend para baixar ZIP
+- [ ] Testar fluxo completo de geração e download
+
+### Landing Page Profissional
+- [x] Criar nova página LandingPage.tsx
+- [x] Hero section com título impactante e CTA
+- [x] Seção de funcionalidades (6 cards com ícones)
+- [x] Seção de benefícios
+- [x] Seção CTA final
+- [x] Footer com informações
+- [x] Botão "Entrar" no header
+- [x] Responsividade mobile (Tailwind)
+
+
+## Fase 20 - Melhorias da Landing Page (Estilo Adapta)
+
+### Design e Visual
+- [x] Aplicar logo LiciGov Pro no header da landing page
+- [x] Configurar tema padrão light (modo dark disponível via toggle)
+- [x] Corrigir página preta após login (verificar rota de redirecionamento)
+- [x] Redesenhar hero section com layout assimétrico (texto esquerda + imagem direita)
+- [x] Adicionar gradientes sutis no background
+- [x] Melhorar espaçamento e hierarquia visual
+- [x] Ajustar paleta de cores para institucional mas vibrante
+
+### Imagens e Mockups
+- [x] Gerar screenshot realista do dashboard do sistema
+- [x] Criar mockup de laptop mostrando interface em uso
+- [x] Gerar imagem de documentos sendo gerados (ETP, TR, Edital)
+- [x] Adicionar elementos decorativos sutis (brasão estilizado, documentos)
+
+### Conteúdo e Social Proof
+- [x] Adicionar seção de depoimentos com fotos (gestores públicos fictícios)
+- [x] Criar seção com logos de órgãos públicos (placeholder)
+- [x] Melhorar copy dos benefícios
+- [x] Adicionar seção "Como Funciona" com passo a passo visual
+- [x] Adicionar estatísticas de impacto (tempo economizado, processos criados)
+
+### Funcionalidades
+- [x] Melhorar CTAs (primário azul + secundário outline)
+- [x] Adicionar animações sutis ao scroll (blob animation)
+- [x] Implementar efeitos hover nos cards
+- [x] Otimizar responsividade mobile
+- [ ] Adicionar seção de FAQ
+
+### Técnico
+- [x] Garantir tema light fixo (remover ThemeProvider switchable)
+- [x] Corrigir rota após login (evitar tela preta)
+- [x] Otimizar carregamento de imagens
+- [ ] Implementar lazy loading para imagens
+
+
+## Fase 21 - Ajustes Legais e Visuais da Landing Page
+
+### Conformidade Legal (Risco Alto)
+- [x] Remover seção de depoimentos fictícios completamente
+- [x] Remover estatísticas numéricas falsas (70%, 500+, 10.000+)
+- [x] Remover social proof com "500+ órgãos públicos"
+- [x] Substituir por seção de benefícios baseada em funcionalidades reais
+- [x] Manter apenas informações verificáveis (Lei 14.133/21, funcionalidades técnicas)
+
+### Melhorias Visuais
+- [x] Aumentar logo no header de h-12 para h-20
+- [x] Gerar 5 imagens realistas para cards de funcionalidades
+- [x] Adicionar imagens nos cards (atualmente só têm ícones)
+- [x] Melhorar hierarquia visual sem depender de números fictícios
+
+### Conteúdo Alternativo
+- [x] Criar seção de benefícios operacionais (substituir estatísticas)
+- [x] Focar em proposta de valor técnica e funcional
+- [x] Destacar conformidade legal e segurança
+
+
+## Fase 22 - Localização de Imagens (Português)
+
+### Imagens dos Cards de Funcionalidades
+- [x] Regenerar imagem "Gestão de Processos" com textos em português (Status, Andamento, Data de Abertura)
+- [x] Regenerar imagem "Geração de Documentos IA" com textos em português (ETP, TR, Gerar Texto, Sugestões)
+- [x] Regenerar imagem "Colaboração em Equipe" com textos em português (Comentários, Histórico de Versões, Revisão)
+- [x] Regenerar imagem "Dashboard Analytics" com textos em português (Contratos, Gastos, Conformidade)
+- [x] Regenerar imagem "Segurança e Auditoria" com textos em português (Log de Auditoria, Usuário, Ação)
+
+
+## Fase 23 - Correção de Erro Mobile
+
+### Problema Reportado
+- [ ] Investigar erro "Falha ao carregar a pré-visualização" na landing page mobile
+- [ ] Verificar logs do servidor para identificar causa
+- [ ] Verificar erros de build ou TypeScript
+- [ ] Corrigir problema de carregamento
+- [ ] Testar responsividade mobile após correção
+
+
+## Fase 24 - Dashboard de Seleção de Módulos
+
+### Tela Inicial Pós-Login
+- [x] Criar componente ModuleSelectionDashboard.tsx
+- [x] Exibir cards de módulos disponíveis (Processos Licitatórios)
+- [x] Exibir cards de módulos futuros com badge "Em Breve" (Contratação Direta, Contratos, Parecer Jurídico, Gestão)
+- [x] Implementar navegação para cada módulo disponível
+- [x] Atualizar roteamento para /dashboard como página inicial após login
+- [x] Atualizar redirecionamento OAuth para /dashboard
+- [x] Remover "Propostas Comerciais" do dashboard (não deve aparecer, apenas no admin)
+- [x] Testar fluxo completo de login → dashboard → módulo específico
+
+
+## Fase 25 - Integração CATMAT/CATSER (PRIORIDADE ALTA)
+
+### Backend - API de Integração
+- [ ] Pesquisar API oficial do CATMAT/CATSER (ComprasNet)
+- [ ] Criar serviço de integração no backend (server/services/catmatService.ts)
+- [ ] Implementar função de busca por termo
+- [ ] Implementar função de busca por código
+- [ ] Implementar cache de resultados (evitar requisições repetidas)
+- [ ] Criar tRPC router para CATMAT/CATSER (server/routers/catmatRouter.ts)
+- [ ] Adicionar tratamento de erros e fallback
+
+### Database - Armazenamento de Itens
+- [ ] Criar tabela `process_items` no schema
+- [ ] Campos: id, processId, catmatCode, description, unit, quantity, estimatedPrice
+- [ ] Criar relação com tabela `processes`
+- [ ] Executar migration (pnpm db:push)
+
+### Frontend - Interface de Busca
+- [ ] Criar componente CatmatSearch.tsx com autocomplete
+- [ ] Adicionar campo de busca no formulário de novo processo
+- [ ] Implementar debounce na busca (evitar requisições excessivas)
+- [ ] Exibir resultados com código, descrição e unidade
+- [ ] Permitir seleção de múltiplos itens
+- [ ] Criar tabela de itens selecionados com quantidade e preço estimado
+- [ ] Adicionar botão "Remover item"
+- [ ] Salvar itens selecionados ao criar processo
+
+### Integração com IA - Geração de TR
+- [ ] Atualizar prompt de geração de TR para incluir itens CATMAT/CATSER
+- [ ] Formatar itens selecionados em tabela estruturada
+- [ ] Incluir código, descrição, unidade, quantidade e preço estimado
+- [ ] Adicionar seção "Especificações Técnicas" no TR baseada nos itens
+
+### Testes e Validação
+- [ ] Testar busca de itens do CATMAT
+- [ ] Testar busca de serviços do CATSER
+- [ ] Testar seleção de múltiplos itens
+- [ ] Testar geração de TR com itens selecionados
+- [ ] Validar conformidade com Lei 14.133/2021
+
+
+## Fase 26 - Finalização Completa
+
+### Correção de Fuso Horário
+- [x] Auditar todas as queries de banco que usam timestamp
+- [x] Implementar conversão UTC → America/Sao_Paulo no backend (shared/timezone.ts)
+- [x] Garantir que datas sejam exibidas no fuso horário do Brasil
+- [ ] Testar criação e exibição de datas
+
+### Remoção de Componentes Obsoletos
+- [x] Remover AttachPaymentProofDialog.tsx
+- [x] Remover MarkAsPaidDialog.tsx
+- [x] Remover RegisterInvoiceDialog.tsx
+- [x] Remover RenewContractDialog.tsx
+- [x] Remover RenewalHistoryView.tsx
+- [x] Remover referências a esses componentes
+- [ ] Verificar build sem erros TypeScript (21 erros restantes)
+
+### Finalização CATMAT/CATSER
+- [x] Adicionar campo CatmatSearch no formulário NewProcess
+- [x] Criar função saveProcessItems no db.ts
+- [x] Criar função getProcessItems no db.ts
+- [x] Salvar itens selecionados ao criar processo (integrado no mutation)
+- [x] Atualizar prompt generateTR para incluir itens CATMAT
+- [x] Buscar itens CATMAT ao gerar TR e passar para IA
+- [ ] Testar fluxo completo: buscar item → selecionar → criar processo → gerar TR
+### FAQ na Landing Page
+- [x] Criar seção FAQ com 8 perguntas
+- [x] Perguntas sobre precificação
+- [x] Perguntas sobre implementação
+- [x] Perguntas sobre conformidade legal
+- [x] Perguntas sobre usabilidade (editação de documentos)
+- [x] Perguntas sobre integração CATMAT/CATSER
+- [x] Perguntas sobre suporte
+- [x] Perguntas sobre segurança e LGPDanimação de expand/collapse
+- [ ] Responsividade mobile
+
+
+## Fase 27 - Módulo de Gestão do Departamento de Licitações
+
+### Schema do Banco de Dados
+- [x] Criar tabela `tasks` (tarefas do departamento)
+- [x] Criar tabela `task_comments` (comentários em tarefas)
+- [x] Criar tabela `task_attachments` (anexos de tarefas)
+- [x] Criar tabela `task_history` (histórico de alterações)
+- [x] Criar tabela `task_edit_locks` (bloqueio de edição colaborativo)
+- [x] Executar `pnpm db:push` para aplicar mudanças
+
+### Backend tRPC
+- [x] Criar `taskRouter.ts` com procedures CRUD
+- [x] Implementar `tasks.create` (criar tarefa)
+- [x] Implementar `tasks.list` (listar com filtros avançados)
+- [x] Implementar `tasks.getById` (detalhes da tarefa)
+- [x] Implementar `tasks.update` (editar tarefa)
+- [x] Implementar `tasks.delete` (excluir tarefa - admin only)
+- [x] Implementar `tasks.updateStatus` (mudar status - para Kanban)
+- [x] Adicionar taskRouter ao appRouter
+
+### Filtros Avançados
+- [ ] Implementar filtro por texto (busca em título, descrição, comentários)
+- [ ] Implementar filtro por status (múltipla seleção)
+- [ ] Implementar filtro por prioridade
+- [ ] Implementar filtro por tipo/categoria
+- [ ] Implementar filtro por responsável
+- [ ] Implementar filtro por período de criação (de/até)
+- [ ] Implementar filtro por período de prazo (de/até)
+- [ ] Implementar filtro por tags
+
+### Funções do Backend
+- [ ] Criar `getTaskStats()` no db.ts (KPIs do dashboard)
+- [ ] Criar `getTasksByDeadline()` (tarefas urgentes)
+- [ ] Criar `getOverdueTasks()` (tarefas atrasadas)
+- [ ] Criar `getTaskHistory()` (histórico de alterações)
+- [ ] Criar `setEditLock()` e `getEditLock()` (bloqueio colaborativo)
+- [ ] Criar `addTaskComment()` e `getTaskComments()`
+- [ ] Criar `uploadTaskAttachment()` e `getTaskAttachments()`
+
+### Interface Kanban
+- [ ] Criar componente `TaskKanban.tsx`
+- [ ] Implementar drag & drop com `@dnd-kit/core`
+- [ ] Criar 6 colunas (Pendente, Em Andamento, Pausada, Atrasada, Aguardando, Concluída)
+- [ ] Criar cards de tarefas com badges (prioridade, prazo)
+- [ ] Implementar indicadores visuais de prazo (4 cores)
+- [ ] Adicionar contador de tarefas por coluna
+- [ ] Implementar atualização de status via drag & drop
+
+### Visualização Lista
+- [ ] Criar componente `TaskList.tsx`
+- [ ] Criar tabela com 7 colunas (Título, Tipo, Responsável, Status, Prioridade, Prazo, Ações)
+- [ ] Implementar componente de filtros avançados
+- [ ] Adicionar ordenação por coluna
+- [ ] Implementar paginação (20 itens por página)
+- [ ] Adicionar botões de ação (visualizar, editar, excluir)
+
+### Visualização Calendário
+- [ ] Criar componente `TaskCalendar.tsx`
+- [ ] Integrar biblioteca `react-big-calendar`
+- [ ] Implementar marcadores coloridos por prioridade
+- [ ] Adicionar navegação entre meses
+- [ ] Implementar clique para ver detalhes da tarefa
+- [ ] Adicionar legenda de cores
+
+### Dashboard
+- [ ] Criar componente `DepartmentDashboard.tsx`
+- [ ] Implementar 4 KPIs clicáveis (Total, Em Andamento, Concluídas, Atrasadas)
+- [ ] Criar gráfico de pizza (distribuição por status)
+- [ ] Criar gráfico de pizza (distribuição por prioridade)
+- [ ] Criar gráfico de barras (top 5 tipos de tarefas)
+- [ ] Criar gráfico de linhas (evolução mensal)
+- [ ] Implementar widget "Tarefas Urgentes"
+- [ ] Implementar filtro "Minhas Tarefas" vs "Todas"
+
+### Funcionalidades Colaborativas
+- [ ] Criar componente `TaskComments.tsx`
+- [ ] Implementar adição de comentários
+- [ ] Implementar listagem cronológica de comentários
+- [ ] Criar componente `TaskAttachments.tsx`
+- [ ] Implementar upload de anexos (S3, limite 10MB)
+- [ ] Implementar download de anexos
+- [ ] Criar componente `TaskHistory.tsx` (timeline de alterações)
+- [ ] Implementar bloqueio de edição colaborativo (banner visual)
+- [ ] Implementar sistema de notificações (3 dias antes do prazo)
+
+### Relatórios
+- [ ] Criar componente `TaskReports.tsx`
+- [ ] Implementar relatório por período (diário, semanal, mensal)
+- [ ] Implementar exportação PDF (formatado profissionalmente)
+- [ ] Implementar exportação Excel (múltiplas abas)
+- [ ] Respeitar filtros ativos na exportação
+
+### Integração com Processos Licitatórios
+- [ ] Adicionar campo `processId` na tabela `tasks`
+- [ ] Criar botão "Criar Tarefa" na página de detalhes do processo
+- [ ] Pré-preencher formulário com dados do processo
+- [ ] Listar tarefas vinculadas na página de detalhes do processo
+- [ ] Implementar filtro por processo na listagem de tarefas
+
+### Roteamento
+- [ ] Adicionar rota `/gestao` no ModuleSelectionDashboard
+- [ ] Criar rota `/gestao/dashboard` (dashboard principal)
+- [ ] Criar rota `/gestao/kanban` (visualização Kanban)
+- [ ] Criar rota `/gestao/lista` (visualização Lista)
+- [ ] Criar rota `/gestao/calendario` (visualização Calendário)
+- [ ] Criar rota `/gestao/tarefas/:id` (detalhes da tarefa)
+- [ ] Criar rota `/gestao/relatorios` (relatórios)
+
+### Testes
+- [ ] Testar criação de tarefa
+- [ ] Testar edição de tarefa
+- [ ] Testar exclusão de tarefa
+- [ ] Testar drag & drop no Kanban
+- [ ] Testar filtros avançados
+- [ ] Testar exportação de relatórios
+- [ ] Testar bloqueio de edição colaborativo
+- [ ] Testar vinculação com processos licitatórios
+- [ ] Testar indicadores de prazo
+- [ ] Testar notificações
+
+
+## Módulo: Gestão do Departamento de Licitações
+
+### Backend (100% Concluído)
+- [x] Schema do banco de dados (tasks, task_comments, task_attachments, task_history, task_edit_locks)
+- [x] Router tRPC com 8 procedures (create, update, delete, list, getById, addComment, addAttachment, getStats)
+- [x] Funções de banco de dados em db.ts (8 funções)
+- [x] Seed de tarefas de teste (8 tarefas)
+
+### Interface Kanban (100% Concluído)
+- [x] Componente TaskKanban com drag & drop (@dnd-kit)
+- [x] 7 colunas de status (Pendente, Em Andamento, Pausada, Atrasada, Aguardando Info, Concluída, Cancelada)
+- [x] Cards de tarefas com badges de prioridade (Baixa, Média, Alta, Urgente)
+- [x] Indicadores visuais de prazo com 4 cores (verde, amarelo, laranja, vermelho)
+- [x] Contadores de tarefas por coluna
+- [x] Scroll horizontal para navegação entre colunas
+- [x] Integração com tRPC para listar tarefas
+- [x] Atualização de status via drag & drop
+- [x] Rota /gestao-departamento criada
+- [x] Módulo adicionado ao dashboard principal
+
+### Interface Lista (0% - Próxima Fase)
+- [ ] Componente TaskList com tabela de 7 colunas
+- [ ] Filtros avançados (8 critérios combinados)
+- [ ] Paginação (20 itens por página)
+- [ ] Ordenação por colunas
+- [ ] Seleção múltipla de tarefas
+- [ ] Ações em lote (atualizar status, excluir)
+- [ ] Exportar para PDF/Excel
+
+### Interface Calendário (0%)
+- [ ] Componente TaskCalendar com visualização mensal
+- [ ] Tarefas agrupadas por data de prazo
+- [ ] Cores por prioridade
+- [ ] Click para visualizar/editar tarefa
+- [ ] Navegação entre meses
+- [ ] Indicadores de tarefas vencidas
+
+### Dashboard Analítico (0%)
+- [ ] 4 KPIs clicáveis (Total, Pendentes, Em Andamento, Atrasadas)
+- [ ] Gráfico de pizza: distribuição por status
+- [ ] Gráfico de pizza: distribuição por prioridade
+- [ ] Gráfico de barras: top 5 tipos de tarefas
+- [ ] Gráfico de linha: evolução mensal
+- [ ] Widget de tarefas urgentes
+- [ ] Filtros de período
+
+### Funcionalidades Colaborativas (0%)
+- [ ] Sistema de comentários com @mentions
+- [ ] Upload de anexos (até 10MB)
+- [ ] Bloqueio de edição colaborativo
+- [ ] Timeline de histórico de alterações
+- [ ] Notificações push para responsáveis
+- [ ] Atribuição de tarefas a usuários
+
+### Recursos Avançados (0%)
+- [ ] Numeração sequencial automática
+- [ ] Tramitação de tarefas (histórico de movimentações)
+- [ ] Vinculação com processos licitatórios
+- [ ] Tags personalizadas
+- [ ] Busca avançada (texto completo)
+- [ ] Relatórios de produtividade
+- [ ] Integração com calendário de prazos
+
+## Módulo 5 - Gestão do Departamento: Dashboard Analítico
+
+- [x] 4 KPIs principais (Total, Concluídas, Em Andamento, Atrasadas)
+- [x] Gráfico de pizza - Distribuição por Status
+- [x] Gráfico de pizza - Distribuição por Prioridade
+- [x] Gráfico de barras - Top 5 Tipos de Tarefas
+- [x] Gráfico de linha - Evolução Mensal (últimos 6 meses)
+- [x] Integração com Recharts
+- [x] Design responsivo e profissional
+
+
+## Módulo 5 - Gestão do Departamento: Funcionalidades Colaborativas
+
+### Backend (Implementado)
+- [x] Procedures tRPC para comentários (listComments, addComment)
+- [x] Procedures tRPC para anexos (listAttachments, addAttachment, deleteAttachment)
+- [x] Funções no db.ts (listTaskComments, createTaskComment, listTaskAttachments, createTaskAttachment, deleteTaskAttachment)
+- [x] Validação de tamanho de arquivo (10MB)
+
+### Frontend (Pendente de Integração)
+- [x] Componente TaskDetailModal criado
+- [x] Integrar modal no Kanban (clicar em tarefa abre modal)
+- [x] Integrar modal na Lista (clicar em linha abre modal)
+- [ ] Upload real para S3 (atualmente usa base64)
+- [ ] Sistema de notificações push
+- [ ] Timeline de histórico de alterações
+- [ ] Bloqueio de edição simultânea
+
+
+## Testes Realizados
+- [x] Modal de detalhes abre ao clicar em tarefa no Kanban
+- [x] Modal mostra todas as informações (título, prioridade, status, tipo, prazo, responsável, descrição)
+- [x] Seção de anexos visível (0 anexos, botão "Adicionar Anexo", limite 10MB)
+- [x] Seção de comentários visível (campo de texto, botão "Enviar Comentário")
+- [x] Botão Close fecha o modal
+- [ ] Salvar comentário no banco (requer autenticação)
+- [ ] Upload de anexo para S3 (requer implementação)
+
+
+## Correções de TypeScript Realizadas
+- [x] Corrigir tipos no departmentTasksRouter (status/prioridade em português)
+- [x] Adicionar campo createdBy obrigatório
+- [x] Corrigir assignedTo de string para number
+- [x] Corrigir dueDate para deadline no TaskCalendar (10 ocorrências)
+- [x] Corrigir status em inglês para português no TaskDashboard (4 ocorrências)
+- [x] Corrigir verificações de null no TaskDetailModal (deadline, uploadedAt)
+- [x] Corrigir query condicional no getOverdueTasks (db.ts)
+- [x] Converter catmatCode/catserCode para int no saveProcessItems (db.ts)
+- [x] Converter catmatCode/catserCode para string no routers.ts
+- [x] **Reduzir erros de TypeScript de 43 para 17 (redução de 60%)**
+- [x] **Módulo de Gestão do Departamento 100% livre de erros!**
+- [ ] Erros restantes (17) são de módulos antigos (AdminDocuments, AdminProposals, etc.)

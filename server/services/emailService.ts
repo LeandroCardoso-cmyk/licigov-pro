@@ -222,3 +222,34 @@ export async function sendDocumentApprovedEmail(params: {
     documentType: params.documentType,
   });
 }
+
+/**
+ * Template: Mudança de status do processo
+ */
+export async function sendStatusChangeEmail(params: {
+  recipientEmail: string;
+  recipientName: string;
+  processName: string;
+  oldStatus: string;
+  newStatus: string;
+  processId: number;
+}): Promise<boolean> {
+  const statusLabels: Record<string, string> = {
+    em_etp: "Em ETP",
+    em_tr: "Em TR",
+    em_dfd: "Em DFD",
+    em_edital: "Em Edital",
+    concluido: "Concluído",
+  };
+
+  const oldStatusLabel = statusLabels[params.oldStatus] || params.oldStatus;
+  const newStatusLabel = statusLabels[params.newStatus] || params.newStatus;
+
+  return sendEmailNotification({
+    recipientEmail: params.recipientEmail,
+    recipientName: params.recipientName,
+    subject: `Status atualizado: ${params.processName}`,
+    message: `O processo "${params.processName}" teve seu status atualizado:\n\n${oldStatusLabel} → ${newStatusLabel}\n\nAcesse o processo para visualizar os detalhes.\n\nAtenciosamente,\nEquipe LiciGov Pro`,
+    processName: params.processName,
+  });
+}

@@ -88,10 +88,8 @@ export const companyDocumentsRouter = router({
 
       // Registrar log de auditoria
       await db.createAuditLog({
-        userId: ctx.user.id,
-        action: "upload_company_document",
-        entityType: "company_document",
-        entityId: docId,
+        adminId: ctx.user.id,
+        action: "other",
         details: `Documento ${input.name} (${input.type}) versão ${latestVersion + 1} enviado`,
       });
 
@@ -133,10 +131,8 @@ export const companyDocumentsRouter = router({
 
       // Registrar log de auditoria
       await db.createAuditLog({
-        userId: ctx.user.id,
-        action: "delete_company_document",
-        entityType: "company_document",
-        entityId: input.docId,
+        adminId: ctx.user.id,
+        action: "other",
         details: "Documento da empresa deletado",
       });
 

@@ -1,4 +1,4 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, and, or, like, inArray, lte, gte, desc, isNull, lt, sql, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, 
@@ -19,6 +19,14 @@ import {
   payments,
   proposalRequests,
   companyDocuments,
+  contractRenewals,
+  processItems,
+  tasks,
+  taskComments,
+  taskAttachments,
+  taskHistory,
+  taskEditLocks,
+  InsertTask,
   InsertProcess,
   InsertDocument,
   InsertEditalParameter,
@@ -34,7 +42,10 @@ import {
   InsertUsageTracking,
   InsertPayment,
   InsertProposalRequest,
-  InsertCompanyDocument
+  InsertCompanyDocument,
+  InsertContractRenewal,
+  documentTemplates,
+  InsertDocumentTemplate
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -156,6 +167,28 @@ export async function getProcessesByUser(userId: number) {
     .from(processes)
     .where(eq(processes.ownerId, userId))
     .orderBy(desc(processes.updatedAt));
+}
+
+export async function searchProcesses(userId: number, query: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const searchTerm = `%${query}%`;
+  return await db
+    .select()
+    .from(processes)
+    .where(
+      and(
+        eq(processes.ownerId, userId),
+        or(
+          sql`${processes.name} LIKE ${searchTerm}`,
+          sql`${processes.object} LIKE ${searchTerm}`,
+          sql`CAST(${processes.id} AS CHAR) LIKE ${searchTerm}`
+        )
+      )
+    )
+    .orderBy(desc(processes.updatedAt))
+    .limit(10);
 }
 
 export async function getProcessById(id: number) {
@@ -578,12 +611,12 @@ export async function deleteUserData(userId: number) {
   await db.delete(activityLogs).where(eq(activityLogs.userId, userId));
   
   // Deletar processos e seus documentos
-  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  const userProcesses = await db.select().from(processes).where(eq(processes.ownerId, userId));
   for (const process of userProcesses) {
     await db.delete(documents).where(eq(documents.processId, process.id));
     await db.delete(editalParameters).where(eq(editalParameters.processId, process.id));
   }
-  await db.delete(processes).where(eq(processes.userId, userId));
+  await db.delete(processes).where(eq(processes.ownerId, userId));
   
   // Deletar consentimentos
   await db.delete(userConsents).where(eq(userConsents.userId, userId));
@@ -597,7 +630,7 @@ export async function exportUserData(userId: number) {
   if (!db) throw new Error("Database not available");
   
   const user = await getUserById(userId);
-  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  const userProcesses = await db.select().from(processes).where(eq(processes.ownerId, userId));
   const userComments = await db.select().from(comments).where(eq(comments.userId, userId));
   const userNotifications = await db.select().from(notifications).where(eq(notifications.userId, userId));
   const userConsentsData = await getUserConsents(userId);
@@ -642,7 +675,7 @@ export async function getUserStats(userId: number) {
   const db = await getDb();
   if (!db) return { processCount: 0, documentCount: 0, commentCount: 0 };
   
-  const userProcesses = await db.select().from(processes).where(eq(processes.userId, userId));
+  const userProcesses = await db.select().from(processes).where(eq(processes.ownerId, userId));
   const processIds = userProcesses.map(p => p.id);
   
   let documentCount = 0;
@@ -1112,4 +1145,638 @@ export async function updateProposalRequest(
     .update(proposalRequests)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(proposalRequests.id, id));
+}
+
+
+export async function getAllSubscriptionsWithDetails() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const allSubscriptions = await db
+    .select({
+      id: subscriptions.id,
+      userId: subscriptions.userId,
+      planId: subscriptions.planId,
+      status: subscriptions.status,
+      currentPeriodStart: subscriptions.currentPeriodStart,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      stripeSubscriptionId: subscriptions.stripeSubscriptionId,
+      stripeCustomerId: subscriptions.stripeCustomerId,
+      userName: users.name,
+      userEmail: users.email,
+      planName: subscriptionPlans.name,
+      planPrice: subscriptionPlans.price,
+    })
+    .from(subscriptions)
+    .leftJoin(users, eq(subscriptions.userId, users.id))
+    .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id));
+  
+  return allSubscriptions;
+}
+
+// ============================================
+// CONTRACT RENEWALS (Renovações de Contrato)
+// ============================================
+
+export async function renewContract(
+  subscriptionId: number,
+  renewedBy: number,
+  termoAditivoFileUrl?: string,
+  termoAditivoFileKey?: string,
+  numeroEmpenho?: string,
+  valorRenovacao?: number,
+  observacoes?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Buscar assinatura atual
+  const subscription = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.id, subscriptionId))
+    .limit(1);
+  
+  if (subscription.length === 0) {
+    throw new Error("Assinatura não encontrada");
+  }
+  
+  const sub = subscription[0];
+  
+  // Validar limite de renovações (máximo 9 renovações = 10 anos total)
+  if (sub.renewalCount >= 9) {
+    throw new Error("Limite máximo de renovações atingido (9 renovações = 10 anos total)");
+  }
+  
+  // Calcular novas datas
+  const previousEndDate = sub.currentPeriodEnd || new Date();
+  const newEndDate = new Date(previousEndDate);
+  newEndDate.setFullYear(newEndDate.getFullYear() + 1); // + 12 meses
+  
+  const newRenewalCount = sub.renewalCount + 1;
+  
+  // Atualizar assinatura
+  await db
+    .update(subscriptions)
+    .set({
+      currentPeriodEnd: newEndDate,
+      renewalCount: newRenewalCount,
+      lastRenewalDate: new Date(),
+      originalStartDate: sub.originalStartDate || sub.currentPeriodStart,
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.id, subscriptionId));
+  
+  // Registrar renovação no histórico
+  await db.insert(contractRenewals).values({
+    subscriptionId,
+    renewalNumber: newRenewalCount,
+    previousEndDate,
+    newEndDate,
+    termoAditivoFileUrl,
+    termoAditivoFileKey,
+    numeroEmpenho,
+    valorRenovacao,
+    renewedBy,
+    observacoes,
+  });
+  
+  return { success: true, newEndDate, renewalNumber: newRenewalCount };
+}
+
+export async function getContractRenewals(subscriptionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db
+    .select()
+    .from(contractRenewals)
+    .where(eq(contractRenewals.subscriptionId, subscriptionId))
+    .orderBy(desc(contractRenewals.createdAt));
+}
+
+export async function canRenewContract(subscriptionId: number): Promise<{ canRenew: boolean; reason?: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const subscription = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.id, subscriptionId))
+    .limit(1);
+  
+  if (subscription.length === 0) {
+    return { canRenew: false, reason: "Assinatura não encontrada" };
+  }
+  
+  const sub = subscription[0];
+  
+  // Verificar se é assinatura via empenho
+  if (sub.stripeSubscriptionId) {
+    return { canRenew: false, reason: "Apenas assinaturas via empenho podem ser renovadas" };
+  }
+  
+  // Verificar se atingiu limite de renovações (máximo 9 = 10 anos total)
+  if (sub.renewalCount >= 9) {
+    return { canRenew: false, reason: "Limite máximo de 9 renovações atingido (10 anos total)" };
+  }
+  
+  // Verificar se está ativa
+  if (sub.status !== "active") {
+    return { canRenew: false, reason: "Apenas assinaturas ativas podem ser renovadas" };
+  }
+  
+  return { canRenew: true };
+}
+
+
+
+
+export async function getContractsNearLimit() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Buscar contratos com 7, 8 ou 9 renovações (próximos ao limite)
+  const contracts = await db
+    .select({
+      id: subscriptions.id,
+      userId: subscriptions.userId,
+      planId: subscriptions.planId,
+      status: subscriptions.status,
+      currentPeriodStart: subscriptions.currentPeriodStart,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      renewalCount: subscriptions.renewalCount,
+      userName: users.name,
+      userEmail: users.email,
+      planName: subscriptionPlans.name,
+      planPrice: subscriptionPlans.price,
+    })
+    .from(subscriptions)
+    .leftJoin(users, eq(subscriptions.userId, users.id))
+    .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .where(
+      and(
+        eq(subscriptions.status, 'active'),
+        gte(subscriptions.renewalCount, 7)
+      )
+    )
+    .orderBy(desc(subscriptions.renewalCount), subscriptions.currentPeriodEnd);
+  
+  // Calcular métricas
+  const total = contracts.length;
+  const atLimit = contracts.filter(c => c.renewalCount >= 9).length;
+  const critical = contracts.filter(c => c.renewalCount === 8).length;
+  const warning = contracts.filter(c => c.renewalCount === 7).length;
+  
+  return {
+    contracts,
+    total,
+    atLimit,
+    critical,
+    warning,
+  };
+}
+
+
+
+
+// ==================== DOCUMENT TEMPLATES ====================
+
+export async function getTemplatesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db
+    .select()
+    .from(documentTemplates)
+    .where(eq(documentTemplates.userId, userId))
+    .orderBy(desc(documentTemplates.createdAt));
+}
+
+export async function getTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(documentTemplates)
+    .where(eq(documentTemplates.id, id))
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function createTemplate(template: InsertDocumentTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Se for template padrão, remover flag de outros templates do mesmo tipo
+  if (template.isDefault === 1) {
+    await db
+      .update(documentTemplates)
+      .set({ isDefault: 0 })
+      .where(
+        and(
+          eq(documentTemplates.userId, template.userId),
+          eq(documentTemplates.type, template.type)
+        )
+      );
+  }
+  
+  const result = await db.insert(documentTemplates).values(template);
+  return result[0].insertId;
+}
+
+export async function updateTemplate(id: number, updates: Partial<InsertDocumentTemplate>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Se estiver marcando como padrão, remover flag de outros templates
+  if (updates.isDefault === 1 && updates.userId && updates.type) {
+    await db
+      .update(documentTemplates)
+      .set({ isDefault: 0 })
+      .where(
+        and(
+          eq(documentTemplates.userId, updates.userId),
+          eq(documentTemplates.type, updates.type),
+          ne(documentTemplates.id, id)
+        )
+      );
+  }
+  
+  await db
+    .update(documentTemplates)
+    .set(updates)
+    .where(eq(documentTemplates.id, id));
+}
+
+export async function deleteTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(documentTemplates).where(eq(documentTemplates.id, id));
+}
+
+export async function getDefaultTemplate(userId: number, type: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(documentTemplates)
+    .where(
+      and(
+        eq(documentTemplates.userId, userId),
+        eq(documentTemplates.type, type as any),
+        eq(documentTemplates.isDefault, 1)
+      )
+    )
+    .limit(1);
+  
+  return result[0];
+}
+
+
+// ============================================
+// CATMAT/CATSER ITEMS
+// ============================================
+
+export async function saveProcessItems(processId: number, items: Array<{
+  itemType: 'material' | 'service';
+  catmatCode?: string;
+  catserCode?: string;
+  description: string;
+  unit: string;
+  groupCode?: string;
+  classCode?: string;
+  quantity?: number;
+  estimatedPrice?: number;
+}>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Remover itens antigos do processo
+  await db.delete(processItems).where(eq(processItems.processId, processId));
+  
+  // Inserir novos itens
+  if (items.length > 0) {
+    await db.insert(processItems).values(
+      items.map(item => ({
+        processId,
+        itemType: item.itemType,
+        catmatCode: item.catmatCode ? parseInt(String(item.catmatCode)) : null,
+        catserCode: item.catserCode ? parseInt(String(item.catserCode)) : null,
+        description: item.description,
+        unit: item.unit,
+        groupCode: item.groupCode ? parseInt(String(item.groupCode)) : null,
+        classCode: item.classCode ? parseInt(String(item.classCode)) : null,
+        quantity: item.quantity || null,
+        estimatedPrice: item.estimatedPrice || null,
+      }))
+    );
+  }
+}
+
+export async function getProcessItems(processId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db
+    .select()
+    .from(processItems)
+    .where(eq(processItems.processId, processId));
+  
+  return result;
+}
+
+
+// ========================================
+// MÓDULO DE GESTÃO DO DEPARTAMENTO
+// ========================================
+
+/**
+ * Criar nova tarefa
+ */
+export async function createTask(task: InsertTask): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(tasks).values(task);
+  return result[0].insertId;
+}
+
+/**
+ * Buscar tarefa por ID
+ */
+export async function getTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Buscar todas as tarefas (sem filtros)
+ */
+export async function getAllTasks() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.select().from(tasks);
+  return result;
+}
+
+/**
+ * Listar tarefas com filtros
+ */
+export async function listTasks(filters: {
+  search?: string;
+  status?: string[];
+  priority?: string[];
+  type?: string;
+  assignedTo?: number;
+  processId?: number;
+  createdFrom?: Date;
+  createdTo?: Date;
+  deadlineFrom?: Date;
+  deadlineTo?: Date;
+  tags?: string[];
+  page?: number;
+  pageSize?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(tasks);
+
+  // Aplicar filtros
+  const conditions = [];
+
+  if (filters.search) {
+    conditions.push(
+      or(
+        like(tasks.title, `%${filters.search}%`),
+        like(tasks.description, `%${filters.search}%`)
+      )
+    );
+  }
+
+  if (filters.status && filters.status.length > 0) {
+    conditions.push(inArray(tasks.status, filters.status as any));
+  }
+
+  if (filters.priority && filters.priority.length > 0) {
+    conditions.push(inArray(tasks.priority, filters.priority as any));
+  }
+
+  if (filters.type) {
+    conditions.push(eq(tasks.type, filters.type));
+  }
+
+  if (filters.assignedTo) {
+    conditions.push(eq(tasks.assignedTo, filters.assignedTo));
+  }
+
+  if (filters.processId) {
+    conditions.push(eq(tasks.processId, filters.processId));
+  }
+
+  if (filters.createdFrom) {
+    conditions.push(gte(tasks.createdAt, filters.createdFrom));
+  }
+
+  if (filters.createdTo) {
+    conditions.push(lte(tasks.createdAt, filters.createdTo));
+  }
+
+  if (filters.deadlineFrom) {
+    conditions.push(gte(tasks.deadline, filters.deadlineFrom));
+  }
+
+  if (filters.deadlineTo) {
+    conditions.push(lte(tasks.deadline, filters.deadlineTo));
+  }
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  // Paginação
+  const page = filters.page || 1;
+  const pageSize = filters.pageSize || 20;
+  const offset = (page - 1) * pageSize;
+
+  const result = await query.limit(pageSize).offset(offset);
+
+  return result;
+}
+
+/**
+ * Atualizar tarefa
+ */
+export async function updateTask(id: number, updates: Partial<InsertTask>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(tasks).set(updates).where(eq(tasks.id, id));
+}
+
+/**
+ * Excluir tarefa
+ */
+export async function deleteTask(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Excluir comentários, anexos e histórico primeiro
+  await db.delete(taskComments).where(eq(taskComments.taskId, id));
+  await db.delete(taskAttachments).where(eq(taskAttachments.taskId, id));
+  await db.delete(taskHistory).where(eq(taskHistory.taskId, id));
+  await db.delete(taskEditLocks).where(eq(taskEditLocks.taskId, id));
+
+  // Excluir tarefa
+  await db.delete(tasks).where(eq(tasks.id, id));
+}
+
+/**
+ * Atualizar status da tarefa
+ */
+export async function updateTaskStatus(id: number, status: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(tasks).set({ status: status as any }).where(eq(tasks.id, id));
+}
+
+/**
+ * Buscar estatísticas de tarefas
+ */
+export async function getTaskStats(assignedTo?: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, inProgress: 0, completed: 0, overdue: 0 };
+
+  let query = db.select().from(tasks);
+
+  if (assignedTo) {
+    query = query.where(eq(tasks.assignedTo, assignedTo)) as any;
+  }
+
+  const allTasks = await query;
+
+  const now = new Date();
+
+  const stats = {
+    total: allTasks.length,
+    inProgress: allTasks.filter(t => t.status === "em_andamento").length,
+    completed: allTasks.filter(t => t.status === "concluida").length,
+    overdue: allTasks.filter(
+      t => t.deadline && t.deadline < now && t.status !== "concluida"
+    ).length,
+  };
+
+  return stats;
+}
+
+/**
+ * Buscar tarefas atrasadas
+ */
+export async function getOverdueTasks(assignedTo?: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const now = new Date();
+
+  const conditions = [
+    lt(tasks.deadline, now),
+    ne(tasks.status, "concluida")
+  ];
+
+  if (assignedTo) {
+    conditions.push(eq(tasks.assignedTo, assignedTo));
+  }
+
+  const result = await db
+    .select()
+    .from(tasks)
+    .where(and(...conditions));
+    
+  return result;
+}
+
+
+/**
+ * Listar comentários de uma tarefa
+ */
+export async function listTaskComments(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select()
+    .from(taskComments)
+    .where(eq(taskComments.taskId, taskId))
+    .orderBy(taskComments.createdAt);
+
+  return result;
+}
+
+/**
+ * Criar comentário em uma tarefa
+ */
+export async function createTaskComment(comment: {
+  taskId: number;
+  userId: number;
+  content: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(taskComments).values(comment);
+  return result[0].insertId;
+}
+
+/**
+ * Listar anexos de uma tarefa
+ */
+export async function listTaskAttachments(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select()
+    .from(taskAttachments)
+    .where(eq(taskAttachments.taskId, taskId))
+    .orderBy(taskAttachments.uploadedAt);
+
+  return result;
+}
+
+/**
+ * Criar anexo em uma tarefa
+ */
+export async function createTaskAttachment(attachment: {
+  taskId: number;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(taskAttachments).values(attachment);
+  return result[0].insertId;
+}
+
+/**
+ * Deletar anexo
+ */
+export async function deleteTaskAttachment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(taskAttachments).where(eq(taskAttachments.id, id));
 }

@@ -1,9 +1,13 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { proposalRouter } from "./routers/proposalRouter";
 import { companyDocumentsRouter } from "./routers/companyDocumentsRouter";
+import { catmatRouter } from "./routers/catmatRouter";
+import { taskRouter } from "./routers/taskRouter";
+import { departmentTasksRouter } from "./routers/departmentTasksRouter";
+
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
@@ -29,6 +33,29 @@ export const appRouter = router({
       return await db.getProcessesByUser(ctx.user.id);
     }),
 
+    // Buscar processos (para busca global)
+    search: protectedProcedure
+      .input(z.object({ query: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return await db.searchProcesses(ctx.user.id, input.query);
+      }),
+
+    // Buscar todas as atividades do usuário (para relatório)
+    getActivityLogs: protectedProcedure.query(async ({ ctx }) => {
+      const userProcesses = await db.getProcessesByUser(ctx.user.id);
+      const allActivities = [];
+
+      for (const process of userProcesses) {
+        const activities = await db.getActivityLogsByProcess(process.id);
+        allActivities.push(...activities);
+      }
+
+      // Ordenar por data decrescente
+      return allActivities.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }),
+
     // Criar novo processo
     create: protectedProcedure
       .input(z.object({
@@ -38,6 +65,16 @@ export const appRouter = router({
         estimatedValue: z.number().positive(),
         modality: z.string().min(1),
         category: z.string().min(1),
+        catmatItems: z.array(z.object({
+          codigoItem: z.number(),
+          descricaoItem: z.string(),
+          unidadeFornecimento: z.string().optional(),
+          unidadeMedida: z.string().optional(),
+          codigoGrupo: z.number().optional(),
+          descricaoGrupo: z.string().optional(),
+          codigoClasse: z.number().optional(),
+          descricaoClasse: z.string().optional(),
+        })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         // Converter valor para centavos
@@ -56,6 +93,22 @@ export const appRouter = router({
 
         // Registrar atividade
         const processId = Number((result as any).insertId);
+        
+        // Salvar itens CATMAT/CATSER se houver
+        if (input.catmatItems && input.catmatItems.length > 0) {
+          await db.saveProcessItems(
+            processId,
+            input.catmatItems.map(item => ({
+              itemType: 'material' as const, // TODO: detectar se é material ou serviço
+              catmatCode: item.codigoItem.toString(),
+              description: item.descricaoItem,
+              unit: item.unidadeFornecimento || item.unidadeMedida || 'UN',
+              groupCode: item.codigoGrupo?.toString(),
+              classCode: item.codigoClasse?.toString(),
+            }))
+          );
+        }
+        
         await db.createActivityLog({
           processId,
           userId: ctx.user.id,
@@ -119,6 +172,10 @@ export const appRouter = router({
         status: z.enum(["em_etp", "em_tr", "em_dfd", "em_edital", "concluido"]),
       }))
       .mutation(async ({ ctx, input }) => {
+        // Buscar processo antes da atualização para pegar status antigo
+        const process = await db.getProcessById(input.id);
+        const oldStatus = process?.status;
+        
         await db.updateProcessStatus(input.id, input.status);
         
         await db.createActivityLog({
@@ -126,6 +183,21 @@ export const appRouter = router({
           userId: ctx.user.id,
           action: `alterou o status para ${input.status}`,
         });
+
+        // Enviar notificação por email se status mudou
+        if (oldStatus && oldStatus !== input.status && ctx.user.email && process) {
+          const { sendStatusChangeEmail } = await import("./services/emailService");
+          sendStatusChangeEmail({
+            recipientEmail: ctx.user.email,
+            recipientName: ctx.user.name || "Usuário",
+            processName: process.name,
+            oldStatus,
+            newStatus: input.status,
+            processId: input.id,
+          }).catch((error) => {
+            console.error("[Email] Erro ao enviar notificação:", error);
+          });
+        }
 
         return { success: true };
       }),
@@ -217,6 +289,19 @@ export const appRouter = router({
           // Gerar TR
           nextDocType = "tr";
           nextStatus = "em_tr";
+          
+          // Buscar itens CATMAT/CATSER do processo
+          const processItems = await db.getProcessItems(input.processId);
+          const catmatItems = processItems.map(item => ({
+            itemType: item.itemType,
+            catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
+            catserCode: item.catserCode ? String(item.catserCode) : undefined,
+            description: item.description,
+            unit: item.unit,
+            groupCode: item.groupCode ? String(item.groupCode) : undefined,
+            classCode: item.classCode ? String(item.classCode) : undefined,
+          }));
+          
           generatedContent = await generateTR({
             processName: process.name,
             object: process.object || "",
@@ -224,6 +309,7 @@ export const appRouter = router({
             modality: process.modality || "",
             category: process.category || "",
             etpContent: etpDoc.content || "",
+            catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
             organizationName: settings?.organizationName || undefined,
             address: settings?.address || undefined,
             cnpj: settings?.cnpj || undefined,
@@ -306,7 +392,7 @@ export const appRouter = router({
         }
 
         const process = await db.getProcessById(document.processId);
-        if (!process || process.userId !== ctx.user.id) {
+        if (!process || process.ownerId !== ctx.user.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para editar este documento' });
         }
 
@@ -953,6 +1039,18 @@ export const appRouter = router({
         return { ...subscription, plan };
       }),
 
+    // Listar todas as assinaturas (admin)
+    getAllSubscriptions: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Acesso negado. Apenas administradores podem acessar.",
+          });
+        }
+        return await db.getAllSubscriptionsWithDetails();
+      }),
+
     // Obter informações de uso e limites
     getMyLimits: protectedProcedure
       .query(async ({ ctx }) => {
@@ -1059,6 +1157,102 @@ export const appRouter = router({
 
   // Rotas de documentos da empresa
   companyDocuments: companyDocumentsRouter,
+
+  // Rotas de integração CATMAT/CATSER
+  catmat: catmatRouter,
+
+  // Rotas de gestão do departamento
+  tasks: taskRouter,
+  departmentTasks: departmentTasksRouter,
+
+  // Rotas de parcelas de notas fiscais (empenho)
+
+
+  // Rotas de templates de documentos
+  templates: router({
+    // Listar templates do usuário
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return await db.getTemplatesByUser(ctx.user.id);
+    }),
+
+    // Buscar template por ID
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getTemplateById(input.id);
+      }),
+
+    // Buscar template padrão por tipo
+    getDefault: protectedProcedure
+      .input(z.object({ type: z.enum(["etp", "tr", "dfd", "edital"]) }))
+      .query(async ({ ctx, input }) => {
+        return await db.getDefaultTemplate(ctx.user.id, input.type);
+      }),
+
+    // Criar novo template
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        type: z.enum(["etp", "tr", "dfd", "edital"]),
+        content: z.string(),
+        isDefault: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const templateId = await db.createTemplate({
+          userId: ctx.user.id,
+          name: input.name,
+          description: input.description || null,
+          type: input.type,
+          content: input.content,
+          isDefault: input.isDefault ? 1 : 0,
+        });
+
+        return { id: templateId, success: true };
+      }),
+
+    // Atualizar template
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        content: z.string().optional(),
+        isDefault: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const template = await db.getTemplateById(input.id);
+        if (!template || template.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const updates: any = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.description !== undefined) updates.description = input.description;
+        if (input.content !== undefined) updates.content = input.content;
+        if (input.isDefault !== undefined) {
+          updates.isDefault = input.isDefault ? 1 : 0;
+          updates.userId = ctx.user.id;
+          updates.type = template.type;
+        }
+
+        await db.updateTemplate(input.id, updates);
+        return { success: true };
+      }),
+
+    // Excluir template
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const template = await db.getTemplateById(input.id);
+        if (!template || template.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        await db.deleteTemplate(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
