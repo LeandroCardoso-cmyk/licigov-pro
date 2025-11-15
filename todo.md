@@ -1503,3 +1503,29 @@
 - [x] Adicionar botão "Preview" (👁️ Eye) ao lado de Checklist
 - [x] Mostrar checklist formatado com resumo e agrupamento por categoria
 - [x] Criar wrappers com queries para buscar dados
+
+
+## Fase 16 - Melhorias Finais Antes de Contratação Direta
+
+### Menu Lateral com Item Plataformas
+- [x] Adicionar item "Plataformas" no menu lateral do DashboardLayout
+- [x] Adicionar ícone Settings (⚙️)
+- [x] Restringir visibilidade apenas para admins (filtro .filter)
+- [x] Adicionar badge "Admin" ao lado do item
+
+### Página de Logs de Publicação
+- [x] Criar página /admin/publication-logs
+- [x] Criar query tRPC platforms.listPublications (retorna [] por enquanto)
+- [x] Implementar filtros por plataforma e status
+- [x] Criar tabela com colunas: Data, Processo, Plataforma, Status, ID Externo, Ações
+- [ ] Adicionar paginação (pendente)
+- [x] Adicionar botão "Ver Processo" por publicação
+- [x] Preparar estrutura para Nível 3 (TODO marcado no código)
+
+### Exportação de Relatório em PDF
+- [x] Criar serviço processReportService.ts
+- [x] Incluir no relatório: dados do processo, objeto, justificativa, documentos gerados, organização, checklist
+- [x] Adicionar botão "Exportar Relatório" na página ProcessDetails
+- [x] Criar procedure tRPC: downloads.processReport
+- [x] Implementar download automático do PDF (base64 -> blob -> download)
+- [x] Formatação profissional em Markdown convertido para PDF

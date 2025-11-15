@@ -35,6 +35,7 @@ import ActivityReport from "./pages/ActivityReport";
 import DepartmentManagement from "./pages/DepartmentManagement";
 import AIUsageDashboard from "./pages/AIUsageDashboard";
 import AdminPlatforms from "./pages/AdminPlatforms";
+import PublicationLogs from "./pages/PublicationLogs";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -84,6 +85,7 @@ const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport}
 const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
 const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashboard} />;
 const AdminPlatformsRoute = () => <AuthenticatedRoute component={AdminPlatforms} />;
+const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLogs} />;
 
 function Router() {
   return (
@@ -98,7 +100,7 @@ function Router() {
       <Route path={"/auditoria"} component={ActivityReportRoute} />
       <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />      <Route path={"/admin/ai-costs"} component={AIUsageDashboardRoute} />
       <Route path={"/admin/platforms"} component={AdminPlatformsRoute} />
-      <Route path="/processo/:id" component={ProcessDetailsRoute} />
+      <Route path={"/admin/publication-logs"} component={PublicationLogsRoute} />      <Route path="/processo/:id" component={ProcessDetailsRoute} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
       <Route path={"/admin"} component={AdminRoute} />

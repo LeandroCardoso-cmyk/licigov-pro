@@ -327,4 +327,26 @@ export const platformsRouter = router({
       await db.reorderChecklistStep(input.stepId, input.direction);
       return { success: true };
     }),
+
+  /**
+   * Listar publicações com filtros (Admin only)
+   */
+  listPublications: protectedProcedure
+    .input(
+      z.object({
+        platformId: z.number().optional(),
+        status: z
+          .enum(["pending", "processing", "published", "failed", "scheduled"])
+          .optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem ver logs de publicação");
+      }
+
+      // TODO: Implementar query real quando Nível 3 for ativado
+      // Por enquanto retorna array vazio
+      return [];
+    }),
 });

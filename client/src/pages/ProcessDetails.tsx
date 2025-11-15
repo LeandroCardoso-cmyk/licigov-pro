@@ -50,8 +50,10 @@ const documentLabels: Record<string, string> = {
 export default function ProcessDetails() {
   const { user, logout } = useAuth();
   const [publicationModalOpen, setPublicationModalOpen] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const [, navigate] = useLocation();
+  const exportReportMutation = trpc.downloads.processReport.useMutation();
   const params = useParams();
   const processId = parseInt(params.id || "0");
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
@@ -171,6 +173,39 @@ export default function ProcessDetails() {
         console.error('Auto-save failed:', error);
         // Não mostrar erro ao usuário para não interromper edição
       }
+    }
+  };
+
+  const handleExportReport = async () => {
+    setExportingReport(true);
+    try {
+      const result = await exportReportMutation.mutateAsync({ processId });
+      
+      // Converter base64 para blob
+      const byteCharacters = atob(result.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: result.mimeType });
+      
+      // Criar link de download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("Relatório exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao exportar relatório:", error);
+      toast.error("Falha ao exportar relatório. Tente novamente.");
+    } finally {
+      setExportingReport(false);
     }
   };
 
@@ -311,6 +346,20 @@ export default function ProcessDetails() {
               >
                 <Download className="h-4 w-4" />
                 Preparar para Publicação
+              </Button>
+              <Button
+                onClick={handleExportReport}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={exportingReport}
+              >
+                {exportingReport ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                Exportar Relatório
               </Button>
               <MembersDialog processId={processId} processName={process.name} />
               <Badge variant="secondary" className="text-sm px-4 py-2">
