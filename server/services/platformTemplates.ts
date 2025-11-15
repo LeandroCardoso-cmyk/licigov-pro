@@ -6,10 +6,11 @@
 import * as db from "../db";
 
 /**
- * Instruções base de adaptação por plataforma
- * Estas instruções são injetadas nos prompts da IA para adaptar documentos
+ * Instruções base de adaptação por plataforma (FALLBACK)
+ * Estas instruções são usadas apenas se não houver instruções personalizadas no banco
+ * Admins podem personalizar via interface administrativa (/admin/platforms)
  */
-const PLATFORM_INSTRUCTIONS: Record<string, {
+const PLATFORM_INSTRUCTIONS_FALLBACK: Record<string, {
   general: string;
   etp?: string;
   tr?: string;
@@ -126,48 +127,46 @@ Cláusulas genéricas:
 };
 
 /**
- * Obter instruções de adaptação para uma plataforma
+ * Obter instruções de adaptação para uma plataforma e tipo de documento
  */
 export async function getPlatformInstructions(
-  platformId: number | null,
+  platformId: number | null | undefined,
   documentType: "etp" | "tr" | "dfd" | "edital"
 ): Promise<string> {
   if (!platformId) {
-    return ""; // Sem plataforma selecionada, usar formato padrão
+    return ""; // Sem plataforma, retorna vazio
   }
 
+  // Buscar plataforma
   const platform = await db.getPlatformById(platformId);
-  if (!platform) {
-    return "";
-  }
+  if (!platform) return "";
 
-  const instructions = PLATFORM_INSTRUCTIONS[platform.slug];
-  if (!instructions) {
-    return "";
-  }
+  // 1. PRIORIDADE: Buscar instruções personalizadas do banco (campo config)
+  const config = platform.config as any;
+  if (config?.instructions) {
+    let fullInstructions = config.instructions.general || "";
 
-  // Montar instruções completas
-  let fullInstructions = instructions.general;
+    // Adicionar instruções específicas do tipo de documento
+    if (documentType && config.instructions[documentType]) {
+      fullInstructions += "\n\n" + config.instructions[documentType];
+    }
 
-  // Adicionar instruções específicas do tipo de documento
-  if (instructions[documentType]) {
-    fullInstructions += "\n\n" + instructions[documentType];
-  }
-
-  // Adicionar terminologia específica
-  if (instructions.terminology && Object.keys(instructions.terminology).length > 0) {
-    fullInstructions += "\n\nTERMINOLOGIA ESPECÍFICA:\n";
-    for (const [original, replacement] of Object.entries(instructions.terminology)) {
-      fullInstructions += `- Usar "${replacement}" ao invés de "${original}"\n`;
+    // Se encontrou instruções personalizadas, retorna
+    if (fullInstructions.trim()) {
+      return fullInstructions;
     }
   }
 
-  // Adicionar cláusulas obrigatórias
-  if (instructions.mandatoryClauses && instructions.mandatoryClauses.length > 0) {
-    fullInstructions += "\n\nCLÁUSULAS OBRIGATÓRIAS:\n";
-    instructions.mandatoryClauses.forEach((clause, index) => {
-      fullInstructions += `${index + 1}. ${clause}\n`;
-    });
+  // 2. FALLBACK: Usar instruções estáticas se não houver personalizadas
+  const instructions = PLATFORM_INSTRUCTIONS_FALLBACK[platform.slug];
+  if (!instructions) return "";
+
+  // Montar instruções completas do fallback
+  let fullInstructions = instructions.general || "";
+
+  // Adicionar instruções específicas do tipo de documento
+  if (documentType && instructions[documentType]) {
+    fullInstructions += "\n\n" + instructions[documentType];
   }
 
   return fullInstructions;

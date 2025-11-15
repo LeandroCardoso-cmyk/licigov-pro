@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
-import { Edit, Loader2, Plus, Trash2 } from "lucide-react";
+import { Edit, Loader2, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -84,6 +84,16 @@ export function ChecklistEditorDialog({
     },
   });
 
+  const reorderMutation = trpc.platforms.reorderChecklistStep.useMutation({
+    onSuccess: () => {
+      toast.success("Passo reordenado com sucesso!");
+      utils.platforms.getChecklist.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao reordenar passo");
+    },
+  });
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,6 +140,24 @@ export function ChecklistEditorDialog({
                           )}
                         </div>
                         <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => reorderMutation.mutate({ stepId: step.id, direction: "up" })}
+                            disabled={reorderMutation.isPending || step.stepNumber === 1}
+                            title="Mover para cima"
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => reorderMutation.mutate({ stepId: step.id, direction: "down" })}
+                            disabled={reorderMutation.isPending || step.stepNumber === (checklist?.length || 0)}
+                            title="Mover para baixo"
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"

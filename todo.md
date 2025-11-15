@@ -1479,3 +1479,27 @@
 - [x] Implementar confirmação de exclusão (AlertDialog)
 - [ ] Adicionar reordenação de passos (drag and drop ou up/down buttons) - pendente
 - [x] Invalidar queries após mutations para atualizar UI
+
+
+## Fase 15 - Melhorias Finais da Interface Administrativa
+
+### getPlatformInstructions Dinâmico
+- [x] Modificar getPlatformInstructions para buscar instruções do campo config do banco
+- [x] Manter fallback para instruções estáticas se config estiver vazio (PLATFORM_INSTRUCTIONS_FALLBACK)
+- [x] Sistema de prioridade: 1) config.instructions do banco, 2) fallback estático
+
+### Reordenação de Passos
+- [x] Adicionar função reorderChecklistStep no db.ts (swap de stepNumber)
+- [x] Criar procedure tRPC: platforms.reorderChecklistStep
+- [x] Adicionar botões ↑ (ChevronUp) e ↓ (ChevronDown) em cada passo
+- [x] Implementar lógica de swap de stepNumber entre passos
+- [x] Invalidar queries após reordenação
+- [x] Disabled quando já é primeiro/último passo
+
+### Preview de Mudanças
+- [x] Criar componente PreviewDialog.tsx (TemplatePreviewDialog + ChecklistPreviewDialog)
+- [x] Adicionar botão "Preview" (👁️ Eye) ao lado de Instruções
+- [x] Mostrar instruções gerais + específicas (ETP, TR, DFD, Edital)
+- [x] Adicionar botão "Preview" (👁️ Eye) ao lado de Checklist
+- [x] Mostrar checklist formatado com resumo e agrupamento por categoria
+- [x] Criar wrappers com queries para buscar dados

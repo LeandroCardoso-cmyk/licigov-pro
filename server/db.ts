@@ -2356,6 +2356,64 @@ export async function deleteChecklistStep(stepId: number) {
   return { success: true };
 }
 
+/**
+ * Reordenar passo de checklist (swap com passo anterior ou próximo)
+ */
+export async function reorderChecklistStep(
+  stepId: number,
+  direction: "up" | "down"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Buscar passo atual
+  const [currentStep] = await db
+    .select()
+    .from(platformChecklists)
+    .where(eq(platformChecklists.id, stepId))
+    .limit(1);
+
+  if (!currentStep) throw new Error("Passo não encontrado");
+
+  // Buscar passo para trocar
+  const targetStepNumber =
+    direction === "up"
+      ? currentStep.stepNumber - 1
+      : currentStep.stepNumber + 1;
+
+  const [targetStep] = await db
+    .select()
+    .from(platformChecklists)
+    .where(
+      and(
+        eq(platformChecklists.platformId, currentStep.platformId),
+        eq(platformChecklists.stepNumber, targetStepNumber)
+      )
+    )
+    .limit(1);
+
+  if (!targetStep) {
+    throw new Error(
+      direction === "up"
+        ? "Já é o primeiro passo"
+        : "Já é o último passo"
+    );
+  }
+
+  // Swap stepNumber
+  await db
+    .update(platformChecklists)
+    .set({ stepNumber: targetStepNumber })
+    .where(eq(platformChecklists.id, currentStep.id));
+
+  await db
+    .update(platformChecklists)
+    .set({ stepNumber: currentStep.stepNumber })
+    .where(eq(platformChecklists.id, targetStep.id));
+
+  return { success: true };
+}
+
 export async function updatePlatformInstructions(
   platformId: number,
   instructions: {

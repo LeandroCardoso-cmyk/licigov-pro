@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Edit, Plus, Loader2, Settings } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Loader2, Settings, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { ChecklistEditorDialog } from "./AdminPlatforms_ChecklistEditor";
+import { TemplatePreviewDialog, ChecklistPreviewDialog } from "@/components/admin/PreviewDialog";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -23,8 +24,11 @@ export default function AdminPlatforms() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [selectedPlatform, setSelectedPlatform] = useState<number | null>(null);
+  const [selectedPlatformName, setSelectedPlatformName] = useState<string>("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [checklistDialogOpen, setChecklistDialogOpen] = useState(false);
+  const [templatePreviewOpen, setTemplatePreviewOpen] = useState(false);
+  const [checklistPreviewOpen, setChecklistPreviewOpen] = useState(false);
 
   // Verificar se é admin
   if (!user || user.role !== "admin") {
@@ -49,14 +53,28 @@ export default function AdminPlatforms() {
 
   const { data: platforms, isLoading } = trpc.platforms.list.useQuery();
 
-  const handleEditInstructions = (platformId: number) => {
+  const handleEditInstructions = (platformId: number, platformName: string) => {
     setSelectedPlatform(platformId);
+    setSelectedPlatformName(platformName);
     setEditDialogOpen(true);
   };
 
-  const handleEditChecklist = (platformId: number) => {
+  const handleEditChecklist = (platformId: number, platformName: string) => {
     setSelectedPlatform(platformId);
+    setSelectedPlatformName(platformName);
     setChecklistDialogOpen(true);
+  };
+
+  const handlePreviewInstructions = (platformId: number, platformName: string) => {
+    setSelectedPlatform(platformId);
+    setSelectedPlatformName(platformName);
+    setTemplatePreviewOpen(true);
+  };
+
+  const handlePreviewChecklist = (platformId: number, platformName: string) => {
+    setSelectedPlatform(platformId);
+    setSelectedPlatformName(platformName);
+    setChecklistPreviewOpen(true);
   };
 
   return (
@@ -114,28 +132,46 @@ export default function AdminPlatforms() {
                       🌐 {platform.websiteUrl}
                     </p>
                   )}
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => handleEditInstructions(platform.id)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Instruções
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => handleEditChecklist(platform.id)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Checklist
-                    </Button>
-                  </div>
-                </CardContent>
+                                   <div className="space-y-2 mt-4">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => handleEditInstructions(platform.id, platform.name)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Instruções
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handlePreviewInstructions(platform.id, platform.name)}
+                        title="Preview"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => handleEditChecklist(platform.id, platform.name)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Checklist
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handlePreviewChecklist(platform.id, platform.name)}
+                        title="Preview"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>              </CardContent>
               </Card>
             ))}
           </div>
@@ -163,7 +199,82 @@ export default function AdminPlatforms() {
         onOpenChange={setChecklistDialogOpen}
         platformId={selectedPlatform}
       />
+
+      {/* Dialogs de Preview */}
+      <TemplatePreviewDialogWrapper
+        open={templatePreviewOpen}
+        onOpenChange={setTemplatePreviewOpen}
+        platformId={selectedPlatform}
+        platformName={selectedPlatformName}
+      />
+
+      <ChecklistPreviewDialogWrapper
+        open={checklistPreviewOpen}
+        onOpenChange={setChecklistPreviewOpen}
+        platformId={selectedPlatform}
+        platformName={selectedPlatformName}
+      />
     </div>
+  );
+}
+
+/**
+ * Wrapper para TemplatePreviewDialog com query de plataforma
+ */
+function TemplatePreviewDialogWrapper({
+  open,
+  onOpenChange,
+  platformId,
+  platformName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  platformId: number | null;
+  platformName: string;
+}) {
+  const { data: platform } = trpc.platforms.getById.useQuery(
+    { platformId: platformId || 0 },
+    { enabled: !!platformId && open }
+  );
+
+  const instructions = (platform?.config as any)?.instructions || {};
+
+  return (
+    <TemplatePreviewDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      platformName={platformName}
+      instructions={instructions}
+    />
+  );
+}
+
+/**
+ * Wrapper para ChecklistPreviewDialog com query de checklist
+ */
+function ChecklistPreviewDialogWrapper({
+  open,
+  onOpenChange,
+  platformId,
+  platformName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  platformId: number | null;
+  platformName: string;
+}) {
+  const { data: checklist } = trpc.platforms.getChecklist.useQuery(
+    { platformId: platformId || 0 },
+    { enabled: !!platformId && open }
+  );
+
+  return (
+    <ChecklistPreviewDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      platformName={platformName}
+      checklist={checklist || []}
+    />
   );
 }
 

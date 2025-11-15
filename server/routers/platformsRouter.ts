@@ -308,4 +308,23 @@ export const platformsRouter = router({
       await db.deleteChecklistStep(input.stepId);
       return { success: true };
     }),
+
+  /**
+   * Reordenar passo de checklist (Admin only)
+   */
+  reorderChecklistStep: protectedProcedure
+    .input(
+      z.object({
+        stepId: z.number(),
+        direction: z.enum(["up", "down"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem reordenar passos");
+      }
+
+      await db.reorderChecklistStep(input.stepId, input.direction);
+      return { success: true };
+    }),
 });
