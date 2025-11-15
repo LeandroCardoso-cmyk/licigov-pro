@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import { Plus, FileText, Clock, CheckCircle2, Loader2, ArrowLeft, DollarSign } from "lucide-react";
 // import { ExportProcesses } from "@/components/ExportProcesses"; // Removido temporariamente
@@ -219,10 +220,29 @@ export default function Dashboard() {
                           {statusLabels[process.status]}
                         </span>
                       </div>
-                      {process.platformId && (
-                        <Badge variant="outline" className="text-xs">
-                          {process.platform?.name || "Plataforma"}
-                        </Badge>
+                      {process.platformId && process.platform && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-xs cursor-help">
+                              {process.platform.name}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <div className="space-y-1">
+                              <p className="font-semibold">{process.platform.name}</p>
+                              {process.platform.description && (
+                                <p className="text-xs text-muted-foreground">
+                                  {process.platform.description}
+                                </p>
+                              )}
+                              {process.platform.websiteUrl && (
+                                <p className="text-xs">
+                                  🌐 {process.platform.websiteUrl}
+                                </p>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">

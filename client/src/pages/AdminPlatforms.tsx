@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Edit, Plus, Loader2, Settings } from "lucide-react";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { ChecklistEditorDialog } from "./AdminPlatforms_ChecklistEditor";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -186,8 +187,46 @@ function TemplateInstructionsDialog({
     edital: "",
   });
 
-  // TODO: Buscar instruções atuais e implementar mutation de save
-  // Por enquanto, apenas estrutura básica
+  // Buscar plataforma para carregar instruções atuais
+  const { data: platform } = trpc.platforms.getById.useQuery(
+    { platformId: platformId || 0 },
+    { enabled: !!platformId && open }
+  );
+
+  // Carregar instruções atuais quando plataforma for carregada
+  useEffect(() => {
+    if (platform?.config) {
+      const config = platform.config as any;
+      if (config.instructions) {
+        setInstructions({
+          general: config.instructions.general || "",
+          etp: config.instructions.etp || "",
+          tr: config.instructions.tr || "",
+          dfd: config.instructions.dfd || "",
+          edital: config.instructions.edital || "",
+        });
+      }
+    }
+  }, [platform]);
+
+  // Mutation para salvar instruções
+  const updateInstructionsMutation = trpc.platforms.updateInstructions.useMutation({
+    onSuccess: () => {
+      toast.success("Instruções salvas com sucesso!");
+      onOpenChange(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao salvar instruções");
+    },
+  });
+
+  const handleSave = () => {
+    if (!platformId) return;
+    updateInstructionsMutation.mutate({
+      platformId,
+      instructions,
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -259,11 +298,18 @@ function TemplateInstructionsDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => {
-              toast.info("Funcionalidade de salvar será implementada em breve");
-              onOpenChange(false);
-            }}>
-              Salvar Alterações
+            <Button 
+              onClick={handleSave}
+              disabled={updateInstructionsMutation.isPending}
+            >
+              {updateInstructionsMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar Alterações"
+              )}
             </Button>
           </div>
         </div>
@@ -272,79 +318,4 @@ function TemplateInstructionsDialog({
   );
 }
 
-/**
- * Dialog para editar checklist
- */
-function ChecklistEditorDialog({
-  open,
-  onOpenChange,
-  platformId,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  platformId: number | null;
-}) {
-  const { data: checklist, isLoading } = trpc.platforms.getChecklist.useQuery(
-    { platformId: platformId || 0 },
-    { enabled: !!platformId && open }
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Editar Checklist de Publicação</DialogTitle>
-          <DialogDescription>
-            Adicione, edite ou remova passos do checklist de publicação
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">
-                {checklist?.length || 0} passos cadastrados
-              </p>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                Adicionar Passo
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {checklist?.map((step) => (
-                <Card key={step.id}>
-                  <CardHeader className="py-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-sm">
-                          Passo {step.stepNumber}: {step.title}
-                        </CardTitle>
-                        <CardDescription className="text-xs mt-1">
-                          {step.category} {step.isOptional && "• Opcional"}
-                        </CardDescription>
-                      </div>
-                      <Button size="sm" variant="ghost">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Fechar
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
+// ChecklistEditorDialog movido para arquivo separado AdminPlatforms_ChecklistEditor.tsx

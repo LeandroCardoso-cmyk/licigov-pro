@@ -1452,3 +1452,30 @@
 - [ ] Implementar CRUD completo de checklists (pendente)
 - [ ] Adicionar preview em tempo real das mudanças (pendente)
 - [ ] Adicionar versionamento de templates (pendente)
+
+
+## Fase 14 - Completar Interface Administrativa
+
+### Tooltip no Badge de Plataforma
+- [x] Adicionar Tooltip component no badge do dashboard
+- [x] Mostrar nome completo, descrição e website da plataforma
+- [x] Cursor help indicando informações adicionais
+
+### Save de Instruções de Templates
+- [x] Usar campo config (JSON) da tabela platforms existente
+- [x] Criar função updatePlatformInstructions no db.ts
+- [x] Criar procedure tRPC: platforms.updateInstructions
+- [x] Implementar mutation no TemplateInstructionsDialog
+- [x] Adicionar loading state e feedback de sucesso/erro
+- [x] Carregar instruções atuais com useEffect
+
+### CRUD de Checklists
+- [x] Criar função createChecklistStep no db.ts
+- [x] Criar função updateChecklistStep no db.ts
+- [x] Criar função deleteChecklistStep no db.ts
+- [x] Criar procedures tRPC: platforms.createChecklistStep, updateChecklistStep, deleteChecklistStep
+- [x] Implementar dialog de adicionar novo passo (AddStepDialog)
+- [x] Implementar dialog de editar passo existente (EditStepDialog)
+- [x] Implementar confirmação de exclusão (AlertDialog)
+- [ ] Adicionar reordenação de passos (drag and drop ou up/down buttons) - pendente
+- [x] Invalidar queries após mutations para atualizar UI

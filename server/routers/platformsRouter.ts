@@ -217,4 +217,95 @@ export const platformsRouter = router({
 
       return await db.getProcessPublications(input.processId);
     }),
+
+  /**
+   * Atualizar instruções de templates (Admin only)
+   */
+  updateInstructions: protectedProcedure
+    .input(
+      z.object({
+        platformId: z.number(),
+        instructions: z.object({
+          general: z.string().optional(),
+          etp: z.string().optional(),
+          tr: z.string().optional(),
+          dfd: z.string().optional(),
+          edital: z.string().optional(),
+        }),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Verificar se é admin
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem editar instruções");
+      }
+
+      await db.updatePlatformInstructions(input.platformId, input.instructions);
+
+      return { success: true };
+    }),
+
+  /**
+   * Criar novo passo de checklist (Admin only)
+   */
+  createChecklistStep: protectedProcedure
+    .input(
+      z.object({
+        platformId: z.number(),
+        stepNumber: z.number(),
+        title: z.string(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        fields: z.any().optional(),
+        requiredDocuments: z.any().optional(),
+        isOptional: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem criar passos");
+      }
+
+      const stepId = await db.createChecklistStep(input);
+      return { success: true, stepId };
+    }),
+
+  /**
+   * Atualizar passo de checklist (Admin only)
+   */
+  updateChecklistStep: protectedProcedure
+    .input(
+      z.object({
+        stepId: z.number(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        fields: z.any().optional(),
+        requiredDocuments: z.any().optional(),
+        isOptional: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem editar passos");
+      }
+
+      const { stepId, ...data } = input;
+      await db.updateChecklistStep(stepId, data);
+      return { success: true };
+    }),
+
+  /**
+   * Deletar passo de checklist (Admin only)
+   */
+  deleteChecklistStep: protectedProcedure
+    .input(z.object({ stepId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Apenas administradores podem deletar passos");
+      }
+
+      await db.deleteChecklistStep(input.stepId);
+      return { success: true };
+    }),
 });

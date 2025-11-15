@@ -2297,6 +2297,98 @@ export async function getProcessPublications(processId: number) {
 /**
  * Atualizar status de publicação
  */
+/**
+ * Atualizar instruções de templates de uma plataforma
+ */
+/**
+ * Criar novo passo de checklist
+ */
+export async function createChecklistStep(data: {
+  platformId: number;
+  stepNumber: number;
+  title: string;
+  description?: string;
+  category?: string;
+  fields?: any;
+  requiredDocuments?: any;
+  isOptional?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(platformChecklists).values(data as any);
+  return result.insertId;
+}
+
+/**
+ * Atualizar passo de checklist
+ */
+export async function updateChecklistStep(
+  stepId: number,
+  data: {
+    title?: string;
+    description?: string;
+    category?: string;
+    fields?: any;
+    requiredDocuments?: any;
+    isOptional?: boolean;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(platformChecklists)
+    .set(data as any)
+    .where(eq(platformChecklists.id, stepId));
+
+  return { success: true };
+}
+
+/**
+ * Deletar passo de checklist
+ */
+export async function deleteChecklistStep(stepId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(platformChecklists).where(eq(platformChecklists.id, stepId));
+  return { success: true };
+}
+
+export async function updatePlatformInstructions(
+  platformId: number,
+  instructions: {
+    general?: string;
+    etp?: string;
+    tr?: string;
+    dfd?: string;
+    edital?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Buscar config atual
+  const platform = await getPlatformById(platformId);
+  if (!platform) throw new Error("Platform not found");
+
+  // Mesclar instruções no config
+  const currentConfig = (platform.config as any) || {};
+  const updatedConfig = {
+    ...currentConfig,
+    instructions,
+  };
+
+  // Atualizar no banco
+  await db
+    .update(platforms)
+    .set({ config: updatedConfig as any })
+    .where(eq(platforms.id, platformId));
+
+  return { success: true };
+}
+
 export async function updatePublicationStatus(
   publicationId: number,
   status: "draft" | "published" | "scheduled" | "failed" | "cancelled" | "closed",
