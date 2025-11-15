@@ -7,6 +7,7 @@ import { companyDocumentsRouter } from "./routers/companyDocumentsRouter";
 import { catmatRouter } from "./routers/catmatRouter";
 import { taskRouter } from "./routers/taskRouter";
 import { departmentTasksRouter } from "./routers/departmentTasksRouter";
+import { aiUsageRouter } from "./routers/aiUsageRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -264,11 +265,19 @@ export const appRouter = router({
         description: z.string(),
         itemType: z.enum(["material", "service"]).default("material"),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const { findCatmatMatches } = await import("./services/catmatMatcher");
+        const { trackCATMATMatching } = await import("./services/aiUsageTracker");
         
         // Gerar sugestões com IA
         const matches = await findCatmatMatches(input.description, input.itemType);
+        
+        // Rastrear uso de IA
+        await trackCATMATMatching({
+          userId: ctx.user.id,
+          itemDescription: input.description,
+          suggestionsCount: matches.length,
+        });
         
         // Salvar sugestões no banco
         for (const match of matches) {
@@ -1443,6 +1452,9 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // Dashboard de custos de IA (admin only)
+  aiUsage: aiUsageRouter,
 });
 
 export type AppRouter = typeof appRouter;

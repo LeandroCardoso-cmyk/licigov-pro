@@ -33,6 +33,7 @@ import DocumentSettings from "./pages/DocumentSettings";
 import Templates from "./pages/Templates";
 import ActivityReport from "./pages/ActivityReport";
 import DepartmentManagement from "./pages/DepartmentManagement";
+import AIUsageDashboard from "./pages/AIUsageDashboard";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -80,6 +81,7 @@ const TestPage4Route = () => <AuthenticatedRoute component={TestPage4} />;
 const TemplatesRoute = () => <AuthenticatedRoute component={Templates} />;
 const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport} />;
 const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
+const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashboard} />;
 
 function Router() {
   return (
@@ -93,6 +95,7 @@ function Router() {
       <Route path={"/templates"} component={TemplatesRoute} />
       <Route path={"/auditoria"} component={ActivityReportRoute} />
       <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />
+      <Route path={"/admin/ai-costs"} component={AIUsageDashboardRoute} />
       <Route path="/processo/:id" component={ProcessDetailsRoute} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />

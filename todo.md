@@ -1294,15 +1294,23 @@
 - [x] Adicionar validações de formulário (descrição mínima, quantidade > 0)
 - [x] Implementar feedback visual após edição/deleção
 
-### Dashboard de Custos de IA
-- [ ] Criar página AIUsageDashboard.tsx
-- [ ] Criar tabela usage_tracking_ai no banco de dados
-- [ ] Criar funções de rastreamento de custos no db.ts
-- [ ] Implementar procedure trackAIUsage no routers.ts
-- [ ] Exibir custos por tipo de operação (embeddings, matching, geração)
-- [ ] Adicionar gráficos de evolução de custos (últimos 30 dias)
-- [ ] Calcular custo estimado mensal baseado em uso atual
-- [ ] Adicionar rota no App.tsx para /dashboard/ai-costs
+### Dashboard de Custos de IA (Admin - Implementação Completa)
+- [x] Criar tabela aiUsageTracking no banco de dados
+- [x] Criar funções de banco (getAIUsageStats, getAIUsageHistory, exportAIUsageCSV)
+- [x] Criar procedures tRPC (aiUsage.getStats, aiUsage.getHistory, aiUsage.exportCSV)
+- [x] Criar página AIUsageDashboard.tsx com:
+  - [x] Cards de métricas (custo hoje, mês, total, operações/dia)
+  - [x] Gráfico de linha: evolução de custos (últimos 30 dias)
+  - [x] Gráfico de pizza: distribuição por tipo de operação
+  - [x] Tabela detalhada com filtros (tipo, período, usuário)
+  - [x] Botão exportar CSV
+- [x] Criar helper centralizado de rastreamento (aiUsageTracker.ts)
+- [x] Integrar rastreamento em findCatmatMatches (catmatMatcher.ts)
+- [ ] Integrar rastreamento em geração de documentos (requer refatoração)
+  - [ ] Adicionar userId e processId como parâmetros em generateETP/TR/DFD/Edital
+  - [ ] Chamar trackDocumentGeneration após cada geração
+- [x] Adicionar rota protegida /admin/ai-costs no App.tsx
+- [x] Middleware adminProcedure já existe e foi usado nas procedures
 
 ## 📚 Expansão do Sistema RAG
 
