@@ -29,6 +29,7 @@ export const processes = mysqlTable("processes", {
   estimatedValue: int("estimatedValue"), // Valor estimado em centavos
   modality: varchar("modality", { length: 100 }), // Modalidade: pregão, concorrência, etc
   category: varchar("category", { length: 100 }), // Categoria: obras, serviços, compras
+  platformId: int("platformId"), // Plataforma de pregão selecionada (Compras.gov.br, BLL, etc)
   status: mysqlEnum("status", ["em_etp", "em_tr", "em_dfd", "em_edital", "concluido"]).default("em_etp").notNull(),
   ownerId: int("ownerId").notNull(), // Usuário que criou o processo
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -681,3 +682,185 @@ export const embeddingCache = mysqlTable("embedding_cache", {
 
 export type EmbeddingCache = typeof embeddingCache.$inferSelect;
 export type InsertEmbeddingCache = typeof embeddingCache.$inferInsert;
+
+/**
+ * Plataformas de pregão eletrônico
+ * Armazena informações sobre plataformas (Compras.gov.br, BLL, Licitanet, BBMnet, etc)
+ */
+export const platforms = mysqlTable("platforms", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(), // Ex: "Compras.gov.br"
+  slug: varchar("slug", { length: 100 }).notNull().unique(), // Ex: "compras-gov-br"
+  description: text("description"), // Descrição da plataforma
+  logoUrl: text("logoUrl"), // URL do logo da plataforma
+  websiteUrl: text("websiteUrl"), // URL do site da plataforma
+  // Configurações específicas da plataforma
+  config: json("config"), // { requiresLogin: true, supportedModalities: ["pregao", "concorrencia"], etc }
+  // Integração API (Nível 3 - Futuro)
+  hasApiIntegration: boolean("hasApiIntegration").default(false).notNull(),
+  apiBaseUrl: text("apiBaseUrl"), // URL base da API
+  apiAuthType: mysqlEnum("apiAuthType", ["none", "api_key", "oauth2", "basic_auth"]),
+  apiDocumentationUrl: text("apiDocumentationUrl"), // URL da documentação da API
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  displayOrder: int("displayOrder").default(0).notNull(), // Ordem de exibição
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Platform = typeof platforms.$inferSelect;
+export type InsertPlatform = typeof platforms.$inferInsert;
+
+/**
+ * Templates de documentos específicos por plataforma
+ * Armazena variações de templates (ETP, TR, DFD, Edital) adaptadas para cada plataforma
+ */
+export const platformTemplates = mysqlTable("platform_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  platformId: int("platformId").notNull(), // Referência à plataforma
+  documentType: mysqlEnum("documentType", ["etp", "tr", "dfd", "edital"]).notNull(),
+  name: varchar("name", { length: 255 }).notNull(), // Ex: "Template Edital BLL Compras"
+  description: text("description"), // Descrição do template
+  // Conteúdo do template (instruções para IA)
+  templateInstructions: text("templateInstructions").notNull(), // Instruções específicas para IA adaptar o documento
+  // Metadados específicos da plataforma
+  metadata: json("metadata"), // { requiredFields: [], formatRules: {}, annexNaming: {}, etc }
+  // Cláusulas obrigatórias
+  mandatoryClauses: json("mandatoryClauses"), // Array de cláusulas obrigatórias específicas da plataforma
+  // Nomenclaturas específicas
+  terminology: json("terminology"), // { "sessao_publica": "disputa de lances", "licitante": "fornecedor", etc }
+  // Versão do template
+  version: int("version").default(1).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlatformTemplate = typeof platformTemplates.$inferSelect;
+export type InsertPlatformTemplate = typeof platformTemplates.$inferInsert;
+
+/**
+ * Checklists de publicação por plataforma
+ * Guia passo-a-passo para publicar edital em cada plataforma
+ */
+export const platformChecklists = mysqlTable("platform_checklists", {
+  id: int("id").autoincrement().primaryKey(),
+  platformId: int("platformId").notNull(), // Referência à plataforma
+  stepNumber: int("stepNumber").notNull(), // Ordem do passo (1, 2, 3...)
+  title: varchar("title", { length: 255 }).notNull(), // Ex: "Login na plataforma"
+  description: text("description").notNull(), // Descrição detalhada do passo
+  // Campos a serem preenchidos neste passo
+  fields: json("fields"), // [{ name: "numero_processo", label: "Número do Processo", copyFrom: "process.name" }]
+  // Documentos a serem anexados neste passo
+  requiredDocuments: json("requiredDocuments"), // [{ type: "edital", filename: "EDITAL_PREGAO_001_2024.pdf" }]
+  // URL ou screenshot de ajuda
+  helpUrl: text("helpUrl"), // URL de tutorial
+  screenshotUrl: text("screenshotUrl"), // URL de screenshot do passo
+  // Ordem e agrupamento
+  category: varchar("category", { length: 100 }), // Ex: "Dados Básicos", "Upload de Documentos", "Configurações"
+  isOptional: boolean("isOptional").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlatformChecklist = typeof platformChecklists.$inferSelect;
+export type InsertPlatformChecklist = typeof platformChecklists.$inferInsert;
+
+/**
+ * Configurações de API por plataforma (Nível 3 - Futuro)
+ * Armazena credenciais e configurações de integração API
+ */
+export const platformApiConfigs = mysqlTable("platform_api_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  platformId: int("platformId").notNull().unique(), // Referência à plataforma
+  // Credenciais (armazenar criptografadas em produção)
+  apiKey: text("apiKey"), // API Key
+  apiSecret: text("apiSecret"), // API Secret
+  clientId: text("clientId"), // OAuth Client ID
+  clientSecret: text("clientSecret"), // OAuth Client Secret
+  accessToken: text("accessToken"), // Token de acesso (OAuth)
+  refreshToken: text("refreshToken"), // Token de refresh (OAuth)
+  tokenExpiresAt: timestamp("tokenExpiresAt"), // Expiração do token
+  // Configurações adicionais
+  webhookUrl: text("webhookUrl"), // URL para receber webhooks da plataforma
+  webhookSecret: text("webhookSecret"), // Secret para validar webhooks
+  // Status
+  isActive: boolean("isActive").default(false).notNull(),
+  lastTestedAt: timestamp("lastTestedAt"), // Última vez que a conexão foi testada
+  lastTestStatus: mysqlEnum("lastTestStatus", ["success", "failed", "not_tested"]).default("not_tested"),
+  lastTestError: text("lastTestError"), // Mensagem de erro do último teste
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlatformApiConfig = typeof platformApiConfigs.$inferSelect;
+export type InsertPlatformApiConfig = typeof platformApiConfigs.$inferInsert;
+
+/**
+ * Publicações de processos em plataformas (Nível 3 - Futuro)
+ * Rastreia processos publicados via API em plataformas externas
+ */
+export const platformPublications = mysqlTable("platform_publications", {
+  id: int("id").autoincrement().primaryKey(),
+  processId: int("processId").notNull(), // Referência ao processo
+  platformId: int("platformId").notNull(), // Referência à plataforma
+  // Identificadores externos
+  externalId: varchar("externalId", { length: 255 }), // ID do pregão na plataforma externa
+  externalUrl: text("externalUrl"), // URL do pregão na plataforma externa
+  // Status da publicação
+  status: mysqlEnum("status", [
+    "draft", // Rascunho criado
+    "published", // Publicado com sucesso
+    "scheduled", // Agendado para publicação
+    "failed", // Falha na publicação
+    "cancelled", // Cancelado
+    "closed" // Encerrado
+  ]).default("draft").notNull(),
+  // Dados da publicação
+  publishedAt: timestamp("publishedAt"), // Data/hora da publicação
+  scheduledFor: timestamp("scheduledFor"), // Data/hora agendada (se aplicável)
+  closedAt: timestamp("closedAt"), // Data/hora de encerramento
+  // Resposta da API
+  apiResponse: json("apiResponse"), // Resposta completa da API (para debug)
+  errorMessage: text("errorMessage"), // Mensagem de erro (se houver)
+  // Metadados
+  metadata: json("metadata"), // { proposalCount: 5, winnerCompany: "...", etc }
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlatformPublication = typeof platformPublications.$inferSelect;
+export type InsertPlatformPublication = typeof platformPublications.$inferInsert;
+
+/**
+ * Notificações recebidas de plataformas via webhook (Nível 3 - Futuro)
+ * Armazena eventos recebidos das plataformas (nova proposta, impugnação, etc)
+ */
+export const platformNotifications = mysqlTable("platform_notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  publicationId: int("publicationId").notNull(), // Referência à publicação
+  platformId: int("platformId").notNull(), // Referência à plataforma
+  // Tipo de notificação
+  type: mysqlEnum("type", [
+    "new_proposal", // Nova proposta recebida
+    "proposal_updated", // Proposta atualizada
+    "impugnation", // Impugnação recebida
+    "clarification_request", // Pedido de esclarecimento
+    "session_started", // Sessão pública iniciada
+    "session_ended", // Sessão pública encerrada
+    "winner_declared", // Vencedor declarado
+    "other" // Outro tipo
+  ]).notNull(),
+  // Conteúdo da notificação
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  // Dados brutos do webhook
+  webhookPayload: json("webhookPayload"), // Payload completo do webhook
+  // Status
+  isRead: boolean("isRead").default(false).notNull(),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PlatformNotification = typeof platformNotifications.$inferSelect;
+export type InsertPlatformNotification = typeof platformNotifications.$inferInsert;

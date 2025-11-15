@@ -1343,3 +1343,57 @@
 - [x] Implementar função de cache em embeddings.ts
 - [x] Adicionar lógica de cache em generateEmbedding
 - [ ] Testar redução de custos com queries repetidas (aguardar 7 dias de uso)
+
+## Fase 11 - Sistema de Adaptação Inteligente de Editais por Plataforma
+
+### Nível 1: Templates por Plataforma
+- [x] Criar tabela platforms no banco de dados (id, name, slug, description, isActive, config JSON)
+- [x] Criar tabela platform_templates no banco de dados (id, platformId, documentType, templateContent, metadata JSON)
+- [x] Adicionar campo platformId na tabela processes
+- [x] Criar seed inicial com 5 plataformas (Compras.gov.br, BLL, Licitanet, BBMnet, Outra)
+- [x] Implementar funções de banco: getPlatforms, getPlatformById, getPlatformTemplates
+- [x] Criar procedures tRPC: platforms.list, platforms.getById, platforms.getTemplates
+- [x] Criar sistema de templates específicos por plataforma (nomenclaturas, formatação, anexos)
+- [x] Integrar templates com sistema RAG para citações legais contextualizadas
+- [x] Adicionar campo "Plataforma de Pregão" no formulário de novo processo
+- [x] Modificar generateETP para aplicar template da plataforma selecionada (TR, DFD, Edital pendentes)
+- [ ] Modificar generateTR para aplicar formatação específica da plataforma (assinatura adicionada, integração pendente)
+- [ ] Modificar generateDFD para incluir instruções da plataforma (pendente)
+- [ ] Modificar generateEdital para aplicar template da plataforma selecionada (pendente)
+- [x] Criar biblioteca de cláusulas obrigatórias por plataforma (em platformTemplates.ts)
+
+### Nível 2: Exportação Automatizada + Checklist
+- [x] Criar tabela platform_checklists (id, platformId, step, description, fields JSON)
+- [x] Implementar função generatePublicationPackage (procedure tRPC criada)
+- [x] Criar componente PublicationPackageModal (botão "Preparar para Publicação")
+- [x] Gerar planilha de itens CATMAT/CATSER no formato da plataforma (.XLSX) - estrutura preparada
+- [x] Criar checklist interativo específico por plataforma
+- [x] Implementar sistema de cópia automática de campos (click to copy)
+- [x] Adicionar botões de download individual por documento no pacote
+- [x] Criar preview do checklist antes de gerar pacote (integrado no modal)
+- [ ] Implementar exportação do checklist em PDF (pendente)
+- [ ] Adicionar instruções visuais (screenshots) no checklist (pendente)
+- [ ] Popular tabela platform_checklists com checklists reais das 5 plataformas
+
+### Nível 3: Preparação para Integração API (Futuro)
+- [ ] Criar tabela platform_api_configs (id, platformId, apiUrl, authType, credentials, isActive)
+- [ ] Criar interface abstrata IPlatformConnector para padronizar integrações
+- [ ] Implementar ComprasGovConnector (estrutura preparada, sem implementação)
+- [ ] Implementar BLLConnector (estrutura preparada, sem implementação)
+- [ ] Implementar LicitanetConnector (estrutura preparada, sem implementação)
+- [ ] Implementar BBMnetConnector (estrutura preparada, sem implementação)
+- [ ] Criar tabela platform_publications (id, processId, platformId, externalId, status, publishedAt)
+- [ ] Criar procedure tRPC: platforms.publish (preparada para futuro)
+- [ ] Criar componente PublishToPlatformModal (UI preparada, botão desabilitado)
+- [ ] Adicionar dashboard unificado de pregões publicados (estrutura preparada)
+- [ ] Preparar sistema de webhooks para receber notificações das plataformas
+- [ ] Criar tabela platform_notifications (id, publicationId, type, message, receivedAt)
+
+### Funcionalidades Extras
+- [ ] Criar comparador de plataformas (sugere melhor plataforma baseado em critérios)
+- [ ] Implementar simulador de custos de publicação por plataforma
+- [ ] Criar importador de pregões anteriores de outras plataformas
+- [ ] Implementar versionamento de templates (quando plataforma atualiza requisitos)
+- [ ] Adicionar sistema de notificações quando plataforma atualiza requisitos
+- [ ] Criar página admin para gerenciar plataformas e templates
+- [ ] Implementar analytics: qual plataforma é mais usada pelos clientes

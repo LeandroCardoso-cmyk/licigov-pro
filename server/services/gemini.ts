@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
+import { getPlatformInstructions } from "./platformTemplates";
 
 // Inicializar cliente Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -13,6 +14,7 @@ export async function generateETP(params: {
   estimatedValue: number; // em centavos
   modality: string;
   category: string;
+  platformId?: number | null;
   organizationName?: string;
   address?: string;
   cnpj?: string;
@@ -84,6 +86,9 @@ export async function generateETP(params: {
   
   const lawContext = formatRetrievedContext(relevantLaw);
   
+  // Buscar instruções específicas da plataforma
+  const platformInstructions = await getPlatformInstructions(params.platformId || null, "etp");
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21 (Nova Lei de Licitações e Contratos Administrativos).
 
 Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissional para o seguinte processo licitatório:
@@ -98,6 +103,7 @@ ${lawContext}
 - Modalidade: ${modalityName}
 - Categoria: ${categoryName}
 
+${platformInstructions ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${platformInstructions}\n\n` : ""}
 **INSTRUÇÕES CRÍTICAS (SIGA RIGOROSAMENTE):**
 1. **USE OBRIGATORIAMENTE o CONTEXTO LEGAL fornecido acima** - cite explicitamente os artigos mencionados
 2. O ETP deve seguir rigorosamente as diretrizes da Lei 14.133/21
@@ -176,6 +182,7 @@ export async function generateTR(params: {
   estimatedValue: number;
   modality: string;
   category: string;
+  platformId?: number | null;
   etpContent: string; // Conteúdo do ETP para contexto
   catmatItems?: Array<{
     itemType: 'material' | 'service';

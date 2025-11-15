@@ -28,8 +28,12 @@ export default function NewProcess() {
     estimatedValue: "",
     modality: "",
     category: "",
+    platformId: null as number | null,
   });
 
+
+  // Buscar plataformas disponíveis
+  const { data: platforms } = trpc.platforms.list.useQuery();
 
   const createProcessMutation = trpc.processes.create.useMutation({
     onSuccess: () => {
@@ -58,6 +62,7 @@ export default function NewProcess() {
       estimatedValue: valueNumber,
       modality: formData.modality,
       category: formData.category,
+      platformId: formData.platformId,
     });
   };
 
@@ -203,6 +208,30 @@ export default function NewProcess() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Plataforma de Pregão */}
+              <div className="space-y-2">
+                <Label htmlFor="platform">Plataforma de Pregão (opcional)</Label>
+                <Select
+                  value={formData.platformId?.toString() || ""}
+                  onValueChange={(value) => setFormData({ ...formData, platformId: value ? parseInt(value) : null })}
+                >
+                  <SelectTrigger id="platform">
+                    <SelectValue placeholder="Selecione a plataforma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhuma (formato padrão)</SelectItem>
+                    {platforms?.map((platform) => (
+                      <SelectItem key={platform.id} value={platform.id.toString()}>
+                        {platform.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Selecione a plataforma onde o edital será publicado. O sistema adaptará automaticamente os documentos para os requisitos específicos da plataforma.
+                </p>
               </div>
 
               {/* Botões */}

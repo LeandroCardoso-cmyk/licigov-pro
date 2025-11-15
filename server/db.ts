@@ -47,7 +47,11 @@ import {
   InsertCompanyDocument,
   InsertContractRenewal,
   documentTemplates,
-  InsertDocumentTemplate
+  InsertDocumentTemplate,
+  platforms,
+  platformTemplates,
+  platformChecklists,
+  platformPublications
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2106,4 +2110,194 @@ export async function exportAIUsageCSV(filters?: {
   ].join("\n");
 
   return csvContent;
+}
+
+
+// ==================== PLATFORMS ====================
+
+/**
+ * Buscar todas as plataformas ativas
+ */
+export async function getPlatforms() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(platforms)
+    .where(eq(platforms.isActive, true))
+    .orderBy(asc(platforms.displayOrder));
+}
+
+/**
+ * Buscar plataforma por ID
+ */
+export async function getPlatformById(platformId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(platforms)
+    .where(eq(platforms.id, platformId))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+/**
+ * Buscar plataforma por slug
+ */
+export async function getPlatformBySlug(slug: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(platforms)
+    .where(eq(platforms.slug, slug))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+/**
+ * Buscar templates de uma plataforma por tipo de documento
+ */
+export async function getPlatformTemplates(platformId: number, documentType?: "etp" | "tr" | "dfd" | "edital") {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db
+    .select()
+    .from(platformTemplates)
+    .where(
+      and(
+        eq(platformTemplates.platformId, platformId),
+        eq(platformTemplates.isActive, true)
+      )
+    );
+
+  if (documentType) {
+    query = query.where(eq(platformTemplates.documentType, documentType));
+  }
+
+  return await query;
+}
+
+/**
+ * Buscar checklist de uma plataforma
+ */
+export async function getPlatformChecklist(platformId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(platformChecklists)
+    .where(eq(platformChecklists.platformId, platformId))
+    .orderBy(asc(platformChecklists.stepNumber));
+}
+
+/**
+ * Adicionar platformId ao processo
+ */
+export async function updateProcessPlatform(processId: number, platformId: number | null) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(processes)
+    .set({ 
+      platformId,
+      updatedAt: new Date()
+    })
+    .where(eq(processes.id, processId));
+
+  return await getProcessById(processId);
+}
+
+/**
+ * Criar publicação de processo em plataforma (Nível 3 - Futuro)
+ */
+export async function createPlatformPublication(data: {
+  processId: number;
+  platformId: number;
+  externalId?: string;
+  externalUrl?: string;
+  status?: "draft" | "published" | "scheduled" | "failed" | "cancelled" | "closed";
+  scheduledFor?: Date;
+  metadata?: Record<string, any>;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(platformPublications).values({
+    processId: data.processId,
+    platformId: data.platformId,
+    externalId: data.externalId || null,
+    externalUrl: data.externalUrl || null,
+    status: data.status || "draft",
+    scheduledFor: data.scheduledFor || null,
+    metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+  });
+
+  return result;
+}
+
+/**
+ * Buscar publicações de um processo
+ */
+export async function getProcessPublications(processId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(platformPublications)
+    .where(eq(platformPublications.processId, processId))
+    .orderBy(desc(platformPublications.createdAt));
+}
+
+/**
+ * Atualizar status de publicação
+ */
+export async function updatePublicationStatus(
+  publicationId: number,
+  status: "draft" | "published" | "scheduled" | "failed" | "cancelled" | "closed",
+  data?: {
+    externalId?: string;
+    externalUrl?: string;
+    publishedAt?: Date;
+    closedAt?: Date;
+    errorMessage?: string;
+    apiResponse?: Record<string, any>;
+  }
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const updateData: any = {
+    status,
+    updatedAt: new Date(),
+  };
+
+  if (data?.externalId) updateData.externalId = data.externalId;
+  if (data?.externalUrl) updateData.externalUrl = data.externalUrl;
+  if (data?.publishedAt) updateData.publishedAt = data.publishedAt;
+  if (data?.closedAt) updateData.closedAt = data.closedAt;
+  if (data?.errorMessage) updateData.errorMessage = data.errorMessage;
+  if (data?.apiResponse) updateData.apiResponse = JSON.stringify(data.apiResponse);
+
+  await db
+    .update(platformPublications)
+    .set(updateData)
+    .where(eq(platformPublications.id, publicationId));
+
+  return await db
+    .select()
+    .from(platformPublications)
+    .where(eq(platformPublications.id, publicationId))
+    .limit(1)
+    .then(rows => rows[0] || null);
 }

@@ -8,6 +8,7 @@ import { catmatRouter } from "./routers/catmatRouter";
 import { taskRouter } from "./routers/taskRouter";
 import { departmentTasksRouter } from "./routers/departmentTasksRouter";
 import { aiUsageRouter } from "./routers/aiUsageRouter";
+import { platformsRouter } from "./routers/platformsRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -66,6 +67,7 @@ export const appRouter = router({
         estimatedValue: z.number().positive(),
         modality: z.string().min(1),
         category: z.string().min(1),
+        platformId: z.number().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         // Converter valor para centavos
@@ -78,6 +80,7 @@ export const appRouter = router({
           estimatedValue: valueInCents,
           modality: input.modality,
           category: input.category,
+          platformId: input.platformId || null,
           ownerId: ctx.user.id,
           status: "em_etp",
         });
@@ -1455,6 +1458,9 @@ export const appRouter = router({
 
   // Dashboard de custos de IA (admin only)
   aiUsage: aiUsageRouter,
+
+  // Plataformas de pregão eletrônico
+  platforms: platformsRouter,
 });
 
 export type AppRouter = typeof appRouter;

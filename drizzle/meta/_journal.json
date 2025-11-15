@@ -134,6 +134,20 @@
       "when": 1763227729857,
       "tag": "0018_rapid_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1763235556352,
+      "tag": "0019_vengeful_stryfe",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1763235651705,
+      "tag": "0020_fantastic_wildside",
+      "breakpoints": true
     }
   ]
 }
