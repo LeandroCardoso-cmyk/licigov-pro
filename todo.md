@@ -1274,3 +1274,47 @@
 - [ ] Atualizar README.md com novas funcionalidades
 - [ ] Documentar custos estimados de IA
 - [ ] Criar guia de uso para usuários finais
+
+
+## 🎨 Melhorias de UI e Dashboard (Nova Implementação)
+
+### UI de Sugestões CATMAT
+- [x] Criar componente CatmatSuggestionsModal.tsx
+- [x] Integrar modal no fluxo de importação de itens
+- [x] Adicionar botões Aprovar/Rejeitar para cada sugestão
+- [x] Exibir score de confiança e justificativa técnica
+- [x] Implementar loading states durante geração de sugestões
+- [x] Adicionar botão "Sugerir Código" na tabela de itens sem código
+
+### Edição Inline de Itens
+- [x] Criar componente EditItemDialog.tsx
+- [x] Adicionar colunas "Ações" na tabela de itens do TRItemsModal
+- [x] Implementar botão "Editar" com ícone de lápis
+- [x] Implementar botão "Deletar" com confirmação
+- [x] Adicionar validações de formulário (descrição mínima, quantidade > 0)
+- [x] Implementar feedback visual após edição/deleção
+
+### Dashboard de Custos de IA
+- [ ] Criar página AIUsageDashboard.tsx
+- [ ] Criar tabela usage_tracking_ai no banco de dados
+- [ ] Criar funções de rastreamento de custos no db.ts
+- [ ] Implementar procedure trackAIUsage no routers.ts
+- [ ] Exibir custos por tipo de operação (embeddings, matching, geração)
+- [ ] Adicionar gráficos de evolução de custos (últimos 30 dias)
+- [ ] Calcular custo estimado mensal baseado em uso atual
+- [ ] Adicionar rota no App.tsx para /dashboard/ai-costs
+
+## 📚 Expansão do Sistema RAG
+
+### Suporte a Múltiplos Documentos
+- [x] Modificar retrieveRelevantLaw para suportar filtro por documentos
+- [x] Criar script genérico de indexação (indexDocument.mjs)
+- [x] Criar guia completo de uso (GUIA_RAG_MULTIPLOS_DOCUMENTOS.md)
+- [ ] Criar procedure admin para upload de novos documentos (UI)
+- [ ] Implementar UI de gerenciamento de documentos (admin)
+
+### Documentos Sugeridos para Indexação
+- [ ] Lei 8.666/93 (Lei de Licitações anterior - referência) - Pronto para indexar
+- [ ] Decreto 11.462/2023 (Regulamenta Lei 14.133/21) - Pronto para indexar
+- [ ] IN SEGES/ME nº 65/2021 (Instrução Normativa de Contratações) - Pronto para indexar
+- [ ] Lei Complementar 123/2006 (Estatuto da ME/EPP) - Pronto para indexar

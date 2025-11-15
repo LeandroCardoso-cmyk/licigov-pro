@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json, decimal } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -639,3 +639,27 @@ export const catmatSuggestions = mysqlTable("catmat_suggestions", {
 
 export type CatmatSuggestion = typeof catmatSuggestions.$inferSelect;
 export type InsertCatmatSuggestion = typeof catmatSuggestions.$inferInsert;
+
+/**
+ * Rastreamento de uso de IA (custos e métricas)
+ */
+export const aiUsageTracking = mysqlTable("ai_usage_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // Usuário que executou a operação
+  processId: int("processId"), // Processo relacionado (opcional)
+  operationType: mysqlEnum("operationType", [
+    "embedding", // Geração de embeddings
+    "rag_query", // Consulta RAG
+    "catmat_matching", // Matching CATMAT com IA
+    "document_generation", // Geração de documentos (ETP, TR, DFD, Edital)
+  ]).notNull(),
+  model: varchar("model", { length: 50 }).notNull(), // "text-embedding-004", "gemini-1.5-flash", etc
+  inputTokens: int("inputTokens").notNull(), // Tokens de entrada
+  outputTokens: int("outputTokens").notNull(), // Tokens de saída
+  estimatedCostUSD: decimal("estimatedCostUSD", { precision: 10, scale: 6 }).notNull(), // Custo estimado em USD
+  metadata: json("metadata"), // { documentType: "ETP", itemsCount: 10, etc }
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AIUsageTracking = typeof aiUsageTracking.$inferSelect;
+export type InsertAIUsageTracking = typeof aiUsageTracking.$inferInsert;

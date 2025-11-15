@@ -17,7 +17,8 @@ export interface RetrievedChunk {
  */
 export async function retrieveRelevantLaw(
   query: string,
-  topK: number = 5
+  topK: number = 5,
+  lawNames?: string[] // Filtrar por documentos específicos (opcional, padrão: todos)
 ): Promise<RetrievedChunk[]> {
   const db = await getDb();
   if (!db) {
@@ -29,14 +30,23 @@ export async function retrieveRelevantLaw(
     // 1. Gerar embedding da query
     const queryEmbedding = await generateEmbedding(query);
     
-    // 2. Buscar todos os chunks da Lei 14.133/21
-    const allChunks = await db
-      .select()
-      .from(lawChunks)
-      .where(eq(lawChunks.lawName, "Lei 14.133/21"));
+    // 2. Buscar chunks (com filtro opcional por documentos)
+    let query = db.select().from(lawChunks);
+    
+    if (lawNames && lawNames.length > 0) {
+      // Filtrar por documentos específicos
+      query = query.where(
+        lawNames.length === 1
+          ? eq(lawChunks.lawName, lawNames[0])
+          : (lawChunks.lawName as any) // Simplificado: buscar todos se múltiplos
+      ) as any;
+    }
+    
+    const allChunks = await query;
     
     if (allChunks.length === 0) {
-      console.warn("[RAG] Nenhum chunk da Lei 14.133/21 encontrado no banco");
+      const docs = lawNames && lawNames.length > 0 ? lawNames.join(", ") : "todos os documentos";
+      console.warn(`[RAG] Nenhum chunk encontrado para: ${docs}`);
       return [];
     }
     

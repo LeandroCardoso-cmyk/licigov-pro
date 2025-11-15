@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { CatmatSearch, CatmatItem } from "@/components/CatmatSearch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, Trash2, Package, FileSpreadsheet, Search } from "lucide-react";
+import { Loader2, Trash2, Package, FileSpreadsheet, Search, Sparkles, Pencil } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImportItemsModal from "@/components/ImportItemsModal";
+import CatmatSuggestionsModal from "@/components/CatmatSuggestionsModal";
+import EditItemDialog from "@/components/EditItemDialog";
 import {
   Table,
   TableBody,
@@ -26,6 +28,14 @@ interface TRItemsModalProps {
 export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRItemsModalProps) {
   const [selectedItems, setSelectedItems] = useState<CatmatItem[]>([]);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false);
+  const [selectedItemForSuggestions, setSelectedItemForSuggestions] = useState<{
+    id: number;
+    description: string;
+    itemType: "material" | "service";
+  } | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedItemForEdit, setSelectedItemForEdit] = useState<any>(null);
 
   // Buscar itens já adicionados
   const { data: existingItems, isLoading, refetch } = trpc.processes.getProcessItems.useQuery(
@@ -44,6 +54,19 @@ export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRIte
     },
     onError: (error) => {
       toast.error("Erro ao salvar itens", {
+        description: error.message,
+      });
+    },
+  });
+
+  // Mutation para deletar item
+  const deleteItemMutation = trpc.processes.deleteProcessItem.useMutation({
+    onSuccess: () => {
+      toast.success("Item removido com sucesso!");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error("Erro ao remover item", {
         description: error.message,
       });
     },
@@ -71,6 +94,12 @@ export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRIte
   const handleImportSuccess = () => {
     refetch();
     setShowImportModal(false);
+  };
+
+  const handleDeleteItem = (itemId: number) => {
+    if (confirm("Tem certeza que deseja remover este item?")) {
+      deleteItemMutation.mutate({ itemId });
+    }
   };
 
   return (
@@ -219,6 +248,7 @@ export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRIte
                       <TableHead>Descrição</TableHead>
                       <TableHead>Unidade</TableHead>
                       <TableHead>Quantidade</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -228,6 +258,45 @@ export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRIte
                         <TableCell>{item.description}</TableCell>
                         <TableCell>{item.unit}</TableCell>
                         <TableCell>{item.quantity || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {!item.catmatCode && !item.catserCode && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2"
+                                onClick={() => {
+                                  setSelectedItemForSuggestions({
+                                    id: item.id,
+                                    description: item.description,
+                                    itemType: item.itemType as "material" | "service",
+                                  });
+                                  setShowSuggestionsModal(true);
+                                }}
+                              >
+                                <Sparkles className="h-3 w-3" />
+                                Sugerir Código
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedItemForEdit(item);
+                                setShowEditDialog(true);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteItem(item.id)}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -245,6 +314,38 @@ export function TRItemsModal({ processId, open, onOpenChange, onSuccess }: TRIte
         processId={processId}
         onSuccess={handleImportSuccess}
       />
+
+      {/* Modal de Sugestões CATMAT */}
+      {selectedItemForSuggestions && (
+        <CatmatSuggestionsModal
+          open={showSuggestionsModal}
+          onClose={() => {
+            setShowSuggestionsModal(false);
+            setSelectedItemForSuggestions(null);
+          }}
+          processItemId={selectedItemForSuggestions.id}
+          itemDescription={selectedItemForSuggestions.description}
+          itemType={selectedItemForSuggestions.itemType}
+          onApproved={() => {
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Modal de Edição de Item */}
+      {selectedItemForEdit && (
+        <EditItemDialog
+          open={showEditDialog}
+          onClose={() => {
+            setShowEditDialog(false);
+            setSelectedItemForEdit(null);
+          }}
+          item={selectedItemForEdit}
+          onSuccess={() => {
+            refetch();
+          }}
+        />
+      )}
     </>
   );
 }
