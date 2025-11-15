@@ -53,7 +53,10 @@ export async function retrieveRelevantLaw(
     // 3. Calcular similaridade para cada chunk
     const chunksWithSimilarity = allChunks.map((chunk) => {
       try {
-        const chunkEmbedding = JSON.parse(chunk.embedding as string);
+        // Embedding pode vir como objeto (já parseado) ou string (precisa parsear)
+        const chunkEmbedding = typeof chunk.embedding === 'string' 
+          ? JSON.parse(chunk.embedding) 
+          : chunk.embedding as number[];
         const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
         
         return {

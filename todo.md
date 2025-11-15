@@ -1335,11 +1335,11 @@
 ### Formato de Embeddings no RAG
 - [x] Corrigir script indexLaw.ts para salvar embeddings como JSON válido no MySQL
 - [x] Limpar chunks antigos do banco de dados (9.192 chunks deletados)
-- [ ] Reindexar todos os 6 documentos com formato correto - EM ANDAMENTO (ver /tmp/reindex_all.log)
-- [ ] Testar RAG após reindexação para validar citações nos documentos gerados
+- [x] Reindexar todos os 6 documentos com formato correto - CONCLUÍDA (9.782 chunks)
+- [x] Testar RAG após reindexação para validar citações - FUNCIONANDO (scores 69-72%)
 
 ### Cache de Embeddings
 - [x] Criar tabela embedding_cache no banco de dados
 - [x] Implementar função de cache em embeddings.ts
 - [x] Adicionar lógica de cache em generateEmbedding
-- [ ] Testar redução de custos com queries repetidas (após reindexação)
+- [ ] Testar redução de custos com queries repetidas (aguardar 7 dias de uso)
