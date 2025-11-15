@@ -82,7 +82,7 @@ async function indexDocument() {
 
         await connection.execute(
           `INSERT INTO law_chunks (lawName, chunkIndex, articleNumber, content, embedding, createdAt)
-           VALUES (?, ?, ?, ?, ?, NOW())`,
+           VALUES (?, ?, ?, ?, CAST(? AS JSON), NOW())`,
           [
             lawName,
             chunk.index,

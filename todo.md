@@ -1330,9 +1330,16 @@
 - [x] Manual de Licitações e Contratos do TCE Paraná - 1116 chunks
 
 
-## 🔧 Correções Necessárias
+## 🔧 Correções e Melhorias
 
 ### Formato de Embeddings no RAG
-- [ ] Corrigir script indexLaw.ts para salvar embeddings como JSON válido
-- [ ] Reindexar todos os documentos com formato correto (estimativa: 2h)
+- [x] Corrigir script indexLaw.ts para salvar embeddings como JSON válido no MySQL
+- [x] Limpar chunks antigos do banco de dados (9.192 chunks deletados)
+- [ ] Reindexar todos os 6 documentos com formato correto - EM ANDAMENTO (ver /tmp/reindex_all.log)
 - [ ] Testar RAG após reindexação para validar citações nos documentos gerados
+
+### Cache de Embeddings
+- [x] Criar tabela embedding_cache no banco de dados
+- [x] Implementar função de cache em embeddings.ts
+- [x] Adicionar lógica de cache em generateEmbedding
+- [ ] Testar redução de custos com queries repetidas (após reindexação)

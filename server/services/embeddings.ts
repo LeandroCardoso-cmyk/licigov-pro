@@ -1,16 +1,78 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ENV } from "../_core/env";
+import { createHash } from "crypto";
+import { getDb } from "../db";
+import { embeddingCache } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 const genAI = new GoogleGenerativeAI(ENV.geminiApiKey);
 
 /**
- * Gera embedding para um texto usando Google Gemini text-embedding-004
+ * Gera hash SHA-256 de um texto
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
+function hashText(text: string): string {
+  return createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
+}
+
+/**
+ * Gera embedding para um texto usando Google Gemini text-embedding-004
+ * Usa cache para evitar gerar embeddings duplicados
+ */
+export async function generateEmbedding(text: string, useCache: boolean = true): Promise<number[]> {
+  const db = await getDb();
+  const textHash = hashText(text);
+  
+  // 1. Tentar buscar no cache
+  if (useCache && db) {
+    try {
+      const cached = await db
+        .select()
+        .from(embeddingCache)
+        .where(eq(embeddingCache.textHash, textHash))
+        .limit(1);
+      
+      if (cached.length > 0) {
+        // Atualizar hitCount e lastUsedAt
+        await db
+          .update(embeddingCache)
+          .set({
+            hitCount: cached[0].hitCount + 1,
+            lastUsedAt: new Date(),
+          })
+          .where(eq(embeddingCache.id, cached[0].id));
+        
+        return cached[0].embedding as number[];
+      }
+    } catch (error) {
+      console.warn("Erro ao buscar cache de embedding:", error);
+      // Continua para gerar novo embedding
+    }
+  }
+  
+  // 2. Gerar novo embedding
   try {
     const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
     const result = await model.embedContent(text);
-    return result.embedding.values;
+    const embedding = result.embedding.values;
+    
+    // 3. Salvar no cache
+    if (useCache && db) {
+      try {
+        await db.insert(embeddingCache).values({
+          textHash,
+          text: text.substring(0, 1000), // Salvar apenas primeiros 1000 chars para debug
+          embedding: embedding as any,
+          model: "text-embedding-004",
+          hitCount: 0,
+          lastUsedAt: new Date(),
+        });
+      } catch (error) {
+        console.warn("Erro ao salvar cache de embedding:", error);
+        // Não falha se não conseguir salvar no cache
+      }
+    }
+    
+    return embedding;
   } catch (error) {
     console.error("Erro ao gerar embedding:", error);
     throw new Error("Falha ao gerar embedding");

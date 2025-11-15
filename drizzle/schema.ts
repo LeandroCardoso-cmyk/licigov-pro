@@ -663,3 +663,21 @@ export const aiUsageTracking = mysqlTable("ai_usage_tracking", {
 
 export type AIUsageTracking = typeof aiUsageTracking.$inferSelect;
 export type InsertAIUsageTracking = typeof aiUsageTracking.$inferInsert;
+
+/**
+ * Cache de embeddings para queries frequentes
+ * Reduz custos de API armazenando embeddings de textos já processados
+ */
+export const embeddingCache = mysqlTable("embedding_cache", {
+  id: int("id").autoincrement().primaryKey(),
+  textHash: varchar("textHash", { length: 64 }).notNull().unique(), // SHA-256 do texto
+  text: text("text").notNull(), // Texto original (para debug)
+  embedding: json("embedding").notNull(), // Vector de embeddings
+  model: varchar("model", { length: 50 }).notNull(), // "text-embedding-004"
+  hitCount: int("hitCount").default(0).notNull(), // Número de vezes que foi reutilizado
+  lastUsedAt: timestamp("lastUsedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EmbeddingCache = typeof embeddingCache.$inferSelect;
+export type InsertEmbeddingCache = typeof embeddingCache.$inferInsert;
