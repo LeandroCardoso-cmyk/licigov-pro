@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { proposalRouter } from "./routers/proposalRouter";
+import { commercialRouter } from "./routers/commercialRouter";
 import { companyDocumentsRouter } from "./routers/companyDocumentsRouter";
 import { catmatRouter } from "./routers/catmatRouter";
 import { taskRouter } from "./routers/taskRouter";
@@ -173,6 +173,88 @@ export const appRouter = router({
       .input(z.object({ processId: z.number() }))
       .query(async ({ input }) => {
         return await db.getProcessItems(input.processId);
+      }),
+
+    // Parsear arquivo Excel/CSV com itens (Fase 1 MVP)
+    parseItemsFile: protectedProcedure
+      .input(z.object({
+        fileContent: z.string(), // base64
+        fileName: z.string(),
+        columnMapping: z.object({
+          description: z.number(), // índice da coluna (0-based)
+          quantity: z.number().optional(),
+          unit: z.number().optional(),
+          unitPrice: z.number().optional(),
+          totalPrice: z.number().optional(),
+        }),
+        previewOnly: z.boolean().optional(), // Se true, retorna apenas preview das primeiras 6 linhas
+      }))
+      .mutation(async ({ input }) => {
+        const XLSX = await import('xlsx');
+        
+        // Decodificar base64
+        const buffer = Buffer.from(input.fileContent, 'base64');
+        
+        // Parsear arquivo
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Converter para JSON (array de arrays)
+        const data: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        // Validar
+        if (data.length === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo vazio' });
+        }
+        
+        // Se for apenas preview, retornar primeiras 6 linhas (header + 5 linhas)
+        if (input.previewOnly) {
+          return {
+            success: true,
+            preview: data.slice(0, 6),
+            items: [],
+            count: 0,
+          };
+        }
+        
+        if (data.length > 500) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Máximo 500 itens por importação' });
+        }
+        
+        // Pular primeira linha (cabeçalho) e parsear itens
+        const items = data.slice(1).map((row, index) => {
+          const description = row[input.columnMapping.description]?.toString().trim();
+          
+          if (!description || description.length < 10) {
+            throw new TRPCError({ 
+              code: 'BAD_REQUEST', 
+              message: `Linha ${index + 2}: Descrição inválida (mínimo 10 caracteres)` 
+            });
+          }
+          
+          return {
+            description,
+            quantity: input.columnMapping.quantity !== undefined 
+              ? parseFloat(row[input.columnMapping.quantity]) || 1 
+              : 1,
+            unit: input.columnMapping.unit !== undefined 
+              ? row[input.columnMapping.unit]?.toString().trim() || 'UN' 
+              : 'UN',
+            unitPrice: input.columnMapping.unitPrice !== undefined 
+              ? parseFloat(row[input.columnMapping.unitPrice]) || 0 
+              : 0,
+            totalPrice: input.columnMapping.totalPrice !== undefined 
+              ? parseFloat(row[input.columnMapping.totalPrice]) || 0 
+              : 0,
+          };
+        }).filter(item => item.description); // Remover linhas vazias
+        
+        return { 
+          success: true, 
+          items,
+          count: items.length 
+        };
       }),
 
     // Atualizar status do processo
@@ -1162,8 +1244,8 @@ export const appRouter = router({
       }),
   }),
 
-  // Rotas de propostas comerciais e pagamento por empenho
-  proposals: proposalRouter,
+  // Rotas de gestão comercial (clientes e contratos do LiciGov Pro)
+  commercial: commercialRouter,
 
   // Rotas de documentos da empresa
   companyDocuments: companyDocumentsRouter,

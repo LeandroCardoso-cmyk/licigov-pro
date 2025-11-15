@@ -18,7 +18,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Plans from "./pages/Plans";
 import SolicitarProposta from "./pages/SolicitarProposta";
 // import AdminSubscriptions from "./pages/AdminSubscriptions";
-import AdminProposals from "./pages/AdminProposals";
+import CommercialManagement from "./pages/CommercialManagement";
 import AdminDocuments from "./pages/AdminDocuments";
 // import AdminDefaultDashboard from "./pages/AdminDefaultDashboard";
 // import AdminContractsReport from "./pages/AdminContractsReport";
@@ -68,7 +68,7 @@ const SettingsRoute = () => <AuthenticatedRoute component={Settings} />;
 const AnalyticsRoute = () => <AuthenticatedRoute component={Analytics} />;
 const AdminRoute = () => <AuthenticatedRoute component={Admin} />;
 // const AdminSubscriptionsRoute = () => <AuthenticatedRoute component={AdminSubscriptions} />;
-const AdminProposalsRoute = () => <AuthenticatedRoute component={AdminProposals} />;
+const CommercialManagementRoute = () => <AuthenticatedRoute component={CommercialManagement} />;
 const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments} />;
 // const AdminDefaultDashboardRoute = () => <AuthenticatedRoute component={AdminDefaultDashboard} />;
 // const AdminContractsReportRoute = () => <AuthenticatedRoute component={AdminContractsReport} />;
@@ -87,7 +87,7 @@ function Router() {
       <Route path={"/"} component={LandingPage} />
       <Route path={"/dashboard"} component={ModuleSelectionRoute} />
       <Route path={"/processos"} component={ProcessesRoute} />
-      <Route path={"/propostas"} component={AdminProposalsRoute} />
+      <Route path={"/gestao-comercial"} component={CommercialManagementRoute} />
       <Route path={"/novo-processo"} component={NewProcessRoute} />
       <Route path={"/personalizacao-documentos"} component={DocumentSettingsRoute} />
       <Route path={"/templates"} component={TemplatesRoute} />
@@ -98,7 +98,7 @@ function Router() {
       <Route path={"/analytics"} component={AnalyticsRoute} />
       <Route path={"/admin"} component={AdminRoute} />
       {/* <Route path={"/admin/assinaturas"} component={AdminSubscriptionsRoute} /> */}
-      <Route path={"/admin/propostas"} component={AdminProposalsRoute} />
+      <Route path={"/admin/propostas"} component={CommercialManagementRoute} />
       <Route path={"/admin/documentos"} component={AdminDocumentsRoute} />
       {/* <Route path={"/admin/inadimplencia"} component={AdminDefaultDashboardRoute} /> */}
       {/* <Route path={"/admin/contratos-limite"} component={AdminContractsReportRoute} /> */}

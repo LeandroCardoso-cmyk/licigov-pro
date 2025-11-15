@@ -5,7 +5,7 @@ import { generatePropostaComercial, generateMinutaContrato, generateTermoReferen
 import { generateProposalZip } from "../services/proposalZipGenerator";
 import { TRPCError } from "@trpc/server";
 
-export const proposalRouter = router({
+export const commercialRouter = router({
   create: publicProcedure
     .input(
       z.object({

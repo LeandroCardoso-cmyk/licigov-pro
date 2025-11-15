@@ -14,7 +14,7 @@ import { FileText, Loader2, Search, CheckCircle, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-export default function AdminProposals() {
+export default function CommercialManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [selectedProposal, setSelectedProposal] = useState<any>(null);
@@ -26,9 +26,9 @@ export default function AdminProposals() {
     observacoes: "",
   });
 
-  const { data: proposals, isLoading, refetch } = trpc.proposals.listAll.useQuery();
-  const registerEmpenhoMutation = trpc.proposals.registerEmpenho.useMutation();
-  const activateSubscriptionMutation = trpc.proposals.activateSubscription.useMutation();
+  const { data: proposals, isLoading, refetch } = trpc.commercial.listAll.useQuery();
+  const registerEmpenhoMutation = trpc.commercial.registerEmpenho.useMutation();
+  const activateSubscriptionMutation = trpc.commercial.activateSubscription.useMutation();
 
   const handleRegisterEmpenho = async () => {
     if (!selectedProposal) return;
@@ -82,9 +82,9 @@ export default function AdminProposals() {
     <div className="container mx-auto py-8 space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Gerenciar Propostas</CardTitle>
+          <CardTitle className="text-2xl">Gestão Comercial</CardTitle>
           <CardDescription>
-            Visualize solicitações, registre empenhos e ative assinaturas
+            Gerencie clientes, contratos e assinaturas do LiciGov Pro
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

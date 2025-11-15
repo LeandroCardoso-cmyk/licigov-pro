@@ -163,7 +163,6 @@ export default function ProcessDetails() {
         await updateDocumentMutation.mutateAsync({
           documentId: editingDocumentId,
           content,
-          createNewVersion: false, // Não criar nova versão no auto-save
         });
         setEditingContent(content);
       } catch (error) {
@@ -268,7 +267,7 @@ export default function ProcessDetails() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <GlobalSearch />
+              {/* <GlobalSearch /> */}
               <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium text-foreground">{user?.name}</p>

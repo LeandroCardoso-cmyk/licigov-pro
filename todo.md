@@ -1189,3 +1189,34 @@
 - [ ] Atualizar rota de /admin/propostas para /admin/comercial
 - [ ] Atualizar labels e títulos para "Gestão Comercial"
 - [ ] Atualizar menu de navegação
+
+
+## 🔄 Renomear Módulo Propostas para Gestão Comercial
+- [x] Renomear arquivo proposalRouter.ts para commercialRouter.ts
+- [x] Atualizar import no server/routers.ts
+- [x] Renomear página AdminProposals.tsx para CommercialManagement.tsx
+- [x] Atualizar rota de /admin/propostas para /gestao-comercial
+- [x] Atualizar labels e títulos na interface
+
+## 📊 Importação de Itens CATMAT/CATSER - Fase 1 (MVP)
+### Backend
+- [x] Instalar biblioteca xlsx para parsing de Excel/CSV
+- [x] Criar procedure processes.parseItemsFile (recebe arquivo, retorna array de itens)
+- [x] Adicionar validações (máximo 500 itens, descrição mínimo 10 caracteres)
+- [x] Adicionar modo previewOnly para retornar primeiras 6 linhas
+- [ ] Criar procedure processes.matchCatmatSimple (busca por palavras-chave) - Fase 2
+
+### Frontend
+- [x] Criar componente ImportItemsModal
+- [x] Implementar drag & drop de arquivo
+- [x] Preview da planilha (primeiras 5 linhas)
+- [x] Mapeamento de colunas (dropdown)
+- [x] Tabela de revisão de itens
+- [x] Integrar no TRItemsModal (aba "Importar" + aba "Buscar Manual")
+- [x] Manter busca manual funcionando
+
+### Testes
+- [ ] Testar importação de Excel (.xlsx)
+- [ ] Testar importação de CSV (.csv)
+- [ ] Testar validações (arquivo grande, muitos itens)
+- [ ] Testar busca manual ainda funciona
