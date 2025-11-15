@@ -29,6 +29,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 // import { GlobalSearch } from "@/components/GlobalSearch"; // Removido temporariamente
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { CommentsSection } from "@/components/CommentsSection";
+import { TRItemsModal } from "@/components/TRItemsModal";
 
 const statusLabels: Record<string, string> = {
   em_etp: "Em ETP",
@@ -53,6 +54,7 @@ export default function ProcessDetails() {
   const processId = parseInt(params.id || "0");
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
+  const [trItemsModalOpen, setTrItemsModalOpen] = useState(false);
 
   const { data: process, isLoading: processLoading } = trpc.processes.getById.useQuery({
     id: processId,
@@ -401,6 +403,17 @@ export default function ProcessDetails() {
             <div className="flex items-center justify-between mb-4">
               <CardTitle>Documentos do Processo</CardTitle>
               <div className="flex gap-2">
+                {/* Botão para adicionar itens ao TR (Lei 14.133/21) */}
+                {process.status === "em_etp" && etpDocument && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setTrItemsModalOpen(true)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Adicionar Itens ao TR
+                  </Button>
+                )}
                 {canAdvance && nextDocumentLabel && (
                   <Button 
                     variant="default" 
@@ -658,6 +671,18 @@ export default function ProcessDetails() {
           </Card>
         )}
       </main>
+
+      {/* Modal para adicionar itens CATMAT/CATSER ao TR */}
+      <TRItemsModal
+        processId={processId}
+        open={trItemsModalOpen}
+        onOpenChange={setTrItemsModalOpen}
+        onSuccess={() => {
+          // Invalidar queries para atualizar a interface
+          utils.processes.getById.invalidate({ id: processId });
+          utils.documents.listByProcess.invalidate({ processId });
+        }}
+      />
     </div>
   );
 }

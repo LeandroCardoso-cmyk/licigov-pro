@@ -1152,3 +1152,40 @@
 - [x] **Reduzir erros de TypeScript de 43 para 17 (redução de 60%)**
 - [x] **Módulo de Gestão do Departamento 100% livre de erros!**
 - [ ] Erros restantes (17) são de módulos antigos (AdminDocuments, AdminProposals, etc.)
+
+
+## 🔧 Correção de Conformidade com Lei 14.133/21
+
+### Problema Identificado
+- [ ] Itens CATMAT/CATSER estão sendo solicitados na criação do processo (antes do ETP)
+- [ ] Segundo a Lei 14.133/21, itens devem ser detalhados apenas no TR, não no ETP
+
+### Alterações Necessárias
+
+#### Frontend
+- [x] Remover campo catmatItems da tela NewProcess.tsx
+- [x] Remover componente CatmatSearch de NewProcess.tsx
+- [ ] Criar tela/modal "Elaborar TR" para adicionar itens CATMAT
+- [ ] Adicionar botão "Adicionar Itens" na tela de detalhes do processo (quando status = "em_etp")
+- [ ] Criar interface para gerenciar itens antes de gerar TR
+
+#### Backend
+- [x] Remover catmatItems do input da procedure processes.create
+- [x] Remover chamada db.saveProcessItems da procedure processes.create
+- [x] Criar procedure processes.addItemsToTR para salvar itens na fase TR
+- [x] Criar procedure processes.getProcessItems para buscar itens
+- [x] Procedure processes.generateDocument já busca itens ao gerar TR
+
+#### Fluxo Correto (Lei 14.133/21)
+- [ ] 1. Criar processo (dados básicos, sem itens)
+- [ ] 2. Gerar ETP (estudo preliminar, sem detalhamento de itens)
+- [ ] 3. Adicionar itens CATMAT/CATSER (tela específica)
+- [ ] 4. Gerar TR (inclui itens adicionados)
+- [ ] 5. Gerar DFD (consolida ETP + TR)
+- [ ] 6. Gerar Edital
+
+### Renomear Módulo de Propostas
+- [ ] Renomear AdminProposals.tsx para CommercialManagement.tsx
+- [ ] Atualizar rota de /admin/propostas para /admin/comercial
+- [ ] Atualizar labels e títulos para "Gestão Comercial"
+- [ ] Atualizar menu de navegação

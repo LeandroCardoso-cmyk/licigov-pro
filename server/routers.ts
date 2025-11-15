@@ -65,16 +65,6 @@ export const appRouter = router({
         estimatedValue: z.number().positive(),
         modality: z.string().min(1),
         category: z.string().min(1),
-        catmatItems: z.array(z.object({
-          codigoItem: z.number(),
-          descricaoItem: z.string(),
-          unidadeFornecimento: z.string().optional(),
-          unidadeMedida: z.string().optional(),
-          codigoGrupo: z.number().optional(),
-          descricaoGrupo: z.string().optional(),
-          codigoClasse: z.number().optional(),
-          descricaoClasse: z.string().optional(),
-        })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         // Converter valor para centavos
@@ -93,21 +83,6 @@ export const appRouter = router({
 
         // Registrar atividade
         const processId = Number((result as any).insertId);
-        
-        // Salvar itens CATMAT/CATSER se houver
-        if (input.catmatItems && input.catmatItems.length > 0) {
-          await db.saveProcessItems(
-            processId,
-            input.catmatItems.map(item => ({
-              itemType: 'material' as const, // TODO: detectar se é material ou serviço
-              catmatCode: item.codigoItem.toString(),
-              description: item.descricaoItem,
-              unit: item.unidadeFornecimento || item.unidadeMedida || 'UN',
-              groupCode: item.codigoGrupo?.toString(),
-              classCode: item.codigoClasse?.toString(),
-            }))
-          );
-        }
         
         await db.createActivityLog({
           processId,
@@ -163,6 +138,41 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getProcessById(input.id);
+      }),
+
+    // Adicionar itens CATMAT/CATSER ao TR (Lei 14.133/21)
+    addItemsToTR: protectedProcedure
+      .input(z.object({
+        processId: z.number(),
+        items: z.array(z.object({
+          itemType: z.enum(['material', 'service']),
+          catmatCode: z.string().optional(),
+          catserCode: z.string().optional(),
+          description: z.string(),
+          unit: z.string(),
+          groupCode: z.string().optional(),
+          classCode: z.string().optional(),
+          quantity: z.number().optional(),
+          estimatedPrice: z.number().optional(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.saveProcessItems(input.processId, input.items);
+        
+        await db.createActivityLog({
+          processId: input.processId,
+          userId: ctx.user.id,
+          action: `adicionou ${input.items.length} item(ns) ao TR`,
+        });
+        
+        return { success: true };
+      }),
+
+    // Obter itens CATMAT/CATSER do processo
+    getProcessItems: protectedProcedure
+      .input(z.object({ processId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getProcessItems(input.processId);
       }),
 
     // Atualizar status do processo

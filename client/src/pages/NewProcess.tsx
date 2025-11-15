@@ -17,7 +17,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { APP_LOGO, APP_TITLE } from "@/const";
-import { CatmatSearch, CatmatItem } from "@/components/CatmatSearch";
+
 
 export default function NewProcess() {
   const { user, logout } = useAuth();
@@ -29,7 +29,7 @@ export default function NewProcess() {
     modality: "",
     category: "",
   });
-  const [selectedItems, setSelectedItems] = useState<CatmatItem[]>([]);
+
 
   const createProcessMutation = trpc.processes.create.useMutation({
     onSuccess: () => {
@@ -58,7 +58,6 @@ export default function NewProcess() {
       estimatedValue: valueNumber,
       modality: formData.modality,
       category: formData.category,
-      catmatItems: selectedItems.length > 0 ? selectedItems : undefined,
     });
   };
 
@@ -204,20 +203,6 @@ export default function NewProcess() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              {/* Itens CATMAT/CATSER */}
-              <div className="space-y-2">
-                <Label>Itens (CATMAT/CATSER) - Opcional</Label>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Busque e selecione itens do catálogo oficial para incluir no Termo de Referência
-                </p>
-                <CatmatSearch
-                  type="material"
-                  onSelect={(item) => setSelectedItems([...selectedItems, item])}
-                  selectedItems={selectedItems}
-                  onRemove={(item) => setSelectedItems(selectedItems.filter(i => i.codigoItem !== item.codigoItem))}
-                />
               </div>
 
               {/* Botões */}
