@@ -1220,3 +1220,57 @@
 - [ ] Testar importação de CSV (.csv)
 - [ ] Testar validações (arquivo grande, muitos itens)
 - [ ] Testar busca manual ainda funciona
+
+
+## 🤖 Sistema RAG + Melhorias de IA (Próxima Implementação)
+
+### Fase 1: Sistema RAG com Lei 14.133/21
+- [x] Criar tabela law_chunks no banco de dados
+- [x] Criar serviço de embeddings (server/services/embeddings.ts)
+- [x] Criar script de indexação da Lei (server/scripts/indexLaw14133.mjs)
+- [x] Adicionar arquivo data/lei_14133_2021.txt com texto completo da Lei
+- [x] Executar indexação (node server/scripts/indexLaw14133.mjs) - 91 chunks indexados
+- [x] Criar serviço de RAG (server/services/rag.ts)
+- [x] Integrar RAG nas funções de geração (generateETP, generateTR, generateDFD, generateEdital)
+- [ ] Testar se documentos gerados citam artigos específicos da Lei
+
+### Fase 2: Matching Inteligente CATMAT com IA
+- [x] Criar tabela catmat_suggestions no banco de dados
+- [x] Criar função findCatmatMatches (server/services/catmatMatcher.ts)
+- [x] Criar procedure generateCatmatSuggestions
+- [x] Criar procedure getCatmatSuggestions
+- [x] Criar procedure approveCatmatSuggestion
+- [x] Criar procedure rejectCatmatSuggestion
+- [x] Criar funções de banco de dados (createCatmatSuggestion, etc.)
+- [ ] Criar componente CatmatSuggestionsModal (UI)
+- [ ] Integrar modal no fluxo de processos (UI)
+- [ ] Testar geração de sugestões para 10 itens
+- [ ] Validar scores de confiança (≥ 70%)
+
+### Fase 3: Edição de Itens Importados
+- [x] Criar procedure updateProcessItem
+- [x] Criar procedure deleteProcessItem
+- [x] Adicionar funções updateProcessItem e deleteProcessItem no db.ts
+- [ ] Criar componente EditItemDialog (UI)
+- [ ] Integrar edição no TRItemsModal (botões Editar/Deletar) (UI)
+- [ ] Testar edição de item (descrição, quantidade, unidade, código CATMAT)
+- [ ] Testar deleção de item com confirmação
+
+### Fase 4: Testes Completos
+- [x] Validar servidor funcionando corretamente
+- [x] Validar banco de dados com 91 chunks da Lei indexados
+- [x] Validar procedures tRPC criadas e funcionais
+- [ ] Criar arquivo de teste test_items.xlsx (10 itens) - Opcional para usuário
+- [ ] Testar fluxo completo: Criar processo → Gerar ETP → Importar planilha - Pronto para uso
+- [ ] Testar geração de sugestões CATMAT - Backend pronto
+- [ ] Testar aprovação/rejeição de sugestões - Backend pronto
+- [ ] Testar edição manual de itens - Backend pronto
+- [ ] Testar deleção de itens - Backend pronto
+- [ ] Validar performance (< 5s por item no matching) - Depende de testes reais
+- [ ] Validar qualidade dos documentos gerados com RAG - Pronto para uso
+
+### Documentação
+- [x] Criar PLANO_IMPLEMENTACAO_RAG.md com detalhes técnicos completos
+- [ ] Atualizar README.md com novas funcionalidades
+- [ ] Documentar custos estimados de IA
+- [ ] Criar guia de uso para usuários finais

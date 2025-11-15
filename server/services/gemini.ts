@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 
 // Inicializar cliente Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -75,9 +76,20 @@ export async function generateETP(params: {
     footer += `---`;
   }
 
+  // Buscar trechos relevantes da Lei 14.133/21 usando RAG
+  const relevantLaw = await retrieveRelevantLaw(
+    `Estudo Técnico Preliminar para ${params.object}. Modalidade: ${modalityName}. Categoria: ${categoryName}`,
+    5
+  );
+  
+  const lawContext = formatRetrievedContext(relevantLaw);
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21 (Nova Lei de Licitações e Contratos Administrativos).
 
 Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissional para o seguinte processo licitatório:
+
+**CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
+${lawContext}
 
 **DADOS DO PROCESSO:**
 - Nome do Processo: ${params.processName}
@@ -87,18 +99,16 @@ Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissio
 - Categoria: ${categoryName}
 
 **INSTRUÇÕES CRÍTICAS (SIGA RIGOROSAMENTE):**
-1. O ETP deve seguir rigorosamente as diretrizes da Lei 14.133/21, especialmente o Art. 18, §1º
-2. O documento deve ser estruturado, formal e tecnicamente preciso
-3. Use linguagem jurídica apropriada para documentos oficiais
-4. Inclua todas as seções obrigatórias de um ETP
-5. Forneça justificativas técnicas e econômicas sólidas baseadas APENAS nas informações fornecidas
-6. **NÃO INVENTE referências legais, artigos ou números que não existem**
-7. **NÃO CITE artigos específicos da Lei 14.133/21 a menos que você tenha CERTEZA ABSOLUTA de que existem**
-8. **Se precisar mencionar a lei, use referências genéricas como "conforme Lei 14.133/21" sem especificar artigos**
-9. **NÃO INVENTE dados técnicos, valores ou especificações que não foram fornecidos**
-10. **Use apenas as informações fornecidas nos DADOS DO PROCESSO acima**
-11. O documento deve estar pronto para ser apresentado à autoridade competente
-12. **AVISO: Este documento será revisado por um jurídico. Seja preciso e factual.**
+1. **USE OBRIGATORIAMENTE o CONTEXTO LEGAL fornecido acima** - cite explicitamente os artigos mencionados
+2. O ETP deve seguir rigorosamente as diretrizes da Lei 14.133/21
+3. **CITE os artigos específicos** fornecidos no contexto legal (ex: "Conforme Art. 6º, XXIII da Lei 14.133/21...")
+4. O documento deve ser estruturado, formal e tecnicamente preciso
+5. Use linguagem jurídica apropriada para documentos oficiais
+6. Inclua todas as seções obrigatórias de um ETP
+7. Forneça justificativas técnicas e econômicas sólidas
+8. **NÃO INVENTE artigos que não estão no contexto legal fornecido**
+9. O documento deve estar pronto para ser apresentado à autoridade competente
+10. **AVISO: Este documento será revisado por um jurídico. Seja preciso e factual.**
 
 **ESTRUTURA OBRIGATÓRIA DO ETP:**
 
@@ -233,9 +243,19 @@ export async function generateTR(params: {
     catmatSection += `\n**IMPORTANTE:** Estes itens estão catalogados oficialmente no sistema CATMAT/CATSER do Governo Federal. Use estas descrições padronizadas no TR.\n`;
   }
 
+  // Buscar trechos relevantes da Lei 14.133/21 para TR
+  const relevantLawTR = await retrieveRelevantLaw(
+    `Termo de Referência para ${params.object}. Especificações técnicas e obrigações contratuais`,
+    5
+  );
+  const lawContextTR = formatRetrievedContext(relevantLawTR);
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base no ETP já elaborado, gere agora um **Termo de Referência (TR)** completo e detalhado.
+
+**CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
+${lawContextTR}
 
 **CONTEXTO - ETP ELABORADO:**
 ${params.etpContent}
@@ -248,12 +268,13 @@ ${params.etpContent}
 - Categoria: ${params.category}${catmatSection}
 
 **INSTRUÇÕES:**
-1. O TR deve ser mais detalhado e técnico que o ETP
-2. Inclua especificações técnicas completas
-3. ${params.catmatItems && params.catmatItems.length > 0 ? 'OBRIGATÓRIO: Inclua uma seção "ESPECIFICAÇÕES DOS ITENS" detalhando cada item CATMAT/CATSER listado acima, mantendo os códigos oficiais' : 'Defina especificações técnicas baseadas no objeto'}
-4. Defina obrigações do contratado e do contratante
-5. Estabeleça critérios de aceitação e fiscalização
-6. Siga a Lei 14.133/21, especialmente Art. 6º, XXIII
+1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
+2. O TR deve ser mais detalhado e técnico que o ETP
+3. Inclua especificações técnicas completas
+4. ${params.catmatItems && params.catmatItems.length > 0 ? 'OBRIGATÓRIO: Inclua uma seção "ESPECIFICAÇÕES DOS ITENS" detalhando cada item CATMAT/CATSER listado acima, mantendo os códigos oficiais' : 'Defina especificações técnicas baseadas no objeto'}
+5. Defina obrigações do contratado e do contratante
+6. Estabeleça critérios de aceitação e fiscalização
+7. **CITE os artigos específicos** da Lei 14.133/21 fornecidos no contexto legal
 
 Gere um documento profissional em markdown.`;
 
@@ -319,11 +340,21 @@ export async function generateDFD(params: {
     footerDFD += `---`;
   }
 
+  // Buscar trechos relevantes da Lei 14.133/21 para DFD
+  const relevantLawDFD = await retrieveRelevantLaw(
+    `Documento Formalizador de Demanda. Formalização da necessidade e início do processo licitatório`,
+    5
+  );
+  const lawContextDFD = formatRetrievedContext(relevantLawDFD);
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base no ETP e TR já elaborados, gere agora um **Documento Formalizador de Demanda (DFD)** completo.
 
 O DFD é o documento que formaliza a necessidade da contratação e dá início ao processo licitatório.
+
+**CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
+${lawContextDFD}
 
 **CONTEXTO - ETP ELABORADO:**
 ${params.etpContent}
@@ -339,11 +370,12 @@ ${params.trContent}
 - Categoria: ${params.category}
 
 **INSTRUÇÕES:**
-1. O DFD deve ser conciso e objetivo
-2. Deve conter a justificativa da necessidade
-3. Deve referenciar o ETP e TR
-4. Deve indicar a disponibilidade orçamentária
-5. Siga a Lei 14.133/21, especialmente Art. 11
+1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
+2. O DFD deve ser conciso e objetivo
+3. Deve conter a justificativa da necessidade
+4. Deve referenciar o ETP e TR
+5. Deve indicar a disponibilidade orçamentária
+6. **CITE os artigos específicos** da Lei 14.133/21 fornecidos no contexto legal
 
 Gere um documento profissional em markdown.`;
 
@@ -410,9 +442,19 @@ export async function generateEdital(params: {
     footerEdital += `---`;
   }
 
+  // Buscar trechos relevantes da Lei 14.133/21 para Edital
+  const relevantLawEdital = await retrieveRelevantLaw(
+    `Edital de licitação. Modalidade ${params.modality}. Regras de participação e julgamento`,
+    5
+  );
+  const lawContextEdital = formatRetrievedContext(relevantLawEdital);
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base em todos os documentos já elaborados (ETP, TR e DFD), gere agora o **Edital de Licitação** completo.
+
+**CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
+${lawContextEdital}
 
 **CONTEXTO - ETP:**
 ${params.etpContent}
@@ -431,12 +473,13 @@ ${params.dfdContent}
 - Categoria: ${params.category}
 
 **INSTRUÇÕES:**
-1. O Edital deve ser completo e pronto para publicação
-2. Inclua todas as seções obrigatórias de um edital
-3. Defina prazos, critérios de habilitação e julgamento
-4. Estabeleça regras claras de participação
-5. Siga rigorosamente a Lei 14.133/21
-6. Use linguagem jurídica formal e precisa
+1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
+2. O Edital deve ser completo e pronto para publicação
+3. Inclua todas as seções obrigatórias de um edital
+4. Defina prazos, critérios de habilitação e julgamento
+5. Estabeleça regras claras de participação
+6. **CITE os artigos específicos** da Lei 14.133/21 fornecidos no contexto legal
+7. Use linguagem jurídica formal e precisa
 
 **ESTRUTURA DO EDITAL:**
 

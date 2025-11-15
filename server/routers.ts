@@ -257,6 +257,104 @@ export const appRouter = router({
         };
       }),
 
+    // Gerar sugestões CATMAT para um item
+    generateCatmatSuggestions: protectedProcedure
+      .input(z.object({
+        processItemId: z.number(),
+        description: z.string(),
+        itemType: z.enum(["material", "service"]).default("material"),
+      }))
+      .mutation(async ({ input }) => {
+        const { findCatmatMatches } = await import("./services/catmatMatcher");
+        
+        // Gerar sugestões com IA
+        const matches = await findCatmatMatches(input.description, input.itemType);
+        
+        // Salvar sugestões no banco
+        for (const match of matches) {
+          await db.createCatmatSuggestion({
+            processItemId: input.processItemId,
+            catmatCode: match.code,
+            description: match.description,
+            confidenceScore: match.confidence,
+            reasoning: match.reasoning,
+          });
+        }
+        
+        return { success: true, suggestions: matches };
+      }),
+    
+    // Obter sugestões CATMAT de um item
+    getCatmatSuggestions: protectedProcedure
+      .input(z.object({ processItemId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getCatmatSuggestionsByItem(input.processItemId);
+      }),
+    
+    // Aprovar sugestão CATMAT (atualiza o item com o código)
+    approveCatmatSuggestion: protectedProcedure
+      .input(z.object({ 
+        suggestionId: z.number(),
+        processItemId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        // Buscar sugestão
+        const suggestion = await db.getCatmatSuggestionById(input.suggestionId);
+        if (!suggestion) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Sugestão não encontrada' });
+        }
+        
+        // Atualizar item com código CATMAT
+        const itemType = suggestion.catmatCode.startsWith('CAT') ? 'material' : 'service';
+        await db.updateProcessItem(input.processItemId, {
+          itemType,
+          catmatCode: itemType === 'material' ? suggestion.catmatCode : undefined,
+          catserCode: itemType === 'service' ? suggestion.catmatCode : undefined,
+          description: suggestion.description,
+        });
+        
+        // Atualizar status da sugestão
+        await db.updateCatmatSuggestion(input.suggestionId, { status: 'approved' });
+        
+        // Rejeitar outras sugestões do mesmo item
+        await db.rejectOtherSuggestions(input.processItemId, input.suggestionId);
+        
+        return { success: true };
+      }),
+    
+    // Rejeitar sugestão CATMAT
+    rejectCatmatSuggestion: protectedProcedure
+      .input(z.object({ suggestionId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.updateCatmatSuggestion(input.suggestionId, { status: 'rejected' });
+        return { success: true };
+      }),
+    
+    // Atualizar item manualmente
+    updateProcessItem: protectedProcedure
+      .input(z.object({
+        itemId: z.number(),
+        description: z.string().optional(),
+        quantity: z.number().optional(),
+        unit: z.string().optional(),
+        unitPrice: z.number().optional(),
+        catmatCode: z.string().optional(),
+        catserCode: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { itemId, ...data } = input;
+        await db.updateProcessItem(itemId, data);
+        return { success: true };
+      }),
+    
+    // Deletar item
+    deleteProcessItem: protectedProcedure
+      .input(z.object({ itemId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteProcessItem(input.itemId);
+        return { success: true };
+      }),
+
     // Atualizar status do processo
     updateStatus: protectedProcedure
       .input(z.object({

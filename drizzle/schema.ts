@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -605,3 +605,37 @@ export const taskEditLocks = mysqlTable("task_edit_locks", {
 
 export type TaskEditLock = typeof taskEditLocks.$inferSelect;
 export type InsertTaskEditLock = typeof taskEditLocks.$inferInsert;
+
+/**
+ * Chunks da Lei 14.133/21 para sistema RAG
+ */
+export const lawChunks = mysqlTable("law_chunks", {
+  id: int("id").autoincrement().primaryKey(),
+  lawName: varchar("lawName", { length: 100 }).notNull(), // "Lei 14.133/21"
+  chunkIndex: int("chunkIndex").notNull(), // Ordem do chunk
+  articleNumber: varchar("articleNumber", { length: 20 }), // "Art. 6º"
+  content: text("content").notNull(), // Texto do chunk
+  embedding: json("embedding").notNull(), // Vector de embeddings
+  metadata: json("metadata"), // { section: "...", topic: "..." }
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LawChunk = typeof lawChunks.$inferSelect;
+export type InsertLawChunk = typeof lawChunks.$inferInsert;
+
+/**
+ * Sugestões de códigos CATMAT/CATSER geradas por IA
+ */
+export const catmatSuggestions = mysqlTable("catmat_suggestions", {
+  id: int("id").autoincrement().primaryKey(),
+  processItemId: int("processItemId").notNull(), // FK para processItems
+  catmatCode: varchar("catmatCode", { length: 20 }).notNull(),
+  description: text("description").notNull(),
+  confidenceScore: int("confidenceScore").notNull(), // 0-100
+  reasoning: text("reasoning"), // Explicação da IA
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CatmatSuggestion = typeof catmatSuggestions.$inferSelect;
+export type InsertCatmatSuggestion = typeof catmatSuggestions.$inferInsert;

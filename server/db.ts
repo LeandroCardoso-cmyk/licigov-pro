@@ -21,6 +21,7 @@ import {
   companyDocuments,
   contractRenewals,
   processItems,
+  catmatSuggestions,
   tasks,
   taskComments,
   taskAttachments,
@@ -1779,4 +1780,121 @@ export async function deleteTaskAttachment(id: number) {
   if (!db) throw new Error("Database not available");
 
   await db.delete(taskAttachments).where(eq(taskAttachments.id, id));
+}
+
+/**
+ * ==========================================
+ * FUNÇÕES DE SUGESTÕES CATMAT/CATSER
+ * ==========================================
+ */
+
+/**
+ * Criar sugestão CATMAT para um item
+ */
+export async function createCatmatSuggestion(data: {
+  processItemId: number;
+  catmatCode: string;
+  description: string;
+  confidenceScore: number;
+  reasoning: string;
+  status?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(catmatSuggestions).values({
+    ...data,
+    status: (data.status as any) || "pending",
+  });
+  
+  return result[0].insertId;
+}
+
+/**
+ * Buscar sugestões de um item específico
+ */
+export async function getCatmatSuggestionsByItem(processItemId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db
+    .select()
+    .from(catmatSuggestions)
+    .where(eq(catmatSuggestions.processItemId, processItemId))
+    .orderBy(desc(catmatSuggestions.confidenceScore));
+  
+  return result;
+}
+
+/**
+ * Buscar sugestão por ID
+ */
+export async function getCatmatSuggestionById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db
+    .select()
+    .from(catmatSuggestions)
+    .where(eq(catmatSuggestions.id, id))
+    .limit(1);
+  
+  return result[0];
+}
+
+/**
+ * Atualizar status de uma sugestão
+ */
+export async function updateCatmatSuggestion(id: number, data: { status: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(catmatSuggestions)
+    .set({ status: data.status as any })
+    .where(eq(catmatSuggestions.id, id));
+}
+
+/**
+ * Rejeitar outras sugestões do mesmo item (quando uma é aprovada)
+ */
+export async function rejectOtherSuggestions(processItemId: number, approvedId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(catmatSuggestions)
+    .set({ status: "rejected" as any })
+    .where(
+      and(
+        eq(catmatSuggestions.processItemId, processItemId),
+        ne(catmatSuggestions.id, approvedId),
+        eq(catmatSuggestions.status, "pending" as any)
+      )
+    );
+}
+
+/**
+ * Atualizar item do processo
+ */
+export async function updateProcessItem(id: number, data: Partial<typeof processItems.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(processItems)
+    .set(data)
+    .where(eq(processItems.id, id));
+}
+
+/**
+ * Deletar item do processo
+ */
+export async function deleteProcessItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .delete(processItems)
+    .where(eq(processItems.id, id));
 }
