@@ -864,3 +864,156 @@ export const platformNotifications = mysqlTable("platform_notifications", {
 
 export type PlatformNotification = typeof platformNotifications.$inferSelect;
 export type InsertPlatformNotification = typeof platformNotifications.$inferInsert;
+
+
+/**
+ * ========================================
+ * MÓDULO: CONTRATAÇÃO DIRETA
+ * ========================================
+ * Tabelas para gerenciar dispensas e inexigibilidades de licitação
+ */
+
+/**
+ * Artigos legais para enquadramento de contratações diretas
+ * Base: Lei 14.133/2021 - Art. 74 (Inexigibilidade) e Art. 75 (Dispensa)
+ */
+export const directContractLegalArticles = mysqlTable("direct_contract_legal_articles", {
+  id: int("id").autoincrement().primaryKey(),
+  // Tipo de contratação
+  type: mysqlEnum("type", ["dispensa", "inexigibilidade"]).notNull(),
+  // Artigo e inciso
+  article: varchar("article", { length: 20 }).notNull(), // Ex: "Art. 75, I"
+  inciso: varchar("inciso", { length: 10 }), // Ex: "I", "II", "III"
+  // Descrição legal
+  description: text("description").notNull(), // Texto completo do artigo
+  summary: varchar("summary", { length: 500 }).notNull(), // Resumo para exibição
+  // Limites de valor (em centavos)
+  valueLimit: int("valueLimit"), // Limite de valor (null = sem limite)
+  // Exemplos práticos
+  examples: json("examples"), // Array de exemplos de aplicação
+  // Documentação obrigatória
+  requiredDocuments: json("requiredDocuments"), // Array de documentos necessários
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DirectContractLegalArticle = typeof directContractLegalArticles.$inferSelect;
+export type InsertDirectContractLegalArticle = typeof directContractLegalArticles.$inferInsert;
+
+/**
+ * Contratações diretas (dispensas e inexigibilidades)
+ */
+export const directContracts = mysqlTable("direct_contracts", {
+  id: int("id").autoincrement().primaryKey(),
+  // Vinculação com processo (se houver)
+  processId: int("processId"), // FK para processes (opcional)
+  // Identificação
+  number: varchar("number", { length: 50 }).notNull(), // Ex: "001/2025"
+  year: int("year").notNull(),
+  // Tipo de contratação
+  type: mysqlEnum("type", ["dispensa", "inexigibilidade"]).notNull(),
+  // Enquadramento legal
+  legalArticleId: int("legalArticleId").notNull(), // FK para direct_contract_legal_articles
+  // Dados da contratação
+  object: text("object").notNull(), // Objeto da contratação
+  justification: text("justification").notNull(), // Justificativa legal
+  value: int("value").notNull(), // Valor estimado (em centavos)
+  executionDeadline: int("executionDeadline"), // Prazo de execução (em dias)
+  // Fornecedor (obrigatório em inexigibilidade, opcional em dispensa)
+  supplierName: varchar("supplierName", { length: 255 }),
+  supplierCNPJ: varchar("supplierCNPJ", { length: 18 }),
+  supplierAddress: text("supplierAddress"),
+  supplierContact: varchar("supplierContact", { length: 100 }),
+  // Modo de execução
+  mode: mysqlEnum("mode", ["presencial", "eletronico"]).default("presencial").notNull(),
+  platformId: int("platformId"), // FK para platforms (se eletrônico)
+  // Status
+  status: mysqlEnum("status", [
+    "draft", // Rascunho
+    "pending_approval", // Aguardando aprovação
+    "approved", // Aprovado
+    "published", // Publicado
+    "in_execution", // Em execução
+    "completed", // Concluído
+    "cancelled" // Cancelado
+  ]).default("draft").notNull(),
+  // Datas
+  approvedAt: timestamp("approvedAt"),
+  publishedAt: timestamp("publishedAt"),
+  ratifiedAt: timestamp("ratifiedAt"), // Data de ratificação
+  completedAt: timestamp("completedAt"),
+  // Metadados
+  metadata: json("metadata"), // { urgency: "alta", category: "obras", etc }
+  // Responsável
+  createdBy: int("createdBy").notNull(), // FK para users
+  approvedBy: int("approvedBy"), // FK para users
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DirectContract = typeof directContracts.$inferSelect;
+export type InsertDirectContract = typeof directContracts.$inferInsert;
+
+/**
+ * Documentos gerados para contratações diretas
+ */
+export const directContractDocuments = mysqlTable("direct_contract_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  directContractId: int("directContractId").notNull(), // FK para direct_contracts
+  // Tipo de documento
+  type: mysqlEnum("type", [
+    "termo_dispensa", // Termo de Dispensa
+    "termo_inexigibilidade", // Termo de Inexigibilidade
+    "dfd", // Documento de Formalização da Demanda
+    "tr", // Termo de Referência
+    "minuta_contrato", // Minuta de Contrato
+    "planilha_cotacao", // Planilha de Cotação (3 orçamentos)
+    "mapa_comparativo", // Mapa Comparativo de Preços
+    "ata_ratificacao", // Ata de Ratificação
+    "outro" // Outro tipo
+  ]).notNull(),
+  // Conteúdo
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(), // Conteúdo em Markdown
+  // Versão
+  version: int("version").default(1).notNull(),
+  // Status
+  status: mysqlEnum("status", ["draft", "final", "archived"]).default("draft").notNull(),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DirectContractDocument = typeof directContractDocuments.$inferSelect;
+export type InsertDirectContractDocument = typeof directContractDocuments.$inferInsert;
+
+/**
+ * Cotações de preço (para dispensas que exigem 3 orçamentos)
+ */
+export const directContractQuotations = mysqlTable("direct_contract_quotations", {
+  id: int("id").autoincrement().primaryKey(),
+  directContractId: int("directContractId").notNull(), // FK para direct_contracts
+  // Fornecedor
+  supplierName: varchar("supplierName", { length: 255 }).notNull(),
+  supplierCNPJ: varchar("supplierCNPJ", { length: 18 }),
+  supplierContact: varchar("supplierContact", { length: 100 }),
+  // Proposta
+  value: int("value").notNull(), // Valor proposto (em centavos)
+  deliveryDeadline: int("deliveryDeadline"), // Prazo de entrega (em dias)
+  paymentTerms: varchar("paymentTerms", { length: 255 }), // Condições de pagamento
+  // Arquivo da proposta
+  attachmentUrl: varchar("attachmentUrl", { length: 500 }),
+  // Observações
+  notes: text("notes"),
+  // Status
+  isSelected: boolean("isSelected").default(false).notNull(), // Se foi o vencedor
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DirectContractQuotation = typeof directContractQuotations.$inferSelect;
+export type InsertDirectContractQuotation = typeof directContractQuotations.$inferInsert;

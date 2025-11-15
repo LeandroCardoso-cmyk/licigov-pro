@@ -1529,3 +1529,83 @@
 - [x] Criar procedure tRPC: downloads.processReport
 - [x] Implementar download automático do PDF (base64 -> blob -> download)
 - [x] Formatação profissional em Markdown convertido para PDF
+
+
+## Módulo Contratação Direta
+
+### Fase 1 - Infraestrutura e Schema
+- [x] Criar tabela direct_contracts (contratações diretas)
+- [x] Criar tabela direct_contract_legal_articles (artigos legais)
+- [x] Criar tabela direct_contract_documents (documentos específicos)
+- [x] Criar tabela direct_contract_quotations (cotações de preço)
+- [x] Adicionar seed de artigos legais (Art. 74 e 75 da Lei 14.133) - 10 artigos populados
+- [ ] Atualizar schema de processes para suportar tipo "dispensa" e "inexigibilidade" (não necessário, tabela separada)
+
+### Fase 2 - Backend
+- [x] Criar funções de banco: createDirectContract, getDirectContractById, listDirectContracts
+- [x] Criar funções de banco: getLegalArticles, getLegalArticleById
+- [x] Criar funções de banco: createQuotation, listQuotations
+- [x] Criar router directContractsRouter com procedures básicas
+- [x] Criar procedure: directContracts.create
+- [x] Criar procedure: directContracts.list
+- [x] Criar procedure: directContracts.getById
+- [x] Criar procedure: directContracts.legalArticles.list
+- [x] Registrar directContractsRouter no appRouter
+
+### Fase 3 - Assistente de Enquadramento Legal (IA)
+- [ ] Criar serviço legalFrameworkAssistant.ts
+- [ ] Implementar função suggestLegalArticle (IA analisa situação e sugere artigo)
+- [ ] Implementar função generateJustification (IA gera justificativa inicial)
+- [ ] Implementar função validateValue (verifica limites legais)
+- [ ] Criar procedure: directContracts.suggestLegalArticle
+- [ ] Criar procedure: directContracts.generateJustification
+
+### Fase 4 - Geração de Documentos Específicos
+- [ ] Criar serviço directContractDocuments.ts
+- [ ] Implementar função generateTermoDispensa (Termo de Dispensa)
+- [ ] Implementar função generateTermoInexigibilidade (Termo de Inexigibilidade)
+- [ ] Implementar função generateMinutaContrato (Minuta de Contrato)
+- [ ] Implementar função generatePlanilhaCotacao (Planilha de 3 Orçamentos)
+- [ ] Implementar função generateMapaComparativo (Mapa Comparativo de Preços)
+- [ ] Adaptar generateDFD para contratação direta
+- [ ] Adaptar generateTR para contratação direta
+- [ ] Criar procedures tRPC para cada tipo de documento
+
+### Fase 5 - UI: Formulário e Dashboard
+- [ ] Criar página NewDirectContract.tsx (formulário wizard de 4 passos)
+- [ ] Passo 1: Enquadramento Legal (tipo, artigo, assistente IA)
+- [ ] Passo 2: Dados da Contratação (objeto, justificativa, valor, prazo)
+- [ ] Passo 3: Fornecedor (se conhecido - inexigibilidade)
+- [ ] Passo 4: Documentação (quais documentos gerar, modo presencial/eletrônico)
+- [ ] Criar página DirectContractsList.tsx (dashboard de contratações diretas)
+- [ ] Criar página DirectContractDetails.tsx (detalhes da contratação)
+- [ ] Adicionar filtros: Tipo, Artigo Legal, Valor, Status
+- [ ] Adicionar rota /direct-contracts no App.tsx
+- [ ] Adicionar item "Contratações Diretas" no menu lateral
+
+### Fase 6 - Modo Presencial
+- [ ] Criar serviço directContractPresencial.ts
+- [ ] Implementar função generateEmailTemplate (template de email para fornecedores)
+- [ ] Implementar função generatePresencialPackage (ZIP com documentos)
+- [ ] Criar componente PresencialModeDialog
+- [ ] Adicionar botão "Gerar Pacote Presencial" no DirectContractDetails
+- [ ] Implementar upload de propostas recebidas
+- [ ] Criar tabela comparativa de propostas
+- [ ] Implementar geração de Mapa Comparativo
+
+### Fase 7 - Integração com Plataformas
+- [ ] Adaptar platformTemplates.ts para contratação direta
+- [ ] Adicionar instruções específicas para dispensa/inexigibilidade por plataforma
+- [ ] Criar checklists de publicação para contratação direta
+- [ ] Integrar PublicationPackageModal com contratação direta
+- [ ] Testar exportação de documentos por plataforma
+
+### Fase 8 - Testes e Refinamentos
+- [ ] Testar fluxo completo: Dispensa presencial
+- [ ] Testar fluxo completo: Dispensa eletrônica
+- [ ] Testar fluxo completo: Inexigibilidade presencial
+- [ ] Testar fluxo completo: Inexigibilidade eletrônica
+- [ ] Testar assistente de enquadramento legal
+- [ ] Testar geração de todos os documentos
+- [ ] Testar integração com plataformas
+- [ ] Salvar checkpoint final

@@ -1,4 +1,4 @@
-import { eq, and, or, like, inArray, lte, gte, desc, isNull, lt, sql, ne } from "drizzle-orm";
+import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, sql, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, 
@@ -51,7 +51,14 @@ import {
   platforms,
   platformTemplates,
   platformChecklists,
-  platformPublications
+  platformPublications,
+  directContractLegalArticles,
+  directContracts,
+  InsertDirectContract,
+  directContractDocuments,
+  InsertDirectContractDocument,
+  directContractQuotations,
+  InsertDirectContractQuotation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2485,4 +2492,213 @@ export async function updatePublicationStatus(
     .where(eq(platformPublications.id, publicationId))
     .limit(1)
     .then(rows => rows[0] || null);
+}
+
+
+// ========================================
+// CONTRATAÇÃO DIRETA
+// ========================================
+
+export async function getLegalArticles(type?: "dispensa" | "inexigibilidade") {
+  const db = await getDb();
+  if (!db) return [];
+
+  const query = db.select().from(directContractLegalArticles).where(eq(directContractLegalArticles.isActive, true));
+
+  if (type) {
+    return await query.where(eq(directContractLegalArticles.type, type));
+  }
+
+  return await query;
+}
+
+export async function getLegalArticleById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(directContractLegalArticles)
+    .where(eq(directContractLegalArticles.id, id))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+export async function createDirectContract(data: InsertDirectContract) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(directContracts).values(data);
+  const insertedId = result[0].insertId;
+
+  return await getDirectContractById(insertedId);
+}
+
+export async function getDirectContractById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select({
+      directContract: directContracts,
+      legalArticle: directContractLegalArticles,
+      platform: platforms,
+    })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .where(eq(directContracts.id, id))
+    .limit(1);
+
+  if (!result[0]) return null;
+
+  return {
+    ...result[0].directContract,
+    legalArticle: result[0].legalArticle,
+    platform: result[0].platform,
+  };
+}
+
+export async function listDirectContracts(userId: number, filters?: {
+  type?: "dispensa" | "inexigibilidade";
+  status?: string;
+  year?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db
+    .select({
+      directContract: directContracts,
+      legalArticle: directContractLegalArticles,
+      platform: platforms,
+    })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .where(eq(directContracts.createdBy, userId))
+    .orderBy(desc(directContracts.createdAt));
+
+  if (filters?.type) {
+    query = query.where(eq(directContracts.type, filters.type));
+  }
+
+  if (filters?.status) {
+    query = query.where(eq(directContracts.status, filters.status as any));
+  }
+
+  if (filters?.year) {
+    query = query.where(eq(directContracts.year, filters.year));
+  }
+
+  const results = await query;
+
+  return results.map(row => ({
+    ...row.directContract,
+    legalArticle: row.legalArticle,
+    platform: row.platform,
+  }));
+}
+
+export async function updateDirectContract(id: number, data: Partial<InsertDirectContract>) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(directContracts)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(directContracts.id, id));
+
+  return await getDirectContractById(id);
+}
+
+export async function createDirectContractDocument(data: InsertDirectContractDocument) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(directContractDocuments).values(data);
+  const insertedId = result[0].insertId;
+
+  const doc = await db
+    .select()
+    .from(directContractDocuments)
+    .where(eq(directContractDocuments.id, insertedId))
+    .limit(1);
+
+  return doc[0] || null;
+}
+
+export async function getDirectContractDocuments(directContractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(directContractDocuments)
+    .where(eq(directContractDocuments.directContractId, directContractId))
+    .orderBy(desc(directContractDocuments.createdAt));
+}
+
+export async function updateDirectContractDocument(id: number, data: Partial<InsertDirectContractDocument>) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(directContractDocuments)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(directContractDocuments.id, id));
+
+  const doc = await db
+    .select()
+    .from(directContractDocuments)
+    .where(eq(directContractDocuments.id, id))
+    .limit(1);
+
+  return doc[0] || null;
+}
+
+export async function createQuotation(data: InsertDirectContractQuotation) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(directContractQuotations).values(data);
+  const insertedId = result[0].insertId;
+
+  const quotation = await db
+    .select()
+    .from(directContractQuotations)
+    .where(eq(directContractQuotations.id, insertedId))
+    .limit(1);
+
+  return quotation[0] || null;
+}
+
+export async function listQuotations(directContractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(directContractQuotations)
+    .where(eq(directContractQuotations.directContractId, directContractId))
+    .orderBy(asc(directContractQuotations.value));
+}
+
+export async function updateQuotation(id: number, data: Partial<InsertDirectContractQuotation>) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(directContractQuotations)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(directContractQuotations.id, id));
+
+  const quotation = await db
+    .select()
+    .from(directContractQuotations)
+    .where(eq(directContractQuotations.id, id))
+    .limit(1);
+
+  return quotation[0] || null;
 }

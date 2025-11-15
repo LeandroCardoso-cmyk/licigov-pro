@@ -10,6 +10,7 @@ import { departmentTasksRouter } from "./routers/departmentTasksRouter";
 import { aiUsageRouter } from "./routers/aiUsageRouter";
 import { platformsRouter } from "./routers/platformsRouter";
 import { downloadRouter } from "./routers/downloadRouter";
+import { directContractsRouter } from "./routers/directContractsRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -1465,6 +1466,7 @@ export const appRouter = router({
 
   // Downloads de pacotes e documentos
   downloads: downloadRouter,
+  directContracts: directContractsRouter,
 });
 
 export type AppRouter = typeof appRouter;
