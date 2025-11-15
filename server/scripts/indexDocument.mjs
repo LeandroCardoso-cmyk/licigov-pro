@@ -1,6 +1,10 @@
 import { readFileSync } from "fs";
+import { config } from "dotenv";
 import { generateEmbedding } from "../services/embeddings.js";
 import { drizzle } from "drizzle-orm/mysql2";
+
+// Carregar variáveis de ambiente
+config();
 
 /**
  * Script genérico para indexar qualquer documento legal no sistema RAG

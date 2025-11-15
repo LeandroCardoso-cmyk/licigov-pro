@@ -1321,8 +1321,10 @@
 - [ ] Criar procedure admin para upload de novos documentos (UI)
 - [ ] Implementar UI de gerenciamento de documentos (admin)
 
-### Documentos Sugeridos para Indexação
-- [ ] Lei 8.666/93 (Lei de Licitações anterior - referência) - Pronto para indexar
-- [ ] Decreto 11.462/2023 (Regulamenta Lei 14.133/21) - Pronto para indexar
-- [ ] IN SEGES/ME nº 65/2021 (Instrução Normativa de Contratações) - Pronto para indexar
-- [ ] Lei Complementar 123/2006 (Estatuto da ME/EPP) - Pronto para indexar
+### Documentos para Indexação no RAG
+- [x] Lei 8.666/93 (Lei de Licitações anterior - referência) - 520 chunks
+- [x] Decreto 11.462/2023 (Regulamenta Lei 14.133/21) - 101 chunks
+- [x] IN SEGES/ME nº 65/2021 (Instrução Normativa de Contratações) - 34 chunks
+- [x] Lei Complementar 123/2006 (Estatuto da ME/EPP) - 749 chunks
+- [ ] Manual de Licitações e Contratos do TCU - Indexando em background (1990/6581 chunks)
+- [x] Manual de Licitações e Contratos do TCE Paraná - 1116 chunks
