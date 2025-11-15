@@ -30,6 +30,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { CommentsSection } from "@/components/CommentsSection";
 import { TRItemsModal } from "@/components/TRItemsModal";
+import { PublicationPackageModal } from "@/components/process/PublicationPackageModal";
 
 const statusLabels: Record<string, string> = {
   em_etp: "Em ETP",
@@ -48,6 +49,7 @@ const documentLabels: Record<string, string> = {
 
 export default function ProcessDetails() {
   const { user, logout } = useAuth();
+  const [publicationModalOpen, setPublicationModalOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const [, navigate] = useLocation();
   const params = useParams();
@@ -301,6 +303,15 @@ export default function ProcessDetails() {
               <p className="text-muted-foreground">{process.object}</p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setPublicationModalOpen(true)}
+                variant="default"
+                size="sm"
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Preparar para Publicação
+              </Button>
               <MembersDialog processId={processId} processName={process.name} />
               <Badge variant="secondary" className="text-sm px-4 py-2">
                 {statusLabels[process.status]}
@@ -681,6 +692,13 @@ export default function ProcessDetails() {
           utils.processes.getById.invalidate({ id: processId });
           utils.documents.listByProcess.invalidate({ processId });
         }}
+      />
+
+      {/* Modal de Preparação para Publicação */}
+      <PublicationPackageModal
+        processId={processId}
+        open={publicationModalOpen}
+        onOpenChange={setPublicationModalOpen}
       />
     </div>
   );

@@ -257,6 +257,9 @@ export async function generateTR(params: {
   );
   const lawContextTR = formatRetrievedContext(relevantLawTR);
   
+  // Buscar instruções específicas da plataforma
+  const platformInstructionsTR = await getPlatformInstructions(params.platformId || null, "tr");
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base no ETP já elaborado, gere agora um **Termo de Referência (TR)** completo e detalhado.
@@ -274,6 +277,7 @@ ${params.etpContent}
 - Modalidade: ${params.modality}
 - Categoria: ${params.category}${catmatSection}
 
+${platformInstructionsTR ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${platformInstructionsTR}\n\n` : ""}
 **INSTRUÇÕES:**
 1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
 2. O TR deve ser mais detalhado e técnico que o ETP
@@ -304,6 +308,7 @@ export async function generateDFD(params: {
   estimatedValue: number;
   modality: string;
   category: string;
+  platformId?: number | null;
   etpContent: string;
   trContent: string;
   organizationName?: string;
@@ -354,6 +359,9 @@ export async function generateDFD(params: {
   );
   const lawContextDFD = formatRetrievedContext(relevantLawDFD);
   
+  // Buscar instruções específicas da plataforma
+  const platformInstructionsDFD = await getPlatformInstructions(params.platformId || null, "dfd");
+  
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
 Com base no ETP e TR já elaborados, gere agora um **Documento Formalizador de Demanda (DFD)** completo.
@@ -376,6 +384,7 @@ ${params.trContent}
 - Modalidade: ${params.modality}
 - Categoria: ${params.category}
 
+${platformInstructionsDFD ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${platformInstructionsDFD}\n\n` : ""}
 **INSTRUÇÕES:**
 1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
 2. O DFD deve ser conciso e objetivo
@@ -405,6 +414,7 @@ export async function generateEdital(params: {
   estimatedValue: number;
   modality: string;
   category: string;
+  platformId?: number | null;
   etpContent: string;
   trContent: string;
   dfdContent: string;
@@ -454,6 +464,9 @@ export async function generateEdital(params: {
     `Edital de licitação. Modalidade ${params.modality}. Regras de participação e julgamento`,
     5
   );
+  
+  // Buscar instruções específicas da plataforma
+  const platformInstructionsEdital = await getPlatformInstructions(params.platformId || null, "edital");
   const lawContextEdital = formatRetrievedContext(relevantLawEdital);
   
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
@@ -479,6 +492,7 @@ ${params.dfdContent}
 - Modalidade: ${params.modality}
 - Categoria: ${params.category}
 
+${platformInstructionsEdital ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${platformInstructionsEdital}\n\n` : ""}
 **INSTRUÇÕES:**
 1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
 2. O Edital deve ser completo e pronto para publicação

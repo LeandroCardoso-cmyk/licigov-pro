@@ -46,9 +46,37 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
     );
   };
 
+  // Mutation para baixar pacote ZIP
+  const downloadPackageMutation = trpc.downloads.publicationPackage.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: data.mimeType });
+      
+      // Criar link de download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("Pacote baixado com sucesso!");
+    },
+    onError: () => {
+      toast.error("Erro ao gerar pacote. Tente novamente.");
+    },
+  });
+
   const handleDownloadAll = () => {
-    toast.info("Funcionalidade de download em lote será implementada em breve");
-    // TODO: Implementar geração de ZIP com todos os documentos
+    downloadPackageMutation.mutate({ processId });
   };
 
   if (isLoading) {
@@ -118,9 +146,18 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button onClick={handleDownloadAll} className="w-full" size="lg">
-                  <Download className="h-4 w-4 mr-2" />
-                  Baixar Todos os Documentos (.ZIP)
+                <Button 
+                  onClick={handleDownloadAll} 
+                  className="w-full" 
+                  size="lg"
+                  disabled={downloadPackageMutation.isPending}
+                >
+                  {downloadPackageMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  {downloadPackageMutation.isPending ? "Gerando pacote..." : "Baixar Todos os Documentos (.ZIP)"}
                 </Button>
 
                 <div className="space-y-2">

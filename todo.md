@@ -1397,3 +1397,33 @@
 - [ ] Adicionar sistema de notificações quando plataforma atualiza requisitos
 - [ ] Criar página admin para gerenciar plataformas e templates
 - [ ] Implementar analytics: qual plataforma é mais usada pelos clientes
+
+
+## Fase 12 - Completar Sistema de Plataformas (Próximos Passos)
+
+### Checklists Detalhados
+- [x] Criar script de seed para popular platform_checklists
+- [x] Adicionar checklist completo do Compras.gov.br (12 passos)
+- [x] Adicionar checklist completo do BLL Compras (9 passos)
+- [x] Adicionar checklist completo do Licitanet (8 passos)
+- [x] Adicionar checklist completo do BBMNet (8 passos)
+- [x] Adicionar checklist genérico para "Outra Plataforma" (5 passos)
+
+### Integração de Templates
+- [x] Adicionar platformInstructions em generateTR (buscar + injetar no prompt)
+- [x] Adicionar platformInstructions em generateDFD (buscar + injetar no prompt)
+- [x] Adicionar platformInstructions em generateEdital (buscar + injetar no prompt)
+- [x] Atualizar chamadas de generateTR/DFD/Edital para passar platformId
+
+### Exportação em Lote
+- [x] Criar serviço de geração de planilha XLSX (excelService.ts)
+- [x] Implementar função generateItemsSpreadsheet (formatar por plataforma)
+- [x] Criar serviço de geração de ZIP (zipService.ts)
+- [x] Implementar procedure tRPC: downloads.publicationPackage e downloads.itemsSpreadsheet
+- [x] Adicionar botão "Baixar Todos (.ZIP)" funcional no modal
+
+### Integração UI
+- [x] Adicionar botão "Preparar para Publicação" na página ProcessDetails
+- [x] Integrar modal PublicationPackageModal com download funcional
+- [x] Adicionar loading state no botão de download
+- [x] Sistema de cópia de campos implementado no checklist

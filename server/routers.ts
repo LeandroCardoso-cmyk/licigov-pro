@@ -9,6 +9,7 @@ import { taskRouter } from "./routers/taskRouter";
 import { departmentTasksRouter } from "./routers/departmentTasksRouter";
 import { aiUsageRouter } from "./routers/aiUsageRouter";
 import { platformsRouter } from "./routers/platformsRouter";
+import { downloadRouter } from "./routers/downloadRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -1461,6 +1462,9 @@ export const appRouter = router({
 
   // Plataformas de pregão eletrônico
   platforms: platformsRouter,
+
+  // Downloads de pacotes e documentos
+  downloads: downloadRouter,
 });
 
 export type AppRouter = typeof appRouter;
