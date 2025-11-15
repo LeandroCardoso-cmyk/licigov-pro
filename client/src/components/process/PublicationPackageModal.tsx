@@ -79,6 +79,43 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
     downloadPackageMutation.mutate({ processId });
   };
 
+  // Mutation para baixar checklist PDF
+  const downloadChecklistPDFMutation = trpc.downloads.checklistPDF.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: data.mimeType });
+      
+      // Criar link de download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("Checklist exportado com sucesso!");
+    },
+    onError: () => {
+      toast.error("Erro ao exportar checklist. Tente novamente.");
+    },
+  });
+
+  const handleExportChecklistPDF = () => {
+    if (!platform?.id) {
+      toast.error("Nenhuma plataforma selecionada");
+      return;
+    }
+    downloadChecklistPDFMutation.mutate({ processId, platformId: platform.id });
+  };
+
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -245,9 +282,24 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
                       {completedSteps.length} de {checklist.length} passos concluídos
                     </p>
                   </div>
-                  <Badge variant={completedSteps.length === checklist.length ? "default" : "secondary"}>
-                    {Math.round((completedSteps.length / checklist.length) * 100)}% completo
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleExportChecklistPDF}
+                      disabled={downloadChecklistPDFMutation.isPending}
+                    >
+                      {downloadChecklistPDFMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-1" />
+                      )}
+                      {downloadChecklistPDFMutation.isPending ? "Gerando..." : "Exportar PDF"}
+                    </Button>
+                    <Badge variant={completedSteps.length === checklist.length ? "default" : "secondary"}>
+                      {Math.round((completedSteps.length / checklist.length) * 100)}% completo
+                    </Badge>
+                  </div>
                 </div>
 
                 {Object.entries(checklistByCategory).map(([category, steps]) => (

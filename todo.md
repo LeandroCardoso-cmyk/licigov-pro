@@ -1427,3 +1427,28 @@
 - [x] Integrar modal PublicationPackageModal com download funcional
 - [x] Adicionar loading state no botão de download
 - [x] Sistema de cópia de campos implementado no checklist
+
+
+## Fase 13 - Melhorias UX do Sistema de Plataformas
+
+### Badge de Plataforma no Dashboard
+- [x] Adicionar query de plataforma no card do processo (join em getProcessesByUser e getProcessById)
+- [x] Integrar badge nos cards do dashboard
+- [ ] Adicionar tooltip com informações da plataforma (pendente)
+
+### Exportação de Checklist em PDF
+- [x] Criar serviço pdfChecklistService.ts
+- [x] Implementar função generateChecklistPDF
+- [x] Adicionar procedure tRPC: downloads.checklistPDF
+- [x] Adicionar botão "Exportar Checklist (PDF)" no modal
+- [x] Incluir cabeçalho, resumo, instruções e rodapé no PDF
+
+### Interface Administrativa
+- [x] Criar página /admin/platforms
+- [x] Criar dialog TemplateInstructionsDialog (estrutura básica)
+- [x] Criar dialog ChecklistEditorDialog (estrutura básica)
+- [x] Restringir acesso apenas para admins
+- [ ] Implementar mutation de save de instruções (pendente)
+- [ ] Implementar CRUD completo de checklists (pendente)
+- [ ] Adicionar preview em tempo real das mudanças (pendente)
+- [ ] Adicionar versionamento de templates (pendente)

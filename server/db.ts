@@ -169,8 +169,23 @@ export async function getProcessesByUser(userId: number) {
   if (!db) return [];
   
   return await db
-    .select()
+    .select({
+      id: processes.id,
+      name: processes.name,
+      description: processes.description,
+      object: processes.object,
+      estimatedValue: processes.estimatedValue,
+      modality: processes.modality,
+      category: processes.category,
+      platformId: processes.platformId,
+      status: processes.status,
+      ownerId: processes.ownerId,
+      createdAt: processes.createdAt,
+      updatedAt: processes.updatedAt,
+      platform: platforms,
+    })
     .from(processes)
+    .leftJoin(platforms, eq(processes.platformId, platforms.id))
     .where(eq(processes.ownerId, userId))
     .orderBy(desc(processes.updatedAt));
 }
@@ -201,7 +216,27 @@ export async function getProcessById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   
-  const result = await db.select().from(processes).where(eq(processes.id, id)).limit(1);
+  const result = await db
+    .select({
+      id: processes.id,
+      name: processes.name,
+      description: processes.description,
+      object: processes.object,
+      estimatedValue: processes.estimatedValue,
+      modality: processes.modality,
+      category: processes.category,
+      platformId: processes.platformId,
+      status: processes.status,
+      ownerId: processes.ownerId,
+      createdAt: processes.createdAt,
+      updatedAt: processes.updatedAt,
+      platform: platforms,
+    })
+    .from(processes)
+    .leftJoin(platforms, eq(processes.platformId, platforms.id))
+    .where(eq(processes.id, id))
+    .limit(1);
+  
   return result.length > 0 ? result[0] : undefined;
 }
 
