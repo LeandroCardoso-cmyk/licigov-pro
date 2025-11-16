@@ -8,6 +8,10 @@ import {
   generatePlanilhaCotacao,
   generateMapaComparativo,
 } from "../services/directContractDocuments";
+import {
+  generatePresentialPackage,
+  generateEmailTemplate,
+} from "../services/directContractPackage";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
@@ -626,6 +630,73 @@ export const directContractsRouter = router({
         });
         
         return { documentId: document.id, content };
+      }),
+  }),
+
+  // ========================================
+  // PACOTE PRESENCIAL
+  // ========================================
+  
+  presential: router({
+    // Gerar pacote completo (ZIP)
+    generatePackage: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+        includeDocuments: z.boolean().optional(),
+        includeQuotations: z.boolean().optional(),
+        includeReadme: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.contractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar pacote desta contratação",
+          });
+        }
+        
+        const zipBuffer = await generatePresentialPackage(input);
+        
+        // Converter buffer para base64 para enviar via tRPC
+        return {
+          filename: `Contratacao_Direta_${directContract.number}_${directContract.year}.zip`,
+          data: zipBuffer.toString("base64"),
+        };
+      }),
+    
+    // Gerar template de email
+    getEmailTemplate: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+      }))
+      .query(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.contractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para acessar esta contratação",
+          });
+        }
+        
+        return generateEmailTemplate(directContract);
       }),
   }),
 });

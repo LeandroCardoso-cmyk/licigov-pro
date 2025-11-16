@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { PresentialPackageModal } from "@/components/PresentialPackageModal";
 
 /**
  * Página de Detalhes da Contratação Direta
@@ -39,6 +40,7 @@ export default function DirectContractDetails() {
   const contractId = params?.id ? parseInt(params.id) : 0;
 
   const [showQuotationDialog, setShowQuotationDialog] = useState(false);
+  const [showPresentialPackage, setShowPresentialPackage] = useState(false);
   const [quotationSupplier, setQuotationSupplier] = useState("");
   const [quotationValue, setQuotationValue] = useState("");
   const [quotationDate, setQuotationDate] = useState("");
@@ -183,13 +185,23 @@ export default function DirectContractDetails() {
                 {contract.legalArticle?.article} {contract.legalArticle?.inciso || ""}
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-right space-y-3">
               <div className="text-3xl font-bold text-green-600">
                 R$ {(contract.value / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Criado em {format(new Date(contract.createdAt), "dd/MM/yyyy", { locale: ptBR })}
               </p>
+              {contract.mode === "presencial" && (
+                <Button
+                  onClick={() => setShowPresentialPackage(true)}
+                  variant="default"
+                  size="sm"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Preparar Pacote Presencial
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -528,6 +540,13 @@ export default function DirectContractDetails() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal: Pacote Presencial */}
+      <PresentialPackageModal
+        open={showPresentialPackage}
+        onOpenChange={setShowPresentialPackage}
+        contractId={contractId}
+      />
     </div>
   );
 }
