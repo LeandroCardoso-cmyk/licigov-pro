@@ -1553,23 +1553,22 @@
 - [x] Registrar directContractsRouter no appRouter
 
 ### Fase 3 - Assistente de Enquadramento Legal (IA)
-- [ ] Criar serviço legalFrameworkAssistant.ts
-- [ ] Implementar função suggestLegalArticle (IA analisa situação e sugere artigo)
-- [ ] Implementar função generateJustification (IA gera justificativa inicial)
-- [ ] Implementar função validateValue (verifica limites legais)
-- [ ] Criar procedure: directContracts.suggestLegalArticle
-- [ ] Criar procedure: directContracts.generateJustification
+- [x] Criar serviço legalFrameworkAssistant.ts
+- [x] Implementar função suggestLegalArticle (IA analisa situação e sugere artigo)
+- [x] Implementar função generateJustification (IA gera justificativa inicial)
+- [x] Implementar função validateValue (verifica limites legais)
+- [x] Criar procedure: directContracts.assistant.suggestArticle
+- [x] Criar procedure: directContracts.assistant.generateJustification
+- [x] Criar procedure: directContracts.assistant.validateValue
 
-### Fase 4 - Geração de Documentos Específicos
-- [ ] Criar serviço directContractDocuments.ts
-- [ ] Implementar função generateTermoDispensa (Termo de Dispensa)
-- [ ] Implementar função generateTermoInexigibilidade (Termo de Inexigibilidade)
-- [ ] Implementar função generateMinutaContrato (Minuta de Contrato)
-- [ ] Implementar função generatePlanilhaCotacao (Planilha de 3 Orçamentos)
-- [ ] Implementar função generateMapaComparativo (Mapa Comparativo de Preços)
-- [ ] Adaptar generateDFD para contratação direta
-- [ ] Adaptar generateTR para contratação direta
-- [ ] Criar procedures tRPC para cada tipo de documento
+#### Fase 4 - Geração de Documentos Específicos
+- [x] Criar serviço directContractDocuments.ts
+- [x] Implementar função generateTermoDispensa (Termo de Dispensa)
+- [x] Implementar função generateTermoInexigibilidade (Termo de Inexigibilidade)
+- [x] Implementar função generateMinutaContrato (Minuta de Contrato)
+- [x] Implementar função generatePlanilhaCotacao (Planilha de Cotação)
+- [x] Implementar função generateMapaComparativo (Mapa Comparativo de Preços)
+- [x] Criar procedures: directContracts.generate.termoDispensa, termoInexigibilidade, minutaContrato, planilhaCotacao, mapaComparativoa cada tipo de documento
 
 ### Fase 5 - UI: Formulário e Dashboard
 - [ ] Criar página NewDirectContract.tsx (formulário wizard de 4 passos)

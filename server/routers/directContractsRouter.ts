@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { suggestLegalArticle, generateJustification, validateValue } from "../services/legalFrameworkAssistant";
+import {
+  generateTermoDispensa,
+  generateTermoInexigibilidade,
+  generateMinutaContrato,
+  generatePlanilhaCotacao,
+  generateMapaComparativo,
+} from "../services/directContractDocuments";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
@@ -20,6 +28,55 @@ import {
  * Router para gerenciar contratações diretas (dispensas e inexigibilidades)
  */
 export const directContractsRouter = router({
+  // ========================================
+  // ASSISTENTE DE ENQUADRAMENTO LEGAL (IA)
+  // ========================================
+  
+  assistant: router({
+    // Sugerir artigo legal baseado na situação
+    suggestArticle: protectedProcedure
+      .input(
+        z.object({
+          situation: z.string().min(20),
+          object: z.string().min(10),
+          estimatedValue: z.number().positive(),
+          urgency: z.string().optional(),
+          hasExclusiveSupplier: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await suggestLegalArticle(input);
+      }),
+
+    // Gerar justificativa inicial
+    generateJustification: protectedProcedure
+      .input(
+        z.object({
+          articleId: z.number(),
+          object: z.string(),
+          situation: z.string(),
+          estimatedValue: z.number(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await generateJustification(input);
+      }),
+
+    // Validar valor
+    validateValue: protectedProcedure
+      .input(
+        z.object({
+          articleId: z.number(),
+          articleType: z.enum(["dispensa", "inexigibilidade"]),
+          estimatedValue: z.number(),
+          category: z.enum(["obras", "servicos", "compras"]),
+        })
+      )
+      .query(({ input }) => {
+        return validateValue(input);
+      }),
+  }),
+
   // ========================================
   // ARTIGOS LEGAIS
   // ========================================
@@ -325,6 +382,250 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input }) => {
         return await updateQuotation(input.id, input.data);
+      }),
+  }),
+
+  // ========================================
+  // GERAÇÃO DE DOCUMENTOS
+  // ========================================
+  
+  generate: router({
+    // Gerar Termo de Dispensa
+    termoDispensa: protectedProcedure
+      .input(z.object({
+        directContractId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.directContractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar documentos desta contratação",
+          });
+        }
+        
+        const content = await generateTermoDispensa({
+          directContractId: input.directContractId,
+          userId: ctx.user.id,
+        });
+        
+        // Salvar documento no banco
+        const document = await createDirectContractDocument({
+          directContractId: input.directContractId,
+          type: "termo_dispensa",
+          title: `Termo de Dispensa nº ${directContract.number}/${directContract.year}`,
+          content,
+          version: 1,
+          status: "draft",
+        });
+        
+        return { documentId: document.id, content };
+      }),
+    
+    // Gerar Termo de Inexigibilidade
+    termoInexigibilidade: protectedProcedure
+      .input(z.object({
+        directContractId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.directContractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar documentos desta contratação",
+          });
+        }
+        
+        const content = await generateTermoInexigibilidade({
+          directContractId: input.directContractId,
+          userId: ctx.user.id,
+        });
+        
+        // Salvar documento no banco
+        const document = await createDirectContractDocument({
+          directContractId: input.directContractId,
+          type: "termo_inexigibilidade",
+          title: `Termo de Inexigibilidade nº ${directContract.number}/${directContract.year}`,
+          content,
+          version: 1,
+          status: "draft",
+        });
+        
+        return { documentId: document.id, content };
+      }),
+    
+    // Gerar Minuta de Contrato
+    minutaContrato: protectedProcedure
+      .input(z.object({
+        directContractId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.directContractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar documentos desta contratação",
+          });
+        }
+        
+        const content = await generateMinutaContrato({
+          directContractId: input.directContractId,
+          userId: ctx.user.id,
+        });
+        
+        // Salvar documento no banco
+        const document = await createDirectContractDocument({
+          directContractId: input.directContractId,
+          type: "minuta_contrato",
+          title: `Minuta de Contrato nº ${directContract.number}/${directContract.year}`,
+          content,
+          version: 1,
+          status: "draft",
+        });
+        
+        return { documentId: document.id, content };
+      }),
+    
+    // Gerar Planilha de Cotação
+    planilhaCotacao: protectedProcedure
+      .input(z.object({
+        directContractId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.directContractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar documentos desta contratação",
+          });
+        }
+        
+        // Buscar cotações
+        const quotations = await listQuotations(input.directContractId);
+        
+        if (quotations.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "É necessário cadastrar pelo menos uma cotação antes de gerar a planilha",
+          });
+        }
+        
+        const content = await generatePlanilhaCotacao({
+          directContractId: input.directContractId,
+          quotations: quotations.map((q) => ({
+            supplierName: q.supplierName,
+            supplierCNPJ: q.supplierCNPJ || undefined,
+            value: q.value,
+            deliveryDeadline: q.deliveryDeadline || undefined,
+            paymentTerms: q.paymentTerms || undefined,
+          })),
+        });
+        
+        // Salvar documento no banco
+        const document = await createDirectContractDocument({
+          directContractId: input.directContractId,
+          type: "planilha_cotacao",
+          title: `Planilha de Cotação nº ${directContract.number}/${directContract.year}`,
+          content,
+          version: 1,
+          status: "draft",
+        });
+        
+        return { documentId: document.id, content };
+      }),
+    
+    // Gerar Mapa Comparativo
+    mapaComparativo: protectedProcedure
+      .input(z.object({
+        directContractId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const directContract = await getDirectContractById(input.directContractId);
+        
+        if (!directContract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para gerar documentos desta contratação",
+          });
+        }
+        
+        // Buscar cotações
+        const quotations = await listQuotations(input.directContractId);
+        
+        if (quotations.length < 2) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "É necessário cadastrar pelo menos 2 cotações para gerar o mapa comparativo",
+          });
+        }
+        
+        const content = await generateMapaComparativo({
+          directContractId: input.directContractId,
+          quotations: quotations.map((q) => ({
+            supplierName: q.supplierName,
+            supplierCNPJ: q.supplierCNPJ || undefined,
+            value: q.value,
+            deliveryDeadline: q.deliveryDeadline || undefined,
+            paymentTerms: q.paymentTerms || undefined,
+            notes: q.notes || undefined,
+          })),
+        });
+        
+        // Salvar documento no banco
+        const document = await createDirectContractDocument({
+          directContractId: input.directContractId,
+          type: "mapa_comparativo",
+          title: `Mapa Comparativo nº ${directContract.number}/${directContract.year}`,
+          content,
+          version: 1,
+          status: "draft",
+        });
+        
+        return { documentId: document.id, content };
       }),
   }),
 });
