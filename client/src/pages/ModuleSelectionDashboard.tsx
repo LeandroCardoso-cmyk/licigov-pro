@@ -42,8 +42,8 @@ const modules: Module[] = [
     title: "Contratação Direta",
     description: "Gestão de contratações diretas e dispensas de licitação conforme Lei 14.133/2021",
     icon: <FileCheck className="h-8 w-8" />,
-    path: "/contratacao-direta",
-    available: false,
+    path: "/direct-contracts",
+    available: true,
     color: "from-purple-500 to-purple-600",
   },
   {

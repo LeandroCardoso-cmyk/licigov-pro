@@ -1,5 +1,5 @@
 import { invokeLLM } from "../_core/llm";
-import { db } from "../db";
+import * as db from "../db";
 
 /**
  * Assistente de Enquadramento Legal com IA

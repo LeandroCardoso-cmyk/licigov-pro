@@ -36,6 +36,9 @@ import DepartmentManagement from "./pages/DepartmentManagement";
 import AIUsageDashboard from "./pages/AIUsageDashboard";
 import AdminPlatforms from "./pages/AdminPlatforms";
 import PublicationLogs from "./pages/PublicationLogs";
+import DirectContracts from "./pages/DirectContracts";
+import NewDirectContract from "./pages/NewDirectContract";
+import DirectContractDetails from "./pages/DirectContractDetails";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -86,6 +89,9 @@ const DepartmentManagementRoute = () => <AuthenticatedRoute component={Departmen
 const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashboard} />;
 const AdminPlatformsRoute = () => <AuthenticatedRoute component={AdminPlatforms} />;
 const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLogs} />;
+const DirectContractsRoute = () => <AuthenticatedRoute component={DirectContracts} />;
+const NewDirectContractRoute = () => <AuthenticatedRoute component={NewDirectContract} />;
+const DirectContractDetailsRoute = () => <AuthenticatedRoute component={DirectContractDetails} />;
 
 function Router() {
   return (
@@ -100,7 +106,11 @@ function Router() {
       <Route path={"/auditoria"} component={ActivityReportRoute} />
       <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />      <Route path={"/admin/ai-costs"} component={AIUsageDashboardRoute} />
       <Route path={"/admin/platforms"} component={AdminPlatformsRoute} />
-      <Route path={"/admin/publication-logs"} component={PublicationLogsRoute} />      <Route path="/processo/:id" component={ProcessDetailsRoute} />
+      <Route path={'/admin/publication-logs'} component={PublicationLogsRoute} />
+      <Route path={'/direct-contracts'} component={DirectContractsRoute} />
+      <Route path={'/direct-contracts/new'} component={NewDirectContractRoute} />
+      <Route path={'/direct-contracts/:id'} component={DirectContractDetailsRoute} />
+      <Route path="/processo/:id" component={ProcessDetailsRoute} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
       <Route path={"/admin"} component={AdminRoute} />
