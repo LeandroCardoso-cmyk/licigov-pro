@@ -29,6 +29,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PresentialPackageModal } from "@/components/PresentialPackageModal";
+import { ChecklistTab } from "@/components/ChecklistTab";
 
 /**
  * Página de Detalhes da Contratação Direta
@@ -211,6 +212,9 @@ export default function DirectContractDetails() {
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="documents">Documentos</TabsTrigger>
             <TabsTrigger value="quotations">Cotações</TabsTrigger>
+            {contract.platformId && (
+              <TabsTrigger value="checklist">Checklist da Plataforma</TabsTrigger>
+            )}
           </TabsList>
 
           {/* Aba: Visão Geral */}
@@ -487,6 +491,13 @@ export default function DirectContractDetails() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Aba: Checklist da Plataforma */}
+          {contract.platformId && (
+            <TabsContent value="checklist" className="space-y-6">
+              <ChecklistTab contractId={contractId} platformId={contract.platformId} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

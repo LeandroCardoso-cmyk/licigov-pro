@@ -1613,12 +1613,14 @@
 ## Módulo Contratação Direta - Melhorias Avançadas
 
 ### Fase 7: Integração com Plataformas
-- [ ] Adicionar campo "plataforma" no schema (comprasnet, bll, pncp, nenhuma)
-- [ ] Criar tabela de checklists por plataforma
-- [ ] Popular checklists específicos (ComprasNet, BLL, PNCP)
+- [x] Adicionar campo "plataforma" no schema (comprasnet, bll, pncp, nenhuma) - já existia
+- [x] Criar tabela de checklists por plataforma - reutilizada tabela existente
+- [x] Popular checklists específicos (ComprasNet, BLL, PNCP) - seed executado
+- [x] Criar funções de banco (listPlatforms, getPlatformById, getPlatformChecklists)
+- [x] Criar procedures tRPC (platforms.list, platforms.getById, platforms.getChecklists)
+- [x] Adicionar seletor de plataforma no formulário de nova contratação - já existia
+- [x] Exibir checklist específico na página de detalhes - ChecklistTab criado
 - [ ] Criar serviço de adaptação de documentos por plataforma
-- [ ] Adicionar seletor de plataforma no formulário de nova contratação
-- [ ] Exibir checklist específico na página de detalhes
 - [ ] Validar campos obrigatórios por plataforma
 - [ ] Gerar documentos adaptados conforme plataforma selecionada
 

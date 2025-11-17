@@ -26,6 +26,9 @@ import {
   createQuotation,
   listQuotations,
   updateQuotation,
+  listPlatforms,
+  getPlatformById,
+  getPlatformChecklists,
 } from "../db";
 
 /**
@@ -697,6 +700,45 @@ export const directContractsRouter = router({
         }
         
         return generateEmailTemplate(directContract);
+      }),
+  }),
+
+  // ========================================
+  // PLATAFORMAS E CHECKLISTS
+  // ========================================
+  
+  platforms: router({
+    // Listar todas as plataformas ativas
+    list: protectedProcedure
+      .query(async () => {
+        return await listPlatforms();
+      }),
+    
+    // Buscar plataforma por ID
+    getById: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .query(async ({ input }) => {
+        const platform = await getPlatformById(input.id);
+        
+        if (!platform) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Plataforma não encontrada",
+          });
+        }
+        
+        return platform;
+      }),
+    
+    // Buscar checklists de uma plataforma
+    getChecklists: protectedProcedure
+      .input(z.object({
+        platformId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await getPlatformChecklists(input.platformId);
       }),
   }),
 });

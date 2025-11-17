@@ -54,7 +54,7 @@ export default function NewDirectContract() {
     { enabled: !!type }
   );
 
-  const { data: platforms } = trpc.platforms.list.useQuery();
+  const { data: platforms } = trpc.directContracts.platforms.list.useQuery();
 
   // Mutations
   const suggestArticleMutation = trpc.directContracts.assistant.suggestArticle.useMutation();
