@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { format } from "date-fns";
@@ -17,6 +18,7 @@ import {
   CheckSquare,
   Clock,
   User,
+  FileDown,
 } from "lucide-react";
 
 interface AuditTimelineProps {
@@ -34,6 +36,39 @@ export function AuditTimeline({ contractId }: AuditTimelineProps) {
   const { data: logs, isLoading } = trpc.directContracts.audit.getLogs.useQuery({
     contractId,
   });
+
+  // Mutation para exportar relatório
+  const exportReportMutation = trpc.directContracts.audit.exportReport.useMutation();
+
+  const handleExportPDF = async () => {
+    try {
+      const result = await exportReportMutation.mutateAsync({
+        contractId,
+        filterAction: filterAction === "all" ? undefined : filterAction,
+      });
+
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(result.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+
+      // Criar link de download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Erro ao exportar relatório:", error);
+    }
+  };
 
   const getActionIcon = (action: string) => {
     switch (action) {
@@ -141,26 +176,34 @@ export function AuditTimeline({ contractId }: AuditTimelineProps) {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Histórico de Ações</CardTitle>
-              <CardDescription>Registro completo de todas as ações realizadas</CardDescription>
-            </div>
-            <div className="w-64">
-              <Select value={filterAction} onValueChange={setFilterAction}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filtrar por ação" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Ações</SelectItem>
-                  <SelectItem value="created">Criação</SelectItem>
-                  <SelectItem value="updated">Edição</SelectItem>
-                  <SelectItem value="document_generated">Documentos Gerados</SelectItem>
-                  <SelectItem value="quotation_added">Cotações Adicionadas</SelectItem>
-                  <SelectItem value="package_generated">Pacotes Gerados</SelectItem>
-                  <SelectItem value="status_changed">Mudanças de Status</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <CardTitle>Histórico de Ações</CardTitle>
+            <CardDescription>Registro completo de todas as ações realizadas</CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={filterAction} onValueChange={setFilterAction}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Filtrar por ação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Ações</SelectItem>
+                <SelectItem value="created">Criação</SelectItem>
+                <SelectItem value="updated">Edição</SelectItem>
+                <SelectItem value="document_generated">Documentos Gerados</SelectItem>
+                <SelectItem value="quotation_added">Cotações Adicionadas</SelectItem>
+                <SelectItem value="package_generated">Pacotes Gerados</SelectItem>
+                <SelectItem value="status_changed">Mudanças de Status</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={handleExportPDF}
+              disabled={exportReportMutation.isPending}
+              variant="outline"
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              {exportReportMutation.isPending ? "Gerando..." : "Exportar PDF"}
+            </Button>
+          </div>
           </div>
         </CardHeader>
       </Card>

@@ -1661,9 +1661,12 @@
 - [x] Adicionar auditoria automática ao marcar checklist
 
 ### Fase 11: Exportação de Relatório de Auditoria
-- [ ] Criar serviço de geração de PDF de auditoria
-- [ ] Criar procedure tRPC (audit.exportReport)
-- [ ] Adicionar botão "Exportar PDF" na aba Histórico
-- [ ] Formatar PDF com timeline completa
-- [ ] Adicionar estatísticas por tipo de ação e usuário
-- [ ] Incluir filtros aplicados no relatório
+- [x] Criar serviço de geração de PDF de auditoria (directContractAuditReport.ts)
+- [x] Instalar dependência pdfkit e @types/pdfkit
+- [x] Criar procedure tRPC (audit.exportReport)
+- [x] Adicionar botão "Exportar PDF" na aba Histórico
+- [x] Formatar PDF com timeline completa (cabeçalho, informações, timeline, rodapé)
+- [x] Adicionar estatísticas por tipo de ação e usuário
+- [x] Incluir filtros aplicados no relatório
+- [x] Registrar auditoria ao exportar relatório
+- [x] Download automático do PDF no frontend

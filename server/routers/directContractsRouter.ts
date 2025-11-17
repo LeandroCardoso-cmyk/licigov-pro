@@ -13,6 +13,7 @@ import {
   generateEmailTemplate,
 } from "../services/directContractPackage";
 import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
+import { generateAuditReport } from "../services/directContractAuditReport";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
@@ -901,6 +902,53 @@ export const directContractsRouter = router({
         }
         
         return await getDirectContractAuditLogsByAction(input.contractId, input.action);
+      }),
+    
+    // Exportar relatório de auditoria em PDF
+    exportReport: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+        filterAction: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const contract = await getDirectContractById(input.contractId);
+        
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (contract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para acessar esta contratação",
+          });
+        }
+        
+        const pdfBuffer = await generateAuditReport({
+          contractId: input.contractId,
+          filterAction: input.filterAction,
+        });
+        
+        // Registrar auditoria
+        await createDirectContractAuditLog({
+          directContractId: input.contractId,
+          action: "document_downloaded",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: {
+            documentType: "audit_report",
+            filterAction: input.filterAction,
+          },
+        });
+        
+        return {
+          filename: `Auditoria_Contratacao_${contract.number}_${contract.year}.pdf`,
+          data: pdfBuffer.toString("base64"),
+        };
       }),
   }),
 
