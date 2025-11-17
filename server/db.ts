@@ -2840,3 +2840,183 @@ export async function deleteChecklistProgress(directContractId: number, stepNumb
 
   return true;
 }
+
+
+// ========================================
+// ESTATÍSTICAS DE CONTRATAÇÕES DIRETAS
+// ========================================
+
+/**
+ * Busca estatísticas gerais de contratações diretas
+ */
+export async function getDirectContractsOverview() {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Total de contratações
+  const totalResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(directContracts);
+  const total = totalResult[0]?.count || 0;
+
+  // Total por tipo
+  const byTypeResult = await db
+    .select({
+      type: directContracts.type,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(directContracts)
+    .groupBy(directContracts.type);
+
+  // Total por status
+  const byStatusResult = await db
+    .select({
+      status: directContracts.status,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(directContracts)
+    .groupBy(directContracts.status);
+
+  // Valor total
+  const valueResult = await db
+    .select({ total: sql<number>`SUM(value)` })
+    .from(directContracts);
+  const totalValue = valueResult[0]?.total || 0;
+
+  // Tempo médio de conclusão (em dias)
+  const avgTimeResult = await db
+    .select({
+      avgDays: sql<number>`AVG(DATEDIFF(updatedAt, createdAt))`,
+    })
+    .from(directContracts)
+    .where(eq(directContracts.status, "completed"));
+  const avgCompletionTime = avgTimeResult[0]?.avgDays || 0;
+
+  // Taxa de aprovação
+  const approvedResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(directContracts)
+    .where(eq(directContracts.status, "approved"));
+  const approvedCount = approvedResult[0]?.count || 0;
+  const approvalRate = total > 0 ? (approvedCount / total) * 100 : 0;
+
+  return {
+    total,
+    byType: byTypeResult,
+    byStatus: byStatusResult,
+    totalValue,
+    avgCompletionTime: Math.round(avgCompletionTime),
+    approvalRate: Math.round(approvalRate * 10) / 10,
+  };
+}
+
+/**
+ * Busca dados para gráficos de contratações diretas
+ */
+export async function getDirectContractsChartData() {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Dispensas vs Inexigibilidades por mês (últimos 12 meses)
+  const monthlyResult = await db
+    .select({
+      month: sql<string>`DATE_FORMAT(createdAt, '%Y-%m')`,
+      type: directContracts.type,
+      count: sql<number>`COUNT(*)`,
+      totalValue: sql<number>`SUM(value)`,
+    })
+    .from(directContracts)
+    .where(sql`createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`)
+    .groupBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`, directContracts.type)
+    .orderBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`);
+
+  // Valor por plataforma
+  const byPlatformResult = await db
+    .select({
+      platformId: directContracts.platformId,
+      platformName: platforms.name,
+      count: sql<number>`COUNT(*)`,
+      totalValue: sql<number>`SUM(${directContracts.value})`,
+    })
+    .from(directContracts)
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .groupBy(directContracts.platformId, platforms.name);
+
+  // Status (para gráfico de pizza)
+  const byStatusResult = await db
+    .select({
+      status: directContracts.status,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(directContracts)
+    .groupBy(directContracts.status);
+
+  return {
+    monthly: monthlyResult,
+    byPlatform: byPlatformResult,
+    byStatus: byStatusResult,
+  };
+}
+
+/**
+ * Busca top 5 fornecedores mais contratados
+ */
+export async function getTopSuppliers() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select({
+      supplierName: directContracts.supplierName,
+      supplierCNPJ: directContracts.supplierCNPJ,
+      count: sql<number>`COUNT(*)`,
+      totalValue: sql<number>`SUM(value)`,
+    })
+    .from(directContracts)
+    .where(sql`supplierName IS NOT NULL AND supplierName != ''`)
+    .groupBy(directContracts.supplierName, directContracts.supplierCNPJ)
+    .orderBy(sql`COUNT(*) DESC`)
+    .limit(5);
+
+  return result;
+}
+
+/**
+ * Busca top 5 artigos legais mais usados
+ */
+export async function getTopLegalArticles() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select({
+      articleId: directContracts.legalArticleId,
+      articleNumber: directContractLegalArticles.articleNumber,
+      articleDescription: directContractLegalArticles.description,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .where(sql`${directContracts.legalArticleId} IS NOT NULL`)
+    .groupBy(directContracts.legalArticleId, directContractLegalArticles.articleNumber, directContractLegalArticles.description)
+    .orderBy(sql`COUNT(*) DESC`)
+    .limit(5);
+
+  return result;
+}
+
+/**
+ * Busca contratações recentes
+ */
+export async function getRecentDirectContracts(limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select()
+    .from(directContracts)
+    .orderBy(desc(directContracts.createdAt))
+    .limit(limit);
+
+  return result;
+}

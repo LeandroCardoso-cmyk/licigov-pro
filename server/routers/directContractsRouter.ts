@@ -36,6 +36,11 @@ import {
   getDirectContractAuditLogsByAction,
   saveChecklistProgress,
   getChecklistProgress,
+  getDirectContractsOverview,
+  getDirectContractsChartData,
+  getTopSuppliers,
+  getTopLegalArticles,
+  getRecentDirectContracts,
 } from "../db";
 
 /**
@@ -1032,6 +1037,46 @@ export const directContractsRouter = router({
         }
         
         return await getChecklistProgress(input.contractId);
+      }),
+  }),
+
+  // ========================================
+  // ESTATÍSTICAS E ANALYTICS
+  // ========================================
+  
+  analytics: router({
+    // Buscar estatísticas gerais
+    getOverview: protectedProcedure.query(async () => {
+      const overview = await getDirectContractsOverview();
+      return overview;
+    }),
+    
+    // Buscar dados para gráficos
+    getCharts: protectedProcedure.query(async () => {
+      const charts = await getDirectContractsChartData();
+      return charts;
+    }),
+    
+    // Buscar top fornecedores
+    getTopSuppliers: protectedProcedure.query(async () => {
+      const suppliers = await getTopSuppliers();
+      return suppliers;
+    }),
+    
+    // Buscar top artigos legais
+    getTopArticles: protectedProcedure.query(async () => {
+      const articles = await getTopLegalArticles();
+      return articles;
+    }),
+    
+    // Buscar contratações recentes
+    getRecent: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional().default(10),
+      }))
+      .query(async ({ input }) => {
+        const recent = await getRecentDirectContracts(input.limit);
+        return recent;
       }),
   }),
 });

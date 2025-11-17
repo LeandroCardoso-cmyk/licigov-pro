@@ -1670,3 +1670,19 @@
 - [x] Incluir filtros aplicados no relatório
 - [x] Registrar auditoria ao exportar relatório
 - [x] Download automático do PDF no frontend
+
+
+### Fase 12: Dashboard de Estatísticas e Analytics
+- [x] Criar funções de banco para buscar estatísticas agregadas (5 funções)
+- [x] Criar procedures tRPC (analytics.getOverview, analytics.getCharts, analytics.getTopSuppliers, analytics.getTopArticles, analytics.getRecent)
+- [x] Instalar dependência recharts para gráficos
+- [x] Criar página DirectContractsAnalytics.tsx
+- [x] Implementar cards de métricas principais (total, valor, tempo médio, taxa de aprovação)
+- [x] Implementar gráfico de linhas (dispensas vs inexigibilidades por mês)
+- [x] Implementar gráfico de barras (valor por plataforma)
+- [x] Implementar gráfico de pizza (distribuição por status)
+- [x] Implementar gráfico de área (evolução mensal total)
+- [x] Implementar tabela de top 5 fornecedores (com valor total e quantidade)
+- [x] Implementar tabela de top 5 artigos legais (com descrição e usos)
+- [x] Adicionar rota no App.tsx (/direct-contracts/analytics)
+- [x] Adicionar botão "Analytics" no dashboard principal

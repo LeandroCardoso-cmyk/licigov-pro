@@ -39,6 +39,7 @@ import PublicationLogs from "./pages/PublicationLogs";
 import DirectContracts from "./pages/DirectContracts";
 import NewDirectContract from "./pages/NewDirectContract";
 import DirectContractDetails from "./pages/DirectContractDetails";
+import DirectContractsAnalytics from "./pages/DirectContractsAnalytics";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -108,6 +109,7 @@ function Router() {
       <Route path={"/admin/platforms"} component={AdminPlatformsRoute} />
       <Route path={'/admin/publication-logs'} component={PublicationLogsRoute} />
       <Route path={'/direct-contracts'} component={DirectContractsRoute} />
+      <Route path={'/direct-contracts/analytics'} component={() => <AuthenticatedRoute component={DirectContractsAnalytics} />} />
       <Route path={'/direct-contracts/new'} component={NewDirectContractRoute} />
       <Route path={'/direct-contracts/:id'} component={DirectContractDetailsRoute} />
       <Route path="/processo/:id" component={ProcessDetailsRoute} />
