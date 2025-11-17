@@ -1052,3 +1052,21 @@ export const directContractAuditLogs = mysqlTable("direct_contract_audit_logs", 
 
 export type DirectContractAuditLog = typeof directContractAuditLogs.$inferSelect;
 export type InsertDirectContractAuditLog = typeof directContractAuditLogs.$inferInsert;
+/**
+ * Progresso do checklist de plataforma por contratação direta
+ * Salva quais passos foram concluídos
+ */
+export const directContractChecklistProgress = mysqlTable("direct_contract_checklist_progress", {
+  id: int("id").autoincrement().primaryKey(),
+  directContractId: int("directContractId").notNull(), // FK para direct_contracts
+  stepNumber: int("stepNumber").notNull(), // Número do passo (1, 2, 3, 4)
+  isCompleted: boolean("isCompleted").default(false).notNull(),
+  completedBy: int("completedBy"), // FK para users
+  completedAt: timestamp("completedAt"),
+  notes: text("notes"), // Observações sobre o passo
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DirectContractChecklistProgress = typeof directContractChecklistProgress.$inferSelect;
+export type InsertDirectContractChecklistProgress = typeof directContractChecklistProgress.$inferInsert;

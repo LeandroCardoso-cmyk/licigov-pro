@@ -60,6 +60,8 @@ import {
   InsertDirectContractQuotation,
   directContractAuditLogs,
   InsertDirectContractAuditLog,
+  directContractChecklistProgress,
+  InsertDirectContractChecklistProgress,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2767,4 +2769,74 @@ export async function getDirectContractAuditLogsByAction(directContractId: numbe
       )
     )
     .orderBy(desc(directContractAuditLogs.createdAt));
+}
+
+// ========================================
+// PROGRESSO DO CHECKLIST
+// ========================================
+
+export async function saveChecklistProgress(progress: InsertDirectContractChecklistProgress) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Verificar se já existe um registro para este passo
+  const existing = await db
+    .select()
+    .from(directContractChecklistProgress)
+    .where(
+      and(
+        eq(directContractChecklistProgress.directContractId, progress.directContractId),
+        eq(directContractChecklistProgress.stepNumber, progress.stepNumber)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    // Atualizar existente
+    await db
+      .update(directContractChecklistProgress)
+      .set({
+        isCompleted: progress.isCompleted,
+        completedBy: progress.completedBy,
+        completedAt: progress.isCompleted ? new Date() : null,
+        notes: progress.notes,
+      })
+      .where(eq(directContractChecklistProgress.id, existing[0].id));
+
+    return existing[0].id;
+  } else {
+    // Criar novo
+    const result = await db.insert(directContractChecklistProgress).values({
+      ...progress,
+      completedAt: progress.isCompleted ? new Date() : undefined,
+    });
+    return result.insertId;
+  }
+}
+
+export async function getChecklistProgress(directContractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(directContractChecklistProgress)
+    .where(eq(directContractChecklistProgress.directContractId, directContractId))
+    .orderBy(asc(directContractChecklistProgress.stepNumber));
+}
+
+export async function deleteChecklistProgress(directContractId: number, stepNumber: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .delete(directContractChecklistProgress)
+    .where(
+      and(
+        eq(directContractChecklistProgress.directContractId, directContractId),
+        eq(directContractChecklistProgress.stepNumber, stepNumber)
+      )
+    );
+
+  return true;
 }

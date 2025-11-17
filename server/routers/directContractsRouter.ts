@@ -33,6 +33,8 @@ import {
   createDirectContractAuditLog,
   getDirectContractAuditLogs,
   getDirectContractAuditLogsByAction,
+  saveChecklistProgress,
+  getChecklistProgress,
 } from "../db";
 
 /**
@@ -243,7 +245,22 @@ export const directContractsRouter = router({
         });
       }
       
-      return await updateDirectContract(input.id, input.data);
+      const result = await updateDirectContract(input.id, input.data);
+      
+      // Registrar auditoria
+      if (result) {
+        await createDirectContractAuditLog({
+          directContractId: input.id,
+          action: "updated",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: {
+            updatedFields: Object.keys(input.data),
+          },
+        });
+      }
+      
+      return result;
     }),
 
   // ========================================
@@ -718,6 +735,19 @@ export const directContractsRouter = router({
         
         const zipBuffer = await generatePresentialPackage(input);
         
+        // Registrar auditoria
+        await createDirectContractAuditLog({
+          directContractId: input.contractId,
+          action: "package_generated",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: {
+            includeDocuments: input.includeDocuments,
+            includeQuotations: input.includeQuotations,
+            includeReadme: input.includeReadme,
+          },
+        });
+        
         // Converter buffer para base64 para enviar via tRPC
         return {
           filename: `Contratacao_Direta_${directContract.number}_${directContract.year}.zip`,
@@ -871,6 +901,89 @@ export const directContractsRouter = router({
         }
         
         return await getDirectContractAuditLogsByAction(input.contractId, input.action);
+      }),
+  }),
+
+  // ========================================
+  // PROGRESSO DO CHECKLIST
+  // ========================================
+  
+  checklist: router({
+    // Salvar progresso de um passo
+    saveProgress: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+        stepNumber: z.number(),
+        isCompleted: z.boolean(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Verificar permissão
+        const contract = await getDirectContractById(input.contractId);
+        
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (contract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para atualizar esta contratação",
+          });
+        }
+        
+        const result = await saveChecklistProgress({
+          directContractId: input.contractId,
+          stepNumber: input.stepNumber,
+          isCompleted: input.isCompleted,
+          completedBy: ctx.user.id,
+          notes: input.notes,
+        });
+        
+        // Registrar auditoria
+        if (result) {
+          await createDirectContractAuditLog({
+            directContractId: input.contractId,
+            action: "checklist_updated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: {
+              stepNumber: input.stepNumber,
+              isCompleted: input.isCompleted,
+            },
+          });
+        }
+        
+        return { success: true, id: result };
+      }),
+    
+    // Buscar progresso de uma contratação
+    getProgress: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+      }))
+      .query(async ({ input, ctx }) => {
+        // Verificar permissão
+        const contract = await getDirectContractById(input.contractId);
+        
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (contract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para acessar esta contratação",
+          });
+        }
+        
+        return await getChecklistProgress(input.contractId);
       }),
   }),
 });

@@ -1648,3 +1648,22 @@
 - [ ] Criar procedure para exportar relatório de auditoria
 - [ ] Gerar PDF de relatório de auditoria
 - [ ] Adicionar botão "Exportar Auditoria" na página de detalhes
+
+
+### Fase 10: Completar Auditoria e Persistir Checklist
+- [x] Adicionar auditoria na mutation de editar contratação (update)
+- [x] Adicionar auditoria na mutation de gerar pacote presencial
+- [x] Criar tabela direct_contract_checklist_progress
+- [x] Criar funções de banco (saveChecklistProgress, getChecklistProgress, deleteChecklistProgress)
+- [x] Criar procedures tRPC (checklist.saveProgress, checklist.getProgress)
+- [x] Atualizar componente ChecklistTab para salvar estado (update otimista + rollback)
+- [x] Carregar estado do checklist ao abrir página (useEffect)
+- [x] Adicionar auditoria automática ao marcar checklist
+
+### Fase 11: Exportação de Relatório de Auditoria
+- [ ] Criar serviço de geração de PDF de auditoria
+- [ ] Criar procedure tRPC (audit.exportReport)
+- [ ] Adicionar botão "Exportar PDF" na aba Histórico
+- [ ] Formatar PDF com timeline completa
+- [ ] Adicionar estatísticas por tipo de ação e usuário
+- [ ] Incluir filtros aplicados no relatório

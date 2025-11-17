@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +28,27 @@ export function ChecklistTab({ contractId, platformId }: ChecklistTabProps) {
     platformId,
   });
 
-  const toggleStep = (stepNumber: number) => {
+  // Buscar progresso salvo
+  const { data: progress } = trpc.directContracts.checklist.getProgress.useQuery({
+    contractId,
+  });
+
+  // Mutation para salvar progresso
+  const saveProgressMutation = trpc.directContracts.checklist.saveProgress.useMutation();
+
+  // Carregar progresso salvo ao montar o componente
+  useEffect(() => {
+    if (progress && progress.length > 0) {
+      const completed = new Set(progress.filter((p) => p.isCompleted).map((p) => p.stepNumber));
+      setCompletedSteps(completed);
+    }
+  }, [progress]);
+
+  const toggleStep = async (stepNumber: number) => {
+    const isCurrentlyCompleted = completedSteps.has(stepNumber);
+    const newIsCompleted = !isCurrentlyCompleted;
+
+    // Atualizar estado local imediatamente (otimista)
     setCompletedSteps((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(stepNumber)) {
@@ -38,6 +58,27 @@ export function ChecklistTab({ contractId, platformId }: ChecklistTabProps) {
       }
       return newSet;
     });
+
+    // Salvar no banco de dados
+    try {
+      await saveProgressMutation.mutateAsync({
+        contractId,
+        stepNumber,
+        isCompleted: newIsCompleted,
+      });
+    } catch (error) {
+      // Reverter em caso de erro
+      setCompletedSteps((prev) => {
+        const newSet = new Set(prev);
+        if (isCurrentlyCompleted) {
+          newSet.add(stepNumber);
+        } else {
+          newSet.delete(stepNumber);
+        }
+        return newSet;
+      });
+      console.error("Erro ao salvar progresso:", error);
+    }
   };
 
   const getCategoryIcon = (category: string | null) => {
