@@ -30,6 +30,9 @@ import {
   listPlatforms,
   getPlatformById,
   getPlatformChecklists,
+  createDirectContractAuditLog,
+  getDirectContractAuditLogs,
+  getDirectContractAuditLogsByAction,
 } from "../db";
 
 /**
@@ -152,6 +155,19 @@ export const directContractsRouter = router({
         });
       }
       
+      // Registrar auditoria
+      await createDirectContractAuditLog({
+        directContractId: directContract.id,
+        action: "created",
+        userId: ctx.user.id,
+        userName: ctx.user.name || undefined,
+        details: {
+          type: input.type,
+          number: input.number,
+          year: input.year,
+        },
+      });
+      
       return directContract;
     }),
   
@@ -272,7 +288,23 @@ export const directContractsRouter = router({
           });
         }
         
-        return await createDirectContractDocument(input);
+        const document = await createDirectContractDocument(input);
+        
+        // Registrar auditoria
+        if (document) {
+          await createDirectContractAuditLog({
+            directContractId: input.directContractId,
+            action: "document_generated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: {
+              documentType: input.type,
+              documentTitle: input.title,
+            },
+          });
+        }
+        
+        return document;
       }),
     
     list: protectedProcedure
@@ -348,7 +380,23 @@ export const directContractsRouter = router({
           });
         }
         
-        return await createQuotation(input);
+        const quotation = await createQuotation(input);
+        
+        // Registrar auditoria
+        if (quotation) {
+          await createDirectContractAuditLog({
+            directContractId: input.directContractId,
+            action: "quotation_added",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: {
+              supplierName: input.supplierName,
+              value: input.value,
+            },
+          });
+        }
+        
+        return quotation;
       }),
     
     list: protectedProcedure
@@ -764,6 +812,65 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input }) => {
         return await consultCNPJ(input.cnpj);
+      }),
+  }),
+
+  // ========================================
+  // AUDITORIA E HISTÓRICO
+  // ========================================
+  
+  audit: router({
+    // Buscar logs de auditoria de uma contratação
+    getLogs: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+      }))
+      .query(async ({ input, ctx }) => {
+        // Verificar permissão
+        const contract = await getDirectContractById(input.contractId);
+        
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (contract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para acessar esta contratação",
+          });
+        }
+        
+        return await getDirectContractAuditLogs(input.contractId);
+      }),
+    
+    // Buscar logs por tipo de ação
+    getLogsByAction: protectedProcedure
+      .input(z.object({
+        contractId: z.number(),
+        action: z.string(),
+      }))
+      .query(async ({ input, ctx }) => {
+        // Verificar permissão
+        const contract = await getDirectContractById(input.contractId);
+        
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contratação direta não encontrada",
+          });
+        }
+        
+        if (contract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para acessar esta contratação",
+          });
+        }
+        
+        return await getDirectContractAuditLogsByAction(input.contractId, input.action);
       }),
   }),
 });

@@ -1639,10 +1639,12 @@
 ### Fase 9: Sistema de Histórico e Auditoria
 - [x] Criar tabela de auditoria (direct_contract_audit_logs)
 - [x] Criar funções de banco (createDirectContractAuditLog, getDirectContractAuditLogs, getDirectContractAuditLogsByAction)
-- [ ] Registrar todas as ações (criar, editar, gerar documento, download)
-- [ ] Criar componente Timeline de ações
-- [ ] Exibir timeline na página de detalhes
-- [ ] Adicionar filtros na timeline (tipo de ação, usuário, data)
+- [x] Criar procedures tRPC (audit.getLogs, audit.getLogsByAction)
+- [x] Registrar ações principais (criar, gerar documento, adicionar cotação)
+- [x] Criar componente AuditTimeline com ícones e badges
+- [x] Exibir timeline na página de detalhes (aba "Histórico")
+- [x] Adicionar filtros na timeline (tipo de ação)
+- [ ] Adicionar mais registros de auditoria (editar, deletar cotação, gerar pacote)
 - [ ] Criar procedure para exportar relatório de auditoria
 - [ ] Gerar PDF de relatório de auditoria
 - [ ] Adicionar botão "Exportar Auditoria" na página de detalhes
