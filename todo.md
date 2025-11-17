@@ -1608,3 +1608,36 @@
 - [ ] Testar geração de todos os documentos
 - [ ] Testar integração com plataformas
 - [ ] Salvar checkpoint final
+
+
+## Módulo Contratação Direta - Melhorias Avançadas
+
+### Fase 7: Integração com Plataformas
+- [ ] Adicionar campo "plataforma" no schema (comprasnet, bll, pncp, nenhuma)
+- [ ] Criar tabela de checklists por plataforma
+- [ ] Popular checklists específicos (ComprasNet, BLL, PNCP)
+- [ ] Criar serviço de adaptação de documentos por plataforma
+- [ ] Adicionar seletor de plataforma no formulário de nova contratação
+- [ ] Exibir checklist específico na página de detalhes
+- [ ] Validar campos obrigatórios por plataforma
+- [ ] Gerar documentos adaptados conforme plataforma selecionada
+
+### Fase 8: Validação de Documentos
+- [ ] Criar serviço de validação de CNPJ (API Receita Federal)
+- [ ] Adicionar validação de CNPJ no formulário de fornecedor
+- [ ] Criar checklist de documentos obrigatórios
+- [ ] Adicionar upload de certidões negativas
+- [ ] Validar certidões (Federal, Estadual, Municipal, FGTS, Trabalhista)
+- [ ] Exibir status de validação na página de detalhes
+- [ ] Bloquear geração de pacote se documentos inválidos
+- [ ] Adicionar alertas de documentos vencidos
+
+### Fase 9: Sistema de Histórico e Auditoria
+- [ ] Criar tabela de auditoria (audit_logs)
+- [ ] Registrar todas as ações (criar, editar, gerar documento, download)
+- [ ] Criar componente Timeline de ações
+- [ ] Exibir timeline na página de detalhes
+- [ ] Adicionar filtros na timeline (tipo de ação, usuário, data)
+- [ ] Criar procedure para exportar relatório de auditoria
+- [ ] Gerar PDF de relatório de auditoria
+- [ ] Adicionar botão "Exportar Auditoria" na página de detalhes

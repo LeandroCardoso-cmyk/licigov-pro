@@ -2702,3 +2702,42 @@ export async function updateQuotation(id: number, data: Partial<InsertDirectCont
 
   return quotation[0] || null;
 }
+
+// ========================================
+// PLATAFORMAS E CHECKLISTS
+// ========================================
+
+export async function listPlatforms() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(platforms)
+    .where(eq(platforms.isActive, true))
+    .orderBy(asc(platforms.displayOrder));
+}
+
+export async function getPlatformById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const platform = await db
+    .select()
+    .from(platforms)
+    .where(eq(platforms.id, id))
+    .limit(1);
+
+  return platform[0] || null;
+}
+
+export async function getPlatformChecklists(platformId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(platformChecklists)
+    .where(eq(platformChecklists.platformId, platformId))
+    .orderBy(asc(platformChecklists.stepNumber));
+}

@@ -1017,3 +1017,4 @@ export const directContractQuotations = mysqlTable("direct_contract_quotations",
 
 export type DirectContractQuotation = typeof directContractQuotations.$inferSelect;
 export type InsertDirectContractQuotation = typeof directContractQuotations.$inferInsert;
+
