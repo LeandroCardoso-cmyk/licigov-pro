@@ -1018,3 +1018,37 @@ export const directContractQuotations = mysqlTable("direct_contract_quotations",
 export type DirectContractQuotation = typeof directContractQuotations.$inferSelect;
 export type InsertDirectContractQuotation = typeof directContractQuotations.$inferInsert;
 
+/**
+ * Logs de auditoria para contratações diretas
+ * Registra todas as ações realizadas (criar, editar, gerar documento, download, etc)
+ */
+export const directContractAuditLogs = mysqlTable("direct_contract_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  directContractId: int("directContractId").notNull(), // FK para direct_contracts
+  // Ação realizada
+  action: mysqlEnum("action", [
+    "created", // Contratação criada
+    "updated", // Contratação editada
+    "status_changed", // Status alterado
+    "document_generated", // Documento gerado
+    "document_downloaded", // Documento baixado
+    "quotation_added", // Cotação adicionada
+    "quotation_deleted", // Cotação removida
+    "package_generated", // Pacote presencial gerado
+    "checklist_updated", // Checklist atualizado
+    "approved", // Contratação aprovada
+    "published", // Contratação publicada
+    "ratified", // Contratação ratificada
+    "completed", // Contratação concluída
+  ]).notNull(),
+  // Usuário que realizou a ação
+  userId: int("userId").notNull(), // FK para users
+  userName: varchar("userName", { length: 255 }), // Nome do usuário (cache)
+  // Detalhes da ação (JSON)
+  details: json("details"), // { documentType: "termo_dispensa", oldStatus: "draft", newStatus: "approved", etc }
+  // Timestamp
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DirectContractAuditLog = typeof directContractAuditLogs.$inferSelect;
+export type InsertDirectContractAuditLog = typeof directContractAuditLogs.$inferInsert;

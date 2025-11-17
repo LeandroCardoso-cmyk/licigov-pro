@@ -12,6 +12,7 @@ import {
   generatePresentialPackage,
   generateEmailTemplate,
 } from "../services/directContractPackage";
+import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
@@ -739,6 +740,30 @@ export const directContractsRouter = router({
       }))
       .query(async ({ input }) => {
         return await getPlatformChecklists(input.platformId);
+      }),
+  }),
+
+  // ========================================
+  // VALIDAÇÃO DE DOCUMENTOS
+  // ========================================
+  
+  validation: router({
+    // Validar CNPJ (formato e dígitos verificadores)
+    validateCNPJ: protectedProcedure
+      .input(z.object({
+        cnpj: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return validateCNPJ(input.cnpj);
+      }),
+    
+    // Consultar CNPJ na Receita Federal
+    consultCNPJ: protectedProcedure
+      .input(z.object({
+        cnpj: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return await consultCNPJ(input.cnpj);
       }),
   }),
 });

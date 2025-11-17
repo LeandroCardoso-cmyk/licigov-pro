@@ -56,9 +56,10 @@ import {
   directContracts,
   InsertDirectContract,
   directContractDocuments,
-  InsertDirectContractDocument,
-  directContractQuotations,
-  InsertDirectContractQuotation
+  InsertDirectContractDocument,  directContractQuotations,
+  InsertDirectContractQuotation,
+  directContractAuditLogs,
+  InsertDirectContractAuditLog,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2718,19 +2719,6 @@ export async function listPlatforms() {
     .orderBy(asc(platforms.displayOrder));
 }
 
-export async function getPlatformById(id: number) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const platform = await db
-    .select()
-    .from(platforms)
-    .where(eq(platforms.id, id))
-    .limit(1);
-
-  return platform[0] || null;
-}
-
 export async function getPlatformChecklists(platformId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -2740,4 +2728,43 @@ export async function getPlatformChecklists(platformId: number) {
     .from(platformChecklists)
     .where(eq(platformChecklists.platformId, platformId))
     .orderBy(asc(platformChecklists.stepNumber));
+}
+
+// ========================================
+// AUDITORIA DE CONTRATAÇÕES DIRETAS
+// ========================================
+
+export async function createDirectContractAuditLog(log: InsertDirectContractAuditLog) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(directContractAuditLogs).values(log);
+  return result.insertId;
+}
+
+export async function getDirectContractAuditLogs(directContractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(directContractAuditLogs)
+    .where(eq(directContractAuditLogs.directContractId, directContractId))
+    .orderBy(desc(directContractAuditLogs.createdAt));
+}
+
+export async function getDirectContractAuditLogsByAction(directContractId: number, action: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(directContractAuditLogs)
+    .where(
+      and(
+        eq(directContractAuditLogs.directContractId, directContractId),
+        eq(directContractAuditLogs.action, action as any)
+      )
+    )
+    .orderBy(desc(directContractAuditLogs.createdAt));
 }

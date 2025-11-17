@@ -47,6 +47,9 @@ export default function NewDirectContract() {
   // Estados de UI
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
   const [loadingAI, setLoadingAI] = useState(false);
+  const [cnpjValidation, setCnpjValidation] = useState<{ isValid: boolean; error?: string } | null>(null);
+  const [cnpjData, setCnpjData] = useState<any>(null);
+  const [loadingCNPJ, setLoadingCNPJ] = useState(false);
 
   // Queries
   const { data: articles } = trpc.directContracts.legalArticles.list.useQuery(
@@ -59,6 +62,7 @@ export default function NewDirectContract() {
   // Mutations
   const suggestArticleMutation = trpc.directContracts.assistant.suggestArticle.useMutation();
   const generateJustificationMutation = trpc.directContracts.assistant.generateJustification.useMutation();
+  const consultCNPJMutation = trpc.directContracts.validation.consultCNPJ.useMutation();
   const createMutation = trpc.directContracts.create.useMutation();
 
   const handleSuggestArticle = async () => {
@@ -85,6 +89,44 @@ export default function NewDirectContract() {
       toast.error(error.message || "Erro ao sugerir artigo");
     } finally {
       setLoadingAI(false);
+    }
+  };
+
+  const handleValidateCNPJ = async (cnpj: string) => {
+    if (!cnpj || cnpj.length < 14) {
+      setCnpjValidation(null);
+      setCnpjData(null);
+      return;
+    }
+
+    setLoadingCNPJ(true);
+    try {
+      const result = await consultCNPJMutation.mutateAsync({ cnpj });
+      
+      if (result.success && result.data) {
+        setCnpjValidation({ isValid: true });
+        setCnpjData(result.data);
+        
+        // Preencher automaticamente os campos
+        if (!supplierName) {
+          setSupplierName(result.data.nomeFantasia || result.data.razaoSocial);
+        }
+        if (!supplierAddress && result.data.endereco) {
+          setSupplierAddress(`${result.data.endereco}, ${result.data.municipio}/${result.data.uf}`);
+        }
+        
+        toast.success("CNPJ válido! Dados preenchidos automaticamente.");
+      } else {
+        setCnpjValidation({ isValid: false, error: result.error });
+        setCnpjData(null);
+        toast.error(result.error || "CNPJ inválido");
+      }
+    } catch (error: any) {
+      setCnpjValidation({ isValid: false, error: "Erro ao validar CNPJ" });
+      setCnpjData(null);
+      toast.error("Erro ao validar CNPJ");
+    } finally {
+      setLoadingCNPJ(false);
     }
   };
 
@@ -535,12 +577,36 @@ export default function NewDirectContract() {
 
                 <div>
                   <Label htmlFor="supplierCNPJ">CNPJ</Label>
-                  <Input
-                    id="supplierCNPJ"
-                    value={supplierCNPJ}
-                    onChange={(e) => setSupplierCNPJ(e.target.value)}
-                    placeholder="Ex: 00.000.000/0000-00"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="supplierCNPJ"
+                      value={supplierCNPJ}
+                      onChange={(e) => setSupplierCNPJ(e.target.value)}
+                      placeholder="Ex: 00.000.000/0000-00"
+                      className={cnpjValidation ? (cnpjValidation.isValid ? "border-green-500" : "border-red-500") : ""}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleValidateCNPJ(supplierCNPJ)}
+                      disabled={loadingCNPJ || !supplierCNPJ}
+                    >
+                      {loadingCNPJ ? "Validando..." : "Validar"}
+                    </Button>
+                  </div>
+                  {cnpjValidation && !cnpjValidation.isValid && (
+                    <p className="text-sm text-red-600 mt-1">{cnpjValidation.error}</p>
+                  )}
+                  {cnpjData && (
+                    <div className="mt-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        <strong>Razão Social:</strong> {cnpjData.razaoSocial}
+                      </p>
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        <strong>Situação:</strong> {cnpjData.situacao}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>

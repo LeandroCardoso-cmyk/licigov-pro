@@ -1625,8 +1625,10 @@
 - [ ] Gerar documentos adaptados conforme plataforma selecionada
 
 ### Fase 8: Validação de Documentos
-- [ ] Criar serviço de validação de CNPJ (API Receita Federal)
-- [ ] Adicionar validação de CNPJ no formulário de fornecedor
+- [x] Criar serviço de validação de CNPJ (API Receita Federal) - cnpjValidator.ts
+- [x] Adicionar procedures tRPC (validateCNPJ, consultCNPJ)
+- [x] Adicionar validação de CNPJ no formulário de fornecedor - botão Validar
+- [x] Feedback visual (borda verde/vermelha) e preenchimento automático
 - [ ] Criar checklist de documentos obrigatórios
 - [ ] Adicionar upload de certidões negativas
 - [ ] Validar certidões (Federal, Estadual, Municipal, FGTS, Trabalhista)
@@ -1635,7 +1637,8 @@
 - [ ] Adicionar alertas de documentos vencidos
 
 ### Fase 9: Sistema de Histórico e Auditoria
-- [ ] Criar tabela de auditoria (audit_logs)
+- [x] Criar tabela de auditoria (direct_contract_audit_logs)
+- [x] Criar funções de banco (createDirectContractAuditLog, getDirectContractAuditLogs, getDirectContractAuditLogsByAction)
 - [ ] Registrar todas as ações (criar, editar, gerar documento, download)
 - [ ] Criar componente Timeline de ações
 - [ ] Exibir timeline na página de detalhes
