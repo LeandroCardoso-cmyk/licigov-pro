@@ -1722,40 +1722,45 @@
 - [x] Criar procedures tRPC para gerar documentos (4 procedures: generateMinuta, generateAmendment, generateApostille, generateRescission)
 - [x] Integrar geração com auditoria automática
 - [x] Salvar documentos no banco de dados
+- [x] Conectar botões de geração aos handlers
+- [x] Implementar download automático de Markdown
+- [x] Criar modal de rescisão com formulário completo
 
 ### Fase 4: UI - Formulário e Dashboard
-- [ ] Criar página Contracts.tsx (dashboard com filtros e cards de estatísticas)
-- [ ] Criar página NewContract.tsx (formulário wizard com 3 passos)
-- [ ] Implementar filtros (status, tipo, ano, vencimento)
-- [ ] Implementar cards de estatísticas (ativos, vencidos, a vencer)
-- [ ] Adicionar rotas no App.tsx
+- [x] Criar página Contracts.tsx (dashboard com filtros e cards de estatísticas)
+- [x] Criar página NewContract.tsx (formulário wizard com 3 passos)
+- [x] Implementar filtros (status, tipo, ano, vencimento)
+- [x] Implementar cards de estatísticas (ativos, vencidos, a vencer)
+- [x] Adicionar rotas no App.tsx
 
 ### Fase 5: Página de Detalhes e Gestão de Aditivos
-- [ ] Criar página ContractDetails.tsx (3 abas: visão geral, aditivos, documentos)
-- [ ] Implementar aba de visão geral (dados do contrato, contratado, vigência)
-- [ ] Implementar aba de aditivos (lista + formulário de novo aditivo)
-- [ ] Implementar aba de apostilamentos (lista + formulário de novo apostilamento)
-- [ ] Implementar aba de documentos (lista + botões de geração)
-- [ ] Implementar timeline de eventos
+- [x] Criar página ContractDetails.tsx (3 abas: visão geral, aditivos, documentos)
+- [x] Implementar aba de visão geral (dados do contrato, contratado, vigência)
+- [x] Implementar aba de aditivos (lista + formulário de novo aditivo)
+- [x] Implementar aba de apostilamentos (lista + formulário de novo apostilamento)
+- [x] Implementar aba de documentos (lista + botões de geração)
+- [x] Implementar timeline de eventos
 
 ### Fase 6: Sistema de Alertas
-- [ ] Criar função de cálculo de dias até vencimento
-- [ ] Implementar badges de alerta (vencido, vence em 30/60/90 dias)
-- [ ] Criar sistema de notificações automáticas (notifyOwner)
-- [ ] Adicionar alertas no dashboard
+- [x] Criar função de cálculo de dias até vencimento
+- [x] Implementar badges de alerta (vencido, vence em 30/60/90 dias)
+- [x] Criar página ContractAlerts.tsx com filtros e estatísticas
+- [x] Adicionar botão "Alertas" no dashboard de Contratos com badge de contagem
+- [x] Adicionar badge de alerta no card de Contratos no dashboard principal
+- [ ] Criar sistema de notificações automáticas (notifyOwner) - pendente
 
 ### Fase 7: Integração com Outros Módulos
-- [ ] Adicionar botão "Gerar Contrato" em ProcessDetails.tsx
-- [ ] Adicionar botão "Gerar Contrato" em DirectContractDetails.tsx
-- [ ] Criar modal de criação rápida de contrato
-- [ ] Preencher dados automaticamente a partir do processo/contratação
+- [x] Adicionar botão "Gerar Contrato" em ProcessDetails.tsx
+- [x] Adicionar botão "Gerar Contrato" em DirectContractDetails.tsx
+- [x] Implementar pré-preenchimento automático via query params
+- [x] Preencher dados automaticamente a partir do processo/contratação
 
 ### Fase 8: Auditoria e Relatórios
-- [ ] Criar tabela de auditoria (contract_audit_logs)
-- [ ] Registrar todas as ações (criar, editar, adicionar aditivo, gerar documento)
-- [ ] Criar componente ContractAuditTimeline
-- [ ] Implementar exportação de relatório de auditoria em PDF
-- [ ] Adicionar aba "Histórico" na página de detalhes
+- [x] Criar tabela de auditoria (contract_audit_logs)
+- [x] Registrar todas as ações (criar, editar, adicionar aditivo, gerar documento)
+- [x] Adicionar aba "Histórico" na página de detalhes
+- [ ] Criar componente ContractAuditTimeline - pendente
+- [ ] Implementar exportação de relatório de auditoria em PDF - pendente
 
 ### Fase 9: Testes Finais
 - [ ] Testar fluxo completo de criação de contrato

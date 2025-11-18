@@ -96,10 +96,21 @@ export default function Contracts() {
                 Gerencie contratos, aditivos e prazos de vigência
               </p>
             </div>
-            <Button onClick={() => setLocation("/contracts/new")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Contrato
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setLocation("/contracts/alerts")} variant="outline">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Alertas
+                {overview && (overview.expiredCount + overview.expiring30Days) > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {overview.expiredCount + overview.expiring30Days}
+                  </Badge>
+                )}
+              </Button>
+              <Button onClick={() => setLocation("/contracts/new")}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Contrato
+              </Button>
+            </div>
           </div>
         </div>
       </div>

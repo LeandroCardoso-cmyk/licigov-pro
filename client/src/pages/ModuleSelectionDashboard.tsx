@@ -13,6 +13,7 @@ import {
   Briefcase
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 interface Module {
@@ -78,6 +79,11 @@ const modules: Module[] = [
 export default function ModuleSelectionDashboard() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
+  
+  // Buscar alertas de contratos
+  const { data: contractsOverview } = trpc.contracts.analytics.getOverview.useQuery(undefined, {
+    enabled: !!user,
+  });
 
   const handleModuleClick = (module: Module) => {
     if (!module.available) {
@@ -159,6 +165,11 @@ export default function ModuleSelectionDashboard() {
                     {!module.available && (
                       <Badge variant="secondary" className="shrink-0">
                         Em Breve
+                      </Badge>
+                    )}
+                    {module.id === "contracts" && contractsOverview && (contractsOverview.expiredCount + contractsOverview.expiring30Days) > 0 && (
+                      <Badge variant="destructive" className="shrink-0">
+                        {contractsOverview.expiredCount + contractsOverview.expiring30Days} alertas
                       </Badge>
                     )}
                   </div>

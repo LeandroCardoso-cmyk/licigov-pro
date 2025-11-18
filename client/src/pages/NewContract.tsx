@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,42 @@ import { toast } from "sonner";
 export default function NewContract() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(1);
+  
+  // Detectar query params para pré-preenchimento
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const source = params.get('source');
+    
+    if (source === 'process') {
+      // Pré-preencher com dados do processo licitatorio
+      const processNumber = params.get('number');
+      const processObject = params.get('object');
+      const processValue = params.get('value');
+      
+      if (processNumber) setNumber(processNumber);
+      if (processObject) setObject(processObject);
+      if (processValue) setValue(processValue);
+      setType('fornecimento'); // Tipo padrão
+      
+      toast.success('Dados pré-preenchidos do processo licitatorio!');
+    } else if (source === 'direct') {
+      // Pré-preencher com dados da contratação direta
+      const directNumber = params.get('number');
+      const directObject = params.get('object');
+      const directValue = params.get('value');
+      const contractedName = params.get('contractedName');
+      const contractedCnpj = params.get('contractedCnpj');
+      
+      if (directNumber) setNumber(directNumber);
+      if (directObject) setObject(directObject);
+      if (directValue) setValue(directValue);
+      if (contractedName) setContractorName(contractedName);
+      if (contractedCnpj) setContractorCNPJ(contractedCnpj);
+      setType('fornecimento'); // Tipo padrão
+      
+      toast.success('Dados pré-preenchidos da contratação direta!');
+    }
+  }, []);
 
   // Passo 1: Dados Básicos
   const [number, setNumber] = useState("");

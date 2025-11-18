@@ -361,6 +361,24 @@ export default function ProcessDetails() {
                 )}
                 Exportar Relatório
               </Button>
+              <Button
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    source: 'process',
+                    processId: process.id.toString(),
+                    number: process.number,
+                    object: process.name,
+                    value: process.estimatedValue,
+                  });
+                  navigate(`/contracts/new?${params.toString()}`);
+                }}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Gerar Contrato
+              </Button>
               <MembersDialog processId={processId} processName={process.name} />
               <Badge variant="secondary" className="text-sm px-4 py-2">
                 {statusLabels[process.status]}

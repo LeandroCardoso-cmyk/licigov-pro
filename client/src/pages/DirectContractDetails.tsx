@@ -194,16 +194,37 @@ export default function DirectContractDetails() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Criado em {format(new Date(contract.createdAt), "dd/MM/yyyy", { locale: ptBR })}
               </p>
-              {contract.mode === "presencial" && (
+              <div className="flex gap-2">
+                {contract.mode === "presencial" && (
+                  <Button
+                    onClick={() => setShowPresentialPackage(true)}
+                    variant="default"
+                    size="sm"
+                  >
+                    <Package className="w-4 h-4 mr-2" />
+                    Preparar Pacote Presencial
+                  </Button>
+                )}
                 <Button
-                  onClick={() => setShowPresentialPackage(true)}
-                  variant="default"
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      source: 'direct',
+                      directContractId: contract.id.toString(),
+                      number: contract.number,
+                      object: contract.object,
+                      contractedName: contract.contractedName || '',
+                      contractedCnpj: contract.contractedCnpj || '',
+                      value: (contract.value / 100).toString(),
+                    });
+                    setLocation(`/contracts/new?${params.toString()}`);
+                  }}
+                  variant="outline"
                   size="sm"
                 >
-                  <Package className="w-4 h-4 mr-2" />
-                  Preparar Pacote Presencial
+                  <FileText className="w-4 h-4 mr-2" />
+                  Gerar Contrato
                 </Button>
-              )}
+              </div>
             </div>
           </div>
         </div>

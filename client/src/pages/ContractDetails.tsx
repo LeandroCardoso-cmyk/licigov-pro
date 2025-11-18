@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { NewAmendmentModal } from "@/components/NewAmendmentModal";
 import { NewApostilleModal } from "@/components/NewApostilleModal";
+import { RescissionModal } from "@/components/RescissionModal";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ export default function ContractDetails() {
   const [activeTab, setActiveTab] = useState("overview");
   const [amendmentModalOpen, setAmendmentModalOpen] = useState(false);
   const [apostilleModalOpen, setApostilleModalOpen] = useState(false);
+  const [rescissionModalOpen, setRescissionModalOpen] = useState(false);
 
   // Buscar contrato
   const { data: contract, isLoading } = trpc.contracts.getById.useQuery(
@@ -63,6 +65,82 @@ export default function ContractDetails() {
     { contractId: parseInt(id!) },
     { enabled: !!id }
   );
+
+  // Mutations para geração de documentos
+  const utils = trpc.useUtils();
+  
+  const generateMinutaMutation = trpc.contracts.generation.generateMinuta.useMutation({
+    onSuccess: (data) => {
+      toast.success("Minuta gerada com sucesso!");
+      // Download automático do Markdown
+      downloadMarkdown(data.content, `Minuta_Contrato_${contract?.number}_${contract?.year}.md`);
+      // Invalidar queries para atualizar lista de documentos
+      utils.contracts.documents.list.invalidate({ contractId: parseInt(id!) });
+      utils.contracts.audit.getLogs.invalidate({ contractId: parseInt(id!) });
+    },
+    onError: (error) => {
+      toast.error("Erro ao gerar minuta: " + error.message);
+    },
+  });
+
+  const generateRescissionMutation = trpc.contracts.generation.generateRescission.useMutation({
+    onSuccess: (data) => {
+      toast.success("Termo de rescisão gerado com sucesso!");
+      // Download automático do Markdown
+      downloadMarkdown(data.content, `Termo_Rescisao_Contrato_${contract?.number}_${contract?.year}.md`);
+      // Invalidar queries
+      utils.contracts.documents.list.invalidate({ contractId: parseInt(id!) });
+      utils.contracts.audit.getLogs.invalidate({ contractId: parseInt(id!) });
+      utils.contracts.getById.invalidate({ id: parseInt(id!) });
+      setRescissionModalOpen(false);
+    },
+    onError: (error) => {
+      toast.error("Erro ao gerar termo de rescisão: " + error.message);
+    },
+  });
+
+  // Função para download de Markdown
+  const downloadMarkdown = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Handlers
+  const handleGenerateMinuta = () => {
+    if (!contract) return;
+    generateMinutaMutation.mutate({ contractId: contract.id });
+  };
+
+  const handleGenerateRescission = (rescissionData: {
+    type: "unilateral" | "bilateral" | "judicial";
+    reason: string;
+    effectiveDate: string;
+    penaltyAmount?: string;
+    notes?: string;
+  }) => {
+    if (!contract) return;
+    const data = {
+      contractId: contract.id,
+      type: rescissionData.type,
+      reason: rescissionData.reason,
+      effectiveDate: rescissionData.effectiveDate,
+      penaltyAmount: rescissionData.penaltyAmount ? parseFloat(rescissionData.penaltyAmount) : undefined,
+      notes: rescissionData.notes || undefined,
+    };
+    generateRescissionMutation.mutate(data);
+  };
+
+  const handleDownloadDocument = (doc: any) => {
+    downloadMarkdown(doc.content, `${doc.title}.md`);
+    toast.success("Download iniciado!");
+  };
 
   if (isLoading) {
     return (
@@ -484,11 +562,18 @@ export default function ContractDetails() {
 
             {/* Botões de Geração */}
             <div className="grid gap-4 md:grid-cols-2">
-              <Button variant="outline" className="h-auto py-4">
+              <Button 
+                variant="outline" 
+                className="h-auto py-4"
+                onClick={handleGenerateMinuta}
+                disabled={generateMinutaMutation.isPending}
+              >
                 <div className="flex flex-col items-start w-full">
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-5 w-5" />
-                    <span className="font-semibold">Minuta de Contrato</span>
+                    <span className="font-semibold">
+                      {generateMinutaMutation.isPending ? "Gerando..." : "Minuta de Contrato"}
+                    </span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     Gerar minuta baseada na Lei 14.133/2021
@@ -496,7 +581,11 @@ export default function ContractDetails() {
                 </div>
               </Button>
 
-              <Button variant="outline" className="h-auto py-4">
+              <Button 
+                variant="outline" 
+                className="h-auto py-4"
+                onClick={() => setRescissionModalOpen(true)}
+              >
                 <div className="flex flex-col items-start w-full">
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-5 w-5" />
@@ -529,7 +618,11 @@ export default function ContractDetails() {
                             </p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDownloadDocument(doc)}
+                        >
                           <Download className="h-4 w-4 mr-2" />
                           Download
                         </Button>
@@ -617,6 +710,12 @@ export default function ContractDetails() {
             onClose={() => setApostilleModalOpen(false)}
             contractId={contract.id}
             currentValue={contract.value}
+          />
+          <RescissionModal
+            open={rescissionModalOpen}
+            onClose={() => setRescissionModalOpen(false)}
+            onConfirm={handleGenerateRescission}
+            isLoading={generateRescissionMutation.isPending}
           />
         </>
       )}
