@@ -62,6 +62,16 @@ import {
   InsertDirectContractAuditLog,
   directContractChecklistProgress,
   InsertDirectContractChecklistProgress,
+  contracts,
+  InsertContract,
+  contractAmendments,
+  InsertContractAmendment,
+  contractApostilles,
+  InsertContractApostille,
+  contractDocuments,
+  InsertContractDocument,
+  contractAuditLogs,
+  InsertContractAuditLog,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -3019,4 +3029,337 @@ export async function getRecentDirectContracts(limit: number = 10) {
     .limit(limit);
 
   return result;
+}
+
+
+// ============================================================================
+// FUNÇÕES DE CONTRATOS
+// ============================================================================
+
+/**
+ * Criar novo contrato
+ */
+export async function createContract(data: InsertContract) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(contracts).values(data);
+  const insertedId = result[0].insertId;
+
+  return await getContractById(insertedId);
+}
+
+/**
+ * Buscar contrato por ID
+ */
+export async function getContractById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Listar contratos do usuário com filtros
+ */
+export async function listContracts(userId: number, filters?: {
+  type?: string;
+  status?: string;
+  year?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.createdBy, userId))
+    .orderBy(desc(contracts.createdAt));
+
+  if (filters?.type) {
+    query = query.where(eq(contracts.type, filters.type as any));
+  }
+
+  if (filters?.status) {
+    query = query.where(eq(contracts.status, filters.status as any));
+  }
+
+  if (filters?.year) {
+    query = query.where(eq(contracts.year, filters.year));
+  }
+
+  return await query;
+}
+
+/**
+ * Atualizar contrato
+ */
+export async function updateContract(id: number, data: Partial<InsertContract>) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(contracts)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(contracts.id, id));
+
+  return await getContractById(id);
+}
+
+/**
+ * Criar aditivo de contrato
+ */
+export async function createAmendment(data: InsertContractAmendment) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(contractAmendments).values(data);
+  const insertedId = result[0].insertId;
+
+  const amendment = await db
+    .select()
+    .from(contractAmendments)
+    .where(eq(contractAmendments.id, insertedId))
+    .limit(1);
+
+  return amendment.length > 0 ? amendment[0] : null;
+}
+
+/**
+ * Listar aditivos de um contrato
+ */
+export async function listAmendments(contractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contractAmendments)
+    .where(eq(contractAmendments.contractId, contractId))
+    .orderBy(asc(contractAmendments.number));
+}
+
+/**
+ * Criar apostilamento de contrato
+ */
+export async function createApostille(data: InsertContractApostille) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(contractApostilles).values(data);
+  const insertedId = result[0].insertId;
+
+  const apostille = await db
+    .select()
+    .from(contractApostilles)
+    .where(eq(contractApostilles.id, insertedId))
+    .limit(1);
+
+  return apostille.length > 0 ? apostille[0] : null;
+}
+
+/**
+ * Listar apostilamentos de um contrato
+ */
+export async function listApostilles(contractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contractApostilles)
+    .where(eq(contractApostilles.contractId, contractId))
+    .orderBy(asc(contractApostilles.number));
+}
+
+/**
+ * Criar documento de contrato
+ */
+export async function createContractDocument(data: InsertContractDocument) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(contractDocuments).values(data);
+  const insertedId = result[0].insertId;
+
+  const doc = await db
+    .select()
+    .from(contractDocuments)
+    .where(eq(contractDocuments.id, insertedId))
+    .limit(1);
+
+  return doc.length > 0 ? doc[0] : null;
+}
+
+/**
+ * Listar documentos de um contrato
+ */
+export async function listContractDocuments(contractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contractDocuments)
+    .where(eq(contractDocuments.contractId, contractId))
+    .orderBy(desc(contractDocuments.createdAt));
+}
+
+/**
+ * Atualizar documento de contrato
+ */
+export async function updateContractDocument(id: number, data: Partial<InsertContractDocument>) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db
+    .update(contractDocuments)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(contractDocuments.id, id));
+
+  const doc = await db
+    .select()
+    .from(contractDocuments)
+    .where(eq(contractDocuments.id, id))
+    .limit(1);
+
+  return doc.length > 0 ? doc[0] : null;
+}
+
+/**
+ * Criar log de auditoria de contrato
+ */
+export async function createContractAuditLog(log: InsertContractAuditLog) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(contractAuditLogs).values(log);
+  return result.insertId;
+}
+
+/**
+ * Buscar logs de auditoria de um contrato
+ */
+export async function getContractAuditLogs(contractId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contractAuditLogs)
+    .where(eq(contractAuditLogs.contractId, contractId))
+    .orderBy(desc(contractAuditLogs.createdAt));
+}
+
+/**
+ * Buscar logs de auditoria por ação
+ */
+export async function getContractAuditLogsByAction(contractId: number, action: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contractAuditLogs)
+    .where(
+      and(
+        eq(contractAuditLogs.contractId, contractId),
+        eq(contractAuditLogs.action, action as any)
+      )
+    )
+    .orderBy(desc(contractAuditLogs.createdAt));
+}
+
+/**
+ * Buscar estatísticas gerais de contratos
+ */
+export async function getContractsOverview() {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Total de contratos
+  const totalResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(contracts);
+  const total = totalResult[0]?.count || 0;
+
+  // Total por tipo
+  const byTypeResult = await db
+    .select({
+      type: contracts.type,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(contracts)
+    .groupBy(contracts.type);
+
+  // Total por status
+  const byStatusResult = await db
+    .select({
+      status: contracts.status,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(contracts)
+    .groupBy(contracts.status);
+
+  // Valor total
+  const valueResult = await db
+    .select({ total: sql<number>`SUM(currentValue)` })
+    .from(contracts);
+  const totalValue = valueResult[0]?.total || 0;
+
+  // Contratos ativos
+  const activeResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(contracts)
+    .where(eq(contracts.status, "active"));
+  const activeCount = activeResult[0]?.count || 0;
+
+  // Contratos vencidos
+  const expiredResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(contracts)
+    .where(eq(contracts.status, "expired"));
+  const expiredCount = expiredResult[0]?.count || 0;
+
+  // Contratos a vencer em 30 dias
+  const expiringSoonResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.status, "active"),
+        sql`DATEDIFF(endDate, NOW()) <= 30 AND DATEDIFF(endDate, NOW()) > 0`
+      )
+    );
+  const expiringSoonCount = expiringSoonResult[0]?.count || 0;
+
+  return {
+    total,
+    byType: byTypeResult,
+    byStatus: byStatusResult,
+    totalValue,
+    active: activeCount,
+    expired: expiredCount,
+    expiringSoon: expiringSoonCount,
+  };
+}
+
+/**
+ * Buscar contratos recentes
+ */
+export async function getRecentContracts(limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(contracts)
+    .orderBy(desc(contracts.createdAt))
+    .limit(limit);
 }

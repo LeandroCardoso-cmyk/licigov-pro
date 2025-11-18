@@ -1699,13 +1699,20 @@
 - [x] Aplicar mudanças no banco (pnpm db:push) - 5 tabelas criadas
 
 ### Fase 2: Backend - Procedures tRPC e Funções de Banco
-- [ ] Criar funções de banco (createContract, getContractById, listContracts, updateContract)
-- [ ] Criar funções de aditivos (createAmendment, listAmendments)
-- [ ] Criar funções de apostilamentos (createApostille, listApostilles)
-- [ ] Criar funções de documentos (createContractDocument, listContractDocuments)
-- [ ] Criar procedures tRPC (contracts.create, contracts.list, contracts.getById, contracts.update)
-- [ ] Criar procedures de aditivos (amendments.create, amendments.list)
-- [ ] Criar procedures de apostilamentos (apostilles.create, apostilles.list)
+- [x] Criar funções de banco (createContract, getContractById, listContracts, updateContract)
+- [x] Criar funções de aditivos (createAmendment, listAmendments)
+- [x] Criar funções de apostilamentos (createApostille, listApostilles)
+- [x] Criar funções de documentos (createContractDocument, listContractDocuments, updateContractDocument)
+- [x] Criar funções de auditoria (createContractAuditLog, getContractAuditLogs, getContractAuditLogsByAction)
+- [x] Criar funções de estatísticas (getContractsOverview, getRecentContracts)
+- [x] Criar router de contratos (contractsRouter.ts) - 15 procedures
+- [x] Criar procedures tRPC (contracts.create, contracts.list, contracts.getById, contracts.update)
+- [x] Criar procedures de aditivos (amendments.create, amendments.list)
+- [x] Criar procedures de apostilamentos (apostilles.create, apostilles.list)
+- [x] Criar procedures de documentos (documents.create, documents.list, documents.update)
+- [x] Criar procedures de auditoria (audit.getLogs, audit.getLogsByAction)
+- [x] Criar procedures de estatísticas (analytics.getOverview, analytics.getRecent)
+- [x] Registrar router no routers.ts principal
 
 ### Fase 3: Geração de Documentos
 - [ ] Criar serviço de geração de Minuta de Contrato
