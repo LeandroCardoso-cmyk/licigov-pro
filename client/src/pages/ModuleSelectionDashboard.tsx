@@ -51,8 +51,8 @@ const modules: Module[] = [
     title: "Gestão de Contratos",
     description: "Acompanhamento de contratos, prazos, aditivos e fiscalização contratual",
     icon: <BarChart3 className="h-8 w-8" />,
-    path: "/contratos",
-    available: false,
+    path: "/contracts",
+    available: true,
     color: "from-orange-500 to-orange-600",
   },
   {
