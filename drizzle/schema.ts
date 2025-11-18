@@ -1070,3 +1070,207 @@ export const directContractChecklistProgress = mysqlTable("direct_contract_check
 
 export type DirectContractChecklistProgress = typeof directContractChecklistProgress.$inferSelect;
 export type InsertDirectContractChecklistProgress = typeof directContractChecklistProgress.$inferInsert;
+
+// ============================================================================
+// MÓDULO DE CONTRATOS
+// ============================================================================
+
+/**
+ * Contratos administrativos
+ * Gerencia contratos originados de processos licitatórios ou contratações diretas
+ */
+export const contracts = mysqlTable("contracts", {
+  id: int("id").autoincrement().primaryKey(),
+  // Número e identificação
+  number: varchar("number", { length: 50 }).notNull().unique(), // Ex: "001/2025"
+  year: int("year").notNull(),
+  // Objeto
+  object: text("object").notNull(), // Descrição do objeto contratado
+  // Tipo de contrato
+  type: mysqlEnum("type", [
+    "fornecimento", // Fornecimento de materiais
+    "servico", // Prestação de serviços
+    "obra", // Execução de obra
+    "concessao", // Concessão de serviço público
+    "outro" // Outro tipo
+  ]).notNull(),
+  // Origem (opcional - pode ser criado manualmente)
+  originType: mysqlEnum("originType", ["processo", "contratacao_direta", "manual"]),
+  originId: int("originId"), // ID do processo ou contratação direta
+  // Contratado
+  contractorName: varchar("contractorName", { length: 255 }).notNull(),
+  contractorCNPJ: varchar("contractorCNPJ", { length: 18 }),
+  contractorAddress: text("contractorAddress"),
+  contractorContact: varchar("contractorContact", { length: 100 }),
+  // Valores
+  value: int("value").notNull(), // Valor original (em centavos)
+  currentValue: int("currentValue").notNull(), // Valor atual (após aditivos)
+  // Vigência
+  startDate: timestamp("startDate").notNull(), // Data de início
+  endDate: timestamp("endDate").notNull(), // Data de término
+  // Renovação automática
+  autoRenewal: boolean("autoRenewal").default(false).notNull(),
+  maxRenewals: int("maxRenewals").default(0), // Número máximo de renovações
+  currentRenewals: int("currentRenewals").default(0), // Renovações já realizadas
+  // Fiscal do contrato
+  fiscalUserId: int("fiscalUserId"), // FK para users
+  fiscalUserName: varchar("fiscalUserName", { length: 255 }),
+  // Status
+  status: mysqlEnum("status", [
+    "draft", // Rascunho
+    "active", // Ativo/Vigente
+    "suspended", // Suspenso
+    "terminated", // Rescindido
+    "expired", // Vencido
+    "completed" // Concluído
+  ]).default("draft").notNull(),
+  // Observações
+  notes: text("notes"),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdBy: int("createdBy").notNull(), // FK para users
+});
+
+export type Contract = typeof contracts.$inferSelect;
+export type InsertContract = typeof contracts.$inferInsert;
+
+/**
+ * Aditivos de contrato
+ * Registra alterações de prazo, valor ou escopo
+ */
+export const contractAmendments = mysqlTable("contract_amendments", {
+  id: int("id").autoincrement().primaryKey(),
+  contractId: int("contractId").notNull(), // FK para contracts
+  // Número do aditivo
+  number: int("number").notNull(), // 1º, 2º, 3º aditivo
+  // Tipo de aditivo
+  type: mysqlEnum("type", [
+    "prazo", // Aditivo de prazo
+    "valor", // Aditivo de valor
+    "escopo", // Aditivo de escopo/objeto
+    "misto" // Aditivo misto (prazo + valor, etc)
+  ]).notNull(),
+  // Justificativa
+  justification: text("justification").notNull(),
+  // Alterações de prazo
+  newEndDate: timestamp("newEndDate"), // Nova data de término
+  daysAdded: int("daysAdded"), // Dias adicionados
+  // Alterações de valor
+  valueChange: int("valueChange"), // Valor adicionado/reduzido (em centavos)
+  newTotalValue: int("newTotalValue"), // Novo valor total do contrato
+  // Alterações de escopo
+  scopeChanges: text("scopeChanges"), // Descrição das mudanças no escopo
+  // Data de assinatura
+  signedAt: timestamp("signedAt"),
+  // Observações
+  notes: text("notes"),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdBy: int("createdBy").notNull(), // FK para users
+});
+
+export type ContractAmendment = typeof contractAmendments.$inferSelect;
+export type InsertContractAmendment = typeof contractAmendments.$inferInsert;
+
+/**
+ * Apostilamentos de contrato
+ * Registra alterações que não exigem termo aditivo
+ */
+export const contractApostilles = mysqlTable("contract_apostilles", {
+  id: int("id").autoincrement().primaryKey(),
+  contractId: int("contractId").notNull(), // FK para contracts
+  // Número do apostilamento
+  number: int("number").notNull(), // 1º, 2º, 3º apostilamento
+  // Tipo de apostilamento
+  type: mysqlEnum("type", [
+    "reajuste", // Reajuste de preços por índice
+    "correcao", // Correção de dados cadastrais
+    "designacao", // Designação de fiscal
+    "outro" // Outro tipo
+  ]).notNull(),
+  // Descrição
+  description: text("description").notNull(),
+  // Valor (para reajustes)
+  valueChange: int("valueChange"), // Valor do reajuste (em centavos)
+  newTotalValue: int("newTotalValue"), // Novo valor total
+  // Índice de reajuste (para reajustes)
+  indexType: varchar("indexType", { length: 50 }), // IPCA, IGP-M, etc
+  indexValue: varchar("indexValue", { length: 20 }), // Ex: "5.79%"
+  // Data de assinatura
+  signedAt: timestamp("signedAt"),
+  // Observações
+  notes: text("notes"),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdBy: int("createdBy").notNull(), // FK para users
+});
+
+export type ContractApostille = typeof contractApostilles.$inferSelect;
+export type InsertContractApostille = typeof contractApostilles.$inferInsert;
+
+/**
+ * Documentos gerados para contratos
+ */
+export const contractDocuments = mysqlTable("contract_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  contractId: int("contractId").notNull(), // FK para contracts
+  // Tipo de documento
+  type: mysqlEnum("type", [
+    "minuta", // Minuta de contrato
+    "aditivo", // Termo de aditivo
+    "apostilamento", // Termo de apostilamento
+    "rescisao", // Termo de rescisão
+    "outro" // Outro tipo
+  ]).notNull(),
+  // Referência (para aditivos e apostilamentos)
+  referenceId: int("referenceId"), // ID do aditivo ou apostilamento
+  // Conteúdo
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(), // Conteúdo em Markdown
+  // Versão
+  version: int("version").default(1).notNull(),
+  // Status
+  status: mysqlEnum("status", ["draft", "final", "archived"]).default("draft").notNull(),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ContractDocument = typeof contractDocuments.$inferSelect;
+export type InsertContractDocument = typeof contractDocuments.$inferInsert;
+
+/**
+ * Logs de auditoria para contratos
+ * Registra todas as ações realizadas
+ */
+export const contractAuditLogs = mysqlTable("contract_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  contractId: int("contractId").notNull(), // FK para contracts
+  // Ação realizada
+  action: mysqlEnum("action", [
+    "created", // Contrato criado
+    "updated", // Contrato editado
+    "status_changed", // Status alterado
+    "amendment_added", // Aditivo adicionado
+    "apostille_added", // Apostilamento adicionado
+    "document_generated", // Documento gerado
+    "document_downloaded", // Documento baixado
+    "renewed", // Contrato renovado
+    "suspended", // Contrato suspenso
+    "terminated", // Contrato rescindido
+    "completed", // Contrato concluído
+  ]).notNull(),
+  // Usuário que realizou a ação
+  userId: int("userId").notNull(), // FK para users
+  userName: varchar("userName", { length: 255 }), // Nome do usuário (cache)
+  // Detalhes da ação (JSON)
+  details: json("details"), // { documentType: "minuta", oldStatus: "draft", newStatus: "active", etc }
+  // Timestamp
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ContractAuditLog = typeof contractAuditLogs.$inferSelect;
+export type InsertContractAuditLog = typeof contractAuditLogs.$inferInsert;

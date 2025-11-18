@@ -169,6 +169,13 @@
       "when": 1763415874369,
       "tag": "0023_amazing_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1763482695033,
+      "tag": "0024_secret_gorgon",
+      "breakpoints": true
     }
   ]
 }

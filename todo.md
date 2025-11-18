@@ -1686,3 +1686,72 @@
 - [x] Implementar tabela de top 5 artigos legais (com descrição e usos)
 - [x] Adicionar rota no App.tsx (/direct-contracts/analytics)
 - [x] Adicionar botão "Analytics" no dashboard principal
+
+
+## Módulo de Contratos
+
+### Fase 1: Schema de Banco de Dados
+- [x] Criar tabela `contracts` (25 campos: número, objeto, contratado, valor, vigência, status, renovação)
+- [x] Criar tabela `contract_amendments` (15 campos: aditivos de prazo, valor, escopo)
+- [x] Criar tabela `contract_apostilles` (14 campos: apostilamentos, reajustes, correções)
+- [x] Criar tabela `contract_documents` (10 campos: documentos gerados)
+- [x] Criar tabela `contract_audit_logs` (7 campos: auditoria completa)
+- [x] Aplicar mudanças no banco (pnpm db:push) - 5 tabelas criadas
+
+### Fase 2: Backend - Procedures tRPC e Funções de Banco
+- [ ] Criar funções de banco (createContract, getContractById, listContracts, updateContract)
+- [ ] Criar funções de aditivos (createAmendment, listAmendments)
+- [ ] Criar funções de apostilamentos (createApostille, listApostilles)
+- [ ] Criar funções de documentos (createContractDocument, listContractDocuments)
+- [ ] Criar procedures tRPC (contracts.create, contracts.list, contracts.getById, contracts.update)
+- [ ] Criar procedures de aditivos (amendments.create, amendments.list)
+- [ ] Criar procedures de apostilamentos (apostilles.create, apostilles.list)
+
+### Fase 3: Geração de Documentos
+- [ ] Criar serviço de geração de Minuta de Contrato
+- [ ] Criar serviço de geração de Termo de Aditivo
+- [ ] Criar serviço de geração de Termo de Apostilamento
+- [ ] Criar serviço de geração de Termo de Rescisão
+- [ ] Criar procedures tRPC para gerar documentos
+
+### Fase 4: UI - Formulário e Dashboard
+- [ ] Criar página Contracts.tsx (dashboard com filtros e cards de estatísticas)
+- [ ] Criar página NewContract.tsx (formulário wizard com 3 passos)
+- [ ] Implementar filtros (status, tipo, ano, vencimento)
+- [ ] Implementar cards de estatísticas (ativos, vencidos, a vencer)
+- [ ] Adicionar rotas no App.tsx
+
+### Fase 5: Página de Detalhes e Gestão de Aditivos
+- [ ] Criar página ContractDetails.tsx (3 abas: visão geral, aditivos, documentos)
+- [ ] Implementar aba de visão geral (dados do contrato, contratado, vigência)
+- [ ] Implementar aba de aditivos (lista + formulário de novo aditivo)
+- [ ] Implementar aba de apostilamentos (lista + formulário de novo apostilamento)
+- [ ] Implementar aba de documentos (lista + botões de geração)
+- [ ] Implementar timeline de eventos
+
+### Fase 6: Sistema de Alertas
+- [ ] Criar função de cálculo de dias até vencimento
+- [ ] Implementar badges de alerta (vencido, vence em 30/60/90 dias)
+- [ ] Criar sistema de notificações automáticas (notifyOwner)
+- [ ] Adicionar alertas no dashboard
+
+### Fase 7: Integração com Outros Módulos
+- [ ] Adicionar botão "Gerar Contrato" em ProcessDetails.tsx
+- [ ] Adicionar botão "Gerar Contrato" em DirectContractDetails.tsx
+- [ ] Criar modal de criação rápida de contrato
+- [ ] Preencher dados automaticamente a partir do processo/contratação
+
+### Fase 8: Auditoria e Relatórios
+- [ ] Criar tabela de auditoria (contract_audit_logs)
+- [ ] Registrar todas as ações (criar, editar, adicionar aditivo, gerar documento)
+- [ ] Criar componente ContractAuditTimeline
+- [ ] Implementar exportação de relatório de auditoria em PDF
+- [ ] Adicionar aba "Histórico" na página de detalhes
+
+### Fase 9: Testes Finais
+- [ ] Testar fluxo completo de criação de contrato
+- [ ] Testar geração de todos os documentos
+- [ ] Testar adição de aditivos e apostilamentos
+- [ ] Testar sistema de alertas
+- [ ] Testar integração com outros módulos
+- [ ] Salvar checkpoint final
