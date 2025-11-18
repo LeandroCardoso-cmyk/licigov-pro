@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
+import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
 
 /**
  * Router de Contratos
@@ -367,6 +369,252 @@ export const contractsRouter = router({
       .input(z.object({ limit: z.number().default(10) }))
       .query(async ({ input }) => {
         return await db.getRecentContracts(input.limit);
+      }),
+  }),
+
+  // ============================================================================
+  // GERAÇÃO DE DOCUMENTOS
+  // ============================================================================
+
+  generation: router({
+    /**
+     * Gerar Minuta de Contrato
+     */
+    generateMinuta: protectedProcedure
+      .input(z.object({ contractId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const contract = await db.getContractById(input.contractId);
+        if (!contract) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+        }
+
+        const content = generateContractMinuta({
+          number: contract.number,
+          year: contract.year,
+          object: contract.object,
+          type: contract.type as any,
+          contractorName: contract.contractorName,
+          contractorCNPJ: contract.contractorCNPJ || undefined,
+          contractorAddress: contract.contractorAddress || undefined,
+          contractorContact: contract.contractorContact || undefined,
+          value: parseFloat(contract.value),
+          currentValue: parseFloat(contract.currentValue),
+          startDate: contract.startDate,
+          endDate: contract.endDate,
+          fiscalUserName: contract.fiscalUserName || undefined,
+          notes: contract.notes || undefined,
+          originType: contract.originType as any || undefined,
+        });
+
+        const document = await db.createContractDocument({
+          contractId: input.contractId,
+          type: "minuta",
+          title: `Minuta de Contrato nº ${contract.number}/${contract.year}`,
+          content,
+          status: "draft",
+        });
+
+        await db.createContractAuditLog({
+          contractId: input.contractId,
+          action: "document_generated",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: { documentType: "minuta", documentId: document?.id },
+        });
+
+        return { documentId: document?.id, content };
+      }),
+
+    /**
+     * Gerar Termo de Aditivo
+     */
+    generateAmendment: protectedProcedure
+      .input(z.object({ contractId: z.number(), amendmentId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const contract = await db.getContractById(input.contractId);
+        if (!contract) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+        }
+
+        const amendments = await db.listAmendments(input.contractId);
+        const amendment = amendments.find(a => a.id === input.amendmentId);
+        if (!amendment) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Aditivo não encontrado" });
+        }
+
+        const content = generateAmendmentTerm(
+          {
+            number: contract.number,
+            year: contract.year,
+            object: contract.object,
+            type: contract.type as any,
+            contractorName: contract.contractorName,
+            contractorCNPJ: contract.contractorCNPJ || undefined,
+            value: parseFloat(contract.value),
+            currentValue: parseFloat(contract.currentValue),
+            startDate: contract.startDate,
+            endDate: contract.endDate,
+          },
+          {
+            number: amendment.number,
+            type: amendment.type as any,
+            justification: amendment.justification,
+            newEndDate: amendment.newEndDate || undefined,
+            daysAdded: amendment.daysAdded || undefined,
+            valueChange: amendment.valueChange ? parseFloat(amendment.valueChange) : undefined,
+            newTotalValue: amendment.newTotalValue ? parseFloat(amendment.newTotalValue) : undefined,
+            scopeChanges: amendment.scopeChanges || undefined,
+            signedAt: amendment.signedAt || undefined,
+          }
+        );
+
+        const document = await db.createContractDocument({
+          contractId: input.contractId,
+          type: "aditivo",
+          referenceId: input.amendmentId,
+          title: `Termo Aditivo nº ${amendment.number}`,
+          content,
+          status: "draft",
+        });
+
+        await db.createContractAuditLog({
+          contractId: input.contractId,
+          action: "document_generated",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: { documentType: "aditivo", documentId: document?.id, amendmentId: input.amendmentId },
+        });
+
+        return { documentId: document?.id, content };
+      }),
+
+    /**
+     * Gerar Termo de Apostilamento
+     */
+    generateApostille: protectedProcedure
+      .input(z.object({ contractId: z.number(), apostilleId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const contract = await db.getContractById(input.contractId);
+        if (!contract) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+        }
+
+        const apostilles = await db.listApostilles(input.contractId);
+        const apostille = apostilles.find(a => a.id === input.apostilleId);
+        if (!apostille) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Apostilamento não encontrado" });
+        }
+
+        const content = generateApostilleTerm(
+          {
+            number: contract.number,
+            year: contract.year,
+            object: contract.object,
+            type: contract.type as any,
+            contractorName: contract.contractorName,
+            contractorCNPJ: contract.contractorCNPJ || undefined,
+            value: parseFloat(contract.value),
+            currentValue: parseFloat(contract.currentValue),
+            startDate: contract.startDate,
+            endDate: contract.endDate,
+            fiscalUserName: contract.fiscalUserName || undefined,
+          },
+          {
+            number: apostille.number,
+            type: apostille.type as any,
+            description: apostille.description,
+            valueChange: apostille.valueChange ? parseFloat(apostille.valueChange) : undefined,
+            newTotalValue: apostille.newTotalValue ? parseFloat(apostille.newTotalValue) : undefined,
+            indexType: apostille.indexType || undefined,
+            indexValue: apostille.indexValue || undefined,
+            signedAt: apostille.signedAt || undefined,
+          }
+        );
+
+        const document = await db.createContractDocument({
+          contractId: input.contractId,
+          type: "apostilamento",
+          referenceId: input.apostilleId,
+          title: `Termo de Apostilamento nº ${apostille.number}`,
+          content,
+          status: "draft",
+        });
+
+        await db.createContractAuditLog({
+          contractId: input.contractId,
+          action: "document_generated",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: { documentType: "apostilamento", documentId: document?.id, apostilleId: input.apostilleId },
+        });
+
+        return { documentId: document?.id, content };
+      }),
+
+    /**
+     * Gerar Termo de Rescisão
+     */
+    generateRescission: protectedProcedure
+      .input(
+        z.object({
+          contractId: z.number(),
+          type: z.enum(["unilateral", "bilateral", "judicial"]),
+          reason: z.string(),
+          effectiveDate: z.date(),
+          penaltyAmount: z.number().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const contract = await db.getContractById(input.contractId);
+        if (!contract) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+        }
+
+        const content = generateRescissionTerm(
+          {
+            number: contract.number,
+            year: contract.year,
+            object: contract.object,
+            type: contract.type as any,
+            contractorName: contract.contractorName,
+            contractorCNPJ: contract.contractorCNPJ || undefined,
+            value: parseFloat(contract.value),
+            currentValue: parseFloat(contract.currentValue),
+            startDate: contract.startDate,
+            endDate: contract.endDate,
+          },
+          {
+            type: input.type,
+            reason: input.reason,
+            effectiveDate: input.effectiveDate,
+            penaltyAmount: input.penaltyAmount,
+            notes: input.notes,
+          }
+        );
+
+        const document = await db.createContractDocument({
+          contractId: input.contractId,
+          type: "rescisao",
+          title: `Termo de Rescisão ${input.type === "unilateral" ? "Unilateral" : input.type === "bilateral" ? "Bilateral" : "Judicial"}`,
+          content,
+          status: "draft",
+        });
+
+        // Atualizar status do contrato
+        await db.updateContract(input.contractId, {
+          status: "terminated",
+        });
+
+        await db.createContractAuditLog({
+          contractId: input.contractId,
+          action: "rescission_created",
+          userId: ctx.user.id,
+          userName: ctx.user.name || undefined,
+          details: { documentType: "rescisao", documentId: document?.id, rescissionType: input.type },
+        });
+
+        return { documentId: document?.id, content };
       }),
   }),
 });

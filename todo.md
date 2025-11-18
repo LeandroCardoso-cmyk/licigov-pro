@@ -1715,11 +1715,13 @@
 - [x] Registrar router no routers.ts principal
 
 ### Fase 3: Geração de Documentos
-- [ ] Criar serviço de geração de Minuta de Contrato
-- [ ] Criar serviço de geração de Termo de Aditivo
-- [ ] Criar serviço de geração de Termo de Apostilamento
-- [ ] Criar serviço de geração de Termo de Rescisão
-- [ ] Criar procedures tRPC para gerar documentos
+- [x] Criar serviço de geração de Minuta de Contrato (Lei 14.133/2021, 11 cláusulas)
+- [x] Criar serviço de geração de Termo de Aditivo (prazo, valor, escopo, misto)
+- [x] Criar serviço de geração de Termo de Apostilamento (reajuste, correção, designação)
+- [x] Criar serviço de geração de Termo de Rescisão (unilateral, bilateral, judicial)
+- [x] Criar procedures tRPC para gerar documentos (4 procedures: generateMinuta, generateAmendment, generateApostille, generateRescission)
+- [x] Integrar geração com auditoria automática
+- [x] Salvar documentos no banco de dados
 
 ### Fase 4: UI - Formulário e Dashboard
 - [ ] Criar página Contracts.tsx (dashboard com filtros e cards de estatísticas)
