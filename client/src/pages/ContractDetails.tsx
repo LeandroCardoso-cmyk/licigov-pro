@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { NewAmendmentModal } from "@/components/NewAmendmentModal";
+import { NewApostilleModal } from "@/components/NewApostilleModal";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +31,8 @@ export default function ContractDetails() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
+  const [amendmentModalOpen, setAmendmentModalOpen] = useState(false);
+  const [apostilleModalOpen, setApostilleModalOpen] = useState(false);
 
   // Buscar contrato
   const { data: contract, isLoading } = trpc.contracts.getById.useQuery(
@@ -317,7 +321,7 @@ export default function ContractDetails() {
                   Alterações de prazo, valor ou escopo do contrato
                 </p>
               </div>
-              <Button>
+              <Button onClick={() => setAmendmentModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Aditivo
               </Button>
@@ -398,7 +402,7 @@ export default function ContractDetails() {
                   Reajustes, correções e alterações sem modificar a essência do contrato
                 </p>
               </div>
-              <Button>
+              <Button onClick={() => setApostilleModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Apostilamento
               </Button>
@@ -597,6 +601,25 @@ export default function ContractDetails() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Modais */}
+      {contract && (
+        <>
+          <NewAmendmentModal
+            open={amendmentModalOpen}
+            onClose={() => setAmendmentModalOpen(false)}
+            contractId={contract.id}
+            currentEndDate={contract.endDate}
+            currentValue={contract.value}
+          />
+          <NewApostilleModal
+            open={apostilleModalOpen}
+            onClose={() => setApostilleModalOpen(false)}
+            contractId={contract.id}
+            currentValue={contract.value}
+          />
+        </>
+      )}
     </div>
   );
 }
