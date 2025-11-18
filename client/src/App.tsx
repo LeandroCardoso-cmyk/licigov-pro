@@ -42,6 +42,7 @@ import DirectContractDetails from "./pages/DirectContractDetails";
 import DirectContractsAnalytics from "./pages/DirectContractsAnalytics";
 import Contracts from "./pages/Contracts";
 import NewContract from "./pages/NewContract";
+import ContractDetails from "./pages/ContractDetails";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -116,6 +117,7 @@ function Router() {
       <Route path={'/direct-contracts/:id'} component={DirectContractDetailsRoute} />
       <Route path={'/contracts'} component={() => <AuthenticatedRoute component={Contracts} />} />
       <Route path={'/contracts/new'} component={() => <AuthenticatedRoute component={NewContract} />} />
+      <Route path={'/contracts/:id'} component={() => <AuthenticatedRoute component={ContractDetails} />} />
       <Route path="/processo/:id" component={ProcessDetailsRoute} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
