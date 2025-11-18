@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
+import { checkContractExpirations, getExpirationSummary } from "../services/contractNotifications";
+import { generateAlertsExcelReport, generateAuditExcelReport } from "../services/contractReports";
 
 /**
  * Router de Contratos
@@ -615,6 +617,60 @@ export const contractsRouter = router({
         });
 
         return { documentId: document?.id, content };
+      }),
+  }),
+
+  // ============================================================================
+  // NOTIFICAÇÕES
+  // ============================================================================
+
+  notifications: router({
+    /**
+     * Verificar vencimentos e enviar notificações
+     */
+    checkExpirations: protectedProcedure.mutation(async ({ ctx }) => {
+      const result = await checkContractExpirations();
+      return result;
+    }),
+
+    /**
+     * Obter resumo de vencimentos
+     */
+    getSummary: protectedProcedure.query(async ({ ctx }) => {
+      const summary = await getExpirationSummary();
+      return summary;
+    }),
+  }),
+
+  // ============================================================================
+  // RELATÓRIOS
+  // ============================================================================
+
+  reports: router({
+    /**
+     * Exportar relatório de alertas em Excel
+     */
+    exportAlertsExcel: protectedProcedure.mutation(async ({ ctx }) => {
+      const buffer = await generateAlertsExcelReport();
+      const base64 = buffer.toString("base64");
+      return {
+        data: base64,
+        filename: `alertas-contratos-${new Date().toISOString().split('T')[0]}.xlsx`,
+      };
+    }),
+
+    /**
+     * Exportar histórico de auditoria em Excel
+     */
+    exportAuditExcel: protectedProcedure
+      .input(z.object({ contractId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const buffer = await generateAuditExcelReport(input.contractId);
+        const base64 = buffer.toString("base64");
+        return {
+          data: base64,
+          filename: `auditoria-contrato-${input.contractId}-${new Date().toISOString().split('T')[0]}.xlsx`,
+        };
       }),
   }),
 });

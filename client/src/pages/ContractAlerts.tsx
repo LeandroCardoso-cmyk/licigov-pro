@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, AlertTriangle, Clock, Calendar, FileText } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Clock, Calendar, FileText, Bell, Download } from "lucide-react";
+import { toast } from "sonner";
 import { differenceInDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -16,6 +17,54 @@ import { ptBR } from "date-fns/locale";
 export default function ContractAlerts() {
   const [, setLocation] = useLocation();
   const [filter, setFilter] = useState<"all" | "expired" | "30" | "60" | "90">("all");
+  
+  // Mutation para exportar Excel
+  const exportExcelMutation = trpc.contracts.reports.exportAlertsExcel.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("Relatório exportado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao exportar relatório", {
+        description: error.message,
+      });
+    },
+  });
+  
+  // Mutation para verificar vencimentos manualmente
+  const checkExpirationsMutation = trpc.contracts.notifications.checkExpirations.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`Verificação concluída!`, {
+          description: `${data.notificationsSent} notificações enviadas`,
+        });
+      } else {
+        toast.error("Erro ao verificar vencimentos", {
+          description: data.message,
+        });
+      }
+    },
+    onError: (error) => {
+      toast.error("Erro ao verificar vencimentos", {
+        description: error.message,
+      });
+    },
+  });
 
   // Buscar todos os contratos ativos
   const { data: contracts, isLoading } = trpc.contracts.list.useQuery({
@@ -105,6 +154,24 @@ export default function ContractAlerts() {
               <p className="text-muted-foreground">
                 Contratos próximos ao vencimento e vencidos
               </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => exportExcelMutation.mutate()}
+                disabled={exportExcelMutation.isPending}
+                variant="outline"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {exportExcelMutation.isPending ? "Exportando..." : "Exportar Excel"}
+              </Button>
+              <Button
+                onClick={() => checkExpirationsMutation.mutate()}
+                disabled={checkExpirationsMutation.isPending}
+                variant="outline"
+              >
+                <Bell className="h-4 w-4 mr-2" />
+                {checkExpirationsMutation.isPending ? "Verificando..." : "Verificar e Notificar"}
+              </Button>
             </div>
           </div>
         </div>

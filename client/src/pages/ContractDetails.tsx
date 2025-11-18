@@ -35,6 +35,34 @@ export default function ContractDetails() {
   const [amendmentModalOpen, setAmendmentModalOpen] = useState(false);
   const [apostilleModalOpen, setApostilleModalOpen] = useState(false);
   const [rescissionModalOpen, setRescissionModalOpen] = useState(false);
+  
+  // Mutation para exportar auditoria
+  const exportAuditMutation = trpc.contracts.reports.exportAuditExcel.useMutation({
+    onSuccess: (data) => {
+      // Converter base64 para blob e fazer download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("Histórico exportado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao exportar histórico", {
+        description: error.message,
+      });
+    },
+  });
 
   // Buscar contrato
   const { data: contract, isLoading } = trpc.contracts.getById.useQuery(
@@ -645,11 +673,27 @@ export default function ContractDetails() {
 
           {/* Aba 5: Histórico */}
           <TabsContent value="history" className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-1">Histórico de Atividades</h3>
-              <p className="text-sm text-muted-foreground">
-                Timeline completa de todas as ações realizadas neste contrato
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold mb-1">Histórico de Atividades</h3>
+                <p className="text-sm text-muted-foreground">
+                  Timeline completa de todas as ações realizadas neste contrato
+                </p>
+              </div>
+              {auditLogs && auditLogs.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!contract) return;
+                    exportAuditMutation.mutate({ contractId: contract.id });
+                  }}
+                  disabled={exportAuditMutation.isPending}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {exportAuditMutation.isPending ? "Exportando..." : "Exportar Excel"}
+                </Button>
+              )}
             </div>
 
             {auditLogs && auditLogs.length > 0 ? (

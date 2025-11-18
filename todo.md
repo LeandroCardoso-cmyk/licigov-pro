@@ -1769,3 +1769,27 @@
 - [ ] Testar sistema de alertas
 - [ ] Testar integração com outros módulos
 - [ ] Salvar checkpoint final
+
+### Fase 10: Sistema de Notificações Automáticas
+- [x] Criar função checkContractExpirations para verificar vencimentos
+- [x] Implementar lógica de alertas (30, 60, 90 dias antes)
+- [x] Integrar com notifyOwner para envio de notificações
+- [x] Criar procedure tRPC para verificação manual
+- [x] Adicionar botão "Verificar e Notificar" na página de Alertas
+- [ ] Configurar job agendado (cron diário) - pendente
+
+### Fase 11: Exportação de Relatórios
+- [x] Implementar exportação de alertas em Excel
+- [x] Implementar exportação de histórico de auditoria em Excel
+- [x] Adicionar botão de exportação na página de Alertas
+- [x] Adicionar botão de exportação na aba de Histórico
+- [x] Criar procedures tRPC para exportação (exportAlertsExcel, exportAuditExcel)
+- [x] Implementar download automático com conversão base64
+
+### Fase 12: Validação de CNPJ Automática
+- [x] Botão de validação de CNPJ no NewContract.tsx (já implementado)
+- [x] Integração com procedure de consulta CNPJ (já existente)
+- [x] Preenchimento automático de nome, endereço e contato (já funcional)
+- [x] Feedback visual de validação (borda verde/vermelha)
+- [x] Tratamento de erros completo
+- [x] Fluxo completo de validação testado
