@@ -1835,3 +1835,18 @@
 - [x] Adicionar gradientes hover nos botões (blue-600 → blue-700)
 - [x] Adicionar gradientes em seções alternadas (gray-50, white, blue gradients)
 - [x] Testar responsividade e legibilidade
+
+
+### Fase 17: Melhorias Finais na Landing Page
+- [x] Melhorar contraste dos cards (texto branco + overlay from-black/70)
+- [x] Adicionar descrição dos cards sobre a imagem com drop-shadow
+- [x] Implementar animações de scroll (fade-in e slide-up)
+- [x] Criar hook useIntersectionObserver
+- [x] Criar componente AnimatedSection com 4 tipos de animação
+- [x] Aplicar animações nos cards de funcionalidades
+- [x] Aplicar animações na seção "Como Funciona"
+- [x] Criar formulário de contato inline (nome, email, órgão, telefone, mensagem)
+- [x] Criar contactRouter com procedure submitContactForm
+- [x] Integrar formulário antes do footer com handler de submit
+- [x] Adicionar estado de loading e feedback com toasts
+- [x] Integrar com notifyOwner para alertar proprietário

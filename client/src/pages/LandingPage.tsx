@@ -3,8 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Clock, Users, BarChart3, Shield, Zap, CheckCircle2, ArrowRight, ChevronDown } from "lucide-react";
 import { APP_TITLE, APP_LOGO, getLoginUrl } from "@/const";
 import { Link } from "wouter";
+import { AnimatedSection } from "@/components/AnimatedSection";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export default function LandingPage() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitContactMutation = trpc.contact.submitContactForm.useMutation();
   const features = [
     {
       icon: FileText,
@@ -175,6 +181,7 @@ export default function LandingPage() {
           {features.map((feature, index) => {
             const Icon = feature.icon;
             return (
+              <AnimatedSection key={index} animation="slide-up" delay={index * 100}>
               <Card 
                 key={index} 
                 className="border-2 hover:border-blue-300 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 cursor-pointer overflow-hidden group"
@@ -185,7 +192,10 @@ export default function LandingPage() {
                     alt={feature.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                  <div className="absolute bottom-4 right-4 left-4">
+                    <p className="text-white text-sm drop-shadow-lg">{feature.description}</p>
+                  </div>
                   <div className="absolute bottom-4 left-4 w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg">
                     <Icon className="h-6 w-6 text-blue-600" />
                   </div>
@@ -195,6 +205,7 @@ export default function LandingPage() {
                   <p className="text-gray-600">{feature.description}</p>
                 </CardContent>
               </Card>
+              </AnimatedSection>
             );
           })}
         </div>
@@ -214,7 +225,8 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {howItWorks.map((item, index) => (
-              <div key={index} className="relative">
+              <AnimatedSection key={index} animation="slide-up" delay={index * 150}>
+              <div className="relative">
                 <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow h-full">
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg">
                     {item.step}
@@ -228,6 +240,7 @@ export default function LandingPage() {
                   </div>
                 )}
               </div>
+              </AnimatedSection>
             ))}
           </div>
         </div>
@@ -359,6 +372,142 @@ export default function LandingPage() {
                 </details>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Formulário de Contato Inline */}
+      <section className="bg-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="max-w-2xl mx-auto">
+            <AnimatedSection animation="fade-in">
+              <div className="text-center mb-10">
+                <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                  Entre em Contato
+                </h3>
+                <p className="text-xl text-gray-600">
+                  Preencha o formulário e nossa equipe entrará em contato em até 24 horas
+                </p>
+              </div>
+
+              <form 
+                className="space-y-6 bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-2xl shadow-xl"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setIsSubmitting(true);
+
+                  const formData = new FormData(e.currentTarget);
+                  const data = {
+                    name: formData.get('name') as string,
+                    email: formData.get('email') as string,
+                    organ: formData.get('organ') as string,
+                    phone: formData.get('phone') as string,
+                    message: formData.get('message') as string || undefined,
+                  };
+
+                  try {
+                    await submitContactMutation.mutateAsync(data);
+                    toast.success('Formulário enviado com sucesso!', {
+                      description: 'Entraremos em contato em breve.',
+                    });
+                    e.currentTarget.reset();
+                  } catch (error: any) {
+                    toast.error('Erro ao enviar formulário', {
+                      description: error.message || 'Tente novamente mais tarde.',
+                    });
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+              >
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Nome Completo *
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="Seu nome"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                      E-mail *
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="seu@email.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="organ" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Órgão Público *
+                    </label>
+                    <input
+                      type="text"
+                      id="organ"
+                      name="organ"
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="Nome do órgão"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Telefone *
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      name="phone"
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="(00) 00000-0000"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="message" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mensagem (opcional)
+                  </label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    placeholder="Conte-nos mais sobre suas necessidades..."
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={isSubmitting}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Enviando...' : 'Enviar Solicitação'}
+                  {!isSubmitting && <ArrowRight className="ml-2 h-5 w-5" />}
+                </Button>
+
+                <p className="text-sm text-gray-600 text-center">
+                  Ao enviar este formulário, você concorda com nossa Política de Privacidade
+                </p>
+              </form>
+            </AnimatedSection>
           </div>
         </div>
       </section>

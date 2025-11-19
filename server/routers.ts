@@ -12,6 +12,7 @@ import { platformsRouter } from "./routers/platformsRouter";
 import { downloadRouter } from "./routers/downloadRouter";
 import { directContractsRouter } from "./routers/directContractsRouter";
 import { contractsRouter } from "./routers/contractsRouter";
+import { contactRouter } from "./routers/contactRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -21,6 +22,7 @@ import { convertToPDF, convertToDOCX } from "./services/documentConverter";
 
 export const appRouter = router({
   system: systemRouter,
+  contact: contactRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
