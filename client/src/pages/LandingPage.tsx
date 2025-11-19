@@ -77,7 +77,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -95,7 +95,8 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section - Assimétrico */}
-      <section className="container mx-auto px-4 py-16 md:py-24">
+      <section className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-16 md:py-24">
+        <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* Texto à esquerda */}
           <div className="space-y-6">
@@ -111,15 +112,11 @@ export default function LandingPage() {
             </p>
             <div className="flex gap-4 flex-wrap">
               {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-              <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700 text-lg px-8">
-                <Link href="/solicitar-proposta">
+              <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg px-8 shadow-lg hover:shadow-xl transition-all">
+                <Link href="/solicitar-proposta" className="flex items-center">
                   Solicitar Proposta Comercial
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
-              </Button>
-              {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-              <Button asChild variant="outline" size="lg" className="text-lg px-8">
-                <a href={getLoginUrl()}>Acessar Sistema</a>
               </Button>
             </div>
           </div>
@@ -138,10 +135,11 @@ export default function LandingPage() {
             <div className="absolute -bottom-8 -left-4 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
           </div>
         </div>
+        </div>
       </section>
 
       {/* Benefícios Principais */}
-      <section className="bg-blue-600 text-white py-16">
+      <section className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h3 className="text-3xl md:text-4xl font-bold mb-4">
@@ -218,7 +216,7 @@ export default function LandingPage() {
             {howItWorks.map((item, index) => (
               <div key={index} className="relative">
                 <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow h-full">
-                  <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg">
                     {item.step}
                   </div>
                   <h4 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h4>
@@ -236,7 +234,8 @@ export default function LandingPage() {
       </section>
 
       {/* Geração Automática com IA */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="bg-white py-20">
+        <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div className="order-2 md:order-1">
             <img 
@@ -267,10 +266,11 @@ export default function LandingPage() {
             </ul>
           </div>
         </div>
+        </div>
       </section>
 
       {/* Colaboração em Equipe */}
-      <section className="bg-gradient-to-br from-indigo-50 to-blue-50 py-20">
+      <section className="bg-gradient-to-b from-gray-50 to-white py-20">
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
@@ -373,8 +373,8 @@ export default function LandingPage() {
             Solicite uma proposta comercial personalizada para o seu órgão. Sem compromisso.
           </p>
           {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-          <Button asChild size="lg" variant="secondary" className="text-lg px-8">
-            <Link href="/solicitar-proposta">
+          <Button asChild size="lg" className="text-lg px-8 bg-white text-blue-600 hover:bg-gray-100 shadow-lg hover:shadow-xl transition-all">
+            <Link href="/solicitar-proposta" className="flex items-center">
               Solicitar Proposta Agora
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>

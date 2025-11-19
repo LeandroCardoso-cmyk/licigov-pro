@@ -1826,3 +1826,12 @@
 - [x] Substituir botão "Solicitar Proposta" do header por "Entrar no Sistema"
 - [x] Ajustar estilo do botão de login para destaque (azul, primário)
 - [x] Testar navegação e redirecionamento
+
+
+### Fase 16: Melhorias Visuais na Landing Page
+- [x] Remover botão "Acessar Sistema" duplicado (já existe no header)
+- [x] Corrigir alinhamento do botão "Solicitar Proposta Comercial" (seta centralizada)
+- [x] Adicionar gradientes sutis no hero section (blue-50 → white → indigo-50)
+- [x] Adicionar gradientes hover nos botões (blue-600 → blue-700)
+- [x] Adicionar gradientes em seções alternadas (gray-50, white, blue gradients)
+- [x] Testar responsividade e legibilidade
