@@ -8,20 +8,57 @@ import ExcelJS from "exceljs";
  * Gera relatório completo de tarefas em Excel
  */
 export async function generateTasksExcelReport(filters?: {
-  status?: string;
-  priority?: string;
+  status?: string[];
+  priority?: string[];
   assignedTo?: number;
+  startDate?: Date;
+  endDate?: Date;
+  tags?: string[];
 }) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Buscar tarefas (aplicar filtros se fornecidos)
-  let query = db.select().from(tasks);
+  // Buscar tarefas e aplicar filtros
+  let allTasks = await db.select().from(tasks);
   
-  // TODO: Aplicar filtros quando necessário
-  const allTasks = await query;
+  // Aplicar filtros
+  if (filters) {
+    allTasks = allTasks.filter((task) => {
+      // Filtro por status
+      if (filters.status && filters.status.length > 0) {
+        if (!filters.status.includes(task.status)) return false;
+      }
+      
+      // Filtro por prioridade
+      if (filters.priority && filters.priority.length > 0) {
+        if (!filters.priority.includes(task.priority)) return false;
+      }
+      
+      // Filtro por responsável
+      if (filters.assignedTo) {
+        if (task.assignedTo !== filters.assignedTo) return false;
+      }
+      
+      // Filtro por período (data de criação)
+      if (filters.startDate) {
+        if (new Date(task.createdAt) < filters.startDate) return false;
+      }
+      if (filters.endDate) {
+        if (new Date(task.createdAt) > filters.endDate) return false;
+      }
+      
+      // Filtro por tags
+      if (filters.tags && filters.tags.length > 0) {
+        const taskTags = task.tags ? JSON.parse(task.tags) : [];
+        const hasMatchingTag = filters.tags.some(tag => taskTags.includes(tag));
+        if (!hasMatchingTag) return false;
+      }
+      
+      return true;
+    });
+  }
 
   // Criar workbook
   const workbook = new ExcelJS.Workbook();
@@ -113,18 +150,36 @@ export async function generateTasksExcelReport(filters?: {
  * Gera relatório resumido de tarefas em formato Markdown (para PDF)
  */
 export async function generateTasksPDFContent(filters?: {
-  status?: string;
-  priority?: string;
+  status?: string[];
+  priority?: string[];
   assignedTo?: number;
+  startDate?: Date;
+  endDate?: Date;
+  tags?: string[];
 }) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Buscar tarefas
-  let query = db.select().from(tasks);
-  const allTasks = await query;
+  // Buscar tarefas e aplicar filtros
+  let allTasks = await db.select().from(tasks);
+  
+  // Aplicar filtros (mesma lógica do Excel)
+  if (filters) {
+    allTasks = allTasks.filter((task) => {
+      if (filters.status && filters.status.length > 0 && !filters.status.includes(task.status)) return false;
+      if (filters.priority && filters.priority.length > 0 && !filters.priority.includes(task.priority)) return false;
+      if (filters.assignedTo && task.assignedTo !== filters.assignedTo) return false;
+      if (filters.startDate && new Date(task.createdAt) < filters.startDate) return false;
+      if (filters.endDate && new Date(task.createdAt) > filters.endDate) return false;
+      if (filters.tags && filters.tags.length > 0) {
+        const taskTags = task.tags ? JSON.parse(task.tags) : [];
+        if (!filters.tags.some(tag => taskTags.includes(tag))) return false;
+      }
+      return true;
+    });
+  }
 
   // Mapear labels
   const statusLabels: Record<string, string> = {

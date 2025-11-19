@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TaskKanban from "@/components/TaskKanban";
@@ -57,6 +57,23 @@ export default function DepartmentManagement() {
       });
     },
   });
+  
+  // Mutation para verificar prazos
+  const checkDeadlinesMutation = trpc.departmentTasks.checkDeadlines.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(`Verificação concluída!`, {
+          description: `${result.notificationsSent} notificação(s) enviada(s). ${result.upcomingCount} tarefa(s) próximas do prazo, ${result.overdueCount} atrasada(s).`,
+        });
+      } else {
+        toast.error("Erro ao verificar prazos");
+      }
+    },
+    onError: (error) => {      toast.error("Erro ao verificar prazos", {
+        description: error.message,
+      });
+    },
+  });
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -69,6 +86,14 @@ export default function DepartmentManagement() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => checkDeadlinesMutation.mutate()}
+            disabled={checkDeadlinesMutation.isPending}
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            {checkDeadlinesMutation.isPending ? "Verificando..." : "Verificar Prazos"}
+          </Button>
           <Button
             variant="outline"
             onClick={() => exportPDFMutation.mutate()}

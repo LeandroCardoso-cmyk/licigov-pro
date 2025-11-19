@@ -12,6 +12,7 @@ import {
   getOverdueTasks
 } from "../db";
 import { generateTasksExcelReport, generateTasksPDFContent } from "../services/taskReports";
+import { checkTaskDeadlines, getTaskDeadlineSummary } from "../services/taskNotifications";
 
 export const taskRouter = router({
   /**
@@ -49,6 +50,7 @@ export const taskRouter = router({
       z.object({
         search: z.string().optional(),
         status: z.array(z.string()).optional(),
+        tags: z.array(z.string()).optional(),
         priority: z.array(z.string()).optional(),
         type: z.string().optional(),
         assignedTo: z.number().int().positive().optional(),
@@ -199,9 +201,12 @@ export const taskRouter = router({
   exportExcel: protectedProcedure
     .input(
       z.object({
-        status: z.string().optional(),
-        priority: z.string().optional(),
+        status: z.array(z.string()).optional(),
+        priority: z.array(z.string()).optional(),
         assignedTo: z.number().optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        tags: z.array(z.string()).optional(),
       }).optional()
     )
     .mutation(async ({ input }) => {
@@ -219,9 +224,12 @@ export const taskRouter = router({
   exportPDF: protectedProcedure
     .input(
       z.object({
-        status: z.string().optional(),
-        priority: z.string().optional(),
+        status: z.array(z.string()).optional(),
+        priority: z.array(z.string()).optional(),
         assignedTo: z.number().optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        tags: z.array(z.string()).optional(),
       }).optional()
     )
     .mutation(async ({ input }) => {
@@ -230,5 +238,23 @@ export const taskRouter = router({
         content: markdown,
         filename: `tarefas-resumo-${new Date().toISOString().split('T')[0]}.md`,
       };
+    }),
+
+  /**
+   * Verificar prazos e enviar notificações
+   */
+  checkDeadlines: protectedProcedure
+    .mutation(async () => {
+      const result = await checkTaskDeadlines();
+      return result;
+    }),
+
+  /**
+   * Obter resumo de prazos
+   */
+  getDeadlineSummary: protectedProcedure
+    .query(async () => {
+      const summary = await getTaskDeadlineSummary();
+      return summary;
     }),
 });

@@ -1805,3 +1805,18 @@
 - [ ] Criar sistema de tags personalizadas (backend + frontend) - pendente
 - [ ] Implementar filtro por tags - pendente
 - [ ] Adicionar filtros avançados na exportação de relatórios - pendente
+
+
+### Fase 14: Melhorias Finais do Módulo de Gestão
+- [x] Criar componente TagManager para gerenciar tags personalizadas
+- [x] Adicionar suporte a filtro por tags no backend
+- [ ] Implementar CRUD de tags completo (criar, editar, deletar) - pendente
+- [ ] Adicionar seletor de tags no formulário de tarefas - pendente
+- [ ] Implementar filtro por tags em todas as visualizações - pendente
+- [x] Criar serviço de notificações de prazo (taskNotifications.ts)
+- [x] Implementar verificação automática de prazos (3 dias antes e atrasadas)
+- [x] Integrar com notifyOwner para envio de alertas
+- [x] Adicionar botão de verificação manual de prazos
+- [x] Implementar filtros avançados de exportação (período, status, responsável, tags)
+- [x] Atualizar procedures tRPC para aceitar filtros avançados
+- [ ] Adicionar modal de configuração de filtros antes de exportar (UI) - pendente
