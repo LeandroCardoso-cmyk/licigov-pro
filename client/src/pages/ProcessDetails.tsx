@@ -26,7 +26,6 @@ import { toast } from "sonner";
 import { DocumentEditor } from "@/components/DocumentEditor";
 import { MembersDialog } from "@/components/MembersDialog";
 import { NotificationBell } from "@/components/NotificationBell";
-// import { GlobalSearch } from "@/components/GlobalSearch"; // Removido temporariamente
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { CommentsSection } from "@/components/CommentsSection";
 import { TRItemsModal } from "@/components/TRItemsModal";
@@ -304,7 +303,6 @@ export default function ProcessDetails() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* <GlobalSearch /> */}
               <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium text-foreground">{user?.name}</p>
