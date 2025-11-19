@@ -1858,3 +1858,11 @@
 - [x] Manter descrição apenas no CardContent abaixo da imagem
 - [x] Limpar cache do TypeScript para resolver erro "1 error"
 - [x] Testar landing page após correções
+
+
+### Fase 19: Melhorar Contraste de Texto na Landing Page
+- [x] Identificar texto cinza sobre fundo escuro (cards "Busca Inteligente" e "Gestão Completa")
+- [x] Adicionar overlay escuro (from-black/60) apenas nesses cards
+- [x] Alterar texto de text-gray-600 para text-white com drop-shadow
+- [x] Posicionar texto sobre a imagem (absolute bottom-16)
+- [x] Testar contraste e legibilidade
