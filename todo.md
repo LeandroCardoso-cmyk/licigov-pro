@@ -1820,3 +1820,9 @@
 - [x] Implementar filtros avançados de exportação (período, status, responsável, tags)
 - [x] Atualizar procedures tRPC para aceitar filtros avançados
 - [ ] Adicionar modal de configuração de filtros antes de exportar (UI) - pendente
+
+
+### Fase 15: Melhorias na Landing Page
+- [x] Substituir botão "Solicitar Proposta" do header por "Entrar no Sistema"
+- [x] Ajustar estilo do botão de login para destaque (azul, primário)
+- [x] Testar navegação e redirecionamento

@@ -87,12 +87,8 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-3">
             {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-            <Button variant="outline" asChild className="hidden sm:flex">
-              <a href={getLoginUrl()}>Entrar</a>
-            </Button>
-            {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
-              <Link href="/solicitar-proposta">Solicitar Proposta</Link>
+              <a href={getLoginUrl()}>Entrar no Sistema</a>
             </Button>
           </div>
         </div>
