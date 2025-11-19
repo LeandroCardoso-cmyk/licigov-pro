@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3 } from "lucide-react";
+import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 import TaskKanban from "@/components/TaskKanban";
 import TaskList from "@/components/TaskList";
 import TaskCalendar from "@/components/TaskCalendar";
@@ -9,6 +11,52 @@ import TaskDashboard from "@/components/TaskDashboard";
 
 export default function DepartmentManagement() {
   const [activeTab, setActiveTab] = useState("kanban");
+  
+  // Mutation para exportar Excel
+  const exportExcelMutation = trpc.departmentTasks.exportExcel.useMutation({
+    onSuccess: (data) => {
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("Relatório Excel exportado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao exportar relatório", {
+        description: error.message,
+      });
+    },
+  });
+  
+  // Mutation para exportar PDF (Markdown)
+  const exportPDFMutation = trpc.departmentTasks.exportPDF.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([data.content], { type: "text/markdown" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("Relatório resumido exportado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao exportar relatório", {
+        description: error.message,
+      });
+    },
+  });
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -20,10 +68,28 @@ export default function DepartmentManagement() {
             Gerencie tarefas, prazos e atividades do departamento de licitações
           </p>
         </div>
-        <Button size="lg">
-          <Plus className="h-5 w-5 mr-2" />
-          Nova Tarefa
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportPDFMutation.mutate()}
+            disabled={exportPDFMutation.isPending}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {exportPDFMutation.isPending ? "Exportando..." : "PDF Resumido"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => exportExcelMutation.mutate()}
+            disabled={exportExcelMutation.isPending}
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            {exportExcelMutation.isPending ? "Exportando..." : "Excel Completo"}
+          </Button>
+          <Button size="lg">
+            <Plus className="h-5 w-5 mr-2" />
+            Nova Tarefa
+          </Button>
+        </div>
       </div>
 
       {/* Tabs de visualização */}

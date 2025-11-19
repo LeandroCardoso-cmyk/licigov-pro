@@ -75,14 +75,14 @@
 - [x] Sistema de comentários (backend completo)
 - [x] Sistema de anexos (backend completo)
 - [x] Vinculação com processos licitatórios
-- [ ] Visualização em Calendário - tarefas nos dias - estrutura criada (grid mensal, navegação, legenda, resumo)
+- [x] Visualização em Calendário - tarefas nos dias - completo (grid mensal, navegação, legenda, resumo, clique em tarefas)
 - [x] Campos: Nome da Tarefa, Responsável, Status, Prazo Final, Tipo, Prioridade, Descrição
 - [x] Status: Pendente, Em Andamento, Pausada, Atrasada, Aguardando Informação, Concluída, Cancelada (7 status)
 - [x] Prioridades: Baixa, Média, Alta, Urgente (com cores diferenciadas)
 - [x] Anexar arquivos às tarefas (limite de 10MB) - backend implementado
 - [ ] Tags personalizadas
-- [ ] Relatório Resumido (Nome, Status, Prazo) - botão PDF criado
-- [ ] Relatório Completo - botão Excel criado
+- [x] Relatório Resumido (Nome, Status, Prazo) - PDF/Markdown implementado
+- [x] Relatório Completo - Excel implementado com formatação
 - [ ] Calendário com datas de licitações
 - [x] Indicadores visuais de prazo (4 cores: verde, amarelo, laranja, vermelho)
 
@@ -1793,3 +1793,15 @@
 - [x] Feedback visual de validação (borda verde/vermelha)
 - [x] Tratamento de erros completo
 - [x] Fluxo completo de validação testado
+
+
+### Fase 13: Completar Módulo de Gestão do Departamento
+- [x] Implementar calendário funcional (renderizar tarefas nos dias)
+- [x] Adicionar navegação entre meses no calendário
+- [x] Implementar clique em tarefa no calendário para ver detalhes
+- [x] Implementar relatório PDF (resumido: nome, status, prazo)
+- [x] Implementar relatório Excel (completo: todos os campos)
+- [x] Adicionar botões de exportação no header do DepartmentManagement
+- [ ] Criar sistema de tags personalizadas (backend + frontend) - pendente
+- [ ] Implementar filtro por tags - pendente
+- [ ] Adicionar filtros avançados na exportação de relatórios - pendente

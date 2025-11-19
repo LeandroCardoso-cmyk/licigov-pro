@@ -11,6 +11,7 @@ import {
   getTaskStats,
   getOverdueTasks
 } from "../db";
+import { generateTasksExcelReport, generateTasksPDFContent } from "../services/taskReports";
 
 export const taskRouter = router({
   /**
@@ -190,5 +191,44 @@ export const taskRouter = router({
     .query(async ({ input }) => {
       const tasks = await getOverdueTasks(input.assignedTo);
       return tasks;
+    }),
+
+  /**
+   * Exportar relatório de tarefas em Excel
+   */
+  exportExcel: protectedProcedure
+    .input(
+      z.object({
+        status: z.string().optional(),
+        priority: z.string().optional(),
+        assignedTo: z.number().optional(),
+      }).optional()
+    )
+    .mutation(async ({ input }) => {
+      const buffer = await generateTasksExcelReport(input);
+      const base64 = buffer.toString("base64");
+      return {
+        data: base64,
+        filename: `tarefas-${new Date().toISOString().split('T')[0]}.xlsx`,
+      };
+    }),
+
+  /**
+   * Exportar relatório resumido de tarefas (Markdown para PDF)
+   */
+  exportPDF: protectedProcedure
+    .input(
+      z.object({
+        status: z.string().optional(),
+        priority: z.string().optional(),
+        assignedTo: z.number().optional(),
+      }).optional()
+    )
+    .mutation(async ({ input }) => {
+      const markdown = await generateTasksPDFContent(input);
+      return {
+        content: markdown,
+        filename: `tarefas-resumo-${new Date().toISOString().split('T')[0]}.md`,
+      };
     }),
 });

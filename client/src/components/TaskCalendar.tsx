@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const PRIORITY_COLORS = {
 };
 
 export default function TaskCalendar() {
+  const [, setLocation] = useLocation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const { data: tasks = [], isLoading } = trpc.departmentTasks.list.useQuery();
@@ -147,6 +149,7 @@ export default function TaskCalendar() {
                           hover:shadow-sm transition-shadow
                           ${PRIORITY_COLORS[task.priority]}
                         `}
+                        onClick={() => setLocation(`/gestao/tarefas/${task.id}`)}
                         title={`${task.title}\n${task.description || ""}\nPrioridade: ${task.priority}\nStatus: ${task.status}`}
                       >
                         <div className="font-medium truncate">{task.title}</div>
