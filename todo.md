@@ -1850,3 +1850,11 @@
 - [x] Integrar formulário antes do footer com handler de submit
 - [x] Adicionar estado de loading e feedback com toasts
 - [x] Integrar com notifyOwner para alertar proprietário
+
+
+### Fase 18: Correções da Landing Page
+- [x] Remover texto duplicado dos cards (removido overlay e texto sobre imagem)
+- [x] Reverter overlay escuro dos cards (removido from-black/70)
+- [x] Manter descrição apenas no CardContent abaixo da imagem
+- [x] Limpar cache do TypeScript para resolver erro "1 error"
+- [x] Testar landing page após correções

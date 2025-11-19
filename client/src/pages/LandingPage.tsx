@@ -192,17 +192,14 @@ export default function LandingPage() {
                     alt={feature.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                  <div className="absolute bottom-4 right-4 left-4">
-                    <p className="text-white text-sm drop-shadow-lg">{feature.description}</p>
-                  </div>
+
                   <div className="absolute bottom-4 left-4 w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg">
                     <Icon className="h-6 w-6 text-blue-600" />
                   </div>
                 </div>
                 <CardContent className="p-6">
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h4>
-                  <p className="text-gray-600">{feature.description}</p>
+                  <h4 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h4>
+                  <p className="text-gray-600 leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
               </AnimatedSection>
