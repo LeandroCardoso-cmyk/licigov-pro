@@ -1874,3 +1874,8 @@
 - [x] Favicon customizado já configurado (%VITE_APP_LOGO%)
 - [x] Implementar Google Analytics GA4 no head (placeholder G-XXXXXXXXXX)
 - [x] Testar todas as melhorias
+
+
+### Fase 21: Ativar Google Analytics
+- [x] Substituir G-XXXXXXXXXX por G-N0PT3PG3R1 no index.html
+- [x] Google Analytics GA4 ativado e pronto para rastrear
