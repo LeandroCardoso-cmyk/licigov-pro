@@ -1886,3 +1886,9 @@
 - [x] Adicionar Meta Tags Twitter Card (twitter:card, twitter:title, twitter:description, twitter:image)
 - [x] Adicionar meta description padrão para SEO
 - [ ] Testar preview em redes sociais
+
+
+### Fase 23: Criar Imagem OG para Redes Sociais
+- [x] Gerar imagem og-image.png (1200x630px) com IA
+- [x] Salvar imagem em client/public/og-image.png
+- [ ] Testar preview em redes sociais
