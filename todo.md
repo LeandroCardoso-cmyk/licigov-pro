@@ -1892,3 +1892,11 @@
 - [x] Gerar imagem og-image.png (1200x630px) com IA
 - [x] Salvar imagem em client/public/og-image.png
 - [ ] Testar preview em redes sociais
+
+
+### Fase 24: Correções de Alinhamento na Landing Page
+- [x] Remover texto branco sobreposto nas imagens dos cards
+- [x] Garantir que todo texto esteja legível (apenas no CardContent)
+- [x] Corrigir altura do card 4 na seção "Como Funciona" (todos os cards devem ter mesma altura)
+- [x] Gerar nova imagem realista para seção "Geração Automática com IA"
+- [ ] Testar responsividade após correções
