@@ -1923,3 +1923,10 @@
 - [x] Aplicar background no hero section com parallax
 - [x] Ajustar grid para acomodar 10 cards (3 colunas)
 - [x] Testar responsividade e legibilidade
+
+
+### Fase 27: Melhorias Visuais Hero e Seção Benefícios
+- [x] Gerar novo mockup do laptop com fundo azul gradiente (integrado ao hero)
+- [x] Substituir imagem hero-dashboard-mockup.png
+- [x] Adicionar gradientes nos ícones de check da seção "Por que escolher"
+- [x] Testar integração visual e contraste

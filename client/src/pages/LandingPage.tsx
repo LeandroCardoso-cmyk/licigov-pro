@@ -191,8 +191,10 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {benefits.map((benefit, index) => (
-              <div key={index} className="flex items-start gap-3 bg-blue-700/30 p-4 rounded-lg backdrop-blur-sm">
-                <CheckCircle2 className="h-6 w-6 text-green-300 flex-shrink-0 mt-0.5" />
+              <div key={index} className="flex items-start gap-3 bg-blue-700/30 p-4 rounded-lg backdrop-blur-sm hover:bg-blue-700/40 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-cyan-300 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
                 <span className="text-blue-50">{benefit}</span>
               </div>
             ))}
