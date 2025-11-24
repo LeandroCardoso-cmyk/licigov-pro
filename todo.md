@@ -1930,3 +1930,10 @@
 - [x] Substituir imagem hero-dashboard-mockup.png
 - [x] Adicionar gradientes nos ícones de check da seção "Por que escolher"
 - [x] Testar integração visual e contraste
+
+
+### Fase 30: Atualizar Meta Tags com Domínio Personalizado
+- [x] Substituir licigov-pro.manus.space por licigovpro.com.br nas meta tags OG
+- [x] Atualizar og:url para https://licigovpro.com.br
+- [x] Atualizar og:image para https://licigovpro.com.br/og-image.png
+- [x] Testar preview em redes sociais
