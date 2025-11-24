@@ -1937,3 +1937,18 @@
 - [x] Atualizar og:url para https://licigovpro.com.br
 - [x] Atualizar og:image para https://licigovpro.com.br/og-image.png
 - [x] Testar preview em redes sociais
+
+
+### Fase 31: Redesign Completo do Dashboard + Painel Admin
+- [x] Gerar 5 imagens mockup realistas para cards do dashboard
+- [x] Redesenhar ModuleSelectionDashboard.tsx com estilo profissional azul (matching landing page)
+- [x] Substituir cores chapadas por gradientes sutis
+- [x] Adicionar estatísticas/números em cada card
+- [x] Implementar botão de alternância de tema (dark/light) no header
+- [x] Painel administrativo já existe em /admin
+- [x] Redesenhar Admin.tsx com visual profissional e estatísticas
+- [x] Gestão de propostas comerciais já implementada
+- [x] Gestão de documentos do sistema já implementada
+- [x] Verificação de role admin já implementada
+- [x] Botão "Painel Admin" no header (visível apenas para owner/admin)
+- [x] Testar todas as funcionalidades
