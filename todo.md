@@ -1910,3 +1910,16 @@
 - [x] Criar linha do tempo visual animada na seção "Como Funciona"
 - [x] Adicionar gradientes animados suaves no background
 - [x] Testar todas as animações em diferentes navegadores
+
+
+### Fase 26: Atualização Completa da Landing Page
+- [x] Corrigir altura do card 2 (Geração Automática de Documentos)
+- [x] Gerar imagem de fundo de prédios governamentais de Brasília
+- [x] Gerar imagens mockup para 4 novas funcionalidades
+- [x] Adicionar funcionalidade "Contratação Direta"
+- [x] Adicionar funcionalidade "Gestão de Contratos"
+- [x] Adicionar funcionalidade "Parecer Jurídico com IA"
+- [x] Adicionar funcionalidade "Gestão do Departamento"
+- [x] Aplicar background no hero section com parallax
+- [x] Ajustar grid para acomodar 10 cards (3 colunas)
+- [x] Testar responsividade e legibilidade
