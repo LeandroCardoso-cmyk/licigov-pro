@@ -1979,3 +1979,10 @@
 - [x] Identificar páginas sem botão voltar e adicionar BackToDashboard
 - [x] Testar navegação em todas as páginas principais
 - [x] Testar alternância de tema e sincronização entre dispositivos
+
+### Fase 35: Correção da Navegação do Botão Voltar
+- [x] Atualizar BackToDashboard para usar window.history.back() ao invés de navigate("/dashboard")
+- [x] Implementar lógica inteligente: voltar histórico se houver, senão ir para dashboard
+- [x] Testar fluxo: Dashboard → Módulo → Funcionalidade → Voltar (deve ir para Módulo)
+- [x] Verificar que não quebra navegação em páginas sem histórico
+- [x] Alterar texto do botão de "Voltar ao Dashboard" para "Voltar"
