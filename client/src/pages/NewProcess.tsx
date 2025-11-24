@@ -17,6 +17,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { APP_LOGO, APP_TITLE } from "@/const";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 
 export default function NewProcess() {
@@ -101,6 +102,10 @@ export default function NewProcess() {
               </Button>
               <img src={APP_LOGO} alt={APP_TITLE} className="h-12 w-auto" />
               <div>
+                <Breadcrumbs items={[
+                  { label: "Processos Licitatórios", href: "/processos" },
+                  { label: "Novo Processo" }
+                ]} className="mb-2" />
                 <h1 className="text-xl font-bold text-foreground">Novo Processo Licitatório</h1>
                 <p className="text-sm text-muted-foreground">Preencha as informações básicas</p>
               </div>

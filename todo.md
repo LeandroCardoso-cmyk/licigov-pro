@@ -1986,3 +1986,13 @@
 - [x] Testar fluxo: Dashboard → Módulo → Funcionalidade → Voltar (deve ir para Módulo)
 - [x] Verificar que não quebra navegação em páginas sem histórico
 - [x] Alterar texto do botão de "Voltar ao Dashboard" para "Voltar"
+
+### Fase 36: Breadcrumbs, Atalhos de Teclado e Indicadores de Navegação
+- [x] Criar componente Breadcrumbs reutilizável com suporte a rotas dinâmicas
+- [x] Implementar atalho ESC para voltar à página anterior
+- [x] Implementar atalho Ctrl+Home para ir ao dashboard
+- [x] Criar hook useKeyboardNavigation para atalhos globais
+- [x] Integrar useKeyboardNavigation no App.tsx
+- [x] Integrar breadcrumbs em NewProcess.tsx
+- [x] Adicionar imports de Breadcrumbs em 6 páginas principais
+- [x] Verificar acessibilidade dos breadcrumbs (aria-label="Breadcrumb")

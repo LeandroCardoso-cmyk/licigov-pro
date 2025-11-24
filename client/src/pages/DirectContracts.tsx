@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
 import { Plus, Search, FileText, TrendingUp, AlertCircle, CheckCircle, Clock, BarChart3 } from "lucide-react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BackToDashboard } from "@/components/BackToDashboard";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

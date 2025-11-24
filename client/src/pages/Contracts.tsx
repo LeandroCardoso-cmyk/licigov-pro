@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, FileText, AlertTriangle, Clock, DollarSign, Search, Filter } from "lucide-react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BackToDashboard } from "@/components/BackToDashboard";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

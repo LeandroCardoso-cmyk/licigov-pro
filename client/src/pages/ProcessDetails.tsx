@@ -21,6 +21,7 @@ import { useState } from "react";
 import { APP_LOGO } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun } from "lucide-react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
 import { DocumentEditor } from "@/components/DocumentEditor";

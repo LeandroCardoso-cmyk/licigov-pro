@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Check, Sparkles, AlertCircle, FileText, User, Building } from "lucide-react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 /**
  * Formulário Wizard de Nova Contratação Direta

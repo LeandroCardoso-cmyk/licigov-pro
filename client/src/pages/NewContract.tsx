@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { toast } from "sonner";
 
 /**

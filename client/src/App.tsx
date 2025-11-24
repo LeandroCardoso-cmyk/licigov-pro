@@ -49,6 +49,7 @@ import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
 import { useState, useEffect } from "react";
 import { trpc } from "./lib/trpc";
+import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -149,6 +150,9 @@ function Router() {
 function App() {
   const { isAuthenticated } = useAuth();
   const [showConsentModal, setShowConsentModal] = useState(false);
+  
+  // Atalhos de teclado globais (ESC, Ctrl+Home)
+  useKeyboardNavigation();
   
   const { data: hasConsent, isLoading: checkingConsent } = trpc.lgpd.checkConsent.useQuery(
     { termsVersion: "1.0", privacyVersion: "1.0" },
