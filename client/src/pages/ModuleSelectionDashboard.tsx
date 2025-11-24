@@ -165,22 +165,22 @@ export default function ModuleSelectionDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b shadow-sm sticky top-0 z-10">
+      <header className="bg-card/80 backdrop-blur-sm border-b shadow-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={APP_LOGO} alt={APP_TITLE} className="h-16 drop-shadow-md" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{APP_TITLE}</h1>
-              <p className="text-sm text-gray-600">Plataforma de Gestão Pública</p>
+              <h1 className="text-xl font-bold text-foreground">{APP_TITLE}</h1>
+              <p className="text-sm text-muted-foreground">Plataforma de Gestão Pública</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -189,7 +189,7 @@ export default function ModuleSelectionDashboard() {
                 variant="outline" 
                 size="sm" 
                 onClick={() => navigate('/admin')}
-                className="border-blue-200 hover:bg-blue-50"
+                className="border-primary/20 hover:bg-primary/10"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Painel Admin
@@ -200,7 +200,7 @@ export default function ModuleSelectionDashboard() {
                 variant="outline"
                 size="sm"
                 onClick={toggleTheme}
-                className="border-gray-200 hover:bg-gray-50"
+                className="border-border hover:bg-muted"
               >
                 {theme === "light" ? (
                   <Moon className="h-4 w-4" />
@@ -210,8 +210,8 @@ export default function ModuleSelectionDashboard() {
               </Button>
             )}
             <div className="text-right">
-              <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-              <p className="text-xs text-gray-600">{user?.email}</p>
+              <p className="text-sm font-medium text-foreground">{user?.name}</p>
+              <p className="text-xs text-muted-foreground">{user?.email}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => logout()}>
               Sair
@@ -225,10 +225,10 @@ export default function ModuleSelectionDashboard() {
         <div className="max-w-7xl mx-auto">
           {/* Welcome Section */}
           <div className="mb-12 text-center">
-            <h2 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-4">
+            <h2 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
               Bem-vindo, {user?.name?.split(" ")[0]}! 👋
             </h2>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-muted-foreground">
               Selecione um módulo abaixo para começar a trabalhar
             </p>
           </div>
@@ -240,13 +240,13 @@ export default function ModuleSelectionDashboard() {
                 key={module.id}
                 className={`group relative overflow-hidden transition-all duration-300 hover:shadow-2xl cursor-pointer border-2 ${
                   module.available 
-                    ? "hover:scale-[1.02] hover:border-blue-300" 
+                    ? "hover:scale-[1.02] hover:border-primary/30" 
                     : "opacity-75 hover:opacity-90"
                 }`}
                 onClick={() => handleModuleClick(module)}
               >
                 {/* Image Preview */}
-                <div className="relative h-48 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
+                <div className="relative h-48 overflow-hidden bg-gradient-to-br from-muted to-muted/50">
                   <img 
                     src={module.image} 
                     alt={module.title}
@@ -262,16 +262,16 @@ export default function ModuleSelectionDashboard() {
 
                   {/* Stats Badge */}
                   {module.stats && (
-                    <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-md">
-                      <p className="text-xs text-gray-600">{module.stats.label}</p>
-                      <p className="text-lg font-bold text-gray-900">{module.stats.value}</p>
+                    <div className="absolute top-3 right-3 bg-card/95 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-md border">
+                      <p className="text-xs text-muted-foreground">{module.stats.label}</p>
+                      <p className="text-lg font-bold text-foreground">{module.stats.value}</p>
                     </div>
                   )}
                 </div>
 
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-xl font-bold text-gray-900">{module.title}</CardTitle>
+                    <CardTitle className="text-xl font-bold text-foreground">{module.title}</CardTitle>
                     {!module.available && (
                       <Badge variant="secondary" className="shrink-0">
                         Em Breve
@@ -283,7 +283,7 @@ export default function ModuleSelectionDashboard() {
                       </Badge>
                     )}
                   </div>
-                  <CardDescription className="text-sm mt-2 text-gray-600">
+                  <CardDescription className="text-sm mt-2 text-muted-foreground">
                     {module.description}
                   </CardDescription>
                 </CardHeader>
@@ -293,7 +293,7 @@ export default function ModuleSelectionDashboard() {
                     variant={module.available ? "default" : "outline"}
                     className={`w-full transition-all ${
                       module.available 
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg" 
+                        ? "bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-md hover:shadow-lg" 
                         : ""
                     }`}
                     disabled={!module.available}

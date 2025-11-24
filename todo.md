@@ -1962,3 +1962,9 @@
 - [x] Implementar modo dark aprovado com paleta profissional (Opção 3 - Híbrido Personalizado)
 - [x] Adicionar botão "Voltar ao Dashboard" em todas as páginas internas
 - [x] Testar navegação e dark mode em todas as páginas
+
+### Fase 33: Correção do Dark Mode no Background Principal
+- [x] Corrigir ModuleSelectionDashboard para usar bg-background ao invés de cores fixas
+- [x] Substituir todas as cores fixas (gray-*, blue-*, white) por variáveis CSS do tema
+- [x] Testar dark mode em todas as páginas principais (Home, Dashboard, Admin)
+- [x] Verificar contraste e legibilidade em dark mode
