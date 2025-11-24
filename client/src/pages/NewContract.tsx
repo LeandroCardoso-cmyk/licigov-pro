@@ -197,7 +197,11 @@ export default function NewContract() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold">Novo Contrato</h1>
+              <Breadcrumbs items={[
+                  { label: "Gestão de Contratos", href: "/contracts" },
+                  { label: "Novo Contrato" }
+                ]} className="mb-2" />
+                <h1 className="text-3xl font-bold">Novo Contrato</h1>
               <p className="text-muted-foreground mt-1">
                 Passo {step} de 3
               </p>

@@ -13,12 +13,23 @@ import {
   Briefcase,
   ScrollText,
   Moon,
-  Sun
+  Sun,
+  History,
+  Clock
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useNavigationHistory } from "@/hooks/useNavigationHistory";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Module {
   id: string;
@@ -113,6 +124,7 @@ export default function ModuleSelectionDashboard() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
   const { theme, toggleTheme, switchable } = useTheme();
+  const navigationHistory = useNavigationHistory();
   
   // Buscar estatísticas
   const { data: contractsOverview } = trpc.contracts.analytics.getOverview.useQuery(undefined, {
@@ -208,6 +220,35 @@ export default function ModuleSelectionDashboard() {
                   <Sun className="h-4 w-4" />
                 )}
               </Button>
+            )}
+            {/* Histórico de Navegação */}
+            {navigationHistory.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-border hover:bg-muted">
+                    <History className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Histórico de Navegação
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {navigationHistory.map((item, index) => (
+                    <DropdownMenuItem
+                      key={`${item.path}-${index}`}
+                      onClick={() => navigate(item.path)}
+                      className="cursor-pointer"
+                    >
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-medium">{item.label}</span>
+                        <span className="text-xs text-muted-foreground">{item.path}</span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <div className="text-right">
               <p className="text-sm font-medium text-foreground">{user?.name}</p>

@@ -229,9 +229,15 @@ export default function NewDirectContract() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Nova Contratação Direta
-          </h1>
+          <div>
+            <Breadcrumbs items={[
+              { label: "Contratação Direta", href: "/direct-contracts" },
+              { label: "Nova Contratação" }
+            ]} className="mb-2" />
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Nova Contratação Direta
+            </h1>
+          </div>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Dispensa ou Inexigibilidade de Licitação
           </p>

@@ -50,6 +50,7 @@ import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { trpc } from "./lib/trpc";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { KeyboardShortcutsTooltip } from "./components/KeyboardShortcutsTooltip";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -173,6 +174,7 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
+          <KeyboardShortcutsTooltip />
           <Router />
           {/* ConsentModal temporariamente desabilitado para debug */}
           {false && isAuthenticated && (

@@ -89,6 +89,9 @@ export default function DirectContracts() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
+            <Breadcrumbs items={[
+              { label: "Contratação Direta" }
+            ]} className="mb-2" />
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Contratações Diretas
             </h1>

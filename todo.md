@@ -1996,3 +1996,19 @@
 - [x] Integrar breadcrumbs em NewProcess.tsx
 - [x] Adicionar imports de Breadcrumbs em 6 páginas principais
 - [x] Verificar acessibilidade dos breadcrumbs (aria-label="Breadcrumb")
+
+### Fase 37: Breadcrumbs JSX, Tooltip de Atalhos e Histórico de Navegação
+- [x] Adicionar breadcrumbs JSX em Contracts.tsx
+- [x] Adicionar breadcrumbs JSX em NewContract.tsx
+- [x] Adicionar breadcrumbs JSX em ContractDetails.tsx
+- [x] Adicionar breadcrumbs JSX em DirectContracts.tsx
+- [x] Adicionar breadcrumbs JSX em NewDirectContract.tsx
+- [x] Adicionar breadcrumbs JSX em ProcessDetails.tsx
+- [x] Adicionar breadcrumbs JSX em NewProcess.tsx (já estava pronto)
+- [x] Criar componente KeyboardShortcutsTooltip com lista de atalhos
+- [x] Implementar lógica de exibição no primeiro acesso (localStorage)
+- [x] Integrar KeyboardShortcutsTooltip no App.tsx
+- [x] Criar hook useNavigationHistory para rastrear últimas 5 páginas
+- [x] Adicionar menu dropdown de histórico no header do ModuleSelectionDashboard
+- [x] Testar breadcrumbs em todas as páginas
+- [x] Testar tooltip e histórico de navegação

@@ -333,6 +333,10 @@ export default function ProcessDetails() {
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div>
+              <Breadcrumbs items={[
+                { label: "Processos Licitatórios", href: "/processos" },
+                { label: "Detalhes do Processo" }
+              ]} className="mb-2" />
               <h1 className="text-3xl font-bold text-foreground mb-2">{process.name}</h1>
               <p className="text-muted-foreground">{process.object}</p>
             </div>

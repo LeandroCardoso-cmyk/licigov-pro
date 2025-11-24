@@ -99,6 +99,9 @@ export default function Contracts() {
             <div className="flex items-center gap-4">
               <BackToDashboard variant="ghost" />
               <div>
+                <Breadcrumbs items={[
+                  { label: "Gestão de Contratos" }
+                ]} className="mb-2" />
                 <h1 className="text-3xl font-bold">Contratos</h1>
                 <p className="text-muted-foreground mt-1">
                   Gerencie contratos, aditivos e prazos de vigência
