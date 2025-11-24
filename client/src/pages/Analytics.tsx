@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Users, FileText, TrendingUp, Activity } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { Badge } from "@/components/ui/badge";
 
 const statusLabels: Record<string, string> = {

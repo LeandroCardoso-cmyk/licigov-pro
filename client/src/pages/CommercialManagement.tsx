@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { FileText, Loader2, Search, CheckCircle, XCircle } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

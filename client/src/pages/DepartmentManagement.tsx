@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet, Bell } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TaskKanban from "@/components/TaskKanban";

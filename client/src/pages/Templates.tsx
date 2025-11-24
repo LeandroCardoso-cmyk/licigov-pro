@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Plus, Edit, Trash2, FileText, Star, Loader2 } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import {
   AlertDialog,

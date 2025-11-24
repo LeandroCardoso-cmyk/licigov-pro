@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, FileText, AlertTriangle, Clock, DollarSign, Search, Filter } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -16,6 +17,9 @@ import { ptBR } from "date-fns/locale";
  */
 export default function Contracts() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+
+  if (!user) return null;
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -90,11 +94,14 @@ export default function Contracts() {
       <div className="border-b bg-card">
         <div className="container py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Contratos</h1>
-              <p className="text-muted-foreground mt-1">
-                Gerencie contratos, aditivos e prazos de vigência
-              </p>
+            <div className="flex items-center gap-4">
+              <BackToDashboard variant="ghost" />
+              <div>
+                <h1 className="text-3xl font-bold">Contratos</h1>
+                <p className="text-muted-foreground mt-1">
+                  Gerencie contratos, aditivos e prazos de vigência
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button onClick={() => setLocation("/contracts/alerts")} variant="outline">

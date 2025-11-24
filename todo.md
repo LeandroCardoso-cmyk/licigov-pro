@@ -1952,3 +1952,13 @@
 - [x] Verificação de role admin já implementada
 - [x] Botão "Painel Admin" no header (visível apenas para owner/admin)
 - [x] Testar todas as funcionalidades
+
+
+### Fase 32: Correções e Melhorias de UX
+- [x] Corrigir erro no formulário "Novo Processo" (Select.Item sem value prop)
+- [x] Pesquisar referências de dark mode em sites consolidados (GitHub, Vercel, Linear, Stripe)
+- [x] Analisar paletas de cores dark mode de alta qualidade
+- [x] Apresentar sugestões de dark mode para aprovação do usuário
+- [x] Implementar modo dark aprovado com paleta profissional (Opção 3 - Híbrido Personalizado)
+- [x] Adicionar botão "Voltar ao Dashboard" em todas as páginas internas
+- [x] Testar navegação e dark mode em todas as páginas

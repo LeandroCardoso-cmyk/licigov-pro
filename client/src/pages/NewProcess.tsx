@@ -213,15 +213,15 @@ export default function NewProcess() {
               {/* Plataforma de Pregão */}
               <div className="space-y-2">
                 <Label htmlFor="platform">Plataforma de Pregão (opcional)</Label>
-                <Select
-                  value={formData.platformId?.toString() || ""}
-                  onValueChange={(value) => setFormData({ ...formData, platformId: value ? parseInt(value) : null })}
+                  <Select
+                    value={formData.platformId?.toString() || "none"}
+                    onValueChange={(value) => setFormData({ ...formData, platformId: value === "none" ? null : parseInt(value) })}
                 >
                   <SelectTrigger id="platform">
                     <SelectValue placeholder="Selecione a plataforma" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma (formato padrão)</SelectItem>
+                    <SelectItem value="none">Nenhuma (formato padrão)</SelectItem>
                     {platforms?.map((platform) => (
                       <SelectItem key={platform.id} value={platform.id.toString()}>
                         {platform.name}

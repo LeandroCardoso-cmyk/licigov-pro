@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Download, Search, Filter, FileText, Loader2, Calendar, User, Activity } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 

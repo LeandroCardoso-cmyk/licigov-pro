@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { trpc } from "@/lib/trpc";
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Download, TrendingUp, DollarSign, Activity, Sparkles } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 
 const OPERATION_LABELS = {
