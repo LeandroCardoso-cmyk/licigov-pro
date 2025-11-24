@@ -3,7 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Clock, Users, BarChart3, Shield, Zap, CheckCircle2, ArrowRight, ChevronDown, FileCheck, ScrollText, Scale, Calendar } from "lucide-react";
 import { APP_TITLE, APP_LOGO, getLoginUrl } from "@/const";
 import { Link } from "wouter";
-import { AnimatedSection } from "@/components/AnimatedSection";
+import AnimatedSection from "@/components/AnimatedSection";
+import WhatsAppButton from "@/components/WhatsAppButton";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -108,6 +109,8 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Botão Flutuante do WhatsApp */}
+      <WhatsAppButton />
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -544,6 +547,174 @@ export default function LandingPage() {
               </form>
             </AnimatedSection>
           </div>
+        </div>
+      </section>
+
+      {/* Preços e Planos */}
+      <section className="bg-gradient-to-br from-gray-50 to-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Planos e Preços
+            </h3>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Escolha o plano ideal baseado nas <strong>funcionalidades</strong> que seu órgão precisa
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Plano Básico */}
+            <AnimatedSection animation="slide-up" delay={0}>
+            <Card className="border-2 hover:border-blue-300 hover:shadow-xl transition-all duration-300 h-full flex flex-col">
+              <CardContent className="p-8 flex flex-col h-full">
+                <div className="mb-6">
+                  <h4 className="text-2xl font-bold text-gray-900 mb-2">Básico</h4>
+                  <p className="text-gray-600 text-sm">Essencial para começar</p>
+                </div>
+                <div className="mb-6">
+                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <p className="text-sm text-gray-500">Preço personalizado</p>
+                </div>
+                <ul className="space-y-3 mb-8 flex-grow">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Gestão de Processos Licitatórios</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Geração de Documentos (ETP, TR, DFD)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Dashboard e Relatórios Básicos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Até 3 usuários</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Suporte por email</span>
+                  </li>
+                </ul>
+                {/* @ts-ignore */}
+                <Button asChild className="w-full bg-gray-100 text-gray-900 hover:bg-gray-200">
+                  <Link href="/solicitar-proposta">Solicitar Proposta</Link>
+                </Button>
+              </CardContent>
+            </Card>
+            </AnimatedSection>
+
+            {/* Plano Profissional */}
+            <AnimatedSection animation="slide-up" delay={100}>
+            <Card className="border-2 border-blue-500 hover:border-blue-600 hover:shadow-2xl transition-all duration-300 relative h-full flex flex-col">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
+                  ⭐ Mais Popular
+                </span>
+              </div>
+              <CardContent className="p-8 flex flex-col h-full">
+                <div className="mb-6">
+                  <h4 className="text-2xl font-bold text-gray-900 mb-2">Profissional</h4>
+                  <p className="text-gray-600 text-sm">Completo para a maioria dos órgãos</p>
+                </div>
+                <div className="mb-6">
+                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <p className="text-sm text-gray-500">Preço personalizado</p>
+                </div>
+                <ul className="space-y-3 mb-8 flex-grow">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm font-semibold">Tudo do Básico +</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Contratação Direta</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Gestão de Contratos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Parecer Jurídico com IA</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Colaboração em Equipe (versões)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Até 10 usuários</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Suporte prioritário</span>
+                  </li>
+                </ul>
+                {/* @ts-ignore */}
+                <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+                  <Link href="/solicitar-proposta">Solicitar Proposta</Link>
+                </Button>
+              </CardContent>
+            </Card>
+            </AnimatedSection>
+
+            {/* Plano Enterprise */}
+            <AnimatedSection animation="slide-up" delay={200}>
+            <Card className="border-2 hover:border-blue-300 hover:shadow-xl transition-all duration-300 h-full flex flex-col">
+              <CardContent className="p-8 flex flex-col h-full">
+                <div className="mb-6">
+                  <h4 className="text-2xl font-bold text-gray-900 mb-2">Enterprise</h4>
+                  <p className="text-gray-600 text-sm">Solução completa e customizada</p>
+                </div>
+                <div className="mb-6">
+                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <p className="text-sm text-gray-500">Preço personalizado</p>
+                </div>
+                <ul className="space-y-3 mb-8 flex-grow">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm font-semibold">Tudo do Profissional +</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Gestão do Departamento (calendário/tarefas)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Busca Inteligente Avançada</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Segurança e Auditoria Completa</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Usuários ilimitados</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Suporte dedicado + treinamento</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700 text-sm">Customizações sob demanda</span>
+                  </li>
+                </ul>
+                {/* @ts-ignore */}
+                <Button asChild className="w-full bg-gray-100 text-gray-900 hover:bg-gray-200">
+                  <Link href="/solicitar-proposta">Solicitar Proposta</Link>
+                </Button>
+              </CardContent>
+            </Card>
+            </AnimatedSection>
+          </div>
+
+          <p className="text-center text-gray-600 mt-12 max-w-3xl mx-auto">
+            <strong>Importante:</strong> Todos os planos são baseados em <strong>funcionalidades</strong>, não no tamanho do município. 
+            Qualquer órgão pode escolher o plano que melhor atende suas necessidades operacionais.
+          </p>
         </div>
       </section>
 

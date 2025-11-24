@@ -1930,3 +1930,15 @@
 - [x] Substituir imagem hero-dashboard-mockup.png
 - [x] Adicionar gradientes nos ícones de check da seção "Por que escolher"
 - [x] Testar integração visual e contraste
+
+
+### Fase 28: Animações Scroll-Reveal + Preços + Chat WhatsApp
+- [x] Implementar biblioteca de scroll-reveal (Intersection Observer)
+- [x] Adicionar animações fade-in nos cards de funcionalidades
+- [x] Criar seção de preços/planos com 3 opções (Básico, Profissional, Enterprise)
+- [x] Estruturar planos focados em funcionalidades (não em tamanho de município)
+- [x] Adicionar badge "Mais Popular" no plano Profissional
+- [x] Criar componente de botão flutuante do WhatsApp
+- [x] Posicionar botão fixo no canto inferior direito
+- [x] Adicionar animação pulse no botão WhatsApp
+- [x] Testar scroll-reveal em diferentes resoluções
