@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Upload, Loader2, FileText, AlertCircle, CheckCircle } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

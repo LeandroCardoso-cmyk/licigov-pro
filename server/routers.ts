@@ -32,6 +32,13 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    // Salvar preferência de tema
+    updateTheme: protectedProcedure
+      .input(z.object({ theme: z.enum(["light", "dark", "system"]) }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateUserTheme(ctx.user.id, input.theme);
+        return { success: true };
+      }),
   }),
 
   processes: router({

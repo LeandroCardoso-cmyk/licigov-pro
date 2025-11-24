@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { Edit, Loader2, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import {
   AlertDialog,

@@ -159,6 +159,21 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function updateUserTheme(userId: number, theme: "light" | "dark" | "system"): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update user theme: database not available");
+    return;
+  }
+
+  try {
+    await db.update(users).set({ theme }).where(eq(users.id, userId));
+  } catch (error) {
+    console.error("[Database] Failed to update user theme:", error);
+    throw error;
+  }
+}
+
 export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return undefined;

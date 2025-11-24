@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar, Settings, Palette } from "lucide-react";
+import { BackToDashboard } from "@/components/BackToDashboard";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 

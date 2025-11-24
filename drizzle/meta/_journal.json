@@ -176,6 +176,13 @@
       "when": 1763482695033,
       "tag": "0024_secret_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1764016739908,
+      "tag": "0025_hot_famine",
+      "breakpoints": true
     }
   ]
 }

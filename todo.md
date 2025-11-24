@@ -1968,3 +1968,14 @@
 - [x] Substituir todas as cores fixas (gray-*, blue-*, white) por variáveis CSS do tema
 - [x] Testar dark mode em todas as páginas principais (Home, Dashboard, Admin)
 - [x] Verificar contraste e legibilidade em dark mode
+
+### Fase 34: Melhorias de Tema e Correções de Navegação
+- [x] Investigar e corrigir erro ao acessar card "Gestão de Contratos" (faltava import useAuth)
+- [x] Adicionar campo `theme` (enum: 'light', 'dark', 'system') na tabela users
+- [x] Criar procedures tRPC para salvar/carregar preferência de tema (auth.updateTheme)
+- [x] Implementar sincronização de tema com banco de dados (ThemeContext atualizado)
+- [x] Adicionar transição suave (300ms ease-in-out) no ThemeContext
+- [x] Implementar atalho de teclado (Ctrl/Cmd + Shift + D) para alternar tema
+- [x] Identificar páginas sem botão voltar e adicionar BackToDashboard
+- [x] Testar navegação em todas as páginas principais
+- [x] Testar alternância de tema e sincronização entre dispositivos
