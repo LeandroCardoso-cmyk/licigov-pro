@@ -101,7 +101,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section - Assimétrico */}
-      <section className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-16 md:py-24">
+      <section className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 animate-gradient py-16 md:py-24">
         <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* Texto à esquerda */}
@@ -118,7 +118,7 @@ export default function LandingPage() {
             </p>
             <div className="flex gap-4 flex-wrap">
               {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-              <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg px-8 shadow-lg hover:shadow-xl transition-all">
+              <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg px-8 shadow-lg hover:shadow-xl transition-all animate-breathing">
                 <Link href="/solicitar-proposta" className="flex items-center">
                   Solicitar Proposta Comercial
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -129,7 +129,7 @@ export default function LandingPage() {
 
           {/* Imagem à direita */}
           <div className="relative">
-            <div className="relative z-10 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="relative z-10 rounded-2xl overflow-hidden shadow-2xl animate-float">
               <img 
                 src="/hero-dashboard-mockup.png" 
                 alt="Dashboard LiciGov Pro" 
@@ -184,7 +184,7 @@ export default function LandingPage() {
               <AnimatedSection key={index} animation="slide-up" delay={index * 100}>
               <Card 
                 key={index} 
-                className="border-2 hover:border-blue-300 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 cursor-pointer overflow-hidden group"
+                className="border-2 hover:border-blue-400 hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 hover:scale-105 cursor-pointer overflow-hidden group"
               >
                 <div className="relative h-48 overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50">
                   <img 
@@ -193,8 +193,8 @@ export default function LandingPage() {
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
 
-                  <div className="absolute bottom-4 left-4 w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg">
-                    <Icon className="h-6 w-6 text-blue-600" />
+                  <div className="absolute bottom-4 left-4 w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Icon className="h-6 w-6 text-blue-600 group-hover:rotate-12 transition-transform duration-300" />
                   </div>
                 </div>
                 <CardContent className="p-6">
@@ -226,8 +226,8 @@ export default function LandingPage() {
             {howItWorks.map((item, index) => (
               <AnimatedSection key={index} animation="slide-up" delay={index * 150}>
               <div className="relative h-full flex flex-col">
-                <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow h-full">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg">
+                <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 h-full group">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
                     {item.step}
                   </div>
                   <h4 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h4>
@@ -235,7 +235,7 @@ export default function LandingPage() {
                 </div>
                 {index < howItWorks.length - 1 && (
                   <div className="hidden lg:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
-                    <ArrowRight className="h-8 w-8 text-blue-300" />
+                    <ArrowRight className="h-8 w-8 text-blue-400 animate-pulse" />
                   </div>
                 )}
               </div>

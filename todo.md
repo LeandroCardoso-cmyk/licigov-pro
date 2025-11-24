@@ -1900,3 +1900,13 @@
 - [x] Corrigir altura do card 4 na seção "Como Funciona" (todos os cards devem ter mesma altura)
 - [x] Gerar nova imagem realista para seção "Geração Automática com IA"
 - [ ] Testar responsividade após correções
+
+
+### Fase 25: Animações e Micro-interações na Landing Page
+- [x] Adicionar animações de hover nos ícones (pulsar, bounce, rotate)
+- [x] Melhorar hover effects nos cards (lift + sombra + scale)
+- [x] Implementar efeito parallax sutil no hero section
+- [x] Adicionar animação "breathing/pulse" no botão principal do hero
+- [x] Criar linha do tempo visual animada na seção "Como Funciona"
+- [x] Adicionar gradientes animados suaves no background
+- [x] Testar todas as animações em diferentes navegadores
