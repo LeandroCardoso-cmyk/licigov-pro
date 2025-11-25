@@ -204,6 +204,13 @@
       "when": 1764031425675,
       "tag": "0028_bizarre_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1764035163632,
+      "tag": "0029_furry_stryfe",
+      "breakpoints": true
     }
   ]
 }

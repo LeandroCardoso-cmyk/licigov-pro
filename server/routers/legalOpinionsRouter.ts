@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
 import { getDocumentSettingsByUser } from "../db";
@@ -239,56 +240,86 @@ export const legalOpinionsRouter = router({
 
       return result;
     }),
-
   /**
-   * Assinar parecer jurídico digitalmente
+   * Assinar digitalmente um parecer jurídico (ATUALIZADO: com role e senha)
    */
   sign: protectedProcedure
-    .input(z.object({ id: z.number() }))
-    .mutation(async ({ input, ctx }) => {
+    .input(
+      z.object({
+        id: z.number(),
+        signerRole: z.enum(["revisor", "responsavel", "gestor"]),
+        signaturePassword: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
       const { generateContentHash, generateSignature, generateCertificateInfo } = await import("../services/digitalSignatureService");
-      const { createDigitalSignature, updateLegalOpinion, getLegalOpinionById } = await import("../db");
+      const {
+        getLegalOpinionById,
+        validateSignaturePassword,
+        hasUserSignedOpinion,
+        addSignatureToHistory,
+        getSignatureCount,
+      } = await import("../db");
 
       // Buscar parecer
       const opinion = await getLegalOpinionById(input.id);
       if (!opinion) {
-        throw new Error("Parecer jurídico não encontrado");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Parecer jurídico não encontrado" });
+      }
+
+      // Validar senha de assinatura
+      const isPasswordValid = await validateSignaturePassword(ctx.user.id, input.signaturePassword);
+      if (!isPasswordValid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha de assinatura inválida" });
+      }
+
+      // Verificar se usuário já assinou
+      const alreadySigned = await hasUserSignedOpinion(input.id, ctx.user.id);
+      if (alreadySigned) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Você já assinou este parecer" });
+      }
+
+      // Verificar se já atingiu o número de assinaturas necessárias
+      const currentSignatures = await getSignatureCount(input.id);
+      if (currentSignatures >= opinion.requiredSignatures) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Este parecer já possui todas as assinaturas necessárias" });
       }
 
       // Gerar hash do conteúdo
       const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
-      const contentHash = generateContentHash(content);
+      const documentHash = generateContentHash(content);
 
-      // Gerar assinatura
-      const signature = generateSignature(contentHash, ctx.user.id);
+      // Gerar assinatura criptográfica
+      const signature = generateSignature(documentHash, ctx.user.id);
 
       // Gerar informações do certificado
       const certificateInfo = generateCertificateInfo(ctx.user.name || "Usuário", ctx.user.email);
 
-      // Criar assinatura digital no banco
-      const signatureId = await createDigitalSignature({
-        documentType: "legal_opinion",
-        documentId: input.id,
-        contentHash,
+      // Adicionar assinatura ao histórico
+      const signatureId = await addSignatureToHistory({
+        opinionId: input.id,
+        userId: ctx.user.id,
+        userName: ctx.user.name || "Usuário",
+        userEmail: ctx.user.email || null,
+        signerRole: input.signerRole,
+        documentHash,
         signature,
-        signedBy: ctx.user.id,
-        signedByName: ctx.user.name || "Usuário",
-        signedByEmail: ctx.user.email,
         certificateInfo,
-        isValid: true,
       });
-
-      // Atualizar parecer com signatureId
-      await updateLegalOpinion(input.id, { signatureId: signature.id });
 
       // Enviar notificação automática
       const { notifyOwner } = await import("../_core/notification");
+      const roleNames = {
+        revisor: "Advogado Revisor",
+        responsavel: "Advogado Responsável",
+        gestor: "Gestor Jurídico",
+      };
       await notifyOwner({
-        title: `🔒 Parecer Jurídico Assinado Digitalmente`,
-        content: `O parecer "${opinion.title}" foi assinado digitalmente por ${ctx.user.name || ctx.user.email}.\n\nAssinado em: ${new Date().toLocaleString("pt-BR")}\nHash SHA-256: ${signature.documentHash.substring(0, 16)}...`,
+        title: `🔒 Parecer Jurídico Assinado`,
+        content: `O parecer "${opinion.title}" foi assinado digitalmente por ${ctx.user.name || ctx.user.email} como ${roleNames[input.signerRole]}.\n\nAssinado em: ${new Date().toLocaleString("pt-BR")}\nAssinaturas: ${currentSignatures + 1}/${opinion.requiredSignatures}\nHash SHA-256: ${documentHash.substring(0, 16)}...`,
       });
 
-      return { success: true, signatureId: signature.id };
+      return { success: true, signatureId, signaturesCount: currentSignatures + 1, requiredSignatures: opinion.requiredSignatures };
     }),
 
   /**
@@ -368,4 +399,37 @@ export const legalOpinionsRouter = router({
       conclusionDist,
     };
   }),
+
+  /**
+   * Configurar senha de assinatura do usuário
+   */
+  setSignaturePassword: protectedProcedure
+    .input(
+      z.object({
+        password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { setSignaturePassword } = await import("../db");
+      await setSignaturePassword(ctx.user.id, input.password);
+      return { success: true };
+    }),
+
+  /**
+   * Verificar se usuário tem senha de assinatura configurada
+   */
+  hasSignaturePassword: protectedProcedure.query(async ({ ctx }) => {
+    const { hasSignaturePassword } = await import("../db");
+    return await hasSignaturePassword(ctx.user.id);
+  }),
+
+  /**
+   * Obter histórico de assinaturas de um parecer
+   */
+  getSignatureHistory: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const { getSignatureHistory } = await import("../db");
+      return await getSignatureHistory(input.id);
+    }),
 });

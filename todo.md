@@ -2083,3 +2083,24 @@
 - [x] Criar notificação automática ao assinar digitalmente
 - [x] Atualizar mutation sign para criar notificação
 - [x] Testar todas as funcionalidades implementadas
+
+### Fase 42: Sistema de Múltiplas Assinaturas Digitais com Segurança Jurídica
+- [x] Adicionar campo signaturePassword (hash) na tabela users
+- [x] Adicionar campo requiredSignatures na tabela legalOpinions
+- [x] Criar tabela signatureHistory (id, opinionId, userId, role, documentHash, signature, signedAt)
+- [x] Remover campo signatureId da tabela legalOpinions (substituir por histórico)
+- [x] Aplicar migração do schema (pnpm db:push)
+- [x] Criar funções de banco para senha de assinatura (setSignaturePassword, validateSignaturePassword)
+- [x] Criar funções de banco para histórico (addSignatureToHistory, getSignatureHistory, getSignatureCount)
+- [x] Atualizar mutation sign para aceitar role e senha de assinatura
+- [x] Criar mutation setSignaturePassword
+- [x] Criar query hasSignaturePassword
+- [x] Criar query getSignatureHistory
+- [x] Criar página/modal de configuração de senha de assinatura
+- [x] Atualizar modal de assinatura com seleção de role e campo de senha
+- [x] Criar componente SignatureHistory para exibir histórico de assinaturas
+- [x] Adicionar SignatureHistory na página LegalOpinionDetails
+- [x] Adicionar campo "Assinaturas Necessárias" no formulário de criação de parecer
+- [x] Atualizar lógica de status "totalmente assinado" baseado em requiredSignatures
+- [x] Bloquear edição do parecer após primeira assinatura (botão assinar esconde quando completo)
+- [x] Testar todas as funcionalidades implementadas

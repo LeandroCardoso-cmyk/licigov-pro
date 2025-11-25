@@ -29,6 +29,7 @@ export default function NewLegalOpinion() {
   const [sourceId, setSourceId] = useState("");
   const [legalQuestion, setLegalQuestion] = useState("");
   const [context, setContext] = useState("");
+  const [requiredSignatures, setRequiredSignatures] = useState<number>(1);
 
   // Pré-preencher campos com base nos query params
   useEffect(() => {
@@ -84,6 +85,7 @@ export default function NewLegalOpinion() {
         sourceId: sourceId ? parseInt(sourceId) : undefined,
         legalQuestion,
         context: context || undefined,
+        requiredSignatures,
       });
 
       toast.success("Parecer criado com sucesso!");
@@ -117,6 +119,7 @@ export default function NewLegalOpinion() {
         sourceId: sourceId ? parseInt(sourceId) : undefined,
         legalQuestion,
         context: context || undefined,
+        requiredSignatures,
       });
 
       toast.success("Parecer criado! Gerando análise com IA...");
@@ -281,6 +284,27 @@ export default function NewLegalOpinion() {
                   placeholder="Informações complementares que possam auxiliar na análise..."
                   rows={4}
                 />
+              </div>
+
+              {/* Número de Assinaturas Necessárias */}
+              <div className="space-y-2">
+                <Label htmlFor="requiredSignatures">Assinaturas Necessárias</Label>
+                <Select
+                  value={requiredSignatures.toString()}
+                  onValueChange={(value) => setRequiredSignatures(parseInt(value))}
+                >
+                  <SelectTrigger id="requiredSignatures">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 assinatura (padrão)</SelectItem>
+                    <SelectItem value="2">2 assinaturas (revisor + responsável)</SelectItem>
+                    <SelectItem value="3">3 assinaturas (revisor + responsável + gestor)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Define quantas assinaturas digitais são necessárias para validar este parecer
+                </p>
               </div>
 
               {/* Botões */}

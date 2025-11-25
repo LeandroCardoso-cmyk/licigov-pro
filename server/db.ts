@@ -1,5 +1,6 @@
-import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, sql, ne } from "drizzle-orm";
+import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import bcrypt from "bcrypt";
 import { 
   InsertUser, 
   users,
@@ -60,6 +61,7 @@ import {
   InsertDirectContractQuotation,
   legalOpinions,
   InsertLegalOpinion,
+  signatureHistory,
   directContractAuditLogs,
   InsertDirectContractAuditLog,
   directContractChecklistProgress,
@@ -3708,4 +3710,122 @@ export async function getConclusionDistribution(period: "all" | "7days" | "30day
     { conclusion: "Desfavorável", count: unfavorable },
     { conclusion: "Com Ressalvas", count: withReservations },
   ];
+}
+
+/**
+ * ========================================
+ * SIGNATURE PASSWORD (USER)
+ * ========================================
+ */
+
+/**
+ * Definir senha de assinatura para um usuário
+ */
+export async function setSignaturePassword(userId: number, password: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const saltRounds = 10;
+  const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+  await db.update(users).set({ signaturePassword: hashedPassword }).where(eq(users.id, userId));
+}
+
+/**
+ * Validar senha de assinatura de um usuário
+ */
+export async function validateSignaturePassword(userId: number, password: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (user.length === 0 || !user[0].signaturePassword) return false;
+
+  return await bcrypt.compare(password, user[0].signaturePassword);
+}
+
+/**
+ * Verificar se usuário tem senha de assinatura configurada
+ */
+export async function hasSignaturePassword(userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return user.length > 0 && !!user[0].signaturePassword;
+}
+
+/**
+ * ========================================
+ * SIGNATURE HISTORY
+ * ========================================
+ */
+
+/**
+ * Adicionar assinatura ao histórico
+ */
+export async function addSignatureToHistory(data: {
+  opinionId: number;
+  userId: number;
+  userName: string;
+  userEmail: string | null;
+  signerRole: "revisor" | "responsavel" | "gestor";
+  documentHash: string;
+  signature: string;
+  certificateInfo: any;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(signatureHistory).values({
+    opinionId: data.opinionId,
+    userId: data.userId,
+    userName: data.userName,
+    userEmail: data.userEmail,
+    signerRole: data.signerRole,
+    documentHash: data.documentHash,
+    signature: data.signature,
+    certificateInfo: data.certificateInfo,
+    isValid: true,
+  });
+
+  return Number(result.insertId);
+}
+
+/**
+ * Obter histórico de assinaturas de um parecer
+ */
+export async function getSignatureHistory(opinionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(signatureHistory).where(eq(signatureHistory.opinionId, opinionId)).orderBy(signatureHistory.signedAt);
+}
+
+/**
+ * Contar assinaturas de um parecer
+ */
+export async function getSignatureCount(opinionId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const signatures = await db.select().from(signatureHistory).where(eq(signatureHistory.opinionId, opinionId));
+  return signatures.length;
+}
+
+/**
+ * Verificar se usuário já assinou um parecer
+ */
+export async function hasUserSignedOpinion(opinionId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const signatures = await db
+    .select()
+    .from(signatureHistory)
+    .where(eq(signatureHistory.opinionId, opinionId))
+    .where(eq(signatureHistory.userId, userId))
+    .limit(1);
+
+  return signatures.length > 0;
 }

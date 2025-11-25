@@ -11,6 +11,7 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   theme: mysqlEnum("theme", ["light", "dark", "system"]).default("system").notNull(),
+  signaturePassword: varchar("signaturePassword", { length: 255 }), // Hash bcrypt da senha de assinatura
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -1304,8 +1305,8 @@ export const legalOpinions = mysqlTable("legal_opinions", {
   status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
   // Template (se este parecer é um template reutilizável)
   isTemplate: boolean("isTemplate").default(false).notNull(),
-  // Assinatura digital (FK para digitalSignatures)
-  signatureId: int("signatureId"),
+  // Número de assinaturas necessárias (1-3)
+  requiredSignatures: int("requiredSignatures").default(1).notNull(),
   // Usuário que solicitou
   requestedBy: int("requestedBy").notNull(), // FK para users
   // Usuário que revisou (se houver)
@@ -1349,3 +1350,31 @@ export const digitalSignatures = mysqlTable("digital_signatures", {
 
 export type DigitalSignature = typeof digitalSignatures.$inferSelect;
 export type InsertDigitalSignature = typeof digitalSignatures.$inferInsert;
+
+/**
+ * Histórico de assinaturas digitais (múltiplas assinaturas por parecer)
+ */
+export const signatureHistory = mysqlTable("signature_history", {
+  id: int("id").autoincrement().primaryKey(),
+  // Parecer assinado
+  opinionId: int("opinionId").notNull(), // FK para legalOpinions
+  // Usuário que assinou
+  userId: int("userId").notNull(), // FK para users
+  userName: varchar("userName", { length: 255 }).notNull(), // Nome do usuário no momento da assinatura
+  userEmail: varchar("userEmail", { length: 320 }), // Email do usuário no momento da assinatura
+  // Role escolhido pelo assinante (Advogado Revisor, Advogado Responsável, Gestor Jurídico)
+  signerRole: mysqlEnum("signerRole", ["revisor", "responsavel", "gestor"]).notNull(),
+  // Hash SHA-256 do documento no momento da assinatura
+  documentHash: varchar("documentHash", { length: 64 }).notNull(),
+  // Assinatura criptográfica (hash assinado com chave privada simulada)
+  signature: text("signature").notNull(),
+  // Informações do certificado (simulado)
+  certificateInfo: json("certificateInfo"),
+  // Validação
+  isValid: boolean("isValid").default(true).notNull(),
+  // Timestamp
+  signedAt: timestamp("signedAt").defaultNow().notNull(),
+});
+
+export type SignatureHistory = typeof signatureHistory.$inferSelect;
+export type InsertSignatureHistory = typeof signatureHistory.$inferInsert;

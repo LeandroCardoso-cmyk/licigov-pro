@@ -35,6 +35,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
+import { SetSignaturePasswordDialog } from "@/components/SetSignaturePasswordDialog";
+import { SignatureHistory } from "@/components/SignatureHistory";
 
 export default function LegalOpinionDetails() {
   const { user, loading: authLoading } = useAuth();
@@ -42,9 +54,24 @@ export default function LegalOpinionDetails() {
   const [, params] = useRoute("/parecer-juridico/:id");
   const opinionId = params?.id ? parseInt(params.id) : null;
   const [showSignDialog, setShowSignDialog] = useState(false);
+  const [showSetPasswordDialog, setShowSetPasswordDialog] = useState(false);
+  const [signerRole, setSignerRole] = useState<"revisor" | "responsavel" | "gestor">("responsavel");
+  const [signaturePassword, setSignaturePassword] = useState("");
+  const [showSignaturePassword, setShowSignaturePassword] = useState(false);
 
   // Buscar parecer
   const { data: opinion, isLoading, refetch } = trpc.legalOpinions.getById.useQuery(
+    { id: opinionId! },
+    { enabled: !!opinionId }
+  );
+
+  // Verificar se usuário tem senha de assinatura
+  const { data: hasPassword } = trpc.legalOpinions.hasSignaturePassword.useQuery(undefined, {
+    enabled: !!user,
+  });
+
+  // Buscar histórico de assinaturas
+  const { data: signatureHistoryData } = trpc.legalOpinions.getSignatureHistory.useQuery(
     { id: opinionId! },
     { enabled: !!opinionId }
   );
@@ -106,15 +133,36 @@ export default function LegalOpinionDetails() {
 
   // Mutation para assinar digitalmente
   const signMutation = trpc.legalOpinions.sign.useMutation({
-    onSuccess: () => {
-      toast.success("✅ Parecer assinado digitalmente com sucesso!");
+    onSuccess: (data) => {
+      toast.success(`✅ Parecer assinado digitalmente! (${data.signaturesCount}/${data.requiredSignatures})`);
       setShowSignDialog(false);
+      setSignaturePassword("");
       refetch();
     },
     onError: (error) => {
       toast.error(error.message || "Erro ao assinar parecer");
     },
   });
+
+  const handleSignClick = () => {
+    if (!hasPassword) {
+      setShowSetPasswordDialog(true);
+      return;
+    }
+    setShowSignDialog(true);
+  };
+
+  const handleSign = () => {
+    if (!signaturePassword) {
+      toast.error("Digite sua senha de assinatura");
+      return;
+    }
+    signMutation.mutate({
+      id: opinion!.id,
+      signerRole,
+      signaturePassword,
+    });
+  };
 
   // Query para verificar assinatura
   const { data: signatureInfo } = trpc.legalOpinions.verifySignature.useQuery(
@@ -292,10 +340,11 @@ export default function LegalOpinionDetails() {
               )}
 
               {/* Botão Assinar Digitalmente */}
-              {opinion.status === "approved" && opinion.opinion && !opinion.signatureId && (
+              {opinion.status === "approved" && opinion.opinion && 
+               (!signatureHistoryData || signatureHistoryData.length < opinion.requiredSignatures) && (
                 <Button 
                   variant="default"
-                  onClick={() => setShowSignDialog(true)}
+                  onClick={handleSignClick}
                   disabled={signMutation.isPending}
                 >
                   {signMutation.isPending ? (
@@ -308,10 +357,12 @@ export default function LegalOpinionDetails() {
               )}
 
               {/* Badge de Assinado */}
-              {opinion.signatureId && signatureInfo?.signed && (
+              {signatureHistoryData && signatureHistoryData.length > 0 && (
                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
                   <ShieldCheck className="h-4 w-4 mr-1" />
-                  Assinado Digitalmente
+                  {signatureHistoryData.length >= opinion.requiredSignatures
+                    ? "Totalmente Assinado"
+                    : `${signatureHistoryData.length}/${opinion.requiredSignatures} Assinaturas`}
                 </Badge>
               )}
             </div>
@@ -475,91 +526,87 @@ export default function LegalOpinionDetails() {
           </div>
 
           {/* Card de Informações de Assinatura Digital */}
-          {opinion.signatureId && signatureInfo && (
-            <Card className="border-green-200 bg-green-50/50">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-green-600" />
-                  Assinatura Digital
-                </CardTitle>
-                <CardDescription>
-                  Este parecer foi assinado digitalmente
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Assinado por</p>
-                    <p className="text-sm font-semibold">{signatureInfo.signedBy}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Data da Assinatura</p>
-                    <p className="text-sm font-semibold">
-                      {new Date(signatureInfo.signedAt).toLocaleDateString("pt-BR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="pt-3 border-t">
-                  <div className="flex items-center gap-2">
-                    {signatureInfo.hashMatches && signatureInfo.signatureValid ? (
-                      <>
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-700 font-medium">
-                          Assinatura válida - Documento íntegro
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="h-4 w-4 text-red-600" />
-                        <span className="text-sm text-red-700 font-medium">
-                          Assinatura inválida - Documento pode ter sido alterado
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Histórico de Assinaturas */}
+          {signatureHistoryData && signatureHistoryData.length > 0 && (
+            <SignatureHistory
+              signatures={signatureHistoryData}
+              requiredSignatures={opinion.requiredSignatures}
+            />
           )}
         </div>
       </div>
 
       {/* Modal de Confirmação de Assinatura */}
       <AlertDialog open={showSignDialog} onOpenChange={setShowSignDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-[550px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
               Assinar Digitalmente
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
+            <AlertDialogDescription className="space-y-4">
               <p>
                 Você está prestes a assinar digitalmente este parecer jurídico.
               </p>
+
+              {/* Seleção de Role */}
+              <div className="space-y-2">
+                <Label htmlFor="signerRole" className="text-foreground font-medium">
+                  Você está assinando como:
+                </Label>
+                <Select value={signerRole} onValueChange={(value: any) => setSignerRole(value)}>
+                  <SelectTrigger id="signerRole">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="revisor">Advogado Revisor</SelectItem>
+                    <SelectItem value="responsavel">Advogado Responsável</SelectItem>
+                    <SelectItem value="gestor">Gestor Jurídico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Campo de Senha */}
+              <div className="space-y-2">
+                <Label htmlFor="signaturePassword" className="text-foreground font-medium">
+                  Senha de Assinatura:
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="signaturePassword"
+                    type={showSignaturePassword ? "text" : "password"}
+                    placeholder="Digite sua senha de assinatura"
+                    value={signaturePassword}
+                    onChange={(e) => setSignaturePassword(e.target.value)}
+                    disabled={signMutation.isPending}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowSignaturePassword(!showSignaturePassword)}
+                  >
+                    {showSignaturePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
               <div className="bg-muted p-3 rounded-md space-y-2">
-                <p className="text-sm font-medium text-foreground">O que isso significa?</p>
+                <p className="text-sm font-medium text-foreground">O que acontece ao assinar?</p>
                 <ul className="text-sm space-y-1 list-disc list-inside">
                   <li>Sua identidade será vinculada a este documento</li>
                   <li>Um hash criptográfico SHA-256 será gerado</li>
                   <li>A assinatura será incluída nas exportações PDF/DOCX</li>
-                  <li>A integridade do documento poderá ser verificada</li>
+                  <li>Esta ação não pode ser desfeita</li>
                 </ul>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Esta ação não pode ser desfeita.
-              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => signMutation.mutate({ id: opinion!.id })}
+              onClick={handleSign}
               disabled={signMutation.isPending}
             >
               {signMutation.isPending ? (
@@ -577,6 +624,16 @@ export default function LegalOpinionDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Configuração de Senha */}
+      <SetSignaturePasswordDialog
+        open={showSetPasswordDialog}
+        onOpenChange={setShowSetPasswordDialog}
+        onSuccess={() => {
+          setShowSetPasswordDialog(false);
+          setShowSignDialog(true);
+        }}
+      />
     </div>
   );
 }
