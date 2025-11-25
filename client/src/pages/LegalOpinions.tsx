@@ -21,7 +21,9 @@ import {
   XCircle, 
   AlertCircle,
   Loader2,
-  Eye
+  Eye,
+  BookmarkCheck,
+  BarChart3
 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -31,12 +33,14 @@ export default function LegalOpinions() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string>("all");
+  const [templateFilter, setTemplateFilter] = useState<string>("all");
 
   // Buscar pareceres
   const { data: opinions, isLoading } = trpc.legalOpinions.list.useQuery(
     {
       status: statusFilter !== "all" ? (statusFilter as any) : undefined,
       sourceType: sourceTypeFilter !== "all" ? (sourceTypeFilter as any) : undefined,
+      isTemplate: templateFilter === "templates" ? true : templateFilter === "regular" ? false : undefined,
     },
     { enabled: !!user }
   );
@@ -111,10 +115,16 @@ export default function LegalOpinions() {
                 </p>
               </div>
             </div>
-            <Button onClick={() => navigate("/parecer-juridico/novo")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Parecer
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate("/parecer-juridico/analytics")}>
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Analytics
+              </Button>
+              <Button onClick={() => navigate("/parecer-juridico/novo")}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Parecer
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -126,7 +136,7 @@ export default function LegalOpinions() {
             <CardTitle className="text-lg">Filtros</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -154,6 +164,19 @@ export default function LegalOpinions() {
                     <SelectItem value="direct_contract">Contratação Direta</SelectItem>
                     <SelectItem value="contract">Contrato</SelectItem>
                     <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Tipo de Parecer</label>
+                <Select value={templateFilter} onValueChange={setTemplateFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="regular">Pareceres Regulares</SelectItem>
+                    <SelectItem value="templates">Templates</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -191,7 +214,15 @@ export default function LegalOpinions() {
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-lg mb-2">{opinion.title}</CardTitle>
+                      <div className="flex items-center gap-2 mb-2">
+                        <CardTitle className="text-lg">{opinion.title}</CardTitle>
+                        {opinion.isTemplate && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                            <BookmarkCheck className="h-3 w-3 mr-1" />
+                            Template
+                          </Badge>
+                        )}
+                      </div>
                       <CardDescription className="line-clamp-2">
                         {opinion.description || opinion.legalQuestion}
                       </CardDescription>

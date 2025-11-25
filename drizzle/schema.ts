@@ -1304,6 +1304,8 @@ export const legalOpinions = mysqlTable("legal_opinions", {
   status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
   // Template (se este parecer é um template reutilizável)
   isTemplate: boolean("isTemplate").default(false).notNull(),
+  // Assinatura digital (FK para digitalSignatures)
+  signatureId: int("signatureId"),
   // Usuário que solicitou
   requestedBy: int("requestedBy").notNull(), // FK para users
   // Usuário que revisou (se houver)
@@ -1316,3 +1318,34 @@ export const legalOpinions = mysqlTable("legal_opinions", {
 
 export type LegalOpinion = typeof legalOpinions.$inferSelect;
 export type InsertLegalOpinion = typeof legalOpinions.$inferInsert;
+
+/**
+ * Assinaturas Digitais
+ * Sistema de assinatura digital para validação jurídica de documentos
+ */
+export const digitalSignatures = mysqlTable("digital_signatures", {
+  id: int("id").autoincrement().primaryKey(),
+  // Tipo de documento assinado
+  documentType: mysqlEnum("documentType", ["legal_opinion", "contract", "amendment", "apostille", "rescission"]).notNull(),
+  // ID do documento assinado
+  documentId: int("documentId").notNull(),
+  // Hash SHA-256 do conteúdo do documento
+  contentHash: varchar("contentHash", { length: 64 }).notNull(),
+  // Assinatura digital (simulada com hash + chave privada)
+  signature: text("signature").notNull(),
+  // Usuário que assinou
+  signedBy: int("signedBy").notNull(), // FK para users
+  signedByName: text("signedByName").notNull(),
+  signedByEmail: varchar("signedByEmail", { length: 320 }),
+  // Informações do certificado (simulado)
+  certificateInfo: json("certificateInfo"), // { issuer: "...", validFrom: "...", validUntil: "..." }
+  // Timestamp da assinatura
+  signedAt: timestamp("signedAt").defaultNow().notNull(),
+  // Validade da assinatura
+  isValid: boolean("isValid").default(true).notNull(),
+  // Observações
+  notes: text("notes"),
+});
+
+export type DigitalSignature = typeof digitalSignatures.$inferSelect;
+export type InsertDigitalSignature = typeof digitalSignatures.$inferInsert;

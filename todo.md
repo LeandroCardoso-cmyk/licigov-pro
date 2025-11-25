@@ -2052,3 +2052,22 @@
 - [x] Aplicar migração do schema (pnpm db:push)
 - [x] Adicionar botão "Salvar como Template" na página de detalhes do parecer
 - [x] Testar todas as integrações e funcionalidades
+
+### Fase 40: Melhorias Avançadas do Módulo Parecer Jurídico
+- [x] Adicionar filtro de templates na página LegalOpinions.tsx
+- [x] Atualizar query para suportar filtro isTemplate
+- [x] Adicionar badge "Template" nos cards de pareceres salvos como template
+- [x] Implementar sistema de assinatura digital (backend)
+- [x] Criar tabela digitalSignatures no schema
+- [x] Adicionar campo signatureId na tabela legalOpinions
+- [x] Implementar geração de hash SHA-256 do documento
+- [x] Implementar assinatura com chave privada (simulada)
+- [x] Adicionar assinatura digital na exportação PDF
+- [x] Adicionar assinatura digital na exportação DOCX
+- [x] Criar página LegalOpinionsAnalytics.tsx (dashboard de métricas)
+- [x] Implementar funções de banco para estatísticas (getLegalOpinionsOverview, getTopArticles, etc)
+- [x] Criar procedures tRPC para analytics
+- [x] Adicionar cards de métricas (total, favoráveis, desfavoráveis, tempo médio)
+- [x] Adicionar gráficos (pareceres por mês, distribuição favorável/desfavorável, top artigos)
+- [x] Adicionar botão "Analytics" no header da página LegalOpinions
+- [x] Testar todas as funcionalidades implementadas

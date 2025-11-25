@@ -27,7 +27,8 @@ interface DocumentSettings {
  */
 export async function exportLegalOpinionToPDF(
   legalOpinion: LegalOpinion,
-  settings: DocumentSettings
+  settings: DocumentSettings,
+  signatureBlock?: string
 ): Promise<Buffer> {
   const browser = await puppeteer.launch({
     headless: true,
@@ -37,7 +38,7 @@ export async function exportLegalOpinionToPDF(
   try {
     const page = await browser.newPage();
     
-    const html = generateHTML(legalOpinion, settings);
+    const html = generateHTML(legalOpinion, settings, signatureBlock);
     
     await page.setContent(html, { waitUntil: "networkidle0" });
     
@@ -63,7 +64,8 @@ export async function exportLegalOpinionToPDF(
  */
 export async function exportLegalOpinionToDOCX(
   legalOpinion: LegalOpinion,
-  settings: DocumentSettings
+  settings: DocumentSettings,
+  signatureBlock?: string
 ): Promise<Buffer> {
   const doc = new Document({
     sections: [
@@ -153,6 +155,17 @@ export async function exportLegalOpinionToDOCX(
             : [new Paragraph({ text: "Conclusão não disponível." })]),
           new Paragraph({ text: "" }),
 
+          // Assinatura Digital
+          ...(signatureBlock
+            ? signatureBlock.split("\n\n").map(
+                (para) =>
+                  new Paragraph({
+                    text: para.replace(/[#*`]/g, ""), // Remove markdown
+                  })
+              )
+            : []),
+          new Paragraph({ text: "" }),
+
           // Rodapé
           new Paragraph({
             text: `Data: ${legalOpinion.createdAt.toLocaleDateString("pt-BR")}`,
@@ -177,9 +190,10 @@ export async function exportLegalOpinionToDOCX(
 /**
  * Gera HTML para renderização do PDF
  */
-function generateHTML(legalOpinion: LegalOpinion, settings: DocumentSettings): string {
+function generateHTML(legalOpinion: LegalOpinion, settings: DocumentSettings, signatureBlock?: string): string {
   const opinionHTML = legalOpinion.opinion ? marked(legalOpinion.opinion) : "<p>Parecer não gerado ainda.</p>";
   const conclusionHTML = legalOpinion.conclusion ? marked(legalOpinion.conclusion) : "<p>Conclusão não disponível.</p>";
+  const signatureHTML = signatureBlock ? marked(signatureBlock) : "";
 
   return `
     <!DOCTYPE html>
@@ -295,13 +309,15 @@ function generateHTML(legalOpinion: LegalOpinion, settings: DocumentSettings): s
 
       <!-- Data -->
       <div class="date">
-        <p>Data: ${legalOpinion.createdAt.toLocaleDateString("pt-BR")}</p>
+        <p><strong>Data:</strong> ${new Date(legalOpinion.createdAt).toLocaleDateString("pt-BR")}</p>
       </div>
+
+      <!-- Assinatura Digital -->
+      ${signatureHTML ? `<div class="section">${signatureHTML}</div>` : ""}
 
       <!-- Rodapé -->
       <div class="footer">
-        <p>${settings.organizationEmail || ""} | ${settings.organizationPhone || ""}</p>
-        <p>${settings.organizationWebsite || ""}</p>
+        <p>${settings.organizationPhone || ""} | ${settings.organizationEmail || ""} | ${settings.organizationWebsite || ""}</p>
       </div>
     </body>
     </html>

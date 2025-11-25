@@ -25,6 +25,7 @@ export const legalOpinionsRouter = router({
         status: z.enum(["draft", "in_review", "approved", "archived"]).optional(),
         sourceType: z.enum(["process", "direct_contract", "contract", "other"]).optional(),
         requestedBy: z.number().optional(),
+        isTemplate: z.boolean().optional(),
       }).optional()
     )
     .query(async ({ input }) => {
@@ -139,7 +140,19 @@ export const legalOpinionsRouter = router({
       }
 
       const settings = await getDocumentSettingsByUser(ctx.user.id);
-      const pdfBuffer = await exportLegalOpinionToPDF(opinion, settings || {});
+
+      // Buscar assinatura digital se existir
+      let signatureBlock: string | undefined;
+      if (opinion.signatureId) {
+        const { getDigitalSignatureById } = await import("../db");
+        const { formatSignatureBlock } = await import("../services/digitalSignatureService");
+        const signature = await getDigitalSignatureById(opinion.signatureId);
+        if (signature) {
+          signatureBlock = formatSignatureBlock(signature);
+        }
+      }
+
+      const pdfBuffer = await exportLegalOpinionToPDF(opinion, settings || {}, signatureBlock);
 
       return {
         buffer: pdfBuffer.toString("base64"),
@@ -159,7 +172,19 @@ export const legalOpinionsRouter = router({
       }
 
       const settings = await getDocumentSettingsByUser(ctx.user.id);
-      const docxBuffer = await exportLegalOpinionToDOCX(opinion, settings || {});
+
+      // Buscar assinatura digital se existir
+      let signatureBlock: string | undefined;
+      if (opinion.signatureId) {
+        const { getDigitalSignatureById } = await import("../db");
+        const { formatSignatureBlock } = await import("../services/digitalSignatureService");
+        const signature = await getDigitalSignatureById(opinion.signatureId);
+        if (signature) {
+          signatureBlock = formatSignatureBlock(signature);
+        }
+      }
+
+      const docxBuffer = await exportLegalOpinionToDOCX(opinion, settings || {}, signatureBlock);
 
       return {
         buffer: docxBuffer.toString("base64"),
@@ -214,4 +239,122 @@ export const legalOpinionsRouter = router({
 
       return result;
     }),
+
+  /**
+   * Assinar parecer jurídico digitalmente
+   */
+  sign: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const { generateContentHash, generateSignature, generateCertificateInfo } = await import("../services/digitalSignatureService");
+      const { createDigitalSignature, updateLegalOpinion, getLegalOpinionById } = await import("../db");
+
+      // Buscar parecer
+      const opinion = await getLegalOpinionById(input.id);
+      if (!opinion) {
+        throw new Error("Parecer jurídico não encontrado");
+      }
+
+      // Gerar hash do conteúdo
+      const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
+      const contentHash = generateContentHash(content);
+
+      // Gerar assinatura
+      const signature = generateSignature(contentHash, ctx.user.id);
+
+      // Gerar informações do certificado
+      const certificateInfo = generateCertificateInfo(ctx.user.name || "Usuário", ctx.user.email);
+
+      // Criar assinatura digital no banco
+      const signatureId = await createDigitalSignature({
+        documentType: "legal_opinion",
+        documentId: input.id,
+        contentHash,
+        signature,
+        signedBy: ctx.user.id,
+        signedByName: ctx.user.name || "Usuário",
+        signedByEmail: ctx.user.email,
+        certificateInfo,
+        isValid: true,
+      });
+
+      // Atualizar parecer com ID da assinatura
+      await updateLegalOpinion(input.id, {
+        signatureId,
+      });
+
+      return { success: true, signatureId };
+    }),
+
+  /**
+   * Verificar assinatura digital de um parecer
+   */
+  verifySignature: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const { validateSignature } = await import("../services/digitalSignatureService");
+      const { getLegalOpinionById, getDigitalSignatureById } = await import("../db");
+
+      // Buscar parecer
+      const opinion = await getLegalOpinionById(input.id);
+      if (!opinion || !opinion.signatureId) {
+        return { signed: false, valid: false };
+      }
+
+      // Buscar assinatura
+      const digitalSignature = await getDigitalSignatureById(opinion.signatureId);
+      if (!digitalSignature) {
+        return { signed: false, valid: false };
+      }
+
+      // Gerar hash do conteúdo atual
+      const { generateContentHash } = await import("../services/digitalSignatureService");
+      const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
+      const currentHash = generateContentHash(content);
+
+      // Verificar se o hash corresponde
+      const hashMatches = currentHash === digitalSignature.contentHash;
+
+      // Validar assinatura
+      const signatureValid = validateSignature(
+        digitalSignature.contentHash,
+        digitalSignature.signature,
+        digitalSignature.signedBy
+      );
+
+      return {
+        signed: true,
+        valid: hashMatches && signatureValid && digitalSignature.isValid,
+        signedBy: digitalSignature.signedByName,
+        signedAt: digitalSignature.signedAt,
+        hashMatches,
+        signatureValid,
+      };
+    }),
+
+  /**
+   * Obter visão geral de estatísticas
+   */
+  getAnalytics: protectedProcedure.query(async () => {
+    const {
+      getLegalOpinionsOverview,
+      getLegalOpinionsByMonth,
+      getTopCitedArticles,
+      getConclusionDistribution,
+    } = await import("../db");
+
+    const [overview, byMonth, topArticles, conclusionDist] = await Promise.all([
+      getLegalOpinionsOverview(),
+      getLegalOpinionsByMonth(),
+      getTopCitedArticles(),
+      getConclusionDistribution(),
+    ]);
+
+    return {
+      overview,
+      byMonth,
+      topArticles,
+      conclusionDist,
+    };
+  }),
 });
