@@ -1,0 +1,20 @@
+CREATE TABLE `legal_opinions` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`title` varchar(255) NOT NULL,
+	`description` text,
+	`sourceType` enum('process','direct_contract','contract','other') NOT NULL,
+	`sourceId` int,
+	`legalQuestion` text NOT NULL,
+	`context` text,
+	`opinion` text,
+	`conclusion` enum('favorable','unfavorable','with_reservations'),
+	`citedArticles` json,
+	`jurisprudence` json,
+	`status` enum('draft','in_review','approved','archived') NOT NULL DEFAULT 'draft',
+	`requestedBy` int NOT NULL,
+	`reviewedBy` int,
+	`reviewedAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `legal_opinions_id` PRIMARY KEY(`id`)
+);

@@ -13,6 +13,7 @@ import { downloadRouter } from "./routers/downloadRouter";
 import { directContractsRouter } from "./routers/directContractsRouter";
 import { contractsRouter } from "./routers/contractsRouter";
 import { contactRouter } from "./routers/contactRouter";
+import { legalOpinionsRouter } from "./routers/legalOpinionsRouter";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -1480,6 +1481,9 @@ export const appRouter = router({
   
   // Contratos administrativos
   contracts: contractsRouter,
+  
+  // Pareceres jurídicos
+  legalOpinions: legalOpinionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

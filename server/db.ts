@@ -58,6 +58,8 @@ import {
   directContractDocuments,
   InsertDirectContractDocument,  directContractQuotations,
   InsertDirectContractQuotation,
+  legalOpinions,
+  InsertLegalOpinion,
   directContractAuditLogs,
   InsertDirectContractAuditLog,
   directContractChecklistProgress,
@@ -3377,4 +3379,115 @@ export async function getRecentContracts(limit: number = 10) {
     .from(contracts)
     .orderBy(desc(contracts.createdAt))
     .limit(limit);
+}
+
+
+// ============================================================================
+// LEGAL OPINIONS (Pareceres Jurídicos)
+// ============================================================================
+
+/**
+ * Criar parecer jurídico
+ */
+export async function createLegalOpinion(data: InsertLegalOpinion) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(legalOpinions).values(data);
+  return result[0].insertId;
+}
+
+/**
+ * Listar pareceres jurídicos com filtros
+ */
+export async function getLegalOpinions(filters?: {
+  status?: string;
+  sourceType?: string;
+  requestedBy?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(legalOpinions);
+
+  const conditions = [];
+  if (filters?.status) {
+    conditions.push(eq(legalOpinions.status, filters.status as any));
+  }
+  if (filters?.sourceType) {
+    conditions.push(eq(legalOpinions.sourceType, filters.sourceType as any));
+  }
+  if (filters?.requestedBy) {
+    conditions.push(eq(legalOpinions.requestedBy, filters.requestedBy));
+  }
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  return await query.orderBy(desc(legalOpinions.createdAt));
+}
+
+/**
+ * Buscar parecer jurídico por ID
+ */
+export async function getLegalOpinionById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(legalOpinions)
+    .where(eq(legalOpinions.id, id))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+/**
+ * Atualizar parecer jurídico
+ */
+export async function updateLegalOpinion(
+  id: number,
+  data: Partial<InsertLegalOpinion>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(legalOpinions)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(legalOpinions.id, id));
+}
+
+/**
+ * Deletar parecer jurídico
+ */
+export async function deleteLegalOpinion(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(legalOpinions).where(eq(legalOpinions.id, id));
+}
+
+/**
+ * Buscar pareceres por fonte (processo, contratação direta, etc)
+ */
+export async function getLegalOpinionsBySource(
+  sourceType: string,
+  sourceId: number
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(legalOpinions)
+    .where(
+      and(
+        eq(legalOpinions.sourceType, sourceType as any),
+        eq(legalOpinions.sourceId, sourceId)
+      )
+    )
+    .orderBy(desc(legalOpinions.createdAt));
 }

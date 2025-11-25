@@ -44,6 +44,9 @@ import Contracts from "./pages/Contracts";
 import NewContract from "./pages/NewContract";
 import ContractDetails from "./pages/ContractDetails";
 import ContractAlerts from "./pages/ContractAlerts";
+import LegalOpinions from "./pages/LegalOpinions";
+import NewLegalOpinion from "./pages/NewLegalOpinion";
+import LegalOpinionDetails from "./pages/LegalOpinionDetails";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 // import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
@@ -99,6 +102,9 @@ const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLog
 const DirectContractsRoute = () => <AuthenticatedRoute component={DirectContracts} />;
 const NewDirectContractRoute = () => <AuthenticatedRoute component={NewDirectContract} />;
 const DirectContractDetailsRoute = () => <AuthenticatedRoute component={DirectContractDetails} />;
+const LegalOpinionsRoute = () => <AuthenticatedRoute component={LegalOpinions} />;
+const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
+const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
 
 function Router() {
   return (
@@ -122,6 +128,9 @@ function Router() {
       <Route path={'/contracts/new'} component={() => <AuthenticatedRoute component={NewContract} />} />
       <Route path={'/contracts/alerts'} component={() => <AuthenticatedRoute component={ContractAlerts} />} />
       <Route path={'/contracts/:id'} component={() => <AuthenticatedRoute component={ContractDetails} />} />
+      <Route path={'/parecer-juridico'} component={LegalOpinionsRoute} />
+      <Route path={'/parecer-juridico/novo'} component={NewLegalOpinionRoute} />
+      <Route path={'/parecer-juridico/:id'} component={LegalOpinionDetailsRoute} />
       <Route path="/processo/:id" component={ProcessDetailsRoute} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />

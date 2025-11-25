@@ -96,7 +96,7 @@ const modules: Module[] = [
     description: "Análise jurídica automatizada com IA baseada na Lei 14.133/2021",
     icon: <Scale className="h-6 w-6" />,
     path: "/parecer-juridico",
-    available: false,
+    available: true,
     color: "from-red-500 to-red-600",
     image: "/dashboard-parecer-juridico.png",
     stats: {

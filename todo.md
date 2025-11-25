@@ -2012,3 +2012,30 @@
 - [x] Adicionar menu dropdown de histórico no header do ModuleSelectionDashboard
 - [x] Testar breadcrumbs em todas as páginas
 - [x] Testar tooltip e histórico de navegação
+
+### Fase 38: Módulo Parecer Jurídico com IA
+- [ ] Criar tabela legalOpinions no schema.ts
+- [ ] Aplicar migração no banco (pnpm db:push)
+- [ ] Criar funções de DB em db.ts (createLegalOpinion, getLegalOpinions, etc)
+- [ ] Criar router legalOpinions em routers.ts com procedures CRUD
+- [ ] Implementar geração de parecer com IA usando invokeLLM
+- [ ] Criar página LegalOpinions.tsx (listagem com filtros)
+- [ ] Criar página NewLegalOpinion.tsx (formulário de solicitação)
+- [ ] Criar página LegalOpinionDetails.tsx (visualização e edição)
+- [ ] Adicionar rotas no App.tsx
+- [ ] Atualizar card do módulo no ModuleSelectionDashboard
+- [ ] Testar geração de parecer e CRUD completo
+
+### Fase 38: Módulo Parecer Jurídico com IA (Implementação Completa)
+- [x] Criar tabela legalOpinions no schema.ts
+- [x] Aplicar migração no banco (pnpm db:push)
+- [x] Criar funções de DB em db.ts (createLegalOpinion, getLegalOpinions, etc)
+- [x] Criar router legalOpinionsRouter.ts com procedures CRUD
+- [x] Registrar legalOpinionsRouter no appRouter
+- [x] Implementar geração de parecer com IA usando invokeLLM (legalOpinionService.ts)
+- [x] Criar página LegalOpinions.tsx (listagem com filtros)
+- [x] Criar página NewLegalOpinion.tsx (formulário de solicitação)
+- [x] Criar página LegalOpinionDetails.tsx (visualização e edição)
+- [x] Adicionar rotas no App.tsx (/parecer-juridico, /parecer-juridico/novo, /parecer-juridico/:id)
+- [x] Atualizar card do módulo no ModuleSelectionDashboard (available: true)
+- [x] Testar geração de parecer e CRUD completo

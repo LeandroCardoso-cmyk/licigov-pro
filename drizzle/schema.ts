@@ -1275,3 +1275,42 @@ export const contractAuditLogs = mysqlTable("contract_audit_logs", {
 
 export type ContractAuditLog = typeof contractAuditLogs.$inferSelect;
 export type InsertContractAuditLog = typeof contractAuditLogs.$inferInsert;
+
+/**
+ * Pareceres Jurídicos
+ * Análises jurídicas automatizadas com IA baseadas na Lei 14.133/2021
+ */
+export const legalOpinions = mysqlTable("legal_opinions", {
+  id: int("id").autoincrement().primaryKey(),
+  // Título e descrição
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  // Tipo de origem (processo licitatório ou contratação direta)
+  sourceType: mysqlEnum("sourceType", ["process", "direct_contract", "contract", "other"]).notNull(),
+  sourceId: int("sourceId"), // ID do processo, contratação direta ou contrato relacionado
+  // Questão jurídica a ser analisada
+  legalQuestion: text("legalQuestion").notNull(),
+  // Contexto adicional fornecido pelo usuário
+  context: text("context"),
+  // Parecer gerado pela IA
+  opinion: text("opinion"), // Conteúdo do parecer em Markdown
+  // Conclusão (Favorável, Desfavorável, Com Ressalvas)
+  conclusion: mysqlEnum("conclusion", ["favorable", "unfavorable", "with_reservations"]),
+  // Artigos da Lei 14.133/2021 citados (JSON array)
+  citedArticles: json("citedArticles"), // ["Art. 6º", "Art. 75", etc]
+  // Jurisprudências citadas (JSON array)
+  jurisprudence: json("jurisprudence"), // [{court: "TCU", number: "123/2022", summary: "..."}]
+  // Status
+  status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
+  // Usuário que solicitou
+  requestedBy: int("requestedBy").notNull(), // FK para users
+  // Usuário que revisou (se houver)
+  reviewedBy: int("reviewedBy"),
+  reviewedAt: timestamp("reviewedAt"),
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LegalOpinion = typeof legalOpinions.$inferSelect;
+export type InsertLegalOpinion = typeof legalOpinions.$inferInsert;

@@ -1,0 +1,347 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { BackToDashboard } from "@/components/BackToDashboard";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { trpc } from "@/lib/trpc";
+import { 
+  Scale, 
+  Loader2, 
+  Sparkles, 
+  CheckCircle2, 
+  XCircle, 
+  AlertCircle,
+  FileText,
+  Calendar,
+  User,
+  Tag
+} from "lucide-react";
+import { useLocation, useRoute } from "wouter";
+import { toast } from "sonner";
+import { Streamdown } from "streamdown";
+
+export default function LegalOpinionDetails() {
+  const { user, loading: authLoading } = useAuth();
+  const [, navigate] = useLocation();
+  const [, params] = useRoute("/parecer-juridico/:id");
+  const opinionId = params?.id ? parseInt(params.id) : null;
+
+  // Buscar parecer
+  const { data: opinion, isLoading, refetch } = trpc.legalOpinions.getById.useQuery(
+    { id: opinionId! },
+    { enabled: !!opinionId }
+  );
+
+  // Mutation para gerar parecer
+  const generateMutation = trpc.legalOpinions.generateOpinion.useMutation({
+    onSuccess: () => {
+      toast.success("Parecer gerado com sucesso!");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao gerar parecer");
+    },
+  });
+
+  // Mutation para atualizar status
+  const updateMutation = trpc.legalOpinions.update.useMutation({
+    onSuccess: () => {
+      toast.success("Status atualizado!");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao atualizar");
+    },
+  });
+
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!opinion) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <p className="text-lg text-muted-foreground mb-4">Parecer não encontrado</p>
+        <Button onClick={() => navigate("/parecer-juridico")}>
+          Voltar para Pareceres
+        </Button>
+      </div>
+    );
+  }
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+      draft: { label: "Rascunho", variant: "secondary" },
+      in_review: { label: "Em Revisão", variant: "default" },
+      approved: { label: "Aprovado", variant: "outline" },
+      archived: { label: "Arquivado", variant: "destructive" },
+    };
+    const config = variants[status] || { label: status, variant: "outline" };
+    return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const getConclusionIcon = (conclusion: string | null) => {
+    if (!conclusion) return null;
+    const icons: Record<string, JSX.Element> = {
+      favorable: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+      unfavorable: <XCircle className="h-5 w-5 text-red-600" />,
+      with_reservations: <AlertCircle className="h-5 w-5 text-yellow-600" />,
+    };
+    return icons[conclusion] || null;
+  };
+
+  const getConclusionLabel = (conclusion: string | null) => {
+    if (!conclusion) return "Aguardando Análise";
+    const labels: Record<string, string> = {
+      favorable: "Favorável",
+      unfavorable: "Desfavorável",
+      with_reservations: "Com Ressalvas",
+    };
+    return labels[conclusion] || conclusion;
+  };
+
+  const getSourceTypeLabel = (sourceType: string) => {
+    const labels: Record<string, string> = {
+      process: "Processo Licitatório",
+      direct_contract: "Contratação Direta",
+      contract: "Contrato",
+      other: "Outro",
+    };
+    return labels[sourceType] || sourceType;
+  };
+
+  const handleGenerate = async () => {
+    if (!opinionId) return;
+    await generateMutation.mutateAsync({ id: opinionId });
+  };
+
+  const handleApprove = async () => {
+    if (!opinionId) return;
+    await updateMutation.mutateAsync({
+      id: opinionId,
+      status: "approved",
+      reviewedBy: user?.id,
+    });
+  };
+
+  const isGenerating = generateMutation.isPending;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <BackToDashboard />
+              <div>
+                <Breadcrumbs items={[
+                  { label: "Parecer Jurídico", href: "/parecer-juridico" },
+                  { label: "Detalhes do Parecer" }
+                ]} className="mb-1" />
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                  <Scale className="h-6 w-6 text-primary" />
+                  {opinion.title}
+                </h1>
+                <div className="flex items-center gap-3 mt-2">
+                  {getStatusBadge(opinion.status)}
+                  {opinion.conclusion && (
+                    <div className="flex items-center gap-2">
+                      {getConclusionIcon(opinion.conclusion)}
+                      <span className="text-sm font-medium">{getConclusionLabel(opinion.conclusion)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {!opinion.opinion && (
+                <Button onClick={handleGenerate} disabled={isGenerating}>
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Gerar com IA
+                    </>
+                  )}
+                </Button>
+              )}
+              {opinion.status === "in_review" && (
+                <Button onClick={handleApprove} disabled={updateMutation.isPending}>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Aprovar
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Conteúdo */}
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Coluna Principal */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Questão Jurídica */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Questão Jurídica</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-foreground whitespace-pre-wrap">{opinion.legalQuestion}</p>
+              </CardContent>
+            </Card>
+
+            {/* Contexto */}
+            {opinion.context && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Contexto Adicional</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-foreground whitespace-pre-wrap">{opinion.context}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Parecer Gerado */}
+            {opinion.opinion ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Parecer Jurídico
+                  </CardTitle>
+                  <CardDescription>
+                    Análise fundamentada na Lei 14.133/2021
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <Streamdown>{opinion.opinion}</Streamdown>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
+                  <p className="text-lg font-medium text-muted-foreground mb-2">
+                    Parecer ainda não gerado
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Clique em "Gerar com IA" para criar a análise jurídica
+                  </p>
+                  <Button onClick={handleGenerate} disabled={isGenerating}>
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Gerando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Gerar com IA
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Coluna Lateral */}
+          <div className="space-y-6">
+            {/* Informações */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Informações</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Tag className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Tipo</p>
+                    <p className="text-sm text-muted-foreground">{getSourceTypeLabel(opinion.sourceType)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <User className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Solicitado por</p>
+                    <p className="text-sm text-muted-foreground">Usuário #{opinion.requestedBy}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Calendar className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Criado em</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(opinion.createdAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                </div>
+                {opinion.reviewedAt && (
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Revisado em</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(opinion.reviewedAt).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Artigos Citados */}
+            {opinion.citedArticles && (opinion.citedArticles as string[]).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Artigos Citados</CardTitle>
+                  <CardDescription>Lei 14.133/2021</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {(opinion.citedArticles as string[]).map((article, index) => (
+                      <Badge key={index} variant="outline">
+                        {article}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Jurisprudências */}
+            {opinion.jurisprudence && Array.isArray(opinion.jurisprudence) && opinion.jurisprudence.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Jurisprudências</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {opinion.jurisprudence.map((juris: any, index: number) => (
+                    <div key={index} className="border-l-2 border-primary pl-3">
+                      <p className="text-sm font-medium">{juris.court} - {juris.number}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{juris.summary}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

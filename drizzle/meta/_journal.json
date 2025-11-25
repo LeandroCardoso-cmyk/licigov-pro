@@ -183,6 +183,13 @@
       "when": 1764016739908,
       "tag": "0025_hot_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1764028892463,
+      "tag": "0026_loose_giant_man",
+      "breakpoints": true
     }
   ]
 }
