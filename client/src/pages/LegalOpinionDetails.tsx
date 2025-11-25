@@ -17,17 +17,31 @@ import {
   User,
   Tag,
   Download,
-  BookmarkPlus
+  BookmarkPlus,
+  Shield,
+  ShieldCheck
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function LegalOpinionDetails() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [, params] = useRoute("/parecer-juridico/:id");
   const opinionId = params?.id ? parseInt(params.id) : null;
+  const [showSignDialog, setShowSignDialog] = useState(false);
 
   // Buscar parecer
   const { data: opinion, isLoading, refetch } = trpc.legalOpinions.getById.useQuery(
@@ -89,6 +103,24 @@ export default function LegalOpinionDetails() {
       toast.error(error.message || "Erro ao exportar DOCX");
     },
   });
+
+  // Mutation para assinar digitalmente
+  const signMutation = trpc.legalOpinions.sign.useMutation({
+    onSuccess: () => {
+      toast.success("✅ Parecer assinado digitalmente com sucesso!");
+      setShowSignDialog(false);
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao assinar parecer");
+    },
+  });
+
+  // Query para verificar assinatura
+  const { data: signatureInfo } = trpc.legalOpinions.verifySignature.useQuery(
+    { id: opinionId! },
+    { enabled: !!opinionId && !!opinion?.signatureId }
+  );
 
   if (authLoading || isLoading) {
     return (
@@ -258,6 +290,30 @@ export default function LegalOpinionDetails() {
                   Salvar como Template
                 </Button>
               )}
+
+              {/* Botão Assinar Digitalmente */}
+              {opinion.status === "approved" && opinion.opinion && !opinion.signatureId && (
+                <Button 
+                  variant="default"
+                  onClick={() => setShowSignDialog(true)}
+                  disabled={signMutation.isPending}
+                >
+                  {signMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Shield className="h-4 w-4 mr-2" />
+                  )}
+                  Assinar Digitalmente
+                </Button>
+              )}
+
+              {/* Badge de Assinado */}
+              {opinion.signatureId && signatureInfo?.signed && (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  Assinado Digitalmente
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -417,8 +473,110 @@ export default function LegalOpinionDetails() {
               </Card>
             )}
           </div>
+
+          {/* Card de Informações de Assinatura Digital */}
+          {opinion.signatureId && signatureInfo && (
+            <Card className="border-green-200 bg-green-50/50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-green-600" />
+                  Assinatura Digital
+                </CardTitle>
+                <CardDescription>
+                  Este parecer foi assinado digitalmente
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Assinado por</p>
+                    <p className="text-sm font-semibold">{signatureInfo.signedBy}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Data da Assinatura</p>
+                    <p className="text-sm font-semibold">
+                      {new Date(signatureInfo.signedAt).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-3 border-t">
+                  <div className="flex items-center gap-2">
+                    {signatureInfo.hashMatches && signatureInfo.signatureValid ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-700 font-medium">
+                          Assinatura válida - Documento íntegro
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-600" />
+                        <span className="text-sm text-red-700 font-medium">
+                          Assinatura inválida - Documento pode ter sido alterado
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
+
+      {/* Modal de Confirmação de Assinatura */}
+      <AlertDialog open={showSignDialog} onOpenChange={setShowSignDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              Assinar Digitalmente
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Você está prestes a assinar digitalmente este parecer jurídico.
+              </p>
+              <div className="bg-muted p-3 rounded-md space-y-2">
+                <p className="text-sm font-medium text-foreground">O que isso significa?</p>
+                <ul className="text-sm space-y-1 list-disc list-inside">
+                  <li>Sua identidade será vinculada a este documento</li>
+                  <li>Um hash criptográfico SHA-256 será gerado</li>
+                  <li>A assinatura será incluída nas exportações PDF/DOCX</li>
+                  <li>A integridade do documento poderá ser verificada</li>
+                </ul>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Esta ação não pode ser desfeita.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => signMutation.mutate({ id: opinion!.id })}
+              disabled={signMutation.isPending}
+            >
+              {signMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assinando...
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4 mr-2" />
+                  Confirmar Assinatura
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

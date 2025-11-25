@@ -278,12 +278,17 @@ export const legalOpinionsRouter = router({
         isValid: true,
       });
 
-      // Atualizar parecer com ID da assinatura
-      await updateLegalOpinion(input.id, {
-        signatureId,
+      // Atualizar parecer com signatureId
+      await updateLegalOpinion(input.id, { signatureId: signature.id });
+
+      // Enviar notificação automática
+      const { notifyOwner } = await import("../_core/notification");
+      await notifyOwner({
+        title: `🔒 Parecer Jurídico Assinado Digitalmente`,
+        content: `O parecer "${opinion.title}" foi assinado digitalmente por ${ctx.user.name || ctx.user.email}.\n\nAssinado em: ${new Date().toLocaleString("pt-BR")}\nHash SHA-256: ${signature.documentHash.substring(0, 16)}...`,
       });
 
-      return { success: true, signatureId };
+      return { success: true, signatureId: signature.id };
     }),
 
   /**
@@ -335,7 +340,13 @@ export const legalOpinionsRouter = router({
   /**
    * Obter visão geral de estatísticas
    */
-  getAnalytics: protectedProcedure.query(async () => {
+  getAnalytics: protectedProcedure
+    .input(
+      z.object({
+        period: z.enum(["all", "7days", "30days", "90days", "year"]).default("30days"),
+      })
+    )
+    .query(async ({ input }) => {
     const {
       getLegalOpinionsOverview,
       getLegalOpinionsByMonth,
@@ -344,10 +355,10 @@ export const legalOpinionsRouter = router({
     } = await import("../db");
 
     const [overview, byMonth, topArticles, conclusionDist] = await Promise.all([
-      getLegalOpinionsOverview(),
-      getLegalOpinionsByMonth(),
-      getTopCitedArticles(),
-      getConclusionDistribution(),
+      getLegalOpinionsOverview(input.period),
+      getLegalOpinionsByMonth(input.period),
+      getTopCitedArticles(input.period),
+      getConclusionDistribution(input.period),
     ]);
 
     return {

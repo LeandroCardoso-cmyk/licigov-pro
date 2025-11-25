@@ -3576,18 +3576,49 @@ export async function invalidateDigitalSignature(id: number) {
  */
 
 /**
+ * Função helper para filtrar pareceres por período
+ */
+function filterByPeriod<T extends { createdAt: Date | string }>(items: T[], period: "all" | "7days" | "30days" | "90days" | "year"): T[] {
+  if (period === "all") return items;
+
+  const now = new Date();
+  const cutoffDate = new Date();
+
+  switch (period) {
+    case "7days":
+      cutoffDate.setDate(now.getDate() - 7);
+      break;
+    case "30days":
+      cutoffDate.setDate(now.getDate() - 30);
+      break;
+    case "90days":
+      cutoffDate.setDate(now.getDate() - 90);
+      break;
+    case "year":
+      cutoffDate.setFullYear(now.getFullYear() - 1);
+      break;
+  }
+
+  return items.filter((item) => {
+    const itemDate = typeof item.createdAt === "string" ? new Date(item.createdAt) : item.createdAt;
+    return itemDate >= cutoffDate;
+  });
+}
+
+/**
  * Obter visão geral de pareceres jurídicos
  */
-export async function getLegalOpinionsOverview() {
+export async function getLegalOpinionsOverview(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return null;
 
   const allOpinions = await db.select().from(legalOpinions);
+  const filteredOpinions = filterByPeriod(allOpinions, period);
 
-  const total = allOpinions.length;
-  const favorable = allOpinions.filter((op) => op.conclusion === "favorable").length;
-  const unfavorable = allOpinions.filter((op) => op.conclusion === "unfavorable").length;
-  const withReservations = allOpinions.filter((op) => op.conclusion === "with_reservations").length;
+  const total = filteredOpinions.length;
+  const favorable = filteredOpinions.filter((op) => op.conclusion === "favorable").length;
+  const unfavorable = filteredOpinions.filter((op) => op.conclusion === "unfavorable").length;
+  const withReservations = filteredOpinions.filter((op) => op.conclusion === "with_reservations").length;
 
   // Calcular tempo médio de geração (estimado em 2-5 minutos)
   const avgTime = Math.floor(Math.random() * 3) + 2; // Simulado
@@ -3604,11 +3635,12 @@ export async function getLegalOpinionsOverview() {
 /**
  * Obter pareceres por mês (últimos 6 meses)
  */
-export async function getLegalOpinionsByMonth() {
+export async function getLegalOpinionsByMonth(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
 
   const allOpinions = await db.select().from(legalOpinions);
+  const filteredOpinions = filterByPeriod(allOpinions, period);
 
   // Agrupar por mês
   const monthlyData: Record<string, number> = {};
@@ -3620,7 +3652,7 @@ export async function getLegalOpinionsByMonth() {
     monthlyData[key] = 0;
   }
 
-  allOpinions.forEach((opinion) => {
+  filteredOpinions.forEach((opinion) => {
     const date = new Date(opinion.createdAt);
     const key = date.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
     if (monthlyData[key] !== undefined) {
@@ -3634,15 +3666,16 @@ export async function getLegalOpinionsByMonth() {
 /**
  * Obter artigos mais citados
  */
-export async function getTopCitedArticles() {
+export async function getTopCitedArticles(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
 
   const allOpinions = await db.select().from(legalOpinions);
+  const filteredOpinions = filterByPeriod(allOpinions, period);
 
   const articleCounts: Record<string, number> = {};
 
-  allOpinions.forEach((opinion) => {
+  filteredOpinions.forEach((opinion) => {
     if (opinion.citedArticles && Array.isArray(opinion.citedArticles)) {
       (opinion.citedArticles as string[]).forEach((article) => {
         articleCounts[article] = (articleCounts[article] || 0) + 1;
@@ -3659,15 +3692,16 @@ export async function getTopCitedArticles() {
 /**
  * Obter distribuição de conclusões
  */
-export async function getConclusionDistribution() {
+export async function getConclusionDistribution(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
 
   const allOpinions = await db.select().from(legalOpinions);
+  const filteredOpinions = filterByPeriod(allOpinions, period);
 
-  const favorable = allOpinions.filter((op) => op.conclusion === "favorable").length;
-  const unfavorable = allOpinions.filter((op) => op.conclusion === "unfavorable").length;
-  const withReservations = allOpinions.filter((op) => op.conclusion === "with_reservations").length;
+  const favorable = filteredOpinions.filter((op) => op.conclusion === "favorable").length;
+  const unfavorable = filteredOpinions.filter((op) => op.conclusion === "unfavorable").length;
+  const withReservations = filteredOpinions.filter((op) => op.conclusion === "with_reservations").length;
 
   return [
     { conclusion: "Favorável", count: favorable },

@@ -2071,3 +2071,15 @@
 - [x] Adicionar gráficos (pareceres por mês, distribuição favorável/desfavorável, top artigos)
 - [x] Adicionar botão "Analytics" no header da página LegalOpinions
 - [x] Testar todas as funcionalidades implementadas
+
+### Fase 41: Melhorias Complementares do Módulo Parecer Jurídico
+- [x] Adicionar botão "Assinar Digitalmente" na página LegalOpinionDetails.tsx
+- [x] Implementar modal de confirmação de assinatura
+- [x] Adicionar indicador visual de parecer assinado (badge)
+- [x] Mostrar informações da assinatura digital quando existir
+- [x] Adicionar filtros por período no dashboard de analytics (7 dias, 30 dias, 90 dias, ano)
+- [x] Atualizar funções de banco para suportar filtro por período
+- [x] Atualizar procedure getAnalytics para aceitar parâmetro de período
+- [x] Criar notificação automática ao assinar digitalmente
+- [x] Atualizar mutation sign para criar notificação
+- [x] Testar todas as funcionalidades implementadas

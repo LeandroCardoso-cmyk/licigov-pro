@@ -3,6 +3,14 @@ import { BackToDashboard } from "@/components/BackToDashboard";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { useState } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   BarChart3,
   TrendingUp,
@@ -16,13 +24,17 @@ import {
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
+type PeriodFilter = "all" | "7days" | "30days" | "90days" | "year";
+
 export default function LegalOpinionsAnalytics() {
   const { user, loading: authLoading } = useAuth();
+  const [period, setPeriod] = useState<PeriodFilter>("30days");
 
   // Buscar analytics
-  const { data: analytics, isLoading } = trpc.legalOpinions.getAnalytics.useQuery(undefined, {
-    enabled: !!user,
-  });
+  const { data: analytics, isLoading } = trpc.legalOpinions.getAnalytics.useQuery(
+    { period },
+    { enabled: !!user }
+  );
 
   if (authLoading || isLoading) {
     return (
@@ -73,6 +85,21 @@ export default function LegalOpinionsAnalytics() {
                   Estatísticas e métricas do módulo de Parecer Jurídico
                 </p>
               </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Período:</span>
+              <Select value={period} onValueChange={(value) => setPeriod(value as PeriodFilter)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7days">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30days">Últimos 30 dias</SelectItem>
+                  <SelectItem value="90days">Últimos 90 dias</SelectItem>
+                  <SelectItem value="year">Último ano</SelectItem>
+                  <SelectItem value="all">Todos os períodos</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
