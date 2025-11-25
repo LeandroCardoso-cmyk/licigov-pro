@@ -1,0 +1,1 @@
+ALTER TABLE `legal_opinions` ADD `isTemplate` boolean DEFAULT false NOT NULL;

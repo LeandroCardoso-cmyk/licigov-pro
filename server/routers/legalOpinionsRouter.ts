@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
+import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
+import { getDocumentSettingsByUser } from "../db";
 import {
   createLegalOpinion,
   getLegalOpinions,
@@ -123,6 +125,46 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input }) => {
       await deleteLegalOpinion(input.id);
       return { success: true };
+    }),
+
+  /**
+   * Exportar parecer em PDF
+   */
+  exportPDF: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const opinion = await getLegalOpinionById(input.id);
+      if (!opinion) {
+        throw new Error("Parecer não encontrado");
+      }
+
+      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const pdfBuffer = await exportLegalOpinionToPDF(opinion, settings || {});
+
+      return {
+        buffer: pdfBuffer.toString("base64"),
+        filename: `parecer-juridico-${opinion.id}.pdf`,
+      };
+    }),
+
+  /**
+   * Exportar parecer em DOCX
+   */
+  exportDOCX: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const opinion = await getLegalOpinionById(input.id);
+      if (!opinion) {
+        throw new Error("Parecer não encontrado");
+      }
+
+      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const docxBuffer = await exportLegalOpinionToDOCX(opinion, settings || {});
+
+      return {
+        buffer: docxBuffer.toString("base64"),
+        filename: `parecer-juridico-${opinion.id}.docx`,
+      };
     }),
 
   /**

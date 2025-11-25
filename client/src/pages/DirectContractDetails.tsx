@@ -25,6 +25,7 @@ import {
   User,
   Building,
   FileCheck,
+  Scale,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -195,6 +196,15 @@ export default function DirectContractDetails() {
                 Criado em {format(new Date(contract.createdAt), "dd/MM/yyyy", { locale: ptBR })}
               </p>
               <div className="flex gap-2">
+                {/* Botão Solicitar Parecer Jurídico */}
+                <Button
+                  onClick={() => setLocation(`/parecer-juridico/novo?contractId=${contract.id}&type=contratacao_direta`)}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Scale className="w-4 h-4 mr-2" />
+                  Solicitar Parecer
+                </Button>
                 {contract.mode === "presencial" && (
                   <Button
                     onClick={() => setShowPresentialPackage(true)}

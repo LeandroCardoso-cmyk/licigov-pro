@@ -2039,3 +2039,16 @@
 - [x] Adicionar rotas no App.tsx (/parecer-juridico, /parecer-juridico/novo, /parecer-juridico/:id)
 - [x] Atualizar card do módulo no ModuleSelectionDashboard (available: true)
 - [x] Testar geração de parecer e CRUD completo
+
+### Fase 39: Integração e Melhorias do Módulo Parecer Jurídico
+- [x] Adicionar botão "Solicitar Parecer" em ProcessDetails.tsx
+- [x] Adicionar botão "Solicitar Parecer" em DirectContractDetails.tsx
+- [x] Atualizar NewLegalOpinion para pré-preencher contexto via query params
+- [x] Implementar exportação de parecer em PDF com formatação profissional (legalOpinionExportService.ts)
+- [x] Implementar exportação de parecer em DOCX com formatação profissional (docx library)
+- [x] Adicionar procedures exportPDF e exportDOCX no legalOpinionsRouter
+- [x] Adicionar botões de download (PDF/DOCX) em LegalOpinionDetails
+- [x] Adicionar campo isTemplate (boolean) na tabela legalOpinions
+- [x] Aplicar migração do schema (pnpm db:push)
+- [x] Adicionar botão "Salvar como Template" na página de detalhes do parecer
+- [x] Testar todas as integrações e funcionalidades

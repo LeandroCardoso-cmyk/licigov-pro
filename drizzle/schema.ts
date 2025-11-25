@@ -1302,6 +1302,8 @@ export const legalOpinions = mysqlTable("legal_opinions", {
   jurisprudence: json("jurisprudence"), // [{court: "TCU", number: "123/2022", summary: "..."}]
   // Status
   status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
+  // Template (se este parecer é um template reutilizável)
+  isTemplate: boolean("isTemplate").default(false).notNull(),
   // Usuário que solicitou
   requestedBy: int("requestedBy").notNull(), // FK para users
   // Usuário que revisou (se houver)

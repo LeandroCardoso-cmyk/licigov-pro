@@ -15,7 +15,9 @@ import {
   FileText,
   Calendar,
   User,
-  Tag
+  Tag,
+  Download,
+  BookmarkPlus
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
@@ -52,6 +54,39 @@ export default function LegalOpinionDetails() {
     },
     onError: (error) => {
       toast.error(error.message || "Erro ao atualizar");
+    },
+  });
+
+  // Mutations para exportação
+  const exportPDFMutation = trpc.legalOpinions.exportPDF.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([Uint8Array.from(atob(data.buffer), c => c.charCodeAt(0))], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF baixado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao exportar PDF");
+    },
+  });
+
+  const exportDOCXMutation = trpc.legalOpinions.exportDOCX.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([Uint8Array.from(atob(data.buffer), c => c.charCodeAt(0))], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("DOCX baixado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao exportar DOCX");
     },
   });
 
@@ -160,6 +195,37 @@ export default function LegalOpinionDetails() {
               </div>
             </div>
             <div className="flex gap-2">
+              {/* Botões de Download */}
+              {opinion.opinion && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => exportPDFMutation.mutate({ id: opinion.id })}
+                    disabled={exportPDFMutation.isPending}
+                  >
+                    {exportPDFMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    PDF
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => exportDOCXMutation.mutate({ id: opinion.id })}
+                    disabled={exportDOCXMutation.isPending}
+                  >
+                    {exportDOCXMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    DOCX
+                  </Button>
+                </>
+              )}
               {!opinion.opinion && (
                 <Button onClick={handleGenerate} disabled={isGenerating}>
                   {isGenerating ? (
@@ -179,6 +245,17 @@ export default function LegalOpinionDetails() {
                 <Button onClick={handleApprove} disabled={updateMutation.isPending}>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Aprovar
+                </Button>
+              )}
+              {/* Botão Salvar como Template */}
+              {opinion.status === "approved" && !opinion.isTemplate && (
+                <Button 
+                  variant="outline"
+                  onClick={() => updateMutation.mutate({ id: opinion.id, isTemplate: true })}
+                  disabled={updateMutation.isPending}
+                >
+                  <BookmarkPlus className="h-4 w-4 mr-2" />
+                  Salvar como Template
                 </Button>
               )}
             </div>

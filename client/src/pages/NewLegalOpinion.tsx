@@ -15,19 +15,37 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { Scale, Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
 
 export default function NewLegalOpinion() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const searchParams = new URLSearchParams(useSearch());
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sourceType, setSourceType] = useState<"process" | "direct_contract" | "contract" | "other">("other");
   const [sourceId, setSourceId] = useState("");
   const [legalQuestion, setLegalQuestion] = useState("");
   const [context, setContext] = useState("");
+
+  // Pré-preencher campos com base nos query params
+  useEffect(() => {
+    const processId = searchParams.get("processId");
+    const contractId = searchParams.get("contractId");
+    const type = searchParams.get("type");
+
+    if (processId) {
+      setSourceType("process");
+      setSourceId(processId);
+      setTitle("Parecer Jurídico - Processo Licitatório");
+    } else if (contractId && type === "contratacao_direta") {
+      setSourceType("direct_contract");
+      setSourceId(contractId);
+      setTitle("Parecer Jurídico - Contratação Direta");
+    }
+  }, []);
 
   // Mutations
   const createMutation = trpc.legalOpinions.create.useMutation();

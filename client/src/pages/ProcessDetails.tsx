@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
+  Scale,
 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -483,6 +484,15 @@ export default function ProcessDetails() {
             <div className="flex items-center justify-between mb-4">
               <CardTitle>Documentos do Processo</CardTitle>
               <div className="flex gap-2">
+                {/* Botão Solicitar Parecer Jurídico */}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate(`/parecer-juridico/novo?processId=${process.id}&type=processo`)}
+                >
+                  <Scale className="mr-2 h-4 w-4" />
+                  Solicitar Parecer
+                </Button>
                 {/* Botão para adicionar itens ao TR (Lei 14.133/21) */}
                 {process.status === "em_etp" && etpDocument && (
                   <Button 
