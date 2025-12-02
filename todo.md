@@ -2104,3 +2104,9 @@
 - [x] Atualizar lógica de status "totalmente assinado" baseado em requiredSignatures
 - [x] Bloquear edição do parecer após primeira assinatura (botão assinar esconde quando completo)
 - [x] Testar todas as funcionalidades implementadas
+
+### Fase 43: Atualizar Paleta de Cores da Landing Page
+- [x] Substituir azul vibrante por tons azul-acinzentados profissionais
+- [x] Atualizar gradiente de fundo do hero
+- [x] Ajustar cores de botões e elementos de destaque
+- [x] Testar legibilidade e contraste

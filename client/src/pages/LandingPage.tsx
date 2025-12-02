@@ -119,7 +119,7 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-3">
             {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-            <Button asChild className="bg-blue-600 hover:bg-blue-700">
+            <Button asChild className="bg-slate-600 hover:bg-slate-700">
               <a href={getLoginUrl()}>Entrar no Sistema</a>
             </Button>
           </div>
@@ -136,13 +136,13 @@ export default function LandingPage() {
             className="w-full h-full object-cover"
             style={{ filter: 'blur(4px)' }}
           />
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-600/70 via-blue-500/60 to-indigo-600/70"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-700/80 via-slate-600/70 to-blue-900/75"></div>
         </div>
         <div className="container mx-auto px-4 relative z-10">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* Texto à esquerda */}
           <div className="space-y-6">
-            <div className="inline-block px-4 py-2 bg-white/90 text-blue-700 rounded-full text-sm font-semibold backdrop-blur-sm">
+            <div className="inline-block px-4 py-2 bg-white/90 text-slate-700 rounded-full text-sm font-semibold backdrop-blur-sm">
               🚀 Plataforma Oficial para Licitações Públicas
             </div>
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight drop-shadow-lg">
@@ -154,7 +154,7 @@ export default function LandingPage() {
             </p>
             <div className="flex gap-4 flex-wrap">
               {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-              <Button asChild size="lg" className="bg-white text-blue-600 hover:bg-blue-50 text-lg px-8 shadow-2xl hover:shadow-3xl transition-all animate-breathing font-bold">
+              <Button asChild size="lg" className="bg-white text-slate-700 hover:bg-slate-50 text-lg px-8 shadow-2xl hover:shadow-3xl transition-all animate-breathing font-bold">
                 <Link href="/solicitar-proposta" className="flex items-center">
                   Solicitar Proposta Comercial
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -173,31 +173,31 @@ export default function LandingPage() {
               />
             </div>
             {/* Elementos decorativos */}
-            <div className="absolute -top-4 -right-4 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-            <div className="absolute -bottom-8 -left-4 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+            <div className="absolute -top-4 -right-4 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-blob"></div>
+            <div className="absolute -bottom-8 -left-4 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-blob animation-delay-2000"></div>
           </div>
         </div>
         </div>
       </section>
 
       {/* Benefícios Principais */}
-      <section className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-16">
+      <section className="bg-gradient-to-r from-slate-600 to-slate-700 text-white py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h3 className="text-3xl md:text-4xl font-bold mb-4">
               Por que escolher o LiciGov Pro?
             </h3>
-            <p className="text-xl text-blue-100 max-w-2xl mx-auto">
+            <p className="text-xl text-slate-200 max-w-2xl mx-auto">
               Benefícios comprovados para órgãos públicos
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {benefits.map((benefit, index) => (
-              <div key={index} className="flex items-start gap-3 bg-blue-700/30 p-4 rounded-lg backdrop-blur-sm hover:bg-blue-700/40 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-cyan-300 flex items-center justify-center flex-shrink-0 shadow-lg">
+              <div key={index} className="flex items-start gap-3 bg-slate-700/30 p-4 rounded-lg backdrop-blur-sm hover:bg-slate-700/40 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-blue-400 flex items-center justify-center flex-shrink-0 shadow-lg">
                   <CheckCircle2 className="h-5 w-5 text-white" />
                 </div>
-                <span className="text-blue-50">{benefit}</span>
+                <span className="text-slate-50">{benefit}</span>
               </div>
             ))}
           </div>
@@ -222,9 +222,9 @@ export default function LandingPage() {
               <AnimatedSection key={index} animation="slide-up" delay={index * 100}>
               <Card 
                 key={index} 
-                className="border-2 hover:border-blue-400 hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 hover:scale-105 cursor-pointer overflow-hidden group h-full flex flex-col"
+                className="border-2 hover:border-slate-400 hover:shadow-2xl transition-all duration-300 hover:-translate-y-3 hover:scale-105 cursor-pointer overflow-hidden group h-full flex flex-col"
               >
-                <div className="relative h-48 overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50">
+                <div className="relative h-48 overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50">
                   <img 
                     src={feature.image} 
                     alt={feature.title}
@@ -232,7 +232,7 @@ export default function LandingPage() {
                   />
 
                   <div className="absolute bottom-4 left-4 w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Icon className="h-6 w-6 text-blue-600 group-hover:rotate-12 transition-transform duration-300" />
+                    <Icon className="h-6 w-6 text-slate-600 group-hover:rotate-12 transition-transform duration-300" />
                   </div>
                 </div>
                 <CardContent className="p-6">
@@ -249,7 +249,7 @@ export default function LandingPage() {
       </section>
 
       {/* Como Funciona */}
-      <section className="bg-gradient-to-br from-blue-50 to-indigo-50 py-20">
+      <section className="bg-gradient-to-br from-slate-50 to-blue-50 py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -265,7 +265,7 @@ export default function LandingPage() {
               <AnimatedSection key={index} animation="slide-up" delay={index * 150}>
               <div className="relative h-full flex flex-col">
                 <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 h-full group">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
+                  <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
                     {item.step}
                   </div>
                   <h4 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h4>
@@ -273,7 +273,7 @@ export default function LandingPage() {
                 </div>
                 {index < howItWorks.length - 1 && (
                   <div className="hidden lg:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
-                    <ArrowRight className="h-8 w-8 text-blue-400 animate-pulse" />
+                    <ArrowRight className="h-8 w-8 text-slate-400 animate-pulse" />
                   </div>
                 )}
               </div>
@@ -296,7 +296,7 @@ export default function LandingPage() {
           </div>
           <div className="order-1 md:order-2 space-y-6">
             <h3 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Geração Automática de Documentos com <span className="text-blue-600">Inteligência Artificial</span>
+              Geração Automática de Documentos com <span className="text-slate-600">Inteligência Artificial</span>
             </h3>
             <p className="text-lg text-gray-600">
               Nossa IA especializada em licitações públicas cria automaticamente todos os documentos necessários, seguindo rigorosamente a <strong>Lei 14.133/2021</strong>.
@@ -325,7 +325,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <h3 className="text-3xl md:text-4xl font-bold text-gray-900">
-                Trabalhe em Equipe com <span className="text-blue-600">Total Transparência</span>
+                Trabalhe em Equipe com <span className="text-slate-600">Total Transparência</span>
               </h3>
               <p className="text-lg text-gray-600">
                 Colabore com sua equipe em tempo real. Controle de versões, comentários e histórico completo de todas as alterações.
@@ -428,7 +428,7 @@ export default function LandingPage() {
               </div>
 
               <form 
-                className="space-y-6 bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-2xl shadow-xl"
+                className="space-y-6 bg-gradient-to-br from-slate-50 to-blue-50 p-8 rounded-2xl shadow-xl"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setIsSubmitting(true);
@@ -534,7 +534,7 @@ export default function LandingPage() {
                   type="submit"
                   size="lg"
                   disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'Enviando...' : 'Enviar Solicitação'}
                   {!isSubmitting && <ArrowRight className="ml-2 h-5 w-5" />}
@@ -570,7 +570,7 @@ export default function LandingPage() {
                   <p className="text-gray-600 text-sm">Essencial para começar</p>
                 </div>
                 <div className="mb-6">
-                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <div className="text-4xl font-bold text-slate-600 mb-2">Sob Consulta</div>
                   <p className="text-sm text-gray-500">Preço personalizado</p>
                 </div>
                 <ul className="space-y-3 mb-8 flex-grow">
@@ -603,9 +603,9 @@ export default function LandingPage() {
             </Card>
 
             {/* Plano Profissional */}
-            <Card className="border-2 border-blue-500 hover:border-blue-600 hover:shadow-2xl transition-all relative h-full flex flex-col">
+            <Card className="border-2 border-slate-500 hover:border-slate-600 hover:shadow-2xl transition-all relative h-full flex flex-col">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
+                <span className="bg-gradient-to-r from-slate-600 to-slate-700 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
                   ⭐ Mais Popular
                 </span>
               </div>
@@ -615,7 +615,7 @@ export default function LandingPage() {
                   <p className="text-gray-600 text-sm">Completo para a maioria dos órgãos</p>
                 </div>
                 <div className="mb-6">
-                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <div className="text-4xl font-bold text-slate-600 mb-2">Sob Consulta</div>
                   <p className="text-sm text-gray-500">Preço personalizado</p>
                 </div>
                 <ul className="space-y-3 mb-8 flex-grow">
@@ -649,7 +649,7 @@ export default function LandingPage() {
                   </li>
                 </ul>
                 {/* @ts-ignore */}
-                <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+                <Button asChild className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800">
                   <Link href="/solicitar-proposta">Solicitar Proposta</Link>
                 </Button>
               </CardContent>
@@ -663,7 +663,7 @@ export default function LandingPage() {
                   <p className="text-gray-600 text-sm">Solução completa e customizada</p>
                 </div>
                 <div className="mb-6">
-                  <div className="text-4xl font-bold text-blue-600 mb-2">Sob Consulta</div>
+                  <div className="text-4xl font-bold text-slate-600 mb-2">Sob Consulta</div>
                   <p className="text-sm text-gray-500">Preço personalizado</p>
                 </div>
                 <ul className="space-y-3 mb-8 flex-grow">
@@ -712,7 +712,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Final */}
-      <section className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-20">
+      <section className="bg-gradient-to-r from-slate-600 to-slate-700 text-white py-20">
         <div className="container mx-auto px-4 text-center">
           <h3 className="text-3xl md:text-4xl font-bold mb-4">
             Pronto para modernizar seus processos licitatórios?
@@ -721,7 +721,7 @@ export default function LandingPage() {
             Solicite uma proposta comercial personalizada para o seu órgão. Sem compromisso.
           </p>
           {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-          <Button asChild size="lg" className="text-lg px-8 bg-white text-blue-600 hover:bg-gray-100 shadow-lg hover:shadow-xl transition-all">
+          <Button asChild size="lg" className="text-lg px-8 bg-white text-slate-700 hover:bg-gray-100 shadow-lg hover:shadow-xl transition-all">
             <Link href="/solicitar-proposta" className="flex items-center">
               Solicitar Proposta Agora
               <ArrowRight className="ml-2 h-5 w-5" />
