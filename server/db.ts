@@ -1,6 +1,6 @@
 import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import bcrypt from "bcrypt";
+import { hashPassword, verifyPassword } from "./services/passwordSecurity";
 import { 
   InsertUser, 
   users,
@@ -3725,8 +3725,8 @@ export async function setSignaturePassword(userId: number, password: string): Pr
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const saltRounds = 10;
-  const hashedPassword = await bcrypt.hash(password, saltRounds);
+  // SEGURANÇA ATUALIZADA: Salt factor 12 (Auditoria Técnica - Item 3.1)
+  const hashedPassword = await hashPassword(password);
 
   await db.update(users).set({ signaturePassword: hashedPassword }).where(eq(users.id, userId));
 }
@@ -3741,7 +3741,7 @@ export async function validateSignaturePassword(userId: number, password: string
   const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (user.length === 0 || !user[0].signaturePassword) return false;
 
-  return await bcrypt.compare(password, user[0].signaturePassword);
+  return await verifyPassword(password, user[0].signaturePassword);
 }
 
 /**

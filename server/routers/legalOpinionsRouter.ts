@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
+import { rateLimitMiddleware } from "../services/rateLimiter";
 import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
 import { getDocumentSettingsByUser } from "../db";
 import {
@@ -195,8 +196,9 @@ export const legalOpinionsRouter = router({
 
   /**
    * Gerar parecer jurídico com IA
+   * RATE LIMIT: 20 gerações por hora (Auditoria Técnica - Item 3.2)
    */
-  generateOpinion: protectedProcedure
+  generateOpinion: protectedProcedure.use(rateLimitMiddleware('documentGeneration'))
     .input(
       z.object({
         id: z.number(), // ID do parecer já criado
@@ -242,8 +244,9 @@ export const legalOpinionsRouter = router({
     }),
   /**
    * Assinar digitalmente um parecer jurídico (ATUALIZADO: com role e senha)
+   * RATE LIMIT: 10 assinaturas por 15 minutos (Auditoria Técnica - Item 3.2)
    */
-  sign: protectedProcedure
+  sign: protectedProcedure.use(rateLimitMiddleware('signature'))
     .input(
       z.object({
         id: z.number(),
