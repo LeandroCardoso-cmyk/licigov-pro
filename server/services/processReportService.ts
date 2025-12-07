@@ -12,7 +12,7 @@ export async function generateProcessReport(processId: number): Promise<Buffer> 
   }
 
   // Buscar documentos gerados
-  const documents = await db.getDocumentsByProcessId(processId);
+  const documents = await db.getDocumentsByProcess(processId);
 
   // Buscar checklist da plataforma (se houver)
   let checklist: any[] = [];

@@ -52,7 +52,7 @@ export async function generatePublicationZip(
   for (const doc of documents) {
     try {
       // Converter documento para PDF
-      const pdfBuffer = await convertToPDF(doc.content);
+      const pdfBuffer = await convertToPDF(doc.content || '', `${doc.type}.pdf`);
 
       // Determinar nome do arquivo
       let filename = "";

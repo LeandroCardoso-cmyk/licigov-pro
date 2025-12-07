@@ -1,5 +1,6 @@
 import { invokeLLM } from "../_core/llm";
 import { getDirectContractById, getLegalArticleById, getDocumentSettingsByUser } from "../db";
+import { validateLegalCitations } from "./legalValidation";
 
 /**
  * Serviço de Geração de Documentos Específicos para Contratação Direta
@@ -129,7 +130,22 @@ Autoridade Competente
     ],
   });
 
-  return response.choices[0].message.content || "";
+  const content = response.choices[0].message.content || "";
+  
+  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+  const validation = validateLegalCitations(content);
+  
+  if (!validation.isValid) {
+    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
+    throw new Error(
+      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
+      `Por favor, gere novamente o documento.`
+    );
+  }
+  
+  console.log("[Direct Contract Doc] Documento validado com sucesso");
+  
+  return content;
 }
 
 /**
@@ -257,7 +273,22 @@ Autoridade Competente
     ],
   });
 
-  return response.choices[0].message.content || "";
+  const content = response.choices[0].message.content || "";
+  
+  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+  const validation = validateLegalCitations(content);
+  
+  if (!validation.isValid) {
+    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
+    throw new Error(
+      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
+      `Por favor, gere novamente o documento.`
+    );
+  }
+  
+  console.log("[Direct Contract Doc] Documento validado com sucesso");
+  
+  return content;
 }
 
 /**
@@ -388,7 +419,22 @@ _________________________________
     ],
   });
 
-  return response.choices[0].message.content || "";
+  const content = response.choices[0].message.content || "";
+  
+  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+  const validation = validateLegalCitations(content);
+  
+  if (!validation.isValid) {
+    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
+    throw new Error(
+      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
+      `Por favor, gere novamente o documento.`
+    );
+  }
+  
+  console.log("[Direct Contract Doc] Documento validado com sucesso");
+  
+  return content;
 }
 
 /**

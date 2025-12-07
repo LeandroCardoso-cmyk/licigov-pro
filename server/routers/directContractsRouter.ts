@@ -150,6 +150,37 @@ export const directContractsRouter = router({
       metadata: z.any().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      // VALIDAÇÃO DE CONFORMIDADE LEGAL (Auditoria Técnica - Item 4.2)
+      if (input.type === 'dispensa') {
+        const { validateDispensaValue } = await import("../services/contractValidation");
+        
+        // Buscar artigo legal para determinar fundamentação
+        const article = await getLegalArticleById(input.legalArticleId);
+        if (!article) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Artigo legal não encontrado',
+          });
+        }
+        
+        // Validar limite de valor conforme fundamentação legal
+        const legalBasis = article.article.includes('75, I') ? 'art75_i_a' : 'art75_ii_outros';
+        const valueValidation = validateDispensaValue(input.value, legalBasis as any);
+        
+        if (!valueValidation.isValid) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: valueValidation.error!,
+          });
+        }
+        
+        console.log('[Direct Contract] Validação de dispensa aprovada:', {
+          value: `R$ ${(input.value / 100).toFixed(2)}`,
+          limit: `R$ ${(valueValidation.limit / 100).toFixed(2)}`,
+          legalBasis: article.article,
+        });
+      }
+      
       const directContract = await createDirectContract({
         ...input,
         createdBy: ctx.user.id,

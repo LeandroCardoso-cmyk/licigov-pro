@@ -1,5 +1,6 @@
 import { invokeLLM } from "../_core/llm";
 import * as db from "../db";
+import { validateLegalCitations } from "./legalValidation";
 
 /**
  * Assistente de Enquadramento Legal com IA
@@ -219,7 +220,22 @@ Elabore uma justificativa técnica e jurídica COMPLETA para a contratação dir
     ],
   });
 
-  return response.choices[0].message.content || "";
+  const content = response.choices[0].message.content || "";
+  
+  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+  const validation = validateLegalCitations(content);
+  
+  if (!validation.isValid) {
+    console.error("[Legal Framework] Artigos inválidos:", validation.invalidArticles);
+    throw new Error(
+      `Justificativa contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
+      `Por favor, gere novamente a justificativa.`
+    );
+  }
+  
+  console.log("[Legal Framework] Justificativa validada com sucesso");
+  
+  return content;
 }
 
 /**

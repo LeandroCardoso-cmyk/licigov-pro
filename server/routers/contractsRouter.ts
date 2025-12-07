@@ -156,6 +156,86 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+        // VALIDAÇÃO DE CONFORMIDADE LEGAL (Auditoria Técnica - Item 1.4, 1.5)
+        const { validateAmendmentValue, validateContractDuration, validateAmendmentJustification } = await import("../services/contractValidation");
+        
+        // 1. Validar justificativa (sempre obrigatória)
+        const justificationValidation = validateAmendmentJustification(input.justification);
+        if (!justificationValidation.isValid) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Justificativa inválida:\n${justificationValidation.errors.join('\n')}`,
+          });
+        }
+        
+        // 2. Buscar contrato para validações
+        const contract = await db.getContractById(input.contractId);
+        if (!contract) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Contrato não encontrado' });
+        }
+        
+        // 3. Validar limite de valor (se aplicável)
+        if (input.type === 'valor' || input.type === 'misto') {
+          if (!input.valueChange) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Valor do aditivo é obrigatório para aditivos de valor',
+            });
+          }
+          
+          // Buscar total de aditivos existentes
+          const existingAmendments = await db.getAmendmentsByContractId(input.contractId);
+          const totalExistingValue = existingAmendments
+            .filter(a => a.valueChange)
+            .reduce((sum, a) => sum + (a.valueChange || 0), 0);
+          
+          const valueValidation = validateAmendmentValue(
+            contract.value,
+            totalExistingValue,
+            input.valueChange
+          );
+          
+          if (!valueValidation.isValid) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: valueValidation.error!,
+            });
+          }
+          
+          console.log('[Amendment] Validação de valor aprovada:', {
+            percentage: valueValidation.percentage.toFixed(2) + '%',
+            remaining: `R$ ${(valueValidation.remaining / 100).toFixed(2)}`,
+          });
+        }
+        
+        // 4. Validar prazo contratual (se aplicável)
+        if (input.type === 'prazo' || input.type === 'misto') {
+          if (!input.newEndDate) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Nova data fim é obrigatória para aditivos de prazo',
+            });
+          }
+          
+          const durationValidation = validateContractDuration(
+            contract.startDate,
+            input.newEndDate
+          );
+          
+          if (!durationValidation.isValid) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: durationValidation.error!,
+            });
+          }
+          
+          console.log('[Amendment] Validação de prazo aprovada:', {
+            totalMonths: durationValidation.totalDurationMonths.toFixed(1),
+            maxDate: durationValidation.maxDate.toISOString().split('T')[0],
+          });
+        }
+        
+        // 5. Criar aditivo (validações aprovadas)
         const amendment = await db.createAmendment({
           ...input,
           createdBy: ctx.user.id,
