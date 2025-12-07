@@ -107,6 +107,20 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       
+      // AUDITORIA TÉCNICA - Item 1.2: Bloquear edição após assinatura
+      const { getSignatureCount } = await import("../db");
+      const { canEditDocument } = await import("../services/signatureValidation");
+      
+      const signatureCount = await getSignatureCount(id);
+      const editCheck = canEditDocument(signatureCount);
+      
+      if (!editCheck.canEdit) {
+        throw new TRPCError({ 
+          code: "FORBIDDEN", 
+          message: editCheck.reason || "Documento não pode ser editado" 
+        });
+      }
+      
       // Se está sendo aprovado, adicionar reviewedBy e reviewedAt
       if (data.status === "approved") {
         await updateLegalOpinion(id, {
@@ -262,7 +276,9 @@ export const legalOpinionsRouter = router({
         hasUserSignedOpinion,
         addSignatureToHistory,
         getSignatureCount,
+        getSignatureHistory,
       } = await import("../db");
+      const { validateBeforeSign, canEditDocument } = await import("../services/signatureValidation");
 
       // Buscar parecer
       const opinion = await getLegalOpinionById(input.id);
@@ -286,6 +302,29 @@ export const legalOpinionsRouter = router({
       const currentSignatures = await getSignatureCount(input.id);
       if (currentSignatures >= opinion.requiredSignatures) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Este parecer já possui todas as assinaturas necessárias" });
+      }
+
+      // AUDITORIA TÉCNICA - Item 1.2: Verificar se documento pode ser editado
+      const editCheck = canEditDocument(currentSignatures);
+      if (!editCheck.canEdit) {
+        // Documento já assinado, validar integridade antes de adicionar nova assinatura
+        const signatures = await getSignatureHistory(input.id);
+        if (signatures.length > 0) {
+          const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
+          const validation = validateBeforeSign({
+            documentContent: content,
+            currentSignatureCount: currentSignatures,
+            expectedSignatureCount: currentSignatures,
+            originalHash: signatures[0].documentHash,
+          });
+          
+          if (!validation.isValid) {
+            throw new TRPCError({ 
+              code: "BAD_REQUEST", 
+              message: `Validação de assinatura falhou: ${validation.errors.join(", ")}` 
+            });
+          }
+        }
       }
 
       // Gerar hash do conteúdo

@@ -434,6 +434,19 @@ export const directContractsRouter = router({
           });
         }
         
+        // AUDITORIA TÉCNICA - Item 2.1: Validar CNPJ duplicado
+        const existingQuotations = await listQuotations(input.directContractId);
+        const duplicateCNPJ = existingQuotations.find(
+          q => q.supplierCnpj === input.supplierCnpj
+        );
+        
+        if (duplicateCNPJ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Já existe uma cotação do fornecedor ${duplicateCNPJ.supplierName} (CNPJ: ${input.supplierCnpj}) nesta contratação.`,
+          });
+        }
+        
         const quotation = await createQuotation(input);
         
         // Registrar auditoria

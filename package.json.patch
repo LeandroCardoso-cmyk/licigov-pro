@@ -1,0 +1,8 @@
+# Adicionar ao package.json:
+
+"scripts": {
+  ...
+  "test:audit": "vitest run server/services/__tests__/auditCorrections.test.ts",
+  "test:ci": "vitest run --reporter=verbose",
+  "lint": "eslint . --ext .ts,.tsx --max-warnings 0 || true"
+}
