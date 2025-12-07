@@ -39,7 +39,7 @@ export async function generateProcessReport(processId: number): Promise<Buffer> 
 | Campo | Valor |
 |-------|-------|
 | **Nome** | ${process.name} |
-| **Número** | ${process.number || "Não informado"} |
+
 | **Modalidade** | ${process.modality} |
 | **Categoria** | ${process.category} |
 | **Valor Estimado** | ${process.estimatedValue ? `R$ ${process.estimatedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "Não informado"} |
@@ -53,13 +53,7 @@ export async function generateProcessReport(processId: number): Promise<Buffer> 
 
 ${process.object || "Não informado"}
 
----
-
-## 📝 Justificativa
-
-${process.justification || "Não informada"}
-
----
+------
 
 ## 📑 Documentos Gerados
 
@@ -68,7 +62,7 @@ ${
     ? "_Nenhum documento gerado ainda._"
     : documents
         .map(
-          (doc, index) => `
+          (doc: any, index: number) => `
 ### ${index + 1}. ${doc.type.toUpperCase()}
 
 - **Versão:** ${doc.version}
@@ -78,19 +72,6 @@ ${
         )
         .join("\n")
 }
-
----
-
-## 🏢 Dados da Organização
-
-| Campo | Valor |
-|-------|-------|
-| **CNPJ** | ${process.organization?.cnpj || "Não informado"} |
-| **Nome** | ${process.organization?.name || "Não informado"} |
-| **Endereço** | ${process.organization?.address || "Não informado"} |
-| **Cidade/UF** | ${process.organization?.city || ""}${process.organization?.state ? `/${process.organization.state}` : ""} |
-| **Telefone** | ${process.organization?.phone || "Não informado"} |
-| **Email** | ${process.organization?.email || "Não informado"} |
 
 ---
 
