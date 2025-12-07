@@ -55,12 +55,13 @@ export function validateAmendmentValue(
 }
 
 /**
- * Validação de prazo contratual (Art. 107 da Lei 14.133/2021)
- * Limite: 5 anos de duração total
+ * Validação de prazo contratual (Art. 125 da Lei 14.133/2021)
+ * Limite: 120 meses (10 anos) de duração total incluindo aditivos
  */
 export interface ContractDurationValidation {
   isValid: boolean;
   totalDurationDays: number;
+  totalDurationMonths: number;
   totalDurationYears: number;
   maxDate: Date;
   error?: string;
@@ -71,27 +72,28 @@ export function validateContractDuration(
   newEndDate: Date
 ): ContractDurationValidation {
   const totalDurationDays = differenceInDays(newEndDate, startDate);
-  const totalDurationYears = totalDurationDays / 365.25;
-  const maxDate = addYears(startDate, 5);
+  const totalDurationMonths = totalDurationDays / 30.44; // Média de dias por mês
+  const totalDurationYears = totalDurationMonths / 12;
+  const maxDate = addYears(startDate, 10); // 120 meses = 10 anos
 
-  const isValid = totalDurationYears <= 5;
+  const isValid = totalDurationMonths <= 120;
 
   return {
     isValid,
     totalDurationDays,
+    totalDurationMonths,
     totalDurationYears,
     maxDate,
     error: !isValid
-      ? `Duração total do contrato excede 5 anos (Art. 107 da Lei 14.133/2021).\n\n` +
+      ? `Duração total do contrato excede 120 meses (Art. 125 da Lei 14.133/2021).\n\n` +
         `Data de início: ${format(startDate, 'dd/MM/yyyy')}\n` +
         `Nova data fim: ${format(newEndDate, 'dd/MM/yyyy')}\n` +
-        `Duração total: ${totalDurationYears.toFixed(2)} anos\n\n` +
-        `Limite máximo: 5 anos (${format(maxDate, 'dd/MM/yyyy')})\n\n` +
-        `Exceções previstas no Art. 107, §1º:\n` +
-        `- Contratos de prestação contínua\n` +
-        `- Aluguel de equipamentos e programas de informática\n` +
-        `- Contratos que envolvam direitos reais sobre bens imóveis\n\n` +
-        `Se este contrato se enquadra em exceção, adicione justificativa detalhada.`
+        `Duração total: ${totalDurationMonths.toFixed(1)} meses (${totalDurationYears.toFixed(2)} anos)\n\n` +
+        `Limite máximo: 120 meses / 10 anos (${format(maxDate, 'dd/MM/yyyy')})\n\n` +
+        `Art. 125: Os contratos poderão ser alterados, com as devidas justificativas, nos seguintes casos:\n` +
+        `- Aditivos de prazo: até 120 meses\n` +
+        `- Aditivos de valor: até 50% do valor inicial\n\n` +
+        `Se houver necessidade de prazo superior, é necessário novo processo licitatório.`
       : undefined,
   };
 }

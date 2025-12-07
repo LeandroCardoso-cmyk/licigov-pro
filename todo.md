@@ -2208,7 +2208,7 @@
 
 ### Fase 1 - Crítico (48h)
 
-- [ ] Integrar legalValidation em generateLegalOpinion()
+- [x] Integrar legalValidation em generateLegalOpinion() (legalOpinionService.ts)
 - [ ] Integrar legalValidation em generateETP/TR/DFD/Edital()
 - [ ] Integrar contractValidation em contracts.amendments.create
 - [ ] Integrar contractValidation em contracts.create
@@ -2226,3 +2226,8 @@
 - [ ] 7.2 - Adicionar preview antes de gerar documentos
 - [ ] 7.3 - Melhorar microcopy da interface
 - [ ] 7.4 - Implementar atalhos de teclado
+
+
+## 🔧 CORREÇÃO URGENTE
+
+- [x] Corrigir validação de prazo de aditivos de 5 anos para 120 meses (Art. 125 da Lei 14.133/2021)

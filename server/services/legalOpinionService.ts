@@ -1,4 +1,5 @@
 import { invokeLLM } from "../_core/llm";
+import { validateLegalCitations, extractCitedArticles } from "./legalValidation";
 
 interface GenerateLegalOpinionParams {
   title: string;
@@ -63,16 +64,20 @@ export async function generateLegalOpinion(
 
 Sua função é elaborar pareceres jurídicos fundamentados, objetivos e tecnicamente precisos sobre questões relacionadas a processos licitatórios, contratações diretas e contratos administrativos.
 
+**IMPORTANTE - VALIDAÇÃO DE ARTIGOS:**
+A Lei 14.133/2021 possui APENAS 194 artigos (Art. 1 a Art. 194).
+NUNCA cite artigos que não existem. Verifique sempre se o artigo está dentro deste limite.
+
 **Diretrizes para o Parecer:**
 1. Estrutura clara: Relatório, Fundamentação, Conclusão
-2. Citar artigos específicos da Lei 14.133/2021 quando aplicável
+2. Citar APENAS artigos válidos da Lei 14.133/2021 (1-194)
 3. Mencionar jurisprudências relevantes do TCU, STJ ou tribunais superiores quando pertinente
 4. Linguagem técnica mas acessível
 5. Conclusão objetiva: Favorável, Desfavorável ou Com Ressalvas
 6. Formato Markdown para melhor legibilidade
 
 **Base Legal Principal:**
-- Lei 14.133/2021 (Nova Lei de Licitações e Contratos)
+- Lei 14.133/2021 (Nova Lei de Licitações e Contratos) - 194 artigos
 - Decreto 11.462/2023 (Regulamentação)
 - Jurisprudências do TCU e tribunais superiores
 
@@ -157,6 +162,29 @@ Por favor, elabore um parecer jurídico completo sobre a questão apresentada, f
     }
 
     const result: LegalOpinionResult = JSON.parse(content);
+    
+    // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+    const validation = validateLegalCitations(result.opinion);
+    
+    if (!validation.isValid) {
+      console.error("[Legal Opinion] Artigos inválidos detectados:", validation.invalidArticles);
+      console.error("[Legal Opinion] Avisos:", validation.warnings);
+      
+      throw new Error(
+        `Parecer contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
+        `O parecer não pode ser gerado com artigos inexistentes. Por favor, tente novamente.`
+      );
+    }
+    
+    // Log de sucesso
+    const citedArticles = extractCitedArticles(result.opinion);
+    console.log("[Legal Opinion] Parecer gerado com sucesso");
+    console.log("[Legal Opinion] Artigos citados:", citedArticles.length);
+    
+    if (validation.suggestions.length > 0) {
+      console.warn("[Legal Opinion] Sugestões:", validation.suggestions);
+    }
+    
     return result;
   } catch (error) {
     console.error("Erro ao gerar parecer jurídico:", error);
