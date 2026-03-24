@@ -27,7 +27,7 @@ export default function CommercialManagement() {
     observacoes: "",
   });
 
-  const { data: proposals, isLoading, refetch } = trpc.commercial.listAll.useQuery();
+  const { data: proposals, isLoading, refetch } = trpc.commercial.list.useQuery();
   const registerEmpenhoMutation = trpc.commercial.registerEmpenho.useMutation();
   const activateSubscriptionMutation = trpc.commercial.activateSubscription.useMutation();
 
@@ -37,7 +37,8 @@ export default function CommercialManagement() {
     try {
       await registerEmpenhoMutation.mutateAsync({
         proposalId: selectedProposal.id,
-        ...empenhoData,
+        numeroEmpenho: empenhoData.numeroEmpenho,
+        dataEmpenho: new Date(empenhoData.dataEmpenho),
         valorEmpenho: parseFloat(empenhoData.valorEmpenho),
       });
       toast.success("Empenho registrado com sucesso");
@@ -51,7 +52,7 @@ export default function CommercialManagement() {
 
   const handleActivateSubscription = async (proposalId: number) => {
     try {
-      await activateSubscriptionMutation.mutateAsync({ proposalId });
+      await activateSubscriptionMutation.mutateAsync({ proposalId, userId: proposalId });
       toast.success("Assinatura ativada com sucesso!");
       refetch();
     } catch (error: any) {
@@ -59,7 +60,7 @@ export default function CommercialManagement() {
     }
   };
 
-  const filteredProposals = proposals?.filter((proposal) => {
+  const filteredProposals = proposals?.filter((proposal: any) => {
     const matchesSearch =
       searchTerm === "" ||
       proposal.orgaoNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -128,7 +129,7 @@ export default function CommercialManagement() {
               </TableHeader>
               <TableBody>
                 {filteredProposals && filteredProposals.length > 0 ? (
-                  filteredProposals.map((proposal) => (
+                  filteredProposals.map((proposal: any) => (
                     <TableRow key={proposal.id}>
                       <TableCell>
                         <div>

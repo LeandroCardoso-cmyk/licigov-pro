@@ -338,9 +338,9 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
                                 {step.description}
                               </p>
 
-                              {step.fields && Array.isArray(step.fields) && step.fields.length > 0 && (
+                              {Array.isArray(step.fields) && (step.fields as any[]).length > 0 && (
                                 <div className="space-y-2 mb-3">
-                                  {step.fields.map((field: any, idx: number) => (
+                                  {(step.fields as any[]).map((field: any, idx: number) => (
                                     <div
                                       key={idx}
                                       className="flex items-center justify-between bg-background p-2 rounded border"
@@ -359,11 +359,11 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
                                 </div>
                               )}
 
-                              {step.requiredDocuments && Array.isArray(step.requiredDocuments) && step.requiredDocuments.length > 0 && (
+                              {Array.isArray(step.requiredDocuments) && (step.requiredDocuments as any[]).length > 0 && (
                                 <div className="text-sm">
                                   <p className="font-medium mb-1">Documentos necessários:</p>
                                   <ul className="list-disc list-inside text-muted-foreground">
-                                    {step.requiredDocuments.map((doc: any, idx: number) => (
+                                    {(step.requiredDocuments as any[]).map((doc: any, idx: number) => (
                                       <li key={idx}>{doc.type}: {doc.filename}</li>
                                     ))}
                                   </ul>
@@ -385,11 +385,9 @@ export function PublicationPackageModal({ processId, open, onOpenChange }: Publi
                           <p className="font-medium">Acessar plataforma</p>
                           <p className="text-sm text-muted-foreground">{platform.websiteUrl}</p>
                         </div>
-                        <Button asChild>
-                          <a href={platform.websiteUrl} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Abrir
-                          </a>
+                        <Button onClick={() => window.open(platform.websiteUrl!, "_blank", "noopener,noreferrer")}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Abrir
                         </Button>
                       </div>
                     </CardContent>

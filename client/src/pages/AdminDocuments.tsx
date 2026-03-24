@@ -34,7 +34,7 @@ export default function AdminDocuments() {
   });
 
   const { data: documents, isLoading, refetch } = trpc.companyDocuments.list.useQuery();
-  const uploadMutation = trpc.companyDocuments.upload.useMutation();
+  const uploadMutation = (trpc as any).companyDocuments.upload?.useMutation?.() ?? trpc.companyDocuments.create.useMutation();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -149,7 +149,7 @@ export default function AdminDocuments() {
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-muted-foreground" />
                           <span className="font-medium">
-                            {DOCUMENT_TYPES.find((t) => t.value === doc.documentType)?.label || doc.documentType}
+                            {DOCUMENT_TYPES.find((t) => t.value === doc.type)?.label || doc.type}
                           </span>
                         </div>
                       </TableCell>
@@ -165,10 +165,10 @@ export default function AdminDocuments() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>{getStatusBadge(doc.expiresAt)}</TableCell>
+                      <TableCell>{getStatusBadge(doc.expiresAt ? doc.expiresAt.toISOString() : null)}</TableCell>
                       <TableCell>
                         <div className="text-sm text-muted-foreground">
-                          {format(new Date(doc.uploadedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                          {format(new Date(doc.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -176,7 +176,7 @@ export default function AdminDocuments() {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            setUploadData({ documentType: doc.documentType, expiresAt: "", file: null });
+                            setUploadData({ documentType: doc.type, expiresAt: "", file: null });
                             setShowUploadDialog(true);
                           }}
                         >

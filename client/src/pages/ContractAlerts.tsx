@@ -265,7 +265,7 @@ export default function ContractAlerts() {
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
-                        }).format(parseFloat(contract.currentValue))}
+                        }).format(contract.currentValue)}
                       </p>
                     </div>
                     <div>

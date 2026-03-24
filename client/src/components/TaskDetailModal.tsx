@@ -355,7 +355,7 @@ export default function TaskDetailModal({ taskId, open, onClose }: TaskDetailMod
                     <div>
                       <p className="text-sm font-medium">{attachment.fileName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatFileSize(attachment.fileSize)}
+                        {formatFileSize(attachment.fileSize ?? 0)}
                         {attachment.uploadedAt && (
                           <>
                             {" • "}

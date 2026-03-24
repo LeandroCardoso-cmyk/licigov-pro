@@ -98,9 +98,9 @@ export function NewAmendmentModal({
       contractId,
       type,
       justification,
-      newEndDate: newEndDate || undefined,
-      valueChange: valueChange || undefined,
-      scopeChange: scopeChange || undefined,
+      newEndDate: newEndDate ? new Date(newEndDate) : undefined,
+      valueChange: valueChange ? parseFloat(valueChange) : undefined,
+      scopeChanges: scopeChange || undefined,
     });
   };
 

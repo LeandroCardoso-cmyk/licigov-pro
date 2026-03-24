@@ -146,7 +146,7 @@ export default function NewDirectContract() {
         estimatedValue: parseFloat(value) * 100,
       });
 
-      setJustification(result.justification);
+      setJustification(result as string);
       toast.success("Justificativa gerada pela IA!");
     } catch (error: any) {
       toast.error(error.message || "Erro ao gerar justificativa");

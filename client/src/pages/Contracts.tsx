@@ -112,9 +112,9 @@ export default function Contracts() {
               <Button onClick={() => setLocation("/contracts/alerts")} variant="outline">
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Alertas
-                {overview && (overview.expiredCount + overview.expiring30Days) > 0 && (
+                {overview && (overview.expired + overview.expiringSoon) > 0 && (
                   <Badge variant="destructive" className="ml-2">
-                    {overview.expiredCount + overview.expiring30Days}
+                    {overview.expired + overview.expiringSoon}
                   </Badge>
                 )}
               </Button>
@@ -136,7 +136,7 @@ export default function Contracts() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{overview?.byStatus.active || 0}</div>
+              <div className="text-2xl font-bold">{overview?.active || 0}</div>
               <p className="text-xs text-muted-foreground">
                 {overview?.total || 0} total
               </p>
@@ -149,7 +149,7 @@ export default function Contracts() {
               <AlertTriangle className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{overview?.byStatus.expired || 0}</div>
+              <div className="text-2xl font-bold text-red-600">{overview?.expired || 0}</div>
               <p className="text-xs text-muted-foreground">
                 Requerem atenção
               </p>
@@ -297,7 +297,7 @@ export default function Contracts() {
                               {new Intl.NumberFormat('pt-BR', {
                                 style: 'currency',
                                 currency: 'BRL',
-                              }).format(parseFloat(contract.currentValue))}
+                              }).format(contract.currentValue)}
                             </p>
                           </div>
 

@@ -73,6 +73,7 @@ export const legalOpinionsRouter = router({
         sourceId: z.number().optional(),
         legalQuestion: z.string().min(10, "Questão jurídica deve ter pelo menos 10 caracteres"),
         context: z.string().optional(),
+        requiredSignatures: z.number().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
