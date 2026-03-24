@@ -11,6 +11,7 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   theme: mysqlEnum("theme", ["light", "dark", "system"]).default("system").notNull(),
+  passwordHash: varchar("passwordHash", { length: 255 }),           // Hash bcrypt do login (auth próprio)
   signaturePassword: varchar("signaturePassword", { length: 255 }), // Hash bcrypt da senha de assinatura
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
