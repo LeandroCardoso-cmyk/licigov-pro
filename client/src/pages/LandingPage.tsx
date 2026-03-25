@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Clock, Users, BarChart3, Shield, Zap, CheckCircle2, ArrowRight, ChevronDown, FileCheck, ScrollText, Scale, Calendar } from "lucide-react";
-import { APP_TITLE, APP_LOGO, getLoginUrl } from "@/const";
+import { APP_TITLE, APP_LOGO } from "@/const";
 import { Link } from "wouter";
 import { AnimatedSection } from "@/components/AnimatedSection";
 import WhatsAppButton from "@/components/WhatsAppButton";
@@ -120,7 +120,7 @@ export default function LandingPage() {
           <div className="flex gap-3">
             {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
             <Button asChild className="bg-slate-600 hover:bg-slate-700">
-              <a href={getLoginUrl()}>Entrar no Sistema</a>
+              <a href="/login">Entrar no Sistema</a>
             </Button>
           </div>
         </div>
