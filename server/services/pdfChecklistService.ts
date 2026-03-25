@@ -39,10 +39,11 @@ async function generateChecklistMarkdown(
 
   // Agrupar por categoria
   const itemsByCategory = checklistItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+    const cat = item.category ?? "Geral";
+    if (!acc[cat]) {
+      acc[cat] = [];
     }
-    acc[item.category].push(item);
+    acc[cat].push(item);
     return acc;
   }, {} as Record<string, typeof checklistItems>);
 
@@ -101,18 +102,18 @@ async function generateChecklistMarkdown(
       }
 
       // Campos
-      if (item.fields && item.fields.length > 0) {
+      if (item.fields && Array.isArray(item.fields) && (item.fields as any[]).length > 0) {
         markdown += `**Campos:**\n\n`;
-        item.fields.forEach((field) => {
+        (item.fields as any[]).forEach((field: any) => {
           markdown += `- **${field.label}:** ${field.value}\n`;
         });
         markdown += `\n`;
       }
 
       // Documentos necessários
-      if (item.requiredDocuments && item.requiredDocuments.length > 0) {
+      if (item.requiredDocuments && Array.isArray(item.requiredDocuments) && (item.requiredDocuments as any[]).length > 0) {
         markdown += `**Documentos Necessários:**\n\n`;
-        item.requiredDocuments.forEach((doc) => {
+        (item.requiredDocuments as any[]).forEach((doc: any) => {
           markdown += `- ${doc.filename}\n`;
         });
         markdown += `\n`;
@@ -147,7 +148,7 @@ export async function generateChecklistPDF(
   const markdown = await generateChecklistMarkdown(processId, platformId);
 
   // Converter para PDF
-  const pdfBuffer = await convertToPDF(markdown);
+  const pdfBuffer = await convertToPDF(markdown, "checklist.pdf");
 
   return pdfBuffer;
 }

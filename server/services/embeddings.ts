@@ -84,7 +84,7 @@ export async function generateEmbedding(text: string, useCache: boolean = true):
  */
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   try {
-    const embeddings = await Promise.all(texts.map(generateEmbedding));
+    const embeddings = await Promise.all(texts.map(text => generateEmbedding(text)));
     return embeddings;
   } catch (error) {
     console.error("Erro ao gerar embeddings em lote:", error);

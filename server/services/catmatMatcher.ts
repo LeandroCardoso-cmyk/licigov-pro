@@ -100,7 +100,7 @@ export async function findCatmatMatches(
       }
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const result = JSON.parse(response.choices[0].message.content as string);
     
     // Validar que temos exatamente 3 sugestões
     if (!result.matches || result.matches.length === 0) {

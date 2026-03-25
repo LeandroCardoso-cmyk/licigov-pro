@@ -180,7 +180,7 @@ export default function PublicationLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {publications.map((pub) => (
+                  {(publications as any[]).map((pub) => (
                     <TableRow key={pub.id}>
                       <TableCell>
                         {new Date(pub.createdAt).toLocaleDateString("pt-BR", {

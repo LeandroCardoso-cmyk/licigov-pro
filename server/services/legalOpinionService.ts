@@ -161,7 +161,7 @@ Por favor, elabore um parecer jurídico completo sobre a questão apresentada, f
       throw new Error("Resposta vazia da IA");
     }
 
-    const result: LegalOpinionResult = JSON.parse(content);
+    const result: LegalOpinionResult = JSON.parse(content as string);
     
     // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
     const validation = validateLegalCitations(result.opinion);

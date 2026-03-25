@@ -184,10 +184,10 @@ export const contractsRouter = router({
           }
           
           // Buscar total de aditivos existentes
-          const existingAmendments = await db.getAmendmentsByContractId(input.contractId);
+          const existingAmendments = await db.listAmendments(input.contractId);
           const totalExistingValue = existingAmendments
-            .filter(a => a.valueChange)
-            .reduce((sum, a) => sum + (a.valueChange || 0), 0);
+            .filter((a: any) => a.valueChange)
+            .reduce((sum: any, a: any) => sum + (a.valueChange || 0), 0);
           
           const valueValidation = validateAmendmentValue(
             contract.value,
@@ -479,8 +479,8 @@ export const contractsRouter = router({
           contractorCNPJ: contract.contractorCNPJ || undefined,
           contractorAddress: contract.contractorAddress || undefined,
           contractorContact: contract.contractorContact || undefined,
-          value: parseFloat(contract.value),
-          currentValue: parseFloat(contract.currentValue),
+          value: contract.value,
+          currentValue: contract.currentValue,
           startDate: contract.startDate,
           endDate: contract.endDate,
           fiscalUserName: contract.fiscalUserName || undefined,
@@ -532,8 +532,8 @@ export const contractsRouter = router({
             type: contract.type as any,
             contractorName: contract.contractorName,
             contractorCNPJ: contract.contractorCNPJ || undefined,
-            value: parseFloat(contract.value),
-            currentValue: parseFloat(contract.currentValue),
+            value: contract.value,
+            currentValue: contract.currentValue,
             startDate: contract.startDate,
             endDate: contract.endDate,
           },
@@ -543,8 +543,8 @@ export const contractsRouter = router({
             justification: amendment.justification,
             newEndDate: amendment.newEndDate || undefined,
             daysAdded: amendment.daysAdded || undefined,
-            valueChange: amendment.valueChange ? parseFloat(amendment.valueChange) : undefined,
-            newTotalValue: amendment.newTotalValue ? parseFloat(amendment.newTotalValue) : undefined,
+            valueChange: amendment.valueChange ?? undefined,
+            newTotalValue: amendment.newTotalValue ?? undefined,
             scopeChanges: amendment.scopeChanges || undefined,
             signedAt: amendment.signedAt || undefined,
           }
@@ -595,8 +595,8 @@ export const contractsRouter = router({
             type: contract.type as any,
             contractorName: contract.contractorName,
             contractorCNPJ: contract.contractorCNPJ || undefined,
-            value: parseFloat(contract.value),
-            currentValue: parseFloat(contract.currentValue),
+            value: contract.value,
+            currentValue: contract.currentValue,
             startDate: contract.startDate,
             endDate: contract.endDate,
             fiscalUserName: contract.fiscalUserName || undefined,
@@ -605,8 +605,8 @@ export const contractsRouter = router({
             number: apostille.number,
             type: apostille.type as any,
             description: apostille.description,
-            valueChange: apostille.valueChange ? parseFloat(apostille.valueChange) : undefined,
-            newTotalValue: apostille.newTotalValue ? parseFloat(apostille.newTotalValue) : undefined,
+            valueChange: apostille.valueChange ?? undefined,
+            newTotalValue: apostille.newTotalValue ?? undefined,
             indexType: apostille.indexType || undefined,
             indexValue: apostille.indexValue || undefined,
             signedAt: apostille.signedAt || undefined,
@@ -661,8 +661,8 @@ export const contractsRouter = router({
             type: contract.type as any,
             contractorName: contract.contractorName,
             contractorCNPJ: contract.contractorCNPJ || undefined,
-            value: parseFloat(contract.value),
-            currentValue: parseFloat(contract.currentValue),
+            value: contract.value,
+            currentValue: contract.currentValue,
             startDate: contract.startDate,
             endDate: contract.endDate,
           },
@@ -690,7 +690,7 @@ export const contractsRouter = router({
 
         await db.createContractAuditLog({
           contractId: input.contractId,
-          action: "rescission_created",
+          action: "terminated",
           userId: ctx.user.id,
           userName: ctx.user.name || undefined,
           details: { documentType: "rescisao", documentId: document?.id, rescissionType: input.type },
@@ -732,7 +732,7 @@ export const contractsRouter = router({
      */
     exportAlertsExcel: protectedProcedure.mutation(async ({ ctx }) => {
       const buffer = await generateAlertsExcelReport();
-      const base64 = buffer.toString("base64");
+      const base64 = Buffer.from(buffer as any).toString("base64");
       return {
         data: base64,
         filename: `alertas-contratos-${new Date().toISOString().split('T')[0]}.xlsx`,
@@ -746,7 +746,7 @@ export const contractsRouter = router({
       .input(z.object({ contractId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const buffer = await generateAuditExcelReport(input.contractId);
-        const base64 = buffer.toString("base64");
+        const base64 = Buffer.from(buffer as any).toString("base64");
         return {
           data: base64,
           filename: `auditoria-contrato-${input.contractId}-${new Date().toISOString().split('T')[0]}.xlsx`,

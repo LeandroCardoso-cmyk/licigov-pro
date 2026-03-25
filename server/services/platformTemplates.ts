@@ -188,7 +188,7 @@ export async function applyPlatformTerminology(
     return text;
   }
 
-  const instructions = PLATFORM_INSTRUCTIONS[platform.slug];
+  const instructions = PLATFORM_INSTRUCTIONS_FALLBACK[platform.slug];
   if (!instructions?.terminology) {
     return text;
   }
@@ -197,7 +197,7 @@ export async function applyPlatformTerminology(
   for (const [original, replacement] of Object.entries(instructions.terminology)) {
     // Substituir com case-insensitive
     const regex = new RegExp(original, "gi");
-    modifiedText = modifiedText.replace(regex, replacement);
+    modifiedText = modifiedText.replace(regex, replacement as string);
   }
 
   return modifiedText;

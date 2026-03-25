@@ -96,6 +96,7 @@ export function NewAmendmentModal({
 
     createAmendment.mutate({
       contractId,
+      number: 1,
       type,
       justification,
       newEndDate: newEndDate ? new Date(newEndDate) : undefined,

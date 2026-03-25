@@ -13,7 +13,7 @@ async function testRAG() {
   );
   console.log(`✅ Encontrados ${test1.length} trechos relevantes:`);
   test1.forEach((chunk, i) => {
-    console.log(`\n${i + 1}. Documento: ${chunk.documentName}`);
+    console.log(`\n${i + 1}. Documento: ${chunk.articleNumber}`);
     console.log(`   Similaridade: ${(chunk.similarity * 100).toFixed(1)}%`);
     console.log(`   Trecho: ${chunk.content.substring(0, 150)}...`);
   });
@@ -27,7 +27,7 @@ async function testRAG() {
   );
   console.log(`✅ Encontrados ${test2.length} trechos relevantes:`);
   test2.forEach((chunk, i) => {
-    console.log(`\n${i + 1}. Documento: ${chunk.documentName}`);
+    console.log(`\n${i + 1}. Documento: ${chunk.articleNumber}`);
     console.log(`   Similaridade: ${(chunk.similarity * 100).toFixed(1)}%`);
     console.log(`   Trecho: ${chunk.content.substring(0, 150)}...`);
   });
@@ -41,7 +41,7 @@ async function testRAG() {
   );
   console.log(`✅ Encontrados ${test3.length} trechos relevantes:`);
   test3.forEach((chunk, i) => {
-    console.log(`\n${i + 1}. Documento: ${chunk.documentName}`);
+    console.log(`\n${i + 1}. Documento: ${chunk.articleNumber}`);
     console.log(`   Similaridade: ${(chunk.similarity * 100).toFixed(1)}%`);
     console.log(`   Trecho: ${chunk.content.substring(0, 150)}...`);
   });

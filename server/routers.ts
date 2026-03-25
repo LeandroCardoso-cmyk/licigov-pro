@@ -413,10 +413,11 @@ export const appRouter = router({
         
         // Atualizar item com código CATMAT
         const itemType = suggestion.catmatCode.startsWith('CAT') ? 'material' : 'service';
+        const parsedCode = parseInt(suggestion.catmatCode.replace(/\D/g, '')) || null;
         await db.updateProcessItem(input.processItemId, {
           itemType,
-          catmatCode: itemType === 'material' ? suggestion.catmatCode : undefined,
-          catserCode: itemType === 'service' ? suggestion.catmatCode : undefined,
+          catmatCode: itemType === 'material' ? parsedCode : undefined,
+          catserCode: itemType === 'service' ? parsedCode : undefined,
           description: suggestion.description,
         });
         
@@ -449,11 +450,15 @@ export const appRouter = router({
         catserCode: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { itemId, ...data } = input;
-        await db.updateProcessItem(itemId, data);
+        const { itemId, catmatCode, catserCode, ...rest } = input;
+        await db.updateProcessItem(itemId, {
+          ...rest,
+          catmatCode: catmatCode ? parseInt(catmatCode) : undefined,
+          catserCode: catserCode ? parseInt(catserCode) : undefined,
+        });
         return { success: true };
       }),
-    
+
     // Deletar item
     deleteProcessItem: protectedProcedure
       .input(z.object({ itemId: z.number() }))

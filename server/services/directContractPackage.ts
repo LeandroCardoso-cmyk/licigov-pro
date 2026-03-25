@@ -52,7 +52,7 @@ export async function generatePresentialPackage(
 
   // Adicionar planilha de cotações
   if (includeQuotations) {
-    const quotations = await db.getDirectContractQuotations(contractId);
+    const quotations = await db.listQuotations(contractId);
     
     if (quotations.length > 0) {
       const spreadsheet = await generateQuotationsSpreadsheet(contract, quotations);

@@ -14,8 +14,8 @@ export default function DepartmentManagement() {
   const [activeTab, setActiveTab] = useState("kanban");
   
   // Mutation para exportar Excel
-  const exportExcelMutation = trpc.departmentTasks.exportExcel.useMutation({
-    onSuccess: (data) => {
+  const exportExcelMutation = (trpc as any).departmentTasks.exportExcel.useMutation({
+    onSuccess: (data: any) => {
       const byteCharacters = atob(data.data);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
@@ -33,16 +33,16 @@ export default function DepartmentManagement() {
       window.URL.revokeObjectURL(url);
       toast.success("Relatório Excel exportado com sucesso!");
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error("Erro ao exportar relatório", {
         description: error.message,
       });
     },
   });
-  
+
   // Mutation para exportar PDF (Markdown)
-  const exportPDFMutation = trpc.departmentTasks.exportPDF.useMutation({
-    onSuccess: (data) => {
+  const exportPDFMutation = (trpc as any).departmentTasks.exportPDF.useMutation({
+    onSuccess: (data: any) => {
       const blob = new Blob([data.content], { type: "text/markdown" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -52,16 +52,16 @@ export default function DepartmentManagement() {
       window.URL.revokeObjectURL(url);
       toast.success("Relatório resumido exportado com sucesso!");
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error("Erro ao exportar relatório", {
         description: error.message,
       });
     },
   });
-  
+
   // Mutation para verificar prazos
-  const checkDeadlinesMutation = trpc.departmentTasks.checkDeadlines.useMutation({
-    onSuccess: (result) => {
+  const checkDeadlinesMutation = (trpc as any).departmentTasks.checkDeadlines.useMutation({
+    onSuccess: (result: any) => {
       if (result.success) {
         toast.success(`Verificação concluída!`, {
           description: `${result.notificationsSent} notificação(s) enviada(s). ${result.upcomingCount} tarefa(s) próximas do prazo, ${result.overdueCount} atrasada(s).`,
@@ -70,7 +70,7 @@ export default function DepartmentManagement() {
         toast.error("Erro ao verificar prazos");
       }
     },
-    onError: (error) => {      toast.error("Erro ao verificar prazos", {
+    onError: (error: any) => {      toast.error("Erro ao verificar prazos", {
         description: error.message,
       });
     },

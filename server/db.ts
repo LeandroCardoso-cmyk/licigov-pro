@@ -2784,7 +2784,7 @@ export async function createDirectContractAuditLog(log: InsertDirectContractAudi
   if (!db) return null;
 
   const result = await db.insert(directContractAuditLogs).values(log);
-  return result.insertId;
+  return (result as any)[0]?.insertId ?? result;
 }
 
 export async function getDirectContractAuditLogs(directContractId: number) {
@@ -2853,7 +2853,7 @@ export async function saveChecklistProgress(progress: InsertDirectContractCheckl
       ...progress,
       completedAt: progress.isCompleted ? new Date() : undefined,
     });
-    return result.insertId;
+    return (result as any)[0]?.insertId ?? result;
   }
 }
 
@@ -3034,14 +3034,14 @@ export async function getTopLegalArticles() {
   const result = await db
     .select({
       articleId: directContracts.legalArticleId,
-      articleNumber: directContractLegalArticles.articleNumber,
+      articleNumber: directContractLegalArticles.article,
       articleDescription: directContractLegalArticles.description,
       count: sql<number>`COUNT(*)`,
     })
     .from(directContracts)
     .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
     .where(sql`${directContracts.legalArticleId} IS NOT NULL`)
-    .groupBy(directContracts.legalArticleId, directContractLegalArticles.articleNumber, directContractLegalArticles.description)
+    .groupBy(directContracts.legalArticleId, directContractLegalArticles.article, directContractLegalArticles.description)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
@@ -3270,7 +3270,7 @@ export async function createContractAuditLog(log: InsertContractAuditLog) {
   if (!db) return null;
 
   const result = await db.insert(contractAuditLogs).values(log);
-  return result.insertId;
+  return (result as any)[0]?.insertId ?? result;
 }
 
 /**
@@ -3798,7 +3798,7 @@ export async function addSignatureToHistory(data: {
     isValid: true,
   });
 
-  return Number(result.insertId);
+  return Number((result as any)[0]?.insertId ?? 0);
 }
 
 /**

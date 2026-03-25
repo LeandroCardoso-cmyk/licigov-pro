@@ -25,7 +25,7 @@ import {
   BookmarkCheck,
   BarChart3
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 
 export default function LegalOpinions() {
@@ -66,7 +66,7 @@ export default function LegalOpinions() {
 
   const getConclusionIcon = (conclusion: string | null) => {
     if (!conclusion) return null;
-    const icons: Record<string, JSX.Element> = {
+    const icons: Record<string, ReactElement> = {
       favorable: <CheckCircle2 className="h-4 w-4 text-green-600" />,
       unfavorable: <XCircle className="h-4 w-4 text-red-600" />,
       with_reservations: <AlertCircle className="h-4 w-4 text-yellow-600" />,
