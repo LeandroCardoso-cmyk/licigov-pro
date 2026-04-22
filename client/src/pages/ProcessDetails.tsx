@@ -129,6 +129,20 @@ export default function ProcessDetails() {
 
   const utils = trpc.useUtils();
 
+  const [downloadingUpload, setDownloadingUpload] = useState<number | null>(null);
+
+  const handleDownloadUploaded = async (documentId: number) => {
+    setDownloadingUpload(documentId);
+    try {
+      const result = await utils.documents.getDownloadUrl.fetch({ documentId });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Erro ao gerar link de download. Tente novamente.");
+    } finally {
+      setDownloadingUpload(null);
+    }
+  };
+
   const handleGenerateNext = () => {
     generateNextMutation.mutate({ processId });
   };
@@ -669,11 +683,11 @@ export default function ProcessDetails() {
                                 <VersionHistoryDialog documentId={dfdDocument.id} documentType="dfd" />
                               </>
                             )}
-                            {dfdDocument.fileUrl && (
-                              <a href={dfdDocument.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm border border-input rounded-md px-3 h-8 hover:bg-accent transition-colors">
-                                <Download className="h-4 w-4" />
+                            {dfdDocument.s3Key && (
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(dfdDocument.id)} disabled={downloadingUpload === dfdDocument.id}>
+                                {downloadingUpload === dfdDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                 Baixar Arquivo
-                              </a>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -760,11 +774,11 @@ export default function ProcessDetails() {
                                 <VersionHistoryDialog documentId={etpDocument.id} documentType="etp" />
                               </>
                             )}
-                            {etpDocument.fileUrl && (
-                              <a href={etpDocument.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm border border-input rounded-md px-3 h-8 hover:bg-accent transition-colors">
-                                <Download className="h-4 w-4" />
+                            {etpDocument.s3Key && (
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(etpDocument.id)} disabled={downloadingUpload === etpDocument.id}>
+                                {downloadingUpload === etpDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                 Baixar Arquivo
-                              </a>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -851,11 +865,11 @@ export default function ProcessDetails() {
                                 <VersionHistoryDialog documentId={trDocument.id} documentType="tr" />
                               </>
                             )}
-                            {trDocument.fileUrl && (
-                              <a href={trDocument.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm border border-input rounded-md px-3 h-8 hover:bg-accent transition-colors">
-                                <Download className="h-4 w-4" />
+                            {trDocument.s3Key && (
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(trDocument.id)} disabled={downloadingUpload === trDocument.id}>
+                                {downloadingUpload === trDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                 Baixar Arquivo
-                              </a>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -942,11 +956,11 @@ export default function ProcessDetails() {
                                 <VersionHistoryDialog documentId={editalDocument.id} documentType="edital" />
                               </>
                             )}
-                            {editalDocument.fileUrl && (
-                              <a href={editalDocument.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm border border-input rounded-md px-3 h-8 hover:bg-accent transition-colors">
-                                <Download className="h-4 w-4" />
+                            {editalDocument.s3Key && (
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(editalDocument.id)} disabled={downloadingUpload === editalDocument.id}>
+                                {downloadingUpload === editalDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                 Baixar Arquivo
-                              </a>
+                              </Button>
                             )}
                           </div>
                         </div>
