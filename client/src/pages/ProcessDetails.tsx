@@ -62,11 +62,15 @@ export default function ProcessDetails() {
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
   const [trItemsModalOpen, setTrItemsModalOpen] = useState(false);
+<<<<<<< claude/rebuild-licigov-pro-bFyTO
   const [activeTab, setActiveTab] = useState<"dfd" | "etp" | "tr" | "edital">("dfd");
   const [generatingDoc, setGeneratingDoc] = useState<string | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadDocType = useRef<"dfd" | "etp" | "tr" | "edital" | null>(null);
+=======
+  const [activeTab, setActiveTab] = useState<"etp" | "tr" | "dfd" | "edital">("etp");
+>>>>>>> main
 
   const { data: process, isLoading: processLoading } = trpc.processes.getById.useQuery({
     id: processId,
