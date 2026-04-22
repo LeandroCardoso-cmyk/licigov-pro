@@ -4,6 +4,24 @@
  *
  * Uso:
  *   pnpm tsx scripts/seed-admin.ts
+<<<<<<< claude/rebuild-licigov-pro-bFyTO
+ *
+ * Em produção isso roda automaticamente no bootstrap do servidor.
+ * Use este script apenas para forçar a criação local/manualmente.
+ */
+import "dotenv/config";
+import { bootstrap } from "../server/bootstrap";
+
+bootstrap()
+  .then(() => {
+    console.log("Seed concluído.");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("Erro no seed:", err);
+    process.exit(1);
+  });
+=======
  */
 import "dotenv/config";
 import bcrypt from "bcrypt";
@@ -77,3 +95,4 @@ main().catch((err) => {
   console.error("❌  Erro ao criar usuário admin:", err);
   process.exit(1);
 });
+>>>>>>> main

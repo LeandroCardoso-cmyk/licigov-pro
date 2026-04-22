@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { bootstrap } from "../bootstrap";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -59,4 +60,13 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+async function main() {
+  await bootstrap();
+  await startServer();
+  console.log("[bootstrap] ✓ Server started");
+}
+
+main().catch((err) => {
+  console.error("[bootstrap] Fatal error during startup:", err);
+  process.exit(1);
+});
