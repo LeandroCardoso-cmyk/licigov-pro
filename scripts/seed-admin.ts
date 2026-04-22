@@ -4,9 +4,6 @@
  *
  * Uso:
  *   pnpm tsx scripts/seed-admin.ts
- *
- * Em produção isso roda automaticamente no bootstrap do servidor.
- * Use este script apenas para forçar a criação local/manualmente.
  */
 import "dotenv/config";
 import { bootstrap } from "../server/bootstrap";
