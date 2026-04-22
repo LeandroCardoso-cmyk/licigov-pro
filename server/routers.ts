@@ -23,7 +23,7 @@ import { z } from "zod";
 import * as db from "./db";
 import { generateETP, generateTR, generateDFD, generateEdital } from "./services/gemini";
 import { convertToPDF, convertToDOCX } from "./services/documentConverter";
-import { storagePut } from "./storage";
+import { storagePut, storageGet } from "./storage";
 
 export const appRouter = router({
   system: systemRouter,
@@ -877,7 +877,27 @@ export const appRouter = router({
           details: JSON.stringify({ fileName: input.fileName, s3Key: key }),
         });
 
-        return { success: true, docType: input.docType, version: nextVersion, fileUrl: url };
+        return { success: true, docType: input.docType, version: nextVersion };
+      }),
+
+    // Gerar presigned URL para download de arquivo enviado via upload
+    getDownloadUrl: protectedProcedure
+      .input(z.object({ documentId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const document = await db.getDocumentById(input.documentId);
+        if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+
+        const process = await db.getProcessById(document.processId);
+        if (!process || process.ownerId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        if (!document.s3Key) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Este documento não possui arquivo S3 associado" });
+        }
+
+        const { url } = await storageGet(document.s3Key, 3600);
+        return { url, expiresIn: 3600 };
       }),
 
     // Obter histórico de versões de um documento
