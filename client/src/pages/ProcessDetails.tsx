@@ -60,6 +60,7 @@ export default function ProcessDetails() {
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
   const [trItemsModalOpen, setTrItemsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"etp" | "tr" | "dfd" | "edital">("etp");
 
   const { data: process, isLoading: processLoading } = trpc.processes.getById.useQuery({
     id: processId,
@@ -263,10 +264,6 @@ export default function ProcessDetails() {
   const trDocument = documents?.find((doc) => doc.type === "tr");
   const dfdDocument = documents?.find((doc) => doc.type === "dfd");
   const editalDocument = documents?.find((doc) => doc.type === "edital");
-
-  // Determinar qual documento exibir
-  // Estado para controlar qual documento está sendo visualizado
-  const [activeTab, setActiveTab] = useState<"etp" | "tr" | "dfd" | "edital">("etp");
 
   // Determinar qual documento exibir baseado na aba ativa
   const currentDocument = 
