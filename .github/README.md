@@ -93,4 +93,4 @@ Adicione ao README.md principal:
 2. Remover `continue-on-error` dos jobs de TypeScript e Lint
 3. Adicionar testes E2E com Playwright
 4. Configurar code coverage reporting
-5. Adicionar notificações de falha (Slack, Discord, etc.)
+5. Adicionar notificações de falha (Slack, Discord, etc.).
