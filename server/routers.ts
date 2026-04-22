@@ -23,6 +23,7 @@ import { z } from "zod";
 import * as db from "./db";
 import { generateETP, generateTR, generateDFD, generateEdital } from "./services/gemini";
 import { convertToPDF, convertToDOCX } from "./services/documentConverter";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
   system: systemRouter,
@@ -177,12 +178,12 @@ export const appRouter = router({
           category: input.category,
           platformId: input.platformId || null,
           ownerId: ctx.user.id,
-          status: "em_etp",
+          status: "em_dfd",
         });
 
         // Registrar atividade
         const processId = Number((result as any).insertId);
-        
+
         await db.createActivityLog({
           processId,
           userId: ctx.user.id,
@@ -193,13 +194,14 @@ export const appRouter = router({
         // Buscar configurações do usuário
         const settings = await db.getDocumentSettingsByUser(ctx.user.id);
 
-        // Gerar ETP automaticamente em background
-        generateETP({
+        // Gerar DFD automaticamente em background (primeiro documento da Lei 14.133)
+        generateDFD({
           processName: input.name,
           object: input.object,
           estimatedValue: valueInCents,
           modality: input.modality,
           category: input.category,
+          platformId: input.platformId || null,
           organizationName: settings?.organizationName || undefined,
           address: settings?.address || undefined,
           cnpj: settings?.cnpj || undefined,
@@ -207,26 +209,22 @@ export const appRouter = router({
           email: settings?.email || undefined,
           website: settings?.website || undefined,
         })
-          .then(async (etpContent) => {
-            // Salvar ETP no banco de dados
+          .then(async (dfdContent) => {
             await db.createDocument({
               processId,
-              type: "etp",
-              content: etpContent,
+              type: "dfd",
+              content: dfdContent,
               version: 1,
             });
-
-            // Registrar atividade
             await db.createActivityLog({
               processId,
               userId: ctx.user.id,
-              action: "gerou o ETP automaticamente",
+              action: "gerou o DFD automaticamente",
               details: JSON.stringify({ generatedBy: "AI" }),
             });
           })
           .catch((error) => {
-            console.error("Erro ao gerar ETP:", error);
-            // Não falhar a criação do processo se a geração do ETP falhar
+            console.error("Erro ao gerar DFD:", error);
           });
 
         return { success: true, processId };
@@ -471,7 +469,7 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(["em_etp", "em_tr", "em_dfd", "em_edital", "concluido"]),
+        status: z.enum(["em_dfd", "em_etp", "em_tr", "em_edital", "concluido"]),
       }))
       .mutation(async ({ ctx, input }) => {
         // Buscar processo antes da atualização para pegar status antigo
@@ -561,38 +559,53 @@ export const appRouter = router({
         return await db.getDocumentByProcessAndType(input.processId, input.type);
       }),
 
-    // Gerar próximo documento (TR, DFD ou Edital)
+    // Gerar próximo documento conforme fluxo Lei 14.133: DFD → ETP → TR → Edital
     generateNext: protectedProcedure
       .input(z.object({
         processId: z.number(),
       }))
       .mutation(async ({ ctx, input }) => {
-        // Buscar processo
         const process = await db.getProcessById(input.processId);
-        if (!process) {
-          throw new Error("Processo não encontrado");
-        }
+        if (!process) throw new Error("Processo não encontrado");
 
-        // Buscar configurações do usuário
         const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+        const docs = await db.getDocumentsByProcess(input.processId);
+        const dfdDoc = docs.find(d => d.type === "dfd");
+        const etpDoc = docs.find(d => d.type === "etp");
+        const trDoc = docs.find(d => d.type === "tr");
 
-        // Buscar documentos existentes
-        const documents = await db.getDocumentsByProcess(input.processId);
-        const etpDoc = documents.find(d => d.type === "etp");
-        const trDoc = documents.find(d => d.type === "tr");
-        const dfdDoc = documents.find(d => d.type === "dfd");
-
-        let nextDocType: "tr" | "dfd" | "edital";
-        let nextStatus: "em_tr" | "em_dfd" | "em_edital" | "concluido";
+        let nextDocType: "dfd" | "etp" | "tr" | "edital";
+        let nextStatus: "em_dfd" | "em_etp" | "em_tr" | "em_edital" | "concluido";
         let generatedContent: string;
 
-        // Determinar qual documento gerar
-        if (process.status === "em_etp" && etpDoc) {
-          // Gerar TR
+        const commonOrgParams = {
+          organizationName: settings?.organizationName || undefined,
+          address: settings?.address || undefined,
+          cnpj: settings?.cnpj || undefined,
+          phone: settings?.phone || undefined,
+          email: settings?.email || undefined,
+          website: settings?.website || undefined,
+        };
+
+        // Lei 14.133: DFD → ETP → TR → Edital
+        if (process.status === "em_dfd" && dfdDoc) {
+          // DFD pronto → gerar ETP
+          nextDocType = "etp";
+          nextStatus = "em_etp";
+          generatedContent = await generateETP({
+            processName: process.name,
+            object: process.object || "",
+            estimatedValue: process.estimatedValue || 0,
+            modality: process.modality || "",
+            category: process.category || "",
+            platformId: process.platformId,
+            dfdContent: dfdDoc.content || "",
+            ...commonOrgParams,
+          });
+        } else if (process.status === "em_etp" && etpDoc && dfdDoc) {
+          // ETP pronto → gerar TR
           nextDocType = "tr";
           nextStatus = "em_tr";
-          
-          // Buscar itens CATMAT/CATSER do processo
           const processItems = await db.getProcessItems(input.processId);
           const catmatItems = processItems.map(item => ({
             itemType: item.itemType,
@@ -603,77 +616,59 @@ export const appRouter = router({
             groupCode: item.groupCode ? String(item.groupCode) : undefined,
             classCode: item.classCode ? String(item.classCode) : undefined,
           }));
-          
           generatedContent = await generateTR({
             processName: process.name,
             object: process.object || "",
             estimatedValue: process.estimatedValue || 0,
             modality: process.modality || "",
             category: process.category || "",
+            platformId: process.platformId,
             etpContent: etpDoc.content || "",
             catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
-            organizationName: settings?.organizationName || undefined,
-            address: settings?.address || undefined,
-            cnpj: settings?.cnpj || undefined,
-            phone: settings?.phone || undefined,
-            email: settings?.email || undefined,
-            website: settings?.website || undefined,
+            ...commonOrgParams,
           });
-        } else if (process.status === "em_tr" && trDoc && etpDoc) {
-          // Gerar DFD
-          nextDocType = "dfd";
-          nextStatus = "em_dfd";
-          generatedContent = await generateDFD({
-            processName: process.name,
-            object: process.object || "",
-            estimatedValue: process.estimatedValue || 0,
-            modality: process.modality || "",
-            category: process.category || "",
-            etpContent: etpDoc.content || "",
-            trContent: trDoc.content || "",
-            organizationName: settings?.organizationName || undefined,
-            address: settings?.address || undefined,
-            cnpj: settings?.cnpj || undefined,
-            phone: settings?.phone || undefined,
-            email: settings?.email || undefined,
-            website: settings?.website || undefined,
-          });
-        } else if (process.status === "em_dfd" && dfdDoc && trDoc && etpDoc) {
-          // Gerar Edital
+        } else if (process.status === "em_tr" && trDoc && etpDoc && dfdDoc) {
+          // TR pronto → gerar Edital
           nextDocType = "edital";
-          nextStatus = "concluido";
+          nextStatus = "em_edital";
           generatedContent = await generateEdital({
             processName: process.name,
             object: process.object || "",
             estimatedValue: process.estimatedValue || 0,
             modality: process.modality || "",
             category: process.category || "",
+            platformId: process.platformId,
+            dfdContent: dfdDoc.content || "",
             etpContent: etpDoc.content || "",
             trContent: trDoc.content || "",
-            dfdContent: dfdDoc.content || "",
-            organizationName: settings?.organizationName || undefined,
-            address: settings?.address || undefined,
-            cnpj: settings?.cnpj || undefined,
-            phone: settings?.phone || undefined,
-            email: settings?.email || undefined,
-            website: settings?.website || undefined,
+            ...commonOrgParams,
           });
+        } else if (process.status === "em_edital") {
+          // Edital pronto → concluir processo
+          await db.updateProcessStatus(input.processId, "concluido");
+          await db.createActivityLog({
+            processId: input.processId,
+            userId: ctx.user.id,
+            action: "concluiu o processo",
+            details: JSON.stringify({ status: "concluido" }),
+          });
+          return { success: true, documentType: null, status: "concluido" };
         } else {
           throw new Error("Não é possível gerar o próximo documento. Verifique o status do processo.");
         }
 
-        // Salvar documento gerado
+        const existingDoc = docs.find(d => d.type === nextDocType);
+        const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
+
         await db.createDocument({
           processId: input.processId,
           type: nextDocType,
           content: generatedContent,
-          version: 1,
+          version: nextVersion,
         });
 
-        // Atualizar status do processo
         await db.updateProcessStatus(input.processId, nextStatus);
 
-        // Registrar atividade
         await db.createActivityLog({
           processId: input.processId,
           userId: ctx.user.id,
@@ -715,6 +710,174 @@ export const appRouter = router({
         });
 
         return { success: true, version: newVersion };
+      }),
+
+    // Gerar qualquer documento por tipo (DFD, ETP, TR ou Edital)
+    generateDocument: protectedProcedure
+      .input(z.object({
+        processId: z.number(),
+        docType: z.enum(["dfd", "etp", "tr", "edital"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const process = await db.getProcessById(input.processId);
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+        const docs = await db.getDocumentsByProcess(input.processId);
+        const dfdDoc = docs.find(d => d.type === "dfd");
+        const etpDoc = docs.find(d => d.type === "etp");
+        const trDoc = docs.find(d => d.type === "tr");
+
+        const commonOrgParams = {
+          organizationName: settings?.organizationName || undefined,
+          address: settings?.address || undefined,
+          cnpj: settings?.cnpj || undefined,
+          phone: settings?.phone || undefined,
+          email: settings?.email || undefined,
+          website: settings?.website || undefined,
+        };
+
+        let generatedContent: string;
+
+        if (input.docType === "dfd") {
+          generatedContent = await generateDFD({
+            processName: process.name,
+            object: process.object || "",
+            estimatedValue: process.estimatedValue || 0,
+            modality: process.modality || "",
+            category: process.category || "",
+            platformId: process.platformId,
+            ...commonOrgParams,
+          });
+        } else if (input.docType === "etp") {
+          generatedContent = await generateETP({
+            processName: process.name,
+            object: process.object || "",
+            estimatedValue: process.estimatedValue || 0,
+            modality: process.modality || "",
+            category: process.category || "",
+            platformId: process.platformId,
+            dfdContent: dfdDoc?.content || undefined,
+            ...commonOrgParams,
+          });
+        } else if (input.docType === "tr") {
+          if (!etpDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP é necessário para gerar o TR" });
+          const processItems = await db.getProcessItems(input.processId);
+          const catmatItems = processItems.map(item => ({
+            itemType: item.itemType,
+            catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
+            catserCode: item.catserCode ? String(item.catserCode) : undefined,
+            description: item.description,
+            unit: item.unit,
+            groupCode: item.groupCode ? String(item.groupCode) : undefined,
+            classCode: item.classCode ? String(item.classCode) : undefined,
+          }));
+          generatedContent = await generateTR({
+            processName: process.name,
+            object: process.object || "",
+            estimatedValue: process.estimatedValue || 0,
+            modality: process.modality || "",
+            category: process.category || "",
+            platformId: process.platformId,
+            etpContent: etpDoc.content || "",
+            catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
+            ...commonOrgParams,
+          });
+        } else {
+          // edital
+          if (!etpDoc || !trDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP e TR são necessários para gerar o Edital" });
+          generatedContent = await generateEdital({
+            processName: process.name,
+            object: process.object || "",
+            estimatedValue: process.estimatedValue || 0,
+            modality: process.modality || "",
+            category: process.category || "",
+            platformId: process.platformId,
+            dfdContent: dfdDoc?.content || "",
+            etpContent: etpDoc.content || "",
+            trContent: trDoc.content || "",
+            ...commonOrgParams,
+          });
+        }
+
+        const existingDoc = docs.find(d => d.type === input.docType);
+        const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
+
+        await db.createDocument({
+          processId: input.processId,
+          type: input.docType,
+          content: generatedContent,
+          version: nextVersion,
+        });
+
+        // Avançar status se o documento gerado corresponde ao status atual
+        const statusMap: Record<string, string> = {
+          dfd: "em_dfd",
+          etp: "em_etp",
+          tr: "em_tr",
+          edital: "em_edital",
+        };
+        if (process.status === statusMap[input.docType]) {
+          // status já corresponde — sem alteração necessária
+        } else if (
+          (input.docType === "dfd" && process.status !== "em_dfd") ||
+          (input.docType === "etp" && process.status === "em_dfd") ||
+          (input.docType === "tr" && process.status === "em_etp") ||
+          (input.docType === "edital" && process.status === "em_tr")
+        ) {
+          await db.updateProcessStatus(input.processId, statusMap[input.docType] as any);
+        }
+
+        await db.createActivityLog({
+          processId: input.processId,
+          userId: ctx.user.id,
+          action: `gerou o ${input.docType.toUpperCase()} por IA`,
+          details: JSON.stringify({ generatedBy: "AI", docType: input.docType }),
+        });
+
+        return { success: true, docType: input.docType, version: nextVersion };
+      }),
+
+    // Upload de documento (PDF/DOCX) para S3
+    uploadDocument: protectedProcedure
+      .input(z.object({
+        processId: z.number(),
+        docType: z.enum(["dfd", "etp", "tr", "edital"]),
+        fileName: z.string(),
+        fileBase64: z.string(),
+        mimeType: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const process = await db.getProcessById(input.processId);
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        const s3Key = `processes/${input.processId}/${input.docType}/${Date.now()}_${input.fileName}`;
+        const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
+
+        const docs = await db.getDocumentsByProcess(input.processId);
+        const existingDoc = docs.find(d => d.type === input.docType);
+        const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
+
+        await db.createDocument({
+          processId: input.processId,
+          type: input.docType,
+          content: null,
+          sourceType: "upload",
+          s3Key: key,
+          fileUrl: url,
+          version: nextVersion,
+        } as any);
+
+        await db.createActivityLog({
+          processId: input.processId,
+          userId: ctx.user.id,
+          action: `fez upload do ${input.docType.toUpperCase()}`,
+          details: JSON.stringify({ fileName: input.fileName, s3Key: key }),
+        });
+
+        return { success: true, docType: input.docType, version: nextVersion, fileUrl: url };
       }),
 
     // Obter histórico de versões de um documento
