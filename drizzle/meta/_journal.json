@@ -211,6 +211,13 @@
       "when": 1764035163632,
       "tag": "0029_furry_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1745280000000,
+      "tag": "0030_add_password_hash",
+      "breakpoints": true
     }
   ]
 }
