@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/mysql2/migrator";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { users } from "../drizzle/schema";
+import type { RowDataPacket } from "mysql2";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -13,19 +14,39 @@ const ADMIN_EMAIL = "cardosomsales@gmail.com";
 const ADMIN_PASSWORD = "Admin@123";
 const ADMIN_NAME = "Administrador";
 
-// In the production bundle (dist/index.js) import.meta.dirname = dist/
-// In development (tsx server/_core/index.ts) it resolves to server/
-// Either way, ../drizzle points to the project-root drizzle/ folder.
-const MIGRATIONS_FOLDER = path.join(import.meta.dirname, "../drizzle");
+// process.cwd() is always the project root in both Railway and local dev,
+// regardless of how esbuild bundles import.meta.dirname.
+const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
 
-// ─── Steps ────────────────────────────────────────────────────────────────────
+// ─── Step 1: run pending migrations ──────────────────────────────────────────
 
 async function runMigrations(connection: mysql.Connection): Promise<void> {
-  console.log("[bootstrap] Running database migrations...");
+  console.log(`[bootstrap] Running migrations from: ${MIGRATIONS_FOLDER}`);
   const db = drizzle(connection);
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
   console.log("[bootstrap] ✓ DB OK");
 }
+
+// ─── Step 2: ensure critical schema (safety net) ─────────────────────────────
+// Guards against schema.ts changes that were never accompanied by a migration
+// file. Each check is idempotent and safe to run on every startup.
+
+async function ensureSchema(connection: mysql.Connection): Promise<void> {
+  // Ensure passwordHash column — added after initial migrations were generated
+  const [cols] = await connection.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME   = 'users'
+       AND COLUMN_NAME  = 'passwordHash'`
+  );
+  if ((cols[0] as { cnt: number }).cnt === 0) {
+    await connection.execute("ALTER TABLE `users` ADD `passwordHash` varchar(255)");
+    console.log("[bootstrap] ✓ Schema patched: users.passwordHash added");
+  }
+}
+
+// ─── Step 3: seed admin user ──────────────────────────────────────────────────
 
 async function seedAdmin(connection: mysql.Connection): Promise<void> {
   console.log("[bootstrap] Checking admin user...");
@@ -68,7 +89,7 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
 
 /**
  * Runs all startup tasks before Express begins accepting requests.
- * Safe to call multiple times — every step is idempotent.
+ * Every step is idempotent — safe to call on every deploy.
  */
 export async function bootstrap(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -76,10 +97,12 @@ export async function bootstrap(): Promise<void> {
     throw new Error("[bootstrap] DATABASE_URL is not set. Cannot start server.");
   }
 
+  console.log("[bootstrap] Starting...");
   const connection = await mysql.createConnection(databaseUrl);
 
   try {
     await runMigrations(connection);
+    await ensureSchema(connection);
     await seedAdmin(connection);
   } finally {
     await connection.end();
