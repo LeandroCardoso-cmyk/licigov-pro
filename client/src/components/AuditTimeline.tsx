@@ -225,7 +225,7 @@ export function AuditTimeline({ contractId }: AuditTimelineProps) {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Badge className={getActionColor(log.action)}>{getActionLabel(log.action)}</Badge>
-                    {log.details && typeof log.details === "object" && "documentType" in log.details && (
+                    {!!(log.details) && typeof log.details === "object" && "documentType" in (log.details as object) && (
                       <Badge variant="outline">{(log.details as any).documentType}</Badge>
                     )}
                   </div>
@@ -241,7 +241,7 @@ export function AuditTimeline({ contractId }: AuditTimelineProps) {
             </CardHeader>
 
             {/* Detalhes da ação */}
-            {log.details && typeof log.details === "object" && Object.keys(log.details).length > 0 && (
+            {!!(log.details) && typeof log.details === "object" && Object.keys(log.details as object).length > 0 && (
               <CardContent>
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
                   <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">

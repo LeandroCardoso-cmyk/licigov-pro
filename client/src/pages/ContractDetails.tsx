@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { NewAmendmentModal } from "@/components/NewAmendmentModal";
 import { NewApostilleModal } from "@/components/NewApostilleModal";
 import { RescissionModal } from "@/components/RescissionModal";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -158,7 +159,7 @@ export default function ContractDetails() {
       contractId: contract.id,
       type: rescissionData.type,
       reason: rescissionData.reason,
-      effectiveDate: rescissionData.effectiveDate,
+      effectiveDate: new Date(rescissionData.effectiveDate),
       penaltyAmount: rescissionData.penaltyAmount ? parseFloat(rescissionData.penaltyAmount) : undefined,
       notes: rescissionData.notes || undefined,
     };
@@ -322,7 +323,7 @@ export default function ContractDetails() {
                       {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                      }).format(parseFloat(contract.value))}
+                      }).format(contract.value)}
                     </p>
                   </div>
                   <div>
@@ -331,7 +332,7 @@ export default function ContractDetails() {
                       {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
-                      }).format(parseFloat(contract.currentValue))}
+                      }).format(contract.currentValue)}
                     </p>
                   </div>
                   <div>
@@ -478,7 +479,7 @@ export default function ContractDetails() {
                               style: 'currency',
                               currency: 'BRL',
                               signDisplay: 'always',
-                            }).format(parseFloat(amendment.valueChange))}
+                            }).format(amendment.valueChange ?? 0)}
                           </p>
                         </div>
                       )}
@@ -543,21 +544,21 @@ export default function ContractDetails() {
                         <span className="text-sm text-muted-foreground">Descrição</span>
                         <p className="text-sm">{apostille.description}</p>
                       </div>
-                      {apostille.newValue && (
+                      {apostille.newTotalValue && (
                         <div>
                           <span className="text-sm text-muted-foreground">Novo Valor</span>
                           <p className="font-medium">
                             {new Intl.NumberFormat('pt-BR', {
                               style: 'currency',
                               currency: 'BRL',
-                            }).format(parseFloat(apostille.newValue))}
+                            }).format(apostille.newTotalValue ?? 0)}
                           </p>
                         </div>
                       )}
-                      {apostille.adjustmentIndex && (
+                      {apostille.indexType && (
                         <div>
                           <span className="text-sm text-muted-foreground">Índice de Reajuste</span>
-                          <p className="font-medium">{apostille.adjustmentIndex}</p>
+                          <p className="font-medium">{apostille.indexType}</p>
                         </div>
                       )}
                     </CardContent>
@@ -718,9 +719,9 @@ export default function ContractDetails() {
                               locale: ptBR,
                             })}
                           </p>
-                          {log.details && (
+                          {!!(log.details) && (
                             <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto">
-                              {JSON.stringify(JSON.parse(log.details), null, 2)}
+                              {JSON.stringify(log.details, null, 2)}
                             </pre>
                           )}
                         </div>
@@ -750,14 +751,14 @@ export default function ContractDetails() {
             open={amendmentModalOpen}
             onClose={() => setAmendmentModalOpen(false)}
             contractId={contract.id}
-            currentEndDate={contract.endDate}
-            currentValue={contract.value}
+            currentEndDate={contract.endDate instanceof Date ? contract.endDate.toISOString() : String(contract.endDate)}
+            currentValue={String(contract.value)}
           />
           <NewApostilleModal
             open={apostilleModalOpen}
             onClose={() => setApostilleModalOpen(false)}
             contractId={contract.id}
-            currentValue={contract.value}
+            currentValue={String(contract.value)}
           />
           <RescissionModal
             open={rescissionModalOpen}

@@ -72,7 +72,7 @@ export async function generateAlertsExcelReport() {
       year: contract.year,
       object: contract.object,
       contractor: contract.contractorName,
-      value: parseFloat(contract.currentValue),
+      value: contract.currentValue,
       endDate: format(endDate, "dd/MM/yyyy", { locale: ptBR }),
       daysUntilExpiry,
       status: statusText,
@@ -186,7 +186,7 @@ export async function generateAuditExcelReport(contractId: number) {
       createdAt: format(new Date(log.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR }),
       action: actionLabels[log.action] || log.action,
       userName: log.userName || "Sistema",
-      details: log.details ? JSON.stringify(JSON.parse(log.details), null, 2) : "-",
+      details: log.details ? JSON.stringify(log.details, null, 2) : "-",
     });
   });
 

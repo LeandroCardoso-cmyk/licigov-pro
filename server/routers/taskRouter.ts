@@ -59,7 +59,6 @@ export const taskRouter = router({
         createdTo: z.date().optional(),
         deadlineFrom: z.date().optional(),
         deadlineTo: z.date().optional(),
-        tags: z.array(z.string()).optional(),
         page: z.number().int().positive().default(1),
         pageSize: z.number().int().positive().default(20),
       })
@@ -211,7 +210,7 @@ export const taskRouter = router({
     )
     .mutation(async ({ input }) => {
       const buffer = await generateTasksExcelReport(input);
-      const base64 = buffer.toString("base64");
+      const base64 = Buffer.from(buffer as any).toString("base64");
       return {
         data: base64,
         filename: `tarefas-${new Date().toISOString().split('T')[0]}.xlsx`,

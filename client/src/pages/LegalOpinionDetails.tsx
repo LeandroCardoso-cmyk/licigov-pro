@@ -24,7 +24,7 @@ import {
 import { useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -167,7 +167,7 @@ export default function LegalOpinionDetails() {
   // Query para verificar assinatura
   const { data: signatureInfo } = trpc.legalOpinions.verifySignature.useQuery(
     { id: opinionId! },
-    { enabled: !!opinionId && !!opinion?.signatureId }
+    { enabled: !!opinionId && !!(opinion as any)?.signatureId }
   );
 
   if (authLoading || isLoading) {
@@ -202,7 +202,7 @@ export default function LegalOpinionDetails() {
 
   const getConclusionIcon = (conclusion: string | null) => {
     if (!conclusion) return null;
-    const icons: Record<string, JSX.Element> = {
+    const icons: Record<string, ReactElement> = {
       favorable: <CheckCircle2 className="h-5 w-5 text-green-600" />,
       unfavorable: <XCircle className="h-5 w-5 text-red-600" />,
       with_reservations: <AlertCircle className="h-5 w-5 text-yellow-600" />,
@@ -328,10 +328,10 @@ export default function LegalOpinionDetails() {
                 </Button>
               )}
               {/* Botão Salvar como Template */}
-              {opinion.status === "approved" && !opinion.isTemplate && (
-                <Button 
+              {opinion.status === "approved" && !(opinion as any).isTemplate && (
+                <Button
                   variant="outline"
-                  onClick={() => updateMutation.mutate({ id: opinion.id, isTemplate: true })}
+                  onClick={() => (updateMutation as any).mutate({ id: opinion.id, isTemplate: true })}
                   disabled={updateMutation.isPending}
                 >
                   <BookmarkPlus className="h-4 w-4 mr-2" />
@@ -489,7 +489,7 @@ export default function LegalOpinionDetails() {
             </Card>
 
             {/* Artigos Citados */}
-            {opinion.citedArticles && (opinion.citedArticles as string[]).length > 0 && (
+            {!!(opinion.citedArticles) && Array.isArray(opinion.citedArticles) && (opinion.citedArticles as string[]).length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Artigos Citados</CardTitle>
@@ -508,7 +508,7 @@ export default function LegalOpinionDetails() {
             )}
 
             {/* Jurisprudências */}
-            {opinion.jurisprudence && Array.isArray(opinion.jurisprudence) && opinion.jurisprudence.length > 0 && (
+            {!!(opinion.jurisprudence) && Array.isArray(opinion.jurisprudence) && opinion.jurisprudence.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Jurisprudências</CardTitle>

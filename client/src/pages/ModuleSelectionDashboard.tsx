@@ -132,7 +132,7 @@ export default function ModuleSelectionDashboard() {
   });
 
   const { data: processesData } = trpc.processes.list.useQuery(
-    { status: undefined, year: undefined },
+    undefined,
     { enabled: !!user }
   );
 
@@ -166,7 +166,7 @@ export default function ModuleSelectionDashboard() {
       return { ...module, stats: { label: "Contratações", value: directContractsData.length } };
     }
     if (module.id === "contracts" && contractsOverview) {
-      return { ...module, stats: { label: "Contratos Vigentes", value: contractsOverview.activeCount } };
+      return { ...module, stats: { label: "Contratos Vigentes", value: contractsOverview.active } };
     }
     if (module.id === "department-management" && tasksData) {
       const pendingTasks = tasksData.filter(t => t.status !== "concluida").length;
@@ -318,9 +318,9 @@ export default function ModuleSelectionDashboard() {
                         Em Breve
                       </Badge>
                     )}
-                    {module.id === "contracts" && contractsOverview && (contractsOverview.expiredCount + contractsOverview.expiring30Days) > 0 && (
+                    {module.id === "contracts" && contractsOverview && (contractsOverview.expired + contractsOverview.expiringSoon) > 0 && (
                       <Badge variant="destructive" className="shrink-0 animate-pulse">
-                        {contractsOverview.expiredCount + contractsOverview.expiring30Days} alertas
+                        {contractsOverview.expired + contractsOverview.expiringSoon} alertas
                       </Badge>
                     )}
                   </div>

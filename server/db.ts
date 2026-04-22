@@ -1,4 +1,4 @@
-import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, sql } from "drizzle-orm";
+import { eq, and, or, like, inArray, lte, gte, desc, asc, isNull, lt, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { hashPassword, verifyPassword } from "./services/passwordSecurity";
 import { 
@@ -186,6 +186,28 @@ export async function getUserByEmail(email: string) {
   
   const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createUser(data: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  openId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.insert(users).values({
+    openId: data.openId,
+    email: data.email,
+    name: data.name,
+    passwordHash: data.passwordHash,
+    loginMethod: "email",
+    lastSignedIn: new Date(),
+  });
+
+  const result = await db.select().from(users).where(eq(users.email, data.email)).limit(1);
+  return result[0]!;
 }
 
 export async function getUserById(id: number) {
@@ -2244,21 +2266,15 @@ export async function getPlatformTemplates(platformId: number, documentType?: "e
   const db = await getDb();
   if (!db) return [];
 
-  let query = db
-    .select()
-    .from(platformTemplates)
-    .where(
-      and(
-        eq(platformTemplates.platformId, platformId),
-        eq(platformTemplates.isActive, true)
-      )
-    );
-
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(platformTemplates.platformId, platformId),
+    eq(platformTemplates.isActive, true),
+  ];
   if (documentType) {
-    query = query.where(eq(platformTemplates.documentType, documentType));
+    conditions.push(eq(platformTemplates.documentType, documentType) as any);
   }
 
-  return await query;
+  return await db.select().from(platformTemplates).where(and(...conditions));
 }
 
 /**
@@ -2537,13 +2553,12 @@ export async function getLegalArticles(type?: "dispensa" | "inexigibilidade") {
   const db = await getDb();
   if (!db) return [];
 
-  const query = db.select().from(directContractLegalArticles).where(eq(directContractLegalArticles.isActive, true));
-
+  const conditions: ReturnType<typeof eq>[] = [eq(directContractLegalArticles.isActive, true)];
   if (type) {
-    return await query.where(eq(directContractLegalArticles.type, type));
+    conditions.push(eq(directContractLegalArticles.type, type) as any);
   }
 
-  return await query;
+  return await db.select().from(directContractLegalArticles).where(and(...conditions));
 }
 
 export async function getLegalArticleById(id: number) {
@@ -2602,7 +2617,18 @@ export async function listDirectContracts(userId: number, filters?: {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db
+  const conditions: any[] = [eq(directContracts.createdBy, userId)];
+  if (filters?.type) {
+    conditions.push(eq(directContracts.type, filters.type));
+  }
+  if (filters?.status) {
+    conditions.push(eq(directContracts.status, filters.status as any));
+  }
+  if (filters?.year) {
+    conditions.push(eq(directContracts.year, filters.year));
+  }
+
+  const results = await db
     .select({
       directContract: directContracts,
       legalArticle: directContractLegalArticles,
@@ -2611,22 +2637,8 @@ export async function listDirectContracts(userId: number, filters?: {
     .from(directContracts)
     .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
     .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
-    .where(eq(directContracts.createdBy, userId))
+    .where(and(...conditions))
     .orderBy(desc(directContracts.createdAt));
-
-  if (filters?.type) {
-    query = query.where(eq(directContracts.type, filters.type));
-  }
-
-  if (filters?.status) {
-    query = query.where(eq(directContracts.status, filters.status as any));
-  }
-
-  if (filters?.year) {
-    query = query.where(eq(directContracts.year, filters.year));
-  }
-
-  const results = await query;
 
   return results.map(row => ({
     ...row.directContract,
@@ -2772,7 +2784,7 @@ export async function createDirectContractAuditLog(log: InsertDirectContractAudi
   if (!db) return null;
 
   const result = await db.insert(directContractAuditLogs).values(log);
-  return result.insertId;
+  return (result as any)[0]?.insertId ?? result;
 }
 
 export async function getDirectContractAuditLogs(directContractId: number) {
@@ -2841,7 +2853,7 @@ export async function saveChecklistProgress(progress: InsertDirectContractCheckl
       ...progress,
       completedAt: progress.isCompleted ? new Date() : undefined,
     });
-    return result.insertId;
+    return (result as any)[0]?.insertId ?? result;
   }
 }
 
@@ -3022,14 +3034,14 @@ export async function getTopLegalArticles() {
   const result = await db
     .select({
       articleId: directContracts.legalArticleId,
-      articleNumber: directContractLegalArticles.articleNumber,
+      articleNumber: directContractLegalArticles.article,
       articleDescription: directContractLegalArticles.description,
       count: sql<number>`COUNT(*)`,
     })
     .from(directContracts)
     .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
     .where(sql`${directContracts.legalArticleId} IS NOT NULL`)
-    .groupBy(directContracts.legalArticleId, directContractLegalArticles.articleNumber, directContractLegalArticles.description)
+    .groupBy(directContracts.legalArticleId, directContractLegalArticles.article, directContractLegalArticles.description)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(5);
 
@@ -3097,25 +3109,22 @@ export async function listContracts(userId: number, filters?: {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db
+  const conditions: any[] = [eq(contracts.createdBy, userId)];
+  if (filters?.type) {
+    conditions.push(eq(contracts.type, filters.type as any));
+  }
+  if (filters?.status) {
+    conditions.push(eq(contracts.status, filters.status as any));
+  }
+  if (filters?.year) {
+    conditions.push(eq(contracts.year, filters.year));
+  }
+
+  return await db
     .select()
     .from(contracts)
-    .where(eq(contracts.createdBy, userId))
+    .where(and(...conditions))
     .orderBy(desc(contracts.createdAt));
-
-  if (filters?.type) {
-    query = query.where(eq(contracts.type, filters.type as any));
-  }
-
-  if (filters?.status) {
-    query = query.where(eq(contracts.status, filters.status as any));
-  }
-
-  if (filters?.year) {
-    query = query.where(eq(contracts.year, filters.year));
-  }
-
-  return await query;
 }
 
 /**
@@ -3261,7 +3270,7 @@ export async function createContractAuditLog(log: InsertContractAuditLog) {
   if (!db) return null;
 
   const result = await db.insert(contractAuditLogs).values(log);
-  return result.insertId;
+  return (result as any)[0]?.insertId ?? result;
 }
 
 /**
@@ -3789,7 +3798,7 @@ export async function addSignatureToHistory(data: {
     isValid: true,
   });
 
-  return Number(result.insertId);
+  return Number((result as any)[0]?.insertId ?? 0);
 }
 
 /**
@@ -3823,8 +3832,7 @@ export async function hasUserSignedOpinion(opinionId: number, userId: number): P
   const signatures = await db
     .select()
     .from(signatureHistory)
-    .where(eq(signatureHistory.opinionId, opinionId))
-    .where(eq(signatureHistory.userId, userId))
+    .where(and(eq(signatureHistory.opinionId, opinionId), eq(signatureHistory.userId, userId)))
     .limit(1);
 
   return signatures.length > 0;

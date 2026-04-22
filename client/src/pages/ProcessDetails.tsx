@@ -370,9 +370,8 @@ export default function ProcessDetails() {
                   const params = new URLSearchParams({
                     source: 'process',
                     processId: process.id.toString(),
-                    number: process.number,
                     object: process.name,
-                    value: process.estimatedValue,
+                    value: String(process.estimatedValue ?? 0),
                   });
                   navigate(`/contracts/new?${params.toString()}`);
                 }}

@@ -53,15 +53,15 @@ export async function generateItemsSpreadsheet(
     ]);
 
     items.forEach((item, index) => {
-      const unitPrice = item.estimatedUnitPrice ? item.estimatedUnitPrice / 100 : 0;
-      const totalPrice = unitPrice * item.quantity;
+      const unitPrice = item.estimatedPrice ? item.estimatedPrice / 100 : 0;
+      const totalPrice = unitPrice * (item.quantity ?? 0);
 
       worksheetData.push([
         index + 1,
-        item.code || "N/A",
+        (item.catmatCode || item.catserCode || "N/A"),
         item.description,
         item.unit,
-        item.quantity,
+        (item.quantity ?? 0),
         unitPrice.toFixed(2),
         totalPrice.toFixed(2),
         item.itemType === "material" ? "Material (CATMAT)" : "Serviço (CATSER)",
@@ -81,16 +81,16 @@ export async function generateItemsSpreadsheet(
     ]);
 
     items.forEach((item, index) => {
-      const unitPrice = item.estimatedUnitPrice ? item.estimatedUnitPrice / 100 : 0;
-      const totalPrice = unitPrice * item.quantity;
+      const unitPrice = item.estimatedPrice ? item.estimatedPrice / 100 : 0;
+      const totalPrice = unitPrice * (item.quantity ?? 0);
 
       worksheetData.push([
         1, // Lote único por padrão
         index + 1,
-        item.code || "",
+        (item.catmatCode || item.catserCode || ""),
         item.description,
         item.unit,
-        item.quantity,
+        (item.quantity ?? 0),
         unitPrice.toFixed(2),
         totalPrice.toFixed(2),
       ]);
@@ -109,16 +109,16 @@ export async function generateItemsSpreadsheet(
     ]);
 
     items.forEach((item, index) => {
-      const unitPrice = item.estimatedUnitPrice ? item.estimatedUnitPrice / 100 : 0;
-      const totalPrice = unitPrice * item.quantity;
+      const unitPrice = item.estimatedPrice ? item.estimatedPrice / 100 : 0;
+      const totalPrice = unitPrice * (item.quantity ?? 0);
 
       worksheetData.push([
         index + 1,
         item.itemType === "material" ? "Material" : "Serviço",
-        item.code || "N/A",
+        (item.catmatCode || item.catserCode || "N/A"),
         item.description,
         item.unit,
-        item.quantity,
+        (item.quantity ?? 0),
         unitPrice.toFixed(2),
         totalPrice.toFixed(2),
       ]);
@@ -127,8 +127,8 @@ export async function generateItemsSpreadsheet(
 
   // Adicionar linha de total
   const totalValue = items.reduce((sum, item) => {
-    const unitPrice = item.estimatedUnitPrice ? item.estimatedUnitPrice / 100 : 0;
-    return sum + unitPrice * item.quantity;
+    const unitPrice = item.estimatedPrice ? item.estimatedPrice / 100 : 0;
+    return sum + unitPrice * (item.quantity ?? 0);
   }, 0);
 
   worksheetData.push([]);

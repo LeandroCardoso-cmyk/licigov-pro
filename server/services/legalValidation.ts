@@ -39,7 +39,7 @@ export function validateLegalCitations(content: string): LegalCitationValidation
   // - art 123
   // - Art. 123 da Lei 14.133/2021
   const articleRegex = /(?:Art\.?|Artigo)\s*(\d+)(?:\s*(?:da|,)\s*Lei\s*([\d.\/]+))?/gi;
-  const matches = content.matchAll(articleRegex);
+  const matches = Array.from(content.matchAll(articleRegex));
 
   for (const match of matches) {
     const articleNumber = parseInt(match[1]);
@@ -160,7 +160,7 @@ export function extractCitedArticles(content: string): Array<{
 }> {
   const articles: Array<{ article: number; law: string; context: string }> = [];
   const articleRegex = /(?:Art\.?|Artigo)\s*(\d+)(?:\s*(?:da|,)\s*Lei\s*([\d.\/]+))?/gi;
-  const matches = content.matchAll(articleRegex);
+  const matches = Array.from(content.matchAll(articleRegex));
 
   for (const match of matches) {
     const articleNumber = parseInt(match[1]);

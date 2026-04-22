@@ -437,13 +437,13 @@ export const directContractsRouter = router({
         // AUDITORIA TÉCNICA - Item 2.1: Validar CNPJ duplicado
         const existingQuotations = await listQuotations(input.directContractId);
         const duplicateCNPJ = existingQuotations.find(
-          q => q.supplierCnpj === input.supplierCnpj
+          q => q.supplierCNPJ === input.supplierCNPJ
         );
         
         if (duplicateCNPJ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Já existe uma cotação do fornecedor ${duplicateCNPJ.supplierName} (CNPJ: ${input.supplierCnpj}) nesta contratação.`,
+            message: `Já existe uma cotação do fornecedor ${duplicateCNPJ.supplierName} (CNPJ: ${input.supplierCNPJ}) nesta contratação.`,
           });
         }
         
@@ -551,7 +551,7 @@ export const directContractsRouter = router({
           status: "draft",
         });
         
-        return { documentId: document.id, content };
+        return { documentId: document?.id, content };
       }),
     
     // Gerar Termo de Inexigibilidade
@@ -592,7 +592,7 @@ export const directContractsRouter = router({
           status: "draft",
         });
         
-        return { documentId: document.id, content };
+        return { documentId: document?.id, content };
       }),
     
     // Gerar Minuta de Contrato
@@ -633,7 +633,7 @@ export const directContractsRouter = router({
           status: "draft",
         });
         
-        return { documentId: document.id, content };
+        return { documentId: document?.id, content };
       }),
     
     // Gerar Planilha de Cotação
@@ -690,7 +690,7 @@ export const directContractsRouter = router({
           status: "draft",
         });
         
-        return { documentId: document.id, content };
+        return { documentId: document?.id, content };
       }),
     
     // Gerar Mapa Comparativo
@@ -748,7 +748,7 @@ export const directContractsRouter = router({
           status: "draft",
         });
         
-        return { documentId: document.id, content };
+        return { documentId: document?.id, content };
       }),
   }),
 

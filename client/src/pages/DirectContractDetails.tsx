@@ -50,13 +50,13 @@ export default function DirectContractDetails() {
 
   // Queries
   const { data: contract, isLoading } = trpc.directContracts.getById.useQuery({ id: contractId });
-  const { data: documents } = trpc.directContracts.documents.list.useQuery({ contractId });
-  const { data: quotations } = trpc.directContracts.quotations.list.useQuery({ contractId });
+  const { data: documents } = trpc.directContracts.documents.list.useQuery({ directContractId: contractId });
+  const { data: quotations } = trpc.directContracts.quotations.list.useQuery({ directContractId: contractId });
 
   // Mutations
-  const generateDocMutation = trpc.directContracts.documents.generate.useMutation();
-  const addQuotationMutation = trpc.directContracts.quotations.add.useMutation();
-  const deleteQuotationMutation = trpc.directContracts.quotations.delete.useMutation();
+  const generateDocMutation = (trpc as any).directContracts.documents.generate.useMutation();
+  const addQuotationMutation = (trpc as any).directContracts.quotations.add.useMutation();
+  const deleteQuotationMutation = (trpc as any).directContracts.quotations.delete.useMutation();
   const utils = trpc.useUtils();
 
   if (isLoading) {
@@ -113,9 +113,9 @@ export default function DirectContractDetails() {
 
   const handleGenerateDocument = async (type: string) => {
     try {
-      await generateDocMutation.mutateAsync({ contractId, type });
+      await generateDocMutation.mutateAsync({ directContractId: contractId, type });
       toast.success("Documento gerado com sucesso!");
-      utils.directContracts.documents.list.invalidate({ contractId });
+      utils.directContracts.documents.list.invalidate({ directContractId: contractId });
     } catch (error: any) {
       toast.error(error.message || "Erro ao gerar documento");
     }
@@ -129,10 +129,9 @@ export default function DirectContractDetails() {
 
     try {
       await addQuotationMutation.mutateAsync({
-        contractId,
+        directContractId: contractId,
         supplierName: quotationSupplier,
         value: parseFloat(quotationValue) * 100,
-        quotationDate: new Date(quotationDate),
       });
 
       toast.success("Cotação adicionada!");
@@ -140,7 +139,7 @@ export default function DirectContractDetails() {
       setQuotationSupplier("");
       setQuotationValue("");
       setQuotationDate("");
-      utils.directContracts.quotations.list.invalidate({ contractId });
+      utils.directContracts.quotations.list.invalidate({ directContractId: contractId });
     } catch (error: any) {
       toast.error(error.message || "Erro ao adicionar cotação");
     }
@@ -152,7 +151,7 @@ export default function DirectContractDetails() {
     try {
       await deleteQuotationMutation.mutateAsync({ id: quotationId });
       toast.success("Cotação excluída!");
-      utils.directContracts.quotations.list.invalidate({ contractId });
+      utils.directContracts.quotations.list.invalidate({ directContractId: contractId });
     } catch (error: any) {
       toast.error(error.message || "Erro ao excluir cotação");
     }
@@ -222,8 +221,8 @@ export default function DirectContractDetails() {
                       directContractId: contract.id.toString(),
                       number: contract.number,
                       object: contract.object,
-                      contractedName: contract.contractedName || '',
-                      contractedCnpj: contract.contractedCnpj || '',
+                      contractedName: contract.supplierName || '',
+                      contractedCnpj: contract.supplierCNPJ || '',
                       value: (contract.value / 100).toString(),
                     });
                     setLocation(`/contracts/new?${params.toString()}`);
@@ -367,12 +366,12 @@ export default function DirectContractDetails() {
                     <Label className="text-gray-600 dark:text-gray-400">Descrição</Label>
                     <p className="text-sm">{contract.legalArticle?.description}</p>
                   </div>
-                  {contract.legalArticle?.examples && (
+                  {!!(contract.legalArticle?.examples) && (
                     <>
                       <Separator />
                       <div>
                         <Label className="text-gray-600 dark:text-gray-400">Exemplos de Aplicação</Label>
-                        <p className="text-sm">{contract.legalArticle.examples}</p>
+                        <p className="text-sm">{String(contract.legalArticle!.examples)}</p>
                       </div>
                     </>
                   )}
@@ -447,7 +446,7 @@ export default function DirectContractDetails() {
                           <div>
                             <p className="font-medium">{doc.type.replace(/_/g, " ").toUpperCase()}</p>
                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                              Gerado em {format(new Date(doc.generatedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                              Gerado em {format(new Date(doc.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                             </p>
                           </div>
                         </div>
@@ -497,7 +496,7 @@ export default function DirectContractDetails() {
                           <div>
                             <p className="font-medium">{quotation.supplierName}</p>
                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {format(new Date(quotation.quotationDate), "dd/MM/yyyy", { locale: ptBR })}
+                              {format(new Date(quotation.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                             </p>
                           </div>
                         </div>

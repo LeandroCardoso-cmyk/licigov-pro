@@ -31,8 +31,8 @@ export function UploadContractDialog({
     dataFimVigencia: "",
   });
 
-  const uploadEmpenhoMutation = trpc.proposals.uploadEmpenho.useMutation();
-  const uploadContratoMutation = trpc.proposals.uploadContrato.useMutation();
+  const uploadEmpenhoMutation = (trpc as any).proposals.uploadEmpenho.useMutation();
+  const uploadContratoMutation = (trpc as any).proposals.uploadContrato.useMutation();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];

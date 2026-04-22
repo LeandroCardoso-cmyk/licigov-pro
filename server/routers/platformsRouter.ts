@@ -138,7 +138,7 @@ export const platformsRouter = router({
           description: item.description,
           unit: item.unit,
           quantity: item.quantity,
-          estimatedUnitPrice: item.estimatedUnitPrice,
+          estimatedUnitPrice: item.estimatedPrice,
         })),
         checklist: checklist.map(step => ({
           stepNumber: step.stepNumber,

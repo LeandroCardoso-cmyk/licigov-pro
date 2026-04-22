@@ -123,7 +123,7 @@ Analise a situação e sugira o artigo legal mais adequado (Art. 74 ou Art. 75 d
     },
   });
 
-  const result = JSON.parse(response.choices[0].message.content || "{}");
+  const result = JSON.parse((response.choices[0].message.content as string) || "{}");
 
   // Encontrar o artigo correspondente no banco
   const matchedArticle = articles.find(
@@ -220,7 +220,7 @@ Elabore uma justificativa técnica e jurídica COMPLETA para a contratação dir
     ],
   });
 
-  const content = response.choices[0].message.content || "";
+  const content = (response.choices[0].message.content as string) || "";
   
   // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
   const validation = validateLegalCitations(content);

@@ -27,7 +27,7 @@ export default function DocumentSettings() {
     footerText: "",
   });
 
-  const updateSettingsMutation = trpc.documentSettings.update.useMutation({
+  const updateSettingsMutation = trpc.documentSettings.save.useMutation({
     onSuccess: () => {
       toast.success("Configurações salvas com sucesso!", {
         description: "As alterações serão aplicadas aos próximos documentos gerados.",

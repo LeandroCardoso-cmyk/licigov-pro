@@ -30,8 +30,8 @@ export default function SolicitarProposta() {
     observacoes: "",
   });
 
-  const createProposalMutation = trpc.proposals.create.useMutation();
-  const generateDocumentsMutation = trpc.proposals.generateDocuments.useMutation();
+  const createProposalMutation = (trpc as any).proposals.create.useMutation();
+  const generateDocumentsMutation = (trpc as any).proposals.generateDocuments.useMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

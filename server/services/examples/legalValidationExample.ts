@@ -5,7 +5,7 @@
  * nas funções de geração de documentos do LiciGov Pro.
  */
 
-import { invokeLLM } from '../_core/llm';
+import { invokeLLM } from '../../_core/llm';
 import { validateAndCorrectDocument, validateLegalCitations } from '../legalValidation';
 
 /**
@@ -40,10 +40,9 @@ Estruture o parecer com:
 ## CONCLUSÃO`
         }
       ],
-      temperature: 0.2, // Baixa temperatura para pareceres jurídicos
     });
     
-    return response.choices[0].message.content;
+    return response.choices[0].message.content as string;
   };
   
   // Validar e corrigir documento

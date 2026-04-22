@@ -75,7 +75,7 @@ export async function checkContractExpirations() {
 **Contrato:** ${contract.number}/${contract.year}
 **Objeto:** ${contract.object}
 **Contratado:** ${contract.contractorName}
-**Valor Atual:** R$ ${parseFloat(contract.currentValue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+**Valor Atual:** R$ ${contract.currentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
 **Data de Término:** ${endDate.toLocaleDateString("pt-BR")}
 **Status:** ${alertType === "hoje" ? "Vence hoje!" : alertType === "vencido há " + Math.abs(daysUntilExpiry) + " dias" ? "Vencido!" : `Vence em ${alertType}`}
 

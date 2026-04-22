@@ -79,11 +79,12 @@ export function NewApostilleModal({
 
     createApostille.mutate({
       contractId,
+      number: 1,
       type,
       description,
       indexType: type === "reajuste" ? indexType : undefined,
       indexValue: indexValue || undefined,
-      newValue: newValue || undefined,
+      newTotalValue: newValue ? parseFloat(newValue) : undefined,
     });
   };
 

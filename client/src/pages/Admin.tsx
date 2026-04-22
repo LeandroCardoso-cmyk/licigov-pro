@@ -27,10 +27,10 @@ export default function Admin() {
   const { data: users, isLoading, refetch } = trpc.admin.listUsers.useQuery();
   
   // Buscar estatísticas gerais
-  const { data: processesData } = trpc.processes.list.useQuery({ status: undefined, year: undefined });
+  const { data: processesData } = trpc.processes.list.useQuery();
   const { data: directContractsData } = trpc.directContracts.list.useQuery({ type: undefined, status: undefined, year: undefined });
   const { data: contractsOverview } = trpc.contracts.analytics.getOverview.useQuery();
-  const { data: proposalsData } = trpc.proposals.list.useQuery();
+  const { data: proposalsData } = (trpc as any).proposals?.list?.useQuery?.() ?? { data: undefined };
 
   const promoteToAdminMutation = trpc.admin.promoteToAdmin.useMutation({
     onSuccess: () => {
@@ -164,9 +164,9 @@ export default function Admin() {
                   <ScrollText className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-3xl font-bold text-gray-900">{contractsOverview?.activeCount || 0}</p>
+                  <p className="text-3xl font-bold text-gray-900">{contractsOverview?.active || 0}</p>
                   <p className="text-xs text-gray-600">
-                    {contractsOverview?.expiredCount || 0} vencidos
+                    {contractsOverview?.expired || 0} vencidos
                   </p>
                 </div>
               </div>
@@ -213,7 +213,7 @@ export default function Admin() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Pendentes</span>
                   <Badge variant="secondary">
-                    {proposalsData?.filter(p => p.status === 'pendente').length || 0}
+                    {proposalsData?.filter((p: any) => p.status === 'pendente').length || 0}
                   </Badge>
                 </div>
               </CardContent>

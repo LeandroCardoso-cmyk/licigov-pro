@@ -89,7 +89,7 @@ function formatDateExtensive(date: Date): string {
  * Formatar data curta
  */
 function formatDateShort(date: Date): string {
-  return new Intl.DateFormat("pt-BR").format(date);
+  return new Intl.DateTimeFormat("pt-BR").format(date);
 }
 
 /**

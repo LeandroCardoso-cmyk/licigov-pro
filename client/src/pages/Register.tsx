@@ -7,27 +7,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { APP_LOGO, APP_TITLE } from "@/const";
 
-export default function Login() {
+export default function Register() {
   const [, navigate] = useLocation();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const registerMutation = trpc.auth.register.useMutation({
     onSuccess: () => {
       utils.auth.me.invalidate();
       navigate("/dashboard");
     },
     onError: (err) => {
-      setError(err.message || "Erro ao fazer login. Tente novamente.");
+      setError(err.message || "Erro ao criar conta. Tente novamente.");
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    loginMutation.mutate({ email, password });
+    registerMutation.mutate({ name, email, password });
   };
 
   return (
@@ -44,15 +45,28 @@ export default function Login() {
             <img src={APP_LOGO} alt={APP_TITLE} className="h-32 sm:h-40 w-auto drop-shadow-2xl" />
           </div>
           <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            {APP_TITLE}
+            Criar conta
           </CardTitle>
           <CardDescription className="text-base">
-            Plataforma de automação de processos licitatórios
+            {APP_TITLE} — Automação de processos licitatórios
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6 pb-8">
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome completo</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Seu nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="name"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -71,11 +85,11 @@ export default function Login() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="Mínimo 8 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
               />
             </div>
 
@@ -87,21 +101,21 @@ export default function Login() {
               type="submit"
               className="w-full h-12 text-base font-semibold shadow-lg hover:shadow-xl transition-all"
               size="lg"
-              disabled={loginMutation.isPending}
+              disabled={registerMutation.isPending}
             >
-              {loginMutation.isPending ? "Entrando..." : "Entrar"}
+              {registerMutation.isPending ? "Criando conta..." : "Criar conta"}
             </Button>
           </form>
 
           <p className="text-sm text-center text-muted-foreground">
-            Não tem conta?{" "}
-            <a href="/register" className="text-primary hover:underline font-medium">
-              Criar conta
+            Já tem conta?{" "}
+            <a href="/login" className="text-primary hover:underline font-medium">
+              Entrar
             </a>
           </p>
 
           <p className="text-xs text-center text-muted-foreground px-4">
-            Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade
+            Ao criar sua conta, você concorda com nossos Termos de Serviço e Política de Privacidade
           </p>
         </CardContent>
       </Card>

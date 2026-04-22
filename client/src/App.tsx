@@ -48,16 +48,23 @@ import LegalOpinions from "./pages/LegalOpinions";
 import NewLegalOpinion from "./pages/NewLegalOpinion";
 import LegalOpinionDetails from "./pages/LegalOpinionDetails";
 import LegalOpinionsAnalytics from "./pages/LegalOpinionsAnalytics";
+import Register from "./pages/Register";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
-// import { ConsentModal } from "./components/ConsentModal"; // Removido temporariamente
-import { useState, useEffect } from "react";
-import { trpc } from "./lib/trpc";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { KeyboardShortcutsTooltip } from "./components/KeyboardShortcutsTooltip";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      navigate("/login");
+    }
+  }, [loading, isAuthenticated, navigate]);
 
   if (loading) {
     return (
@@ -68,7 +75,11 @@ function AuthenticatedRoute({ component: Component }: { component: React.Compone
   }
 
   if (!isAuthenticated) {
-    return <Login />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return <Component />;
@@ -154,6 +165,7 @@ function Router() {
       <Route path={"/test3"} component={TestPage3} />
       <Route path={"/test4"} component={TestPage4Route} />
       <Route path={"/login"} component={Login} />
+      <Route path={"/register"} component={Register} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -161,40 +173,16 @@ function Router() {
 }
 
 function App() {
-  const { isAuthenticated } = useAuth();
-  const [showConsentModal, setShowConsentModal] = useState(false);
-  
   // Atalhos de teclado globais (ESC, Ctrl+Home)
   useKeyboardNavigation();
-  
-  const { data: hasConsent, isLoading: checkingConsent } = trpc.lgpd.checkConsent.useQuery(
-    { termsVersion: "1.0", privacyVersion: "1.0" },
-    { enabled: isAuthenticated }
-  );
-
-  useEffect(() => {
-    if (isAuthenticated && !checkingConsent && hasConsent !== undefined) {
-      setShowConsentModal(!hasConsent);
-    }
-  }, [isAuthenticated, hasConsent, checkingConsent]);
 
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        switchable
-      >
+      <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster />
           <KeyboardShortcutsTooltip />
           <Router />
-          {/* ConsentModal temporariamente desabilitado para debug */}
-          {false && isAuthenticated && (
-            <ConsentModal
-              open={showConsentModal}
-              onConsent={() => setShowConsentModal(false)}
-            />
-          )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

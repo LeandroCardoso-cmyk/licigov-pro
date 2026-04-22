@@ -83,7 +83,7 @@ export default function NewContract() {
   const createMutation = trpc.contracts.create.useMutation({
     onSuccess: (data) => {
       toast.success("Contrato criado com sucesso!");
-      setLocation(`/contracts/${data.id}`);
+      setLocation(`/contracts/${data?.id}`);
     },
     onError: (error) => {
       toast.error(`Erro ao criar contrato: ${error.message}`);
@@ -92,15 +92,11 @@ export default function NewContract() {
 
   const validateCNPJMutation = trpc.directContracts.validation.consultCNPJ.useMutation({
     onSuccess: (data) => {
-      if (data.valid) {
+      if (data.success) {
         setCnpjValid(true);
         setCnpjData(data);
-        setContractorName(data.razao_social || "");
-        setContractorAddress(
-          data.logradouro && data.municipio
-            ? `${data.logradouro}, ${data.numero || "S/N"}, ${data.bairro || ""}, ${data.municipio}/${data.uf}, CEP ${data.cep || ""}`
-            : ""
-        );
+        setContractorName(data.data?.razaoSocial || "");
+        setContractorAddress(data.data?.endereco || "");
         toast.success("CNPJ válido! Dados preenchidos automaticamente.");
       } else {
         setCnpjValid(false);

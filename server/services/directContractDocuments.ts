@@ -130,7 +130,7 @@ Autoridade Competente
     ],
   });
 
-  const content = response.choices[0].message.content || "";
+  const content = (response.choices[0].message.content as string) || "";
   
   // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
   const validation = validateLegalCitations(content);
@@ -273,7 +273,7 @@ Autoridade Competente
     ],
   });
 
-  const content = response.choices[0].message.content || "";
+  const content = (response.choices[0].message.content as string) || "";
   
   // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
   const validation = validateLegalCitations(content);
@@ -419,7 +419,7 @@ _________________________________
     ],
   });
 
-  const content = response.choices[0].message.content || "";
+  const content = (response.choices[0].message.content as string) || "";
   
   // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
   const validation = validateLegalCitations(content);
