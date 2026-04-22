@@ -868,7 +868,7 @@ export const appRouter = router({
           s3Key: key,
           fileUrl: url,
           version: nextVersion,
-        } as any);
+        });
 
         await db.createActivityLog({
           processId: input.processId,

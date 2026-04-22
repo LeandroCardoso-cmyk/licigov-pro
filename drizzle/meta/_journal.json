@@ -218,6 +218,13 @@
       "when": 1745280000000,
       "tag": "0030_add_password_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1745366400000,
+      "tag": "0031_documents_upload_fields",
+      "breakpoints": true
     }
   ]
 }

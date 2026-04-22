@@ -32,18 +32,38 @@ async function runMigrations(connection: mysql.Connection): Promise<void> {
 // file. Each check is idempotent and safe to run on every startup.
 
 async function ensureSchema(connection: mysql.Connection): Promise<void> {
-  // Ensure passwordHash column — added after initial migrations were generated
-  const [cols] = await connection.execute<RowDataPacket[]>(
-    `SELECT COUNT(*) AS cnt
-     FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME   = 'users'
-       AND COLUMN_NAME  = 'passwordHash'`
-  );
-  if ((cols[0] as { cnt: number }).cnt === 0) {
-    await connection.execute("ALTER TABLE `users` ADD `passwordHash` varchar(255)");
-    console.log("[bootstrap] ✓ Schema patched: users.passwordHash added");
+  type ColRow = { cnt: number };
+
+  async function addColumnIfMissing(
+    table: string,
+    column: string,
+    definition: string
+  ): Promise<void> {
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME   = ?
+         AND COLUMN_NAME  = ?`,
+      [table, column]
+    );
+    if ((rows[0] as ColRow).cnt === 0) {
+      await connection.execute(`ALTER TABLE \`${table}\` ADD \`${column}\` ${definition}`);
+      console.log(`[bootstrap] ✓ Schema patched: ${table}.${column} added`);
+    }
   }
+
+  // users — passwordHash (added after initial migrations)
+  await addColumnIfMissing("users", "passwordHash", "varchar(255)");
+
+  // documents — upload support columns (added in 0031)
+  await addColumnIfMissing(
+    "documents",
+    "sourceType",
+    "enum('ai','upload') NOT NULL DEFAULT 'ai'"
+  );
+  await addColumnIfMissing("documents", "s3Key", "varchar(500)");
+  await addColumnIfMissing("documents", "fileUrl", "varchar(1000)");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
