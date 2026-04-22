@@ -15,6 +15,7 @@ export async function generateETP(params: {
   modality: string;
   category: string;
   platformId?: number | null;
+  dfdContent?: string;
   organizationName?: string;
   address?: string;
   cnpj?: string;
@@ -89,13 +90,17 @@ export async function generateETP(params: {
   // Buscar instruções específicas da plataforma
   const platformInstructions = await getPlatformInstructions(params.platformId || null, "etp");
   
+  const dfdContext = params.dfdContent
+    ? `\n**CONTEXTO - DFD (DOCUMENTO FORMALIZADOR DE DEMANDA):**\n${params.dfdContent}\n`
+    : "";
+
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21 (Nova Lei de Licitações e Contratos Administrativos).
 
 Sua tarefa é gerar um **Estudo Técnico Preliminar (ETP)** completo e profissional para o seguinte processo licitatório:
 
 **CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
 ${lawContext}
-
+${dfdContext}
 **DADOS DO PROCESSO:**
 - Nome do Processo: ${params.processName}
 - Objeto da Contratação: ${params.object}
@@ -309,8 +314,8 @@ export async function generateDFD(params: {
   modality: string;
   category: string;
   platformId?: number | null;
-  etpContent: string;
-  trContent: string;
+  etpContent?: string;
+  trContent?: string;
   organizationName?: string;
   address?: string;
   cnpj?: string;
@@ -362,21 +367,22 @@ export async function generateDFD(params: {
   // Buscar instruções específicas da plataforma
   const platformInstructionsDFD = await getPlatformInstructions(params.platformId || null, "dfd");
   
+  const etpContext = params.etpContent
+    ? `\n**CONTEXTO - ETP ELABORADO:**\n${params.etpContent}\n`
+    : "";
+  const trContext = params.trContent
+    ? `\n**CONTEXTO - TR ELABORADO:**\n${params.trContent}\n`
+    : "";
+
   const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
 
-Com base no ETP e TR já elaborados, gere agora um **Documento Formalizador de Demanda (DFD)** completo.
+Gere um **Documento Formalizador de Demanda (DFD)** completo.
 
-O DFD é o documento que formaliza a necessidade da contratação e dá início ao processo licitatório.
+O DFD é o documento inicial do processo licitatório que formaliza a necessidade da contratação, conforme o art. 12, inciso VII, da Lei 14.133/21.
 
 **CONTEXTO LEGAL RELEVANTE DA LEI 14.133/21:**
 ${lawContextDFD}
-
-**CONTEXTO - ETP ELABORADO:**
-${params.etpContent}
-
-**CONTEXTO - TR ELABORADO:**
-${params.trContent}
-
+${etpContext}${trContext}
 **DADOS DO PROCESSO:**
 - Nome: ${params.processName}
 - Objeto: ${params.object}
@@ -388,9 +394,9 @@ ${platformInstructionsDFD ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${pla
 **INSTRUÇÕES:**
 1. **USE o CONTEXTO LEGAL fornecido** - cite explicitamente os artigos relevantes
 2. O DFD deve ser conciso e objetivo
-3. Deve conter a justificativa da necessidade
-4. Deve referenciar o ETP e TR
-5. Deve indicar a disponibilidade orçamentária
+3. Deve conter a justificativa e necessidade da contratação
+4. Deve indicar a disponibilidade orçamentária
+5. Deve detalhar o impacto da não contratação
 6. **CITE os artigos específicos** da Lei 14.133/21 fornecidos no contexto legal
 
 Gere um documento profissional em markdown.`;

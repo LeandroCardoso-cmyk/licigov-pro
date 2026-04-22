@@ -33,7 +33,7 @@ export const processes = mysqlTable("processes", {
   modality: varchar("modality", { length: 100 }), // Modalidade: pregão, concorrência, etc
   category: varchar("category", { length: 100 }), // Categoria: obras, serviços, compras
   platformId: int("platformId"), // Plataforma de pregão selecionada (Compras.gov.br, BLL, etc)
-  status: mysqlEnum("status", ["em_etp", "em_tr", "em_dfd", "em_edital", "concluido"]).default("em_etp").notNull(),
+  status: mysqlEnum("status", ["em_dfd", "em_etp", "em_tr", "em_edital", "concluido"]).default("em_dfd").notNull(),
   ownerId: int("ownerId").notNull(), // Usuário que criou o processo
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -49,7 +49,10 @@ export const documents = mysqlTable("documents", {
   id: int("id").autoincrement().primaryKey(),
   processId: int("processId").notNull(),
   type: mysqlEnum("type", ["etp", "tr", "dfd", "edital"]).notNull(),
-  content: text("content"), // Conteúdo do documento em markdown ou HTML
+  content: text("content"), // Conteúdo do documento em markdown (gerado por IA)
+  sourceType: mysqlEnum("sourceType", ["ai", "upload"]).default("ai").notNull(),
+  s3Key: varchar("s3Key", { length: 500 }), // chave S3 para uploads
+  fileUrl: varchar("fileUrl", { length: 1000 }), // URL pública/signed do arquivo
   version: int("version").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
