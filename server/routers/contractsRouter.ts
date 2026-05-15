@@ -202,10 +202,6 @@ export const contractsRouter = router({
             });
           }
           
-          console.log('[Amendment] Validação de valor aprovada:', {
-            percentage: valueValidation.percentage.toFixed(2) + '%',
-            remaining: `R$ ${(valueValidation.remaining / 100).toFixed(2)}`,
-          });
         }
         
         // 4. Validar prazo contratual (se aplicável)
@@ -229,10 +225,6 @@ export const contractsRouter = router({
             });
           }
           
-          console.log('[Amendment] Validação de prazo aprovada:', {
-            totalMonths: durationValidation.totalDurationMonths.toFixed(1),
-            maxDate: durationValidation.maxDate.toISOString().split('T')[0],
-          });
         }
         
         // 5. Criar aditivo (validações aprovadas)

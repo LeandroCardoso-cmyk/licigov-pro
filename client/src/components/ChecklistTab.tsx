@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -77,7 +78,7 @@ export function ChecklistTab({ contractId, platformId }: ChecklistTabProps) {
         }
         return newSet;
       });
-      console.error("Erro ao salvar progresso:", error);
+      toast.error("Erro ao salvar progresso. Tente novamente.");
     }
   };
 
