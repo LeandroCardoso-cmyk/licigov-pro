@@ -1,6 +1,5 @@
-import { marked } from "marked";
+import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
-import puppeteer from "puppeteer";
 
 interface LegalOpinion {
   id: number;
@@ -22,41 +21,89 @@ interface DocumentSettings {
   logoUrl: string | null;
 }
 
+function stripInline(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1");
+}
+
 /**
- * Gera PDF do parecer jurídico com formatação profissional
+ * Gera PDF do parecer jurídico com pdfkit (pure-JS, compatível Railway).
  */
 export async function exportLegalOpinionToPDF(
   legalOpinion: LegalOpinion,
   settings: DocumentSettings,
   signatureBlock?: string
 ): Promise<Buffer> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 56, size: "A4" });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const pageWidth = doc.page.width - 112;
+    const orgName = settings.organizationName || "Órgão Público";
+
+    // Cabeçalho
+    doc.fontSize(14).font("Helvetica-Bold").text(orgName, { align: "center" });
+    if (settings.organizationAddress)
+      doc.fontSize(9).font("Helvetica").text(settings.organizationAddress, { align: "center" });
+    if (settings.organizationCnpj)
+      doc.fontSize(9).font("Helvetica").text(`CNPJ: ${settings.organizationCnpj}`, { align: "center" });
+    doc.moveDown(0.5)
+      .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+      .strokeColor("black").lineWidth(1.5).stroke().lineWidth(1)
+      .moveDown(0.8);
+
+    // Título
+    doc.fontSize(13).font("Helvetica-Bold").text("PARECER JURÍDICO", { align: "center" });
+    doc.fontSize(11).font("Helvetica-Bold").text(legalOpinion.title, { align: "center" });
+    doc.moveDown(1);
+
+    const section = (title: string, body: string) => {
+      doc.fontSize(11).font("Helvetica-Bold").text(title.toUpperCase());
+      doc.moveDown(0.2)
+        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+        .strokeColor("#666").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1)
+        .moveDown(0.4);
+      doc.fontSize(11).font("Helvetica").text(stripInline(body), { align: "justify", lineGap: 1 });
+      doc.moveDown(0.8);
+    };
+
+    section("Questão Jurídica", legalOpinion.legalQuestion);
+    if (legalOpinion.context) section("Contexto", legalOpinion.context);
+    section("Parecer", legalOpinion.opinion || "Parecer não gerado ainda.");
+    section("Conclusão", legalOpinion.conclusion || "Conclusão não disponível.");
+
+    // Data
+    doc.moveDown(0.5).fontSize(10).font("Helvetica-Oblique")
+      .text(`Data: ${new Date(legalOpinion.createdAt).toLocaleDateString("pt-BR")}`, { align: "right" });
+
+    // Assinatura
+    if (signatureBlock) {
+      doc.moveDown(1).fontSize(10).font("Helvetica")
+        .text(stripInline(signatureBlock), { align: "center" });
+    }
+
+    // Rodapé
+    const footerParts = [
+      settings.organizationPhone,
+      settings.organizationEmail,
+      settings.organizationWebsite,
+    ].filter(Boolean).join(" | ");
+    if (footerParts) {
+      doc.moveDown(1)
+        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+        .strokeColor("black").lineWidth(0.5).stroke().lineWidth(1)
+        .moveDown(0.4);
+      doc.fontSize(9).font("Helvetica").text(footerParts, { align: "center" });
+    }
+
+    doc.end();
   });
-
-  try {
-    const page = await browser.newPage();
-    
-    const html = generateHTML(legalOpinion, settings, signatureBlock);
-    
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      margin: {
-        top: "2cm",
-        right: "2cm",
-        bottom: "2cm",
-        left: "2cm",
-      },
-      printBackground: true,
-    });
-
-    return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
 }
 
 /**
@@ -187,139 +234,3 @@ export async function exportLegalOpinionToDOCX(
   return await Packer.toBuffer(doc);
 }
 
-/**
- * Gera HTML para renderização do PDF
- */
-function generateHTML(legalOpinion: LegalOpinion, settings: DocumentSettings, signatureBlock?: string): string {
-  const opinionHTML = legalOpinion.opinion ? marked(legalOpinion.opinion) : "<p>Parecer não gerado ainda.</p>";
-  const conclusionHTML = legalOpinion.conclusion ? marked(legalOpinion.conclusion) : "<p>Conclusão não disponível.</p>";
-  const signatureHTML = signatureBlock ? marked(signatureBlock) : "";
-
-  return `
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${legalOpinion.title}</title>
-      <style>
-        body {
-          font-family: 'Times New Roman', serif;
-          font-size: 12pt;
-          line-height: 1.6;
-          color: #000;
-          margin: 0;
-          padding: 0;
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-          border-bottom: 2px solid #000;
-          padding-bottom: 15px;
-        }
-        .header h1 {
-          font-size: 16pt;
-          margin: 5px 0;
-        }
-        .header p {
-          margin: 3px 0;
-          font-size: 10pt;
-        }
-        .title {
-          text-align: center;
-          margin: 30px 0;
-        }
-        .title h2 {
-          font-size: 14pt;
-          font-weight: bold;
-          margin: 10px 0;
-        }
-        .section {
-          margin: 20px 0;
-        }
-        .section h3 {
-          font-size: 12pt;
-          font-weight: bold;
-          text-transform: uppercase;
-          border-bottom: 1px solid #000;
-          padding-bottom: 5px;
-          margin-bottom: 10px;
-        }
-        .section p {
-          text-align: justify;
-          margin: 10px 0;
-        }
-        .footer {
-          text-align: center;
-          margin-top: 40px;
-          padding-top: 15px;
-          border-top: 1px solid #000;
-          font-size: 10pt;
-        }
-        .date {
-          text-align: right;
-          margin-top: 30px;
-          font-style: italic;
-        }
-      </style>
-    </head>
-    <body>
-      <!-- Cabeçalho -->
-      <div class="header">
-        <h1>${settings.organizationName || "Órgão Público"}</h1>
-        <p>${settings.organizationAddress || ""}</p>
-        <p>CNPJ: ${settings.organizationCnpj || ""}</p>
-      </div>
-
-      <!-- Título -->
-      <div class="title">
-        <h2>PARECER JURÍDICO</h2>
-        <h2>${legalOpinion.title}</h2>
-      </div>
-
-      <!-- Questão Jurídica -->
-      <div class="section">
-        <h3>Questão Jurídica</h3>
-        <p>${legalOpinion.legalQuestion}</p>
-      </div>
-
-      ${
-        legalOpinion.context
-          ? `
-      <!-- Contexto -->
-      <div class="section">
-        <h3>Contexto</h3>
-        <p>${legalOpinion.context}</p>
-      </div>
-      `
-          : ""
-      }
-
-      <!-- Parecer -->
-      <div class="section">
-        <h3>Parecer</h3>
-        ${opinionHTML}
-      </div>
-
-      <!-- Conclusão -->
-      <div class="section">
-        <h3>Conclusão</h3>
-        ${conclusionHTML}
-      </div>
-
-      <!-- Data -->
-      <div class="date">
-        <p><strong>Data:</strong> ${new Date(legalOpinion.createdAt).toLocaleDateString("pt-BR")}</p>
-      </div>
-
-      <!-- Assinatura Digital -->
-      ${signatureHTML ? `<div class="section">${signatureHTML}</div>` : ""}
-
-      <!-- Rodapé -->
-      <div class="footer">
-        <p>${settings.organizationPhone || ""} | ${settings.organizationEmail || ""} | ${settings.organizationWebsite || ""}</p>
-      </div>
-    </body>
-    </html>
-  `;
-}

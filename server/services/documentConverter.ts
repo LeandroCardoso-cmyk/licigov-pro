@@ -1,13 +1,25 @@
-import { marked } from "marked";
-import puppeteer from "puppeteer";
+import PDFDocument from "pdfkit";
+import { Lexer } from "marked";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 
+// Strip inline markdown (bold, italic, links, code) to plain text
+function stripInline(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1");
+}
+
 /**
- * Converte Markdown para PDF com cabeçalho e rodapé personalizados
+ * Converte Markdown para PDF usando pdfkit (pure-JS, sem Chromium).
+ * Compatível com Railway e qualquer ambiente Node.js.
  */
 export async function convertToPDF(
   content: string,
-  fileName: string,
+  _fileName: string,
   organizationName?: string,
   address?: string,
   cnpj?: string,
@@ -15,90 +27,84 @@ export async function convertToPDF(
   email?: string,
   website?: string
 ): Promise<Buffer> {
-  // Converter Markdown para HTML
-  const htmlContent = await marked(content);
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 56, size: "A4" });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
-  // Construir cabeçalho HTML
-  let headerHTML = "";
-  if (organizationName) {
-    headerHTML = `
-      <div style="text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 20px;">
-        <h2 style="color: #1e40af; margin: 0;">${organizationName}</h2>
-        ${address ? `<p style="margin: 5px 0;">${address}</p>` : ""}
-        ${cnpj ? `<p style="margin: 5px 0;">CNPJ: ${cnpj}</p>` : ""}
-      </div>
-    `;
-  }
+    const pageWidth = doc.page.width - 112; // subtract both margins
 
-  // Construir rodapé HTML
-  let footerHTML = "";
-  if (phone || email || website) {
-    footerHTML = `
-      <div style="text-align: center; border-top: 2px solid #1e40af; padding-top: 10px; margin-top: 20px; font-size: 12px;">
-        <p style="margin: 5px 0;"><strong>Contato:</strong></p>
-        ${phone ? `<p style="margin: 5px 0;">Telefone: ${phone}</p>` : ""}
-        ${email ? `<p style="margin: 5px 0;">E-mail: ${email}</p>` : ""}
-        ${website ? `<p style="margin: 5px 0;">Website: ${website}</p>` : ""}
-      </div>
-    `;
-  }
+    // ── Cabeçalho da organização ────────────────────────────────────────────
+    if (organizationName) {
+      doc.fontSize(14).font("Helvetica-Bold").text(organizationName, { align: "center" });
+      if (address) doc.fontSize(9).font("Helvetica").text(address, { align: "center" });
+      if (cnpj) doc.fontSize(9).font("Helvetica").text(`CNPJ: ${cnpj}`, { align: "center" });
+      doc.moveDown(0.5)
+        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+        .strokeColor("#1e40af").lineWidth(1.5).stroke()
+        .strokeColor("black").lineWidth(1)
+        .moveDown(0.8);
+    }
 
-  // HTML completo
-  const fullHTML = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body {
-            font-family: 'Times New Roman', Times, serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px;
+    // ── Conteúdo Markdown → pdfkit ──────────────────────────────────────────
+    const tokens = Lexer.lex(content);
+
+    for (const token of tokens) {
+      switch (token.type) {
+        case "heading": {
+          const sizes: Record<number, number> = { 1: 16, 2: 13, 3: 11 };
+          const size = sizes[token.depth] ?? 11;
+          doc.moveDown(0.4)
+            .fontSize(size).font("Helvetica-Bold")
+            .text(stripInline(token.text), { paragraphGap: 4 });
+          break;
+        }
+        case "paragraph":
+          doc.fontSize(11).font("Helvetica")
+            .text(stripInline(token.text), { align: "justify", paragraphGap: 6, lineGap: 1 });
+          break;
+        case "list":
+          for (const item of token.items) {
+            const bullet = token.ordered ? `${item}. ` : "• ";
+            doc.fontSize(11).font("Helvetica")
+              .text(`${bullet}${stripInline(item.text)}`, { indent: 16, paragraphGap: 3 });
           }
-          h1, h2, h3 { color: #1e40af; }
-          h1 { font-size: 24px; }
-          h2 { font-size: 20px; }
-          h3 { font-size: 16px; }
-          p { text-align: justify; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f3f4f6; }
-        </style>
-      </head>
-      <body>
-        ${headerHTML}
-        ${htmlContent}
-        ${footerHTML}
-      </body>
-    </html>
-  `;
+          doc.moveDown(0.2);
+          break;
+        case "blockquote":
+          doc.fontSize(10).font("Helvetica-Oblique")
+            .text(stripInline(token.text), { indent: 24, paragraphGap: 4 });
+          break;
+        case "hr":
+          doc.moveDown(0.5)
+            .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+            .strokeColor("#888").lineWidth(0.5).stroke()
+            .strokeColor("black").lineWidth(1)
+            .moveDown(0.5);
+          break;
+        case "space":
+          doc.moveDown(0.4);
+          break;
+      }
+    }
 
-  // Gerar PDF usando Puppeteer
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    // ── Rodapé de contato ───────────────────────────────────────────────────
+    if (phone || email || website) {
+      doc.moveDown(1.5)
+        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
+        .strokeColor("#1e40af").lineWidth(1.5).stroke()
+        .strokeColor("black").lineWidth(1)
+        .moveDown(0.5);
+      doc.fontSize(9).font("Helvetica-Bold").text("Contato:", { align: "center" });
+      if (phone) doc.fontSize(9).font("Helvetica").text(`Telefone: ${phone}`, { align: "center" });
+      if (email) doc.fontSize(9).font("Helvetica").text(`E-mail: ${email}`, { align: "center" });
+      if (website) doc.fontSize(9).font("Helvetica").text(`Website: ${website}`, { align: "center" });
+    }
+
+    doc.end();
   });
-
-  try {
-    const page = await browser.newPage();
-    await page.setContent(fullHTML, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      margin: {
-        top: "20mm",
-        right: "20mm",
-        bottom: "20mm",
-        left: "20mm",
-      },
-      printBackground: true,
-    });
-
-    return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
 }
 
 /**
