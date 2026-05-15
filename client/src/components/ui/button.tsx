@@ -39,9 +39,10 @@ function Button({
   className,
   variant,
   size,
+  asChild: _asChild,
   ...props
 }: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants>) {
+  VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
 
   return (
     <button
