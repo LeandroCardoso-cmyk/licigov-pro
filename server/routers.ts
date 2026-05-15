@@ -566,7 +566,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const process = await db.getProcessById(input.processId);
-        if (!process) throw new Error("Processo não encontrado");
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
         const settings = await db.getDocumentSettingsByUser(ctx.user.id);
         const docs = await db.getDocumentsByProcess(input.processId);
@@ -721,6 +722,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const process = await db.getProcessById(input.processId);
         if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
         const settings = await db.getDocumentSettingsByUser(ctx.user.id);
         const docs = await db.getDocumentsByProcess(input.processId);
@@ -1081,15 +1083,6 @@ export const appRouter = router({
       .input(z.object({ processId: z.number() }))
       .query(async ({ input }) => {
         return await db.getEditalParametersByProcess(input.processId);
-      }),
-  }),
-
-  activityLogs: router({
-    // Listar atividades de um processo
-    list: protectedProcedure
-      .input(z.object({ processId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getActivityLogsByProcess(input.processId);
       }),
   }),
 
