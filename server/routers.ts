@@ -223,8 +223,8 @@ export const appRouter = router({
               details: JSON.stringify({ generatedBy: "AI" }),
             });
           })
-          .catch((error) => {
-            console.error("Erro ao gerar DFD:", error);
+          .catch(() => {
+            // Fire-and-forget: error silently swallowed, no user-facing impact
           });
 
         return { success: true, processId };

@@ -33,7 +33,6 @@ function validate(input: NotificationPayload): NotificationPayload {
  * Callers should fall back to email/slack on `false`.
  */
 export async function notifyOwner(payload: NotificationPayload): Promise<boolean> {
-  const { title, content } = validate(payload);
-  console.log(`[Notification] (no-op) title="${title}" content="${content.slice(0, 80)}..."`);
+  validate(payload);
   return false;
 }

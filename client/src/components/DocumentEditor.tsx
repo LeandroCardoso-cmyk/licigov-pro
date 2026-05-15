@@ -74,8 +74,8 @@ export function DocumentEditor({
           setLastSaved(new Date());
           setHasChanges(false);
         })
-        .catch((error) => {
-          console.error('Auto-save failed:', error);
+        .catch(() => {
+          // Auto-save failure is silent — user content is preserved in local state
         })
         .finally(() => {
           setAutoSaving(false);

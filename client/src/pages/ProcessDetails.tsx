@@ -235,11 +235,12 @@ export default function ProcessDetails() {
 
   // ── Derived state ─────────────────────────────────────────────────────────────
 
-  const docMap: Record<DocType, (typeof documents)[number] | undefined> = {
-    dfd: documents?.find((d) => d.type === "dfd"),
-    etp: documents?.find((d) => d.type === "etp"),
-    tr: documents?.find((d) => d.type === "tr"),
-    edital: documents?.find((d) => d.type === "edital"),
+  const docs = documents ?? [];
+  const docMap: Record<DocType, (typeof docs)[number] | undefined> = {
+    dfd: docs.find((d) => d.type === "dfd"),
+    etp: docs.find((d) => d.type === "etp"),
+    tr: docs.find((d) => d.type === "tr"),
+    edital: docs.find((d) => d.type === "edital"),
   };
 
   function getStepStatus(docType: DocType): StepStatus {
@@ -402,7 +403,7 @@ export default function ProcessDetails() {
   function DocTabContent({ docType }: { docType: DocType }) {
     const status = stepStatuses[docType];
     const doc = docMap[docType];
-    const prereq = prerequisites[docType];
+    const prereq = PREREQUISITES[docType];
     const info = DOC_LABELS[docType];
 
     // Locked
@@ -469,7 +470,7 @@ export default function ProcessDetails() {
           )}
 
           {/* Comments */}
-          <CommentsSection documentId={doc.id} processId={process.id} />
+          <CommentsSection documentId={doc.id} processId={process!.id} />
         </div>
       );
     }

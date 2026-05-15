@@ -174,11 +174,6 @@ export const directContractsRouter = router({
           });
         }
         
-        console.log('[Direct Contract] Validação de dispensa aprovada:', {
-          value: `R$ ${(input.value / 100).toFixed(2)}`,
-          limit: `R$ ${(valueValidation.limit / 100).toFixed(2)}`,
-          legalBasis: article.article,
-        });
       }
       
       const directContract = await createDirectContract({
