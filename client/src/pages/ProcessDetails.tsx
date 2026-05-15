@@ -38,46 +38,9 @@ import { CommentsSection } from "@/components/CommentsSection";
 import { TRItemsModal } from "@/components/TRItemsModal";
 import { PublicationPackageModal } from "@/components/process/PublicationPackageModal";
 import { cn } from "@/lib/utils";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type DocType = "dfd" | "etp" | "tr" | "edital";
-type StepStatus = "done-ai" | "done-upload" | "generating" | "uploading" | "pending" | "locked";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const DOC_LABELS: Record<DocType, { short: string; long: string; description: string }> = {
-  dfd: {
-    short: "DFD",
-    long: "Documento Formalizador de Demanda",
-    description: "Formaliza a necessidade da contratação e dá início ao processo (art. 12, VII — Lei 14.133/21)",
-  },
-  etp: {
-    short: "ETP",
-    long: "Estudo Técnico Preliminar",
-    description: "Análise técnica e econômica que fundamenta a decisão de contratar (art. 18 — Lei 14.133/21)",
-  },
-  tr: {
-    short: "TR",
-    long: "Termo de Referência",
-    description: "Define o objeto da contratação, especificações técnicas e condições de execução (art. 6º, XXIII — Lei 14.133/21)",
-  },
-  edital: {
-    short: "Edital",
-    long: "Edital de Licitação",
-    description: "Instrumento convocatório com todas as regras do certame licitatório (art. 25 — Lei 14.133/21)",
-  },
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  em_dfd: "Em DFD",
-  em_etp: "Em ETP",
-  em_tr: "Em TR",
-  em_edital: "Em Edital",
-  concluido: "Concluído",
-};
-
-const DOC_ORDER: DocType[] = ["dfd", "etp", "tr", "edital"];
+import type { DocType, StepStatus } from "@/components/document-flow/types";
+import { DOC_LABELS, STATUS_LABELS, DOC_ORDER, PREREQUISITES } from "@/components/document-flow/types";
+import { useDocumentDownload } from "@/hooks/documents/useDocumentDownload";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -96,7 +59,7 @@ export default function ProcessDetails() {
   const [activeTab, setActiveTab] = useState<DocType>("dfd");
   const [generatingDoc, setGeneratingDoc] = useState<DocType | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<DocType | null>(null);
-  const [downloadingUpload, setDownloadingUpload] = useState<number | null>(null);
+  const { downloadingUpload, downloadUploaded } = useDocumentDownload();
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingDocx, setDownloadingDocx] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -182,24 +145,6 @@ export default function ProcessDetails() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
-  const [downloadingUpload, setDownloadingUpload] = useState<number | null>(null);
-
-  const handleDownloadUploaded = async (documentId: number) => {
-    setDownloadingUpload(documentId);
-    try {
-      const result = await utils.documents.getDownloadUrl.fetch({ documentId });
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch {
-      toast.error("Erro ao gerar link de download. Tente novamente.");
-    } finally {
-      setDownloadingUpload(null);
-    }
-  };
-
-  const handleGenerateNext = () => {
-    generateNextMutation.mutate({ processId });
-  };
-
   const handleGenerateDocument = (docType: DocType) => {
     setGeneratingDoc(docType);
     generateDocumentMutation.mutate({ processId, docType });
@@ -227,18 +172,6 @@ export default function ProcessDetails() {
       });
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleDownloadUploaded = async (documentId: number) => {
-    setDownloadingUpload(documentId);
-    try {
-      const result = await utils.documents.getDownloadUrl.fetch({ documentId });
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch {
-      toast.error("Erro ao gerar link de download.");
-    } finally {
-      setDownloadingUpload(null);
-    }
   };
 
   const handleExportReport = async () => {
@@ -309,19 +242,12 @@ export default function ProcessDetails() {
     edital: documents?.find((d) => d.type === "edital"),
   };
 
-  const prerequisites: Record<DocType, DocType | null> = {
-    dfd: null,
-    etp: "dfd",
-    tr: "etp",
-    edital: "tr",
-  };
-
   function getStepStatus(docType: DocType): StepStatus {
     if (generatingDoc === docType) return "generating";
     if (uploadingDoc === docType) return "uploading";
     const doc = docMap[docType];
     if (doc) return doc.sourceType === "upload" ? "done-upload" : "done-ai";
-    const prereq = prerequisites[docType];
+    const prereq = PREREQUISITES[docType];
     if (prereq && !docMap[prereq]) return "locked";
     return "pending";
   }
@@ -329,7 +255,7 @@ export default function ProcessDetails() {
   const stepStatuses = Object.fromEntries(DOC_ORDER.map((d) => [d, getStepStatus(d)])) as Record<DocType, StepStatus>;
 
   const isTabLocked = (docType: DocType) => {
-    const prereq = prerequisites[docType];
+    const prereq = PREREQUISITES[docType];
     return prereq !== null && !docMap[prereq];
   };
 
@@ -461,7 +387,7 @@ export default function ProcessDetails() {
 
         {/* Download S3 — para uploads */}
         {doc.s3Key && (
-          <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(doc.id)} disabled={downloadingUpload === doc.id}>
+          <Button variant="outline" size="sm" onClick={() => downloadUploaded(doc.id)} disabled={downloadingUpload === doc.id}>
             {downloadingUpload === doc.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
             Baixar arquivo
           </Button>
@@ -701,418 +627,6 @@ export default function ProcessDetails() {
                   </div>
                 ))}
               </div>
-
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* hidden input for file uploads */}
-            <input
-              ref={uploadInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.doc,.docx"
-              onChange={handleFileSelected}
-            />
-
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="dfd">
-                  {dfdDocument ? <CheckCircle2 className="mr-1 h-3 w-3 text-green-500" /> : null}
-                  DFD
-                </TabsTrigger>
-                <TabsTrigger value="etp">
-                  {etpDocument ? <CheckCircle2 className="mr-1 h-3 w-3 text-green-500" /> : null}
-                  ETP
-                </TabsTrigger>
-                <TabsTrigger value="tr">
-                  {trDocument ? <CheckCircle2 className="mr-1 h-3 w-3 text-green-500" /> : null}
-                  TR
-                </TabsTrigger>
-                <TabsTrigger value="edital">
-                  {editalDocument ? <CheckCircle2 className="mr-1 h-3 w-3 text-green-500" /> : null}
-                  Edital
-                </TabsTrigger>
-              </TabsList>
-
-              {/* DFD Tab — primeiro documento (Lei 14.133) */}
-              <TabsContent value="dfd" className="mt-6">
-                {dfdDocument ? (
-                  <div>
-                    {editingDocumentId === dfdDocument.id ? (
-                      <DocumentEditor
-                        initialContent={editingContent}
-                        onSave={handleSaveEdit}
-                        onCancel={handleCancelEdit}
-                        isSaving={updateDocumentMutation.isPending}
-                        autoSave={true}
-                        onAutoSave={handleAutoSave}
-                      />
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold">{documentLabels.dfd}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {dfdDocument.sourceType === "upload" ? "Enviado" : "Gerado"} em {formatDate(dfdDocument.createdAt)} • Versão {dfdDocument.version}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleGenerateDocument("dfd")} disabled={generatingDoc === "dfd"}>
-                              {generatingDoc === "dfd" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                              Regenerar
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleUploadClick("dfd")} disabled={uploadingDoc === "dfd"}>
-                              {uploadingDoc === "dfd" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                              Upload
-                            </Button>
-                            {dfdDocument.content && (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(dfdDocument.id)} disabled={downloadingPdf}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  PDF
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(dfdDocument.id)} disabled={downloadingDocx}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  DOCX
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleEditDocument(dfdDocument.id, dfdDocument.content || '')}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Editar
-                                </Button>
-                                <VersionHistoryDialog documentId={dfdDocument.id} documentType="dfd" />
-                              </>
-                            )}
-                            {dfdDocument.s3Key && (
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(dfdDocument.id)} disabled={downloadingUpload === dfdDocument.id}>
-                                {downloadingUpload === dfdDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                Baixar Arquivo
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {dfdDocument.content ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <Streamdown>{dfdDocument.content}</Streamdown>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FileText className="mx-auto h-10 w-10 mb-3 opacity-50" />
-                            <p>Arquivo enviado via upload</p>
-                          </div>
-                        )}
-                        <div className="mt-6">
-                          <CommentsSection documentId={dfdDocument.id} processId={process.id} />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <FileText className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2 font-medium">DFD ainda não foi criado</p>
-                    <p className="text-sm text-muted-foreground mb-6">O Documento Formalizador de Demanda é o primeiro passo do processo licitatório (Lei 14.133).</p>
-                    <div className="flex gap-3 justify-center">
-                      <Button onClick={() => handleGenerateDocument("dfd")} disabled={generatingDoc === "dfd"}>
-                        {generatingDoc === "dfd" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                        Gerar com IA
-                      </Button>
-                      <Button variant="outline" onClick={() => handleUploadClick("dfd")} disabled={uploadingDoc === "dfd"}>
-                        {uploadingDoc === "dfd" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        Fazer Upload
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* ETP Tab */}
-              <TabsContent value="etp" className="mt-6">
-                {etpDocument ? (
-                  <div>
-                    {editingDocumentId === etpDocument.id ? (
-                      <DocumentEditor
-                        initialContent={editingContent}
-                        onSave={handleSaveEdit}
-                        onCancel={handleCancelEdit}
-                        isSaving={updateDocumentMutation.isPending}
-                        autoSave={true}
-                        onAutoSave={handleAutoSave}
-                      />
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold">{documentLabels.etp}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {etpDocument.sourceType === "upload" ? "Enviado" : "Gerado"} em {formatDate(etpDocument.createdAt)} • Versão {etpDocument.version}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleGenerateDocument("etp")} disabled={generatingDoc === "etp"}>
-                              {generatingDoc === "etp" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                              Regenerar
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleUploadClick("etp")} disabled={uploadingDoc === "etp"}>
-                              {uploadingDoc === "etp" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                              Upload
-                            </Button>
-                            {etpDocument.content && (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(etpDocument.id)} disabled={downloadingPdf}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  PDF
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(etpDocument.id)} disabled={downloadingDocx}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  DOCX
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleEditDocument(etpDocument.id, etpDocument.content || '')}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Editar
-                                </Button>
-                                <VersionHistoryDialog documentId={etpDocument.id} documentType="etp" />
-                              </>
-                            )}
-                            {etpDocument.s3Key && (
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(etpDocument.id)} disabled={downloadingUpload === etpDocument.id}>
-                                {downloadingUpload === etpDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                Baixar Arquivo
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {etpDocument.content ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <Streamdown>{etpDocument.content}</Streamdown>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FileText className="mx-auto h-10 w-10 mb-3 opacity-50" />
-                            <p>Arquivo enviado via upload</p>
-                          </div>
-                        )}
-                        <div className="mt-6">
-                          <CommentsSection documentId={etpDocument.id} processId={process.id} />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <FileText className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2 font-medium">ETP ainda não foi criado</p>
-                    <p className="text-sm text-muted-foreground mb-6">O Estudo Técnico Preliminar é gerado após o DFD.</p>
-                    <div className="flex gap-3 justify-center">
-                      <Button onClick={() => handleGenerateDocument("etp")} disabled={generatingDoc === "etp"}>
-                        {generatingDoc === "etp" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                        Gerar com IA
-                      </Button>
-                      <Button variant="outline" onClick={() => handleUploadClick("etp")} disabled={uploadingDoc === "etp"}>
-                        {uploadingDoc === "etp" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        Fazer Upload
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* TR Tab */}
-              <TabsContent value="tr" className="mt-6">
-                {trDocument ? (
-                  <div>
-                    {editingDocumentId === trDocument.id ? (
-                      <DocumentEditor
-                        initialContent={editingContent}
-                        onSave={handleSaveEdit}
-                        onCancel={handleCancelEdit}
-                        isSaving={updateDocumentMutation.isPending}
-                        autoSave={true}
-                        onAutoSave={handleAutoSave}
-                      />
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold">{documentLabels.tr}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {trDocument.sourceType === "upload" ? "Enviado" : "Gerado"} em {formatDate(trDocument.createdAt)} • Versão {trDocument.version}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleGenerateDocument("tr")} disabled={generatingDoc === "tr"}>
-                              {generatingDoc === "tr" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                              Regenerar
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleUploadClick("tr")} disabled={uploadingDoc === "tr"}>
-                              {uploadingDoc === "tr" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                              Upload
-                            </Button>
-                            {trDocument.content && (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(trDocument.id)} disabled={downloadingPdf}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  PDF
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(trDocument.id)} disabled={downloadingDocx}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  DOCX
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleEditDocument(trDocument.id, trDocument.content || '')}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Editar
-                                </Button>
-                                <VersionHistoryDialog documentId={trDocument.id} documentType="tr" />
-                              </>
-                            )}
-                            {trDocument.s3Key && (
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(trDocument.id)} disabled={downloadingUpload === trDocument.id}>
-                                {downloadingUpload === trDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                Baixar Arquivo
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {trDocument.content ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <Streamdown>{trDocument.content}</Streamdown>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FileText className="mx-auto h-10 w-10 mb-3 opacity-50" />
-                            <p>Arquivo enviado via upload</p>
-                          </div>
-                        )}
-                        <div className="mt-6">
-                          <CommentsSection documentId={trDocument.id} processId={process.id} />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <FileText className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2 font-medium">TR ainda não foi criado</p>
-                    <p className="text-sm text-muted-foreground mb-6">O Termo de Referência é gerado após o ETP.</p>
-                    <div className="flex gap-3 justify-center">
-                      <Button onClick={() => handleGenerateDocument("tr")} disabled={generatingDoc === "tr" || !etpDocument}>
-                        {generatingDoc === "tr" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                        Gerar com IA
-                      </Button>
-                      <Button variant="outline" onClick={() => handleUploadClick("tr")} disabled={uploadingDoc === "tr"}>
-                        {uploadingDoc === "tr" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        Fazer Upload
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* Edital Tab */}
-              <TabsContent value="edital" className="mt-6">
-                {editalDocument ? (
-                  <div>
-                    {editingDocumentId === editalDocument.id ? (
-                      <DocumentEditor
-                        initialContent={editingContent}
-                        onSave={handleSaveEdit}
-                        onCancel={handleCancelEdit}
-                        isSaving={updateDocumentMutation.isPending}
-                        autoSave={true}
-                        onAutoSave={handleAutoSave}
-                      />
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold">{documentLabels.edital}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {editalDocument.sourceType === "upload" ? "Enviado" : "Gerado"} em {formatDate(editalDocument.createdAt)} • Versão {editalDocument.version}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleGenerateDocument("edital")} disabled={generatingDoc === "edital"}>
-                              {generatingDoc === "edital" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                              Regenerar
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleUploadClick("edital")} disabled={uploadingDoc === "edital"}>
-                              {uploadingDoc === "edital" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                              Upload
-                            </Button>
-                            {editalDocument.content && (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(editalDocument.id)} disabled={downloadingPdf}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  PDF
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadDOCX(editalDocument.id)} disabled={downloadingDocx}>
-                                  <Download className="mr-2 h-4 w-4" />
-                                  DOCX
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleEditDocument(editalDocument.id, editalDocument.content || '')}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Editar
-                                </Button>
-                                <VersionHistoryDialog documentId={editalDocument.id} documentType="edital" />
-                              </>
-                            )}
-                            {editalDocument.s3Key && (
-                              <Button variant="outline" size="sm" onClick={() => handleDownloadUploaded(editalDocument.id)} disabled={downloadingUpload === editalDocument.id}>
-                                {downloadingUpload === editalDocument.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                Baixar Arquivo
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {editalDocument.content ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <Streamdown>{editalDocument.content}</Streamdown>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FileText className="mx-auto h-10 w-10 mb-3 opacity-50" />
-                            <p>Arquivo enviado via upload</p>
-                          </div>
-                        )}
-                        <div className="mt-6">
-                          <CommentsSection documentId={editalDocument.id} processId={process.id} />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <FileText className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2 font-medium">Edital ainda não foi criado</p>
-                    <p className="text-sm text-muted-foreground mb-6">O Edital é o documento final do processo licitatório, gerado após o TR.</p>
-                    <div className="flex gap-3 justify-center">
-                      <Button onClick={() => handleGenerateDocument("edital")} disabled={generatingDoc === "edital" || !etpDocument || !trDocument}>
-                        {generatingDoc === "edital" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                        Gerar com IA
-                      </Button>
-                      <Button variant="outline" onClick={() => handleUploadClick("edital")} disabled={uploadingDoc === "edital"}>
-                        {uploadingDoc === "edital" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        Fazer Upload
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        {/* Empty state (not needed anymore) */}
-        {false && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Gerando ETP...
-              </h3>
-              <p className="text-muted-foreground text-center max-w-md">
-                A inteligência artificial está analisando os dados do processo e gerando o Estudo
-                Técnico Preliminar baseado na Lei 14.133/21. Isso pode levar alguns segundos.
-              </p>
             </CardContent>
           </Card>
 
@@ -1122,7 +636,6 @@ export default function ProcessDetails() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <CardTitle className="text-base">Documentos do Processo</CardTitle>
                 <div className="flex gap-2 flex-wrap">
-                  {/* Adicionar itens ao TR */}
                   {(process.status === "em_etp" || process.status === "em_tr") && docMap.etp && (
                     <Button variant="outline" size="sm" onClick={() => setTrItemsModalOpen(true)}>
                       <FileText className="mr-1.5 h-4 w-4" />
@@ -1132,11 +645,8 @@ export default function ProcessDetails() {
                 </div>
               </div>
             </CardHeader>
-
             <CardContent className="pt-4">
-              {/* hidden upload input */}
               <input ref={uploadInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={handleFileSelected} />
-
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DocType)}>
                 <TabsList className="grid w-full grid-cols-4 mb-6">
                   {DOC_ORDER.map((docType) => {
@@ -1148,10 +658,7 @@ export default function ProcessDetails() {
                         key={docType}
                         value={docType}
                         disabled={locked}
-                        className={cn(
-                          "gap-1.5 text-xs sm:text-sm",
-                          locked && "opacity-40"
-                        )}
+                        className={cn("gap-1.5 text-xs sm:text-sm", locked && "opacity-40")}
                       >
                         {isDone ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -1163,10 +670,8 @@ export default function ProcessDetails() {
                     );
                   })}
                 </TabsList>
-
                 {DOC_ORDER.map((docType) => (
                   <TabsContent key={docType} value={docType}>
-                    {/* Step description header */}
                     <div className="mb-4 pb-4 border-b border-border">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-foreground">{DOC_LABELS[docType].long}</h3>
