@@ -1,4 +1,37 @@
 export type DocType = "dfd" | "etp" | "tr" | "edital";
+
+export interface ProcessDocument {
+  id: number;
+  type: string;
+  content: string | null;
+  sourceType: "ai" | "upload";
+  s3Key: string | null;
+  fileUrl: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DocumentActions {
+  generatingDoc: DocType | null;
+  uploadingDoc: DocType | null;
+  downloadingPdf: boolean;
+  downloadingDocx: boolean;
+  downloadingUpload: number | null;
+  editingDocumentId: number | null;
+  editingContent: string;
+  updateIsPending: boolean;
+  onGenerate: (docType: DocType) => void;
+  onUploadClick: (docType: DocType) => void;
+  onDownloadPdf: (docId: number) => void;
+  onDownloadDocx: (docId: number) => void;
+  onDownloadUpload: (docId: number) => void;
+  onEdit: (docId: number, content: string) => void;
+  onSaveEdit: (content: string) => void;
+  onCancelEdit: () => void;
+  onAutoSave: (content: string) => Promise<void>;
+  onTabChange: (docType: DocType) => void;
+}
 export type StepStatus = "done-ai" | "done-upload" | "generating" | "uploading" | "pending" | "locked";
 
 export const DOC_LABELS: Record<DocType, { short: string; long: string; description: string }> = {
