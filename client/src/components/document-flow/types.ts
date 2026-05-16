@@ -1,4 +1,4 @@
-export type DocType = "dfd" | "etp" | "tr" | "edital";
+export type DocType = "dfd" | "etp" | "tr" | "edital" | "contrato" | "ata" | "parecer";
 
 export interface ProcessDocument {
   id: number;
@@ -55,6 +55,21 @@ export const DOC_LABELS: Record<DocType, { short: string; long: string; descript
     long: "Edital de Licitação",
     description: "Instrumento convocatório com todas as regras do certame licitatório (art. 25 — Lei 14.133/21)",
   },
+  contrato: {
+    short: "Contrato",
+    long: "Minuta de Contrato",
+    description: "Minuta do contrato administrativo a ser assinado após a homologação (arts. 92–107 — Lei 14.133/21)",
+  },
+  ata: {
+    short: "Ata",
+    long: "Ata de Resultado de Julgamento",
+    description: "Registro do resultado do certame, adjudicação e recomendação de homologação (arts. 57–71 — Lei 14.133/21)",
+  },
+  parecer: {
+    short: "Parecer",
+    long: "Parecer Jurídico",
+    description: "Análise jurídica sobre a conformidade legal do processo licitatório com a Lei 14.133/21",
+  },
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -62,14 +77,20 @@ export const STATUS_LABELS: Record<string, string> = {
   em_etp: "Em ETP",
   em_tr: "Em TR",
   em_edital: "Em Edital",
+  em_contrato: "Em Contrato",
+  em_ata: "Em Ata",
+  em_parecer: "Em Parecer",
   concluido: "Concluído",
 };
 
-export const DOC_ORDER: DocType[] = ["dfd", "etp", "tr", "edital"];
+export const DOC_ORDER: DocType[] = ["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"];
 
 export const PREREQUISITES: Record<DocType, DocType | null> = {
   dfd: null,
   etp: "dfd",
   tr: "etp",
   edital: "tr",
+  contrato: "edital",
+  ata: "contrato",
+  parecer: "ata",
 };

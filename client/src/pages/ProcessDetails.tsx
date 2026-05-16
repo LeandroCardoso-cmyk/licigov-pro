@@ -106,6 +106,9 @@ export default function ProcessDetails() {
     etp: docs.find((d) => d.type === "etp"),
     tr: docs.find((d) => d.type === "tr"),
     edital: docs.find((d) => d.type === "edital"),
+    contrato: docs.find((d) => d.type === "contrato"),
+    ata: docs.find((d) => d.type === "ata"),
+    parecer: docs.find((d) => d.type === "parecer"),
   } as Record<DocType, (typeof docs)[number] | undefined>;
 
   const getStepStatus = (docType: DocType) => {
@@ -296,7 +299,8 @@ export default function ProcessDetails() {
                 onChange={docActions.handleFileSelected}
               />
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DocType)}>
-                <TabsList className="grid w-full grid-cols-4 mb-6">
+                <div className="overflow-x-auto mb-6">
+                  <TabsList className="inline-flex w-max min-w-full">
                   {DOC_ORDER.map((docType) => {
                     const status = stepStatuses[docType];
                     const isDone = status === "done-ai" || status === "done-upload";
@@ -317,7 +321,8 @@ export default function ProcessDetails() {
                       </TabsTrigger>
                     );
                   })}
-                </TabsList>
+                  </TabsList>
+                </div>
                 {DOC_ORDER.map((docType) => (
                   <TabsContent key={docType} value={docType}>
                     <div className="mb-4 pb-4 border-b border-border">

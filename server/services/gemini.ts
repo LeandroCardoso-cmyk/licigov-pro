@@ -535,3 +535,296 @@ Gere um documento profissional e completo em markdown.`;
     throw new Error("Falha ao gerar Edital. Por favor, tente novamente.");
   }
 }
+
+/**
+ * Gera a Minuta de Contrato usando Google Gemini
+ */
+export async function generateContrato(params: {
+  processName: string;
+  object: string;
+  estimatedValue: number;
+  modality: string;
+  category: string;
+  platformId?: number | null;
+  editalContent: string;
+  trContent: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}): Promise<string> {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash-exp",
+    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 8192 },
+  });
+
+  const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  let header = "";
+  if (params.organizationName) {
+    header = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) header += `${params.address}\n`;
+    if (params.cnpj) header += `CNPJ: ${params.cnpj}\n`;
+    header += `---\n\n`;
+  }
+
+  let footer = "";
+  if (params.phone || params.email || params.website) {
+    footer = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footer += `Telefone: ${params.phone}\n`;
+    if (params.email) footer += `E-mail: ${params.email}\n`;
+    if (params.website) footer += `Website: ${params.website}\n`;
+    footer += `---`;
+  }
+
+  const lawContext = formatRetrievedContext(
+    await retrieveRelevantLaw(`Contrato administrativo. Cláusulas obrigatórias. Lei 14.133/21 arts. 92 a 107`, 5)
+  );
+
+  const prompt = `Você é um especialista em contratos administrativos e na Lei 14.133/21 (Nova Lei de Licitações).
+
+Gere a **Minuta de Contrato Administrativo** completa, pronta para assinatura após a homologação da licitação.
+
+**CONTEXTO LEGAL (Lei 14.133/21):**
+${lawContext}
+
+**EDITAL DE REFERÊNCIA:**
+${params.editalContent}
+
+**TERMO DE REFERÊNCIA:**
+${params.trContent}
+
+**DADOS DO PROCESSO:**
+- Nome: ${params.processName}
+- Objeto: ${params.object}
+- Valor estimado: ${valueInReais}
+- Modalidade: ${params.modality}
+- Categoria: ${params.category}
+
+**ESTRUTURA OBRIGATÓRIA DA MINUTA:**
+1. PARTES CONTRATANTES (Contratante e Contratado — deixar espaços para preenchimento)
+2. OBJETO DO CONTRATO (art. 92, I)
+3. VIGÊNCIA E PRAZOS (art. 105 e 106)
+4. VALOR E FORMA DE PAGAMENTO (art. 92, V e VI)
+5. DOTAÇÃO ORÇAMENTÁRIA (art. 92, IV)
+6. OBRIGAÇÕES DAS PARTES (art. 92, VII e VIII)
+7. GARANTIAS CONTRATUAIS (art. 96)
+8. SANÇÕES E PENALIDADES (art. 156)
+9. RESCISÃO CONTRATUAL (arts. 137 a 139)
+10. FISCALIZAÇÃO E GESTÃO (art. 117)
+11. ALTERAÇÕES CONTRATUAIS (arts. 124 a 136)
+12. PUBLICAÇÃO E VIGÊNCIA
+13. FORO
+
+Use formatação Markdown. Deixe colchetes [PREENCHER] nos campos que precisam ser completados após o resultado da licitação (ex: nome do vencedor, CNPJ, valor final).
+
+Retorne apenas o conteúdo do documento, sem explicações adicionais.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    return `${header}${result.response.text()}${footer}`;
+  } catch (error) {
+    console.error("Erro ao gerar Contrato com Gemini:", error);
+    throw new Error("Falha ao gerar Minuta de Contrato. Por favor, tente novamente.");
+  }
+}
+
+/**
+ * Gera a Ata de Resultado de Julgamento usando Google Gemini
+ */
+export async function generateAta(params: {
+  processName: string;
+  object: string;
+  estimatedValue: number;
+  modality: string;
+  editalContent: string;
+  contratoContent: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}): Promise<string> {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash-exp",
+    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 4096 },
+  });
+
+  const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  let header = "";
+  if (params.organizationName) {
+    header = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) header += `${params.address}\n`;
+    if (params.cnpj) header += `CNPJ: ${params.cnpj}\n`;
+    header += `---\n\n`;
+  }
+
+  let footer = "";
+  if (params.phone || params.email || params.website) {
+    footer = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footer += `Telefone: ${params.phone}\n`;
+    if (params.email) footer += `E-mail: ${params.email}\n`;
+    if (params.website) footer += `Website: ${params.website}\n`;
+    footer += `---`;
+  }
+
+  const lawContext = formatRetrievedContext(
+    await retrieveRelevantLaw(`Ata de resultado. Julgamento de proposta. Adjudicação e homologação. Lei 14.133/21`, 4)
+  );
+
+  const prompt = `Você é um especialista em licitações públicas e na Lei 14.133/21.
+
+Gere a **Ata de Resultado de Julgamento** do processo licitatório, conforme os arts. 57 a 71 da Lei 14.133/21.
+
+**CONTEXTO LEGAL:**
+${lawContext}
+
+**EDITAL:**
+${params.editalContent.substring(0, 2000)}
+
+**MINUTA DE CONTRATO:**
+${params.contratoContent.substring(0, 1000)}
+
+**DADOS DO PROCESSO:**
+- Nome: ${params.processName}
+- Objeto: ${params.object}
+- Valor estimado: ${valueInReais}
+- Modalidade: ${params.modality}
+
+**ESTRUTURA OBRIGATÓRIA:**
+1. IDENTIFICAÇÃO DA SESSÃO PÚBLICA
+2. ABERTURA E CREDENCIAMENTO
+3. PROPOSTA VENCEDORA (deixar [PREENCHER] para dados do vencedor)
+4. ANÁLISE DE HABILITAÇÃO
+5. RESULTADO DO JULGAMENTO
+6. ADJUDICAÇÃO DO OBJETO
+7. RECOMENDAÇÃO DE HOMOLOGAÇÃO
+8. ASSINATURAS
+
+Use formatação Markdown. Deixe colchetes [PREENCHER] nos campos que dependem do resultado real da sessão.
+
+Retorne apenas o conteúdo do documento, sem explicações adicionais.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    return `${header}${result.response.text()}${footer}`;
+  } catch (error) {
+    console.error("Erro ao gerar Ata com Gemini:", error);
+    throw new Error("Falha ao gerar Ata de Resultado. Por favor, tente novamente.");
+  }
+}
+
+/**
+ * Gera o Parecer Jurídico usando Google Gemini
+ */
+export async function generateParecer(params: {
+  processName: string;
+  object: string;
+  estimatedValue: number;
+  modality: string;
+  category: string;
+  dfdContent: string;
+  etpContent: string;
+  trContent: string;
+  editalContent: string;
+  organizationName?: string;
+  address?: string;
+  cnpj?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}): Promise<string> {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash-exp",
+    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 6144 },
+  });
+
+  const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  let header = "";
+  if (params.organizationName) {
+    header = `\n---\n**${params.organizationName}**\n`;
+    if (params.address) header += `${params.address}\n`;
+    if (params.cnpj) header += `CNPJ: ${params.cnpj}\n`;
+    header += `---\n\n`;
+  }
+
+  let footer = "";
+  if (params.phone || params.email || params.website) {
+    footer = `\n\n---\n**Contato:**\n`;
+    if (params.phone) footer += `Telefone: ${params.phone}\n`;
+    if (params.email) footer += `E-mail: ${params.email}\n`;
+    if (params.website) footer += `Website: ${params.website}\n`;
+    footer += `---`;
+  }
+
+  const lawContext = formatRetrievedContext(
+    await retrieveRelevantLaw(`Parecer jurídico aprovação licitação. Controle interno. Conformidade legal. Lei 14.133/21`, 5)
+  );
+
+  const prompt = `Você é um advogado especialista em direito administrativo e licitações públicas, com expertise na Lei 14.133/21.
+
+Elabore o **Parecer Jurídico** sobre o processo licitatório abaixo, analisando a legalidade e conformidade de todos os documentos elaborados.
+
+**CONTEXTO LEGAL:**
+${lawContext}
+
+**DOCUMENTOS DO PROCESSO:**
+
+DFD:
+${params.dfdContent.substring(0, 800)}
+
+ETP:
+${params.etpContent.substring(0, 800)}
+
+TR:
+${params.trContent.substring(0, 800)}
+
+EDITAL:
+${params.editalContent.substring(0, 1000)}
+
+**DADOS DO PROCESSO:**
+- Nome: ${params.processName}
+- Objeto: ${params.object}
+- Valor estimado: ${valueInReais}
+- Modalidade: ${params.modality}
+- Categoria: ${params.category}
+
+**ESTRUTURA DO PARECER:**
+1. IDENTIFICAÇÃO DO PROCESSO
+2. EMENTA
+3. RELATÓRIO (síntese dos documentos analisados)
+4. ANÁLISE JURÍDICA
+   4.1. Conformidade com a Lei 14.133/21
+   4.2. Adequação da modalidade licitatória
+   4.3. Regularidade dos documentos de planejamento
+   4.4. Conformidade do edital
+   4.5. Aspectos de risco jurídico
+5. CONCLUSÃO E RECOMENDAÇÃO (APROVADO/APROVADO COM RESSALVAS/REPROVADO)
+6. ASSINATURA (deixar espaço para assinatura do responsável jurídico)
+
+Use linguagem técnico-jurídica formal. Use formatação Markdown.
+
+Retorne apenas o conteúdo do parecer, sem explicações adicionais.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    return `${header}${result.response.text()}${footer}`;
+  } catch (error) {
+    console.error("Erro ao gerar Parecer com Gemini:", error);
+    throw new Error("Falha ao gerar Parecer Jurídico. Por favor, tente novamente.");
+  }
+}
