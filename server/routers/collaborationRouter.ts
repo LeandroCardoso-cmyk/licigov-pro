@@ -139,4 +139,92 @@ export const collaborationRouter = router({
         isOwner: false,
       };
     }),
+
+  updateFunctionalRole: protectedProcedure
+    .input(z.object({
+      processId: z.number(),
+      userId: z.number(),
+      functionalRole: z.enum(["solicitante", "compras", "juridico", "controle_interno", "gestor", "fiscal", "administrador"]).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await db.getProcessById(input.processId);
+      if (!process || process.ownerId !== ctx.user.id) {
+        throw new Error("Apenas o proprietário pode definir perfis funcionais");
+      }
+      await db.updateProcessMemberFunctionalRole(input.processId, input.userId, input.functionalRole);
+      const targetUser = await db.getUserById(input.userId);
+      await db.createActivityLog({
+        processId: input.processId,
+        userId: ctx.user.id,
+        action: `definiu perfil de ${targetUser?.name || "membro"} como ${input.functionalRole || "nenhum"}`,
+      });
+      return { success: true };
+    }),
+
+  assignStage: protectedProcedure
+    .input(z.object({
+      processId: z.number(),
+      docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
+      assignedUserId: z.number(),
+      note: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await db.getProcessById(input.processId);
+      if (!process || process.ownerId !== ctx.user.id) {
+        throw new Error("Apenas o proprietário pode atribuir responsáveis por etapa");
+      }
+      const assignedUser = await db.getUserById(input.assignedUserId);
+      if (!assignedUser) throw new Error("Usuário não encontrado");
+
+      await db.upsertStageAssignment({
+        processId: input.processId,
+        docType: input.docType,
+        assignedUserId: input.assignedUserId,
+        assignedBy: ctx.user.id,
+        note: input.note || null,
+      });
+
+      await db.createNotification({
+        userId: input.assignedUserId,
+        title: "Você foi designado como responsável por uma etapa",
+        message: `${ctx.user.name} designou você como responsável pela etapa ${input.docType.toUpperCase()} no processo "${process.name}"${input.note ? `. Nota: ${input.note}` : ""}`,
+        type: "stage_assigned",
+        processId: input.processId,
+        isRead: false,
+      });
+
+      await db.createActivityLog({
+        processId: input.processId,
+        userId: ctx.user.id,
+        action: `designou ${assignedUser.name} como responsável pela etapa ${input.docType.toUpperCase()}`,
+        details: JSON.stringify({ docType: input.docType, assignedUserId: input.assignedUserId }),
+      });
+
+      return { success: true };
+    }),
+
+  unassignStage: protectedProcedure
+    .input(z.object({
+      processId: z.number(),
+      docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const process = await db.getProcessById(input.processId);
+      if (!process || process.ownerId !== ctx.user.id) {
+        throw new Error("Apenas o proprietário pode remover responsáveis");
+      }
+      await db.removeStageAssignment(input.processId, input.docType);
+      await db.createActivityLog({
+        processId: input.processId,
+        userId: ctx.user.id,
+        action: `removeu responsável da etapa ${input.docType.toUpperCase()}`,
+      });
+      return { success: true };
+    }),
+
+  getStageAssignments: protectedProcedure
+    .input(z.object({ processId: z.number() }))
+    .query(async ({ input }) => {
+      return await db.getStageAssignments(input.processId);
+    }),
 });

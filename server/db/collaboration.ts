@@ -1,8 +1,9 @@
 import { eq, and, desc } from "drizzle-orm";
 import {
-  activityLogs, documentSettings, processMembers, notifications,
+  activityLogs, documentSettings, processMembers, notifications, stageAssignments,
   processes, users,
   InsertActivityLog, InsertDocumentSettings, InsertProcessMember, InsertNotification,
+  InsertStageAssignment,
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
 
@@ -78,13 +79,71 @@ export async function getProcessMembers(processId: number) {
   return await db
     .select({
       id: processMembers.id, userId: processMembers.userId,
-      permission: processMembers.permission, invitedBy: processMembers.invitedBy,
+      permission: processMembers.permission,
+      functionalRole: processMembers.functionalRole,
+      invitedBy: processMembers.invitedBy,
       createdAt: processMembers.createdAt, userName: users.name, userEmail: users.email,
     })
     .from(processMembers)
     .leftJoin(users, eq(processMembers.userId, users.id))
     .where(eq(processMembers.processId, processId))
     .orderBy(desc(processMembers.createdAt));
+}
+
+export async function updateProcessMemberFunctionalRole(
+  processId: number,
+  userId: number,
+  functionalRole: "solicitante" | "compras" | "juridico" | "controle_interno" | "gestor" | "fiscal" | "administrador" | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(processMembers)
+    .set({ functionalRole: functionalRole as any })
+    .where(and(eq(processMembers.processId, processId), eq(processMembers.userId, userId)));
+}
+
+export async function upsertStageAssignment(assignment: InsertStageAssignment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .insert(stageAssignments)
+    .values(assignment)
+    .onDuplicateKeyUpdate({
+      set: {
+        assignedUserId: assignment.assignedUserId,
+        assignedBy: assignment.assignedBy,
+        note: assignment.note,
+      },
+    });
+}
+
+export async function removeStageAssignment(processId: number, docType: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(stageAssignments)
+    .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType as any)));
+}
+
+export async function getStageAssignments(processId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({
+      id: stageAssignments.id,
+      processId: stageAssignments.processId,
+      docType: stageAssignments.docType,
+      assignedUserId: stageAssignments.assignedUserId,
+      assignedBy: stageAssignments.assignedBy,
+      note: stageAssignments.note,
+      createdAt: stageAssignments.createdAt,
+      assignedUserName: users.name,
+      assignedUserEmail: users.email,
+    })
+    .from(stageAssignments)
+    .leftJoin(users, eq(stageAssignments.assignedUserId, users.id))
+    .where(eq(stageAssignments.processId, processId));
 }
 
 export async function getProcessMember(processId: number, userId: number) {

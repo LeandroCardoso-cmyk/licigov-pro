@@ -111,6 +111,7 @@ export const processMembers = mysqlTable("process_members", {
   processId: int("processId").notNull(),
   userId: int("userId").notNull(),
   permission: mysqlEnum("permission", ["viewer", "editor", "approver", "owner"]).default("viewer").notNull(),
+  functionalRole: mysqlEnum("functionalRole", ["solicitante", "compras", "juridico", "controle_interno", "gestor", "fiscal", "administrador"]),
   invitedBy: int("invitedBy").notNull(), // ID do usuário que convidou
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -120,6 +121,23 @@ export type ProcessMember = typeof processMembers.$inferSelect;
 export type InsertProcessMember = typeof processMembers.$inferInsert;
 
 /**
+ * Responsáveis por etapa de documento (Fase 5 — Workflow Multiusuário)
+ */
+export const stageAssignments = mysqlTable("stage_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  processId: int("processId").notNull(),
+  docType: mysqlEnum("docType", ["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]).notNull(),
+  assignedUserId: int("assignedUserId").notNull(),
+  assignedBy: int("assignedBy").notNull(),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type StageAssignment = typeof stageAssignments.$inferSelect;
+export type InsertStageAssignment = typeof stageAssignments.$inferInsert;
+
+/**
  * Notificações
  */
 export const notifications = mysqlTable("notifications", {
@@ -127,7 +145,7 @@ export const notifications = mysqlTable("notifications", {
   userId: int("userId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
-  type: mysqlEnum("type", ["member_added", "document_edited", "document_approved", "comment_added", "general"]).default("general").notNull(),
+  type: mysqlEnum("type", ["member_added", "document_edited", "document_approved", "comment_added", "stage_assigned", "general"]).default("general").notNull(),
   processId: int("processId"), // Opcional: link para processo relacionado
   documentId: int("documentId"), // Opcional: link para documento relacionado
   isRead: boolean("isRead").default(false).notNull(),

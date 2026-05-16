@@ -51,6 +51,16 @@ const permissionColors: Record<string, string> = {
   viewer: "bg-gray-500",
 };
 
+const FUNCTIONAL_ROLE_LABELS: Record<string, string> = {
+  solicitante: "Solicitante",
+  compras: "Compras",
+  juridico: "Jurídico",
+  controle_interno: "Controle Interno",
+  gestor: "Gestor",
+  fiscal: "Fiscal",
+  administrador: "Administrador",
+};
+
 export function MembersDialog({ processId, processName }: MembersDialogProps) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -74,6 +84,13 @@ export function MembersDialog({ processId, processName }: MembersDialogProps) {
       toast.success("Membro adicionado com sucesso!");
       setEmail("");
       setPermission("viewer");
+      utils.collaboration.listMembers.invalidate({ processId });
+    },
+  });
+
+  const updateFunctionalRoleMutation = trpc.collaboration.updateFunctionalRole.useMutation({
+    onSuccess: () => {
+      toast.success("Perfil funcional atualizado!");
       utils.collaboration.listMembers.invalidate({ processId });
     },
   });
@@ -215,29 +232,60 @@ export function MembersDialog({ processId, processName }: MembersDialogProps) {
                         <p className="font-medium">{member.userName || "Usuário"}</p>
                         <p className="text-sm text-muted-foreground">{member.userEmail}</p>
                       </div>
-                      {isOwner && member.permission !== "owner" ? (
-                        <Select
-                          value={member.permission}
-                          onValueChange={(value) =>
-                            handleUpdatePermission(member.userId, value as any)
-                          }
-                          disabled={updatePermissionMutation.isPending}
-                        >
-                          <SelectTrigger className="w-[140px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="viewer">Visualizador</SelectItem>
-                            <SelectItem value="editor">Editor</SelectItem>
-                            <SelectItem value="approver">Aprovador</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge className={permissionColors[member.permission]}>
-                          <Shield className="mr-1 h-3 w-3" />
-                          {permissionLabels[member.permission]}
-                        </Badge>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {isOwner && member.permission !== "owner" ? (
+                          <Select
+                            value={member.permission}
+                            onValueChange={(value) =>
+                              handleUpdatePermission(member.userId, value as any)
+                            }
+                            disabled={updatePermissionMutation.isPending}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="viewer">Visualizador</SelectItem>
+                              <SelectItem value="editor">Editor</SelectItem>
+                              <SelectItem value="approver">Aprovador</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className={permissionColors[member.permission]}>
+                            <Shield className="mr-1 h-3 w-3" />
+                            {permissionLabels[member.permission]}
+                          </Badge>
+                        )}
+                        {isOwner && member.permission !== "owner" ? (
+                          <Select
+                            value={(member as any).functionalRole ?? "none"}
+                            onValueChange={(value) =>
+                              updateFunctionalRoleMutation.mutate({
+                                processId,
+                                userId: member.userId,
+                                functionalRole: value === "none" ? null : value as any,
+                              })
+                            }
+                            disabled={updateFunctionalRoleMutation.isPending}
+                          >
+                            <SelectTrigger className="w-[140px] h-7 text-xs">
+                              <SelectValue placeholder="Perfil..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Sem perfil</SelectItem>
+                              {Object.entries(FUNCTIONAL_ROLE_LABELS).map(([k, v]) => (
+                                <SelectItem key={k} value={k}>{v}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          (member as any).functionalRole && (
+                            <Badge variant="outline" className="text-xs">
+                              {FUNCTIONAL_ROLE_LABELS[(member as any).functionalRole]}
+                            </Badge>
+                          )
+                        )}
+                      </div>
                     </div>
                     {canManageMembers && member.permission !== "owner" && (
                       <Button
