@@ -2,7 +2,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
-import { generateETP, generateTR, generateDFD, generateEdital } from "../services/gemini";
+import { generateETP, generateTR, generateDFD, generateEdital, generateContrato, generateAta, generateParecer } from "../services/gemini";
 import { convertToPDF, convertToDOCX } from "../services/documentConverter";
 import { storagePut, storageGet } from "../storage";
 
@@ -22,7 +22,7 @@ export const documentsRouter = router({
   save: protectedProcedure
     .input(z.object({
       processId: z.number(),
-      type: z.enum(["etp", "tr", "dfd", "edital"]),
+      type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
       content: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -49,7 +49,7 @@ export const documentsRouter = router({
   getByType: protectedProcedure
     .input(z.object({
       processId: z.number(),
-      type: z.enum(["etp", "tr", "dfd", "edital"]),
+      type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
     }))
     .query(async ({ input }) => {
       return await db.getDocumentByProcessAndType(input.processId, input.type);
@@ -70,9 +70,13 @@ export const documentsRouter = router({
       const etpDoc = docs.find(d => d.type === "etp");
       const trDoc = docs.find(d => d.type === "tr");
 
-      let nextDocType: "dfd" | "etp" | "tr" | "edital";
-      let nextStatus: "em_dfd" | "em_etp" | "em_tr" | "em_edital" | "concluido";
+      let nextDocType: "dfd" | "etp" | "tr" | "edital" | "contrato" | "ata" | "parecer";
+      let nextStatus: "em_dfd" | "em_etp" | "em_tr" | "em_edital" | "em_contrato" | "em_ata" | "em_parecer" | "concluido";
       let generatedContent: string;
+
+      const editalDoc = docs.find(d => d.type === "edital");
+      const contratoDoc = docs.find(d => d.type === "contrato");
+      const ataDoc = docs.find(d => d.type === "ata");
 
       const commonOrgParams = {
         organizationName: settings?.organizationName || undefined,
@@ -135,7 +139,48 @@ export const documentsRouter = router({
           trContent: trDoc.content || "",
           ...commonOrgParams,
         });
-      } else if (process.status === "em_edital") {
+      } else if (process.status === "em_edital" && editalDoc && trDoc) {
+        nextDocType = "contrato";
+        nextStatus = "em_contrato";
+        generatedContent = await generateContrato({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          category: process.category || "",
+          platformId: process.platformId,
+          editalContent: editalDoc.content || "",
+          trContent: trDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else if (process.status === "em_contrato" && contratoDoc && editalDoc) {
+        nextDocType = "ata";
+        nextStatus = "em_ata";
+        generatedContent = await generateAta({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          editalContent: editalDoc.content || "",
+          contratoContent: contratoDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else if (process.status === "em_ata" && ataDoc && editalDoc && trDoc && etpDoc && dfdDoc) {
+        nextDocType = "parecer";
+        nextStatus = "em_parecer";
+        generatedContent = await generateParecer({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          category: process.category || "",
+          dfdContent: dfdDoc.content || "",
+          etpContent: etpDoc.content || "",
+          trContent: trDoc.content || "",
+          editalContent: editalDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else if (process.status === "em_parecer") {
         await db.updateProcessStatus(input.processId, "concluido");
         await db.createActivityLog({
           processId: input.processId,
@@ -203,7 +248,7 @@ export const documentsRouter = router({
   generateDocument: protectedProcedure
     .input(z.object({
       processId: z.number(),
-      docType: z.enum(["dfd", "etp", "tr", "edital"]),
+      docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
     }))
     .mutation(async ({ ctx, input }) => {
       const process = await db.getProcessById(input.processId);
@@ -215,6 +260,8 @@ export const documentsRouter = router({
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
       const trDoc = docs.find(d => d.type === "tr");
+      const editalDoc = docs.find(d => d.type === "edital");
+      const contratoDoc = docs.find(d => d.type === "contrato");
 
       const commonOrgParams = {
         organizationName: settings?.organizationName || undefined,
@@ -271,7 +318,7 @@ export const documentsRouter = router({
           catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
           ...commonOrgParams,
         });
-      } else {
+      } else if (input.docType === "edital") {
         if (!etpDoc || !trDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP e TR são necessários para gerar o Edital" });
         generatedContent = await generateEdital({
           processName: process.name,
@@ -283,6 +330,45 @@ export const documentsRouter = router({
           dfdContent: dfdDoc?.content || "",
           etpContent: etpDoc.content || "",
           trContent: trDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else if (input.docType === "contrato") {
+        if (!editalDoc || !trDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "Edital e TR são necessários para gerar a Minuta de Contrato" });
+        generatedContent = await generateContrato({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          category: process.category || "",
+          platformId: process.platformId,
+          editalContent: editalDoc.content || "",
+          trContent: trDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else if (input.docType === "ata") {
+        if (!editalDoc || !contratoDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "Edital e Minuta de Contrato são necessários para gerar a Ata" });
+        generatedContent = await generateAta({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          editalContent: editalDoc.content || "",
+          contratoContent: contratoDoc.content || "",
+          ...commonOrgParams,
+        });
+      } else {
+        // parecer
+        if (!dfdDoc || !etpDoc || !trDoc || !editalDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "DFD, ETP, TR e Edital são necessários para gerar o Parecer" });
+        generatedContent = await generateParecer({
+          processName: process.name,
+          object: process.object || "",
+          estimatedValue: process.estimatedValue || 0,
+          modality: process.modality || "",
+          category: process.category || "",
+          dfdContent: dfdDoc.content || "",
+          etpContent: etpDoc.content || "",
+          trContent: trDoc.content || "",
+          editalContent: editalDoc.content || "",
           ...commonOrgParams,
         });
       }
@@ -302,15 +388,14 @@ export const documentsRouter = router({
         etp: "em_etp",
         tr: "em_tr",
         edital: "em_edital",
+        contrato: "em_contrato",
+        ata: "em_ata",
+        parecer: "em_parecer",
       };
-      if (process.status === statusMap[input.docType]) {
-        // status already matches — no change needed
-      } else if (
-        (input.docType === "dfd" && process.status !== "em_dfd") ||
-        (input.docType === "etp" && process.status === "em_dfd") ||
-        (input.docType === "tr" && process.status === "em_etp") ||
-        (input.docType === "edital" && process.status === "em_tr")
-      ) {
+      const statusOrder = ["em_dfd", "em_etp", "em_tr", "em_edital", "em_contrato", "em_ata", "em_parecer", "concluido"];
+      const currentIdx = statusOrder.indexOf(process.status);
+      const targetIdx = statusOrder.indexOf(statusMap[input.docType]);
+      if (targetIdx > currentIdx) {
         await db.updateProcessStatus(input.processId, statusMap[input.docType] as any);
       }
 
@@ -327,7 +412,7 @@ export const documentsRouter = router({
   uploadDocument: protectedProcedure
     .input(z.object({
       processId: z.number(),
-      docType: z.enum(["dfd", "etp", "tr", "edital"]),
+      docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
       fileName: z.string(),
       fileBase64: z.string(),
       mimeType: z.string(),
@@ -452,10 +537,13 @@ export const documentsRouter = router({
       }
 
       const documentLabels: Record<string, string> = {
+        dfd: "Documento Formalizador de Demanda (DFD)",
         etp: "Estudo Técnico Preliminar (ETP)",
         tr: "Termo de Referência (TR)",
-        dfd: "Documento Formalizador de Demanda (DFD)",
         edital: "Edital de Licitação",
+        contrato: "Minuta de Contrato",
+        ata: "Ata de Resultado de Julgamento",
+        parecer: "Parecer Jurídico",
       };
 
       const settings = await db.getDocumentSettingsByUser(ctx.user.id);
@@ -494,10 +582,13 @@ export const documentsRouter = router({
       }
 
       const documentLabels: Record<string, string> = {
+        dfd: "Documento Formalizador de Demanda (DFD)",
         etp: "Estudo Técnico Preliminar (ETP)",
         tr: "Termo de Referência (TR)",
-        dfd: "Documento Formalizador de Demanda (DFD)",
         edital: "Edital de Licitação",
+        contrato: "Minuta de Contrato",
+        ata: "Ata de Resultado de Julgamento",
+        parecer: "Parecer Jurídico",
       };
 
       const settings = await db.getDocumentSettingsByUser(ctx.user.id);
