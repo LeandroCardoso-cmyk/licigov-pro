@@ -337,6 +337,7 @@ export default function ProcessDetails() {
                       status={stepStatuses[docType]}
                       doc={docMap[docType]}
                       processId={process.id}
+                      isOwner={process.ownerId === user?.id}
                       actions={documentActions}
                     />
                   </TabsContent>

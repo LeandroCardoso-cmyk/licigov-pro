@@ -5,6 +5,7 @@ import { DocumentEditor } from "@/components/DocumentEditor";
 import { CommentsSection } from "@/components/CommentsSection";
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
 import { DocumentApprovalPanel } from "./DocumentApprovalPanel";
+import { StageAssignmentPanel } from "./StageAssignmentPanel";
 import { StepBadge } from "./StepBadge";
 import type { DocType, StepStatus, ProcessDocument, DocumentActions } from "./types";
 import { DOC_LABELS, PREREQUISITES } from "./types";
@@ -74,10 +75,11 @@ interface Props {
   status: StepStatus;
   doc: ProcessDocument | undefined;
   processId: number;
+  isOwner?: boolean;
   actions: DocumentActions;
 }
 
-export function DocTabContent({ docType, status, doc, processId, actions }: Props) {
+export function DocTabContent({ docType, status, doc, processId, isOwner = false, actions }: Props) {
   const prereq = PREREQUISITES[docType];
   const info = DOC_LABELS[docType];
 
@@ -133,6 +135,7 @@ export function DocTabContent({ docType, status, doc, processId, actions }: Prop
               documentStatus={docStatus}
               onStatusChange={() => actions.onTabChange(docType)}
             />
+            <StageAssignmentPanel processId={processId} docType={docType} isOwner={isOwner} />
           </div>
           <DocActions docType={docType} doc={doc} actions={actions} />
         </div>
