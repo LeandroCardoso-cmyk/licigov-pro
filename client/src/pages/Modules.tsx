@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun, LogOut, FileText, FileCheck, Scale, FileSignature, Calendar, Settings, Palette } from "lucide-react";
-import { BackToDashboard } from "@/components/BackToDashboard";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -118,13 +117,6 @@ export default function Modules() {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
-                {/* Botão de teste para debug */}
-                <button
-                  onClick={() => alert('Clique funcionou!')}
-                  style={{ padding: '8px', background: 'red', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  TESTE
-                </button>
                 <button
                   onClick={() => navigate("/personalizacao-documentos")}
                   style={{ padding: '8px', background: 'transparent', border: 'none', cursor: 'pointer' }}
