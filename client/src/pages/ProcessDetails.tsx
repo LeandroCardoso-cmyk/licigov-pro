@@ -7,40 +7,31 @@ import {
   ArrowLeft,
   FileText,
   Download,
-  Edit,
   Loader2,
-  CheckCircle2,
   AlertCircle,
-  Sparkles,
   Scale,
-  Upload,
-  RefreshCw,
+  CheckCircle2,
   Lock,
-  Bot,
-  UploadCloud,
-  Clock,
-  ChevronRight,
 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { APP_LOGO } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { Streamdown } from "streamdown";
 import { toast } from "sonner";
-import { DocumentEditor } from "@/components/DocumentEditor";
 import { MembersDialog } from "@/components/MembersDialog";
 import { NotificationBell } from "@/components/NotificationBell";
-import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
-import { CommentsSection } from "@/components/CommentsSection";
 import { TRItemsModal } from "@/components/TRItemsModal";
 import { PublicationPackageModal } from "@/components/process/PublicationPackageModal";
 import { cn } from "@/lib/utils";
-import type { DocType, StepStatus } from "@/components/document-flow/types";
-import { DOC_LABELS, STATUS_LABELS, DOC_ORDER, PREREQUISITES } from "@/components/document-flow/types";
-import { useDocumentDownload } from "@/hooks/documents/useDocumentDownload";
+import { DOC_LABELS, DOC_ORDER, PREREQUISITES, STATUS_LABELS } from "@/components/document-flow/types";
+import type { DocType } from "@/components/document-flow/types";
+import { StepBadge } from "@/components/document-flow/StepBadge";
+import { TimelineStep } from "@/components/document-flow/TimelineStep";
+import { DocTabContent } from "@/components/document-flow/DocTabContent";
+import { useProcessDocuments } from "@/hooks/documents/useProcessDocuments";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -53,17 +44,8 @@ export default function ProcessDetails() {
   const exportReportMutation = trpc.downloads.processReport.useMutation();
   const params = useParams();
   const processId = parseInt(params.id || "0");
-  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
-  const [editingContent, setEditingContent] = useState<string>("");
   const [trItemsModalOpen, setTrItemsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<DocType>("dfd");
-  const [generatingDoc, setGeneratingDoc] = useState<DocType | null>(null);
-  const [uploadingDoc, setUploadingDoc] = useState<DocType | null>(null);
-  const { downloadingUpload, downloadUploaded } = useDocumentDownload();
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [downloadingDocx, setDownloadingDocx] = useState(false);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const pendingUploadDocType = useRef<DocType | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -72,113 +54,39 @@ export default function ProcessDetails() {
   const { data: activities } = trpc.activities.listByProcess.useQuery({ processId });
   const utils = trpc.useUtils();
 
-  // ── Mutations ─────────────────────────────────────────────────────────────────
-
   const invalidate = () => {
     utils.processes.getById.invalidate({ id: processId });
     utils.documents.listByProcess.invalidate({ processId });
     utils.activities.listByProcess.invalidate({ processId });
   };
 
-  const generateDocumentMutation = trpc.documents.generateDocument.useMutation({
-    onSuccess: (data) => {
-      toast.success(`${data.docType.toUpperCase()} gerado com sucesso!`);
-      setGeneratingDoc(null);
-      setActiveTab(data.docType as DocType);
-      invalidate();
-    },
-    onError: (err) => {
-      toast.error("Erro ao gerar documento", { description: err.message });
-      setGeneratingDoc(null);
-    },
-  });
+  // ── Document actions hook ─────────────────────────────────────────────────────
 
-  const uploadDocumentMutation = trpc.documents.uploadDocument.useMutation({
-    onSuccess: (data) => {
-      toast.success(`${data.docType.toUpperCase()} enviado com sucesso!`);
-      setUploadingDoc(null);
-      setActiveTab(data.docType as DocType);
-      invalidate();
-    },
-    onError: (err) => {
-      toast.error("Erro ao enviar documento", { description: err.message });
-      setUploadingDoc(null);
-    },
-  });
+  const docActions = useProcessDocuments({ processId, invalidate, setActiveTab });
 
-  const updateDocumentMutation = trpc.documents.updateDocument.useMutation({
-    onSuccess: (data) => {
-      toast.success("Documento atualizado!", { description: `Versão ${data.version} salva.` });
-      setEditingDocumentId(null);
-      setEditingContent("");
-      utils.documents.listByProcess.invalidate({ processId });
-      utils.activities.listByProcess.invalidate({ processId });
-    },
-  });
+  // ── Formatters ────────────────────────────────────────────────────────────────
 
+  const formatDate = (date: Date) =>
+    new Date(date).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
-  const downloadPdfMutation = trpc.documents.downloadPdf.useMutation({
-    onSuccess: (data) => {
-      const blob = new Blob([Uint8Array.from(atob(data.data), (c) => c.charCodeAt(0))], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      Object.assign(document.createElement("a"), { href: url, download: data.filename }).click();
-      URL.revokeObjectURL(url);
-      toast.success("PDF baixado!");
-      setDownloadingPdf(false);
-    },
-    onError: () => setDownloadingPdf(false),
-  });
+  const formatCurrency = (cents: number | null | undefined) =>
+    cents ? (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00";
 
-  const downloadDocxMutation = trpc.documents.downloadDocx.useMutation({
-    onSuccess: (data) => {
-      const blob = new Blob([Uint8Array.from(atob(data.data), (c) => c.charCodeAt(0))], {
-        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      });
-      const url = URL.createObjectURL(blob);
-      Object.assign(document.createElement("a"), { href: url, download: data.filename }).click();
-      URL.revokeObjectURL(url);
-      toast.success("DOCX baixado!");
-      setDownloadingDocx(false);
-    },
-    onError: () => setDownloadingDocx(false),
-  });
-
-  // ── Handlers ──────────────────────────────────────────────────────────────────
-
-  const handleGenerateDocument = (docType: DocType) => {
-    setGeneratingDoc(docType);
-    generateDocumentMutation.mutate({ processId, docType });
-  };
-
-  const handleUploadClick = (docType: DocType) => {
-    pendingUploadDocType.current = docType;
-    uploadInputRef.current?.click();
-  };
-
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const docType = pendingUploadDocType.current;
-    if (!file || !docType) return;
-    e.target.value = "";
-    setUploadingDoc(docType);
-    const reader = new FileReader();
-    reader.onload = () => {
-      uploadDocumentMutation.mutate({
-        processId,
-        docType,
-        fileName: file.name,
-        fileBase64: (reader.result as string).split(",")[1],
-        mimeType: file.type,
-      });
-    };
-    reader.readAsDataURL(file);
-  };
+  // ── Report export ─────────────────────────────────────────────────────────────
 
   const handleExportReport = async () => {
     setExportingReport(true);
     try {
       const result = await exportReportMutation.mutateAsync({ processId });
-      const blob = new Blob([Uint8Array.from(atob(result.data), (c) => c.charCodeAt(0))], { type: result.mimeType });
+      const blob = new Blob([Uint8Array.from(atob(result.data), (c) => c.charCodeAt(0))], {
+        type: result.mimeType,
+      });
       const url = URL.createObjectURL(blob);
       const a = Object.assign(document.createElement("a"), { href: url, download: result.filename });
       document.body.appendChild(a);
@@ -192,26 +100,6 @@ export default function ProcessDetails() {
       setExportingReport(false);
     }
   };
-
-  const handleSaveEdit = (content: string) => {
-    if (editingDocumentId) updateDocumentMutation.mutate({ documentId: editingDocumentId, content });
-  };
-
-  const handleAutoSave = async (content: string) => {
-    if (!editingDocumentId) return;
-    try {
-      await updateDocumentMutation.mutateAsync({ documentId: editingDocumentId, content });
-      setEditingContent(content);
-    } catch {}
-  };
-
-  // ── Formatters ────────────────────────────────────────────────────────────────
-
-  const formatDate = (date: Date) =>
-    new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-  const formatCurrency = (cents: number | null | undefined) =>
-    cents ? (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00";
 
   // ── Loading / error states ────────────────────────────────────────────────────
 
@@ -236,279 +124,38 @@ export default function ProcessDetails() {
   // ── Derived state ─────────────────────────────────────────────────────────────
 
   const docs = documents ?? [];
-  const docMap: Record<DocType, (typeof docs)[number] | undefined> = {
+  const docMap = {
     dfd: docs.find((d) => d.type === "dfd"),
     etp: docs.find((d) => d.type === "etp"),
     tr: docs.find((d) => d.type === "tr"),
     edital: docs.find((d) => d.type === "edital"),
+  } as Record<DocType, (typeof docs)[number] | undefined>;
+
+  const getStepStatus = (docType: DocType) => {
+    if (docActions.generatingDoc === docType) return "generating" as const;
+    if (docActions.uploadingDoc === docType) return "uploading" as const;
+    const doc = docMap[docType];
+    if (doc) return doc.sourceType === "upload" ? "done-upload" as const : "done-ai" as const;
+    const prereq = PREREQUISITES[docType];
+    if (prereq && !docMap[prereq]) return "locked" as const;
+    return "pending" as const;
   };
 
-  function getStepStatus(docType: DocType): StepStatus {
-    if (generatingDoc === docType) return "generating";
-    if (uploadingDoc === docType) return "uploading";
-    const doc = docMap[docType];
-    if (doc) return doc.sourceType === "upload" ? "done-upload" : "done-ai";
-    const prereq = PREREQUISITES[docType];
-    if (prereq && !docMap[prereq]) return "locked";
-    return "pending";
-  }
+  const stepStatuses = Object.fromEntries(DOC_ORDER.map((d) => [d, getStepStatus(d)])) as Record<DocType, ReturnType<typeof getStepStatus>>;
 
-  const stepStatuses = Object.fromEntries(DOC_ORDER.map((d) => [d, getStepStatus(d)])) as Record<DocType, StepStatus>;
-
-  const isTabLocked = (docType: DocType) => {
-    const prereq = PREREQUISITES[docType];
-    return prereq !== null && !docMap[prereq];
+  const documentActions = {
+    ...docActions,
+    onGenerate: docActions.handleGenerate,
+    onUploadClick: docActions.handleUploadClick,
+    onDownloadPdf: docActions.handleDownloadPdf,
+    onDownloadDocx: docActions.handleDownloadDocx,
+    onDownloadUpload: docActions.handleDownloadUpload,
+    onEdit: docActions.handleStartEdit,
+    onSaveEdit: docActions.handleSaveEdit,
+    onCancelEdit: docActions.handleCancelEdit,
+    onAutoSave: docActions.handleAutoSave,
+    onTabChange: setActiveTab,
   };
-
-  // ── Render helpers ────────────────────────────────────────────────────────────
-
-  function StepBadge({ status }: { status: StepStatus }) {
-    if (status === "done-ai")
-      return (
-        <Badge variant="secondary" className="gap-1 text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
-          <Bot className="h-3 w-3" /> Gerado por IA
-        </Badge>
-      );
-    if (status === "done-upload")
-      return (
-        <Badge variant="secondary" className="gap-1 text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
-          <UploadCloud className="h-3 w-3" /> Upload
-        </Badge>
-      );
-    if (status === "generating")
-      return (
-        <Badge variant="secondary" className="gap-1 text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
-          <Loader2 className="h-3 w-3 animate-spin" /> Gerando…
-        </Badge>
-      );
-    if (status === "uploading")
-      return (
-        <Badge variant="secondary" className="gap-1 text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
-          <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
-        </Badge>
-      );
-    if (status === "pending")
-      return (
-        <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-          <Clock className="h-3 w-3" /> Pendente
-        </Badge>
-      );
-    return (
-      <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-        <Lock className="h-3 w-3" /> Bloqueado
-      </Badge>
-    );
-  }
-
-  function TimelineStep({ docType, index }: { docType: DocType; index: number }) {
-    const status = stepStatuses[docType];
-    const isDone = status === "done-ai" || status === "done-upload";
-    const isActive = status === "pending" || status === "generating" || status === "uploading";
-    const isLocked = status === "locked";
-
-    return (
-      <button
-        onClick={() => !isLocked && setActiveTab(docType)}
-        disabled={isLocked}
-        className={cn(
-          "flex flex-col items-center gap-2 min-w-0 flex-1 group",
-          isLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-        )}
-      >
-        <div
-          className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all",
-            isDone && "bg-green-500 border-green-500 text-white",
-            isActive && activeTab === docType && "bg-primary border-primary text-primary-foreground",
-            isActive && activeTab !== docType && "border-primary text-primary bg-background",
-            isLocked && "border-border text-muted-foreground bg-muted"
-          )}
-        >
-          {isDone ? (
-            <CheckCircle2 className="h-5 w-5" />
-          ) : isLocked ? (
-            <Lock className="h-4 w-4" />
-          ) : status === "generating" || status === "uploading" ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <span className="text-sm font-bold">{index + 1}</span>
-          )}
-        </div>
-
-        <div className="text-center">
-          <p className={cn("text-xs font-semibold", isLocked ? "text-muted-foreground" : "text-foreground")}>
-            {DOC_LABELS[docType].short}
-          </p>
-          {isDone && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              v{docMap[docType]?.version}
-              {docMap[docType]?.sourceType === "upload" ? " · Upload" : " · IA"}
-            </p>
-          )}
-        </div>
-      </button>
-    );
-  }
-
-  function DocActions({ docType, doc }: { docType: DocType; doc: NonNullable<typeof docMap[DocType]> }) {
-    const isGenerating = generatingDoc === docType;
-    const isUploading = uploadingDoc === docType;
-
-    return (
-      <div className="flex flex-wrap gap-2">
-        {/* Regenerar com IA */}
-        <Button variant="outline" size="sm" onClick={() => handleGenerateDocument(docType)} disabled={isGenerating || isUploading}>
-          {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-          Regenerar com IA
-        </Button>
-
-        {/* Upload nova versão */}
-        <Button variant="outline" size="sm" onClick={() => handleUploadClick(docType)} disabled={isGenerating || isUploading}>
-          {isUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-          Nova versão
-        </Button>
-
-        {/* Downloads — só para docs com conteúdo markdown */}
-        {doc.content && (
-          <>
-            <Button variant="outline" size="sm" onClick={() => { setDownloadingPdf(true); downloadPdfMutation.mutate({ documentId: doc.id }); }} disabled={downloadingPdf}>
-              {downloadingPdf ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-              PDF
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { setDownloadingDocx(true); downloadDocxMutation.mutate({ documentId: doc.id }); }} disabled={downloadingDocx}>
-              {downloadingDocx ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-              DOCX
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { setEditingDocumentId(doc.id); setEditingContent(doc.content!); }}>
-              <Edit className="mr-1.5 h-3.5 w-3.5" />
-              Editar
-            </Button>
-          </>
-        )}
-
-        {/* Download S3 — para uploads */}
-        {doc.s3Key && (
-          <Button variant="outline" size="sm" onClick={() => downloadUploaded(doc.id)} disabled={downloadingUpload === doc.id}>
-            {downloadingUpload === doc.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-            Baixar arquivo
-          </Button>
-        )}
-
-        {/* Histórico */}
-        <VersionHistoryDialog documentId={doc.id} documentType={docType} />
-      </div>
-    );
-  }
-
-  function DocTabContent({ docType }: { docType: DocType }) {
-    const status = stepStatuses[docType];
-    const doc = docMap[docType];
-    const prereq = PREREQUISITES[docType];
-    const info = DOC_LABELS[docType];
-
-    // Locked
-    if (status === "locked") {
-      const prereqLabel = prereq ? DOC_LABELS[prereq].short : "";
-      return (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-            <Lock className="h-7 w-7 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="font-semibold text-foreground mb-1">{info.short} bloqueado</p>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Complete o <strong>{prereqLabel}</strong> primeiro para liberar esta etapa.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => prereq && setActiveTab(prereq)}>
-            Ir para {prereqLabel}
-            <ChevronRight className="ml-1.5 h-4 w-4" />
-          </Button>
-        </div>
-      );
-    }
-
-    // Editing
-    if (doc && editingDocumentId === doc.id) {
-      return (
-        <DocumentEditor
-          initialContent={editingContent}
-          onSave={handleSaveEdit}
-          onCancel={() => { setEditingDocumentId(null); setEditingContent(""); }}
-          isSaving={updateDocumentMutation.isPending}
-          autoSave={true}
-          onAutoSave={handleAutoSave}
-        />
-      );
-    }
-
-    // Document exists — show content
-    if (doc) {
-      return (
-        <div className="space-y-6">
-          {/* Doc header */}
-          <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
-            <div className="flex items-center gap-3 flex-wrap">
-              <StepBadge status={status} />
-              <span className="text-xs text-muted-foreground">
-                Versão {doc.version} · {formatDate(doc.createdAt)}
-              </span>
-            </div>
-            <DocActions docType={docType} doc={doc} />
-          </div>
-
-          {/* Content */}
-          {doc.content ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <Streamdown>{doc.content}</Streamdown>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center py-10 gap-3 text-muted-foreground">
-              <UploadCloud className="h-10 w-10 opacity-50" />
-              <p className="text-sm">Arquivo enviado via upload</p>
-            </div>
-          )}
-
-          {/* Comments */}
-          <CommentsSection documentId={doc.id} processId={process!.id} />
-        </div>
-      );
-    }
-
-    // Pending — no doc yet, prerequisites met
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-          <FileText className="h-7 w-7 text-primary" />
-        </div>
-        <div className="max-w-md">
-          <p className="font-semibold text-foreground mb-1">{info.long}</p>
-          <p className="text-sm text-muted-foreground">{info.description}</p>
-        </div>
-        <div className="flex gap-3 flex-wrap justify-center">
-          <Button
-            onClick={() => handleGenerateDocument(docType)}
-            disabled={generatingDoc === docType}
-          >
-            {generatingDoc === docType ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            Gerar com IA
-          </Button>
-          <Button variant="outline" onClick={() => handleUploadClick(docType)} disabled={uploadingDoc === docType}>
-            {uploadingDoc === docType ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="mr-2 h-4 w-4" />
-            )}
-            Fazer upload
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // JSX
@@ -540,7 +187,6 @@ export default function ProcessDetails() {
 
       {/* ── Main ── */}
       <main className="container mx-auto px-6 py-8 max-w-6xl">
-        {/* Back */}
         <Button variant="ghost" className="mb-6 -ml-4" onClick={() => navigate("/dashboard")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar ao Dashboard
@@ -561,19 +207,32 @@ export default function ProcessDetails() {
               <p className="text-muted-foreground text-sm">{process.object}</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <Button variant="outline" size="sm" onClick={() => navigate(`/parecer-juridico/novo?processId=${process.id}&type=processo`)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/parecer-juridico/novo?processId=${process.id}&type=processo`)}
+              >
                 <Scale className="mr-1.5 h-4 w-4" />
                 Parecer
               </Button>
               <Button variant="outline" size="sm" onClick={handleExportReport} disabled={exportingReport}>
-                {exportingReport ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
+                {exportingReport ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-1.5 h-4 w-4" />
+                )}
                 Relatório
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const p = new URLSearchParams({ source: "process", processId: process.id.toString(), object: process.name, value: String(process.estimatedValue ?? 0) });
+                  const p = new URLSearchParams({
+                    source: "process",
+                    processId: process.id.toString(),
+                    object: process.name,
+                    value: String(process.estimatedValue ?? 0),
+                  });
                   navigate(`/contracts/new?${p}`);
                 }}
               >
@@ -614,14 +273,19 @@ export default function ProcessDetails() {
               <div className="flex items-start">
                 {DOC_ORDER.map((docType, i) => (
                   <div key={docType} className="flex items-center flex-1 min-w-0">
-                    <TimelineStep docType={docType} index={i} />
+                    <TimelineStep
+                      docType={docType}
+                      index={i}
+                      status={stepStatuses[docType]}
+                      doc={docMap[docType]}
+                      activeTab={activeTab}
+                      onTabChange={setActiveTab}
+                    />
                     {i < DOC_ORDER.length - 1 && (
                       <div
                         className={cn(
                           "h-0.5 flex-1 mx-2 mb-6 transition-colors",
-                          stepStatuses[DOC_ORDER[i + 1]] !== "locked"
-                            ? "bg-primary/40"
-                            : "bg-border"
+                          stepStatuses[DOC_ORDER[i + 1]] !== "locked" ? "bg-primary/40" : "bg-border"
                         )}
                       />
                     )}
@@ -647,13 +311,19 @@ export default function ProcessDetails() {
               </div>
             </CardHeader>
             <CardContent className="pt-4">
-              <input ref={uploadInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={handleFileSelected} />
+              <input
+                ref={docActions.uploadInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx"
+                onChange={docActions.handleFileSelected}
+              />
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DocType)}>
                 <TabsList className="grid w-full grid-cols-4 mb-6">
                   {DOC_ORDER.map((docType) => {
                     const status = stepStatuses[docType];
                     const isDone = status === "done-ai" || status === "done-upload";
-                    const locked = isTabLocked(docType);
+                    const locked = PREREQUISITES[docType] !== null && !docMap[PREREQUISITES[docType]!];
                     return (
                       <TabsTrigger
                         key={docType}
@@ -680,7 +350,13 @@ export default function ProcessDetails() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{DOC_LABELS[docType].description}</p>
                     </div>
-                    <DocTabContent docType={docType} />
+                    <DocTabContent
+                      docType={docType}
+                      status={stepStatuses[docType]}
+                      doc={docMap[docType]}
+                      processId={process.id}
+                      actions={documentActions}
+                    />
                   </TabsContent>
                 ))}
               </Tabs>
@@ -716,8 +392,11 @@ export default function ProcessDetails() {
         onOpenChange={setTrItemsModalOpen}
         onSuccess={invalidate}
       />
-      <PublicationPackageModal processId={processId} open={publicationModalOpen} onOpenChange={setPublicationModalOpen} />
+      <PublicationPackageModal
+        processId={processId}
+        open={publicationModalOpen}
+        onOpenChange={setPublicationModalOpen}
+      />
     </div>
   );
 }
-
