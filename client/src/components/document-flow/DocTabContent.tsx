@@ -4,6 +4,7 @@ import { Streamdown } from "streamdown";
 import { DocumentEditor } from "@/components/DocumentEditor";
 import { CommentsSection } from "@/components/CommentsSection";
 import { VersionHistoryDialog } from "@/components/VersionHistoryDialog";
+import { DocumentApprovalPanel } from "./DocumentApprovalPanel";
 import { StepBadge } from "./StepBadge";
 import type { DocType, StepStatus, ProcessDocument, DocumentActions } from "./types";
 import { DOC_LABELS, PREREQUISITES } from "./types";
@@ -118,14 +119,20 @@ export function DocTabContent({ docType, status, doc, processId, actions }: Prop
 
   // Document exists
   if (doc) {
+    const docStatus = (doc as any).documentStatus ?? "draft";
     return (
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
+        <div className="flex items-start justify-between gap-4 pb-4 border-b border-border flex-wrap">
           <div className="flex items-center gap-3 flex-wrap">
             <StepBadge status={status} />
             <span className="text-xs text-muted-foreground">
               Versão {doc.version} · {formatDate(doc.createdAt)}
             </span>
+            <DocumentApprovalPanel
+              documentId={doc.id}
+              documentStatus={docStatus}
+              onStatusChange={() => actions.onTabChange(docType)}
+            />
           </div>
           <DocActions docType={docType} doc={doc} actions={actions} />
         </div>

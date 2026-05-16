@@ -1,6 +1,6 @@
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import {
-  processes, documents, editalParameters, platforms,
+  processes, documents, editalParameters, platforms, users,
   InsertProcess, InsertDocument, InsertEditalParameter,
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
@@ -110,10 +110,34 @@ export async function getDocumentVersions(processId: number, type: string) {
   const db = await getDb();
   if (!db) return [];
   return await db
-    .select()
+    .select({
+      id: documents.id,
+      processId: documents.processId,
+      type: documents.type,
+      content: documents.content,
+      sourceType: documents.sourceType,
+      s3Key: documents.s3Key,
+      fileUrl: documents.fileUrl,
+      version: documents.version,
+      documentStatus: documents.documentStatus,
+      createdBy: documents.createdBy,
+      createdByName: users.name,
+      createdAt: documents.createdAt,
+      updatedAt: documents.updatedAt,
+    })
     .from(documents)
+    .leftJoin(users, eq(documents.createdBy, users.id))
     .where(and(eq(documents.processId, processId), eq(documents.type, type as any)))
     .orderBy(desc(documents.version));
+}
+
+export async function updateDocumentStatus(
+  documentId: number,
+  status: "draft" | "in_review" | "approved" | "rejected"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(documents).set({ documentStatus: status }).where(eq(documents.id, documentId));
 }
 
 export async function upsertEditalParameters(params: InsertEditalParameter) {

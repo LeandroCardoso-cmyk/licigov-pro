@@ -64,10 +64,13 @@ export function VersionHistoryDialog({ documentId, documentType }: VersionHistor
   };
 
   const documentTypeLabels: Record<string, string> = {
+    dfd: "DFD",
     etp: "ETP",
     tr: "TR",
-    dfd: "DFD",
     edital: "Edital",
+    contrato: "Contrato",
+    ata: "Ata",
+    parecer: "Parecer",
   };
 
   // Função para gerar diff HTML
@@ -168,13 +171,18 @@ export function VersionHistoryDialog({ documentId, documentType }: VersionHistor
                                 </Badge>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
+                            <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
                               <Clock className="h-3 w-3" />
                               {formatDistanceToNow(new Date(version.createdAt), {
                                 addSuffix: true,
                                 locale: ptBR,
                               })}
                             </div>
+                            {(version as any).createdByName && (
+                              <div className="text-xs text-muted-foreground mb-2 truncate">
+                                por {(version as any).createdByName}
+                              </div>
+                            )}
                             <div className="flex gap-1">
                               {index !== 0 && (
                                 <Button

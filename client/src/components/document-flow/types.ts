@@ -8,6 +8,8 @@ export interface ProcessDocument {
   s3Key: string | null;
   fileUrl: string | null;
   version: number;
+  createdBy?: number | null;
+  documentStatus?: "draft" | "in_review" | "approved" | "rejected";
   createdAt: Date;
   updatedAt: Date;
 }
