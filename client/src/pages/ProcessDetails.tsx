@@ -7,12 +7,14 @@ import {
   ArrowLeft,
   FileText,
   Download,
-  Loader2,
   AlertCircle,
   Scale,
   CheckCircle2,
   Lock,
 } from "lucide-react";
+import { PageLoader, InlineLoader } from "@/components/ui/PageLoader";
+import { formatDateTime, formatCurrency } from "@/utils/formatters";
+import { triggerBlobDownload, base64ToBlob } from "@/services/download";
 import { useLocation, useParams } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
@@ -64,35 +66,14 @@ export default function ProcessDetails() {
 
   const docActions = useProcessDocuments({ processId, invalidate, setActiveTab });
 
-  // ── Formatters ────────────────────────────────────────────────────────────────
-
-  const formatDate = (date: Date) =>
-    new Date(date).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-  const formatCurrency = (cents: number | null | undefined) =>
-    cents ? (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00";
-
   // ── Report export ─────────────────────────────────────────────────────────────
 
   const handleExportReport = async () => {
     setExportingReport(true);
     try {
       const result = await exportReportMutation.mutateAsync({ processId });
-      const blob = new Blob([Uint8Array.from(atob(result.data), (c) => c.charCodeAt(0))], {
-        type: result.mimeType,
-      });
-      const url = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement("a"), { href: url, download: result.filename });
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const blob = base64ToBlob(result.data, result.mimeType);
+      triggerBlobDownload(blob, result.filename);
       toast.success("Relatório exportado!");
     } catch {
       toast.error("Falha ao exportar relatório.");
@@ -104,11 +85,7 @@ export default function ProcessDetails() {
   // ── Loading / error states ────────────────────────────────────────────────────
 
   if (processLoading || documentsLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-screen bg-background"><PageLoader /></div>;
   }
 
   if (!process) {
@@ -217,7 +194,7 @@ export default function ProcessDetails() {
               </Button>
               <Button variant="outline" size="sm" onClick={handleExportReport} disabled={exportingReport}>
                 {exportingReport ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  <InlineLoader className="mr-1.5" />
                 ) : (
                   <FileText className="mr-1.5 h-4 w-4" />
                 )}
@@ -375,7 +352,7 @@ export default function ProcessDetails() {
                     <li key={activity.id} className="ml-4">
                       <div className="absolute -left-1.5 w-3 h-3 rounded-full bg-primary/60 border-2 border-background" />
                       <p className="text-sm text-foreground">{activity.action}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(activity.createdAt)}</p>
+                      <p className="text-xs text-muted-foreground">{formatDateTime(activity.createdAt)}</p>
                     </li>
                   ))}
                 </ol>

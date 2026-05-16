@@ -2,7 +2,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { Plus, FileText, Loader2, ArrowLeft, DollarSign } from "lucide-react";
+import { Plus, FileText, ArrowLeft, DollarSign } from "lucide-react";
+import { InlineLoader } from "@/components/ui/PageLoader";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { ProcessCard } from "@/components/dashboard/ProcessCard";
 import { useLocation } from "wouter";
@@ -162,7 +163,7 @@ export default function Dashboard() {
         {/* Processes List */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <InlineLoader className="h-8 w-8 text-primary" />
           </div>
         ) : processes && processes.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

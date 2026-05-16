@@ -1,6 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Users, FileText, TrendingUp, Activity } from "lucide-react";
+import { Users, FileText, TrendingUp, Activity } from "lucide-react";
+import { PageLoader } from "@/components/ui/PageLoader";
+import { formatMonthYear } from "@/utils/formatters";
 import { BackToDashboard } from "@/components/BackToDashboard";
 import { Badge } from "@/components/ui/badge";
 
@@ -24,11 +26,7 @@ export default function Analytics() {
   const { data: analytics, isLoading } = trpc.analytics.getOverview.useQuery();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-screen"><PageLoader /></div>;
   }
 
   if (!analytics) {
@@ -125,7 +123,7 @@ export default function Analytics() {
               <div className="space-y-4">
                 {analytics.documentsByMonth.map((item) => {
                   const [year, month] = item.month.split('-');
-                  const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+                  const monthName = formatMonthYear(new Date(parseInt(year), parseInt(month) - 1));
                   const maxCount = Math.max(...analytics.documentsByMonth.map(d => d.count));
                   const percentage = (item.count / maxCount) * 100;
 

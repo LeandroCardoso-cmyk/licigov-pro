@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { triggerBlobDownload, base64ToBlob } from "@/services/download";
+import { mutationToastCallbacks } from "@/hooks/useMutationToast";
 import { ContractOverviewTab } from "@/components/contract-details/ContractOverviewTab";
 import { ContractAmendmentsTab } from "@/components/contract-details/ContractAmendmentsTab";
 import { ContractApostillesTab } from "@/components/contract-details/ContractApostillesTab";
@@ -55,25 +57,14 @@ export default function ContractDetails() {
 
   const exportAuditMutation = trpc.contracts.reports.exportAuditExcel.useMutation({
     onSuccess: (data) => {
-      const byteCharacters = atob(data.data);
-      const byteArray = new Uint8Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteArray[i] = byteCharacters.charCodeAt(i);
-      }
-      const blob = new Blob([byteArray], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = data.filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      const blob = base64ToBlob(
+        data.data,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      triggerBlobDownload(blob, data.filename);
       toast.success("Histórico exportado com sucesso!");
     },
-    onError: (error) => {
-      toast.error("Erro ao exportar histórico", { description: error.message });
-    },
+    onError: (error) => toast.error("Erro ao exportar histórico", { description: error.message }),
   });
 
   const generateMinutaMutation = trpc.contracts.generation.generateMinuta.useMutation({
@@ -109,14 +100,7 @@ export default function ContractDetails() {
 
   const downloadMarkdown = (content: string, filename: string) => {
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    triggerBlobDownload(blob, filename);
   };
 
   const getStatusBadge = (status: string) => {
