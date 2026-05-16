@@ -34,6 +34,7 @@ export const documentsRouter = router({
         type: input.type,
         content: input.content,
         version,
+        createdBy: ctx.user.id,
       });
 
       await db.createActivityLog({
@@ -201,6 +202,7 @@ export const documentsRouter = router({
         type: nextDocType,
         content: generatedContent,
         version: nextVersion,
+        createdBy: ctx.user.id,
       });
 
       await db.updateProcessStatus(input.processId, nextStatus);
@@ -234,6 +236,7 @@ export const documentsRouter = router({
         type: document.type,
         content: input.content,
         version: newVersion,
+        createdBy: ctx.user.id,
       });
 
       await db.createActivityLog({
@@ -381,6 +384,7 @@ export const documentsRouter = router({
         type: input.docType,
         content: generatedContent,
         version: nextVersion,
+        createdBy: ctx.user.id,
       });
 
       const statusMap: Record<string, string> = {
@@ -438,6 +442,7 @@ export const documentsRouter = router({
         s3Key: key,
         fileUrl: url,
         version: nextVersion,
+        createdBy: ctx.user.id,
       });
 
       await db.createActivityLog({
@@ -506,6 +511,7 @@ export const documentsRouter = router({
         type: currentDocument.type,
         content: versionToRestore.content,
         version: newVersion,
+        createdBy: ctx.user.id,
       });
 
       await db.createActivityLog({
@@ -609,5 +615,56 @@ export const documentsRouter = router({
         filename: `${document.type}_${process.name.replace(/\s+/g, "_")}.pdf`,
         data: buffer.toString("base64"),
       };
+    }),
+
+  submitForReview: protectedProcedure
+    .input(z.object({ documentId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const document = await db.getDocumentById(input.documentId);
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      const process = await db.getProcessById(document.processId);
+      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await db.updateDocumentStatus(input.documentId, "in_review");
+      await db.createActivityLog({
+        processId: document.processId,
+        userId: ctx.user.id,
+        action: `enviou ${document.type.toUpperCase()} para revisão`,
+        details: JSON.stringify({ documentId: input.documentId, version: document.version }),
+      });
+      return { success: true };
+    }),
+
+  approveDocument: protectedProcedure
+    .input(z.object({ documentId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const document = await db.getDocumentById(input.documentId);
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      const process = await db.getProcessById(document.processId);
+      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await db.updateDocumentStatus(input.documentId, "approved");
+      await db.createActivityLog({
+        processId: document.processId,
+        userId: ctx.user.id,
+        action: `aprovou o ${document.type.toUpperCase()} (v${document.version})`,
+        details: JSON.stringify({ documentId: input.documentId, version: document.version }),
+      });
+      return { success: true };
+    }),
+
+  rejectDocument: protectedProcedure
+    .input(z.object({ documentId: z.number(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const document = await db.getDocumentById(input.documentId);
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      const process = await db.getProcessById(document.processId);
+      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await db.updateDocumentStatus(input.documentId, "rejected");
+      await db.createActivityLog({
+        processId: document.processId,
+        userId: ctx.user.id,
+        action: `rejeitou o ${document.type.toUpperCase()} (v${document.version})`,
+        details: JSON.stringify({ documentId: input.documentId, version: document.version, reason: input.reason }),
+      });
+      return { success: true };
     }),
 });

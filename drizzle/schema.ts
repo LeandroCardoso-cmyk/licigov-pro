@@ -54,6 +54,8 @@ export const documents = mysqlTable("documents", {
   s3Key: varchar("s3Key", { length: 500 }), // chave S3 para uploads
   fileUrl: varchar("fileUrl", { length: 1000 }), // URL pública/signed do arquivo
   version: int("version").default(1).notNull(),
+  createdBy: int("createdBy"), // FK para users — autoria da versão
+  documentStatus: mysqlEnum("documentStatus", ["draft", "in_review", "approved", "rejected"]).default("draft").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
