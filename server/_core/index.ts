@@ -8,6 +8,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrap } from "../bootstrap";
+import { APP_CONFIG } from "../config/app";
+import { IS_DEVELOPMENT } from "../config/env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -48,28 +50,27 @@ async function startServer() {
     })
   );
   // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
+  if (IS_DEVELOPMENT) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
+  const preferredPort = APP_CONFIG.port;
   const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    console.info(`[BOOT] Porta ${preferredPort} ocupada, usando porta ${port}`);
   }
 
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.info(`[BOOT][${APP_CONFIG.env}] ${APP_CONFIG.name} rodando em http://localhost:${port}/`);
   });
 }
 
 async function main() {
   await bootstrap();
   await startServer();
-  console.log("[bootstrap] ✓ Server started");
 }
 
 main().catch((err) => {
