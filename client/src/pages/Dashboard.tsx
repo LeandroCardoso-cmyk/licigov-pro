@@ -1,9 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
 import { trpc } from "@/lib/trpc";
 import { Plus, FileText, ArrowLeft, DollarSign } from "lucide-react";
 import { InlineLoader } from "@/components/ui/PageLoader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { ProcessCard } from "@/components/dashboard/ProcessCard";
 import { useLocation } from "wouter";
@@ -177,19 +179,13 @@ export default function Dashboard() {
           </div>
         ) : (
           <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Nenhum processo criado
-              </h3>
-              <p className="text-muted-foreground text-center mb-6 max-w-md">
-                Comece criando seu primeiro processo licitatório. O sistema irá guiá-lo através
-                da geração de todos os documentos necessários.
-              </p>
-              <Button onClick={handleNewProcess} className="gap-2">
-                <Plus className="h-5 w-5" />
-                Criar Primeiro Processo
-              </Button>
+            <CardContent>
+              <EmptyState
+                icon={FileText}
+                title="Nenhum processo criado"
+                description="Comece criando seu primeiro processo licitatório. O sistema irá guiá-lo através da geração de todos os documentos necessários."
+                action={{ label: "Criar Primeiro Processo", onClick: handleNewProcess }}
+              />
             </CardContent>
           </Card>
         )}

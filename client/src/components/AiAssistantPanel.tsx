@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -212,12 +213,11 @@ export function AiAssistantPanel({ processId, activeDocType = "etp" }: Props) {
                   <Streamdown>{result.content}</Streamdown>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
-                  <Sparkles className="h-10 w-10 opacity-30" />
-                  <p className="text-sm">
-                    Clique em "Gerar sugestão" para obter uma análise contextualizada do processo atual.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Sparkles}
+                  title="Nenhuma sugestão gerada"
+                  description='Clique em "Gerar sugestão" para obter uma análise contextualizada do processo atual.'
+                />
               )}
             </ScrollArea>
           </Tabs>

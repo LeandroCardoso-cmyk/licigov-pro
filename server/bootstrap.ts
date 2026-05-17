@@ -105,6 +105,27 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
   console.log(`[bootstrap] ✓ Admin OK (${ADMIN_EMAIL} criado)`);
 }
 
+// ─── Step 0: validate required environment variables ─────────────────────────
+
+const REQUIRED_ENV: Array<{ key: string; hint: string }> = [
+  { key: "DATABASE_URL",  hint: "MySQL connection string" },
+  { key: "JWT_SECRET",    hint: "session signing secret — min 32 chars" },
+  { key: "GEMINI_API_KEY", hint: "Google Gemini API key for AI features" },
+];
+
+function validateEnv(): void {
+  const missing = REQUIRED_ENV.filter(({ key }) => !process.env[key]);
+  if (missing.length > 0) {
+    const lines = missing.map(({ key, hint }) => `  • ${key}  (${hint})`).join("\n");
+    throw new Error(`[bootstrap] Missing required environment variables:\n${lines}`);
+  }
+
+  const jwtSecret = process.env.JWT_SECRET!;
+  if (jwtSecret.length < 32) {
+    throw new Error("[bootstrap] JWT_SECRET must be at least 32 characters long.");
+  }
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
@@ -112,10 +133,9 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
  * Every step is idempotent — safe to call on every deploy.
  */
 export async function bootstrap(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error("[bootstrap] DATABASE_URL is not set. Cannot start server.");
-  }
+  validateEnv();
+
+  const databaseUrl = process.env.DATABASE_URL!;
 
   console.log("[bootstrap] Starting...");
   const connection = await mysql.createConnection(databaseUrl);
