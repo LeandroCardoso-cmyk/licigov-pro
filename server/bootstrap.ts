@@ -63,10 +63,12 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     }
   }
 
-  await addColumnIfMissing("users",     "passwordHash", "varchar(255)");
-  await addColumnIfMissing("documents", "sourceType",   "enum('ai','upload') NOT NULL DEFAULT 'ai'");
-  await addColumnIfMissing("documents", "s3Key",        "varchar(500)");
-  await addColumnIfMissing("documents", "fileUrl",      "varchar(1000)");
+  await addColumnIfMissing("users",     "passwordHash",   "varchar(255)");
+  await addColumnIfMissing("documents", "sourceType",    "enum('ai','upload') NOT NULL DEFAULT 'ai'");
+  await addColumnIfMissing("documents", "s3Key",         "varchar(500)");
+  await addColumnIfMissing("documents", "fileUrl",       "varchar(1000)");
+  await addColumnIfMissing("documents", "createdBy",     "int");
+  await addColumnIfMissing("documents", "documentStatus","enum('draft','in_review','approved','rejected') NOT NULL DEFAULT 'draft'");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
