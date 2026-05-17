@@ -34,6 +34,7 @@ import { StepBadge } from "@/components/document-flow/StepBadge";
 import { TimelineStep } from "@/components/document-flow/TimelineStep";
 import { DocTabContent } from "@/components/document-flow/DocTabContent";
 import { useProcessDocuments } from "@/hooks/documents/useProcessDocuments";
+import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,7 @@ export default function ProcessDetails() {
                 <Download className="mr-1.5 h-4 w-4" />
                 Publicar
               </Button>
+              <AiAssistantPanel processId={processId} activeDocType={activeTab} />
               <MembersDialog processId={processId} processName={process.name} />
             </div>
           </div>

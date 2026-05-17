@@ -26,6 +26,7 @@ import { directContractsRouter } from "./routers/directContractsRouter";
 import { contractsRouter } from "./routers/contractsRouter";
 import { contactRouter } from "./routers/contactRouter";
 import { legalOpinionsRouter } from "./routers/legalOpinionsRouter";
+import { aiAssistantRouter } from "./routers/aiAssistantRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -55,6 +56,7 @@ export const appRouter = router({
   directContracts: directContractsRouter,
   contracts: contractsRouter,
   legalOpinions: legalOpinionsRouter,
+  aiAssistant: aiAssistantRouter,
 });
 
 export type AppRouter = typeof appRouter;
