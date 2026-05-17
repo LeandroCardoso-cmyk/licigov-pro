@@ -7,24 +7,34 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { users } from "../drizzle/schema";
 import type { RowDataPacket } from "mysql2";
+import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
+import { APP_CONFIG } from "./config/app";
+import { AWS_CONFIG } from "./config/aws";
+import { AI_CONFIG } from "./config/ai";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const ADMIN_EMAIL = "cardosomsales@gmail.com";
-const ADMIN_PASSWORD = "Admin@123";
-const ADMIN_NAME = "Administrador";
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    ?? "cardosomsales@gmail.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Admin@123";
+const ADMIN_NAME     = process.env.ADMIN_NAME     ?? "Administrador";
 
 // process.cwd() is always the project root in both Railway and local dev,
 // regardless of how esbuild bundles import.meta.dirname.
 const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
 
+// ─── Logging helper ───────────────────────────────────────────────────────────
+
+function log(module: string, msg: string): void {
+  console.info(`[BOOT]${ENV_TAG}[${module}] ${msg}`);
+}
+
 // ─── Step 1: run pending migrations ──────────────────────────────────────────
 
 async function runMigrations(connection: mysql.Connection): Promise<void> {
-  console.log(`[bootstrap] Running migrations from: ${MIGRATIONS_FOLDER}`);
+  log("DB", `Executando migrações de: ${MIGRATIONS_FOLDER}`);
   const db = drizzle(connection);
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-  console.log("[bootstrap] ✓ DB OK");
+  log("DB", "✓ Migrações aplicadas");
 }
 
 // ─── Step 2: ensure critical schema (safety net) ─────────────────────────────
@@ -49,27 +59,20 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     );
     if ((rows[0] as ColRow).cnt === 0) {
       await connection.execute(`ALTER TABLE \`${table}\` ADD \`${column}\` ${definition}`);
-      console.log(`[bootstrap] ✓ Schema patched: ${table}.${column} added`);
+      log("DB", `✓ Schema corrigido: ${table}.${column} adicionada`);
     }
   }
 
-  // users — passwordHash (added after initial migrations)
-  await addColumnIfMissing("users", "passwordHash", "varchar(255)");
-
-  // documents — upload support columns (added in 0031)
-  await addColumnIfMissing(
-    "documents",
-    "sourceType",
-    "enum('ai','upload') NOT NULL DEFAULT 'ai'"
-  );
-  await addColumnIfMissing("documents", "s3Key", "varchar(500)");
-  await addColumnIfMissing("documents", "fileUrl", "varchar(1000)");
+  await addColumnIfMissing("users",     "passwordHash", "varchar(255)");
+  await addColumnIfMissing("documents", "sourceType",   "enum('ai','upload') NOT NULL DEFAULT 'ai'");
+  await addColumnIfMissing("documents", "s3Key",        "varchar(500)");
+  await addColumnIfMissing("documents", "fileUrl",      "varchar(1000)");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
 
 async function seedAdmin(connection: mysql.Connection): Promise<void> {
-  console.log("[bootstrap] Checking admin user...");
+  log("SEED", "Verificando usuário admin...");
   const db = drizzle(connection);
 
   const existing = await db
@@ -80,13 +83,10 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
 
   if (existing.length > 0) {
     if (existing[0].role !== "admin") {
-      await db
-        .update(users)
-        .set({ role: "admin" })
-        .where(eq(users.email, ADMIN_EMAIL));
-      console.log(`[bootstrap] ✓ Admin OK (${ADMIN_EMAIL} promovido para admin)`);
+      await db.update(users).set({ role: "admin" }).where(eq(users.email, ADMIN_EMAIL));
+      log("SEED", `✓ Admin promovido: ${ADMIN_EMAIL}`);
     } else {
-      console.log(`[bootstrap] ✓ Admin OK (${ADMIN_EMAIL} já existe)`);
+      log("SEED", `✓ Admin já existe: ${ADMIN_EMAIL}`);
     }
     return;
   }
@@ -101,29 +101,7 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
     loginMethod: "email",
     theme: "light",
   });
-
-  console.log(`[bootstrap] ✓ Admin OK (${ADMIN_EMAIL} criado)`);
-}
-
-// ─── Step 0: validate required environment variables ─────────────────────────
-
-const REQUIRED_ENV: Array<{ key: string; hint: string }> = [
-  { key: "DATABASE_URL",  hint: "MySQL connection string" },
-  { key: "JWT_SECRET",    hint: "session signing secret — min 32 chars" },
-  { key: "GEMINI_API_KEY", hint: "Google Gemini API key for AI features" },
-];
-
-function validateEnv(): void {
-  const missing = REQUIRED_ENV.filter(({ key }) => !process.env[key]);
-  if (missing.length > 0) {
-    const lines = missing.map(({ key, hint }) => `  • ${key}  (${hint})`).join("\n");
-    throw new Error(`[bootstrap] Missing required environment variables:\n${lines}`);
-  }
-
-  const jwtSecret = process.env.JWT_SECRET!;
-  if (jwtSecret.length < 32) {
-    throw new Error("[bootstrap] JWT_SECRET must be at least 32 characters long.");
-  }
+  log("SEED", `✓ Admin criado: ${ADMIN_EMAIL}`);
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -133,11 +111,18 @@ function validateEnv(): void {
  * Every step is idempotent — safe to call on every deploy.
  */
 export async function bootstrap(): Promise<void> {
-  validateEnv();
+  // Step 0 — validar variáveis obrigatórias antes de qualquer conexão
+  validateRequiredEnv();
+
+  console.info(
+    `[BOOT]${ENV_TAG} Iniciando ${APP_CONFIG.name} v${APP_CONFIG.version}` +
+    (APP_CONFIG.isStaging    ? " — ⚠️  STAGING" : "") +
+    (APP_CONFIG.isDevelopment ? " — DEV"         : "")
+  );
+
+  log("CONFIG", `APP_ENV=${APP_ENV} | S3=${AWS_CONFIG.isConfigured ? "✓" : "✗"} | AI=${AI_CONFIG.isConfigured ? "✓" : "✗"}`);
 
   const databaseUrl = process.env.DATABASE_URL!;
-
-  console.log("[bootstrap] Starting...");
   const connection = await mysql.createConnection(databaseUrl);
 
   try {
@@ -147,4 +132,6 @@ export async function bootstrap(): Promise<void> {
   } finally {
     await connection.end();
   }
+
+  log("OK", "Bootstrap concluído. Servidor pronto.");
 }

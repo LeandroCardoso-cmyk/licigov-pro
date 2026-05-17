@@ -1,9 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 import { getPlatformInstructions } from "./platformTemplates";
+import { AI_CONFIG } from "../config/ai";
 
-// Inicializar cliente Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
 
 /**
  * Gera o ETP (Estudo Técnico Preliminar) usando Google Gemini

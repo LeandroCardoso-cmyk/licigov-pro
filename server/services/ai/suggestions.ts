@@ -6,11 +6,12 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "../rag";
+import { AI_CONFIG } from "../../config/ai";
 import {
   ProcessContext, processBlock, documentsBlock, outputInstruction, fmtBrl, truncate,
 } from "./promptBuilder";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
 
 function getModel(maxTokens = 2048) {
   return genAI.getGenerativeModel({
