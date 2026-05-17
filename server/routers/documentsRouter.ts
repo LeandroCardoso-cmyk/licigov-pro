@@ -6,16 +6,41 @@ import { generateETP, generateTR, generateDFD, generateEdital, generateContrato,
 import { convertToPDF, convertToDOCX } from "../services/documentConverter";
 import { storagePut, storageGet } from "../storage";
 
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "text/plain",
+] as const;
+
+/** Verifica se o usuário é dono do processo ou membro com acesso. */
+async function assertProcessAccess(processId: number, userId: number): Promise<void> {
+  const process = await db.getProcessById(processId);
+  if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+  if (process.ownerId === userId) return;
+  const member = await db.getProcessMember(processId, userId);
+  if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
+}
+
+/** Verifica se o usuário é dono do processo (operações destrutivas). */
+async function assertProcessOwner(processId: number, userId: number): Promise<void> {
+  const process = await db.getProcessById(processId);
+  if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+  if (process.ownerId !== userId) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o responsável pode executar esta ação" });
+}
+
 export const documentsRouter = router({
   listByProcess: protectedProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertProcessAccess(input.processId, ctx.user.id);
       return await db.getDocumentsByProcess(input.processId);
     }),
 
   list: protectedProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertProcessAccess(input.processId, ctx.user.id);
       return await db.getDocumentsByProcess(input.processId);
     }),
 
@@ -23,9 +48,10 @@ export const documentsRouter = router({
     .input(z.object({
       processId: z.number(),
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
-      content: z.string(),
+      content: z.string().max(500_000),
     }))
     .mutation(async ({ ctx, input }) => {
+      await assertProcessAccess(input.processId, ctx.user.id);
       const existing = await db.getDocumentByProcessAndType(input.processId, input.type);
       const version = existing ? existing.version + 1 : 1;
 
@@ -52,7 +78,8 @@ export const documentsRouter = router({
       processId: z.number(),
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertProcessAccess(input.processId, ctx.user.id);
       return await db.getDocumentByProcessAndType(input.processId, input.type);
     }),
 
@@ -417,17 +444,16 @@ export const documentsRouter = router({
     .input(z.object({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
-      fileName: z.string(),
-      fileBase64: z.string(),
-      mimeType: z.string(),
+      fileName: z.string().max(255).regex(/^[\w\-. ]+$/, "Nome de arquivo inválido"),
+      fileBase64: z.string().max(15_000_000), // ~10 MB em base64
+      mimeType: z.enum(ALLOWED_MIME_TYPES),
     }))
     .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.processId);
-      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-      if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await assertProcessOwner(input.processId, ctx.user.id);
 
       const buffer = Buffer.from(input.fileBase64, "base64");
-      const s3Key = `processes/${input.processId}/${input.docType}/${Date.now()}_${input.fileName}`;
+      const safeFileName = input.fileName.replace(/[^a-zA-Z0-9_\-. ]/g, "_");
+      const s3Key = `processes/${input.processId}/${input.docType}/${Date.now()}_${safeFileName}`;
       const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
 
       const docs = await db.getDocumentsByProcess(input.processId);
@@ -476,11 +502,10 @@ export const documentsRouter = router({
 
   getVersionHistory: protectedProcedure
     .input(z.object({ documentId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const document = await db.getDocumentById(input.documentId);
-      if (!document) {
-        throw new Error("Documento não encontrado");
-      }
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      await assertProcessAccess(document.processId, ctx.user.id);
       return await db.getDocumentVersions(document.processId, document.type);
     }),
 
@@ -491,19 +516,12 @@ export const documentsRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const currentDocument = await db.getDocumentById(input.documentId);
-      if (!currentDocument) {
-        throw new Error("Documento não encontrado");
-      }
+      if (!currentDocument) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
 
       const versionToRestore = await db.getDocumentById(input.versionId);
-      if (!versionToRestore) {
-        throw new Error("Versão não encontrada");
-      }
+      if (!versionToRestore) throw new TRPCError({ code: "NOT_FOUND", message: "Versão não encontrada" });
 
-      const process = await db.getProcessById(currentDocument.processId);
-      if (!process) {
-        throw new Error("Processo não encontrado");
-      }
+      await assertProcessOwner(currentDocument.processId, ctx.user.id);
 
       const newVersion = currentDocument.version + 1;
       await db.createDocument({
@@ -533,14 +551,11 @@ export const documentsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const document = await db.getDocumentById(input.documentId);
-      if (!document) {
-        throw new Error("Documento não encontrado");
-      }
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      await assertProcessAccess(document.processId, ctx.user.id);
 
       const process = await db.getProcessById(document.processId);
-      if (!process) {
-        throw new Error("Processo não encontrado");
-      }
+      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
       const documentLabels: Record<string, string> = {
         dfd: "Documento Formalizador de Demanda (DFD)",
@@ -578,14 +593,11 @@ export const documentsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const document = await db.getDocumentById(input.documentId);
-      if (!document) {
-        throw new Error("Documento não encontrado");
-      }
+      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+      await assertProcessAccess(document.processId, ctx.user.id);
 
       const process = await db.getProcessById(document.processId);
-      if (!process) {
-        throw new Error("Processo não encontrado");
-      }
+      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
       const documentLabels: Record<string, string> = {
         dfd: "Documento Formalizador de Demanda (DFD)",

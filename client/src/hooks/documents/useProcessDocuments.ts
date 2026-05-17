@@ -95,11 +95,25 @@ export function useProcessDocuments({ processId, invalidate, setActiveTab }: Opt
     uploadInputRef.current?.click();
   };
 
+  const ALLOWED_MIME_TYPES = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+  ] as const;
+  type AllowedMime = typeof ALLOWED_MIME_TYPES[number];
+
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const docType = pendingUploadDocType.current;
     if (!file || !docType) return;
     e.target.value = "";
+
+    if (!ALLOWED_MIME_TYPES.includes(file.type as AllowedMime)) {
+      toast.error("Tipo de arquivo não permitido", { description: "Use PDF, DOCX ou TXT." });
+      return;
+    }
+
     setUploadingDoc(docType);
     const reader = new FileReader();
     reader.onload = () => {
@@ -108,7 +122,7 @@ export function useProcessDocuments({ processId, invalidate, setActiveTab }: Opt
         docType,
         fileName: file.name,
         fileBase64: (reader.result as string).split(",")[1],
-        mimeType: file.type,
+        mimeType: file.type as AllowedMime,
       });
     };
     reader.readAsDataURL(file);
