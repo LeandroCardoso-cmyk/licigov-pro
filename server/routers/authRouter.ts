@@ -7,16 +7,18 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
+import { rateLimitMiddleware } from "../services/rateLimiter";
 
 export const authRouter = router({
   me: publicProcedure.query(opts => opts.ctx.user),
 
   register: publicProcedure
+    .use(rateLimitMiddleware("login"))
     .input(
       z.object({
-        name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-        email: z.string().email("E-mail inválido"),
-        password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+        name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(120),
+        email: z.string().email("E-mail inválido").max(254),
+        password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").max(128),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -51,10 +53,11 @@ export const authRouter = router({
     }),
 
   login: publicProcedure
+    .use(rateLimitMiddleware("login"))
     .input(
       z.object({
-        email: z.string().email("E-mail inválido"),
-        password: z.string().min(1, "Informe a senha"),
+        email: z.string().email("E-mail inválido").max(254),
+        password: z.string().min(1, "Informe a senha").max(128),
       })
     )
     .mutation(async ({ ctx, input }) => {

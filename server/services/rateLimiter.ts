@@ -7,6 +7,7 @@
  */
 
 import { TRPCError } from '@trpc/server';
+import { middleware } from '../_core/trpc';
 
 /**
  * Armazenamento em memória para rate limiting
@@ -100,35 +101,30 @@ export function checkRateLimit(
  * Middleware para tRPC procedures
  */
 export function rateLimitMiddleware(limitType: keyof typeof RATE_LIMITS) {
-  return async (opts: { ctx: { user?: { id: number }; req: any }; next: () => Promise<any> }) => {
+  return middleware(async ({ ctx, next }) => {
     const limitConfig = RATE_LIMITS[limitType];
-    
-    // Usar ID do usuário ou IP como identificador
-    const identifier = opts.ctx.user?.id?.toString() || 
-                      opts.ctx.req?.ip || 
-                      opts.ctx.req?.headers?.['x-forwarded-for'] || 
-                      'anonymous';
+
+    const identifier = ctx.user?.id?.toString() ||
+      (ctx.req as any)?.ip ||
+      (ctx.req?.headers as any)?.['x-forwarded-for'] ||
+      'anonymous';
 
     const result = checkRateLimit(identifier, limitType);
 
     if (!result.allowed) {
-      const resetIn = Math.ceil((result.resetAt - Date.now()) / 1000 / 60); // minutos
-
+      const resetIn = Math.ceil((result.resetAt - Date.now()) / 1000 / 60);
       throw new TRPCError({
         code: 'TOO_MANY_REQUESTS',
         message: `${limitConfig.message} (Tente novamente em ${resetIn} minutos)`,
       });
     }
 
-    // Adicionar headers de rate limit na resposta
-    if (opts.ctx.req?.res) {
-      opts.ctx.req.res.setHeader('X-RateLimit-Limit', limitConfig.max.toString());
-      opts.ctx.req.res.setHeader('X-RateLimit-Remaining', result.remaining.toString());
-      opts.ctx.req.res.setHeader('X-RateLimit-Reset', result.resetAt.toString());
-    }
+    (ctx.res as any)?.setHeader?.('X-RateLimit-Limit', limitConfig.max.toString());
+    (ctx.res as any)?.setHeader?.('X-RateLimit-Remaining', result.remaining.toString());
+    (ctx.res as any)?.setHeader?.('X-RateLimit-Reset', result.resetAt.toString());
 
-    return opts.next();
-  };
+    return next();
+  });
 }
 
 /**
