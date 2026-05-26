@@ -1,5 +1,6 @@
 export * from "./connection";
 export * from "./users";
+export * from "./organizations";
 export * from "./processes";
 export * from "./collaboration";
 export * from "./comments";
