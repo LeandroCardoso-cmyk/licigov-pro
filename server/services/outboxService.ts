@@ -1,8 +1,15 @@
+import { eq, and, lte, isNull, or } from "drizzle-orm";
 import { getDb } from "../db/connection";
 import { outboxEvents, outboxDeadLetters } from "../../drizzle/schema";
-import { eq, and, lte, isNull, or } from "drizzle-orm";
+import { serviceLogger } from "./observabilityService";
 
+const log = serviceLogger("OutboxService");
 const MAX_ATTEMPTS = 5;
+
+export type TenantContext = {
+  orgName?: string;
+  orgSlug?: string;
+};
 
 export type OutboxEventPayload = {
   organizationId?: number;
@@ -11,16 +18,17 @@ export type OutboxEventPayload = {
   aggregateId: string;
   correlationId?: string;
   requestId?: string;
+  // Sprint 1.5 — Envelope v2: actor + tenant propagados até o dispatcher
+  actorId?: number;
+  actorName?: string;
+  tenantContext?: TenantContext;
   payload: Record<string, unknown>;
   scheduledAfter?: Date;
 };
 
 /**
- * Adiciona um evento ao outbox transacional.
+ * Adiciona evento ao outbox transacional.
  * Deve ser chamado dentro da mesma transação que modifica o agregado.
- *
- * Se uma instância de db transacional for fornecida, usa ela.
- * Caso contrário, usa conexão avulsa (aceitável para eventos não-críticos).
  */
 export async function appendOutboxEvent(
   event: OutboxEventPayload,
@@ -29,7 +37,7 @@ export async function appendOutboxEvent(
 ): Promise<void> {
   const db = txDb ?? await getDb();
   if (!db) {
-    console.error("[Outbox] DB indisponível — evento não registrado:", event.eventType);
+    log.error("db_unavailable", { eventType: event.eventType });
     return;
   }
 
@@ -41,16 +49,26 @@ export async function appendOutboxEvent(
     aggregateId: event.aggregateId,
     correlationId: event.correlationId ?? null,
     requestId: event.requestId ?? null,
+    actorId: event.actorId ?? null,
+    actorName: event.actorName ?? null,
+    tenantContext: event.tenantContext ?? null,
     payload: event.payload,
     status: "pending",
     attempts: 0,
     scheduledAfter: event.scheduledAfter ?? null,
   });
+
+  log.debug("event_appended", {
+    eventType: event.eventType,
+    aggregateType: event.aggregateType,
+    organizationId: event.organizationId,
+    correlationId: event.correlationId,
+  });
 }
 
 /**
  * Busca próximos eventos pendentes para o dispatcher processar.
- * Utiliza pessimistic lock (lockedBy + lockedUntil) para evitar duplo processamento.
+ * Pessimistic lock via lockedBy + lockedUntil para evitar duplo processamento.
  */
 export async function claimPendingEvents(
   workerId: string,
@@ -60,7 +78,7 @@ export async function claimPendingEvents(
   if (!db) return [];
 
   const now = new Date();
-  const lockUntil = new Date(now.getTime() + 60_000); // lock por 60s
+  const lockUntil = new Date(now.getTime() + 60_000);
 
   const rows = await db
     .select()
@@ -68,30 +86,22 @@ export async function claimPendingEvents(
     .where(
       and(
         eq(outboxEvents.status, "pending"),
-        or(
-          isNull(outboxEvents.scheduledAfter),
-          lte(outboxEvents.scheduledAfter, now),
-        ),
-        or(
-          isNull(outboxEvents.lockedUntil),
-          lte(outboxEvents.lockedUntil, now),
-        ),
+        or(isNull(outboxEvents.scheduledAfter), lte(outboxEvents.scheduledAfter, now)),
+        or(isNull(outboxEvents.lockedUntil), lte(outboxEvents.lockedUntil, now)),
       ),
     )
     .limit(batchSize);
 
   if (rows.length === 0) return [];
 
-  const ids = rows.map(r => r.id);
-
-  // Lock atômico (sem FOR UPDATE aqui — Railway MySQL pode não suportar bem em drizzle)
-  for (const id of ids) {
+  for (const row of rows) {
     await db
       .update(outboxEvents)
       .set({ status: "processing", lockedBy: workerId, lockedUntil: lockUntil })
-      .where(and(eq(outboxEvents.id, id), eq(outboxEvents.status, "pending")));
+      .where(and(eq(outboxEvents.id, row.id), eq(outboxEvents.status, "pending")));
   }
 
+  log.debug("events_claimed", { workerId, count: rows.length });
   return rows;
 }
 
@@ -109,8 +119,8 @@ export async function markDelivered(eventId: string): Promise<void> {
 }
 
 /**
- * Registra falha de entrega e incrementa tentativas.
- * Se atingir MAX_ATTEMPTS, move para dead letter queue.
+ * Registra falha de entrega.
+ * Aplica backoff exponencial. Após MAX_ATTEMPTS, move para DLQ.
  */
 export async function markFailed(eventId: string, error: string): Promise<void> {
   const db = await getDb();
@@ -128,7 +138,6 @@ export async function markFailed(eventId: string, error: string): Promise<void> 
   const newAttempts = event.attempts + 1;
 
   if (newAttempts >= MAX_ATTEMPTS) {
-    // Mover para DLQ
     await db.insert(outboxDeadLetters).values({
       id: crypto.randomUUID(),
       organizationId: event.organizationId,
@@ -145,8 +154,9 @@ export async function markFailed(eventId: string, error: string): Promise<void> 
       .update(outboxEvents)
       .set({ status: "failed", attempts: newAttempts, lastError: error, lockedBy: null })
       .where(eq(outboxEvents.id, eventId));
+
+    log.warn("event_moved_to_dlq", { eventId, eventType: event.eventType, attempts: newAttempts });
   } else {
-    // Backoff exponencial: 2^n segundos
     const backoffSec = Math.pow(2, newAttempts);
     const scheduledAfter = new Date(Date.now() + backoffSec * 1000);
 
@@ -161,5 +171,7 @@ export async function markFailed(eventId: string, error: string): Promise<void> 
         scheduledAfter,
       })
       .where(eq(outboxEvents.id, eventId));
+
+    log.info("event_retry_scheduled", { eventId, attempt: newAttempts, backoffSec });
   }
 }
