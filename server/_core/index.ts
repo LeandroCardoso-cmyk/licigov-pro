@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { bootstrap } from "../bootstrap";
 import { APP_CONFIG } from "../config/app";
 import { IS_DEVELOPMENT } from "../config/env";
+import { correlationMiddleware } from "../middleware/correlationMiddleware";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,7 @@ async function startServer() {
 
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
+  app.use(correlationMiddleware);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -27,8 +27,10 @@ import { contractsRouter } from "./routers/contractsRouter";
 import { contactRouter } from "./routers/contactRouter";
 import { legalOpinionsRouter } from "./routers/legalOpinionsRouter";
 import { aiAssistantRouter } from "./routers/aiAssistantRouter";
+import { organizationsRouter } from "./routers/organizationsRouter";
 
 export const appRouter = router({
+  organizations: organizationsRouter,
   system: systemRouter,
   contact: contactRouter,
   auth: authRouter,

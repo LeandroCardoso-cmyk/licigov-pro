@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json, decimal } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json, decimal, primaryKey, unique } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -26,6 +26,7 @@ export type InsertUser = typeof users.$inferInsert;
  */
 export const processes = mysqlTable("processes", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   object: text("object"), // Objeto da contratação
@@ -47,6 +48,7 @@ export type InsertProcess = typeof processes.$inferInsert;
  */
 export const documents = mysqlTable("documents", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   processId: int("processId").notNull(),
   type: mysqlEnum("type", ["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]).notNull(),
   content: text("content"), // Conteúdo do documento em markdown (gerado por IA)
@@ -160,6 +162,7 @@ export type InsertNotification = typeof notifications.$inferInsert;
  */
 export const comments = mysqlTable("comments", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   documentId: int("documentId").notNull(),
   processId: int("processId").notNull(),
   userId: int("userId").notNull(),
@@ -218,10 +221,16 @@ export type InsertAuditLog = typeof auditLogs.$inferInsert;
  */
 export const activityLogs = mysqlTable("activity_logs", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
+  correlationId: varchar("correlationId", { length: 36 }),
+  requestId: varchar("requestId", { length: 36 }),
+  actorName: varchar("actorName", { length: 255 }),
+  entityType: varchar("entityType", { length: 50 }),
+  entityId: int("entityId"),
   processId: int("processId").notNull(),
   userId: int("userId").notNull(),
-  action: varchar("action", { length: 255 }).notNull(), // Ex: "criou o ETP", "editou o TR"
-  details: text("details"), // Detalhes adicionais em JSON
+  action: varchar("action", { length: 255 }).notNull(),
+  details: text("details"), // JSON com detalhes adicionais
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -548,6 +557,7 @@ export type InsertProcessItem = typeof processItems.$inferInsert;
  */
 export const tasks = mysqlTable("tasks", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   title: varchar("title", { length: 200 }).notNull(), // Título da tarefa
   description: text("description"), // Descrição detalhada
   type: varchar("type", { length: 50 }).notNull(), // Tipo de atividade (Pregão Eletrônico, Análise de Documentação, etc.)
@@ -933,6 +943,7 @@ export type InsertDirectContractLegalArticle = typeof directContractLegalArticle
  */
 export const directContracts = mysqlTable("direct_contracts", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   // Vinculação com processo (se houver)
   processId: int("processId"), // FK para processes (opcional)
   // Identificação
@@ -1107,6 +1118,7 @@ export type InsertDirectContractChecklistProgress = typeof directContractCheckli
  */
 export const contracts = mysqlTable("contracts", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   // Número e identificação
   number: varchar("number", { length: 50 }).notNull().unique(), // Ex: "001/2025"
   year: int("year").notNull(),
@@ -1307,6 +1319,7 @@ export type InsertContractAuditLog = typeof contractAuditLogs.$inferInsert;
  */
 export const legalOpinions = mysqlTable("legal_opinions", {
   id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   // Título e descrição
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
@@ -1402,3 +1415,163 @@ export const signatureHistory = mysqlTable("signature_history", {
 
 export type SignatureHistory = typeof signatureHistory.$inferSelect;
 export type InsertSignatureHistory = typeof signatureHistory.$inferInsert;
+
+// ============================================================================
+// SPRINT 1 — MULTI-TENANT FOUNDATION
+// ============================================================================
+
+/**
+ * Organizações (tenants)
+ * Âncora do modelo multi-tenant. Cada organização é um município/órgão isolado.
+ */
+export const organizations = mysqlTable("organizations", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  cnpj: varchar("cnpj", { length: 18 }),
+  slug: varchar("slug", { length: 100 }).notNull(),
+  esfera: mysqlEnum("esfera", ["federal", "estadual", "municipal", "outro"]).default("municipal"),
+  uf: varchar("uf", { length: 2 }),
+  municipio: varchar("municipio", { length: 100 }),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("organizations_cnpj_unique").on(table.cnpj),
+  unique("organizations_slug_unique").on(table.slug),
+]);
+
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = typeof organizations.$inferInsert;
+
+/**
+ * Membros de organizações com papel (RBAC nível organização)
+ */
+export const organizationMembers = mysqlTable("organization_members", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["owner", "admin", "manager", "operator", "viewer"]).default("operator").notNull(),
+  invitedBy: int("invitedBy"),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("org_members_org_user_unique").on(table.organizationId, table.userId),
+]);
+
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type InsertOrganizationMember = typeof organizationMembers.$inferInsert;
+export type OrgRole = OrganizationMember["role"];
+
+// ============================================================================
+// SPRINT 1 — OUTBOX FOUNDATION
+// ============================================================================
+
+/**
+ * Eventos do outbox transacional.
+ * Garantia de entrega: escrita no mesmo tx do agregado → dispatcher consome assincronamente.
+ */
+export const outboxEvents = mysqlTable("outbox_events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  organizationId: int("organizationId"),
+  eventType: varchar("eventType", { length: 100 }).notNull(),
+  aggregateType: varchar("aggregateType", { length: 50 }).notNull(),
+  aggregateId: varchar("aggregateId", { length: 50 }).notNull(),
+  correlationId: varchar("correlationId", { length: 36 }),
+  requestId: varchar("requestId", { length: 36 }),
+  payload: json("payload").notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "delivered", "failed"]).default("pending").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  lastError: text("lastError"),
+  lockedBy: varchar("lockedBy", { length: 100 }),
+  lockedUntil: timestamp("lockedUntil"),
+  scheduledAfter: timestamp("scheduledAfter"),
+  processedAt: timestamp("processedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OutboxEvent = typeof outboxEvents.$inferSelect;
+export type InsertOutboxEvent = typeof outboxEvents.$inferInsert;
+
+/**
+ * Dead letter queue para eventos do outbox que falharam após max retries.
+ */
+export const outboxDeadLetters = mysqlTable("outbox_dead_letters", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  organizationId: int("organizationId"),
+  eventType: varchar("eventType", { length: 100 }).notNull(),
+  aggregateType: varchar("aggregateType", { length: 50 }).notNull(),
+  aggregateId: varchar("aggregateId", { length: 50 }).notNull(),
+  correlationId: varchar("correlationId", { length: 36 }),
+  payload: json("payload").notNull(),
+  attempts: int("attempts").notNull(),
+  lastError: text("lastError"),
+  movedAt: timestamp("movedAt").defaultNow().notNull(),
+  resolution: mysqlEnum("resolution", ["pending", "resolved", "discarded"]).default("pending").notNull(),
+  resolvedBy: int("resolvedBy"),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedNote: text("resolvedNote"),
+});
+
+export type OutboxDeadLetter = typeof outboxDeadLetters.$inferSelect;
+export type InsertOutboxDeadLetter = typeof outboxDeadLetters.$inferInsert;
+
+/**
+ * Chaves de idempotência para prevenir duplo processamento.
+ * Expiração: 24h. Limpeza via job agendado.
+ */
+export const idempotencyKeys = mysqlTable("idempotency_keys", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  key: varchar("key", { length: 255 }).notNull(),
+  operation: varchar("operation", { length: 100 }).notNull(),
+  status: mysqlEnum("status", ["processing", "completed", "failed"]).default("processing").notNull(),
+  requestPayloadHash: varchar("requestPayloadHash", { length: 64 }),
+  responsePayload: json("responsePayload"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+}, (table) => [
+  unique("idempotency_org_user_key").on(table.organizationId, table.userId, table.key),
+]);
+
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type InsertIdempotencyKey = typeof idempotencyKeys.$inferInsert;
+
+// ============================================================================
+// SPRINT 1 — FEATURE FLAGS FOUNDATION
+// ============================================================================
+
+/**
+ * Feature flags globais (afetam todos os tenants).
+ * Tipos: Release flags, Ops flags (emergência), Experiment flags, Plan flags.
+ */
+export const featureFlags = mysqlTable("feature_flags", {
+  name: varchar("name", { length: 100 }).primaryKey(),
+  enabled: boolean("enabled").default(false).notNull(),
+  reason: varchar("reason", { length: 255 }),
+  updatedBy: int("updatedBy"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+export type InsertFeatureFlag = typeof featureFlags.$inferInsert;
+
+/**
+ * Feature flags por tenant (override do flag global para organização específica).
+ * Suporta rollout gradual via campo `percentage` (0-100).
+ */
+export const tenantFeatureFlags = mysqlTable("tenant_feature_flags", {
+  organizationId: int("organizationId").notNull(),
+  flagName: varchar("flagName", { length: 100 }).notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
+  percentage: int("percentage").default(100),
+  expiresAt: timestamp("expiresAt"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organizationId, table.flagName] }),
+]);
+
+export type TenantFeatureFlag = typeof tenantFeatureFlags.$inferSelect;
+export type InsertTenantFeatureFlag = typeof tenantFeatureFlags.$inferInsert;
