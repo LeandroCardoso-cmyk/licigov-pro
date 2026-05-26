@@ -3,9 +3,9 @@ import bcrypt from "bcrypt";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { users, organizations, organizationMembers } from "../drizzle/schema";
+import { users } from "../drizzle/schema";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
@@ -63,30 +63,12 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     }
   }
 
-  // Colunas pré-Sprint 1 (legacy)
-  await addColumnIfMissing("users",     "passwordHash",    "varchar(255)");
-  await addColumnIfMissing("documents", "sourceType",     "enum('ai','upload') NOT NULL DEFAULT 'ai'");
-  await addColumnIfMissing("documents", "s3Key",          "varchar(500)");
-  await addColumnIfMissing("documents", "fileUrl",        "varchar(1000)");
-  await addColumnIfMissing("documents", "createdBy",      "int");
-  await addColumnIfMissing("documents", "documentStatus", "enum('draft','in_review','approved','rejected') NOT NULL DEFAULT 'draft'");
-
-  // Sprint 1 — Multi-tenant columns (zero-gap safety net)
-  await addColumnIfMissing("processes",        "organizationId", "int");
-  await addColumnIfMissing("documents",        "organizationId", "int");
-  await addColumnIfMissing("tasks",            "organizationId", "int");
-  await addColumnIfMissing("contracts",        "organizationId", "int");
-  await addColumnIfMissing("direct_contracts", "organizationId", "int");
-  await addColumnIfMissing("legal_opinions",   "organizationId", "int");
-  await addColumnIfMissing("comments",         "organizationId", "int");
-  await addColumnIfMissing("activity_logs",    "organizationId", "int");
-
-  // Sprint 1 — Activity logs v2
-  await addColumnIfMissing("activity_logs", "correlationId", "varchar(36)");
-  await addColumnIfMissing("activity_logs", "requestId",     "varchar(36)");
-  await addColumnIfMissing("activity_logs", "actorName",     "varchar(255)");
-  await addColumnIfMissing("activity_logs", "entityType",    "varchar(50)");
-  await addColumnIfMissing("activity_logs", "entityId",      "int");
+  await addColumnIfMissing("users",     "passwordHash",   "varchar(255)");
+  await addColumnIfMissing("documents", "sourceType",    "enum('ai','upload') NOT NULL DEFAULT 'ai'");
+  await addColumnIfMissing("documents", "s3Key",         "varchar(500)");
+  await addColumnIfMissing("documents", "fileUrl",       "varchar(1000)");
+  await addColumnIfMissing("documents", "createdBy",     "int");
+  await addColumnIfMissing("documents", "documentStatus","enum('draft','in_review','approved','rejected') NOT NULL DEFAULT 'draft'");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
@@ -124,49 +106,6 @@ async function seedAdmin(connection: mysql.Connection): Promise<void> {
   log("SEED", `✓ Admin criado: ${ADMIN_EMAIL}`);
 }
 
-// ─── Step 4: seed admin membership na org padrão ────────────────────────────
-
-async function seedDefaultOrgMembership(connection: mysql.Connection): Promise<void> {
-  log("SEED", "Verificando membership do admin na org padrão...");
-  const db = drizzle(connection);
-
-  // Verificar se a tabela organizations existe (pode não existir em dev sem migrations)
-  const [tables] = await connection.execute<RowDataPacket[]>(
-    "SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations'"
-  );
-  if ((tables[0] as { cnt: number }).cnt === 0) {
-    log("SEED", "Tabela organizations não existe ainda — pulando seed de membership");
-    return;
-  }
-
-  const adminUsers = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.role, "admin"))
-    .limit(10);
-
-  for (const adminUser of adminUsers) {
-    const existingMembership = await db
-      .select({ id: organizationMembers.id })
-      .from(organizationMembers)
-      .where(and(
-        eq(organizationMembers.organizationId, 1),
-        eq(organizationMembers.userId, adminUser.id),
-      ))
-      .limit(1);
-
-    if (existingMembership.length === 0) {
-      await db.insert(organizationMembers).values({
-        organizationId: 1,
-        userId: adminUser.id,
-        role: "owner",
-        ativo: true,
-      });
-      log("SEED", `✓ Membership owner criado para admin userId=${adminUser.id} na org padrão`);
-    }
-  }
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
@@ -192,7 +131,6 @@ export async function bootstrap(): Promise<void> {
     await runMigrations(connection);
     await ensureSchema(connection);
     await seedAdmin(connection);
-    await seedDefaultOrgMembership(connection);
   } finally {
     await connection.end();
   }
