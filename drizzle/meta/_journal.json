@@ -351,6 +351,34 @@
       "when": 1749600000000,
       "tag": "0049_document_templates_extend",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1749686400000,
+      "tag": "0050_document_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1749772800000,
+      "tag": "0051_document_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1749859200000,
+      "tag": "0052_document_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1749945600000,
+      "tag": "0053_document_render_cache",
+      "breakpoints": true
     }
   ]
 }
