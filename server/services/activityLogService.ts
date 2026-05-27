@@ -1,11 +1,18 @@
 import { getDb } from "../db/connection";
 import { activityLogs } from "../../drizzle/schema";
+import type { OrgRole } from "../../drizzle/schema";
 
 export type ActivityLogPayload = {
   organizationId?: number;
-  processId: number;
+  processId?: number;
   userId: number;
+  // Sprint 1.5 — snapshots imutáveis
   actorName?: string;
+  actorEmail?: string;
+  actorRole?: string;
+  orgName?: string;
+  sourceContext?: "api" | "job" | "system" | "test" | "webhook";
+  ipAddress?: string;
   action: string;
   entityType?: string;
   entityId?: number;
@@ -15,8 +22,8 @@ export type ActivityLogPayload = {
 };
 
 /**
- * Registra uma entrada estruturada no activity_log.
- * Falhas silenciosas: auditoria nunca pode quebrar o fluxo principal.
+ * Registra entrada estruturada no activity_log.
+ * Falha silenciosa: auditoria nunca pode quebrar o fluxo principal.
  */
 export async function logActivity(payload: ActivityLogPayload): Promise<void> {
   try {
@@ -25,9 +32,14 @@ export async function logActivity(payload: ActivityLogPayload): Promise<void> {
 
     await db.insert(activityLogs).values({
       organizationId: payload.organizationId ?? null,
-      processId: payload.processId,
+      processId: payload.processId ?? null,
       userId: payload.userId,
       actorName: payload.actorName ?? null,
+      actorEmail: payload.actorEmail ?? null,
+      actorRole: payload.actorRole ?? null,
+      orgName: payload.orgName ?? null,
+      sourceContext: payload.sourceContext ?? "api",
+      ipAddress: payload.ipAddress ?? null,
       action: payload.action,
       entityType: payload.entityType ?? null,
       entityId: payload.entityId ?? null,
@@ -36,36 +48,50 @@ export async function logActivity(payload: ActivityLogPayload): Promise<void> {
       details: payload.details ? JSON.stringify(payload.details) : null,
     });
   } catch (err) {
-    // Auditoria falha silenciosamente — nunca propagar erro
     console.error("[ActivityLog] Falha ao registrar atividade:", err);
   }
 }
 
-/**
- * Versão conveniente que extrai contexto do tRPC context.
- */
 export type TrpcAuditCtx = {
   organizationId: number | null;
-  user: { id: number; name?: string | null };
+  user: { id: number; name?: string | null; email?: string | null };
   correlationId: string;
   requestId: string;
+  orgMembership?: { role: OrgRole } | null;
+  orgName?: string | null;
+  req?: { ip?: string; socket?: { remoteAddress?: string } };
 };
 
+/**
+ * Versão conveniente que extrai contexto do tRPC context.
+ * Captura snapshots automáticos de actorEmail, actorRole e orgName.
+ */
 export async function logFromCtx(
   ctx: TrpcAuditCtx,
-  processId: number,
+  processIdOrNull: number | null,
   action: string,
   extras?: {
     entityType?: string;
     entityId?: number;
     details?: Record<string, unknown>;
+    sourceContext?: "api" | "job" | "system" | "test" | "webhook";
   },
 ): Promise<void> {
+  const ip =
+    (ctx.req as { ip?: string } | undefined)?.ip ??
+    (ctx.req as { socket?: { remoteAddress?: string } } | undefined)?.socket?.remoteAddress ??
+    undefined;
+
   await logActivity({
     organizationId: ctx.organizationId ?? undefined,
-    processId,
+    processId: processIdOrNull ?? undefined,
     userId: ctx.user.id,
     actorName: ctx.user.name ?? undefined,
+    actorEmail: ctx.user.email ?? undefined,
+    actorRole: ctx.orgMembership?.role ?? undefined,
+    orgName: ctx.orgName ?? undefined,
+    sourceContext: extras?.sourceContext ?? "api",
+    ipAddress: ip,
     action,
     entityType: extras?.entityType,
     entityId: extras?.entityId,

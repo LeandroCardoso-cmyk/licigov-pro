@@ -1,9 +1,12 @@
 import type { Request } from "express";
 import { eq, and } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { organizationMembers } from "../../drizzle/schema";
 import type { OrganizationMember } from "../../drizzle/schema";
-import { TRPCError } from "@trpc/server";
+import { serviceLogger } from "./observabilityService";
+
+const log = serviceLogger("TenantService");
 
 export type TenantResolution = {
   organizationId: number;
@@ -15,8 +18,8 @@ export type TenantResolution = {
  *
  * Prioridade:
  * 1. Header X-Organization-Id (usuário com múltiplos memberships)
- * 2. Único membership ativo do usuário
- * 3. Fallback: org padrão id=1 se usuário tem membership nela
+ * 2. Único membership ativo → auto-selecionar
+ * 3. Sem membership → fallback org=1 (zero-gap compat)
  */
 export async function resolveTenantForUser(
   userId: number,
@@ -30,40 +33,38 @@ export async function resolveTenantForUser(
   const allMemberships = await db
     .select()
     .from(organizationMembers)
-    .where(and(
-      eq(organizationMembers.userId, userId),
-      eq(organizationMembers.ativo, true),
-    ));
+    .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.ativo, true)));
 
   if (allMemberships.length === 0) {
-    // Usuário sem membership: atribuir à org padrão (fallback zero-gap)
+    log.info("tenant_fallback_no_membership", { userId });
     return {
       organizationId: 1,
       membership: buildDefaultMembership(userId, 1),
     };
   }
 
-  // Header explícito do cliente (usuário com múltiplos memberships)
   const orgIdHeader = req.headers["x-organization-id"];
   if (orgIdHeader) {
     const requestedOrgId = parseInt(orgIdHeader as string, 10);
     const membership = allMemberships.find(m => m.organizationId === requestedOrgId);
     if (!membership) {
+      log.warn("tenant_forbidden_no_membership_for_org", { userId, requestedOrgId });
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "Sem acesso à organização solicitada.",
       });
     }
+    log.debug("tenant_resolved_via_header", { userId, organizationId: requestedOrgId });
     return { organizationId: requestedOrgId, membership };
   }
 
-  // Único membership → auto-selecionar
   if (allMemberships.length === 1) {
     const m = allMemberships[0];
+    log.debug("tenant_resolved_single_membership", { userId, organizationId: m.organizationId });
     return { organizationId: m.organizationId, membership: m };
   }
 
-  // Múltiplos memberships sem header → exigir seleção explícita
+  log.warn("tenant_multiple_orgs_no_header", { userId, count: allMemberships.length });
   throw new TRPCError({
     code: "BAD_REQUEST",
     message: "Você tem acesso a múltiplas organizações. Informe X-Organization-Id.",
@@ -71,7 +72,7 @@ export async function resolveTenantForUser(
 }
 
 /**
- * Obtém o membership de um usuário em uma organização específica.
+ * Obtém o membership ativo de um usuário em uma organização específica.
  */
 export async function getMembership(
   userId: number,
@@ -83,11 +84,13 @@ export async function getMembership(
   const rows = await db
     .select()
     .from(organizationMembers)
-    .where(and(
-      eq(organizationMembers.userId, userId),
-      eq(organizationMembers.organizationId, organizationId),
-      eq(organizationMembers.ativo, true),
-    ))
+    .where(
+      and(
+        eq(organizationMembers.userId, userId),
+        eq(organizationMembers.organizationId, organizationId),
+        eq(organizationMembers.ativo, true),
+      ),
+    )
     .limit(1);
 
   return rows[0] ?? null;
@@ -95,7 +98,6 @@ export async function getMembership(
 
 /**
  * Membership virtual para usuários sem registro formal (zero-gap compatibility).
- * Usado durante a fase de backfill antes de todos os dados terem organizationId preenchido.
  */
 function buildDefaultMembership(userId: number, organizationId: number): OrganizationMember {
   return {

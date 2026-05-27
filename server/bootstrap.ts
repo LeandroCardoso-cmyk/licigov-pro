@@ -87,6 +87,18 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
   await addColumnIfMissing("activity_logs", "actorName",     "varchar(255)");
   await addColumnIfMissing("activity_logs", "entityType",    "varchar(50)");
   await addColumnIfMissing("activity_logs", "entityId",      "int");
+
+  // Sprint 1.5 — ActivityLog hardening: snapshots imutáveis
+  await addColumnIfMissing("activity_logs", "actorEmail",    "varchar(320)");
+  await addColumnIfMissing("activity_logs", "actorRole",     "varchar(50)");
+  await addColumnIfMissing("activity_logs", "orgName",       "varchar(255)");
+  await addColumnIfMissing("activity_logs", "sourceContext", "enum('api','job','system','test','webhook') NOT NULL DEFAULT 'api'");
+  await addColumnIfMissing("activity_logs", "ipAddress",     "varchar(45)");
+
+  // Sprint 1.5 — Outbox envelope v2: actor + tenant context
+  await addColumnIfMissing("outbox_events", "actorId",       "int");
+  await addColumnIfMissing("outbox_events", "actorName",     "varchar(255)");
+  await addColumnIfMissing("outbox_events", "tenantContext", "json");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

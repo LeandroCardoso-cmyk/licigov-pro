@@ -1,8 +1,10 @@
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/connection";
 import { featureFlags, tenantFeatureFlags } from "../../drizzle/schema";
+import { serviceLogger } from "./observabilityService";
 
-// Cache em memória simples (TTL 60s) para reduzir queries em hot path
+const log = serviceLogger("FeatureFlagService");
+
 type CacheEntry = { value: boolean; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60_000;
@@ -25,13 +27,10 @@ function cacheSet(key: string, value: boolean): void {
  * Avalia se uma feature flag está habilitada para uma organização.
  *
  * Ordem de prioridade:
- * 1. Flag global desabilitada (Ops flag) → false, sempre (overrides tudo)
- * 2. Override por tenant (tenant_feature_flags) → valor do tenant
- * 3. Flag global → valor global
+ * 1. Ops flag global ativada (kill-switch) → false sempre (overrides tudo)
+ * 2. Override por tenant com percentage + expiry
+ * 3. Valor global
  * 4. Default → false (safe default)
- *
- * Para flags do tipo Ops (desabilitação de emergência):
- * se flag global = true (desabilitada) → a feature está DESLIGADA independente do tenant.
  */
 export async function isFeatureEnabled(
   flagName: string,
@@ -44,67 +43,86 @@ export async function isFeatureEnabled(
   const db = await getDb();
   if (!db) return false;
 
-  // 1. Verificar flag global
   const [globalFlag] = await db
     .select()
     .from(featureFlags)
     .where(eq(featureFlags.name, flagName))
     .limit(1);
 
-  // Flags de emergência (FF_*_DISABLE): se enabled=true → feature está DESLIGADA
-  const isDisableFlag = flagName.includes("_DISABLE") || flagName === "FF_OUTBOX_DISPATCHER_PAUSE";
-  if (isDisableFlag && globalFlag?.enabled === true) {
+  const isKillSwitch = flagName.includes("_DISABLE") || flagName === "FF_OUTBOX_DISPATCHER_PAUSE";
+  if (isKillSwitch && globalFlag?.enabled === true) {
+    log.info("flag_kill_switch_active", { flagName, organizationId });
     cacheSet(cacheKey, false);
     return false;
   }
 
-  // 2. Override por tenant
   const [tenantFlag] = await db
     .select()
     .from(tenantFeatureFlags)
-    .where(and(
-      eq(tenantFeatureFlags.organizationId, organizationId),
-      eq(tenantFeatureFlags.flagName, flagName),
-    ))
+    .where(
+      and(
+        eq(tenantFeatureFlags.organizationId, organizationId),
+        eq(tenantFeatureFlags.flagName, flagName),
+      ),
+    )
     .limit(1);
 
   if (tenantFlag) {
-    // Verificar expiração
-    if (tenantFlag.expiresAt && tenantFlag.expiresAt < new Date()) {
-      // Flag expirada → cair para global
-    } else {
-      // Suporte a rollout gradual via percentage
+    if (!tenantFlag.expiresAt || tenantFlag.expiresAt >= new Date()) {
       const pct = tenantFlag.percentage ?? 100;
       const enabled = tenantFlag.enabled && (pct >= 100 || Math.random() * 100 < pct);
       cacheSet(cacheKey, enabled);
+      log.debug("flag_resolved_tenant", { flagName, organizationId, enabled, percentage: pct });
       return enabled;
     }
+    log.info("flag_tenant_override_expired", { flagName, organizationId });
   }
 
-  // 3. Valor global (não-Ops flags)
   const globalEnabled = globalFlag?.enabled ?? false;
   cacheSet(cacheKey, globalEnabled);
+  log.debug("flag_resolved_global", { flagName, organizationId, enabled: globalEnabled });
   return globalEnabled;
 }
 
 /**
- * Invalida o cache de feature flags para uma organização.
- * Chamar após atualizar flags via admin.
+ * Invalida cache de feature flags.
+ *
+ * - invalidateFlagCache()                → limpa todo o cache
+ * - invalidateFlagCache(flagName)        → limpa flag em todos os tenants
+ * - invalidateFlagCache(flagName, orgId) → limpa flag de um tenant específico
  */
 export function invalidateFlagCache(flagName?: string, organizationId?: number): void {
-  if (flagName && organizationId) {
+  if (flagName && organizationId !== undefined) {
     cache.delete(`${flagName}:${organizationId}`);
+    log.info("flag_cache_invalidated", { flagName, organizationId, scope: "tenant" });
+  } else if (flagName) {
+    for (const key of cache.keys()) {
+      if (key.startsWith(`${flagName}:`)) cache.delete(key);
+    }
+    log.info("flag_cache_invalidated", { flagName, scope: "all_tenants" });
   } else {
     cache.clear();
+    log.info("flag_cache_invalidated", { scope: "global" });
   }
 }
 
 /**
- * Verifica flags de Ops (emergência global).
- * Mais simples: não verifica tenant override — é global.
+ * Invalida todas as flags de um tenant específico.
+ */
+export function invalidateAllFlagsForTenant(organizationId: number): void {
+  const suffix = `:${organizationId}`;
+  for (const key of cache.keys()) {
+    if (key.endsWith(suffix)) cache.delete(key);
+  }
+  log.info("flag_cache_invalidated", { organizationId, scope: "all_flags_for_tenant" });
+}
+
+/**
+ * Verifica flags de Ops (emergência global — sem tenant override).
  */
 export async function isGlobalFlagEnabled(flagName: string): Promise<boolean> {
-  const cached = cacheGet(`global:${flagName}`);
+  const cacheKey = `global:${flagName}`;
+  const cached = cacheGet(cacheKey);
   if (cached !== undefined) return cached;
 
   const db = await getDb();
@@ -117,6 +135,20 @@ export async function isGlobalFlagEnabled(flagName: string): Promise<boolean> {
     .limit(1);
 
   const enabled = row?.enabled ?? false;
-  cacheSet(`global:${flagName}`, enabled);
+  cacheSet(cacheKey, enabled);
   return enabled;
+}
+
+/**
+ * Snapshot do estado do cache (para observabilidade/debug).
+ */
+export function getFlagCacheSnapshot(): Record<string, { value: boolean; ttlMs: number }> {
+  const now = Date.now();
+  const snapshot: Record<string, { value: boolean; ttlMs: number }> = {};
+  for (const [key, entry] of cache.entries()) {
+    if (entry.expiresAt > now) {
+      snapshot[key] = { value: entry.value, ttlMs: entry.expiresAt - now };
+    }
+  }
+  return snapshot;
 }

@@ -45,7 +45,7 @@ export const organizationsRouter = router({
   ).mutation(async ({ ctx, input }) => {
     await updateOrganization(ctx.organizationId, input);
 
-    await logFromCtx(ctx, 0, "org.updated", {
+    await logFromCtx(ctx, null, "org.updated", {
       entityType: "Organization",
       entityId: ctx.organizationId,
       details: input,
@@ -95,7 +95,7 @@ export const organizationsRouter = router({
       ativo: true,
     });
 
-    await logFromCtx(ctx, 0, "org.member_invited", {
+    await logFromCtx(ctx, null, "org.member_invited", {
       entityType: "OrganizationMember",
       entityId: targetUser.id,
       details: { email: input.email, role: input.role },
@@ -129,7 +129,7 @@ export const organizationsRouter = router({
 
     await updateMemberRole(ctx.organizationId, input.userId, input.role);
 
-    await logFromCtx(ctx, 0, "org.member_role_updated", {
+    await logFromCtx(ctx, null, "org.member_role_updated", {
       entityType: "OrganizationMember",
       entityId: input.userId,
       details: { newRole: input.role, previousRole: target.role },
@@ -168,7 +168,7 @@ export const organizationsRouter = router({
 
     await removeMemberFromOrg(ctx.organizationId, input.userId);
 
-    await logFromCtx(ctx, 0, "org.member_removed", {
+    await logFromCtx(ctx, null, "org.member_removed", {
       entityType: "OrganizationMember",
       entityId: input.userId,
     });
