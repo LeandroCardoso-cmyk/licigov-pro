@@ -1,0 +1,137 @@
+# LiciGov Pro — Master Index
+
+> Versão: 0.8.0 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-05-27
+
+LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
+
+---
+
+## Navegação Rápida
+
+| Categoria | Arquivo Principal | Descrição |
+|-----------|-------------------|-----------|
+| Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
+| Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
+| Multi-tenant | [architecture/MULTI_TENANT_MODEL.md](architecture/MULTI_TENANT_MODEL.md) | Isolamento e RBAC |
+| Motor Documental | [architecture/DOCUMENT_ENGINE.md](architecture/DOCUMENT_ENGINE.md) | Versionamento, workflow, diff |
+| Motor de Importação | [architecture/IMPORT_ENGINE.md](architecture/IMPORT_ENGINE.md) | Parsers, staging, canonicalização |
+| Governança | [governance/GOVERNANCE.md](governance/GOVERNANCE.md) | Decisões e padrões |
+| Engenharia | [governance/ENGINEERING_STANDARDS.md](governance/ENGINEERING_STANDARDS.md) | Padrões técnicos |
+| Sprints | [SPRINT_HISTORY.md](SPRINT_HISTORY.md) | Histórico completo |
+| Roadmap | [roadmap/PRODUCT_ROADMAP.md](roadmap/PRODUCT_ROADMAP.md) | Plano de produto |
+| Changelog | [changelog/CHANGELOG.md](changelog/CHANGELOG.md) | Histórico de mudanças |
+
+---
+
+## Estrutura do Projeto
+
+```
+licigov-pro/
+├── src/                    # Código-fonte (TypeScript)
+│   ├── domain/             # Aggregates, entidades, value objects
+│   ├── application/        # Use cases, serviços de aplicação
+│   ├── infrastructure/     # DB, filas, storage
+│   └── presentation/       # tRPC routers, React pages
+├── docs/                   # Documentação técnica e funcional
+├── governance/             # Governança arquitetural e de produto
+├── architecture/           # Visões arquiteturais detalhadas
+├── sprints/                # Histórico e planejamento de sprints
+├── prompts/                # Prompts de IA para desenvolvimento
+├── releases/               # Estratégia e histórico de releases
+├── roadmap/                # Roadmap de produto
+├── exports/                # Schemas, diagramas, relatórios exportados
+├── backups/                # Políticas de backup e recuperação
+└── changelog/              # Log de mudanças
+```
+
+---
+
+## Stack Tecnológico
+
+| Camada | Tecnologia | Versão |
+|--------|------------|--------|
+| API | tRPC | v11 |
+| ORM | Drizzle ORM | latest |
+| Banco de Dados | MySQL | 8.x |
+| Frontend | React | 19 |
+| Backend | Express | 4.x |
+| Infraestrutura | Railway | - |
+| Testes | Vitest | latest |
+| Runtime | Node.js | 20+ |
+
+---
+
+## Domínio de Negócio
+
+### Fundamento Legal
+- **Lei 14.133/2021** — Nova Lei de Licitações e Contratos Administrativos
+- **Decreto 11.246/2022** — Regulamentação do PNCP
+- **Instrução Normativa SEGES/ME 65/2021** — Estudos preliminares
+- **Instrução Normativa SEGES/ME 58/2022** — TR e ETP
+
+### Aggregates do Domínio
+1. **Organization** — Entidade pública contratante (multi-tenant root)
+2. **OrganizationMember** — Usuário com papel na organização
+3. **DocumentoLicitatorio** — Documento versionado (TR, ETP, Edital, Contrato)
+4. **ImportSession** — Sessão de importação de dados externos
+5. **DocumentTemplate** — Templates reutilizáveis
+6. **ActivityLog** — Auditoria imutável com snapshots
+
+---
+
+## Estado Atual do Projeto (Sprint 2.8)
+
+### Migrações Executadas
+- `0033–0038`: Multi-tenant foundation (Organizations, Members, RBAC, ActivityLogs v2)
+- `0039–0042`: Hardening multi-tenant (snapshots imutáveis, Outbox v2, idempotency TTL)
+- `0043`: Optimistic locking (version field em processes)
+- `0044–0049`: Core documental (DocumentoLicitatorio, workflow, templates, comments)
+- `0050–0053`: Hardening documental (PolicyEngine, DiffEngine, RetentionPolicy, IntegrityService)
+- `0054–0055`: Import foundation (ImportSession, staging tables)
+
+### Cobertura de Testes
+| Sprint | Testes |
+|--------|--------|
+| Sprint 2 | 55 |
+| Sprint 2.5 | 76 |
+| Sprint 2.8 | 99 |
+
+---
+
+## Roadmap de Alto Nível
+
+| Fase | Sprint | Foco Principal |
+|------|--------|----------------|
+| Foundation | 1 – 1.8 | Multi-tenant, RBAC, segurança |
+| Core Documental | 2 – 2.5 | Documentos, workflow, políticas |
+| Import Engine | 2.8 | Parsers, staging, canonicalização |
+| CATMAT Integration | 3 | Catálogo de materiais e serviços |
+| AI Enrichment | 4 | Sugestões IA, scoring de conformidade |
+| Public Portal | 5 | Portal público PNCP |
+| Production Launch | 6 | GA, billing, SLAs |
+
+---
+
+## Links de Referência Externos
+
+- [Lei 14.133/2021 — Planalto](https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm)
+- [PNCP — Portal Nacional de Contratações Públicas](https://www.gov.br/pncp)
+- [CATMAT — Catálogo de Materiais](https://www.comprasgovernamentais.gov.br/paginas/catmat)
+- [tRPC v11 Docs](https://trpc.io)
+- [Drizzle ORM Docs](https://orm.drizzle.team)
+- [Railway Docs](https://docs.railway.app)
+
+---
+
+## Convenções de Nomenclatura
+
+- **Aggregates**: PascalCase, substantivo no singular (`DocumentoLicitatorio`, `Organization`)
+- **Tabelas DB**: snake_case, plural (`documentos_licitatorios`, `organizations`)
+- **tRPC routers**: camelCase, hierárquico (`documents.create`, `imports.session.start`)
+- **Arquivos de domínio**: `[aggregate].aggregate.ts`, `[aggregate].repository.ts`
+- **Migrações**: `NNNN_descricao_snake_case.sql`
+
+---
+
+*Este índice é o ponto de entrada oficial da documentação do LiciGov Pro.*
+*Mantenha-o atualizado a cada sprint concluída.*
