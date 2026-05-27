@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json, decimal, primaryKey, unique } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -76,6 +76,13 @@ export const documents = mysqlTable("documents", {
   // Sprint 2: metadata + archival
   metadata: json("metadata"),
   archivedAt: timestamp("archivedAt"),
+  // Sprint 2.5: integrity
+  contentHash:         varchar("contentHash",         { length: 64 }),
+  snapshotFingerprint: varchar("snapshotFingerprint", { length: 64 }),
+  // Sprint 2.5: retention
+  retentionClass: varchar("retentionClass", { length: 50 }).default("operational_3years").notNull(),
+  legalHold:      int("legalHold").default(0).notNull(),
+  purgeAfter:     timestamp("purgeAfter"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1641,10 +1648,11 @@ export const documentVersions = mysqlTable("document_versions", {
   sourceContext:      mysqlEnum("sourceContext", ["manual", "autosave_publish", "ai", "import", "restore", "workflow"]).default("manual").notNull(),
   actorSnapshot:      json("actorSnapshot").notNull(),
   workflowSnapshot:   json("workflowSnapshot"),
-  correlationId:      varchar("correlationId", { length: 36 }),
-  requestId:          varchar("requestId", { length: 36 }),
-  createdBy:          int("createdBy").notNull(),
-  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+  correlationId:       varchar("correlationId",       { length: 36 }),
+  requestId:           varchar("requestId",           { length: 36 }),
+  snapshotFingerprint: varchar("snapshotFingerprint", { length: 64 }),
+  createdBy:           int("createdBy").notNull(),
+  createdAt:           timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type DocumentVersion = typeof documentVersions.$inferSelect;
@@ -1696,3 +1704,49 @@ export const documentTimeline = mysqlTable("document_timeline", {
 
 export type DocumentTimelineEvent = typeof documentTimeline.$inferSelect;
 export type InsertDocumentTimelineEvent = typeof documentTimeline.$inferInsert;
+
+/**
+ * Sprint 2.5 — Anexos documentais tenant-safe.
+ */
+export const documentAttachments = mysqlTable("document_attachments", {
+  id:               int("id").autoincrement().primaryKey(),
+  organizationId:   int("organizationId").notNull(),
+  documentId:       int("documentId").notNull(),
+  versionId:        int("versionId"),
+  filename:         varchar("filename",         { length: 255 }).notNull(),
+  originalFilename: varchar("originalFilename", { length: 255 }).notNull(),
+  mimeType:         varchar("mimeType",         { length: 100 }).notNull(),
+  fileSize:         int("fileSize").notNull(),
+  storageKey:       varchar("storageKey",       { length: 500 }).notNull(),
+  contentHash:      varchar("contentHash",      { length: 64 }),
+  scanStatus:       mysqlEnum("scanStatus", ["pending", "clean", "infected", "error"]).default("pending").notNull(),
+  uploadedBy:       int("uploadedBy").notNull(),
+  deletedAt:        timestamp("deletedAt"),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DocumentAttachment = typeof documentAttachments.$inferSelect;
+export type InsertDocumentAttachment = typeof documentAttachments.$inferInsert;
+
+/**
+ * Sprint 2.5 — Cache de renders documentais (HTML/DOCX/PDF) por versão.
+ */
+export const documentRenderCache = mysqlTable("document_render_cache", {
+  id:              int("id").autoincrement().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  documentId:      int("documentId").notNull(),
+  versionId:       int("versionId"),
+  format:          mysqlEnum("format", ["html", "docx", "pdf"]).notNull(),
+  renderHash:      varchar("renderHash",      { length: 32 }).notNull(),
+  renderedContent: longtext("renderedContent"),
+  renderedAt:      timestamp("renderedAt"),
+  expiresAt:       timestamp("expiresAt"),
+  status:          mysqlEnum("status", ["pending", "processing", "ready", "failed"]).default("pending").notNull(),
+  storageKey:      varchar("storageKey",      { length: 500 }),
+  fileSize:        int("fileSize"),
+  errorMessage:    text("errorMessage"),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DocumentRenderCacheEntry = typeof documentRenderCache.$inferSelect;
+export type InsertDocumentRenderCacheEntry = typeof documentRenderCache.$inferInsert;
