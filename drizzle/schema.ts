@@ -1647,7 +1647,7 @@ export const documentVersions = mysqlTable("document_versions", {
   changeReason:       varchar("changeReason", { length: 500 }),
   sourceContext:      mysqlEnum("sourceContext", ["manual", "autosave_publish", "ai", "import", "restore", "workflow"]).default("manual").notNull(),
   actorSnapshot:      json("actorSnapshot").notNull(),
-  workflowSnapshot:   json("workflowSnapshot"),
+  workflowSnapshot:    json("workflowSnapshot"),
   correlationId:       varchar("correlationId",       { length: 36 }),
   requestId:           varchar("requestId",           { length: 36 }),
   snapshotFingerprint: varchar("snapshotFingerprint", { length: 64 }),
@@ -1703,7 +1703,7 @@ export const documentTimeline = mysqlTable("document_timeline", {
 });
 
 export type DocumentTimelineEvent = typeof documentTimeline.$inferSelect;
-export type InsertDocumentTimelineEvent = typeof documentTimeline.$inferInsert;
+export type InsertDocumentTimelineEvent = typeof documentTimeline.$inferSelect;
 
 /**
  * Sprint 2.5 — Anexos documentais tenant-safe.
