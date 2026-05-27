@@ -302,6 +302,13 @@
       "when": 1748995200000,
       "tag": "0042_idempotency_ttl_index",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1749081600000,
+      "tag": "0043_optimistic_locking_processes",
+      "breakpoints": true
     }
   ]
 }

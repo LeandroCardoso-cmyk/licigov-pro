@@ -2,6 +2,8 @@ export * from "./connection";
 export * from "./users";
 export * from "./organizations";
 export * from "./tenantRepository";
+export * from "./baseTenantRepository";
+export * from "./queryStrategy";
 export * from "./processes";
 export * from "./collaboration";
 export * from "./comments";
