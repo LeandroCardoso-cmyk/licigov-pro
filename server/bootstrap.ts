@@ -109,6 +109,9 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
   await addColumnIfMissing("outbox_events", "actorId",       "int");
   await addColumnIfMissing("outbox_events", "actorName",     "varchar(255)");
   await addColumnIfMissing("outbox_events", "tenantContext", "json");
+
+  // Sprint 1.8 — Optimistic locking: version field em processes
+  await addColumnIfMissing("processes", "version", "int NOT NULL DEFAULT 1");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
