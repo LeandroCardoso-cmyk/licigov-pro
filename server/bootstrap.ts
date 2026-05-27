@@ -112,6 +112,33 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
 
   // Sprint 1.8 — Optimistic locking: version field em processes
   await addColumnIfMissing("processes", "version", "int NOT NULL DEFAULT 1");
+
+  // Sprint 2 — Core Documental: extend documents
+  await addColumnIfMissing("documents", "title",             "varchar(500)");
+  await addColumnIfMissing("documents", "structuredContent", "json");
+  await addColumnIfMissing("documents", "currentVersionId",  "int");
+  await addColumnIfMissing("documents", "updatedBy",         "int");
+  await addColumnIfMissing("documents", "approvedBy",        "int");
+  await addColumnIfMissing("documents", "isLocked",          "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("documents", "lockedBy",          "int");
+  await addColumnIfMissing("documents", "lockReason",        "varchar(255)");
+  await addColumnIfMissing("documents", "lockExpiresAt",     "timestamp");
+  await addColumnIfMissing("documents", "metadata",          "json");
+  await addColumnIfMissing("documents", "archivedAt",        "timestamp");
+
+  // Sprint 2 — Core Documental: extend comments
+  await addColumnIfMissing("comments", "parentId",     "int");
+  await addColumnIfMissing("comments", "anchorSection","varchar(100)");
+  await addColumnIfMissing("comments", "status",       "enum('open','resolved','dismissed') NOT NULL DEFAULT 'open'");
+  await addColumnIfMissing("comments", "resolvedBy",   "int");
+  await addColumnIfMissing("comments", "resolvedAt",   "timestamp");
+  await addColumnIfMissing("comments", "resolvedNote", "text");
+
+  // Sprint 2 — Core Documental: extend document_templates
+  await addColumnIfMissing("document_templates", "organizationId",    "int");
+  await addColumnIfMissing("document_templates", "structuredContent", "json");
+  await addColumnIfMissing("document_templates", "variables",         "json");
+  await addColumnIfMissing("document_templates", "version",           "int NOT NULL DEFAULT 1");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
