@@ -46,20 +46,36 @@ export type Process = typeof processes.$inferSelect;
 export type InsertProcess = typeof processes.$inferInsert;
 
 /**
+/**
  * Documentos gerados (ETP, TR, DFD, Edital)
  */
 export const documents = mysqlTable("documents", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
   processId: int("processId").notNull(),
-  type: mysqlEnum("type", ["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]).notNull(),
-  content: text("content"), // Conteúdo do documento em markdown (gerado por IA)
+  // Sprint 2: tipo estendido com aditivo + minuta
+  type: mysqlEnum("type", ["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer", "aditivo", "minuta"]).notNull(),
+  title: varchar("title", { length: 500 }),
+  content: text("content"), // Conteúdo legado em markdown (gerado por IA)
+  structuredContent: json("structuredContent"), // Sprint 2: modelo estruturado (IA-ready)
   sourceType: mysqlEnum("sourceType", ["ai", "upload"]).default("ai").notNull(),
-  s3Key: varchar("s3Key", { length: 500 }), // chave S3 para uploads
-  fileUrl: varchar("fileUrl", { length: 1000 }), // URL pública/signed do arquivo
+  s3Key: varchar("s3Key", { length: 500 }),
+  fileUrl: varchar("fileUrl", { length: 1000 }),
   version: int("version").default(1).notNull(),
-  createdBy: int("createdBy"), // FK para users — autoria da versão
-  documentStatus: mysqlEnum("documentStatus", ["draft", "in_review", "approved", "rejected"]).default("draft").notNull(),
+  currentVersionId: int("currentVersionId"),
+  createdBy: int("createdBy"),
+  updatedBy: int("updatedBy"),
+  approvedBy: int("approvedBy"),
+  // Sprint 2: status estendido com archived
+  documentStatus: mysqlEnum("documentStatus", ["draft", "in_review", "approved", "rejected", "archived"]).default("draft").notNull(),
+  // Sprint 2: edit locking
+  isLocked: int("isLocked").default(0).notNull(),
+  lockedBy: int("lockedBy"),
+  lockReason: varchar("lockReason", { length: 255 }),
+  lockExpiresAt: timestamp("lockExpiresAt"),
+  // Sprint 2: metadata + archival
+  metadata: json("metadata"),
+  archivedAt: timestamp("archivedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -160,11 +176,21 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 
 /**
- * Comentários em documentos
+/**
+ * Comentários em documentos — Sprint 2: threading, resolução e ancoragem
  */
 export const comments = mysqlTable("comments", {
   id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
+  organizationId: int("organizationId"),
+  // Sprint 2: threading
+  parentId: int("parentId"),
+  // Sprint 2: ancoragem em seção do documento
+  anchorSection: varchar("anchorSection", { length: 100 }),
+  // Sprint 2: status de resolução
+  status: mysqlEnum("status", ["open", "resolved", "dismissed"]).default("open").notNull(),
+  resolvedBy: int("resolvedBy"),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedNote: text("resolvedNote"),
   documentId: int("documentId").notNull(),
   processId: int("processId").notNull(),
   userId: int("userId").notNull(),
@@ -508,16 +534,25 @@ export type ContractRenewal = typeof contractRenewals.$inferSelect;
 export type InsertContractRenewal = typeof contractRenewals.$inferInsert;
 
 /**
- * Templates personalizáveis para documentos
+/**
+ * Templates personalizáveis para documentos — Sprint 2: multi-tenant + structured
  */
 export const documentTemplates = mysqlTable("document_templates", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(), // Usuário que criou o template
-  name: varchar("name", { length: 255 }).notNull(), // Nome do template
-  description: text("description"), // Descrição do template
-  type: mysqlEnum("type", ["etp", "tr", "dfd", "edital"]).notNull(), // Tipo de documento
-  content: text("content").notNull(), // Conteúdo do template em markdown
-  isDefault: int("isDefault").default(0).notNull(), // 1 se for template padrão do usuário
+  userId: int("userId").notNull(),
+  // Sprint 2: suporte multi-tenant (null = template global)
+  organizationId: int("organizationId"),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  // Sprint 2: tipo estendido
+  type: mysqlEnum("type", ["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer", "aditivo", "minuta"]).notNull(),
+  content: text("content").notNull(),
+  // Sprint 2: modelo estruturado com placeholders e variáveis
+  structuredContent: json("structuredContent"),
+  variables: json("variables"),
+  isDefault: int("isDefault").default(0).notNull(),
+  // Sprint 2: versionamento de templates
+  version: int("version").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1587,3 +1622,77 @@ export const tenantFeatureFlags = mysqlTable("tenant_feature_flags", {
 
 export type TenantFeatureFlag = typeof tenantFeatureFlags.$inferSelect;
 export type InsertTenantFeatureFlag = typeof tenantFeatureFlags.$inferInsert;
+
+// ─── Sprint 2: Core Documental ────────────────────────────────────────────────
+
+/**
+ * Versões imutáveis de documentos.
+ * Cada snapshot captura o estado completo do documento num ponto no tempo.
+ */
+export const documentVersions = mysqlTable("document_versions", {
+  id:                 int("id").autoincrement().primaryKey(),
+  organizationId:     int("organizationId").notNull(),
+  documentId:         int("documentId").notNull(),
+  versionNumber:      int("versionNumber").notNull(),
+  contentSnapshot:    text("contentSnapshot"),
+  structuredSnapshot: json("structuredSnapshot"),
+  diffMetadata:       json("diffMetadata"),
+  changeReason:       varchar("changeReason", { length: 500 }),
+  sourceContext:      mysqlEnum("sourceContext", ["manual", "autosave_publish", "ai", "import", "restore", "workflow"]).default("manual").notNull(),
+  actorSnapshot:      json("actorSnapshot").notNull(),
+  workflowSnapshot:   json("workflowSnapshot"),
+  correlationId:      varchar("correlationId", { length: 36 }),
+  requestId:          varchar("requestId", { length: 36 }),
+  createdBy:          int("createdBy").notNull(),
+  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+export type InsertDocumentVersion = typeof documentVersions.$inferInsert;
+
+/**
+ * Rascunhos de autosave — um por usuário por documento.
+ * Expiram automaticamente após 7 dias sem atividade.
+ */
+export const documentDrafts = mysqlTable("document_drafts", {
+  id:              int("id").autoincrement().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  documentId:      int("documentId").notNull(),
+  userId:          int("userId").notNull(),
+  contentDraft:    text("contentDraft"),
+  structuredDraft: json("structuredDraft"),
+  baseVersionId:   int("baseVersionId"),
+  version:         int("version").default(1).notNull(),
+  lastSavedAt:     timestamp("lastSavedAt").defaultNow().notNull(),
+  expiresAt:       timestamp("expiresAt").notNull(),
+  correlationId:   varchar("correlationId", { length: 36 }),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DocumentDraft = typeof documentDrafts.$inferSelect;
+export type InsertDocumentDraft = typeof documentDrafts.$inferInsert;
+
+/**
+ * Timeline operacional de documentos — registro cronológico imutável.
+ */
+export const documentTimeline = mysqlTable("document_timeline", {
+  id:             int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  documentId:     int("documentId").notNull(),
+  eventType:      varchar("eventType", { length: 100 }).notNull(),
+  actorId:        int("actorId").notNull(),
+  actorName:      varchar("actorName", { length: 255 }),
+  actorEmail:     varchar("actorEmail", { length: 320 }),
+  actorRole:      varchar("actorRole", { length: 50 }),
+  versionId:      int("versionId"),
+  fromState:      varchar("fromState", { length: 50 }),
+  toState:        varchar("toState", { length: 50 }),
+  details:        json("details"),
+  correlationId:  varchar("correlationId", { length: 36 }),
+  requestId:      varchar("requestId", { length: 36 }),
+  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
+});
+
+export type DocumentTimelineEvent = typeof documentTimeline.$inferSelect;
+export type InsertDocumentTimelineEvent = typeof documentTimeline.$inferInsert;
