@@ -36,6 +36,8 @@ export const processes = mysqlTable("processes", {
   platformId: int("platformId"), // Plataforma de pregão selecionada (Compras.gov.br, BLL, etc)
   status: mysqlEnum("status", ["em_dfd", "em_etp", "em_tr", "em_edital", "em_contrato", "em_ata", "em_parecer", "concluido"]).default("em_dfd").notNull(),
   ownerId: int("ownerId").notNull(), // Usuário que criou o processo
+  // Sprint 1.8 — Optimistic locking
+  version: int("version").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
