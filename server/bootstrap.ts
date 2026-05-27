@@ -49,7 +49,17 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     column: string,
     definition: string
   ): Promise<void> {
-    const [rows] = await connection.execute<RowDataPacket[]>(
+    // Se a tabela não existe ainda, as migrations vão criá-la com o schema correto.
+    const [tableRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME   = ?`,
+      [table]
+    );
+    if ((tableRows[0] as ColRow).cnt === 0) return;
+
+    const [colRows] = await connection.execute<RowDataPacket[]>(
       `SELECT COUNT(*) AS cnt
        FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
@@ -57,7 +67,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
          AND COLUMN_NAME  = ?`,
       [table, column]
     );
-    if ((rows[0] as ColRow).cnt === 0) {
+    if ((colRows[0] as ColRow).cnt === 0) {
       await connection.execute(`ALTER TABLE \`${table}\` ADD \`${column}\` ${definition}`);
       log("DB", `✓ Schema corrigido: ${table}.${column} adicionada`);
     }
