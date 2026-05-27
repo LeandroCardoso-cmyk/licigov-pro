@@ -183,7 +183,13 @@ export type DocumentTimelineEventType =
   | "documento_arquivado"
   | "documento_bloqueado"
   | "documento_desbloqueado"
-  | "workflow_alterado";
+  | "workflow_alterado"
+  | "anexo_adicionado"
+  | "anexo_removido"
+  | "integridade_verificada"
+  | "lock_adquirido"
+  | "lock_liberado"
+  | "render_gerado";
 
 // ─── Export foundation ────────────────────────────────────────────────────────
 

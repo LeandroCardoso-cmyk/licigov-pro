@@ -139,6 +139,18 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
   await addColumnIfMissing("document_templates", "structuredContent", "json");
   await addColumnIfMissing("document_templates", "variables",         "json");
   await addColumnIfMissing("document_templates", "version",           "int NOT NULL DEFAULT 1");
+
+  // Sprint 2.5 — Hardening Documental: integrity hashes em documents
+  await addColumnIfMissing("documents", "contentHash",         "varchar(64)");
+  await addColumnIfMissing("documents", "snapshotFingerprint", "varchar(64)");
+
+  // Sprint 2.5 — Retention policy em documents
+  await addColumnIfMissing("documents", "retentionClass", "varchar(50) NOT NULL DEFAULT 'operational_3years'");
+  await addColumnIfMissing("documents", "legalHold",      "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("documents", "purgeAfter",     "timestamp NULL");
+
+  // Sprint 2.5 — Integrity fingerprint em document_versions
+  await addColumnIfMissing("document_versions", "snapshotFingerprint", "varchar(64)");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
