@@ -1750,3 +1750,73 @@ export const documentRenderCache = mysqlTable("document_render_cache", {
 
 export type DocumentRenderCacheEntry = typeof documentRenderCache.$inferSelect;
 export type InsertDocumentRenderCacheEntry = typeof documentRenderCache.$inferInsert;
+
+/**
+ * Sprint 2.8 — Import Sessions aggregate.
+ * Lifecycle: uploaded → queued → parsing → extracted → normalized → awaiting_review → approved/rejected
+ */
+export const importSessions = mysqlTable("import_sessions", {
+  id:                 int("id").autoincrement().primaryKey(),
+  organizationId:     int("organizationId").notNull(),
+  uploadedBy:         int("uploadedBy").notNull(),
+  sourceFileId:       varchar("sourceFileId",   { length: 255 }).notNull(),
+  sourceFileName:     varchar("sourceFileName", { length: 255 }).notNull(),
+  sourceMimeType:     varchar("sourceMimeType", { length: 100 }).notNull(),
+  sourceSize:         int("sourceSize").notNull().default(0),
+  importType:         varchar("importType",     { length: 50  }).notNull().default("generic"),
+  parserType:         varchar("parserType",     { length: 20  }).notNull().default("auto"),
+  parserVersion:      varchar("parserVersion",  { length: 20  }).notNull().default("1.0.0"),
+  status:             mysqlEnum("status", [
+    "uploaded","queued","parsing","extracted",
+    "normalized","awaiting_review","approved","rejected",
+    "failed","archived",
+  ]).notNull().default("uploaded"),
+  progress:           int("progress").notNull().default(0),
+  stage:              varchar("stage",            { length: 100 }),
+  confidenceScore:    decimal("confidenceScore",  { precision: 5, scale: 4 }),
+  extractionSummary:  json("extractionSummary"),
+  warnings:           json("warnings"),
+  errors:             json("errors"),
+  correlationId:      varchar("correlationId",    { length: 36 }),
+  retryCount:         int("retryCount").notNull().default(0),
+  startedAt:          timestamp("startedAt"),
+  finishedAt:         timestamp("finishedAt"),
+  failedAt:           timestamp("failedAt"),
+  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:          timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ImportSession       = typeof importSessions.$inferSelect;
+export type InsertImportSession = typeof importSessions.$inferInsert;
+
+/**
+ * Sprint 2.8 — Import Staging Items.
+ * Raw extracted items awaiting validation → normalization → human review.
+ * NEVER maps directly to domain tables — staging isolation layer only.
+ */
+export const importStagingItems = mysqlTable("import_staging_items", {
+  id:                  int("id").autoincrement().primaryKey(),
+  importSessionId:     int("importSessionId").notNull(),
+  organizationId:      int("organizationId").notNull(),
+  rawDescription:      text("rawDescription"),
+  rawQuantity:         varchar("rawQuantity",    { length: 100 }),
+  rawUnit:             varchar("rawUnit",        { length: 50  }),
+  rawUnitPrice:        varchar("rawUnitPrice",   { length: 100 }),
+  rawTotalPrice:       varchar("rawTotalPrice",  { length: 100 }),
+  rawMetadata:         json("rawMetadata"),
+  sourceLocation:      json("sourceLocation"),
+  parserMetadata:      json("parserMetadata"),
+  confidenceMetadata:  json("confidenceMetadata"),
+  extractionWarnings:  json("extractionWarnings"),
+  extractionErrors:    json("extractionErrors"),
+  reviewStatus:        mysqlEnum("reviewStatus", ["pending","approved","rejected","skipped"]).notNull().default("pending"),
+  reviewedBy:          int("reviewedBy"),
+  reviewedAt:          timestamp("reviewedAt"),
+  reviewNote:          text("reviewNote"),
+  expiresAt:           timestamp("expiresAt"),
+  createdAt:           timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ImportStagingItem       = typeof importStagingItems.$inferSelect;
+export type InsertImportStagingItem = typeof importStagingItems.$inferInsert;
