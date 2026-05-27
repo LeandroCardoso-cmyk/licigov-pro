@@ -151,6 +151,72 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
 
   // Sprint 2.5 — Integrity fingerprint em document_versions
   await addColumnIfMissing("document_versions", "snapshotFingerprint", "varchar(64)");
+
+  // Sprint 2.8 — Import Sessions table (safety net para envs sem migração automática)
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`import_sessions\` (
+      \`id\`                INT          NOT NULL AUTO_INCREMENT,
+      \`organizationId\`    INT          NOT NULL,
+      \`uploadedBy\`        INT          NOT NULL,
+      \`sourceFileId\`      VARCHAR(255) NOT NULL,
+      \`sourceFileName\`    VARCHAR(255) NOT NULL,
+      \`sourceMimeType\`    VARCHAR(100) NOT NULL,
+      \`sourceSize\`        INT          NOT NULL DEFAULT 0,
+      \`importType\`        VARCHAR(50)  NOT NULL DEFAULT 'generic',
+      \`parserType\`        VARCHAR(20)  NOT NULL DEFAULT 'auto',
+      \`parserVersion\`     VARCHAR(20)  NOT NULL DEFAULT '1.0.0',
+      \`status\`            ENUM('uploaded','queued','parsing','extracted','normalized','awaiting_review','approved','rejected','failed','archived') NOT NULL DEFAULT 'uploaded',
+      \`progress\`          INT          NOT NULL DEFAULT 0,
+      \`stage\`             VARCHAR(100),
+      \`confidenceScore\`   DECIMAL(5,4),
+      \`extractionSummary\` JSON,
+      \`warnings\`          JSON,
+      \`errors\`            JSON,
+      \`correlationId\`     VARCHAR(36),
+      \`retryCount\`        INT          NOT NULL DEFAULT 0,
+      \`startedAt\`         TIMESTAMP    NULL,
+      \`finishedAt\`        TIMESTAMP    NULL,
+      \`failedAt\`          TIMESTAMP    NULL,
+      \`createdAt\`         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\`         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_import_sessions_org\`    (\`organizationId\`),
+      INDEX \`idx_import_sessions_status\` (\`organizationId\`, \`status\`),
+      INDEX \`idx_import_sessions_file\`   (\`organizationId\`, \`sourceFileId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.8 — Import Staging Items table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`import_staging_items\` (
+      \`id\`                 INT          NOT NULL AUTO_INCREMENT,
+      \`importSessionId\`    INT          NOT NULL,
+      \`organizationId\`     INT          NOT NULL,
+      \`rawDescription\`     TEXT,
+      \`rawQuantity\`        VARCHAR(100),
+      \`rawUnit\`            VARCHAR(50),
+      \`rawUnitPrice\`       VARCHAR(100),
+      \`rawTotalPrice\`      VARCHAR(100),
+      \`rawMetadata\`        JSON,
+      \`sourceLocation\`     JSON,
+      \`parserMetadata\`     JSON,
+      \`confidenceMetadata\` JSON,
+      \`extractionWarnings\` JSON,
+      \`extractionErrors\`   JSON,
+      \`reviewStatus\`       ENUM('pending','approved','rejected','skipped') NOT NULL DEFAULT 'pending',
+      \`reviewedBy\`         INT,
+      \`reviewedAt\`         TIMESTAMP    NULL,
+      \`reviewNote\`         TEXT,
+      \`expiresAt\`          TIMESTAMP    NULL,
+      \`createdAt\`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_staging_session\`  (\`importSessionId\`),
+      INDEX \`idx_staging_org\`      (\`organizationId\`),
+      INDEX \`idx_staging_review\`   (\`importSessionId\`, \`reviewStatus\`),
+      INDEX \`idx_staging_expires\`  (\`expiresAt\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

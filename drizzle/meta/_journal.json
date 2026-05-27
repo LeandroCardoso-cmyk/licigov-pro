@@ -379,6 +379,20 @@
       "when": 1749945600000,
       "tag": "0053_document_render_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1750032000000,
+      "tag": "0054_import_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1750118400000,
+      "tag": "0055_import_staging",
+      "breakpoints": true
     }
   ]
 }
