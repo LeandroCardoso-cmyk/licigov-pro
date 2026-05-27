@@ -221,16 +221,22 @@ export type InsertAuditLog = typeof auditLogs.$inferInsert;
  */
 export const activityLogs = mysqlTable("activity_logs", {
   id: int("id").autoincrement().primaryKey(),
-  organizationId: int("organizationId"), // Sprint 1: nullable → NOT NULL em sprint futura
+  organizationId: int("organizationId"),
   correlationId: varchar("correlationId", { length: 36 }),
   requestId: varchar("requestId", { length: 36 }),
   actorName: varchar("actorName", { length: 255 }),
+  // Sprint 1.5 — snapshots imutáveis (sobrevivem a mutações do usuário/org)
+  actorEmail: varchar("actorEmail", { length: 320 }),
+  actorRole: varchar("actorRole", { length: 50 }),
+  orgName: varchar("orgName", { length: 255 }),
+  sourceContext: mysqlEnum("sourceContext", ["api", "job", "system", "test", "webhook"]).default("api").notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
   entityType: varchar("entityType", { length: 50 }),
   entityId: int("entityId"),
-  processId: int("processId").notNull(),
+  processId: int("processId"), // nullable: suporta logs org-level sem processo
   userId: int("userId").notNull(),
   action: varchar("action", { length: 255 }).notNull(),
-  details: text("details"), // JSON com detalhes adicionais
+  details: text("details"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -1479,6 +1485,10 @@ export const outboxEvents = mysqlTable("outbox_events", {
   aggregateId: varchar("aggregateId", { length: 50 }).notNull(),
   correlationId: varchar("correlationId", { length: 36 }),
   requestId: varchar("requestId", { length: 36 }),
+  // Sprint 1.5 — Envelope v2: actor + tenant propagados até o dispatcher
+  actorId: int("actorId"),
+  actorName: varchar("actorName", { length: 255 }),
+  tenantContext: json("tenantContext"),
   payload: json("payload").notNull(),
   status: mysqlEnum("status", ["pending", "processing", "delivered", "failed"]).default("pending").notNull(),
   attempts: int("attempts").default(0).notNull(),
