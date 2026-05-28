@@ -393,6 +393,48 @@
       "when": 1750118400000,
       "tag": "0055_import_staging",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1750204800000,
+      "tag": "0056_import_review_transitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1750291200000,
+      "tag": "0057_semantic_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1750377600000,
+      "tag": "0058_extraction_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "5",
+      "when": 1750464000000,
+      "tag": "0059_semantic_search_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1750550400000,
+      "tag": "0060_parser_capabilities",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1750636800000,
+      "tag": "0061_import_analytics_snapshots",
+      "breakpoints": true
     }
   ]
 }

@@ -1820,3 +1820,164 @@ export const importStagingItems = mysqlTable("import_staging_items", {
 
 export type ImportStagingItem       = typeof importStagingItems.$inferSelect;
 export type InsertImportStagingItem = typeof importStagingItems.$inferInsert;
+
+/**
+ * Sprint 2.9 — Import Review Transitions.
+ * Histórico imutável de transições de estado de revisão por item de staging.
+ */
+export const importReviewTransitions = mysqlTable("import_review_transitions", {
+  id:             varchar("id",             { length: 26 }).notNull().primaryKey(),
+  stagingItemId:  varchar("stagingItemId",  { length: 26 }).notNull(),
+  fromState:      mysqlEnum("fromState", [
+    "extracted","normalized","review_pending","reviewed",
+    "approved","rejected","corrected","catmat_linked","finalized",
+  ]).notNull(),
+  toState:        mysqlEnum("toState", [
+    "extracted","normalized","review_pending","reviewed",
+    "approved","rejected","corrected","catmat_linked","finalized",
+  ]).notNull(),
+  actorType:      mysqlEnum("actorType",  ["system","human","ai_assist"]).notNull().default("system"),
+  actorUserId:    int("actorUserId"),
+  actorOrgId:     int("actorOrgId").notNull(),
+  actorAgentId:   varchar("actorAgentId", { length: 128 }),
+  reason:         text("reason"),
+  metadata:       json("metadata"),
+  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
+});
+
+export type ImportReviewTransitionRow       = typeof importReviewTransitions.$inferSelect;
+export type InsertImportReviewTransitionRow = typeof importReviewTransitions.$inferInsert;
+
+/**
+ * Sprint 2.9 — Semantic Candidates.
+ * Candidatos de normalização semântica gerados pelo pipeline.
+ */
+export const semanticCandidates = mysqlTable("semantic_candidates", {
+  id:                   varchar("id",                   { length: 26 }).notNull().primaryKey(),
+  stagingItemId:        varchar("stagingItemId",        { length: 26 }).notNull(),
+  importSessionId:      int("importSessionId").notNull(),
+  organizationId:       int("organizationId").notNull(),
+  proposedDescription:  text("proposedDescription").notNull(),
+  proposedUnit:         varchar("proposedUnit",         { length: 50  }),
+  proposedQuantity:     decimal("proposedQuantity",     { precision: 15, scale: 4 }),
+  proposedUnitPrice:    decimal("proposedUnitPrice",    { precision: 15, scale: 4 }),
+  score:                decimal("score",                { precision: 5,  scale: 4 }).notNull(),
+  rank:                 int("rank").notNull().default(1),
+  source:               mysqlEnum("source", [
+    "exact_match","alias_match","fuzzy_match","prefix_match",
+    "token_match","ngram_match","rule_based","catmat_lookup",
+  ]).notNull(),
+  status:               mysqlEnum("status", ["pending","accepted","rejected","superseded","expired"]).notNull().default("pending"),
+  explanationReason:    text("explanationReason"),
+  explanationMatched:   json("explanationMatched"),
+  explanationPenalty:   decimal("explanationPenalty",   { precision: 4, scale: 3 }).default("0"),
+  explanationBonus:     decimal("explanationBonus",     { precision: 4, scale: 3 }).default("0"),
+  originalRaw:          text("originalRaw").notNull(),
+  catmatCode:           varchar("catmatCode",           { length: 20  }),
+  catmatDesc:           text("catmatDesc"),
+  catmatGroup:          varchar("catmatGroup",          { length: 128 }),
+  indexEntryId:         varchar("indexEntryId",         { length: 26  }),
+  generatedAt:          timestamp("generatedAt").defaultNow().notNull(),
+  evaluatedAt:          timestamp("evaluatedAt"),
+  evaluatedBy:          int("evaluatedBy"),
+});
+
+export type SemanticCandidateRow       = typeof semanticCandidates.$inferSelect;
+export type InsertSemanticCandidateRow = typeof semanticCandidates.$inferInsert;
+
+/**
+ * Sprint 2.9 — Extraction Evidence.
+ * Cadeia de evidências de transformação por item (rastreabilidade jurídica).
+ */
+export const extractionEvidenceTable = mysqlTable("extraction_evidence", {
+  id:                varchar("id",               { length: 26 }).notNull().primaryKey(),
+  stagingItemId:     varchar("stagingItemId",    { length: 26 }).notNull().unique(),
+  importSessionId:   int("importSessionId").notNull(),
+  organizationId:    int("organizationId").notNull(),
+  provenanceSheet:   varchar("provenanceSheet",  { length: 128 }),
+  provenancePage:    int("provenancePage"),
+  provenanceRow:     int("provenanceRow"),
+  provenanceCol:     varchar("provenanceCol",    { length: 32  }),
+  chain:             json("chain").notNull(),
+  createdAt:         timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:         timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExtractionEvidenceRow       = typeof extractionEvidenceTable.$inferSelect;
+export type InsertExtractionEvidenceRow = typeof extractionEvidenceTable.$inferInsert;
+
+/**
+ * Sprint 2.9 — Semantic Search Entries.
+ * Índice de busca semântica local por organização.
+ */
+export const semanticSearchEntries = mysqlTable("semantic_search_entries", {
+  id:             varchar("id",             { length: 26  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  canonicalText:  text("canonicalText").notNull(),
+  displayText:    text("displayText").notNull(),
+  category:       varchar("category",       { length: 128 }),
+  subcategory:    varchar("subcategory",    { length: 128 }),
+  tokens:         json("tokens").notNull(),
+  aliases:        json("aliases").notNull(),
+  synonymTokens:  json("synonymTokens").notNull(),
+  frequency:      int("frequency").notNull().default(0),
+  lastSeenAt:     timestamp("lastSeenAt"),
+  source:         mysqlEnum("source", ["manual","learned","catmat","imported"]).notNull().default("manual"),
+  catmatCode:     varchar("catmatCode",     { length: 20  }),
+  catmatGroup:    varchar("catmatGroup",    { length: 128 }),
+  catmatClass:    varchar("catmatClass",    { length: 128 }),
+  isActive:       boolean("isActive").notNull().default(true),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SemanticSearchEntryRow       = typeof semanticSearchEntries.$inferSelect;
+export type InsertSemanticSearchEntryRow = typeof semanticSearchEntries.$inferInsert;
+
+/**
+ * Sprint 2.9 — Parser Capabilities.
+ * Registro de capacidades e limitações de cada parser.
+ */
+export const parserCapabilitiesTable = mysqlTable("parser_capabilities", {
+  id:                          varchar("id",           { length: 26 }).notNull().primaryKey(),
+  parserType:                  mysqlEnum("parserType", ["xlsx","xls","csv","docx","pdf","auto"]).notNull(),
+  parserVersion:               varchar("parserVersion",{ length: 20 }).notNull(),
+  supportsMultiSheet:          boolean("supportsMultiSheet").notNull().default(false),
+  supportsMultiPage:           boolean("supportsMultiPage").notNull().default(false),
+  supportsFormulas:            boolean("supportsFormulas").notNull().default(false),
+  supportsMergedCells:         boolean("supportsMergedCells").notNull().default(false),
+  supportsImages:              boolean("supportsImages").notNull().default(false),
+  supportsHeaders:             boolean("supportsHeaders").notNull().default(true),
+  supportsFooters:             boolean("supportsFooters").notNull().default(false),
+  descriptionConfidence:       decimal("descriptionConfidence", { precision: 4, scale: 3 }).notNull(),
+  quantityConfidence:          decimal("quantityConfidence",    { precision: 4, scale: 3 }).notNull(),
+  unitConfidence:              decimal("unitConfidence",        { precision: 4, scale: 3 }).notNull(),
+  priceConfidence:             decimal("priceConfidence",       { precision: 4, scale: 3 }).notNull(),
+  limitations:                 json("limitations"),
+  requiresManualUnitReview:    boolean("requiresManualUnitReview").notNull().default(false),
+  requiresManualPriceReview:   boolean("requiresManualPriceReview").notNull().default(false),
+  likelihoodMergedHeaders:     decimal("likelihoodMergedHeaders", { precision: 4, scale: 3 }).notNull().default("0"),
+  likelihoodFooterRows:        decimal("likelihoodFooterRows",    { precision: 4, scale: 3 }).notNull().default("0"),
+  registeredAt:                timestamp("registeredAt").defaultNow().notNull(),
+});
+
+export type ParserCapabilityRow       = typeof parserCapabilitiesTable.$inferSelect;
+export type InsertParserCapabilityRow = typeof parserCapabilitiesTable.$inferInsert;
+
+/**
+ * Sprint 2.9 — Import Analytics Snapshots.
+ * Snapshots periódicos dos 10 KPIs por organização.
+ */
+export const importAnalyticsSnapshots = mysqlTable("import_analytics_snapshots", {
+  id:             varchar("id",           { length: 26 }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  periodStart:    timestamp("periodStart").notNull(),
+  periodEnd:      timestamp("periodEnd").notNull(),
+  sessionCount:   int("sessionCount").notNull().default(0),
+  itemCount:      int("itemCount").notNull().default(0),
+  kpis:           json("kpis").notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ImportAnalyticsSnapshotRow       = typeof importAnalyticsSnapshots.$inferSelect;
+export type InsertImportAnalyticsSnapshotRow = typeof importAnalyticsSnapshots.$inferInsert;
