@@ -219,6 +219,116 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
   `);
 }
 
+  // Sprint 2.9 — Import Review Transitions table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`import_review_transitions\` (
+      \`id\`             VARCHAR(26)  NOT NULL,
+      \`stagingItemId\`  VARCHAR(26)  NOT NULL,
+      \`fromState\`      ENUM('extracted','normalized','review_pending','reviewed','approved','rejected','corrected','catmat_linked','finalized') NOT NULL,
+      \`toState\`        ENUM('extracted','normalized','review_pending','reviewed','approved','rejected','corrected','catmat_linked','finalized') NOT NULL,
+      \`actorType\`      ENUM('system','human','ai_assist') NOT NULL DEFAULT 'system',
+      \`actorUserId\`    INT          NULL,
+      \`actorOrgId\`     INT          NOT NULL,
+      \`actorAgentId\`   VARCHAR(128) NULL,
+      \`reason\`         TEXT         NULL,
+      \`metadata\`       JSON         NULL,
+      \`occurredAt\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_irt_staging_item\` (\`stagingItemId\`),
+      INDEX \`idx_irt_to_state\`    (\`toState\`),
+      INDEX \`idx_irt_org\`         (\`actorOrgId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.9 — Semantic Candidates table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`semantic_candidates\` (
+      \`id\`                   VARCHAR(26)   NOT NULL,
+      \`stagingItemId\`        VARCHAR(26)   NOT NULL,
+      \`importSessionId\`      INT           NOT NULL,
+      \`organizationId\`       INT           NOT NULL,
+      \`proposedDescription\`  TEXT          NOT NULL,
+      \`proposedUnit\`         VARCHAR(50)   NULL,
+      \`proposedQuantity\`     DECIMAL(15,4) NULL,
+      \`proposedUnitPrice\`    DECIMAL(15,4) NULL,
+      \`score\`                DECIMAL(5,4)  NOT NULL,
+      \`rank\`                 TINYINT       NOT NULL DEFAULT 1,
+      \`source\`               ENUM('exact_match','alias_match','fuzzy_match','prefix_match','token_match','ngram_match','rule_based','catmat_lookup') NOT NULL,
+      \`status\`               ENUM('pending','accepted','rejected','superseded','expired') NOT NULL DEFAULT 'pending',
+      \`explanationReason\`    TEXT          NULL,
+      \`explanationMatched\`   JSON          NULL,
+      \`originalRaw\`          TEXT          NOT NULL,
+      \`catmatCode\`           VARCHAR(20)   NULL,
+      \`indexEntryId\`         VARCHAR(26)   NULL,
+      \`generatedAt\`          DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`evaluatedAt\`          DATETIME(3)   NULL,
+      \`evaluatedBy\`          INT           NULL,
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_sc_staging_item\` (\`stagingItemId\`),
+      INDEX \`idx_sc_org\`         (\`organizationId\`),
+      INDEX \`idx_sc_score\`       (\`score\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.9 — Extraction Evidence table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`extraction_evidence\` (
+      \`id\`               VARCHAR(26) NOT NULL,
+      \`stagingItemId\`    VARCHAR(26) NOT NULL,
+      \`importSessionId\`  INT         NOT NULL,
+      \`organizationId\`   INT         NOT NULL,
+      \`chain\`            JSON        NOT NULL,
+      \`createdAt\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE INDEX \`idx_ee_staging_item\` (\`stagingItemId\`),
+      INDEX \`idx_ee_session\` (\`importSessionId\`),
+      INDEX \`idx_ee_org\`     (\`organizationId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.9 — Semantic Search Entries table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`semantic_search_entries\` (
+      \`id\`              VARCHAR(26)  NOT NULL,
+      \`organizationId\`  INT          NOT NULL,
+      \`canonicalText\`   TEXT         NOT NULL,
+      \`displayText\`     TEXT         NOT NULL,
+      \`category\`        VARCHAR(128) NULL,
+      \`tokens\`          JSON         NOT NULL,
+      \`aliases\`         JSON         NOT NULL,
+      \`synonymTokens\`   JSON         NOT NULL,
+      \`frequency\`       INT          NOT NULL DEFAULT 0,
+      \`source\`          ENUM('manual','learned','catmat','imported') NOT NULL DEFAULT 'manual',
+      \`catmatCode\`      VARCHAR(20)  NULL,
+      \`isActive\`        TINYINT(1)   NOT NULL DEFAULT 1,
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_sse_org\`       (\`organizationId\`),
+      INDEX \`idx_sse_catmat\`    (\`catmatCode\`),
+      INDEX \`idx_sse_frequency\` (\`frequency\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.9 — Import Analytics Snapshots table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`import_analytics_snapshots\` (
+      \`id\`              VARCHAR(26) NOT NULL,
+      \`organizationId\`  INT         NOT NULL,
+      \`periodStart\`     DATETIME(3) NOT NULL,
+      \`periodEnd\`       DATETIME(3) NOT NULL,
+      \`sessionCount\`    INT         NOT NULL DEFAULT 0,
+      \`itemCount\`       INT         NOT NULL DEFAULT 0,
+      \`kpis\`            JSON        NOT NULL,
+      \`createdAt\`       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ias_org\`    (\`organizationId\`),
+      INDEX \`idx_ias_period\` (\`organizationId\`, \`periodStart\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
 
 async function seedAdmin(connection: mysql.Connection): Promise<void> {
