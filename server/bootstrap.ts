@@ -217,7 +217,6 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_staging_expires\`  (\`expiresAt\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-}
 
   // Sprint 2.9 — Import Review Transitions table
   await connection.execute(`
