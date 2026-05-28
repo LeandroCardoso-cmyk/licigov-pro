@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS candidate_explainability (
+  id VARCHAR(26) NOT NULL,
+  candidate_id VARCHAR(26) NOT NULL,
+  staging_item_id VARCHAR(26) NOT NULL,
+  organization_id INT NOT NULL,
+  why_suggested TEXT NOT NULL,
+  why_ranked TEXT NOT NULL,
+  why_rejected TEXT NULL,
+  influencing_tokens JSON NOT NULL,
+  aliases_used JSON NOT NULL,
+  parser_influence JSON NOT NULL,
+  normalization_influence JSON NOT NULL,
+  semantic_influence JSON NOT NULL,
+  ranking_rationale TEXT NOT NULL,
+  consensus_rationale TEXT NULL,
+  confidence_rationale TEXT NOT NULL,
+  generated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_ce_candidate (candidate_id),
+  INDEX idx_ce_staging (staging_item_id),
+  INDEX idx_ce_org (organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

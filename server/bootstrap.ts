@@ -326,6 +326,160 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_ias_period\` (\`organizationId\`, \`periodStart\` DESC)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Sprint 2.95 — Candidate Consensus table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`candidate_consensus\` (
+      \`id\`                   VARCHAR(26)   NOT NULL,
+      \`staging_item_id\`      VARCHAR(26)   NOT NULL,
+      \`import_session_id\`    INT           NOT NULL,
+      \`organization_id\`      INT           NOT NULL,
+      \`winning_candidate_id\` VARCHAR(26)   NULL,
+      \`consensus_score\`      DECIMAL(5,4)  NOT NULL,
+      \`consensus_reasoning\`  TEXT          NOT NULL,
+      \`confidence_breakdown\` JSON          NOT NULL,
+      \`ranking_metadata\`     JSON          NOT NULL,
+      \`evidence_summary\`     TEXT          NOT NULL,
+      \`created_at\`           DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_cc_staging\` (\`staging_item_id\`),
+      INDEX \`idx_cc_session\` (\`import_session_id\`),
+      INDEX \`idx_cc_org\`     (\`organization_id\`),
+      INDEX \`idx_cc_score\`   (\`consensus_score\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — Review Decisions table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`review_decisions\` (
+      \`id\`               VARCHAR(26)  NOT NULL,
+      \`staging_item_id\`  VARCHAR(26)  NOT NULL,
+      \`import_session_id\` INT         NOT NULL,
+      \`organization_id\`  INT          NOT NULL,
+      \`operation\`        ENUM('compare_candidates','approve_candidate','reject_candidate','override_candidate','request_manual_entry','request_new_search','attach_evidence','justify_decision','escalate_review') NOT NULL,
+      \`actor_type\`       ENUM('system','human','ai_assist') NOT NULL DEFAULT 'human',
+      \`actor_user_id\`    INT          NULL,
+      \`actor_org_id\`     INT          NOT NULL,
+      \`candidate_id\`     VARCHAR(26)  NULL,
+      \`override_value\`   JSON         NULL,
+      \`justification\`    TEXT         NOT NULL,
+      \`evidence_refs\`    JSON         NOT NULL,
+      \`escalate_to\`      INT          NULL,
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_rd_staging\`   (\`staging_item_id\`),
+      INDEX \`idx_rd_session\`   (\`import_session_id\`),
+      INDEX \`idx_rd_org\`       (\`organization_id\`),
+      INDEX \`idx_rd_operation\` (\`operation\`),
+      INDEX \`idx_rd_actor\`     (\`actor_user_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — Semantic Drift Snapshots table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`semantic_drift_snapshots\` (
+      \`id\`              VARCHAR(26) NOT NULL,
+      \`organization_id\` INT         NOT NULL,
+      \`period_start\`    DATETIME(3) NOT NULL,
+      \`period_end\`      DATETIME(3) NOT NULL,
+      \`metrics\`         JSON        NOT NULL,
+      \`created_at\`      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_sds_org\`    (\`organization_id\`),
+      INDEX \`idx_sds_period\` (\`organization_id\`, \`period_start\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — Catalog Sync Snapshots table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`catalog_sync_snapshots\` (
+      \`id\`                 VARCHAR(26)   NOT NULL,
+      \`organization_id\`    INT           NOT NULL,
+      \`catalog_type\`       ENUM('catmat','catser','custom') NOT NULL,
+      \`version\`            VARCHAR(50)   NOT NULL,
+      \`source_url\`         VARCHAR(500)  NULL,
+      \`checksum\`           VARCHAR(64)   NOT NULL,
+      \`total_entries\`      INT           NOT NULL DEFAULT 0,
+      \`indexed_entries\`    INT           NOT NULL DEFAULT 0,
+      \`sync_status\`        ENUM('pending','syncing','synced','failed','stale') NOT NULL DEFAULT 'pending',
+      \`snapshot_lineage\`   VARCHAR(26)   NULL,
+      \`import_lineage\`     JSON          NOT NULL,
+      \`integrity_metadata\` JSON          NOT NULL,
+      \`cache_metadata\`     JSON          NOT NULL,
+      \`created_at\`         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\`         DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_css_org\`     (\`organization_id\`),
+      INDEX \`idx_css_type\`    (\`catalog_type\`),
+      INDEX \`idx_css_status\`  (\`sync_status\`),
+      INDEX \`idx_css_version\` (\`organization_id\`, \`version\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — Catalog Sync History table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`catalog_sync_history\` (
+      \`id\`              VARCHAR(26)  NOT NULL,
+      \`snapshot_id\`     VARCHAR(26)  NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`operation\`       ENUM('create','update','verify','invalidate','expire') NOT NULL,
+      \`before_version\`  VARCHAR(50)  NULL,
+      \`after_version\`   VARCHAR(50)  NOT NULL,
+      \`actor\`           VARCHAR(128) NOT NULL,
+      \`reason\`          TEXT         NOT NULL,
+      \`occurred_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_csh_snapshot\` (\`snapshot_id\`),
+      INDEX \`idx_csh_org\`      (\`organization_id\`),
+      INDEX \`idx_csh_occurred\` (\`occurred_at\` DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — Candidate Explainability table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`candidate_explainability\` (
+      \`id\`                      VARCHAR(26) NOT NULL,
+      \`candidate_id\`            VARCHAR(26) NOT NULL,
+      \`staging_item_id\`         VARCHAR(26) NOT NULL,
+      \`organization_id\`         INT         NOT NULL,
+      \`why_suggested\`           TEXT        NOT NULL,
+      \`why_ranked\`              TEXT        NOT NULL,
+      \`why_rejected\`            TEXT        NULL,
+      \`influencing_tokens\`      JSON        NOT NULL,
+      \`aliases_used\`            JSON        NOT NULL,
+      \`parser_influence\`        JSON        NOT NULL,
+      \`normalization_influence\` JSON        NOT NULL,
+      \`semantic_influence\`      JSON        NOT NULL,
+      \`ranking_rationale\`       TEXT        NOT NULL,
+      \`consensus_rationale\`     TEXT        NULL,
+      \`confidence_rationale\`    TEXT        NOT NULL,
+      \`generated_at\`            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ce_candidate\` (\`candidate_id\`),
+      INDEX \`idx_ce_staging\`   (\`staging_item_id\`),
+      INDEX \`idx_ce_org\`       (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 2.95 — TR Composition Rules table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`tr_composition_rules\` (
+      \`id\`              VARCHAR(26)  NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`name\`            VARCHAR(255) NOT NULL,
+      \`condition_expr\`  TEXT         NOT NULL,
+      \`action\`          ENUM('include_section','exclude_section','replace_clause','append_clause') NOT NULL,
+      \`target_id\`       VARCHAR(26)  NOT NULL,
+      \`priority\`        INT          NOT NULL DEFAULT 0,
+      \`is_active\`       TINYINT(1)   NOT NULL DEFAULT 1,
+      \`created_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_tcr_org\`      (\`organization_id\`),
+      INDEX \`idx_tcr_priority\` (\`organization_id\`, \`priority\` DESC),
+      INDEX \`idx_tcr_active\`   (\`is_active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

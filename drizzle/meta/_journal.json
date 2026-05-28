@@ -435,6 +435,48 @@
       "when": 1750636800000,
       "tag": "0061_import_analytics_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1750723200000,
+      "tag": "0062_candidate_consensus",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "5",
+      "when": 1750809600000,
+      "tag": "0063_review_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1750896000000,
+      "tag": "0064_semantic_drift_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1750982400000,
+      "tag": "0065_catalog_sync_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1751068800000,
+      "tag": "0066_candidate_explainability",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1751155200000,
+      "tag": "0067_tr_composition_rules",
+      "breakpoints": true
     }
   ]
 }
