@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS review_decisions (
+  id VARCHAR(26) NOT NULL,
+  staging_item_id VARCHAR(26) NOT NULL,
+  import_session_id INT NOT NULL,
+  organization_id INT NOT NULL,
+  operation ENUM('compare_candidates','approve_candidate','reject_candidate','override_candidate','request_manual_entry','request_new_search','attach_evidence','justify_decision','escalate_review') NOT NULL,
+  actor_type ENUM('system','human','ai_assist') NOT NULL DEFAULT 'human',
+  actor_user_id INT NULL,
+  actor_org_id INT NOT NULL,
+  candidate_id VARCHAR(26) NULL,
+  override_value JSON NULL,
+  justification TEXT NOT NULL,
+  evidence_refs JSON NOT NULL,
+  escalate_to INT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_rd_staging (staging_item_id),
+  INDEX idx_rd_session (import_session_id),
+  INDEX idx_rd_org (organization_id),
+  INDEX idx_rd_operation (operation),
+  INDEX idx_rd_actor (actor_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1981,3 +1981,157 @@ export const importAnalyticsSnapshots = mysqlTable("import_analytics_snapshots",
 
 export type ImportAnalyticsSnapshotRow       = typeof importAnalyticsSnapshots.$inferSelect;
 export type InsertImportAnalyticsSnapshotRow = typeof importAnalyticsSnapshots.$inferInsert;
+
+/**
+ * Sprint 2.95 — Candidate Consensus.
+ * Resultado determinístico de consenso entre candidatos semânticos.
+ */
+export const candidateConsensusTable = mysqlTable("candidate_consensus", {
+  id:                  varchar("id",               { length: 26 }).notNull().primaryKey(),
+  stagingItemId:       varchar("stagingItemId",    { length: 26 }).notNull(),
+  importSessionId:     int("importSessionId").notNull(),
+  organizationId:      int("organizationId").notNull(),
+  winningCandidateId:  varchar("winningCandidateId", { length: 26 }),
+  consensusScore:      decimal("consensusScore",   { precision: 5, scale: 4 }).notNull(),
+  consensusReasoning:  text("consensusReasoning").notNull(),
+  confidenceBreakdown: json("confidenceBreakdown").notNull(),
+  rankingMetadata:     json("rankingMetadata").notNull(),
+  evidenceSummary:     text("evidenceSummary").notNull(),
+  createdAt:           timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CandidateConsensusRow       = typeof candidateConsensusTable.$inferSelect;
+export type InsertCandidateConsensusRow = typeof candidateConsensusTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — Review Decisions.
+ * Decisões imutáveis de revisão por item de staging.
+ */
+export const reviewDecisionsTable = mysqlTable("review_decisions", {
+  id:              varchar("id",           { length: 26  }).notNull().primaryKey(),
+  stagingItemId:   varchar("stagingItemId",{ length: 26  }).notNull(),
+  importSessionId: int("importSessionId").notNull(),
+  organizationId:  int("organizationId").notNull(),
+  operation:       mysqlEnum("operation", [
+    "compare_candidates","approve_candidate","reject_candidate","override_candidate",
+    "request_manual_entry","request_new_search","attach_evidence","justify_decision","escalate_review",
+  ]).notNull(),
+  actorType:       mysqlEnum("actorType", ["system","human","ai_assist"]).notNull().default("human"),
+  actorUserId:     int("actorUserId"),
+  actorOrgId:      int("actorOrgId").notNull(),
+  candidateId:     varchar("candidateId",  { length: 26  }),
+  overrideValue:   json("overrideValue"),
+  justification:   text("justification").notNull(),
+  evidenceRefs:    json("evidenceRefs").notNull(),
+  escalateTo:      int("escalateTo"),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ReviewDecisionRow       = typeof reviewDecisionsTable.$inferSelect;
+export type InsertReviewDecisionRow = typeof reviewDecisionsTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — Semantic Drift Snapshots.
+ * Snapshots periódicos de métricas de drift semântico.
+ */
+export const semanticDriftSnapshotsTable = mysqlTable("semantic_drift_snapshots", {
+  id:             varchar("id",           { length: 26 }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  periodStart:    timestamp("periodStart").notNull(),
+  periodEnd:      timestamp("periodEnd").notNull(),
+  metrics:        json("metrics").notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SemanticDriftSnapshotRow       = typeof semanticDriftSnapshotsTable.$inferSelect;
+export type InsertSemanticDriftSnapshotRow = typeof semanticDriftSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — Catalog Sync Snapshots.
+ * Snapshots de sincronização de catálogos CATMAT/CATSER.
+ */
+export const catalogSyncSnapshotsTable = mysqlTable("catalog_sync_snapshots", {
+  id:               varchar("id",              { length: 26  }).notNull().primaryKey(),
+  organizationId:   int("organizationId").notNull(),
+  catalogType:      mysqlEnum("catalogType",   ["catmat","catser","custom"]).notNull(),
+  version:          varchar("version",         { length: 50  }).notNull(),
+  sourceUrl:        varchar("sourceUrl",       { length: 500 }),
+  checksum:         varchar("checksum",        { length: 64  }).notNull(),
+  totalEntries:     int("totalEntries").notNull().default(0),
+  indexedEntries:   int("indexedEntries").notNull().default(0),
+  syncStatus:       mysqlEnum("syncStatus",    ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
+  snapshotLineage:  varchar("snapshotLineage", { length: 26  }),
+  importLineage:    json("importLineage").notNull(),
+  integrityMetadata: json("integrityMetadata").notNull(),
+  cacheMetadata:    json("cacheMetadata").notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CatalogSyncSnapshotRow       = typeof catalogSyncSnapshotsTable.$inferSelect;
+export type InsertCatalogSyncSnapshotRow = typeof catalogSyncSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — Catalog Sync History.
+ * Histórico de operações de sincronização de catálogo.
+ */
+export const catalogSyncHistoryTable = mysqlTable("catalog_sync_history", {
+  id:             varchar("id",            { length: 26  }).notNull().primaryKey(),
+  snapshotId:     varchar("snapshotId",    { length: 26  }).notNull(),
+  organizationId: int("organizationId").notNull(),
+  operation:      mysqlEnum("operation",   ["create","update","verify","invalidate","expire"]).notNull(),
+  beforeVersion:  varchar("beforeVersion", { length: 50  }),
+  afterVersion:   varchar("afterVersion",  { length: 50  }).notNull(),
+  actor:          varchar("actor",         { length: 128 }).notNull(),
+  reason:         text("reason").notNull(),
+  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
+});
+
+export type CatalogSyncHistoryRow       = typeof catalogSyncHistoryTable.$inferSelect;
+export type InsertCatalogSyncHistoryRow = typeof catalogSyncHistoryTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — Candidate Explainability.
+ * Explainability completa por candidato semântico.
+ */
+export const candidateExplainabilityTable = mysqlTable("candidate_explainability", {
+  id:                    varchar("id",           { length: 26 }).notNull().primaryKey(),
+  candidateId:           varchar("candidateId",  { length: 26 }).notNull(),
+  stagingItemId:         varchar("stagingItemId",{ length: 26 }).notNull(),
+  organizationId:        int("organizationId").notNull(),
+  whySuggested:          text("whySuggested").notNull(),
+  whyRanked:             text("whyRanked").notNull(),
+  whyRejected:           text("whyRejected"),
+  influencingTokens:     json("influencingTokens").notNull(),
+  aliasesUsed:           json("aliasesUsed").notNull(),
+  parserInfluence:       json("parserInfluence").notNull(),
+  normalizationInfluence: json("normalizationInfluence").notNull(),
+  semanticInfluence:     json("semanticInfluence").notNull(),
+  rankingRationale:      text("rankingRationale").notNull(),
+  consensusRationale:    text("consensusRationale"),
+  confidenceRationale:   text("confidenceRationale").notNull(),
+  generatedAt:           timestamp("generatedAt").defaultNow().notNull(),
+});
+
+export type CandidateExplainabilityRow       = typeof candidateExplainabilityTable.$inferSelect;
+export type InsertCandidateExplainabilityRow = typeof candidateExplainabilityTable.$inferInsert;
+
+/**
+ * Sprint 2.95 — TR Composition Rules.
+ * Regras de composição de Termos de Referência por organização.
+ */
+export const trCompositionRulesTable = mysqlTable("tr_composition_rules", {
+  id:             varchar("id",           { length: 26  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  name:           varchar("name",         { length: 255 }).notNull(),
+  conditionExpr:  text("conditionExpr").notNull(),
+  action:         mysqlEnum("action",     ["include_section","exclude_section","replace_clause","append_clause"]).notNull(),
+  targetId:       varchar("targetId",     { length: 26  }).notNull(),
+  priority:       int("priority").notNull().default(0),
+  isActive:       boolean("isActive").notNull().default(true),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TrCompositionRuleRow       = typeof trCompositionRulesTable.$inferSelect;
+export type InsertTrCompositionRuleRow = typeof trCompositionRulesTable.$inferInsert;
