@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS item_candidate_links (
+  id VARCHAR(32) NOT NULL,
+  organization_id INT NOT NULL,
+  item_id VARCHAR(64) NOT NULL,
+  candidate_id VARCHAR(32) NOT NULL,
+  staging_item_id VARCHAR(26) NULL,
+  import_session_id INT NULL,
+  score DECIMAL(6,4) NOT NULL DEFAULT 0,
+  candidate_rank INT NOT NULL DEFAULT 1,
+  source VARCHAR(32) NOT NULL,
+  status ENUM('pending','accepted','rejected','superseded','expired') NOT NULL DEFAULT 'pending',
+  catmat_code VARCHAR(32) NULL,
+  is_selected TINYINT(1) NOT NULL DEFAULT 0,
+  replay_key VARCHAR(64) NULL,
+  correlation_id VARCHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_icl_org (organization_id),
+  INDEX idx_icl_item (organization_id, item_id),
+  INDEX idx_icl_candidate (candidate_id),
+  INDEX idx_icl_selected (organization_id, item_id, is_selected)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

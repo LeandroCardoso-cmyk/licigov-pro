@@ -148,3 +148,87 @@ export function rankingAnomaly(params: {
 }): void {
   emit("ranking_anomaly", params);
 }
+
+// ─── Sprint 3.0 — ItemTR / Catalog / Clause observability ─────────────────────
+
+export function matchingLatencyV2(params: {
+  correlationId:  string;
+  organizationId: number;
+  stagingItemId:  string;
+  totalMs:        number;
+  stageBreakdown: Record<string, number>;
+  candidateCount: number;
+}): void {
+  emit("matching_latency_v2", params);
+}
+
+export function catalogLatency(params: {
+  correlationId:  string;
+  organizationId: number;
+  catalogType:    string;
+  operation:      string;
+  totalMs:        number;
+  entryCount:     number;
+}): void {
+  emit("catalog_latency", params);
+}
+
+export function clauseGenerationLatency(params: {
+  correlationId:    string;
+  organizationId:   number;
+  itemCount:        number;
+  clauseCount:      number;
+  totalMs:          number;
+}): void {
+  emit("clause_generation_latency", params);
+}
+
+export function candidateInstability(params: {
+  correlationId:  string;
+  organizationId: number;
+  replayKey:      string;
+  expectedSignature: string;
+  actualSignature: string;
+}): void {
+  emit("candidate_instability", params);
+}
+
+export function overrideFrequency(params: {
+  organizationId: number;
+  windowLabel:    string;
+  overrideCount:  number;
+  totalItems:     number;
+  rate:           number;
+}): void {
+  emit("override_frequency", params);
+}
+
+export function semanticAnomaly(params: {
+  correlationId:  string;
+  organizationId: number;
+  itemId:         string;
+  anomalyType:    string;
+  description:    string;
+}): void {
+  emit("semantic_anomaly", params);
+}
+
+export function compositionAnomaly(params: {
+  correlationId:  string;
+  organizationId: number;
+  replayKey:      string;
+  anomalyType:    string;
+  description:    string;
+}): void {
+  emit("composition_anomaly", params);
+}
+
+export function catalogSyncAnomaly(params: {
+  organizationId: number;
+  catalogType:    string;
+  expectedChecksum: string;
+  actualChecksum: string;
+  description:    string;
+}): void {
+  emit("catalog_sync_anomaly", params);
+}
