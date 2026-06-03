@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS item_review_history (
+  id VARCHAR(32) NOT NULL,
+  item_id VARCHAR(64) NOT NULL,
+  organization_id INT NOT NULL,
+  from_state ENUM('pending_match','candidate_generated','awaiting_review','approved','rejected','overridden','manual_entry','finalized') NOT NULL,
+  to_state ENUM('pending_match','candidate_generated','awaiting_review','approved','rejected','overridden','manual_entry','finalized') NOT NULL,
+  actor_type ENUM('system','human','ai_assist') NOT NULL,
+  actor_user_id INT NULL,
+  actor_email VARCHAR(255) NULL,
+  reason TEXT NULL,
+  justification TEXT NULL,
+  evidence_refs JSON NOT NULL,
+  metadata JSON NULL,
+  correlation_id VARCHAR(64) NULL,
+  occurred_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_irh_org (organization_id),
+  INDEX idx_irh_item (organization_id, item_id),
+  INDEX idx_irh_state (organization_id, to_state),
+  INDEX idx_irh_occurred (item_id, occurred_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
