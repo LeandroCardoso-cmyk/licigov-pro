@@ -2341,3 +2341,171 @@ export const itemExplainabilityTable = mysqlTable("item_explainability", {
 
 export type ItemExplainabilityRow       = typeof itemExplainabilityTable.$inferSelect;
 export type InsertItemExplainabilityRow = typeof itemExplainabilityTable.$inferInsert;
+
+// ============================================================================
+// SPRINT 3.2 — PRODUCTION HARDENING
+// ============================================================================
+
+/**
+ * Sprint 3.2 — Catalog Ingestion Jobs.
+ */
+export const catalogIngestionJobsTable = mysqlTable("catalog_ingestion_jobs", {
+  id:                varchar("id",               { length: 32 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  catalogType:       mysqlEnum("catalog_type",   ["catmat","catser"]).notNull(),
+  status:            mysqlEnum("status",         ["pending","processing","completed","failed","partial"]).notNull().default("pending"),
+  totalEntries:      int("total_entries").notNull().default(0),
+  processedEntries:  int("processed_entries").notNull().default(0),
+  failedEntries:     int("failed_entries").notNull().default(0),
+  duplicatesSkipped: int("duplicates_skipped").notNull().default(0),
+  snapshotId:        varchar("snapshot_id",      { length: 32 }),
+  correlationId:     varchar("correlation_id",   { length: 64 }),
+  resumeToken:       varchar("resume_token",     { length: 255 }),
+  checksumBefore:    varchar("checksum_before",  { length: 64 }).notNull(),
+  checksumAfter:     varchar("checksum_after",   { length: 64 }),
+  startedAt:         timestamp("started_at").defaultNow().notNull(),
+  completedAt:       timestamp("completed_at"),
+  errors:            json("errors"),
+  createdAt:         timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CatalogIngestionJobRow       = typeof catalogIngestionJobsTable.$inferSelect;
+export type InsertCatalogIngestionJobRow = typeof catalogIngestionJobsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Distributed Cache Entries.
+ */
+export const distributedCacheEntriesTable = mysqlTable("distributed_cache_entries", {
+  key:              varchar("key",              { length: 512 }).notNull(),
+  organizationId:   int("organization_id").notNull(),
+  value:            json("value").notNull(),
+  ttlMs:            int("ttl_ms").notNull().default(300000),
+  snapshotVersion:  varchar("snapshot_version", { length: 64 }),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  expiresAt:        timestamp("expires_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.organizationId, table.key] }),
+]);
+
+export type DistributedCacheEntryRow       = typeof distributedCacheEntriesTable.$inferSelect;
+export type InsertDistributedCacheEntryRow = typeof distributedCacheEntriesTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Official Exports.
+ */
+export const officialExportsTable = mysqlTable("official_exports", {
+  id:              varchar("id",              { length: 64 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  processId:       int("process_id").notNull(),
+  format:          mysqlEnum("format",        ["docx","pdf"]).notNull(),
+  filename:        varchar("filename",        { length: 255 }).notNull(),
+  contentHash:     varchar("content_hash",    { length: 64 }).notNull(),
+  pageCount:       int("page_count").notNull().default(1),
+  templateId:      varchar("template_id",     { length: 64 }),
+  watermark:       varchar("watermark",       { length: 255 }),
+  correlationId:   varchar("correlation_id",  { length: 64 }),
+  generatedAt:     timestamp("generated_at").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
+});
+
+export type OfficialExportRow       = typeof officialExportsTable.$inferSelect;
+export type InsertOfficialExportRow = typeof officialExportsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Institutional Workflows.
+ */
+export const institutionalWorkflowsTable = mysqlTable("institutional_workflows", {
+  id:              varchar("id",              { length: 64 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  processId:       int("process_id").notNull(),
+  currentStage:    mysqlEnum("current_stage", ["elaboration","technical_review","legal_review","authority_approval","director_approval","publication","completed","cancelled"]).notNull().default("elaboration"),
+  stages:          json("stages").notNull(),
+  assignedTo:      json("assigned_to").notNull(),
+  deadlines:       json("deadlines").notNull(),
+  escalationRules: json("escalation_rules").notNull(),
+  status:          varchar("status",          { length: 32 }).notNull().default("active"),
+  correlationId:   varchar("correlation_id",  { length: 64 }),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
+  updatedAt:       timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InstitutionalWorkflowRow       = typeof institutionalWorkflowsTable.$inferSelect;
+export type InsertInstitutionalWorkflowRow = typeof institutionalWorkflowsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Operational Audit Events.
+ */
+export const operationalAuditEventsTable = mysqlTable("operational_audit_events", {
+  id:              varchar("id",              { length: 64 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  category:        mysqlEnum("category",      ["export","approval","override","clause_change","item_change","semantic_override","workflow_transition","tenant_operation"]).notNull(),
+  action:          varchar("action",          { length: 255 }).notNull(),
+  actorId:         int("actor_id").notNull(),
+  actorRole:       varchar("actor_role",      { length: 100 }).notNull(),
+  targetType:      varchar("target_type",     { length: 100 }).notNull(),
+  targetId:        varchar("target_id",       { length: 100 }).notNull(),
+  beforeState:     json("before_state"),
+  afterState:      json("after_state"),
+  justification:   text("justification"),
+  correlationId:   varchar("correlation_id",  { length: 64 }),
+  occurredAt:      timestamp("occurred_at").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
+});
+
+export type OperationalAuditEventRow       = typeof operationalAuditEventsTable.$inferSelect;
+export type InsertOperationalAuditEventRow = typeof operationalAuditEventsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Tenant Integrity Reports.
+ */
+export const tenantIntegrityReportsTable = mysqlTable("tenant_integrity_reports", {
+  id:              varchar("id",              { length: 64 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  scanType:        varchar("scan_type",       { length: 64 }).notNull(),
+  findingsCount:   int("findings_count").notNull().default(0),
+  healthy:         boolean("healthy").notNull().default(true),
+  findings:        json("findings").notNull(),
+  scannedAt:       timestamp("scanned_at").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
+});
+
+export type TenantIntegrityReportRow       = typeof tenantIntegrityReportsTable.$inferSelect;
+export type InsertTenantIntegrityReportRow = typeof tenantIntegrityReportsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Security Incidents.
+ */
+export const securityIncidentsTable = mysqlTable("security_incidents", {
+  id:              varchar("id",              { length: 64 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  eventType:       mysqlEnum("event_type",    ["brute_force","suspicious_access","permission_anomaly","session_anomaly","audit_anomaly","rate_limit_exceeded"]).notNull(),
+  severity:        mysqlEnum("severity",      ["info","warning","critical"]).notNull().default("info"),
+  actorId:         int("actor_id"),
+  description:     text("description").notNull(),
+  metadata:        json("metadata"),
+  correlationId:   varchar("correlation_id",  { length: 64 }),
+  detectedAt:      timestamp("detected_at").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
+});
+
+export type SecurityIncidentRow       = typeof securityIncidentsTable.$inferSelect;
+export type InsertSecurityIncidentRow = typeof securityIncidentsTable.$inferInsert;
+
+/**
+ * Sprint 3.2 — Catalog Snapshots V2.
+ */
+export const catalogSnapshotsV2Table = mysqlTable("catalog_snapshots_v2", {
+  id:                 varchar("id",                  { length: 64 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  catalogType:        mysqlEnum("catalog_type",      ["catmat","catser","custom"]).notNull(),
+  version:            varchar("version",             { length: 50 }).notNull(),
+  totalEntries:       int("total_entries").notNull().default(0),
+  indexedEntries:     int("indexed_entries").notNull().default(0),
+  checksum:           varchar("checksum",            { length: 64 }).notNull(),
+  previousSnapshotId: varchar("previous_snapshot_id",{ length: 64 }),
+  ingestionJobId:     varchar("ingestion_job_id",    { length: 32 }),
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CatalogSnapshotV2Row       = typeof catalogSnapshotsV2Table.$inferSelect;
+export type InsertCatalogSnapshotV2Row = typeof catalogSnapshotsV2Table.$inferInsert;

@@ -699,6 +699,164 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_iexp_candidate\` (\`candidate_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Sprint 3.2 — Catalog Ingestion Jobs table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`catalog_ingestion_jobs\` (
+      \`id\`                  VARCHAR(32) NOT NULL,
+      \`organization_id\`     INT         NOT NULL,
+      \`catalog_type\`        ENUM('catmat','catser') NOT NULL,
+      \`status\`              ENUM('pending','processing','completed','failed','partial') NOT NULL DEFAULT 'pending',
+      \`total_entries\`       INT         NOT NULL DEFAULT 0,
+      \`processed_entries\`   INT         NOT NULL DEFAULT 0,
+      \`failed_entries\`      INT         NOT NULL DEFAULT 0,
+      \`duplicates_skipped\`  INT         NOT NULL DEFAULT 0,
+      \`snapshot_id\`         VARCHAR(32) NULL,
+      \`correlation_id\`      VARCHAR(64) NULL,
+      \`resume_token\`        VARCHAR(255) NULL,
+      \`checksum_before\`     VARCHAR(64) NOT NULL,
+      \`checksum_after\`      VARCHAR(64) NULL,
+      \`started_at\`          DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`completed_at\`        DATETIME(3) NULL,
+      \`errors\`              JSON        NULL,
+      \`created_at\`          DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_cij_org\`    (\`organization_id\`),
+      INDEX \`idx_cij_status\` (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Distributed Cache Entries table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`distributed_cache_entries\` (
+      \`key\`                VARCHAR(512) NOT NULL,
+      \`organization_id\`    INT          NOT NULL,
+      \`value\`              JSON         NOT NULL,
+      \`ttl_ms\`             INT          NOT NULL DEFAULT 300000,
+      \`snapshot_version\`   VARCHAR(64)  NULL,
+      \`created_at\`         DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`expires_at\`         DATETIME(3)  NOT NULL,
+      PRIMARY KEY (\`organization_id\`, \`key\`),
+      INDEX \`idx_dce_expires\` (\`expires_at\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Official Exports table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`official_exports\` (
+      \`id\`                VARCHAR(64) NOT NULL,
+      \`organization_id\`   INT         NOT NULL,
+      \`process_id\`        INT         NOT NULL,
+      \`format\`            ENUM('docx','pdf') NOT NULL,
+      \`filename\`          VARCHAR(255) NOT NULL,
+      \`content_hash\`      VARCHAR(64)  NOT NULL,
+      \`page_count\`        INT          NOT NULL DEFAULT 1,
+      \`template_id\`       VARCHAR(64)  NULL,
+      \`watermark\`         VARCHAR(255) NULL,
+      \`correlation_id\`    VARCHAR(64)  NULL,
+      \`generated_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_oe_org\`     (\`organization_id\`),
+      INDEX \`idx_oe_process\` (\`organization_id\`, \`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Institutional Workflows table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`institutional_workflows\` (
+      \`id\`                VARCHAR(64) NOT NULL,
+      \`organization_id\`   INT         NOT NULL,
+      \`process_id\`        INT         NOT NULL,
+      \`current_stage\`     ENUM('elaboration','technical_review','legal_review','authority_approval','director_approval','publication','completed','cancelled') NOT NULL DEFAULT 'elaboration',
+      \`stages\`            JSON        NOT NULL,
+      \`assigned_to\`       JSON        NOT NULL,
+      \`deadlines\`         JSON        NOT NULL,
+      \`escalation_rules\`  JSON        NOT NULL,
+      \`status\`            VARCHAR(32) NOT NULL DEFAULT 'active',
+      \`correlation_id\`    VARCHAR(64) NULL,
+      \`created_at\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_iw_org\`     (\`organization_id\`),
+      INDEX \`idx_iw_process\` (\`organization_id\`, \`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Operational Audit Events table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`operational_audit_events\` (
+      \`id\`                VARCHAR(64)  NOT NULL,
+      \`organization_id\`   INT          NOT NULL,
+      \`category\`          ENUM('export','approval','override','clause_change','item_change','semantic_override','workflow_transition','tenant_operation') NOT NULL,
+      \`action\`            VARCHAR(255) NOT NULL,
+      \`actor_id\`          INT          NOT NULL,
+      \`actor_role\`        VARCHAR(100) NOT NULL,
+      \`target_type\`       VARCHAR(100) NOT NULL,
+      \`target_id\`         VARCHAR(100) NOT NULL,
+      \`before_state\`      JSON         NULL,
+      \`after_state\`       JSON         NULL,
+      \`justification\`     TEXT         NULL,
+      \`correlation_id\`    VARCHAR(64)  NULL,
+      \`occurred_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_oae_org_cat\`    (\`organization_id\`, \`category\`),
+      INDEX \`idx_oae_org_target\` (\`organization_id\`, \`target_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Tenant Integrity Reports table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`tenant_integrity_reports\` (
+      \`id\`                VARCHAR(64) NOT NULL,
+      \`organization_id\`   INT         NOT NULL,
+      \`scan_type\`         VARCHAR(64) NOT NULL,
+      \`findings_count\`    INT         NOT NULL DEFAULT 0,
+      \`healthy\`           TINYINT(1)  NOT NULL DEFAULT 1,
+      \`findings\`          JSON        NOT NULL,
+      \`scanned_at\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_tir_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Security Incidents table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`security_incidents\` (
+      \`id\`                VARCHAR(64) NOT NULL,
+      \`organization_id\`   INT         NOT NULL,
+      \`event_type\`        ENUM('brute_force','suspicious_access','permission_anomaly','session_anomaly','audit_anomaly','rate_limit_exceeded') NOT NULL,
+      \`severity\`          ENUM('info','warning','critical') NOT NULL DEFAULT 'info',
+      \`actor_id\`          INT         NULL,
+      \`description\`       TEXT        NOT NULL,
+      \`metadata\`          JSON        NULL,
+      \`correlation_id\`    VARCHAR(64) NULL,
+      \`detected_at\`       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_si_org_type\`     (\`organization_id\`, \`event_type\`),
+      INDEX \`idx_si_org_severity\` (\`organization_id\`, \`severity\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.2 — Catalog Snapshots V2 table
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`catalog_snapshots_v2\` (
+      \`id\`                   VARCHAR(64)  NOT NULL,
+      \`organization_id\`      INT          NOT NULL,
+      \`catalog_type\`         ENUM('catmat','catser','custom') NOT NULL,
+      \`version\`              VARCHAR(50)  NOT NULL,
+      \`total_entries\`        INT          NOT NULL DEFAULT 0,
+      \`indexed_entries\`      INT          NOT NULL DEFAULT 0,
+      \`checksum\`             VARCHAR(64)  NOT NULL,
+      \`previous_snapshot_id\` VARCHAR(64)  NULL,
+      \`ingestion_job_id\`     VARCHAR(32)  NULL,
+      \`created_at\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_csv2_org_type\` (\`organization_id\`, \`catalog_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
