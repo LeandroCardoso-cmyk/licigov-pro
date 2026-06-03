@@ -857,6 +857,151 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_csv2_org_type\` (\`organization_id\`, \`catalog_type\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Sprint 3.3 — Collaboration Comments
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`collaboration_comments\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`entityType\`       VARCHAR(50)   NOT NULL,
+      \`entityId\`         VARCHAR(64)   NOT NULL,
+      \`threadId\`         VARCHAR(64)   NULL,
+      \`content\`          TEXT          NOT NULL,
+      \`authorId\`         INT           NOT NULL,
+      \`authorName\`       VARCHAR(255)  NOT NULL,
+      \`mentions\`         JSON          NOT NULL,
+      \`status\`           ENUM('active','resolved','deleted') NOT NULL DEFAULT 'active',
+      \`editHistoryJson\`  JSON          NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_cc_org_entity\` (\`organizationId\`, \`entityId\`),
+      INDEX \`idx_cc_org_thread\` (\`organizationId\`, \`threadId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Discussion Threads
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`discussion_threads\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`entityType\`       VARCHAR(50)   NOT NULL,
+      \`entityId\`         VARCHAR(64)   NOT NULL,
+      \`title\`            VARCHAR(500)  NOT NULL,
+      \`status\`           ENUM('open','resolved') NOT NULL DEFAULT 'open',
+      \`resolvedBy\`       INT           NULL,
+      \`resolvedAt\`       DATETIME(3)   NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_dt_org_entity\` (\`organizationId\`, \`entityId\`),
+      INDEX \`idx_dt_org_status\` (\`organizationId\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Webhook Deliveries
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`webhook_deliveries\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`endpointId\`       VARCHAR(64)   NOT NULL,
+      \`eventType\`        VARCHAR(100)  NOT NULL,
+      \`payloadJson\`      JSON          NOT NULL,
+      \`signature\`        VARCHAR(256)  NOT NULL,
+      \`status\`           ENUM('pending','delivered','failed','dead_letter') NOT NULL DEFAULT 'pending',
+      \`attempts\`         INT           NOT NULL DEFAULT 0,
+      \`lastError\`        TEXT          NULL,
+      \`correlationId\`    VARCHAR(64)   NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`deliveredAt\`      DATETIME(3)   NULL,
+      INDEX \`idx_wd_org_event\`  (\`organizationId\`, \`eventType\`),
+      INDEX \`idx_wd_org_status\` (\`organizationId\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Public API Tokens
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`public_api_tokens\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`name\`             VARCHAR(255)  NOT NULL,
+      \`tokenHash\`        VARCHAR(255)  NOT NULL,
+      \`scopes\`           JSON          NOT NULL,
+      \`active\`           BOOLEAN       NOT NULL DEFAULT TRUE,
+      \`expiresAt\`        DATETIME(3)   NULL,
+      \`lastUsedAt\`       DATETIME(3)   NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_pat_org_active\` (\`organizationId\`, \`active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Document Version Diffs
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`document_version_diffs\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`entityType\`       VARCHAR(50)   NOT NULL,
+      \`entityId\`         VARCHAR(64)   NOT NULL,
+      \`fromVersionId\`    VARCHAR(64)   NOT NULL,
+      \`toVersionId\`      VARCHAR(64)   NOT NULL,
+      \`changesJson\`      JSON          NOT NULL,
+      \`summary\`          VARCHAR(500)  NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_dvd_org_entity\` (\`organizationId\`, \`entityId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — External Storage Snapshots
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`external_storage_snapshots\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`adapterId\`        VARCHAR(64)   NOT NULL,
+      \`totalFiles\`       INT           NOT NULL DEFAULT 0,
+      \`syncedFiles\`      INT           NOT NULL DEFAULT 0,
+      \`conflictsCount\`   INT           NOT NULL DEFAULT 0,
+      \`checksum\`         VARCHAR(255)  NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ess_org_adapter\` (\`organizationId\`, \`adapterId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Structured Exports
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`structured_exports\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`schema\`           VARCHAR(100)  NOT NULL,
+      \`format\`           VARCHAR(20)   NOT NULL,
+      \`version\`          VARCHAR(20)   NOT NULL DEFAULT '1.0',
+      \`payloadJson\`      JSON          NOT NULL,
+      \`checksum\`         VARCHAR(255)  NOT NULL,
+      \`correlationId\`    VARCHAR(64)   NOT NULL,
+      \`generatedAt\`      DATETIME(3)   NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_se_org_schema\` (\`organizationId\`, \`schema\`),
+      INDEX \`idx_se_org_format\` (\`organizationId\`, \`format\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Sprint 3.3 — Communication Events
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`communication_events\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organizationId\`   INT           NOT NULL,
+      \`recipientUserId\`  INT           NOT NULL,
+      \`senderUserId\`     INT           NULL,
+      \`type\`             VARCHAR(100)  NOT NULL,
+      \`priority\`         VARCHAR(20)   NOT NULL DEFAULT 'normal',
+      \`title\`            VARCHAR(500)  NOT NULL,
+      \`message\`          TEXT          NOT NULL,
+      \`entityType\`       VARCHAR(50)   NULL,
+      \`entityId\`         VARCHAR(64)   NULL,
+      \`readStatus\`       BOOLEAN       NOT NULL DEFAULT FALSE,
+      \`readAt\`           DATETIME(3)   NULL,
+      \`correlationId\`    VARCHAR(64)   NOT NULL,
+      \`createdAt\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ce_org_recipient\` (\`organizationId\`, \`recipientUserId\`),
+      INDEX \`idx_ce_org_type\`      (\`organizationId\`, \`type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

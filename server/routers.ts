@@ -35,6 +35,9 @@ import { trCompositionRouter } from "./routers/trCompositionRouter";
 import { itemAnalyticsRouter } from "./routers/itemAnalyticsRouter";
 import { exportRouter } from "./routers/exportRouter";
 import { productionReadinessRouter } from "./routers/productionReadinessRouter";
+import { collaborationCommentsRouter } from "./routers/collaborationCommentsRouter";
+import { webhookRouter } from "./routers/webhookRouter";
+import { structuredExportRouter } from "./routers/structuredExportRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -73,6 +76,9 @@ export const appRouter = router({
   itemAnalytics: itemAnalyticsRouter,
   exports: exportRouter,
   productionReadiness: productionReadinessRouter,
+  collaborationComments: collaborationCommentsRouter,
+  webhooks: webhookRouter,
+  structuredExports: structuredExportRouter,
 });
 
 export type AppRouter = typeof appRouter;
