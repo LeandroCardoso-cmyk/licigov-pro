@@ -2135,3 +2135,209 @@ export const trCompositionRulesTable = mysqlTable("tr_composition_rules", {
 
 export type TrCompositionRuleRow       = typeof trCompositionRulesTable.$inferSelect;
 export type InsertTrCompositionRuleRow = typeof trCompositionRulesTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — ItemTR aggregate root.
+ * Item consolidado do Termo de Referência (promovido do staging ao domínio).
+ */
+export const itemTrTable = mysqlTable("item_tr", {
+  id:                    varchar("id",                    { length: 64 }).notNull().primaryKey(),
+  organizationId:        int("organizationId").notNull(),
+  processId:             int("processId").notNull(),
+  sourceImportSessionId: int("sourceImportSessionId"),
+  itemNumber:            int("itemNumber").notNull(),
+  description:           text("description").notNull(),
+  normalizedDescription: text("normalizedDescription").notNull(),
+  detailedSpecification: text("detailedSpecification"),
+  quantity:              decimal("quantity",            { precision: 18, scale: 4 }).notNull().default("0"),
+  unit:                  varchar("unit",                  { length: 32 }).notNull(),
+  canonicalUnit:         varchar("canonicalUnit",         { length: 32 }),
+  estimatedUnitPrice:    decimal("estimatedUnitPrice",   { precision: 18, scale: 4 }),
+  estimatedTotalPrice:   decimal("estimatedTotalPrice",  { precision: 18, scale: 4 }),
+  catmatCode:            varchar("catmatCode",            { length: 32 }),
+  catmatDescription:     text("catmatDescription"),
+  catserCode:            varchar("catserCode",            { length: 32 }),
+  selectedCandidateId:   varchar("selectedCandidateId",   { length: 32 }),
+  consensusId:           varchar("consensusId",           { length: 32 }),
+  confidenceScore:       decimal("confidenceScore",      { precision: 6, scale: 4 }).notNull().default("0"),
+  reviewState:           mysqlEnum("reviewState", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull().default("pending_match"),
+  approvedBy:            int("approvedBy"),
+  approvedAt:            timestamp("approvedAt"),
+  evidenceRef:           varchar("evidenceRef",           { length: 64 }),
+  provenance:            json("provenance").notNull(),
+  warnings:              json("warnings").notNull(),
+  metadata:              json("metadata").notNull(),
+  correlationId:         varchar("correlationId",         { length: 64 }),
+  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:             timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ItemTrRow       = typeof itemTrTable.$inferSelect;
+export type InsertItemTrRow = typeof itemTrTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Item Review History (append-only).
+ * Histórico imutável de transições de estado de revisão de ItemTR.
+ */
+export const itemReviewHistoryTable = mysqlTable("item_review_history", {
+  id:             varchar("id",            { length: 32 }).notNull().primaryKey(),
+  itemId:         varchar("itemId",        { length: 64 }).notNull(),
+  organizationId: int("organizationId").notNull(),
+  fromState:      mysqlEnum("fromState", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
+  toState:        mysqlEnum("toState",   ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
+  actorType:      mysqlEnum("actorType", ["system","human","ai_assist"]).notNull(),
+  actorUserId:    int("actorUserId"),
+  actorEmail:     varchar("actorEmail",   { length: 255 }),
+  reason:         text("reason"),
+  justification:  text("justification"),
+  evidenceRefs:   json("evidenceRefs").notNull(),
+  metadata:       json("metadata"),
+  correlationId:  varchar("correlationId", { length: 64 }),
+  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ItemReviewHistoryRow       = typeof itemReviewHistoryTable.$inferSelect;
+export type InsertItemReviewHistoryRow = typeof itemReviewHistoryTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Catalog Snapshots (CATMAT/CATSER versioned snapshots).
+ */
+export const catalogSnapshotsTable = mysqlTable("catalog_snapshots", {
+  id:               varchar("id",               { length: 32 }).notNull().primaryKey(),
+  organizationId:   int("organizationId").notNull(),
+  catalogType:      mysqlEnum("catalogType", ["catmat","catser","custom"]).notNull(),
+  version:          varchar("version",          { length: 50 }).notNull(),
+  checksum:         varchar("checksum",         { length: 64 }).notNull(),
+  totalEntries:     int("totalEntries").notNull().default(0),
+  indexedEntries:   int("indexedEntries").notNull().default(0),
+  syncStatus:       mysqlEnum("syncStatus", ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
+  snapshotLineage:  varchar("snapshotLineage",  { length: 32 }),
+  importLineage:    json("importLineage").notNull(),
+  integrityMetadata: json("integrityMetadata").notNull(),
+  cacheMetadata:    json("cacheMetadata").notNull(),
+  correlationId:    varchar("correlationId",    { length: 64 }),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CatalogSnapshotRow       = typeof catalogSnapshotsTable.$inferSelect;
+export type InsertCatalogSnapshotRow = typeof catalogSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Catalog Entries (CATMAT/CATSER normalized entries).
+ */
+export const catalogEntriesTable = mysqlTable("catalog_entries", {
+  id:                    varchar("id",                    { length: 32 }).notNull().primaryKey(),
+  organizationId:        int("organizationId").notNull(),
+  code:                  varchar("code",                  { length: 32 }).notNull(),
+  catalogType:           mysqlEnum("catalogType", ["catmat","catser"]).notNull(),
+  description:           text("description").notNull(),
+  normalizedDescription: text("normalizedDescription").notNull(),
+  unit:                  varchar("unit",                  { length: 32 }),
+  canonicalUnit:         varchar("canonicalUnit",         { length: 32 }),
+  catalogGroup:          varchar("catalogGroup",          { length: 255 }),
+  aliases:               json("aliases").notNull(),
+  tokens:                json("tokens").notNull(),
+  active:                boolean("active").notNull().default(true),
+  snapshotId:            varchar("snapshotId",            { length: 32 }),
+  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:             timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CatalogEntryRow       = typeof catalogEntriesTable.$inferSelect;
+export type InsertCatalogEntryRow = typeof catalogEntriesTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Clause Templates (TR clause recommendation templates).
+ */
+export const clauseTemplatesTable = mysqlTable("clause_templates", {
+  id:             varchar("id",            { length: 32 }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  clauseType:     mysqlEnum("clauseType", ["header","body","item_list","legal_basis","justification","specification","price_ref","footer"]).notNull(),
+  title:          varchar("title",         { length: 255 }).notNull(),
+  content:        text("content").notNull(),
+  legalBasis:     varchar("legalBasis",    { length: 255 }),
+  priority:       int("priority").notNull().default(0),
+  appliesTo:      json("appliesTo").notNull(),
+  baseRelevance:  decimal("baseRelevance", { precision: 6, scale: 4 }).notNull().default("0"),
+  isActive:       boolean("isActive").notNull().default(true),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ClauseTemplateRow       = typeof clauseTemplatesTable.$inferSelect;
+export type InsertClauseTemplateRow = typeof clauseTemplatesTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — TR Compositions (intelligent TR composition results).
+ */
+export const trCompositionsTable = mysqlTable("tr_compositions", {
+  id:                  varchar("id",                  { length: 32 }).notNull().primaryKey(),
+  organizationId:      int("organizationId").notNull(),
+  processId:           int("processId").notNull(),
+  replayKey:           varchar("replayKey",           { length: 64 }).notNull(),
+  correlationId:       varchar("correlationId",       { length: 64 }),
+  composedSections:    json("composedSections").notNull(),
+  recommendedClauses:  json("recommendedClauses").notNull(),
+  itemGroups:          json("itemGroups").notNull(),
+  compositionRationale: text("compositionRationale").notNull(),
+  itemCount:           int("itemCount").notNull().default(0),
+  createdBy:           int("createdBy"),
+  createdAt:           timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TrCompositionRow       = typeof trCompositionsTable.$inferSelect;
+export type InsertTrCompositionRow = typeof trCompositionsTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Item Candidate Links (item ↔ semantic candidate lineage).
+ */
+export const itemCandidateLinksTable = mysqlTable("item_candidate_links", {
+  id:              varchar("id",              { length: 32 }).notNull().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  itemId:          varchar("itemId",          { length: 64 }).notNull(),
+  candidateId:     varchar("candidateId",     { length: 32 }).notNull(),
+  stagingItemId:   varchar("stagingItemId",   { length: 26 }),
+  importSessionId: int("importSessionId"),
+  score:           decimal("score",           { precision: 6, scale: 4 }).notNull().default("0"),
+  candidateRank:   int("candidateRank").notNull().default(1),
+  source:          varchar("source",          { length: 32 }).notNull(),
+  status:          mysqlEnum("status", ["pending","accepted","rejected","superseded","expired"]).notNull().default("pending"),
+  catmatCode:      varchar("catmatCode",      { length: 32 }),
+  isSelected:      boolean("isSelected").notNull().default(false),
+  replayKey:       varchar("replayKey",       { length: 64 }),
+  correlationId:   varchar("correlationId",   { length: 64 }),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ItemCandidateLinkRow       = typeof itemCandidateLinksTable.$inferSelect;
+export type InsertItemCandidateLinkRow = typeof itemCandidateLinksTable.$inferInsert;
+
+/**
+ * Sprint 3.0 — Item Explainability (per-candidate explainability for ItemTR).
+ */
+export const itemExplainabilityTable = mysqlTable("item_explainability", {
+  id:                    varchar("id",                    { length: 32 }).notNull().primaryKey(),
+  organizationId:        int("organizationId").notNull(),
+  itemId:                varchar("itemId",                { length: 64 }).notNull(),
+  candidateId:           varchar("candidateId",           { length: 32 }).notNull(),
+  whySuggested:          text("whySuggested").notNull(),
+  whyRanked:             text("whyRanked").notNull(),
+  whyRejected:           text("whyRejected"),
+  influencingTokens:     json("influencingTokens").notNull(),
+  parserInfluence:       json("parserInfluence").notNull(),
+  normalizationInfluence: json("normalizationInfluence").notNull(),
+  semanticInfluence:     json("semanticInfluence").notNull(),
+  rankingRationale:      text("rankingRationale").notNull(),
+  consensusRationale:    text("consensusRationale"),
+  confidenceRationale:   text("confidenceRationale").notNull(),
+  replayKey:             varchar("replayKey",             { length: 64 }),
+  correlationId:         varchar("correlationId",         { length: 64 }),
+  generatedAt:           timestamp("generatedAt").defaultNow().notNull(),
+  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ItemExplainabilityRow       = typeof itemExplainabilityTable.$inferSelect;
+export type InsertItemExplainabilityRow = typeof itemExplainabilityTable.$inferInsert;

@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS catalog_entries (
+  id VARCHAR(32) NOT NULL,
+  organization_id INT NOT NULL,
+  code VARCHAR(32) NOT NULL,
+  catalog_type ENUM('catmat','catser') NOT NULL,
+  description TEXT NOT NULL,
+  normalized_description TEXT NOT NULL,
+  unit VARCHAR(32) NULL,
+  canonical_unit VARCHAR(32) NULL,
+  catalog_group VARCHAR(255) NULL,
+  aliases JSON NOT NULL,
+  tokens JSON NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  snapshot_id VARCHAR(32) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_cat_org (organization_id),
+  INDEX idx_cat_code (organization_id, code),
+  INDEX idx_cat_type (organization_id, catalog_type),
+  INDEX idx_cat_active (organization_id, active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

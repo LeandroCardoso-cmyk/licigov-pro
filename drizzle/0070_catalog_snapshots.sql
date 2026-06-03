@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS catalog_snapshots (
+  id VARCHAR(32) NOT NULL,
+  organization_id INT NOT NULL,
+  catalog_type ENUM('catmat','catser','custom') NOT NULL,
+  version VARCHAR(50) NOT NULL,
+  checksum VARCHAR(64) NOT NULL,
+  total_entries INT NOT NULL DEFAULT 0,
+  indexed_entries INT NOT NULL DEFAULT 0,
+  sync_status ENUM('pending','syncing','synced','failed','stale') NOT NULL DEFAULT 'pending',
+  snapshot_lineage VARCHAR(32) NULL,
+  import_lineage JSON NOT NULL,
+  integrity_metadata JSON NOT NULL,
+  cache_metadata JSON NOT NULL,
+  correlation_id VARCHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_cs_org (organization_id),
+  INDEX idx_cs_type (organization_id, catalog_type),
+  INDEX idx_cs_status (organization_id, sync_status),
+  INDEX idx_cs_checksum (checksum)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
