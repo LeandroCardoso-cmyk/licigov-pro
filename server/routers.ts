@@ -28,6 +28,11 @@ import { contactRouter } from "./routers/contactRouter";
 import { legalOpinionsRouter } from "./routers/legalOpinionsRouter";
 import { aiAssistantRouter } from "./routers/aiAssistantRouter";
 import { organizationsRouter } from "./routers/organizationsRouter";
+import { itemTrRouter } from "./routers/itemTrRouter";
+import { reviewWorkspaceRouter } from "./routers/reviewWorkspaceRouter";
+import { clauseRouter } from "./routers/clauseRouter";
+import { trCompositionRouter } from "./routers/trCompositionRouter";
+import { itemAnalyticsRouter } from "./routers/itemAnalyticsRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -59,6 +64,11 @@ export const appRouter = router({
   contracts: contractsRouter,
   legalOpinions: legalOpinionsRouter,
   aiAssistant: aiAssistantRouter,
+  itemTr: itemTrRouter,
+  reviewWorkspace: reviewWorkspaceRouter,
+  clauses: clauseRouter,
+  trComposition: trCompositionRouter,
+  itemAnalytics: itemAnalyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;
