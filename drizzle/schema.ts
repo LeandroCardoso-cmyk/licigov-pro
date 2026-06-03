@@ -2509,3 +2509,163 @@ export const catalogSnapshotsV2Table = mysqlTable("catalog_snapshots_v2", {
 
 export type CatalogSnapshotV2Row       = typeof catalogSnapshotsV2Table.$inferSelect;
 export type InsertCatalogSnapshotV2Row = typeof catalogSnapshotsV2Table.$inferInsert;
+
+// ============================================================================
+// Sprint 3.3 — Collaboration + Interoperability + Institutional Workflow
+// ============================================================================
+
+/**
+ * Sprint 3.3 — Collaboration Comments.
+ */
+export const collaborationCommentsTable = mysqlTable("collaboration_comments", {
+  id:              varchar("id",           { length: 64  }).notNull().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  entityType:      varchar("entityType",   { length: 50  }).notNull(),
+  entityId:        varchar("entityId",     { length: 64  }).notNull(),
+  threadId:        varchar("threadId",     { length: 64  }),
+  content:         text("content").notNull(),
+  authorId:        int("authorId").notNull(),
+  authorName:      varchar("authorName",   { length: 255 }).notNull(),
+  mentions:        json("mentions").notNull(),
+  status:          mysqlEnum("status", ["active","resolved","deleted"]).notNull().default("active"),
+  editHistoryJson: json("editHistoryJson").notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:       timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CollaborationCommentRow       = typeof collaborationCommentsTable.$inferSelect;
+export type InsertCollaborationCommentRow = typeof collaborationCommentsTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Discussion Threads.
+ */
+export const discussionThreadsTable = mysqlTable("discussion_threads", {
+  id:             varchar("id",          { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  entityType:     varchar("entityType",  { length: 50  }).notNull(),
+  entityId:       varchar("entityId",    { length: 64  }).notNull(),
+  title:          varchar("title",       { length: 500 }).notNull(),
+  status:         mysqlEnum("status", ["open","resolved"]).notNull().default("open"),
+  resolvedBy:     int("resolvedBy"),
+  resolvedAt:     timestamp("resolvedAt"),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DiscussionThreadRow       = typeof discussionThreadsTable.$inferSelect;
+export type InsertDiscussionThreadRow = typeof discussionThreadsTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Webhook Deliveries.
+ */
+export const webhookDeliveriesTable = mysqlTable("webhook_deliveries", {
+  id:             varchar("id",            { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  endpointId:     varchar("endpointId",    { length: 64  }).notNull(),
+  eventType:      varchar("eventType",     { length: 100 }).notNull(),
+  payloadJson:    json("payloadJson").notNull(),
+  signature:      varchar("signature",     { length: 256 }).notNull(),
+  status:         mysqlEnum("status", ["pending","delivered","failed","dead_letter"]).notNull().default("pending"),
+  attempts:       int("attempts").notNull().default(0),
+  lastError:      text("lastError"),
+  correlationId:  varchar("correlationId", { length: 64  }).notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  deliveredAt:    timestamp("deliveredAt"),
+});
+
+export type WebhookDeliveryRow       = typeof webhookDeliveriesTable.$inferSelect;
+export type InsertWebhookDeliveryRow = typeof webhookDeliveriesTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Public API Tokens.
+ */
+export const publicApiTokensTable = mysqlTable("public_api_tokens", {
+  id:             varchar("id",          { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  name:           varchar("name",        { length: 255 }).notNull(),
+  tokenHash:      varchar("tokenHash",   { length: 255 }).notNull(),
+  scopes:         json("scopes").notNull(),
+  active:         boolean("active").notNull().default(true),
+  expiresAt:      timestamp("expiresAt"),
+  lastUsedAt:     timestamp("lastUsedAt"),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PublicApiTokenRow       = typeof publicApiTokensTable.$inferSelect;
+export type InsertPublicApiTokenRow = typeof publicApiTokensTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Document Version Diffs.
+ */
+export const documentVersionDiffsTable = mysqlTable("document_version_diffs", {
+  id:             varchar("id",            { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  entityType:     varchar("entityType",    { length: 50  }).notNull(),
+  entityId:       varchar("entityId",      { length: 64  }).notNull(),
+  fromVersionId:  varchar("fromVersionId", { length: 64  }).notNull(),
+  toVersionId:    varchar("toVersionId",   { length: 64  }).notNull(),
+  changesJson:    json("changesJson").notNull(),
+  summary:        varchar("summary",       { length: 500 }).notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DocumentVersionDiffRow       = typeof documentVersionDiffsTable.$inferSelect;
+export type InsertDocumentVersionDiffRow = typeof documentVersionDiffsTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — External Storage Snapshots.
+ */
+export const externalStorageSnapshotsTable = mysqlTable("external_storage_snapshots", {
+  id:             varchar("id",          { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  adapterId:      varchar("adapterId",   { length: 64  }).notNull(),
+  totalFiles:     int("totalFiles").notNull().default(0),
+  syncedFiles:    int("syncedFiles").notNull().default(0),
+  conflictsCount: int("conflictsCount").notNull().default(0),
+  checksum:       varchar("checksum",    { length: 255 }).notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ExternalStorageSnapshotRow       = typeof externalStorageSnapshotsTable.$inferSelect;
+export type InsertExternalStorageSnapshotRow = typeof externalStorageSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Structured Exports.
+ */
+export const structuredExportsTable = mysqlTable("structured_exports", {
+  id:             varchar("id",            { length: 64  }).notNull().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  schema:         varchar("schema",        { length: 100 }).notNull(),
+  format:         varchar("format",        { length: 20  }).notNull(),
+  version:        varchar("version",       { length: 20  }).notNull().default("1.0"),
+  payloadJson:    json("payloadJson").notNull(),
+  checksum:       varchar("checksum",      { length: 255 }).notNull(),
+  correlationId:  varchar("correlationId", { length: 64  }).notNull(),
+  generatedAt:    timestamp("generatedAt").notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type StructuredExportRow       = typeof structuredExportsTable.$inferSelect;
+export type InsertStructuredExportRow = typeof structuredExportsTable.$inferInsert;
+
+/**
+ * Sprint 3.3 — Communication Events.
+ */
+export const communicationEventsTable = mysqlTable("communication_events", {
+  id:              varchar("id",            { length: 64  }).notNull().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  recipientUserId: int("recipientUserId").notNull(),
+  senderUserId:    int("senderUserId"),
+  type:            varchar("type",          { length: 100 }).notNull(),
+  priority:        varchar("priority",      { length: 20  }).notNull().default("normal"),
+  title:           varchar("title",         { length: 500 }).notNull(),
+  message:         text("message").notNull(),
+  entityType:      varchar("entityType",    { length: 50  }),
+  entityId:        varchar("entityId",      { length: 64  }),
+  readStatus:      boolean("readStatus").notNull().default(false),
+  readAt:          timestamp("readAt"),
+  correlationId:   varchar("correlationId", { length: 64  }).notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CommunicationEventRow       = typeof communicationEventsTable.$inferSelect;
+export type InsertCommunicationEventRow = typeof communicationEventsTable.$inferInsert;
