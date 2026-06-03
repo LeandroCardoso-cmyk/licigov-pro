@@ -533,6 +533,62 @@
       "when": 1751846400000,
       "tag": "0075_item_explainability",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "5",
+      "when": 1751932800000,
+      "tag": "0076_catalog_ingestion_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "5",
+      "when": 1752019200000,
+      "tag": "0077_distributed_cache_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "5",
+      "when": 1752105600000,
+      "tag": "0078_official_exports",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "5",
+      "when": 1752192000000,
+      "tag": "0079_institutional_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "5",
+      "when": 1752278400000,
+      "tag": "0080_operational_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1752364800000,
+      "tag": "0081_tenant_integrity_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1752451200000,
+      "tag": "0082_security_incidents",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "5",
+      "when": 1752537600000,
+      "tag": "0083_catalog_snapshots_v2",
+      "breakpoints": true
     }
   ]
 }

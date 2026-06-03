@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS catalog_ingestion_jobs (
+  id VARCHAR(32) NOT NULL,
+  organization_id INT NOT NULL,
+  catalog_type ENUM('catmat','catser') NOT NULL,
+  status ENUM('pending','processing','completed','failed','partial') NOT NULL DEFAULT 'pending',
+  total_entries INT NOT NULL DEFAULT 0,
+  processed_entries INT NOT NULL DEFAULT 0,
+  failed_entries INT NOT NULL DEFAULT 0,
+  duplicates_skipped INT NOT NULL DEFAULT 0,
+  snapshot_id VARCHAR(32) NULL,
+  correlation_id VARCHAR(64) NULL,
+  resume_token VARCHAR(255) NULL,
+  checksum_before VARCHAR(64) NOT NULL,
+  checksum_after VARCHAR(64) NULL,
+  started_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  completed_at DATETIME(3) NULL,
+  errors JSON NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  INDEX idx_cij_org (organization_id),
+  INDEX idx_cij_status (organization_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

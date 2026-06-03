@@ -33,6 +33,8 @@ import { reviewWorkspaceRouter } from "./routers/reviewWorkspaceRouter";
 import { clauseRouter } from "./routers/clauseRouter";
 import { trCompositionRouter } from "./routers/trCompositionRouter";
 import { itemAnalyticsRouter } from "./routers/itemAnalyticsRouter";
+import { exportRouter } from "./routers/exportRouter";
+import { productionReadinessRouter } from "./routers/productionReadinessRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -69,6 +71,8 @@ export const appRouter = router({
   clauses: clauseRouter,
   trComposition: trCompositionRouter,
   itemAnalytics: itemAnalyticsRouter,
+  exports: exportRouter,
+  productionReadiness: productionReadinessRouter,
 });
 
 export type AppRouter = typeof appRouter;
