@@ -1,0 +1,20 @@
+CREATE TABLE `pilot_organizations` (
+  `id` varchar(128) NOT NULL,
+  `organization_id` int NOT NULL,
+  `municipio` varchar(256) NOT NULL,
+  `estado` char(2) NOT NULL,
+  `populacao` int NOT NULL DEFAULT 0,
+  `pilot_phase` varchar(32) NOT NULL DEFAULT 'onboarding',
+  `pilot_started_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `pilot_go_live_at` datetime(3) NULL,
+  `rollout_percentage` int NOT NULL DEFAULT 0,
+  `features` json NOT NULL,
+  `metrics` json NOT NULL,
+  `health` json NOT NULL,
+  `audit_trail` json NOT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_pilot_orgs_organization_id` (`organization_id`),
+  INDEX `idx_pilot_orgs_phase` (`pilot_phase`)
+);

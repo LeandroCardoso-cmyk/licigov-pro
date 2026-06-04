@@ -1002,6 +1002,230 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_ce_org_type\`      (\`organizationId\`, \`type\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // ─── Sprint 3.4 ─────────────────────────────────────────────────────────────
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`operational_templates\` (
+      \`id\`                     VARCHAR(128)  NOT NULL,
+      \`organization_id\`        INT           NOT NULL DEFAULT 0,
+      \`category\`               VARCHAR(64)   NOT NULL,
+      \`name\`                   VARCHAR(256)  NOT NULL,
+      \`description\`            TEXT          NOT NULL,
+      \`clause_templates\`       JSON          NOT NULL,
+      \`item_tr_templates\`      JSON          NOT NULL,
+      \`workflow_template\`      JSON          NOT NULL,
+      \`legal_basis\`            JSON          NOT NULL,
+      \`estimated_duration_days\` INT          NOT NULL DEFAULT 30,
+      \`approval_levels\`        INT           NOT NULL DEFAULT 2,
+      \`version\`                VARCHAR(32)   NOT NULL DEFAULT '1.0.0',
+      \`version_history\`        JSON          NOT NULL,
+      \`active\`                 TINYINT(1)    NOT NULL DEFAULT 1,
+      \`createdAt\`              DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`              DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_opt_org\` (\`organization_id\`),
+      INDEX \`idx_opt_cat\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`pilot_organizations\` (
+      \`id\`                  VARCHAR(128) NOT NULL,
+      \`organization_id\`     INT          NOT NULL,
+      \`municipio\`           VARCHAR(256) NOT NULL,
+      \`estado\`              CHAR(2)      NOT NULL,
+      \`populacao\`           INT          NOT NULL DEFAULT 0,
+      \`pilot_phase\`         VARCHAR(32)  NOT NULL DEFAULT 'onboarding',
+      \`pilot_started_at\`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`pilot_go_live_at\`    DATETIME(3)  NULL,
+      \`rollout_percentage\`  INT          NOT NULL DEFAULT 0,
+      \`features\`            JSON         NOT NULL,
+      \`metrics\`             JSON         NOT NULL,
+      \`health\`              JSON         NOT NULL,
+      \`audit_trail\`         JSON         NOT NULL,
+      \`createdAt\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_pilot_org\` (\`organization_id\`),
+      INDEX \`idx_pilot_phase\` (\`pilot_phase\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`department_permissions\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_id\`         INT          NOT NULL,
+      \`department\`      VARCHAR(128) NOT NULL,
+      \`resource\`        VARCHAR(64)  NOT NULL,
+      \`actions\`         JSON         NOT NULL,
+      \`scope\`           VARCHAR(32)  NOT NULL DEFAULT 'own',
+      \`granted_by\`      INT          NOT NULL,
+      \`granted_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`expires_at\`      DATETIME(3)  NULL,
+      \`active\`          TINYINT(1)   NOT NULL DEFAULT 1,
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_dp_org_user\` (\`organization_id\`, \`user_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`workflow_permissions\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_id\`         INT          NOT NULL,
+      \`workflow_stage\`  VARCHAR(64)  NOT NULL,
+      \`can_advance\`     TINYINT(1)   NOT NULL DEFAULT 0,
+      \`can_reject\`      TINYINT(1)   NOT NULL DEFAULT 0,
+      \`can_escalate\`    TINYINT(1)   NOT NULL DEFAULT 0,
+      \`can_delegate\`    TINYINT(1)   NOT NULL DEFAULT 0,
+      \`max_delegations\` INT          NOT NULL DEFAULT 1,
+      \`granted_by\`      INT          NOT NULL,
+      \`granted_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_wp_org_user\` (\`organization_id\`, \`user_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`environments\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`name\`            VARCHAR(256) NOT NULL,
+      \`type\`            VARCHAR(32)  NOT NULL DEFAULT 'development',
+      \`status\`          VARCHAR(32)  NOT NULL DEFAULT 'active',
+      \`config\`          JSON         NOT NULL,
+      \`version\`         VARCHAR(32)  NOT NULL DEFAULT '1.0.0',
+      \`promoted_from\`   VARCHAR(128) NULL,
+      \`created_by\`      INT          NOT NULL,
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_env_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`environment_promotions\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`from_env_id\`     VARCHAR(128) NOT NULL,
+      \`to_env_id\`       VARCHAR(128) NOT NULL,
+      \`promoted_by\`     INT          NOT NULL,
+      \`changes\`         JSON         NOT NULL,
+      \`promoted_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_envp_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`ux_events\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_id\`         INT          NOT NULL,
+      \`session_id\`      VARCHAR(128) NOT NULL,
+      \`event_type\`      VARCHAR(64)  NOT NULL,
+      \`feature\`         VARCHAR(128) NOT NULL,
+      \`metadata\`        JSON         NOT NULL,
+      \`duration_ms\`     INT          NULL,
+      \`occurred_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ux_org\`     (\`organization_id\`),
+      INDEX \`idx_ux_session\` (\`session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`ux_sessions\` (
+      \`session_id\`        VARCHAR(128) NOT NULL,
+      \`organization_id\`   INT          NOT NULL,
+      \`user_id\`           INT          NOT NULL,
+      \`started_at\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`ended_at\`          DATETIME(3)  NULL,
+      \`events_count\`      INT          NOT NULL DEFAULT 0,
+      \`features_used\`     JSON         NOT NULL,
+      \`total_duration_ms\` INT          NOT NULL DEFAULT 0,
+      \`createdAt\`         DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`session_id\`),
+      INDEX \`idx_uxs_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`readiness_reports\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`pilot_phase\`     VARCHAR(32)  NOT NULL,
+      \`overall_score\`   INT          NOT NULL DEFAULT 0,
+      \`overall_status\`  VARCHAR(32)  NOT NULL DEFAULT 'not_ready',
+      \`checks\`          JSON         NOT NULL,
+      \`blockers\`        JSON         NOT NULL,
+      \`recommendations\` JSON         NOT NULL,
+      \`generated_at\`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_rr_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`phase_transition_approvals\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`from_phase\`      VARCHAR(32)  NOT NULL,
+      \`to_phase\`        VARCHAR(32)  NOT NULL,
+      \`approved_by\`     INT          NOT NULL,
+      \`readiness_score\` INT          NOT NULL DEFAULT 0,
+      \`notes\`           TEXT         NOT NULL,
+      \`approved_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_pta_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`permission_audit_log\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_id\`         INT          NOT NULL,
+      \`action\`          VARCHAR(64)  NOT NULL,
+      \`resource\`        VARCHAR(64)  NOT NULL,
+      \`resource_id\`     VARCHAR(256) NOT NULL,
+      \`allowed\`         TINYINT(1)   NOT NULL DEFAULT 0,
+      \`reason\`          VARCHAR(512) NOT NULL,
+      \`occurred_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_pal_org\`  (\`organization_id\`),
+      INDEX \`idx_pal_user\` (\`user_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`workflow_analytics_snapshots\` (
+      \`id\`                    VARCHAR(128) NOT NULL,
+      \`organization_id\`       INT          NOT NULL,
+      \`period_start\`          DATETIME(3)  NOT NULL,
+      \`period_end\`            DATETIME(3)  NOT NULL,
+      \`total_processes\`       INT          NOT NULL DEFAULT 0,
+      \`completed_processes\`   INT          NOT NULL DEFAULT 0,
+      \`avg_completion_days\`   DECIMAL(10,2) NOT NULL DEFAULT 0,
+      \`bottleneck_stages\`     JSON         NOT NULL,
+      \`drop_off_points\`       JSON         NOT NULL,
+      \`user_engagement_score\` INT          NOT NULL DEFAULT 0,
+      \`computed_at\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`             DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_was_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

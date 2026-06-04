@@ -205,3 +205,131 @@ export function routeToDepartment(
 export function currentStageAssignees(chain: ApprovalChain): number[] {
   return chain.assignedTo[chain.currentStage] ?? [];
 }
+
+// --- Sprint 3.4 extensions ---------------------------------------------------
+
+export function assignReviewer(
+  chain:          ApprovalChain,
+  stage:          WorkflowStage,
+  userIds:        number[],
+): ApprovalChain {
+  return routeToDepartment(chain, stage, userIds);
+}
+
+export function delegateApproval(
+  chain:       ApprovalChain,
+  actor:       ReviewActor,
+  delegateTo:  number,
+  reason:      string,
+): ApprovalChain {
+  const now          = new Date().toISOString();
+  const currentUsers = chain.assignedTo[chain.currentStage] ?? [];
+  if (actor.userId == null || !currentUsers.includes(actor.userId)) {
+    throw new Error(`Ator (userId=${actor.userId ?? "null"}) nao esta designado para o estagio "${chain.currentStage}" — nao pode delegar.`);
+  }
+  const updatedUsers = currentUsers.map(u => (u === actor.userId ? delegateTo : u));
+  const transitionId = createHash("sha256")
+    .update(`delegate:${chain.id}:${chain.currentStage}:${actor.userId}:${delegateTo}:${chain.history.length}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
+  const transition: WorkflowTransition = {
+    id:           transitionId,
+    from:         chain.currentStage,
+    to:           chain.currentStage,
+    actor,
+    reason:       `Delegacao para userId=${delegateTo}: ${reason}`,
+    evidenceRefs: [],
+    occurredAt:   now,
+  };
+  return {
+    ...chain,
+    assignedTo: { ...chain.assignedTo, [chain.currentStage]: updatedUsers },
+    history:    [...chain.history, transition],
+    updatedAt:  now,
+  };
+}
+
+export function requestCorrection(
+  chain:  ApprovalChain,
+  actor:  ReviewActor,
+  reason: string,
+): ApprovalChain {
+  const now    = new Date().toISOString();
+  const stages = chain.stages;
+  const idx    = stages.indexOf(chain.currentStage);
+  if (idx <= 0) throw new Error("Nao e possivel solicitar correcao no primeiro estagio.");
+  const prevStage    = stages[idx - 1];
+  const transitionId = createHash("sha256")
+    .update(`correction:${chain.id}:${chain.currentStage}:${prevStage}:${chain.history.length}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
+  const transition: WorkflowTransition = {
+    id:           transitionId,
+    from:         chain.currentStage,
+    to:           prevStage,
+    actor,
+    reason:       `Correcao solicitada: ${reason}`,
+    evidenceRefs: [],
+    occurredAt:   now,
+  };
+  return {
+    ...chain,
+    currentStage: prevStage,
+    history:      [...chain.history, transition],
+    updatedAt:    now,
+  };
+}
+
+export function emergencyApprove(
+  chain:        ApprovalChain,
+  actor:        ReviewActor,
+  justification: string,
+): ApprovalChain {
+  if (actor.type !== "human") {
+    throw new Error("Aprovacao emergencial exige ator humano.");
+  }
+  if (!justification || justification.trim().length < 10) {
+    throw new Error("Justificativa de emergencia deve ter ao menos 10 caracteres.");
+  }
+  // Skip to completed directly
+  const now          = new Date().toISOString();
+  const transitionId = createHash("sha256")
+    .update(`emergency:${chain.id}:${chain.currentStage}:completed:${chain.history.length}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
+  const transition: WorkflowTransition = {
+    id:           transitionId,
+    from:         chain.currentStage,
+    to:           "completed",
+    actor,
+    reason:       `EMERGENCIA: ${justification}`,
+    evidenceRefs: [],
+    occurredAt:   now,
+  };
+  return {
+    ...chain,
+    currentStage: "completed",
+    history:      [...chain.history, transition],
+    updatedAt:    now,
+  };
+}
+
+export function balanceWorkload(
+  chains:  ApprovalChain[],
+  userIds: number[],
+): Record<number, ApprovalChain[]> {
+  if (userIds.length === 0) return {};
+  const distribution: Record<number, ApprovalChain[]> = {};
+  for (const uid of userIds) distribution[uid] = [];
+
+  chains.forEach((chain, idx) => {
+    const userId = userIds[idx % userIds.length];
+    distribution[userId].push(chain);
+  });
+
+  return distribution;
+}
+
+export function getOverdueChains(chains: ApprovalChain[]): ApprovalChain[] {
+  return chains.filter(isOverdue);
+}

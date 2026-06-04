@@ -2669,3 +2669,154 @@ export const communicationEventsTable = mysqlTable("communication_events", {
 
 export type CommunicationEventRow       = typeof communicationEventsTable.$inferSelect;
 export type InsertCommunicationEventRow = typeof communicationEventsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Operational Templates.
+ */
+export const operationalTemplatesTable = mysqlTable("operational_templates", {
+  id:                    varchar("id",          { length: 128 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull().default(0),
+  category:              varchar("category",    { length: 64  }).notNull(),
+  name:                  varchar("name",        { length: 256 }).notNull(),
+  description:           text("description").notNull(),
+  clauseTemplates:       json("clause_templates").notNull(),
+  itemTRTemplates:       json("item_tr_templates").notNull(),
+  workflowTemplate:      json("workflow_template").notNull(),
+  legalBasis:            json("legal_basis").notNull(),
+  estimatedDurationDays: int("estimated_duration_days").notNull().default(30),
+  approvalLevels:        int("approval_levels").notNull().default(2),
+  version:               varchar("version",     { length: 32  }).notNull().default("1.0.0"),
+  versionHistory:        json("version_history").notNull(),
+  active:                boolean("active").notNull().default(true),
+  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:             timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type OperationalTemplateRow       = typeof operationalTemplatesTable.$inferSelect;
+export type InsertOperationalTemplateRow = typeof operationalTemplatesTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Pilot Organizations.
+ */
+export const pilotOrganizationsTable = mysqlTable("pilot_organizations", {
+  id:                varchar("id",          { length: 128 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  municipio:         varchar("municipio",   { length: 256 }).notNull(),
+  estado:            varchar("estado",      { length: 2   }).notNull(),
+  populacao:         int("populacao").notNull().default(0),
+  pilotPhase:        varchar("pilot_phase", { length: 32  }).notNull().default("onboarding"),
+  pilotStartedAt:    timestamp("pilot_started_at").defaultNow().notNull(),
+  pilotGoLiveAt:     timestamp("pilot_go_live_at"),
+  rolloutPercentage: int("rollout_percentage").notNull().default(0),
+  features:          json("features").notNull(),
+  metrics:           json("metrics").notNull(),
+  health:            json("health").notNull(),
+  auditTrail:        json("audit_trail").notNull(),
+  createdAt:         timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:         timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type PilotOrganizationRow       = typeof pilotOrganizationsTable.$inferSelect;
+export type InsertPilotOrganizationRow = typeof pilotOrganizationsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Department Permissions.
+ */
+export const departmentPermissionsTable = mysqlTable("department_permissions", {
+  id:             varchar("id",         { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  userId:         int("user_id").notNull(),
+  department:     varchar("department", { length: 128 }).notNull(),
+  resource:       varchar("resource",   { length: 64  }).notNull(),
+  actions:        json("actions").notNull(),
+  scope:          varchar("scope",      { length: 32  }).notNull().default("own"),
+  grantedBy:      int("granted_by").notNull(),
+  grantedAt:      timestamp("granted_at").defaultNow().notNull(),
+  expiresAt:      timestamp("expires_at"),
+  active:         boolean("active").notNull().default(true),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DepartmentPermissionRow       = typeof departmentPermissionsTable.$inferSelect;
+export type InsertDepartmentPermissionRow = typeof departmentPermissionsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Workflow Permissions.
+ */
+export const workflowPermissionsTable = mysqlTable("workflow_permissions", {
+  id:             varchar("id",             { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  userId:         int("user_id").notNull(),
+  workflowStage:  varchar("workflow_stage", { length: 64  }).notNull(),
+  canAdvance:     boolean("can_advance").notNull().default(false),
+  canReject:      boolean("can_reject").notNull().default(false),
+  canEscalate:    boolean("can_escalate").notNull().default(false),
+  canDelegate:    boolean("can_delegate").notNull().default(false),
+  maxDelegations: int("max_delegations").notNull().default(1),
+  grantedBy:      int("granted_by").notNull(),
+  grantedAt:      timestamp("granted_at").defaultNow().notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WorkflowPermissionRow       = typeof workflowPermissionsTable.$inferSelect;
+export type InsertWorkflowPermissionRow = typeof workflowPermissionsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Environments.
+ */
+export const environmentsTable = mysqlTable("environments", {
+  id:             varchar("id",   { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name:           varchar("name", { length: 256 }).notNull(),
+  type:           varchar("type", { length: 32  }).notNull().default("development"),
+  status:         varchar("status", { length: 32 }).notNull().default("active"),
+  config:         json("config").notNull(),
+  version:        varchar("version", { length: 32 }).notNull().default("1.0.0"),
+  promotedFrom:   varchar("promoted_from", { length: 128 }),
+  createdBy:      int("created_by").notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:      timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type EnvironmentRow       = typeof environmentsTable.$inferSelect;
+export type InsertEnvironmentRow = typeof environmentsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — UX Events.
+ */
+export const uxEventsTable = mysqlTable("ux_events", {
+  id:             varchar("id",          { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  userId:         int("user_id").notNull(),
+  sessionId:      varchar("session_id",  { length: 128 }).notNull(),
+  eventType:      varchar("event_type",  { length: 64  }).notNull(),
+  feature:        varchar("feature",     { length: 128 }).notNull(),
+  metadata:       json("metadata").notNull(),
+  durationMs:     int("duration_ms"),
+  occurredAt:     timestamp("occurred_at").defaultNow().notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UXEventRow       = typeof uxEventsTable.$inferSelect;
+export type InsertUXEventRow = typeof uxEventsTable.$inferInsert;
+
+/**
+ * Sprint 3.4 — Workflow Analytics Snapshots.
+ */
+export const workflowAnalyticsSnapshotsTable = mysqlTable("workflow_analytics_snapshots", {
+  id:                   varchar("id", { length: 128 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  periodStart:          timestamp("period_start").notNull(),
+  periodEnd:            timestamp("period_end").notNull(),
+  totalProcesses:       int("total_processes").notNull().default(0),
+  completedProcesses:   int("completed_processes").notNull().default(0),
+  avgCompletionDays:    decimal("avg_completion_days", { precision: 10, scale: 2 }).notNull().default("0"),
+  bottleneckStages:     json("bottleneck_stages").notNull(),
+  dropOffPoints:        json("drop_off_points").notNull(),
+  userEngagementScore:  int("user_engagement_score").notNull().default(0),
+  computedAt:           timestamp("computed_at").defaultNow().notNull(),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WorkflowAnalyticsSnapshotRow       = typeof workflowAnalyticsSnapshotsTable.$inferSelect;
+export type InsertWorkflowAnalyticsSnapshotRow = typeof workflowAnalyticsSnapshotsTable.$inferInsert;
