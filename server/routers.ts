@@ -38,6 +38,8 @@ import { productionReadinessRouter } from "./routers/productionReadinessRouter";
 import { collaborationCommentsRouter } from "./routers/collaborationCommentsRouter";
 import { webhookRouter } from "./routers/webhookRouter";
 import { structuredExportRouter } from "./routers/structuredExportRouter";
+import { pilotReadinessRouter } from "./routers/pilotReadinessRouter";
+import { onboardingRouter } from "./routers/onboardingRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -79,6 +81,8 @@ export const appRouter = router({
   collaborationComments: collaborationCommentsRouter,
   webhooks: webhookRouter,
   structuredExports: structuredExportRouter,
+  pilotReadiness: pilotReadinessRouter,
+  onboarding: onboardingRouter,
 });
 
 export type AppRouter = typeof appRouter;

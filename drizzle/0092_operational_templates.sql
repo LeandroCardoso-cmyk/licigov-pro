@@ -1,0 +1,22 @@
+CREATE TABLE `operational_templates` (
+  `id` varchar(128) NOT NULL,
+  `organization_id` int NOT NULL DEFAULT 0,
+  `category` varchar(64) NOT NULL,
+  `name` varchar(256) NOT NULL,
+  `description` text NOT NULL,
+  `clause_templates` json NOT NULL,
+  `item_tr_templates` json NOT NULL,
+  `workflow_template` json NOT NULL,
+  `legal_basis` json NOT NULL,
+  `estimated_duration_days` int NOT NULL DEFAULT 30,
+  `approval_levels` int NOT NULL DEFAULT 2,
+  `version` varchar(32) NOT NULL DEFAULT '1.0.0',
+  `version_history` json NOT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_operational_templates_org` (`organization_id`),
+  INDEX `idx_operational_templates_category` (`category`),
+  INDEX `idx_operational_templates_active` (`active`)
+);
