@@ -2820,3 +2820,156 @@ export const workflowAnalyticsSnapshotsTable = mysqlTable("workflow_analytics_sn
 
 export type WorkflowAnalyticsSnapshotRow       = typeof workflowAnalyticsSnapshotsTable.$inferSelect;
 export type InsertWorkflowAnalyticsSnapshotRow = typeof workflowAnalyticsSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Pilot Execution Snapshots.
+ */
+export const pilotExecutionSnapshotsTable = mysqlTable("pilot_execution_snapshots", {
+  id:               varchar("id",               { length: 128 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  municipio:        varchar("municipio",        { length: 256 }).notNull(),
+  activationState:  varchar("activation_state", { length: 64  }).notNull().default("inactive"),
+  maturityLevel:    varchar("maturity_level",   { length: 32  }).notNull().default("initial"),
+  adoptionScore:    json("adoption_score").notNull(),
+  healthIndicators: json("health_indicators").notNull(),
+  riskIndicators:   json("risk_indicators").notNull(),
+  rolloutStages:    json("rollout_stages").notNull(),
+  executionHistory: json("execution_history").notNull(),
+  startedAt:        timestamp("started_at").defaultNow().notNull(),
+  lastActivityAt:   timestamp("last_activity_at").defaultNow().notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:        timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type PilotExecutionSnapshotRow       = typeof pilotExecutionSnapshotsTable.$inferSelect;
+export type InsertPilotExecutionSnapshotRow = typeof pilotExecutionSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Operational Feedback.
+ */
+export const operationalFeedbackTable = mysqlTable("operational_feedback", {
+  id:             varchar("id",       { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  userHash:       varchar("user_hash", { length: 32  }).notNull(),
+  category:       varchar("category", { length: 64  }).notNull(),
+  severity:       varchar("severity", { length: 16  }).notNull().default("low"),
+  feature:        varchar("feature",  { length: 256 }).notNull(),
+  message:        text("message").notNull(),
+  rating:         int("rating"),
+  metadata:       json("metadata").notNull(),
+  collectedAt:    timestamp("collected_at").defaultNow().notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OperationalFeedbackRow       = typeof operationalFeedbackTable.$inferSelect;
+export type InsertOperationalFeedbackRow = typeof operationalFeedbackTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Workload Metrics.
+ */
+export const workloadMetricsTable = mysqlTable("workload_metrics", {
+  id:                    varchar("id", { length: 128 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull(),
+  periodStart:           timestamp("period_start").notNull(),
+  periodEnd:             timestamp("period_end").notNull(),
+  reviewerWorkloads:     json("reviewer_workloads").notNull(),
+  alerts:                json("alerts").notNull(),
+  queueHealth:           json("queue_health").notNull(),
+  avgApprovalLatencyMs:  int("avg_approval_latency_ms").notNull().default(0),
+  totalPending:          int("total_pending").notNull().default(0),
+  throughputPerHour:     decimal("throughput_per_hour", { precision: 10, scale: 4 }).notNull().default("0"),
+  productivityScore:     int("productivity_score").notNull().default(100),
+  computedAt:            timestamp("computed_at").defaultNow().notNull(),
+  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WorkloadMetricsRow       = typeof workloadMetricsTable.$inferSelect;
+export type InsertWorkloadMetricsRow = typeof workloadMetricsTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Support Incidents.
+ */
+export const supportIncidentsTable = mysqlTable("support_incidents", {
+  id:                 varchar("id",          { length: 128 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  title:              varchar("title",       { length: 512 }).notNull(),
+  description:        text("description").notNull(),
+  severity:           varchar("severity",    { length: 16  }).notNull().default("low"),
+  category:           varchar("category",    { length: 32  }).notNull(),
+  status:             varchar("status",      { length: 32  }).notNull().default("open"),
+  reportedBy:         int("reported_by").notNull(),
+  assignedTo:         int("assigned_to"),
+  escalations:        json("escalations").notNull(),
+  history:            json("history").notNull(),
+  relatedProcessIds:  json("related_process_ids").notNull(),
+  resolution:         text("resolution"),
+  resolvedAt:         timestamp("resolved_at"),
+  closedAt:           timestamp("closed_at"),
+  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:          timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type SupportIncidentRow       = typeof supportIncidentsTable.$inferSelect;
+export type InsertSupportIncidentRow = typeof supportIncidentsTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Pilot Readiness Scores.
+ */
+export const pilotReadinessScoresTable = mysqlTable("pilot_readiness_scores", {
+  id:              varchar("id",         { length: 128 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  totalScore:      int("total_score").notNull().default(0),
+  tier:            varchar("tier",       { length: 16  }).notNull().default("not_ready"),
+  dimensions:      json("dimensions").notNull(),
+  replayKey:       varchar("replay_key", { length: 64  }).notNull(),
+  recommendations: json("recommendations").notNull(),
+  computedAt:      timestamp("computed_at").defaultNow().notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PilotReadinessScoreRow       = typeof pilotReadinessScoresTable.$inferSelect;
+export type InsertPilotReadinessScoreRow = typeof pilotReadinessScoresTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Operational Health Snapshots.
+ */
+export const operationalHealthSnapshotsTable = mysqlTable("operational_health_snapshots", {
+  id:               varchar("id", { length: 128 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  overallStatus:    varchar("overall_status",    { length: 16 }).notNull().default("healthy"),
+  avgScore:         int("avg_score").notNull().default(100),
+  workflowHealth:   int("workflow_health").notNull().default(100),
+  reviewHealth:     int("review_health").notNull().default(100),
+  approvalHealth:   int("approval_health").notNull().default(100),
+  onboardingHealth: int("onboarding_health").notNull().default(100),
+  supportHealth:    int("support_health").notNull().default(100),
+  activeIncidents:  int("active_incidents").notNull().default(0),
+  activeRisks:      int("active_risks").notNull().default(0),
+  snapshotAt:       timestamp("snapshot_at").defaultNow().notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OperationalHealthSnapshotRow       = typeof operationalHealthSnapshotsTable.$inferSelect;
+export type InsertOperationalHealthSnapshotRow = typeof operationalHealthSnapshotsTable.$inferInsert;
+
+/**
+ * Sprint 3.5 — Training Analytics.
+ */
+export const trainingAnalyticsTable = mysqlTable("training_analytics", {
+  id:             varchar("id",          { length: 128 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  userHash:       varchar("user_hash",   { length: 32  }).notNull(),
+  moduleId:       varchar("module_id",   { length: 128 }).notNull(),
+  moduleName:     varchar("module_name", { length: 256 }).notNull(),
+  role:           varchar("role",        { length: 64  }).notNull(),
+  startedAt:      timestamp("started_at").defaultNow().notNull(),
+  completedAt:    timestamp("completed_at"),
+  durationMs:     int("duration_ms").notNull().default(0),
+  score:          int("score"),
+  attempts:       int("attempts").notNull().default(1),
+  isSimulation:   boolean("is_simulation").notNull().default(false),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TrainingAnalyticsRow       = typeof trainingAnalyticsTable.$inferSelect;
+export type InsertTrainingAnalyticsRow = typeof trainingAnalyticsTable.$inferInsert;

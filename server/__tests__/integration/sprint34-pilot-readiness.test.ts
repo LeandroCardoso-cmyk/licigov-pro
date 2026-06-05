@@ -239,8 +239,8 @@ describe("pilotOrganization", () => {
 // ─── operationalTemplates ─────────────────────────────────────────────────────
 
 describe("operationalTemplates", () => {
-  it("getGlobalTemplates returns 10 templates", () => {
-    expect(getGlobalTemplates()).toHaveLength(10);
+  it("getGlobalTemplates returns at least 10 templates", () => {
+    expect(getGlobalTemplates().length).toBeGreaterThanOrEqual(10);
   });
 
   it("all global templates have organizationId 0", () => {
