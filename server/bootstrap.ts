@@ -1226,6 +1226,171 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_was_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // ─── Sprint 3.5 ─────────────────────────────────────────────────────────────
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`pilot_execution_snapshots\` (
+      \`id\`               VARCHAR(128) NOT NULL,
+      \`organization_id\`  INT          NOT NULL,
+      \`municipio\`        VARCHAR(256) NOT NULL,
+      \`activation_state\` VARCHAR(64)  NOT NULL DEFAULT 'inactive',
+      \`maturity_level\`   VARCHAR(32)  NOT NULL DEFAULT 'initial',
+      \`adoption_score\`   JSON         NOT NULL,
+      \`health_indicators\` JSON        NOT NULL,
+      \`risk_indicators\`  JSON         NOT NULL,
+      \`rollout_stages\`   JSON         NOT NULL,
+      \`execution_history\` JSON        NOT NULL,
+      \`started_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`last_activity_at\` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_pes_org\`   (\`organization_id\`),
+      INDEX \`idx_pes_state\` (\`activation_state\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`operational_feedback\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_hash\`       VARCHAR(32)  NOT NULL,
+      \`category\`        VARCHAR(64)  NOT NULL,
+      \`severity\`        VARCHAR(16)  NOT NULL DEFAULT 'low',
+      \`feature\`         VARCHAR(256) NOT NULL,
+      \`message\`         TEXT         NOT NULL,
+      \`rating\`          TINYINT      NULL,
+      \`metadata\`        JSON         NOT NULL,
+      \`collected_at\`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_of_org\`      (\`organization_id\`),
+      INDEX \`idx_of_category\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`workload_metrics\` (
+      \`id\`                       VARCHAR(128) NOT NULL,
+      \`organization_id\`          INT          NOT NULL,
+      \`period_start\`             DATETIME(3)  NOT NULL,
+      \`period_end\`               DATETIME(3)  NOT NULL,
+      \`reviewer_workloads\`       JSON         NOT NULL,
+      \`alerts\`                   JSON         NOT NULL,
+      \`queue_health\`             JSON         NOT NULL,
+      \`avg_approval_latency_ms\`  INT          NOT NULL DEFAULT 0,
+      \`total_pending\`            INT          NOT NULL DEFAULT 0,
+      \`throughput_per_hour\`      DECIMAL(10,4) NOT NULL DEFAULT 0,
+      \`productivity_score\`       INT          NOT NULL DEFAULT 100,
+      \`computed_at\`              DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`                DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_wm_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`support_incidents\` (
+      \`id\`                  VARCHAR(128) NOT NULL,
+      \`organization_id\`     INT          NOT NULL,
+      \`title\`               VARCHAR(512) NOT NULL,
+      \`description\`         TEXT         NOT NULL,
+      \`severity\`            VARCHAR(16)  NOT NULL DEFAULT 'low',
+      \`category\`            VARCHAR(32)  NOT NULL,
+      \`status\`              VARCHAR(32)  NOT NULL DEFAULT 'open',
+      \`reported_by\`         INT          NOT NULL,
+      \`assigned_to\`         INT          NULL,
+      \`escalations\`         JSON         NOT NULL,
+      \`history\`             JSON         NOT NULL,
+      \`related_process_ids\` JSON         NOT NULL,
+      \`resolution\`          TEXT         NULL,
+      \`resolved_at\`         DATETIME(3)  NULL,
+      \`closed_at\`           DATETIME(3)  NULL,
+      \`createdAt\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_si_org\`      (\`organization_id\`),
+      INDEX \`idx_si_severity\` (\`severity\`),
+      INDEX \`idx_si_status\`   (\`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`pilot_readiness_scores\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`total_score\`     INT          NOT NULL DEFAULT 0,
+      \`tier\`            VARCHAR(16)  NOT NULL DEFAULT 'not_ready',
+      \`dimensions\`      JSON         NOT NULL,
+      \`replay_key\`      VARCHAR(64)  NOT NULL,
+      \`recommendations\` JSON         NOT NULL,
+      \`computed_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_prs_org\`  (\`organization_id\`),
+      UNIQUE INDEX \`idx_prs_replay\` (\`replay_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`workflow_congestion_metrics\` (
+      \`id\`               VARCHAR(128) NOT NULL,
+      \`organization_id\`  INT          NOT NULL,
+      \`stage\`            VARCHAR(64)  NOT NULL,
+      \`department\`       VARCHAR(128) NOT NULL,
+      \`pending_count\`    INT          NOT NULL DEFAULT 0,
+      \`avg_age_hours\`    DECIMAL(10,2) NOT NULL DEFAULT 0,
+      \`congestion_level\` VARCHAR(16)  NOT NULL DEFAULT 'low',
+      \`measured_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_wcm_org\`   (\`organization_id\`),
+      INDEX \`idx_wcm_stage\` (\`stage\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`operational_health_snapshots\` (
+      \`id\`               VARCHAR(128) NOT NULL,
+      \`organization_id\`  INT          NOT NULL,
+      \`overall_status\`   VARCHAR(16)  NOT NULL DEFAULT 'healthy',
+      \`avg_score\`        INT          NOT NULL DEFAULT 100,
+      \`workflow_health\`  INT          NOT NULL DEFAULT 100,
+      \`review_health\`    INT          NOT NULL DEFAULT 100,
+      \`approval_health\`  INT          NOT NULL DEFAULT 100,
+      \`onboarding_health\` INT         NOT NULL DEFAULT 100,
+      \`support_health\`   INT          NOT NULL DEFAULT 100,
+      \`active_incidents\` INT          NOT NULL DEFAULT 0,
+      \`active_risks\`     INT          NOT NULL DEFAULT 0,
+      \`snapshot_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`createdAt\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ohs_org\`    (\`organization_id\`),
+      INDEX \`idx_ohs_status\` (\`overall_status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS \`training_analytics\` (
+      \`id\`              VARCHAR(128) NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`user_hash\`       VARCHAR(32)  NOT NULL,
+      \`module_id\`       VARCHAR(128) NOT NULL,
+      \`module_name\`     VARCHAR(256) NOT NULL,
+      \`role\`            VARCHAR(64)  NOT NULL,
+      \`started_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`completed_at\`    DATETIME(3)  NULL,
+      \`duration_ms\`     INT          NOT NULL DEFAULT 0,
+      \`score\`           INT          NULL,
+      \`attempts\`        INT          NOT NULL DEFAULT 1,
+      \`is_simulation\`   TINYINT(1)   NOT NULL DEFAULT 0,
+      \`createdAt\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ta_org\`    (\`organization_id\`),
+      INDEX \`idx_ta_module\` (\`module_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

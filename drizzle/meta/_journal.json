@@ -701,6 +701,62 @@
       "when": 1755024000000,
       "tag": "0099_workflow_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "5",
+      "when": 1755110400000,
+      "tag": "0100_pilot_execution_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "5",
+      "when": 1755196800000,
+      "tag": "0101_operational_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "5",
+      "when": 1755283200000,
+      "tag": "0102_workload_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "5",
+      "when": 1755369600000,
+      "tag": "0103_support_incidents",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "5",
+      "when": 1755456000000,
+      "tag": "0104_pilot_readiness_scores",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "5",
+      "when": 1755542400000,
+      "tag": "0105_workflow_congestion_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "5",
+      "when": 1755628800000,
+      "tag": "0106_operational_health_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "5",
+      "when": 1755715200000,
+      "tag": "0107_training_analytics",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,23 @@
+CREATE TABLE `support_incidents` (
+  `id` varchar(128) NOT NULL,
+  `organization_id` int NOT NULL,
+  `title` varchar(512) NOT NULL,
+  `description` text NOT NULL,
+  `severity` varchar(16) NOT NULL DEFAULT 'low',
+  `category` varchar(32) NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'open',
+  `reported_by` int NOT NULL,
+  `assigned_to` int NULL,
+  `escalations` json NOT NULL,
+  `history` json NOT NULL,
+  `related_process_ids` json NOT NULL,
+  `resolution` text NULL,
+  `resolved_at` datetime(3) NULL,
+  `closed_at` datetime(3) NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_si_org` (`organization_id`),
+  INDEX `idx_si_severity` (`severity`),
+  INDEX `idx_si_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
