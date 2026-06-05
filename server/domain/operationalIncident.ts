@@ -252,3 +252,85 @@ export function computeIncidentMetrics(incidents: OperationalIncident[]): {
     avgResolutionMs: resolved.length > 0 ? Math.round(totalMs / resolved.length) : 0,
   };
 }
+
+// ─── Sprint 3.6: Expansão — correlação, impacto, escalação ───────────────────
+
+export interface EscalationStep {
+  level:       number;
+  escalatedTo: string;
+  reason:      string;
+  escalatedAt: string;
+}
+
+// Note: these fields are added to IncidentRecord conceptually for new functions;
+// we track them in a separate side-store to avoid breaking existing records.
+const _escalationChains = new Map<string, EscalationStep[]>();
+const _correlationMap   = new Map<string, string>(); // incidentId → correlationId
+const _impactScopes     = new Map<string, "single_user" | "department" | "organization" | "system_wide">();
+
+const IMPACT_SCOPE_WEIGHTS: Record<string, number> = {
+  single_user:  1,
+  department:   3,
+  organization: 7,
+  system_wide:  10,
+};
+
+const SEVERITY_WEIGHTS: Record<string, number> = {
+  low:      1,
+  medium:   2,
+  high:     4,
+  critical: 8,
+};
+
+export function setCorrelationId(incidentId: string, correlationId: string): void {
+  _correlationMap.set(incidentId, correlationId);
+}
+
+export function setImpactScope(
+  incidentId:  string,
+  impactScope: "single_user" | "department" | "organization" | "system_wide",
+): void {
+  _impactScopes.set(incidentId, impactScope);
+}
+
+export function addEscalationStep(
+  incidentId:  string,
+  escalateTo:  string,
+  reason:      string,
+): EscalationStep {
+  const chain  = _escalationChains.get(incidentId) ?? [];
+  const step: EscalationStep = {
+    level:       chain.length + 1,
+    escalatedTo: escalateTo,
+    reason,
+    escalatedAt: new Date().toISOString(),
+  };
+  _escalationChains.set(incidentId, [...chain, step]);
+  return { ...step };
+}
+
+export function getEscalationChain(incidentId: string): EscalationStep[] {
+  return [...(_escalationChains.get(incidentId) ?? [])];
+}
+
+export function correlateIncidents(
+  incidents: OperationalIncident[],
+): Record<string, OperationalIncident[]> {
+  const groups: Record<string, OperationalIncident[]> = {};
+  for (const inc of incidents) {
+    const corrId = _correlationMap.get(inc.id) ?? inc.id;
+    if (!groups[corrId]) groups[corrId] = [];
+    groups[corrId].push(inc);
+  }
+  return groups;
+}
+
+export function computeImpactScore(
+  incidentId: string,
+  severity:   "low" | "medium" | "high" | "critical",
+): number {
+  const scope       = _impactScopes.get(incidentId) ?? "single_user";
+  const scopeWeight = IMPACT_SCOPE_WEIGHTS[scope] ?? 1;
+  const sevWeight   = SEVERITY_WEIGHTS[severity]  ?? 1;
+  return scopeWeight * sevWeight;
+}

@@ -1391,6 +1391,270 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_ta_module\` (\`module_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // ── Sprint 3.6 ────────────────────────────────────────────────────────────
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`institutional_deployments\` (
+      \`id\`                   VARCHAR(64)  NOT NULL,
+      \`organization_id\`      INT          NOT NULL,
+      \`municipio\`            VARCHAR(255) NOT NULL,
+      \`phase\`                VARCHAR(50)  NOT NULL DEFAULT 'planning',
+      \`status\`               VARCHAR(50)  NOT NULL DEFAULT 'scheduled',
+      \`target_version\`       VARCHAR(50)  NOT NULL,
+      \`current_version\`      VARCHAR(50)  NOT NULL,
+      \`rollout_percentage\`   TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      \`health_score\`         TINYINT UNSIGNED NOT NULL DEFAULT 100,
+      \`validation_results\`   JSON         NULL,
+      \`rollback_point\`       VARCHAR(64)  NULL,
+      \`activated_at\`         DATETIME(3)  NULL,
+      \`completed_at\`         DATETIME(3)  NULL,
+      \`created_at\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_id_org\`     (\`organization_id\`),
+      INDEX \`idx_id_status\`  (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`deployment_governance\` (
+      \`id\`                     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      \`deployment_id\`          VARCHAR(64)  NOT NULL,
+      \`organization_id\`        INT          NOT NULL,
+      \`approved_by\`            INT          NOT NULL,
+      \`approval_justification\` TEXT         NOT NULL,
+      \`constraints\`            JSON         NULL,
+      \`governance_checks\`      JSON         NULL,
+      \`governance_at\`          DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_dg_org\`       (\`organization_id\`),
+      INDEX \`idx_dg_dep\`       (\`deployment_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`deployment_events\` (
+      \`id\`              VARCHAR(64)  NOT NULL,
+      \`deployment_id\`   VARCHAR(64)  NOT NULL,
+      \`organization_id\` INT          NOT NULL,
+      \`phase\`           VARCHAR(50)  NOT NULL,
+      \`event_type\`      VARCHAR(50)  NOT NULL,
+      \`actor\`           VARCHAR(255) NOT NULL,
+      \`notes\`           TEXT         NULL,
+      \`occurred_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_de_org\` (\`organization_id\`),
+      INDEX \`idx_de_dep\` (\`deployment_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`deployment_validation_snapshots\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`deployment_id\`    VARCHAR(64)   NOT NULL,
+      \`passed_count\`     SMALLINT      NOT NULL DEFAULT 0,
+      \`warning_count\`    SMALLINT      NOT NULL DEFAULT 0,
+      \`error_count\`      SMALLINT      NOT NULL DEFAULT 0,
+      \`critical_count\`   SMALLINT      NOT NULL DEFAULT 0,
+      \`overall_passed\`   TINYINT(1)    NOT NULL DEFAULT 0,
+      \`replay_key\`       VARCHAR(64)   NOT NULL,
+      \`generated_at\`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE INDEX \`idx_dvs_replay\`  (\`replay_key\`),
+      INDEX \`idx_dvs_org\`            (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`service_health_snapshots\` (
+      \`id\`                VARCHAR(64)      NOT NULL,
+      \`organization_id\`   INT              NOT NULL,
+      \`overall_sla_score\` TINYINT UNSIGNED NOT NULL DEFAULT 100,
+      \`breaching_metrics\` JSON             NULL,
+      \`warning_metrics\`   JSON             NULL,
+      \`snapshot_at\`       DATETIME(3)      NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3)      NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_shs_org\`  (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`operational_stability_metrics\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`metric_type\`      VARCHAR(50)   NOT NULL,
+      \`value\`            DOUBLE        NOT NULL,
+      \`unit\`             VARCHAR(20)   NOT NULL DEFAULT 'count',
+      \`threshold\`        DOUBLE        NOT NULL,
+      \`is_anomalous\`     TINYINT(1)    NOT NULL DEFAULT 0,
+      \`recorded_at\`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_osm_org\`  (\`organization_id\`),
+      INDEX \`idx_osm_type\` (\`organization_id\`, \`metric_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`stability_snapshots\` (
+      \`id\`                VARCHAR(64)   NOT NULL,
+      \`organization_id\`   INT           NOT NULL,
+      \`overall_score\`     TINYINT UNSIGNED NOT NULL DEFAULT 100,
+      \`degradation_level\` VARCHAR(20)   NOT NULL DEFAULT 'none',
+      \`trend\`             VARCHAR(20)   NOT NULL DEFAULT 'stable',
+      \`active_anomalies\`  JSON          NULL,
+      \`snapshot_at\`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ss_org\`  (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`recovery_checkpoints\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`checkpoint_type\`  VARCHAR(50)   NOT NULL,
+      \`snapshot_data\`    JSON          NOT NULL,
+      \`integrity_hash\`   VARCHAR(64)   NOT NULL,
+      \`is_valid\`         TINYINT(1)    NOT NULL DEFAULT 1,
+      \`created_at\`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_rc_org\`  (\`organization_id\`),
+      INDEX \`idx_rc_type\` (\`organization_id\`, \`checkpoint_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`recovery_plans\` (
+      \`id\`                    VARCHAR(64)   NOT NULL,
+      \`organization_id\`       INT           NOT NULL,
+      \`checkpoint_id\`         VARCHAR(64)   NOT NULL,
+      \`plan_type\`             VARCHAR(50)   NOT NULL,
+      \`steps\`                 JSON          NOT NULL,
+      \`estimated_duration_ms\` INT           NOT NULL DEFAULT 0,
+      \`risk_level\`            VARCHAR(20)   NOT NULL DEFAULT 'medium',
+      \`validated_at\`          DATETIME(3)   NULL,
+      \`created_at\`            DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_rp_org\`  (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`recovery_logs\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`plan_id\`          VARCHAR(64)   NOT NULL,
+      \`step\`             SMALLINT      NOT NULL,
+      \`outcome\`          VARCHAR(20)   NOT NULL,
+      \`notes\`            TEXT          NULL,
+      \`executed_at\`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_rl_org\`  (\`organization_id\`),
+      INDEX \`idx_rl_plan\` (\`plan_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`governance_policies\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`policy_type\`      VARCHAR(50)   NOT NULL,
+      \`name\`             VARCHAR(255)  NOT NULL,
+      \`description\`      TEXT          NULL,
+      \`rules\`            JSON          NOT NULL,
+      \`is_active\`        TINYINT(1)    NOT NULL DEFAULT 1,
+      \`effective_from\`   DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`effective_to\`     DATETIME(3)   NULL,
+      \`created_by\`       INT           NOT NULL,
+      \`created_at\`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_gp_org\`    (\`organization_id\`),
+      INDEX \`idx_gp_active\` (\`organization_id\`, \`is_active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`governance_events\` (
+      \`id\`               VARCHAR(64)   NOT NULL,
+      \`policy_id\`        VARCHAR(64)   NOT NULL,
+      \`organization_id\`  INT           NOT NULL,
+      \`action\`           VARCHAR(50)   NOT NULL,
+      \`actor\`            INT           NOT NULL,
+      \`context\`          JSON          NULL,
+      \`outcome\`          VARCHAR(30)   NOT NULL,
+      \`justification\`    TEXT          NULL,
+      \`occurred_at\`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ge_org\`    (\`organization_id\`),
+      INDEX \`idx_ge_policy\` (\`policy_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`support_escalations\` (
+      \`id\`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`incident_id\`      VARCHAR(64)  NOT NULL,
+      \`escalation_level\` TINYINT      NOT NULL DEFAULT 1,
+      \`escalated_to\`     VARCHAR(255) NOT NULL,
+      \`reason\`           TEXT         NOT NULL,
+      \`status\`           VARCHAR(50)  NOT NULL DEFAULT 'open',
+      \`escalated_at\`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`resolved_at\`      DATETIME(3)  NULL,
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_se_org\`      (\`organization_id\`),
+      INDEX \`idx_se_incident\` (\`incident_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`incident_correlations\` (
+      \`id\`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`incident_id\`      VARCHAR(64)  NOT NULL,
+      \`correlation_id\`   VARCHAR(64)  NOT NULL,
+      \`impact_scope\`     VARCHAR(30)  NOT NULL DEFAULT 'single_user',
+      \`impact_score\`     SMALLINT     NOT NULL DEFAULT 0,
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ic_org\`         (\`organization_id\`),
+      INDEX \`idx_ic_correlation\` (\`correlation_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`continuous_operation_metrics\` (
+      \`id\`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`period_days\`      SMALLINT     NOT NULL DEFAULT 30,
+      \`workflow_decay\`   TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      \`adoption_decay\`   TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      \`fatigue\`          TINYINT(1)   NOT NULL DEFAULT 0,
+      \`support_overload\` TINYINT(1)   NOT NULL DEFAULT 0,
+      \`degraded_metrics\` JSON         NULL,
+      \`severity\`         VARCHAR(20)  NOT NULL DEFAULT 'none',
+      \`recorded_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_com_org\`  (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`degradation_records\` (
+      \`id\`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`metric_name\`      VARCHAR(100) NOT NULL,
+      \`drop_percent\`     TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      \`degraded\`         TINYINT(1)   NOT NULL DEFAULT 0,
+      \`detected_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_dr_org\`  (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

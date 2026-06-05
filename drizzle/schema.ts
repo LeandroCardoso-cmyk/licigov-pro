@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, tinyint, smallint, double, datetime } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -2973,3 +2973,130 @@ export const trainingAnalyticsTable = mysqlTable("training_analytics", {
 
 export type TrainingAnalyticsRow       = typeof trainingAnalyticsTable.$inferSelect;
 export type InsertTrainingAnalyticsRow = typeof trainingAnalyticsTable.$inferInsert;
+
+// ─── Sprint 3.6 ───────────────────────────────────────────────────────────────
+
+export const institutionalDeploymentsTable = mysqlTable("institutional_deployments", {
+  id:                 varchar("id", { length: 64 }).primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  municipio:          varchar("municipio", { length: 255 }).notNull(),
+  phase:              varchar("phase", { length: 50 }).notNull().default("planning"),
+  status:             varchar("status", { length: 50 }).notNull().default("scheduled"),
+  targetVersion:      varchar("target_version", { length: 50 }).notNull(),
+  currentVersion:     varchar("current_version", { length: 50 }).notNull(),
+  rolloutPercentage:  tinyint("rollout_percentage").notNull().default(0),
+  healthScore:        tinyint("health_score").notNull().default(100),
+  validationResults:  json("validation_results"),
+  rollbackPoint:      varchar("rollback_point", { length: 64 }),
+  activatedAt:        datetime("activated_at", { fsp: 3 }),
+  completedAt:        datetime("completed_at", { fsp: 3 }),
+  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const deploymentValidationSnapshotsTable = mysqlTable("deployment_validation_snapshots", {
+  id:              varchar("id", { length: 64 }).primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  deploymentId:    varchar("deployment_id", { length: 64 }).notNull(),
+  passedCount:     smallint("passed_count").notNull().default(0),
+  warningCount:    smallint("warning_count").notNull().default(0),
+  errorCount:      smallint("error_count").notNull().default(0),
+  criticalCount:   smallint("critical_count").notNull().default(0),
+  overallPassed:   tinyint("overall_passed").notNull().default(0),
+  replayKey:       varchar("replay_key", { length: 64 }).notNull(),
+  generatedAt:     datetime("generated_at", { fsp: 3 }).notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const serviceHealthSnapshotsTable = mysqlTable("service_health_snapshots", {
+  id:               varchar("id", { length: 64 }).primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  overallSlaScore:  tinyint("overall_sla_score").notNull().default(100),
+  breachingMetrics: json("breaching_metrics"),
+  warningMetrics:   json("warning_metrics"),
+  snapshotAt:       datetime("snapshot_at", { fsp: 3 }).notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const operationalStabilityMetricsTable = mysqlTable("operational_stability_metrics", {
+  id:             varchar("id", { length: 64 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  metricType:     varchar("metric_type", { length: 50 }).notNull(),
+  value:          double("value").notNull(),
+  unit:           varchar("unit", { length: 20 }).notNull().default("count"),
+  threshold:      double("threshold").notNull(),
+  isAnomalous:    tinyint("is_anomalous").notNull().default(0),
+  recordedAt:     datetime("recorded_at", { fsp: 3 }).notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const recoveryCheckpointsTable = mysqlTable("recovery_checkpoints", {
+  id:             varchar("id", { length: 64 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  checkpointType: varchar("checkpoint_type", { length: 50 }).notNull(),
+  snapshotData:   json("snapshot_data").notNull(),
+  integrityHash:  varchar("integrity_hash", { length: 64 }).notNull(),
+  isValid:        tinyint("is_valid").notNull().default(1),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const governancePoliciesTable = mysqlTable("governance_policies", {
+  id:             varchar("id", { length: 64 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  policyType:     varchar("policy_type", { length: 50 }).notNull(),
+  name:           varchar("name", { length: 255 }).notNull(),
+  description:    text("description"),
+  rules:          json("rules").notNull(),
+  isActive:       tinyint("is_active").notNull().default(1),
+  effectiveFrom:  datetime("effective_from", { fsp: 3 }).notNull(),
+  effectiveTo:    datetime("effective_to", { fsp: 3 }),
+  createdBy:      int("created_by").notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const supportEscalationsTable = mysqlTable("support_escalations", {
+  id:               int("id").autoincrement().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  incidentId:       varchar("incident_id", { length: 64 }).notNull(),
+  escalationLevel:  tinyint("escalation_level").notNull().default(1),
+  escalatedTo:      varchar("escalated_to", { length: 255 }).notNull(),
+  reason:           text("reason").notNull(),
+  status:           varchar("status", { length: 50 }).notNull().default("open"),
+  escalatedAt:      datetime("escalated_at", { fsp: 3 }).notNull(),
+  resolvedAt:       datetime("resolved_at", { fsp: 3 }),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const continuousOperationMetricsTable = mysqlTable("continuous_operation_metrics", {
+  id:              int("id").autoincrement().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  periodDays:      smallint("period_days").notNull().default(30),
+  workflowDecay:   tinyint("workflow_decay").notNull().default(0),
+  adoptionDecay:   tinyint("adoption_decay").notNull().default(0),
+  fatigue:         tinyint("fatigue").notNull().default(0),
+  supportOverload: tinyint("support_overload").notNull().default(0),
+  degradedMetrics: json("degraded_metrics"),
+  severity:        varchar("severity", { length: 20 }).notNull().default("none"),
+  recordedAt:      datetime("recorded_at", { fsp: 3 }).notNull(),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const stabilitySnapshotsTable = mysqlTable("stability_snapshots", {
+  id:               varchar("id", { length: 64 }).primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  overallScore:     tinyint("overall_score").notNull().default(100),
+  degradationLevel: varchar("degradation_level", { length: 20 }).notNull().default("none"),
+  trend:            varchar("trend", { length: 20 }).notNull().default("stable"),
+  activeAnomalies:  json("active_anomalies"),
+  snapshotAt:       datetime("snapshot_at", { fsp: 3 }).notNull(),
+  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InstitutionalDeploymentRow      = typeof institutionalDeploymentsTable.$inferSelect;
+export type DeploymentValidationSnapshotRow = typeof deploymentValidationSnapshotsTable.$inferSelect;
+export type ServiceHealthSnapshotRow        = typeof serviceHealthSnapshotsTable.$inferSelect;
+export type OperationalStabilityMetricRow   = typeof operationalStabilityMetricsTable.$inferSelect;
+export type RecoveryCheckpointRow           = typeof recoveryCheckpointsTable.$inferSelect;
+export type GovernancePolicyRow             = typeof governancePoliciesTable.$inferSelect;
+export type SupportEscalationRow            = typeof supportEscalationsTable.$inferSelect;
+export type ContinuousOperationMetricRow    = typeof continuousOperationMetricsTable.$inferSelect;
+export type StabilitySnapshotRow            = typeof stabilitySnapshotsTable.$inferSelect;

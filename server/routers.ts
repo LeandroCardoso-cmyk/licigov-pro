@@ -40,6 +40,8 @@ import { webhookRouter } from "./routers/webhookRouter";
 import { structuredExportRouter } from "./routers/structuredExportRouter";
 import { pilotReadinessRouter } from "./routers/pilotReadinessRouter";
 import { onboardingRouter } from "./routers/onboardingRouter";
+import { deploymentRouter }  from "./routers/deploymentRouter";
+import { stabilityRouter }   from "./routers/stabilityRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -82,7 +84,9 @@ export const appRouter = router({
   webhooks: webhookRouter,
   structuredExports: structuredExportRouter,
   pilotReadiness: pilotReadinessRouter,
-  onboarding: onboardingRouter,
+  onboarding:     onboardingRouter,
+  deployment:     deploymentRouter,
+  stability:      stabilityRouter,
 });
 
 export type AppRouter = typeof appRouter;
