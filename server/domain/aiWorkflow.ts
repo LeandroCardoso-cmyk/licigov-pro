@@ -1,0 +1,423 @@
+import { createHash } from "crypto";
+
+// ─── ID generation ─────────────────────────────────────────────────────────────
+
+let _counter = 0;
+
+function genId(prefix: string): string {
+  _counter += 1;
+  const raw = `${prefix}:${_counter}:${Date.now()}`;
+  return createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 20);
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type WorkflowStepType =
+  | "ai_generation"
+  | "human_review"
+  | "auto_approval"
+  | "override"
+  | "escalation"
+  | "completion";
+
+export type WorkflowStatus =
+  | "pending"
+  | "active"
+  | "awaiting_human"
+  | "overridden"
+  | "approved"
+  | "rejected"
+  | "escalated"
+  | "completed"
+  | "cancelled";
+
+export type WorkflowEventType =
+  | "created"
+  | "step_started"
+  | "step_completed"
+  | "human_review_requested"
+  | "override_applied"
+  | "approved"
+  | "rejected"
+  | "escalated"
+  | "completed"
+  | "cancelled";
+
+export type ApprovalDecision = "approve" | "reject";
+
+export interface WorkflowStep {
+  readonly id:          string;
+  readonly type:        WorkflowStepType;
+  readonly description: string;
+  readonly actorId:     number | null;
+  readonly output:      Record<string, unknown> | null;
+  readonly completedAt: string | null;
+  readonly durationMs:  number | null;
+}
+
+export interface WorkflowOverride {
+  readonly id:            string;
+  readonly overriddenBy:  number;
+  readonly reason:        string;
+  readonly previousValue: string;
+  readonly newValue:      string;
+  readonly justification: string;
+  readonly createdAt:     string;
+}
+
+export interface WorkflowApproval {
+  readonly id:           string;
+  readonly approvedBy:   number;
+  readonly decision:     ApprovalDecision;
+  readonly justification: string;
+  readonly confidence:   number;
+  readonly createdAt:    string;
+}
+
+export interface WorkflowEvent {
+  readonly id:          string;
+  readonly type:        WorkflowEventType;
+  readonly actor:       number | null;
+  readonly description: string;
+  readonly metadata:    Record<string, unknown>;
+  readonly occurredAt:  string;
+}
+
+export interface AIWorkflowState {
+  readonly id:                     string;
+  readonly organizationId:         number;
+  readonly workflowKey:            string;
+  readonly currentStep:            WorkflowStepType;
+  readonly status:                 WorkflowStatus;
+  readonly steps:                  readonly WorkflowStep[];
+  readonly overrides:              readonly WorkflowOverride[];
+  readonly approvals:              readonly WorkflowApproval[];
+  readonly actor:                  number;
+  readonly requiresHumanApproval:  boolean;
+  readonly autoApprovalThreshold:  number | null;
+  readonly explanation:            string;
+  readonly lineage:                readonly string[];
+  readonly history:                readonly WorkflowEvent[];
+  readonly createdAt:              string;
+  readonly updatedAt:              string;
+}
+
+export interface WorkflowMetrics {
+  total:               number;
+  completed:           number;
+  overridden:          number;
+  pendingHumanReview:  number;
+  avgCompletionMs:     number;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeEvent(
+  type:        WorkflowEventType,
+  actor:       number | null,
+  description: string,
+  metadata:    Record<string, unknown> = {},
+): WorkflowEvent {
+  return {
+    id:          genId("wev"),
+    type,
+    actor,
+    description,
+    metadata,
+    occurredAt:  new Date().toISOString(),
+  };
+}
+
+function assertStatus(
+  current:  WorkflowStatus,
+  expected: WorkflowStatus[],
+  action:   string,
+): void {
+  if (!expected.includes(current)) {
+    throw new Error(
+      `Cannot ${action}: current status is '${current}', expected one of [${expected.join(", ")}]`
+    );
+  }
+}
+
+// ─── Factory & transitions ────────────────────────────────────────────────────
+
+export function createWorkflow(params: {
+  organizationId:         number;
+  workflowKey:            string;
+  actor:                  number;
+  explanation:            string;
+  requiresHumanApproval?: boolean;
+  autoApprovalThreshold?: number | null;
+  lineage?:               string[];
+}): AIWorkflowState {
+  const now   = new Date().toISOString();
+  const event = makeEvent("created", params.actor, "Workflow created");
+  return {
+    id:                    genId("wf"),
+    organizationId:        params.organizationId,
+    workflowKey:           params.workflowKey,
+    currentStep:           "ai_generation",
+    status:                "pending",
+    steps:                 [],
+    overrides:             [],
+    approvals:             [],
+    actor:                 params.actor,
+    requiresHumanApproval: params.requiresHumanApproval ?? true,
+    autoApprovalThreshold: params.autoApprovalThreshold ?? null,
+    explanation:           params.explanation,
+    lineage:               params.lineage ?? [],
+    history:               [event],
+    createdAt:             now,
+    updatedAt:             now,
+  };
+}
+
+export function startStep(
+  wf:          AIWorkflowState,
+  stepType:    WorkflowStepType,
+  description: string,
+  actorId?:    number | null,
+): AIWorkflowState {
+  assertStatus(wf.status, ["pending", "active", "awaiting_human"], "start step");
+  const step: WorkflowStep = {
+    id:          genId("wst"),
+    type:        stepType,
+    description,
+    actorId:     actorId ?? null,
+    output:      null,
+    completedAt: null,
+    durationMs:  null,
+  };
+  const event = makeEvent(
+    "step_started",
+    actorId ?? null,
+    `Step started: ${stepType}`,
+    { stepId: step.id, stepType },
+  );
+  return {
+    ...wf,
+    currentStep: stepType,
+    status:      "active",
+    steps:       [...wf.steps, step],
+    history:     [...wf.history, event],
+    updatedAt:   new Date().toISOString(),
+  };
+}
+
+export function completeStep(
+  wf:      AIWorkflowState,
+  stepId:  string,
+  output:  Record<string, unknown>,
+  actorId?: number | null,
+): AIWorkflowState {
+  assertStatus(wf.status, ["active"], "complete step");
+  const now  = new Date().toISOString();
+  const step = wf.steps.find(s => s.id === stepId);
+  if (!step) {
+    throw new Error(`Step '${stepId}' not found in workflow '${wf.id}'`);
+  }
+  const startedAt   = wf.history.find(
+    e => e.type === "step_started" && (e.metadata as Record<string, unknown>)["stepId"] === stepId
+  )?.occurredAt;
+  const durationMs  = startedAt ? Date.now() - new Date(startedAt).getTime() : null;
+
+  const updatedStep: WorkflowStep = {
+    ...step,
+    output,
+    completedAt: now,
+    durationMs,
+  };
+  const event = makeEvent(
+    "step_completed",
+    actorId ?? null,
+    `Step completed: ${step.type}`,
+    { stepId, stepType: step.type },
+  );
+  return {
+    ...wf,
+    steps:     wf.steps.map(s => (s.id === stepId ? updatedStep : s)),
+    history:   [...wf.history, event],
+    updatedAt: now,
+  };
+}
+
+export function requestHumanReview(
+  wf:    AIWorkflowState,
+  actor: number,
+): AIWorkflowState {
+  assertStatus(wf.status, ["active", "pending"], "request human review");
+  const event = makeEvent("human_review_requested", actor, "Human review requested");
+  return {
+    ...wf,
+    currentStep: "human_review",
+    status:      "awaiting_human",
+    history:     [...wf.history, event],
+    updatedAt:   new Date().toISOString(),
+  };
+}
+
+export function applyOverride(params: {
+  wf:            AIWorkflowState;
+  overriddenBy:  number;
+  reason:        string;
+  previousValue: string;
+  newValue:      string;
+  justification: string;
+}): AIWorkflowState {
+  const { wf, overriddenBy, reason, previousValue, newValue, justification } = params;
+  if (justification.length < 10) {
+    throw new Error("Override justification must be at least 10 characters");
+  }
+  const now      = new Date().toISOString();
+  const override: WorkflowOverride = {
+    id:            genId("wov"),
+    overriddenBy,
+    reason,
+    previousValue,
+    newValue,
+    justification,
+    createdAt:     now,
+  };
+  const event = makeEvent(
+    "override_applied",
+    overriddenBy,
+    `Override applied: ${reason}`,
+    { overrideId: override.id, previousValue, newValue },
+  );
+  return {
+    ...wf,
+    currentStep: "override",
+    status:      "overridden",
+    overrides:   [...wf.overrides, override],
+    history:     [...wf.history, event],
+    updatedAt:   now,
+  };
+}
+
+export function addApproval(params: {
+  wf:            AIWorkflowState;
+  approvedBy:    number;
+  decision:      ApprovalDecision;
+  justification: string;
+  confidence:    number;
+}): AIWorkflowState {
+  const { wf, approvedBy, decision, justification, confidence } = params;
+  const now      = new Date().toISOString();
+  const approval: WorkflowApproval = {
+    id:            genId("wap"),
+    approvedBy,
+    decision,
+    justification,
+    confidence,
+    createdAt:     now,
+  };
+  const eventType: WorkflowEventType = decision === "approve" ? "approved" : "rejected";
+  const event = makeEvent(
+    eventType,
+    approvedBy,
+    `Workflow ${decision}d by actor ${approvedBy}`,
+    { approvalId: approval.id, confidence },
+  );
+
+  const updatedApprovals = [...wf.approvals, approval];
+
+  let newStatus: WorkflowStatus = wf.status;
+
+  if (decision === "reject") {
+    newStatus = "rejected";
+  } else if (
+    wf.autoApprovalThreshold !== null &&
+    confidence >= wf.autoApprovalThreshold
+  ) {
+    newStatus = "approved";
+  } else if (!wf.requiresHumanApproval) {
+    newStatus = "approved";
+  } else {
+    newStatus = "approved";
+  }
+
+  return {
+    ...wf,
+    status:    newStatus,
+    approvals: updatedApprovals,
+    history:   [...wf.history, event],
+    updatedAt: now,
+  };
+}
+
+export function escalateWorkflow(
+  wf:     AIWorkflowState,
+  actor:  number,
+  reason: string,
+): AIWorkflowState {
+  assertStatus(wf.status, ["active", "awaiting_human", "pending"], "escalate workflow");
+  const event = makeEvent(
+    "escalated",
+    actor,
+    `Workflow escalated: ${reason}`,
+    { reason },
+  );
+  return {
+    ...wf,
+    currentStep: "escalation",
+    status:      "escalated",
+    history:     [...wf.history, event],
+    updatedAt:   new Date().toISOString(),
+  };
+}
+
+export function completeWorkflow(
+  wf:     AIWorkflowState,
+  actor:  number,
+  output: Record<string, unknown> = {},
+): AIWorkflowState {
+  assertStatus(wf.status, ["active", "approved", "overridden"], "complete workflow");
+  const now   = new Date().toISOString();
+  const event = makeEvent(
+    "completed",
+    actor,
+    "Workflow completed",
+    { output },
+  );
+  return {
+    ...wf,
+    currentStep: "completion",
+    status:      "completed",
+    history:     [...wf.history, event],
+    updatedAt:   now,
+  };
+}
+
+export function cancelWorkflow(
+  wf:    AIWorkflowState,
+  actor: number,
+): AIWorkflowState {
+  assertStatus(wf.status, ["pending", "active", "awaiting_human", "escalated"], "cancel workflow");
+  const event = makeEvent("cancelled", actor, "Workflow cancelled");
+  return {
+    ...wf,
+    status:    "cancelled",
+    history:   [...wf.history, event],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function computeWorkflowMetrics(workflows: AIWorkflowState[]): WorkflowMetrics {
+  const total              = workflows.length;
+  const completed          = workflows.filter(w => w.status === "completed").length;
+  const overridden         = workflows.filter(w => w.status === "overridden").length;
+  const pendingHumanReview = workflows.filter(w => w.status === "awaiting_human").length;
+
+  const completedWorkflows = workflows.filter(w => w.status === "completed");
+  const avgCompletionMs =
+    completedWorkflows.length === 0
+      ? 0
+      : completedWorkflows.reduce((acc, w) => {
+          const created = new Date(w.createdAt).getTime();
+          const updated = new Date(w.updatedAt).getTime();
+          return acc + (updated - created);
+        }, 0) / completedWorkflows.length;
+
+  return { total, completed, overridden, pendingHumanReview, avgCompletionMs };
+}

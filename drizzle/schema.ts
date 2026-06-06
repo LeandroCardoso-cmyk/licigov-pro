@@ -3100,3 +3100,168 @@ export type GovernancePolicyRow             = typeof governancePoliciesTable.$in
 export type SupportEscalationRow            = typeof supportEscalationsTable.$inferSelect;
 export type ContinuousOperationMetricRow    = typeof continuousOperationMetricsTable.$inferSelect;
 export type StabilitySnapshotRow            = typeof stabilitySnapshotsTable.$inferSelect;
+
+// ─── Sprint 4.0: AI Foundation Layer ────────────────────────────────────────
+
+export const aiOrchestrationsTable = mysqlTable("ai_orchestrations", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId:      varchar("session_id", { length: 40 }).notNull(),
+  promptId:       varchar("prompt_id", { length: 20 }),
+  provider:       varchar("provider", { length: 50 }).notNull().default("mock"),
+  model:          varchar("model", { length: 100 }).notNull().default("mock-default"),
+  status:         varchar("status", { length: 30 }).notNull().default("queued"),
+  attempt:        smallint("attempt").notNull().default(1),
+  maxAttempts:    smallint("max_attempts").notNull().default(3),
+  lineage:        json("lineage"),
+  inputs:         json("inputs"),
+  outputs:        json("outputs"),
+  error:          text("error"),
+  history:        json("history"),
+  replayKey:      varchar("replay_key", { length: 64 }).notNull(),
+  startedAt:      datetime("started_at", { fsp: 3 }).notNull(),
+  completedAt:    datetime("completed_at", { fsp: 3 }),
+  updatedAt:      datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const aiPromptVersionsTable = mysqlTable("ai_prompt_versions", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  promptKey:      varchar("prompt_key", { length: 100 }).notNull(),
+  version:        varchar("version", { length: 20 }).notNull().default("1.0.0"),
+  content:        longtext("content").notNull(),
+  variables:      json("variables"),
+  status:         varchar("status", { length: 30 }).notNull().default("draft"),
+  approvedBy:     int("approved_by"),
+  rejectedBy:     int("rejected_by"),
+  rollbackFrom:   varchar("rollback_from", { length: 20 }),
+  lineage:        json("lineage"),
+  history:        json("history"),
+  legalBasis:     text("legal_basis"),
+  checksum:       varchar("checksum", { length: 64 }).notNull(),
+  metadata:       json("metadata"),
+  createdBy:      int("created_by").notNull(),
+  updatedAt:      datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const semanticMemoriesTable = mysqlTable("semantic_memories", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  memoryType:     varchar("memory_type", { length: 30 }).notNull().default("semantic"),
+  key:            varchar("key", { length: 200 }).notNull(),
+  value:          longtext("value").notNull(),
+  sourceRef:      varchar("source_ref", { length: 255 }),
+  context:        json("context"),
+  relevanceScore: decimal("relevance_score", { precision: 4, scale: 3 }).notNull().default("0.500"),
+  lastAccessedAt: datetime("last_accessed_at", { fsp: 3 }),
+  accessCount:    int("access_count").notNull().default(0),
+  ttlMs:          varchar("ttl_ms", { length: 20 }),
+  isActive:       tinyint("is_active").notNull().default(1),
+  updatedAt:      datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const embeddingSnapshotsTable = mysqlTable("embedding_snapshots", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  textHash:       varchar("text_hash", { length: 64 }).notNull(),
+  model:          varchar("model", { length: 100 }).notNull().default("mock-embed-v1"),
+  dimensions:     smallint("dimensions").notNull().default(1536),
+  checksum:       varchar("checksum", { length: 64 }).notNull(),
+  vectorPreview:  json("vector_preview"),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const vectorIndexSnapshotsTable = mysqlTable("vector_index_snapshots", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  indexName:      varchar("index_name", { length: 100 }).notNull(),
+  dimensions:     smallint("dimensions").notNull().default(1536),
+  entryCount:     int("entry_count").notNull().default(0),
+  metadata:       json("metadata"),
+  updatedAt:      datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const groundingEvidenceTable = mysqlTable("grounding_evidence", {
+  id:             varchar("id", { length: 20 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sourceRef:      varchar("source_ref", { length: 255 }).notNull(),
+  content:        longtext("content").notNull(),
+  relevanceScore: decimal("relevance_score", { precision: 4, scale: 3 }).notNull().default("0.500"),
+  evidenceType:   varchar("evidence_type", { length: 30 }).notNull().default("document"),
+  legalBasis:     text("legal_basis"),
+  citationKey:    varchar("citation_key", { length: 100 }).notNull(),
+  verified:       tinyint("verified").notNull().default(0),
+  verifiedAt:     datetime("verified_at", { fsp: 3 }),
+  metadata:       json("metadata"),
+  createdAt:      datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const aiExecutionAuditsTable = mysqlTable("ai_execution_audits", {
+  id:                varchar("id", { length: 20 }).primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  sessionId:         varchar("session_id", { length: 40 }).notNull(),
+  operation:         varchar("operation", { length: 30 }).notNull(),
+  actorId:           int("actor_id"),
+  provider:          varchar("provider", { length: 50 }),
+  modelId:           varchar("model_id", { length: 100 }),
+  promptId:          varchar("prompt_id", { length: 20 }),
+  inputHash:         varchar("input_hash", { length: 64 }).notNull(),
+  outputHash:        varchar("output_hash", { length: 64 }),
+  durationMs:        int("duration_ms"),
+  tokenCount:        int("token_count"),
+  success:           tinyint("success").notNull().default(1),
+  error:             text("error"),
+  replayKey:         varchar("replay_key", { length: 64 }).notNull(),
+  forensicSignature: varchar("forensic_signature", { length: 64 }).notNull(),
+  immutable:         tinyint("immutable").notNull().default(1),
+  recordedAt:        datetime("recorded_at", { fsp: 3 }).notNull(),
+  createdAt:         datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const aiTokenEstimationsTable = mysqlTable("ai_token_estimations", {
+  id:               varchar("id", { length: 20 }).primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  sessionId:        varchar("session_id", { length: 40 }).notNull(),
+  model:            varchar("model", { length: 100 }).notNull().default("mock-default"),
+  maxTokens:        int("max_tokens").notNull().default(4096),
+  usedTokens:       int("used_tokens").notNull().default(0),
+  reservedTokens:   int("reserved_tokens").notNull().default(0),
+  costEstimateUsd:  decimal("cost_estimate_usd", { precision: 10, scale: 6 }).notNull().default("0.000000"),
+  warnings:         json("warnings"),
+  hardLimit:        tinyint("hard_limit").notNull().default(0),
+  updatedAt:        datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:        datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export const aiWorkflowStatesTable = mysqlTable("ai_workflow_states", {
+  id:                     varchar("id", { length: 20 }).primaryKey(),
+  organizationId:         int("organization_id").notNull(),
+  workflowKey:            varchar("workflow_key", { length: 100 }).notNull(),
+  currentStep:            varchar("current_step", { length: 30 }).notNull().default("ai_generation"),
+  status:                 varchar("status", { length: 30 }).notNull().default("pending"),
+  steps:                  json("steps"),
+  overrides:              json("overrides"),
+  approvals:              json("approvals"),
+  actor:                  int("actor").notNull(),
+  requiresHumanApproval:  tinyint("requires_human_approval").notNull().default(0),
+  autoApprovalThreshold:  decimal("auto_approval_threshold", { precision: 4, scale: 3 }),
+  explanation:            text("explanation").notNull(),
+  lineage:                json("lineage"),
+  history:                json("history"),
+  updatedAt:              datetime("updated_at", { fsp: 3 }).notNull(),
+  createdAt:              datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+export type AIOrchestrationRow      = typeof aiOrchestrationsTable.$inferSelect;
+export type AIPromptVersionRow      = typeof aiPromptVersionsTable.$inferSelect;
+export type SemanticMemoryRow       = typeof semanticMemoriesTable.$inferSelect;
+export type EmbeddingSnapshotRow    = typeof embeddingSnapshotsTable.$inferSelect;
+export type VectorIndexSnapshotRow  = typeof vectorIndexSnapshotsTable.$inferSelect;
+export type GroundingEvidenceRow    = typeof groundingEvidenceTable.$inferSelect;
+export type AIExecutionAuditRow     = typeof aiExecutionAuditsTable.$inferSelect;
+export type AITokenEstimationRow    = typeof aiTokenEstimationsTable.$inferSelect;
+export type AIWorkflowStateRow      = typeof aiWorkflowStatesTable.$inferSelect;

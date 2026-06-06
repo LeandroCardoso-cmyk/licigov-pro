@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `ai_workflow_states` (
+  `id`                     VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`        INT          NOT NULL,
+  `workflow_key`           VARCHAR(100) NOT NULL,
+  `current_step`           ENUM('ai_generation','human_review','auto_approval','override','escalation','completion') NOT NULL DEFAULT 'ai_generation',
+  `status`                 ENUM('pending','active','awaiting_human','overridden','approved','rejected','escalated','completed','cancelled') NOT NULL DEFAULT 'pending',
+  `steps`                  JSON         NULL,
+  `overrides`              JSON         NULL,
+  `approvals`              JSON         NULL,
+  `actor`                  INT          NOT NULL,
+  `requires_human_approval` TINYINT(1)  NOT NULL DEFAULT 0,
+  `auto_approval_threshold` DECIMAL(4,3) NULL,
+  `explanation`            TEXT         NOT NULL DEFAULT '',
+  `lineage`                JSON         NULL,
+  `history`                JSON         NULL,
+  `updated_at`             DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `created_at`             DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_aws_org`       (`organization_id`),
+  INDEX `idx_aws_key`       (`organization_id`, `workflow_key`),
+  INDEX `idx_aws_status`    (`organization_id`, `status`),
+  INDEX `idx_aws_actor`     (`organization_id`, `actor`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

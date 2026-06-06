@@ -1655,6 +1655,202 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_dr_org\`  (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`ai_orchestrations\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`session_id\`       VARCHAR(40)  NOT NULL,
+      \`prompt_id\`        VARCHAR(20)  NULL,
+      \`provider\`         VARCHAR(50)  NOT NULL DEFAULT 'mock',
+      \`model\`            VARCHAR(100) NOT NULL DEFAULT 'mock-default',
+      \`status\`           VARCHAR(30)  NOT NULL DEFAULT 'queued',
+      \`attempt\`          SMALLINT     NOT NULL DEFAULT 1,
+      \`max_attempts\`     SMALLINT     NOT NULL DEFAULT 3,
+      \`lineage\`          JSON         NULL,
+      \`inputs\`           JSON         NULL,
+      \`outputs\`          JSON         NULL,
+      \`error\`            TEXT         NULL,
+      \`history\`          JSON         NULL,
+      \`replay_key\`       VARCHAR(64)  NOT NULL,
+      \`started_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`completed_at\`     DATETIME(3)  NULL,
+      \`updated_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ao_org\`      (\`organization_id\`),
+      INDEX \`idx_ao_session\`  (\`organization_id\`, \`session_id\`),
+      INDEX \`idx_ao_status\`   (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`ai_prompt_versions\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`prompt_key\`       VARCHAR(100) NOT NULL,
+      \`version\`          VARCHAR(20)  NOT NULL DEFAULT '1.0.0',
+      \`content\`          LONGTEXT     NOT NULL,
+      \`variables\`        JSON         NULL,
+      \`status\`           VARCHAR(30)  NOT NULL DEFAULT 'draft',
+      \`approved_by\`      INT          NULL,
+      \`rejected_by\`      INT          NULL,
+      \`rollback_from\`    VARCHAR(20)  NULL,
+      \`lineage\`          JSON         NULL,
+      \`history\`          JSON         NULL,
+      \`legal_basis\`      TEXT         NULL,
+      \`checksum\`         VARCHAR(64)  NOT NULL,
+      \`metadata\`         JSON         NULL,
+      \`created_by\`       INT          NOT NULL,
+      \`updated_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_apv_org\`    (\`organization_id\`),
+      INDEX \`idx_apv_key\`    (\`organization_id\`, \`prompt_key\`),
+      INDEX \`idx_apv_status\` (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`semantic_memories\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`memory_type\`      VARCHAR(30)  NOT NULL DEFAULT 'semantic',
+      \`key\`              VARCHAR(200) NOT NULL,
+      \`value\`            LONGTEXT     NOT NULL,
+      \`source_ref\`       VARCHAR(255) NULL,
+      \`context\`          JSON         NULL,
+      \`relevance_score\`  DECIMAL(4,3) NOT NULL DEFAULT 0.500,
+      \`last_accessed_at\` DATETIME(3)  NULL,
+      \`access_count\`     INT UNSIGNED NOT NULL DEFAULT 0,
+      \`ttl_ms\`           BIGINT       NULL,
+      \`is_active\`        TINYINT(1)   NOT NULL DEFAULT 1,
+      \`updated_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_sm_org\`    (\`organization_id\`),
+      INDEX \`idx_sm_type\`   (\`organization_id\`, \`memory_type\`),
+      INDEX \`idx_sm_active\` (\`organization_id\`, \`is_active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`embedding_snapshots\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`text_hash\`        VARCHAR(64)  NOT NULL,
+      \`model\`            VARCHAR(100) NOT NULL DEFAULT 'mock-embed-v1',
+      \`dimensions\`       SMALLINT     NOT NULL DEFAULT 1536,
+      \`checksum\`         VARCHAR(64)  NOT NULL,
+      \`vector_preview\`   JSON         NULL,
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_es_org\`      (\`organization_id\`),
+      INDEX \`idx_es_hash\`     (\`text_hash\`),
+      INDEX \`idx_es_checksum\` (\`checksum\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`vector_index_snapshots\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`index_name\`       VARCHAR(100) NOT NULL,
+      \`dimensions\`       SMALLINT     NOT NULL DEFAULT 1536,
+      \`entry_count\`      INT UNSIGNED NOT NULL DEFAULT 0,
+      \`metadata\`         JSON         NULL,
+      \`updated_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_vis_org\`  (\`organization_id\`),
+      INDEX \`idx_vis_name\` (\`organization_id\`, \`index_name\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`grounding_evidence\` (
+      \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`  INT          NOT NULL,
+      \`source_ref\`       VARCHAR(255) NOT NULL,
+      \`content\`          LONGTEXT     NOT NULL,
+      \`relevance_score\`  DECIMAL(4,3) NOT NULL DEFAULT 0.500,
+      \`evidence_type\`    VARCHAR(30)  NOT NULL DEFAULT 'document',
+      \`legal_basis\`      TEXT         NULL,
+      \`citation_key\`     VARCHAR(100) NOT NULL,
+      \`verified\`         TINYINT(1)   NOT NULL DEFAULT 0,
+      \`verified_at\`      DATETIME(3)  NULL,
+      \`metadata\`         JSON         NULL,
+      \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ge_org\`      (\`organization_id\`),
+      INDEX \`idx_ge_type\`     (\`organization_id\`, \`evidence_type\`),
+      INDEX \`idx_ge_citation\` (\`citation_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`ai_execution_audits\` (
+      \`id\`                  VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`     INT          NOT NULL,
+      \`session_id\`          VARCHAR(40)  NOT NULL,
+      \`operation\`           VARCHAR(30)  NOT NULL,
+      \`actor_id\`            INT          NULL,
+      \`provider\`            VARCHAR(50)  NULL,
+      \`model_id\`            VARCHAR(100) NULL,
+      \`prompt_id\`           VARCHAR(20)  NULL,
+      \`input_hash\`          VARCHAR(64)  NOT NULL,
+      \`output_hash\`         VARCHAR(64)  NULL,
+      \`duration_ms\`         INT          NULL,
+      \`token_count\`         INT          NULL,
+      \`success\`             TINYINT(1)   NOT NULL DEFAULT 1,
+      \`error\`               TEXT         NULL,
+      \`replay_key\`          VARCHAR(64)  NOT NULL,
+      \`forensic_signature\`  VARCHAR(64)  NOT NULL,
+      \`immutable\`           TINYINT(1)   NOT NULL DEFAULT 1,
+      \`recorded_at\`         DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`          DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_aea_org\`       (\`organization_id\`),
+      INDEX \`idx_aea_session\`   (\`organization_id\`, \`session_id\`),
+      INDEX \`idx_aea_operation\` (\`organization_id\`, \`operation\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`ai_token_estimations\` (
+      \`id\`                VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`   INT          NOT NULL,
+      \`session_id\`        VARCHAR(40)  NOT NULL,
+      \`model\`             VARCHAR(100) NOT NULL DEFAULT 'mock-default',
+      \`max_tokens\`        INT          NOT NULL DEFAULT 4096,
+      \`used_tokens\`       INT          NOT NULL DEFAULT 0,
+      \`reserved_tokens\`   INT          NOT NULL DEFAULT 0,
+      \`cost_estimate_usd\` DECIMAL(10,6) NOT NULL DEFAULT 0.000000,
+      \`warnings\`          JSON         NULL,
+      \`hard_limit\`        TINYINT(1)   NOT NULL DEFAULT 0,
+      \`updated_at\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_ate_org\`     (\`organization_id\`),
+      INDEX \`idx_ate_session\` (\`organization_id\`, \`session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS \`ai_workflow_states\` (
+      \`id\`                      VARCHAR(20)  NOT NULL PRIMARY KEY,
+      \`organization_id\`         INT          NOT NULL,
+      \`workflow_key\`            VARCHAR(100) NOT NULL,
+      \`current_step\`            VARCHAR(30)  NOT NULL DEFAULT 'ai_generation',
+      \`status\`                  VARCHAR(30)  NOT NULL DEFAULT 'pending',
+      \`steps\`                   JSON         NULL,
+      \`overrides\`               JSON         NULL,
+      \`approvals\`               JSON         NULL,
+      \`actor\`                   INT          NOT NULL,
+      \`requires_human_approval\` TINYINT(1)   NOT NULL DEFAULT 0,
+      \`auto_approval_threshold\` DECIMAL(4,3) NULL,
+      \`explanation\`             TEXT         NOT NULL DEFAULT '',
+      \`lineage\`                 JSON         NULL,
+      \`history\`                 JSON         NULL,
+      \`updated_at\`              DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`created_at\`              DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`idx_aws_org\`    (\`organization_id\`),
+      INDEX \`idx_aws_key\`    (\`organization_id\`, \`workflow_key\`),
+      INDEX \`idx_aws_status\` (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
