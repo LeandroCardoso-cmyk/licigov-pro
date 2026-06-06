@@ -3249,7 +3249,7 @@ export const aiWorkflowStatesTable = mysqlTable("ai_workflow_states", {
   actor:                  int("actor").notNull(),
   requiresHumanApproval:  tinyint("requires_human_approval").notNull().default(0),
   autoApprovalThreshold:  decimal("auto_approval_threshold", { precision: 4, scale: 3 }),
-  explanation:            text("explanation").notNull(),
+  explanation:            text("explanation"),
   lineage:                json("lineage"),
   history:                json("history"),
   updatedAt:              datetime("updated_at", { fsp: 3 }).notNull(),

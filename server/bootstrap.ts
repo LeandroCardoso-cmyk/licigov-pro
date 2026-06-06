@@ -1841,7 +1841,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`actor\`                   INT          NOT NULL,
       \`requires_human_approval\` TINYINT(1)   NOT NULL DEFAULT 0,
       \`auto_approval_threshold\` DECIMAL(4,3) NULL,
-      \`explanation\`             TEXT         NOT NULL DEFAULT '',
+      \`explanation\`             TEXT         NULL,
       \`lineage\`                 JSON         NULL,
       \`history\`                 JSON         NULL,
       \`updated_at\`              DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
