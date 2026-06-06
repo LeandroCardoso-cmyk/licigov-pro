@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `semantic_memories` (
+  `id`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`  INT          NOT NULL,
+  `memory_type`      ENUM('semantic','contextual','institutional') NOT NULL DEFAULT 'semantic',
+  `key`              VARCHAR(200) NOT NULL,
+  `value`            LONGTEXT     NOT NULL,
+  `source_ref`       VARCHAR(255) NULL,
+  `context`          JSON         NULL,
+  `relevance_score`  DECIMAL(4,3) NOT NULL DEFAULT 0.500,
+  `last_accessed_at` DATETIME(3)  NULL,
+  `access_count`     INT UNSIGNED NOT NULL DEFAULT 0,
+  `ttl_ms`           BIGINT       NULL,
+  `is_active`        TINYINT(1)   NOT NULL DEFAULT 1,
+  `updated_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `created_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_sm_org`       (`organization_id`),
+  INDEX `idx_sm_type`      (`organization_id`, `memory_type`),
+  INDEX `idx_sm_active`    (`organization_id`, `is_active`),
+  INDEX `idx_sm_key`       (`organization_id`, `key`(100))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
