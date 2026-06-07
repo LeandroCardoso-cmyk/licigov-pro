@@ -1851,6 +1851,212 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_aws_status\` (\`organization_id\`, \`status\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`semantic_chunks\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`document_id\`      VARCHAR(100) NOT NULL,
+        \`document_type\`    VARCHAR(50)  NOT NULL,
+        \`content\`          TEXT         NULL,
+        \`token_count\`      INT          NOT NULL DEFAULT 0,
+        \`chunk_index\`      INT          NOT NULL DEFAULT 0,
+        \`total_chunks\`     INT          NOT NULL DEFAULT 0,
+        \`strategy\`         VARCHAR(50)  NOT NULL,
+        \`section_title\`    VARCHAR(255) NULL,
+        \`legal_ref\`        VARCHAR(255) NULL,
+        \`overlap_with_prev\` INT         NOT NULL DEFAULT 0,
+        \`lineage\`          JSON         NULL,
+        \`replay_key\`       VARCHAR(64)  NOT NULL,
+        \`metadata\`         JSON         NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_sc_org\`      (\`organization_id\`),
+        INDEX \`idx_sc_doc\`      (\`organization_id\`, \`document_id\`),
+        INDEX \`idx_sc_strategy\` (\`organization_id\`, \`strategy\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`retrieval_queries\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`raw_query\`        TEXT         NULL,
+        \`expanded_terms\`   JSON         NULL,
+        \`synonym_expansion\` JSON        NULL,
+        \`corrected_query\`  VARCHAR(500) NULL,
+        \`filters\`          JSON         NULL,
+        \`replay_key\`       VARCHAR(64)  NOT NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_rq_org\`      (\`organization_id\`),
+        INDEX \`idx_rq_replay\`   (\`replay_key\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`retrieval_results\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`query_id\`         VARCHAR(20)  NOT NULL,
+        \`chunk_id\`         VARCHAR(20)  NOT NULL,
+        \`lexical_score\`    DECIMAL(6,5) NOT NULL DEFAULT 0,
+        \`semantic_score\`   DECIMAL(6,5) NOT NULL DEFAULT 0,
+        \`contextual_score\` DECIMAL(6,5) NOT NULL DEFAULT 0,
+        \`hybrid_score\`     DECIMAL(6,5) NOT NULL DEFAULT 0,
+        \`rank_position\`    INT          NOT NULL DEFAULT 0,
+        \`retrieval_strategy\` VARCHAR(50) NOT NULL,
+        \`score_breakdown\`  JSON         NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_rr_org\`      (\`organization_id\`),
+        INDEX \`idx_rr_query\`    (\`organization_id\`, \`query_id\`),
+        INDEX \`idx_rr_chunk\`    (\`organization_id\`, \`chunk_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`semantic_relationships\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`source_node_id\`   VARCHAR(100) NOT NULL,
+        \`source_type\`      VARCHAR(50)  NOT NULL,
+        \`target_node_id\`   VARCHAR(100) NOT NULL,
+        \`target_type\`      VARCHAR(50)  NOT NULL,
+        \`edge_type\`        VARCHAR(50)  NOT NULL,
+        \`weight\`           DECIMAL(6,5) NOT NULL DEFAULT 1,
+        \`propagated_score\` DECIMAL(6,5) NULL,
+        \`hop_distance\`     INT          NOT NULL DEFAULT 0,
+        \`metadata\`         JSON         NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_sr_org\`    (\`organization_id\`),
+        INDEX \`idx_sr_source\` (\`organization_id\`, \`source_node_id\`),
+        INDEX \`idx_sr_target\` (\`organization_id\`, \`target_node_id\`),
+        INDEX \`idx_sr_type\`   (\`organization_id\`, \`edge_type\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`institutional_memories\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`memory_type\`      VARCHAR(50)  NOT NULL,
+        \`content\`          TEXT         NULL,
+        \`source_id\`        VARCHAR(100) NULL,
+        \`source_type\`      VARCHAR(50)  NULL,
+        \`confidence\`       DECIMAL(4,3) NOT NULL DEFAULT 0,
+        \`access_count\`     INT          NOT NULL DEFAULT 0,
+        \`tags\`             JSON         NULL,
+        \`ttl_ms\`           BIGINT       NULL,
+        \`lineage\`          JSON         NULL,
+        \`replay_key\`       VARCHAR(64)  NOT NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        \`updated_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_im_org\`     (\`organization_id\`),
+        INDEX \`idx_im_type\`    (\`organization_id\`, \`memory_type\`),
+        INDEX \`idx_im_source\`  (\`organization_id\`, \`source_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`evidence_chains\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`chain_type\`       VARCHAR(50)  NOT NULL,
+        \`head_evidence_id\` VARCHAR(100) NOT NULL,
+        \`links\`            JSON         NULL,
+        \`total_links\`      INT          NOT NULL DEFAULT 0,
+        \`confidence\`       DECIMAL(4,3) NOT NULL DEFAULT 0,
+        \`provenance\`       JSON         NULL,
+        \`is_superseded\`    TINYINT(1)   NOT NULL DEFAULT 0,
+        \`superseded_by\`    VARCHAR(20)  NULL,
+        \`lineage\`          JSON         NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_ec_org\`       (\`organization_id\`),
+        INDEX \`idx_ec_type\`      (\`organization_id\`, \`chain_type\`),
+        INDEX \`idx_ec_head\`      (\`organization_id\`, \`head_evidence_id\`),
+        INDEX \`idx_ec_superseded\` (\`organization_id\`, \`is_superseded\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`retrieval_explanations\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`query_id\`         VARCHAR(20)  NOT NULL,
+        \`correlation_id\`   VARCHAR(20)  NOT NULL,
+        \`explanation_tree\` JSON         NULL,
+        \`ranking_lineage\`  JSON         NULL,
+        \`trace_steps\`      JSON         NULL,
+        \`human_summary\`    TEXT         NULL,
+        \`confidence\`       DECIMAL(4,3) NOT NULL DEFAULT 0,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_re_org\`         (\`organization_id\`),
+        INDEX \`idx_re_query\`       (\`organization_id\`, \`query_id\`),
+        INDEX \`idx_re_correlation\` (\`organization_id\`, \`correlation_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`semantic_indexes\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`index_name\`       VARCHAR(100) NOT NULL,
+        \`entity_type\`      VARCHAR(50)  NOT NULL,
+        \`entity_id\`        VARCHAR(100) NOT NULL,
+        \`tokens\`           JSON         NULL,
+        \`token_count\`      INT          NOT NULL DEFAULT 0,
+        \`index_hash\`       VARCHAR(64)  NOT NULL,
+        \`content_preview\`  VARCHAR(500) NULL,
+        \`metadata\`         JSON         NULL,
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_si_org\`         (\`organization_id\`),
+        INDEX \`idx_si_name\`        (\`organization_id\`, \`index_name\`),
+        INDEX \`idx_si_entity\`      (\`organization_id\`, \`entity_type\`, \`entity_id\`),
+        INDEX \`idx_si_hash\`        (\`index_hash\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`retrieval_observability\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`correlation_id\`   VARCHAR(20)  NOT NULL,
+        \`operation\`        VARCHAR(100) NOT NULL,
+        \`duration_ms\`      INT          NOT NULL DEFAULT 0,
+        \`result_count\`     INT          NOT NULL DEFAULT 0,
+        \`avg_score\`        DECIMAL(6,5) NULL,
+        \`p95_latency_ms\`   INT          NULL,
+        \`stage_breakdown\`  JSON         NULL,
+        \`tags\`             JSON         NULL,
+        \`alert_fired\`      TINYINT(1)   NOT NULL DEFAULT 0,
+        \`alert_type\`       VARCHAR(50)  NULL,
+        \`recorded_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_ro_org\`         (\`organization_id\`),
+        INDEX \`idx_ro_correlation\` (\`organization_id\`, \`correlation_id\`),
+        INDEX \`idx_ro_operation\`   (\`organization_id\`, \`operation\`),
+        INDEX \`idx_ro_alert\`       (\`organization_id\`, \`alert_fired\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`memory_retention_snapshots\` (
+        \`id\`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+        \`organization_id\`  INT          NOT NULL,
+        \`policy_id\`        VARCHAR(20)  NOT NULL,
+        \`snapshot_type\`    VARCHAR(50)  NOT NULL,
+        \`total_memories\`   INT          NOT NULL DEFAULT 0,
+        \`active_count\`     INT          NOT NULL DEFAULT 0,
+        \`expiring_soon_count\` INT       NOT NULL DEFAULT 0,
+        \`expired_count\`    INT          NOT NULL DEFAULT 0,
+        \`archived_count\`   INT          NOT NULL DEFAULT 0,
+        \`avg_confidence\`   DECIMAL(4,3) NULL,
+        \`metrics\`          JSON         NULL,
+        \`lineage\`          JSON         NULL,
+        \`snapshot_at\`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        \`created_at\`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX \`idx_mrs_org\`    (\`organization_id\`),
+        INDEX \`idx_mrs_policy\` (\`organization_id\`, \`policy_id\`),
+        INDEX \`idx_mrs_type\`   (\`organization_id\`, \`snapshot_type\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

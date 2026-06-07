@@ -876,6 +876,16 @@
       "version": "5",
       "when": 1757702400000,
       "breakpoints": true
-    }
+    },
+    { "idx": 125, "version": "6", "when": 1757788800000, "tag": "0125_semantic_chunks" },
+    { "idx": 126, "version": "6", "when": 1757875200000, "tag": "0126_retrieval_queries" },
+    { "idx": 127, "version": "6", "when": 1757961600000, "tag": "0127_retrieval_results" },
+    { "idx": 128, "version": "6", "when": 1758048000000, "tag": "0128_semantic_relationships" },
+    { "idx": 129, "version": "6", "when": 1758134400000, "tag": "0129_institutional_memories" },
+    { "idx": 130, "version": "6", "when": 1758220800000, "tag": "0130_evidence_chains" },
+    { "idx": 131, "version": "6", "when": 1758307200000, "tag": "0131_retrieval_explanations" },
+    { "idx": 132, "version": "6", "when": 1758393600000, "tag": "0132_semantic_indexes" },
+    { "idx": 133, "version": "6", "when": 1758480000000, "tag": "0133_retrieval_observability" },
+    { "idx": 134, "version": "6", "when": 1758566400000, "tag": "0134_memory_retention_snapshots" }
   ]
 }

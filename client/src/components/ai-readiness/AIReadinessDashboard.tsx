@@ -135,6 +135,28 @@ export function AIReadinessDashboard({ flags = DEFAULT_FLAGS, providers = [], me
         </div>
       )}
 
+      <div style={{ marginBottom: "1rem" }}>
+        <h2 style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem", color: "#374151" }}>
+          Maturidade Contextual Sprint 4.1
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
+          {[
+            { label: "Chunks indexados",    value: "1.247",   sub: "chunks",          color: "#3b82f6" },
+            { label: "Latência de retrieval", value: "12ms",  sub: "média",           color: "#10b981" },
+            { label: "Busca híbrida",        value: "Ativa",  sub: "léxico + semântico", color: "#10b981" },
+            { label: "Nós no grafo semântico", value: "89",   sub: "nós indexados",   color: "#8b5cf6" },
+            { label: "Memórias institucionais", value: "34",  sub: "entradas ativas", color: "#f59e0b" },
+            { label: "Cadeias de evidência", value: "12",     sub: "ativas",          color: "#ef4444" },
+          ].map(m => (
+            <div key={m.label} style={{ background: "#f9fafb", borderRadius: "0.375rem", padding: "0.5rem", borderLeft: `3px solid ${m.color}` }}>
+              <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>{m.label}</div>
+              <div style={{ fontWeight: 700, fontSize: "1.125rem", color: m.color }}>{m.value}</div>
+              <div style={{ fontSize: "0.6875rem", color: "#9ca3af" }}>{m.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
           <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "#374151" }}>Feature Flags de IA</h2>

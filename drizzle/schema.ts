@@ -1,4 +1,5 @@
-import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, tinyint, smallint, double, datetime } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, tinyint, smallint, double, datetime, bigint } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Core user table backing auth flow.
@@ -3254,6 +3255,161 @@ export const aiWorkflowStatesTable = mysqlTable("ai_workflow_states", {
   history:                json("history"),
   updatedAt:              datetime("updated_at", { fsp: 3 }).notNull(),
   createdAt:              datetime("created_at", { fsp: 3 }).notNull(),
+});
+
+// ─── Sprint 4.1: Semantic Retrieval & Memory ─────────────────────────────────
+
+export const semanticChunksTable = mysqlTable("semantic_chunks", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  documentId: varchar("document_id", { length: 100 }).notNull(),
+  documentType: varchar("document_type", { length: 50 }).notNull(),
+  content: text("content"),
+  tokenCount: int("token_count").notNull().default(0),
+  chunkIndex: int("chunk_index").notNull().default(0),
+  totalChunks: int("total_chunks").notNull().default(0),
+  strategy: varchar("strategy", { length: 50 }).notNull(),
+  sectionTitle: varchar("section_title", { length: 255 }),
+  legalRef: varchar("legal_ref", { length: 255 }),
+  overlapWithPrev: int("overlap_with_prev").notNull().default(0),
+  lineage: json("lineage"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  metadata: json("metadata"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const retrievalQueriesTable = mysqlTable("retrieval_queries", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  rawQuery: text("raw_query"),
+  expandedTerms: json("expanded_terms"),
+  synonymExpansion: json("synonym_expansion"),
+  correctedQuery: varchar("corrected_query", { length: 500 }),
+  filters: json("filters"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const retrievalResultsTable = mysqlTable("retrieval_results", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  queryId: varchar("query_id", { length: 20 }).notNull(),
+  chunkId: varchar("chunk_id", { length: 20 }).notNull(),
+  lexicalScore: decimal("lexical_score", { precision: 6, scale: 5 }).notNull().default("0"),
+  semanticScore: decimal("semantic_score", { precision: 6, scale: 5 }).notNull().default("0"),
+  contextualScore: decimal("contextual_score", { precision: 6, scale: 5 }).notNull().default("0"),
+  hybridScore: decimal("hybrid_score", { precision: 6, scale: 5 }).notNull().default("0"),
+  rankPosition: int("rank_position").notNull().default(0),
+  retrievalStrategy: varchar("retrieval_strategy", { length: 50 }).notNull(),
+  scoreBreakdown: json("score_breakdown"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const semanticRelationshipsTable = mysqlTable("semantic_relationships", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sourceNodeId: varchar("source_node_id", { length: 100 }).notNull(),
+  sourceType: varchar("source_type", { length: 50 }).notNull(),
+  targetNodeId: varchar("target_node_id", { length: 100 }).notNull(),
+  targetType: varchar("target_type", { length: 50 }).notNull(),
+  edgeType: varchar("edge_type", { length: 50 }).notNull(),
+  weight: decimal("weight", { precision: 6, scale: 5 }).notNull().default("1"),
+  propagatedScore: decimal("propagated_score", { precision: 6, scale: 5 }),
+  hopDistance: int("hop_distance").notNull().default(0),
+  metadata: json("metadata"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const institutionalMemoriesTable = mysqlTable("institutional_memories", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  memoryType: varchar("memory_type", { length: 50 }).notNull(),
+  content: text("content"),
+  sourceId: varchar("source_id", { length: 100 }),
+  sourceType: varchar("source_type", { length: 50 }),
+  confidence: decimal("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  accessCount: int("access_count").notNull().default(0),
+  tags: json("tags"),
+  ttlMs: bigint("ttl_ms", { mode: "number" }),
+  lineage: json("lineage"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  updatedAt: datetime("updated_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const evidenceChainsTable = mysqlTable("evidence_chains", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  chainType: varchar("chain_type", { length: 50 }).notNull(),
+  headEvidenceId: varchar("head_evidence_id", { length: 100 }).notNull(),
+  links: json("links"),
+  totalLinks: int("total_links").notNull().default(0),
+  confidence: decimal("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  provenance: json("provenance"),
+  isSuperseded: tinyint("is_superseded").notNull().default(0),
+  supersededBy: varchar("superseded_by", { length: 20 }),
+  lineage: json("lineage"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const retrievalExplanationsTable = mysqlTable("retrieval_explanations", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  queryId: varchar("query_id", { length: 20 }).notNull(),
+  correlationId: varchar("correlation_id", { length: 20 }).notNull(),
+  explanationTree: json("explanation_tree"),
+  rankingLineage: json("ranking_lineage"),
+  traceSteps: json("trace_steps"),
+  humanSummary: text("human_summary"),
+  confidence: decimal("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const semanticIndexesTable = mysqlTable("semantic_indexes", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  indexName: varchar("index_name", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: varchar("entity_id", { length: 100 }).notNull(),
+  tokens: json("tokens"),
+  tokenCount: int("token_count").notNull().default(0),
+  indexHash: varchar("index_hash", { length: 64 }).notNull(),
+  contentPreview: varchar("content_preview", { length: 500 }),
+  metadata: json("metadata"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const retrievalObservabilityTable = mysqlTable("retrieval_observability", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  correlationId: varchar("correlation_id", { length: 20 }).notNull(),
+  operation: varchar("operation", { length: 100 }).notNull(),
+  durationMs: int("duration_ms").notNull().default(0),
+  resultCount: int("result_count").notNull().default(0),
+  avgScore: decimal("avg_score", { precision: 6, scale: 5 }),
+  p95LatencyMs: int("p95_latency_ms"),
+  stageBreakdown: json("stage_breakdown"),
+  tags: json("tags"),
+  alertFired: tinyint("alert_fired").notNull().default(0),
+  alertType: varchar("alert_type", { length: 50 }),
+  recordedAt: datetime("recorded_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const memoryRetentionSnapshotsTable = mysqlTable("memory_retention_snapshots", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  policyId: varchar("policy_id", { length: 20 }).notNull(),
+  snapshotType: varchar("snapshot_type", { length: 50 }).notNull(),
+  totalMemories: int("total_memories").notNull().default(0),
+  activeCount: int("active_count").notNull().default(0),
+  expiringSoonCount: int("expiring_soon_count").notNull().default(0),
+  expiredCount: int("expired_count").notNull().default(0),
+  archivedCount: int("archived_count").notNull().default(0),
+  avgConfidence: decimal("avg_confidence", { precision: 4, scale: 3 }),
+  metrics: json("metrics"),
+  lineage: json("lineage"),
+  snapshotAt: datetime("snapshot_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
 });
 
 export type AIOrchestrationRow      = typeof aiOrchestrationsTable.$inferSelect;
