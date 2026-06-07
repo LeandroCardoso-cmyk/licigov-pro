@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `context_policies` (
+  `id`                VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`   INT          NOT NULL,
+  `policy_type`       VARCHAR(50)  NOT NULL,
+  `name`              VARCHAR(255) NOT NULL,
+  `description`       TEXT         NULL,
+  `applies_to`        JSON         NULL,
+  `sensitivity_level` VARCHAR(50)  NOT NULL DEFAULT 'internal',
+  `masking_strategy`  VARCHAR(50)  NULL,
+  `requires_evidence` TINYINT(1)   NOT NULL DEFAULT 0,
+  `retention_ms`      BIGINT       NULL,
+  `legal_basis`       TEXT         NULL,
+  `is_active`         TINYINT(1)   NOT NULL DEFAULT 1,
+  `priority`          INT          NOT NULL DEFAULT 0,
+  `created_by`        INT          NOT NULL,
+  `created_at`        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_cp_org`    (`organization_id`),
+  INDEX `idx_cp_type`   (`organization_id`, `policy_type`),
+  INDEX `idx_cp_active` (`organization_id`, `is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

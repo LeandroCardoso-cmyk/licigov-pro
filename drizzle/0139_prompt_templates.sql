@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `prompt_templates` (
+  `id`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`  INT          NOT NULL,
+  `template_key`     VARCHAR(100) NOT NULL,
+  `name`             VARCHAR(255) NOT NULL,
+  `content`          TEXT         NULL,
+  `variables`        JSON         NULL,
+  `version`          VARCHAR(20)  NOT NULL DEFAULT '1.0.0',
+  `legal_basis`      TEXT         NULL,
+  `role`             VARCHAR(50)  NULL,
+  `is_approved`      TINYINT(1)   NOT NULL DEFAULT 0,
+  `approved_by`      INT          NULL,
+  `approved_at`      DATETIME(3)  NULL,
+  `lineage`          JSON         NULL,
+  `replay_key`       VARCHAR(64)  NOT NULL,
+  `created_by`       INT          NOT NULL,
+  `created_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_pt_org`     (`organization_id`),
+  INDEX `idx_pt_key`     (`organization_id`, `template_key`),
+  INDEX `idx_pt_version` (`organization_id`, `template_key`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

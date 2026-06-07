@@ -3412,6 +3412,177 @@ export const memoryRetentionSnapshotsTable = mysqlTable("memory_retention_snapsh
   createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
 });
 
+export const contextAssembliesTable = mysqlTable("context_assemblies", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  totalTokensUsed: int("total_tokens_used").notNull().default(0),
+  fragmentCount: int("fragment_count").notNull().default(0),
+  compressionApplied: tinyint("compression_applied").notNull().default(0),
+  status: varchar("status", { length: 50 }).notNull().default("open"),
+  assemblyReasonKey: varchar("assembly_reason_key", { length: 64 }),
+  lineage: json("lineage"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  assembledAt: datetime("assembled_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const contextFragmentsTable = mysqlTable("context_fragments", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  assemblyId: varchar("assembly_id", { length: 20 }).notNull(),
+  source: varchar("source", { length: 50 }).notNull(),
+  content: text("content"),
+  tokenEstimate: int("token_estimate").notNull().default(0),
+  priority: varchar("priority", { length: 20 }).notNull().default("medium"),
+  relevanceScore: decimal("relevance_score", { precision: 4, scale: 3 }).notNull().default("0"),
+  confidence: decimal("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  isStale: tinyint("is_stale").notNull().default(0),
+  staleness: decimal("staleness", { precision: 4, scale: 3 }).notNull().default("0"),
+  legalBasis: text("legal_basis"),
+  temporalContext: datetime("temporal_context", { mode: "string", fsp: 3 }),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const promptChainsTable = mysqlTable("prompt_chains", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  stages: json("stages"),
+  transitions: json("transitions"),
+  maxTotalTokens: int("max_total_tokens").notNull().default(4096),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const promptStagesTable = mysqlTable("prompt_stages", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  chainId: varchar("chain_id", { length: 20 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  stageType: varchar("stage_type", { length: 50 }).notNull(),
+  templateId: varchar("template_id", { length: 20 }).notNull(),
+  inputVariables: json("input_variables"),
+  outputSchema: json("output_schema"),
+  maxTokens: int("max_tokens").notNull().default(1024),
+  timeoutMs: int("timeout_ms").notNull().default(30000),
+  retryCount: int("retry_count").notNull().default(3),
+  fallbackStrategy: varchar("fallback_strategy", { length: 50 }).notNull().default("retry"),
+  dependsOn: json("depends_on"),
+  guardrails: json("guardrails"),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const promptTemplatesTable = mysqlTable("prompt_templates", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  templateKey: varchar("template_key", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  content: text("content"),
+  variables: json("variables"),
+  version: varchar("version", { length: 20 }).notNull().default("1.0.0"),
+  legalBasis: text("legal_basis"),
+  role: varchar("role", { length: 50 }),
+  isApproved: tinyint("is_approved").notNull().default(0),
+  approvedBy: int("approved_by"),
+  approvedAt: datetime("approved_at", { mode: "string", fsp: 3 }),
+  lineage: json("lineage"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdBy: int("created_by").notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const reasoningTracesTable = mysqlTable("reasoning_traces", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  stages: json("stages"),
+  finalConclusion: text("final_conclusion"),
+  overallConfidence: decimal("overall_confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  contradictionsFound: int("contradictions_found").notNull().default(0),
+  ambiguitiesFound: int("ambiguities_found").notNull().default(0),
+  citationCount: int("citation_count").notNull().default(0),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const groundingEvidencesTable = mysqlTable("grounding_evidences", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  queryId: varchar("query_id", { length: 100 }).notNull(),
+  sourceType: varchar("source_type", { length: 50 }).notNull(),
+  content: text("content"),
+  citation: varchar("citation", { length: 500 }).notNull(),
+  authority: decimal("authority", { precision: 4, scale: 3 }).notNull().default("0"),
+  relevanceScore: decimal("relevance_score", { precision: 4, scale: 3 }).notNull().default("0"),
+  legalBasis: text("legal_basis"),
+  provenance: json("provenance"),
+  isVerified: tinyint("is_verified").notNull().default(0),
+  hallucinationRisk: decimal("hallucination_risk", { precision: 4, scale: 3 }).notNull().default("0"),
+  groundingConfidence: decimal("grounding_confidence", { precision: 4, scale: 3 }).notNull().default("0"),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const contextObservabilityTable = mysqlTable("context_observability", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  value: decimal("value", { precision: 10, scale: 4 }).notNull().default("0"),
+  unit: varchar("unit", { length: 20 }).notNull(),
+  tags: json("tags"),
+  recordedAt: datetime("recorded_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const orchestrationExecutionsTable = mysqlTable("orchestration_executions", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  chainId: varchar("chain_id", { length: 20 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  stageExecutions: json("stage_executions"),
+  finalOutput: text("final_output"),
+  totalTokensUsed: int("total_tokens_used").notNull().default(0),
+  totalDurationMs: int("total_duration_ms").notNull().default(0),
+  correlationId: varchar("correlation_id", { length: 20 }).notNull(),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  executedAt: datetime("executed_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const semanticCompressionsTable = mysqlTable("semantic_compressions", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  originalTokens: int("original_tokens").notNull().default(0),
+  compressedTokens: int("compressed_tokens").notNull().default(0),
+  compressionRatio: decimal("compression_ratio", { precision: 4, scale: 3 }).notNull().default("1"),
+  deduplicatedCount: int("deduplicated_count").notNull().default(0),
+  overlapRemovedCount: int("overlap_removed_count").notNull().default(0),
+  replayKey: varchar("replay_key", { length: 64 }).notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
+export const contextPoliciesTable = mysqlTable("context_policies", {
+  id: varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  policyType: varchar("policy_type", { length: 50 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  appliesTo: json("applies_to"),
+  sensitivityLevel: varchar("sensitivity_level", { length: 50 }).notNull().default("internal"),
+  maskingStrategy: varchar("masking_strategy", { length: 50 }),
+  requiresEvidence: tinyint("requires_evidence").notNull().default(0),
+  retentionMs: bigint("retention_ms", { mode: "number" }),
+  legalBasis: text("legal_basis"),
+  isActive: tinyint("is_active").notNull().default(1),
+  priority: int("priority").notNull().default(0),
+  createdBy: int("created_by").notNull(),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+});
+
 export type AIOrchestrationRow      = typeof aiOrchestrationsTable.$inferSelect;
 export type AIPromptVersionRow      = typeof aiPromptVersionsTable.$inferSelect;
 export type SemanticMemoryRow       = typeof semanticMemoriesTable.$inferSelect;
