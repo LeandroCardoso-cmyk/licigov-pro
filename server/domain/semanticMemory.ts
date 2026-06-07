@@ -198,3 +198,148 @@ export function createRetrievalReference(
     relevanceAtRetrieval:  relevance,
   };
 }
+
+// ─── Sprint 4.1: Institutional Memory Extension ───────────────────────────────
+
+export interface InstitutionalPrecedent {
+  id: string;
+  organizationId: number;
+  title: string;
+  description: string;
+  category: "procurement" | "approval" | "rejection" | "legal" | "workflow" | "vendor";
+  decision: string;
+  rationale: string;
+  applicableContexts: string[];
+  confidence: number;
+  usageCount: number;
+  lastUsedAt: string | null;
+  createdBy: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProcurementPattern {
+  id: string;
+  organizationId: number;
+  patternKey: string;
+  frequency: number;
+  contextSignal: string;
+  associatedDecisions: string[];
+  strengthScore: number;
+  lastObservedAt: string;
+  createdAt: string;
+}
+
+const _precedents = new Map<number, InstitutionalPrecedent[]>();
+const _patterns = new Map<number, ProcurementPattern[]>();
+
+export function createPrecedent(params: {
+  organizationId: number;
+  title: string;
+  description: string;
+  category: InstitutionalPrecedent["category"];
+  decision: string;
+  rationale: string;
+  applicableContexts?: string[];
+  confidence?: number;
+  createdBy: number;
+}): InstitutionalPrecedent {
+  const now = new Date().toISOString();
+  const precedent: InstitutionalPrecedent = {
+    id: genId("prec"),
+    organizationId: params.organizationId,
+    title: params.title,
+    description: params.description,
+    category: params.category,
+    decision: params.decision,
+    rationale: params.rationale,
+    applicableContexts: params.applicableContexts ?? [],
+    confidence: params.confidence ?? 0.5,
+    usageCount: 0,
+    lastUsedAt: null,
+    createdBy: params.createdBy,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const existing = _precedents.get(params.organizationId) ?? [];
+  _precedents.set(params.organizationId, [...existing, precedent]);
+  return precedent;
+}
+
+export function findApplicablePrecedents(
+  organizationId: number,
+  context: string,
+  limit = 5,
+): InstitutionalPrecedent[] {
+  const all = _precedents.get(organizationId) ?? [];
+  const lowerContext = context.toLowerCase();
+  const filtered = all.filter(
+    p =>
+      p.isActive &&
+      p.applicableContexts.some(ac => lowerContext.includes(ac.toLowerCase())),
+  );
+  return [...filtered]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, limit);
+}
+
+export function recordProcurementPattern(
+  organizationId: number,
+  patternKey: string,
+  contextSignal: string,
+): ProcurementPattern {
+  const existing = _patterns.get(organizationId) ?? [];
+  const now = new Date().toISOString();
+
+  const found = existing.find(p => p.patternKey === patternKey);
+  if (found !== undefined) {
+    const newFrequency = found.frequency + 1;
+    const updated: ProcurementPattern = {
+      ...found,
+      frequency: newFrequency,
+      strengthScore: Math.min(1, newFrequency / 10),
+      lastObservedAt: now,
+    };
+    _patterns.set(
+      organizationId,
+      existing.map(p => (p.patternKey === patternKey ? updated : p)),
+    );
+    return updated;
+  }
+
+  const created: ProcurementPattern = {
+    id: genId("patt"),
+    organizationId,
+    patternKey,
+    frequency: 1,
+    contextSignal,
+    associatedDecisions: [],
+    strengthScore: 0.1,
+    lastObservedAt: now,
+    createdAt: now,
+  };
+  _patterns.set(organizationId, [...existing, created]);
+  return created;
+}
+
+export function getProcurementPatterns(organizationId: number): ProcurementPattern[] {
+  return [...(_patterns.get(organizationId) ?? [])];
+}
+
+export function markPrecedentUsed(precedent: InstitutionalPrecedent): InstitutionalPrecedent {
+  const now = new Date().toISOString();
+  const updated: InstitutionalPrecedent = {
+    ...precedent,
+    usageCount: precedent.usageCount + 1,
+    lastUsedAt: now,
+    updatedAt: now,
+  };
+  const existing = _precedents.get(precedent.organizationId) ?? [];
+  _precedents.set(
+    precedent.organizationId,
+    existing.map(p => (p.id === precedent.id ? updated : p)),
+  );
+  return updated;
+}

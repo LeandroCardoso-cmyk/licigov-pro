@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `semantic_chunks` (
+  `id`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`  INT          NOT NULL,
+  `document_id`      VARCHAR(100) NOT NULL,
+  `document_type`    VARCHAR(50)  NOT NULL,
+  `content`          TEXT         NULL,
+  `token_count`      INT          NOT NULL DEFAULT 0,
+  `chunk_index`      INT          NOT NULL DEFAULT 0,
+  `total_chunks`     INT          NOT NULL DEFAULT 0,
+  `strategy`         VARCHAR(50)  NOT NULL,
+  `section_title`    VARCHAR(255) NULL,
+  `legal_ref`        VARCHAR(255) NULL,
+  `overlap_with_prev` INT         NOT NULL DEFAULT 0,
+  `lineage`          JSON         NULL,
+  `replay_key`       VARCHAR(64)  NOT NULL,
+  `metadata`         JSON         NULL,
+  `created_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_sc_org`      (`organization_id`),
+  INDEX `idx_sc_doc`      (`organization_id`, `document_id`),
+  INDEX `idx_sc_strategy` (`organization_id`, `strategy`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
