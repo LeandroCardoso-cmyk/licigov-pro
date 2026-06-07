@@ -42,6 +42,8 @@ import { pilotReadinessRouter } from "./routers/pilotReadinessRouter";
 import { onboardingRouter } from "./routers/onboardingRouter";
 import { deploymentRouter }  from "./routers/deploymentRouter";
 import { stabilityRouter }   from "./routers/stabilityRouter";
+import { contextRouter }     from "./routers/contextRouter";
+import { promptOrchestrationRouter } from "./routers/promptOrchestrationRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -85,8 +87,10 @@ export const appRouter = router({
   structuredExports: structuredExportRouter,
   pilotReadiness: pilotReadinessRouter,
   onboarding:     onboardingRouter,
-  deployment:     deploymentRouter,
-  stability:      stabilityRouter,
+  deployment:          deploymentRouter,
+  stability:           stabilityRouter,
+  context:             contextRouter,
+  promptOrchestration: promptOrchestrationRouter,
 });
 
 export type AppRouter = typeof appRouter;

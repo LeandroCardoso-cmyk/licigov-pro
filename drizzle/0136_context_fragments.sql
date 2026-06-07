@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `context_fragments` (
+  `id`               VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`  INT          NOT NULL,
+  `assembly_id`      VARCHAR(20)  NOT NULL,
+  `source`           VARCHAR(50)  NOT NULL,
+  `content`          TEXT         NULL,
+  `token_estimate`   INT          NOT NULL DEFAULT 0,
+  `priority`         VARCHAR(20)  NOT NULL DEFAULT 'medium',
+  `relevance_score`  DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `confidence`       DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `is_stale`         TINYINT(1)   NOT NULL DEFAULT 0,
+  `staleness`        DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `legal_basis`      TEXT         NULL,
+  `temporal_context` DATETIME(3)  NULL,
+  `replay_key`       VARCHAR(64)  NOT NULL,
+  `created_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_cf_org`      (`organization_id`),
+  INDEX `idx_cf_assembly` (`organization_id`, `assembly_id`),
+  INDEX `idx_cf_source`   (`organization_id`, `source`),
+  INDEX `idx_cf_priority` (`organization_id`, `priority`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

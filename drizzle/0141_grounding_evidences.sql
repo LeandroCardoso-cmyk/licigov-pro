@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `grounding_evidences` (
+  `id`                   VARCHAR(20)  NOT NULL PRIMARY KEY,
+  `organization_id`      INT          NOT NULL,
+  `query_id`             VARCHAR(100) NOT NULL,
+  `source_type`          VARCHAR(50)  NOT NULL,
+  `content`              TEXT         NULL,
+  `citation`             VARCHAR(500) NOT NULL,
+  `authority`            DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `relevance_score`      DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `legal_basis`          TEXT         NULL,
+  `provenance`           JSON         NULL,
+  `is_verified`          TINYINT(1)   NOT NULL DEFAULT 0,
+  `hallucination_risk`   DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `grounding_confidence` DECIMAL(4,3) NOT NULL DEFAULT 0,
+  `replay_key`           VARCHAR(64)  NOT NULL,
+  `created_at`           DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `idx_ge_org`   (`organization_id`),
+  INDEX `idx_ge_query` (`organization_id`, `query_id`),
+  INDEX `idx_ge_type`  (`organization_id`, `source_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

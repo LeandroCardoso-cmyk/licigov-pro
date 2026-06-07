@@ -421,3 +421,87 @@ export function computeWorkflowMetrics(workflows: AIWorkflowState[]): WorkflowMe
 
   return { total, completed, overridden, pendingHumanReview, avgCompletionMs };
 }
+
+// ─── Sprint 4.2: Orchestration Checkpoints ───────────────────────────────────
+
+export interface OrchestrationCheckpoint {
+  id: string;
+  workflowId: string;
+  organizationId: number;
+  stage: string;
+  status: "passed" | "failed" | "warning" | "pending";
+  confidenceScore: number;
+  hallucinationRisk: number;
+  reasoningTrace: string | null;
+  contextTokensUsed: number;
+  validationErrors: string[];
+  approvalRequired: boolean;
+  createdAt: string;
+}
+
+export function createOrchestrationCheckpoint(params: {
+  workflowId: string;
+  organizationId: number;
+  stage: string;
+  confidenceScore: number;
+  hallucinationRisk: number;
+  contextTokensUsed?: number;
+  reasoningTrace?: string;
+}): OrchestrationCheckpoint {
+  const approvalRequired = params.confidenceScore < 0.8 || params.hallucinationRisk > 0.5;
+  const status: OrchestrationCheckpoint["status"] =
+    params.confidenceScore > 0.6 && params.hallucinationRisk < 0.7
+      ? approvalRequired ? "warning" : "passed"
+      : "failed";
+
+  return {
+    id: createHash("sha256")
+      .update(`${params.workflowId}${params.stage}${params.confidenceScore}`)
+      .digest("hex")
+      .slice(0, 20),
+    workflowId:        params.workflowId,
+    organizationId:    params.organizationId,
+    stage:             params.stage,
+    status,
+    confidenceScore:   params.confidenceScore,
+    hallucinationRisk: params.hallucinationRisk,
+    reasoningTrace:    params.reasoningTrace ?? null,
+    contextTokensUsed: params.contextTokensUsed ?? 0,
+    validationErrors:  [],
+    approvalRequired,
+    createdAt:         new Date().toISOString(),
+  };
+}
+
+export function evaluateCheckpoint(checkpoint: OrchestrationCheckpoint): {
+  canProceed: boolean;
+  requiresHumanReview: boolean;
+  reason: string;
+} {
+  const canProceed = checkpoint.confidenceScore > 0.6 && checkpoint.hallucinationRisk < 0.7;
+  const requiresHumanReview = checkpoint.confidenceScore < 0.8 || checkpoint.hallucinationRisk > 0.5;
+  const reason = !canProceed
+    ? `Confidence ${checkpoint.confidenceScore.toFixed(2)} abaixo de 0.6 ou risco de alucinação ${checkpoint.hallucinationRisk.toFixed(2)} acima de 0.7`
+    : requiresHumanReview
+    ? "Revisão humana recomendada por limiar de confiança"
+    : "Aprovado automaticamente";
+  return { canProceed, requiresHumanReview, reason };
+}
+
+export function addCheckpointToHistory(
+  workflow: AIWorkflowState,
+  checkpoint: OrchestrationCheckpoint,
+): AIWorkflowState {
+  const now = new Date().toISOString();
+  const event = makeEvent(
+    "step_completed",
+    checkpoint.organizationId,
+    `Checkpoint: ${checkpoint.stage} — status: ${checkpoint.status}`,
+    { checkpoint },
+  );
+  return {
+    ...workflow,
+    history:   [...workflow.history, event],
+    updatedAt: now,
+  };
+}

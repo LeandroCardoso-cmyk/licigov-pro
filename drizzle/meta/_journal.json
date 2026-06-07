@@ -886,6 +886,17 @@
     { "idx": 131, "version": "6", "when": 1758307200000, "tag": "0131_retrieval_explanations" },
     { "idx": 132, "version": "6", "when": 1758393600000, "tag": "0132_semantic_indexes" },
     { "idx": 133, "version": "6", "when": 1758480000000, "tag": "0133_retrieval_observability" },
-    { "idx": 134, "version": "6", "when": 1758566400000, "tag": "0134_memory_retention_snapshots" }
+    { "idx": 134, "version": "6", "when": 1758566400000, "tag": "0134_memory_retention_snapshots" },
+    { "idx": 135, "version": "6", "when": 1758652800000, "tag": "0135_context_assemblies" },
+    { "idx": 136, "version": "6", "when": 1758739200000, "tag": "0136_context_fragments" },
+    { "idx": 137, "version": "6", "when": 1758825600000, "tag": "0137_prompt_chains" },
+    { "idx": 138, "version": "6", "when": 1758912000000, "tag": "0138_prompt_stages" },
+    { "idx": 139, "version": "6", "when": 1758998400000, "tag": "0139_prompt_templates" },
+    { "idx": 140, "version": "6", "when": 1759084800000, "tag": "0140_reasoning_traces" },
+    { "idx": 141, "version": "6", "when": 1759171200000, "tag": "0141_grounding_evidences" },
+    { "idx": 142, "version": "6", "when": 1759257600000, "tag": "0142_context_observability" },
+    { "idx": 143, "version": "6", "when": 1759344000000, "tag": "0143_orchestration_executions" },
+    { "idx": 144, "version": "6", "when": 1759430400000, "tag": "0144_semantic_compressions" },
+    { "idx": 145, "version": "6", "when": 1759516800000, "tag": "0145_context_policies" }
   ]
 }
