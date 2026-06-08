@@ -192,7 +192,7 @@ function evaluateSectionCondition(
  * Cria um DraftTemplate vazio (sem seções nem variáveis).
  * replayKey = sha256(templateKey + documentType + organizationId)
  */
-export function createDraftTemplate(params: {
+export function createDraftTemplateLegacy(params: {
   organizationId: number;
   templateKey: string;
   name: string;
@@ -225,7 +225,7 @@ export function createDraftTemplate(params: {
  * Cria uma DraftSection sem blocos.
  * replayKey = sha256(templateId + title + order.toString())
  */
-export function createDraftSection(params: {
+export function createDraftSectionLegacy(params: {
   organizationId: number;
   templateId: string;
   title: string;
@@ -257,7 +257,7 @@ export function createDraftSection(params: {
  * Cria um DraftBlock com conteúdo template.
  * replayKey = sha256(blockType + content + order.toString())
  */
-export function createDraftBlock(params: {
+export function createDraftBlockLegacy(params: {
   blockType: BlockType;
   content: string;
   order: number;
@@ -717,3 +717,32 @@ export function validateDraftCompletenessV2(
     completenessScore: Math.min(1, Math.max(0, completenessScore)),
   };
 }
+
+// ─── Sprint 4.3: Canonical-name aliases for document drafting service layer ───
+
+/** Sprint 4.3 DraftVariable type (with name, label, type, required, defaultValue, enumValues) */
+export type DraftVariable = DraftVariableV2;
+
+/** Sprint 4.3 DraftTemplate type (with name, documentType, sections, variables, legalFramework) */
+export type DraftTemplateV3 = DraftTemplateV2;
+
+/** Sprint 4.3 DraftGeneration type (with sessionId, variableValues, resolvedContent) */
+export type DraftGenerationV3 = DraftGenerationV2;
+
+/** @alias createDraftVariableV2 */
+export const createDraftVariable = createDraftVariableV2;
+
+/** @alias generateDraftV2 */
+export const generateDraft = generateDraftV2;
+
+/** @alias validateDraftCompletenessV2 */
+export const validateDraftCompleteness = validateDraftCompletenessV2;
+
+/** @alias createDraftSectionV2 — Sprint 4.3 signature with organizationId, legalBasis, isOptional, blocks */
+export const createDraftSection = createDraftSectionV2;
+
+/** @alias createDraftBlockV2 — Sprint 4.3 signature with organizationId, variables, conditions */
+export const createDraftBlock = createDraftBlockV2;
+
+/** @alias createDraftTemplateV2 — Sprint 4.3 signature with legalFramework, isActive */
+export const createDraftTemplate = createDraftTemplateV2;

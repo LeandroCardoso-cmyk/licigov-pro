@@ -513,7 +513,7 @@ export function createLegalReasoningTraceLegacy(
  * Mapeia inferenceId → premiseIds (IDs que fundamentam a inferência).
  */
 export function buildLegalDependencyGraph(
-  inferences: LegalInference[],
+  inferences: LegalInferenceLegacy[],
 ): Record<string, string[]> {
   const graph: Record<string, string[]> = {};
   for (const inf of inferences) {
@@ -528,10 +528,10 @@ export function buildLegalDependencyGraph(
  * Inferências cujos premises existem no conjunto têm confiança ajustada.
  */
 export function propagateLegalConfidence(
-  inferences: LegalInference[],
-): LegalInference[] {
+  inferences: LegalInferenceLegacy[],
+): LegalInferenceLegacy[] {
   const DECAY = 0.92;
-  const byId  = new Map<string, LegalInference>(inferences.map(i => [i.id, i]));
+  const byId  = new Map<string, LegalInferenceLegacy>(inferences.map(i => [i.id, i]));
 
   return inferences.map(inf => {
     if (inf.premiseIds.length === 0) return inf;
@@ -562,7 +562,7 @@ export function propagateLegalConfidence(
 /**
  * Formata um trace de raciocínio jurídico para auditoria em Markdown.
  */
-export function formatLegalReasoningForAudit(trace: LegalReasoningTrace): string {
+export function formatLegalReasoningForAudit(trace: LegalReasoningTraceLegacy): string {
   const lines: string[] = [
     `# Trace de Raciocínio Jurídico`,
     ``,
@@ -1102,7 +1102,24 @@ export function buildExtendedReasoningExplainability(trace: ExtendedLegalReasoni
   return lines.join("\n");
 }
 
-// ─── Sprint 4.3: Canonical-name aliases for Sprint 4.3 service layer ─────────
+// ─── Sprint 4.3: Canonical type aliases (Sprint 4.3 service layer uses these) ─
+
+/** Sprint 4.3 LegalInference — extended type with traceId, inferenceType, confidence */
+export type LegalInference = ExtendedLegalInference;
+
+/** Sprint 4.3 ComplianceCheck — extended type with ruleId, ruleName, legalBasis, findings */
+export type ComplianceCheck = ExtendedComplianceCheck;
+
+/** Sprint 4.3 LegalRisk — extended type with mitigations string[], legalBasis string */
+export type LegalRisk = ExtendedLegalRisk;
+
+/** Sprint 4.3 LegalRecommendation — extended type with traceId, type, content, priority, rationale */
+export type LegalRecommendation = ExtendedLegalRecommendation;
+
+/** Sprint 4.3 LegalReasoningTrace — extended type with premises, overallRiskScore */
+export type LegalReasoningTrace = ExtendedLegalReasoningTrace;
+
+// ─── Sprint 4.3: Canonical-name function aliases ──────────────────────────────
 
 /** @alias createExtendedLegalRisk */
 export const createLegalRisk = createExtendedLegalRisk;

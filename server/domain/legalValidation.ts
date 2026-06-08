@@ -30,7 +30,7 @@ export type ValidationRuleType =
 
 export type ValidationSeverity = "error" | "warning" | "info";
 
-export interface ValidationRule {
+export interface ValidationRuleLegacy {
   id: string;
   organizationId: number;
   ruleType: ValidationRuleType;
@@ -46,7 +46,7 @@ export interface ValidationRule {
   replayKey: string;
 }
 
-export interface ValidationResult {
+export interface ValidationResultLegacy {
   ruleId: string;
   passed: boolean;
   severity: ValidationSeverity;
@@ -55,12 +55,12 @@ export interface ValidationResult {
   suggestion: string | null;
 }
 
-export interface ValidationReport {
+export interface ValidationReportLegacy {
   id: string;
   organizationId: number;
   documentId: string;
   documentType: string;
-  results: ValidationResult[];
+  results: ValidationResultLegacy[];
   passedCount: number;
   failedCount: number;
   warningCount: number;
@@ -97,9 +97,7 @@ function jaccardSimilarity(tokensA: string[], tokensB: string[]): number {
   const setA = new Set(tokensA);
   const setB = new Set(tokensB);
   let intersection = 0;
-  for (const t of setA) {
-    if (setB.has(t)) intersection++;
-  }
+  Array.from(setA).forEach(t => { if (setB.has(t)) intersection++; });
   const union = setA.size + setB.size - intersection;
   return union === 0 ? 0 : intersection / union;
 }
@@ -111,7 +109,7 @@ function jaccardSimilarity(tokensA: string[], tokensB: string[]): number {
  * replayKey = sha256(organizationId + ruleType + name + legalRef)
  * isActive = true por padrão.
  */
-export function createValidationRule(params: {
+export function createValidationRuleLegacy(params: {
   organizationId: number;
   ruleType: ValidationRuleType;
   name: string;
@@ -122,7 +120,7 @@ export function createValidationRule(params: {
   mandatoryKeywords?: string[];
   forbiddenKeywords?: string[];
   pattern?: string | null;
-}): ValidationRule {
+}): ValidationRuleLegacy {
   const replayKey = sha256Hex(
     `${params.organizationId}${params.ruleType}${params.name}${params.legalRef}`,
   );
@@ -152,13 +150,13 @@ export function createValidationRule(params: {
 export function validateDocument(
   documentContent: string,
   documentType: string,
-  rules: ValidationRule[],
+  rules: ValidationRuleLegacy[],
   organizationId: number,
   documentId: string,
-): ValidationReport {
+): ValidationReportLegacy {
   const contentLower   = documentContent.toLowerCase();
   const contentTokens  = tokenizeSimple(documentContent);
-  const results: ValidationResult[] = [];
+  const results: ValidationResultLegacy[] = [];
   const mandatorySectionsMissing: string[] = [];
   const forbiddenClausesFound: string[]    = [];
 
@@ -248,7 +246,7 @@ export function validateDocument(
     legalIntegrityScore,
     isLegallyCompliant,
     mandatorySectionsMissing,
-    forbiddenClausesFound:   [...new Set(forbiddenClausesFound)],
+    forbiddenClausesFound:   Array.from(new Set(forbiddenClausesFound)),
     replayKey,
     validatedAt:             new Date().toISOString(),
   };
@@ -313,7 +311,7 @@ export function detectSemanticInconsistencies(
  * Computa o score de integridade legal ponderando erros e avisos.
  * Fórmula: (passedCount + warningCount * 0.5) / max(total, 1)
  */
-export function computeLegalIntegrityScore(results: ValidationResult[]): number {
+export function computeLegalIntegrityScore(results: ValidationResultLegacy[]): number {
   if (results.length === 0) return 1;
   const passedCount  = results.filter(r => r.passed).length;
   const warningCount = results.filter(r => !r.passed && r.severity === "warning").length;
@@ -327,9 +325,9 @@ export function computeLegalIntegrityScore(results: ValidationResult[]): number 
 export function generateValidationReport(
   documentId:     string,
   documentType:   string,
-  results:        ValidationResult[],
+  results:        ValidationResultLegacy[],
   organizationId: number,
-): ValidationReport {
+): ValidationReportLegacy {
   const passedCount  = results.filter(r => r.passed).length;
   const failedCount  = results.filter(r => !r.passed).length;
   const warningCount = results.filter(r => !r.passed && r.severity === "warning").length;
@@ -590,3 +588,26 @@ export function getExtendedValidationSummary(report: ExtendedValidationReport): 
     `- Taxa de aprovação: ${passRatePct}%`,
   ].join("\n");
 }
+
+// ─── Sprint 4.3: Canonical-name aliases for legalValidation service layer ────
+
+/** Sprint 4.3 ValidationRule type (with category, legalBasis, expression fields) */
+export type ValidationRule = ExtendedValidationRule;
+
+/** Sprint 4.3 ValidationResult type (with ruleName, evidence fields) */
+export type ValidationResult = ExtendedValidationResult;
+
+/** Sprint 4.3 ValidationReport type (with sessionId, targetType, targetId, passRate) */
+export type ValidationReport = ExtendedValidationReport;
+
+/** @alias createExtendedValidationRule */
+export const createValidationRule = createExtendedValidationRule;
+
+/** @alias createExtendedValidationReport */
+export const createValidationReport = createExtendedValidationReport;
+
+/** @alias applyExtendedValidationRules */
+export const applyValidationRules = applyExtendedValidationRules;
+
+/** @alias getExtendedValidationSummary */
+export const getValidationSummary = getExtendedValidationSummary;
