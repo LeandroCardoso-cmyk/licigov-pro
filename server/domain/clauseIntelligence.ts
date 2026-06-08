@@ -334,3 +334,172 @@ export function inferProcurementType(item: ClauseItemInput): ProcurementType {
   if (item.catmatCode) return "bem";
   return "generico";
 }
+
+// ─── Sprint 4.3: Clause Compatibility & Conflict Analysis ─────────────────────
+
+export interface ClauseCompatibilityResult {
+  clauseIdA: string;
+  clauseIdB: string;
+  organizationId: number;
+  isCompatible: boolean;
+  compatibilityScore: number;   // 0-1
+  conflictType: "direct" | "indirect" | "conditional" | "none";
+  explanation: string;
+  resolution: string | null;
+  checkedAt: string;
+}
+
+export interface ClauseHierarchyNode {
+  clauseId: string;
+  organizationId: number;
+  parentId: string | null;
+  childIds: string[];
+  depth: number;
+  legalBasis: string;
+  isRoot: boolean;
+  isLeaf: boolean;
+}
+
+export interface ClauseRiskAnalysis {
+  clauseId: string;
+  organizationId: number;
+  riskLevel: "critical" | "high" | "medium" | "low" | "none";
+  riskFactors: string[];
+  legalExposure: string;
+  mitigationSuggestion: string;
+  riskScore: number;    // 0-1
+  analyzedAt: string;
+}
+
+export interface ClauseConflictMap {
+  organizationId: number;
+  clauseIds: string[];
+  conflicts: ClauseCompatibilityResult[];
+  conflictCount: number;
+  criticalConflicts: number;
+  resolutionSuggestions: Record<string, string>;  // conflictKey → suggestion
+  generatedAt: string;
+}
+
+export function checkClauseCompatibility(
+  clauseIdA: string,
+  clauseIdB: string,
+  contentA: string,
+  contentB: string,
+  organizationId: number,
+): ClauseCompatibilityResult {
+  // Simple heuristic: if both contents share >30% token overlap → potentially conflicting
+  const tokensA = new Set(contentA.toLowerCase().split(/\s+/));
+  const tokensB = new Set(contentB.toLowerCase().split(/\s+/));
+  const tokensAArr = Array.from(tokensA);
+  const intersection = tokensAArr.filter(t => tokensB.has(t)).length;
+  const union = new Set(tokensAArr.concat(Array.from(tokensB))).size;
+  const overlap = union > 0 ? intersection / union : 0;
+  const isCompatible = overlap < 0.3;
+  return {
+    clauseIdA,
+    clauseIdB,
+    organizationId,
+    isCompatible,
+    compatibilityScore: 1 - overlap,
+    conflictType: isCompatible ? "none" : overlap > 0.6 ? "direct" : "indirect",
+    explanation: isCompatible
+      ? "Cláusulas compatíveis (baixa sobreposição semântica)"
+      : `Conflito detectado: sobreposição de ${(overlap * 100).toFixed(1)}%`,
+    resolution: isCompatible ? null : "Revisar e consolidar cláusulas sobrepostas",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export function buildClauseHierarchy(
+  clauses: Array<{ id: string; organizationId: number; parentId?: string | null; legalBasis?: string }>,
+): ClauseHierarchyNode[] {
+  const childMap = new Map<string, string[]>();
+  for (const c of clauses) {
+    if (c.parentId) {
+      const arr = childMap.get(c.parentId) ?? [];
+      arr.push(c.id);
+      childMap.set(c.parentId, arr);
+    }
+  }
+  const depthMap = new Map<string, number>();
+  function getDepth(id: string): number {
+    if (depthMap.has(id)) return depthMap.get(id)!;
+    const clause = clauses.find(c => c.id === id);
+    const d = clause?.parentId ? 1 + getDepth(clause.parentId) : 0;
+    depthMap.set(id, d);
+    return d;
+  }
+  return clauses.map(c => ({
+    clauseId: c.id,
+    organizationId: c.organizationId,
+    parentId: c.parentId ?? null,
+    childIds: childMap.get(c.id) ?? [],
+    depth: getDepth(c.id),
+    legalBasis: c.legalBasis ?? "",
+    isRoot: !c.parentId,
+    isLeaf: (childMap.get(c.id) ?? []).length === 0,
+  }));
+}
+
+export function analyzeClauseRisk(
+  clauseId: string,
+  content: string,
+  legalBasis: string,
+  organizationId: number,
+): ClauseRiskAnalysis {
+  const riskFactors: string[] = [];
+  let riskScore = 0;
+  if (content.length < 50) { riskFactors.push("Cláusula muito curta"); riskScore += 0.2; }
+  if (!legalBasis || legalBasis.length < 5) { riskFactors.push("Sem embasamento legal"); riskScore += 0.3; }
+  if (/obrigatório|deverá|deve/i.test(content) && !/exceto|salvo/i.test(content)) {
+    riskFactors.push("Obrigação sem exceção explícita");
+    riskScore += 0.15;
+  }
+  if (/multa|penalidade|rescisão/i.test(content)) { riskFactors.push("Cláusula penal"); riskScore += 0.1; }
+  riskScore = Math.min(1, riskScore);
+  const level: ClauseRiskAnalysis["riskLevel"] =
+    riskScore >= 0.7 ? "critical" : riskScore >= 0.5 ? "high" : riskScore >= 0.3 ? "medium" : riskScore >= 0.1 ? "low" : "none";
+  return {
+    clauseId,
+    organizationId,
+    riskLevel: level,
+    riskFactors,
+    legalExposure: riskFactors.length > 0 ? riskFactors.join("; ") : "Sem exposição identificada",
+    mitigationSuggestion: riskFactors.length > 0 ? "Revisar cláusula e adicionar embasamento legal específico" : "Nenhuma mitigação necessária",
+    riskScore,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+export function buildClauseConflictMap(
+  clauses: Array<{ id: string; content: string; organizationId: number }>,
+): ClauseConflictMap {
+  const conflicts: ClauseCompatibilityResult[] = [];
+  const organizationId = clauses[0]?.organizationId ?? 0;
+  for (let i = 0; i < clauses.length; i++) {
+    for (let j = i + 1; j < clauses.length; j++) {
+      const result = checkClauseCompatibility(
+        clauses[i].id, clauses[j].id,
+        clauses[i].content, clauses[j].content,
+        organizationId,
+      );
+      if (!result.isCompatible) conflicts.push(result);
+    }
+  }
+  const criticalConflicts = conflicts.filter(c => c.conflictType === "direct").length;
+  const resolutionSuggestions: Record<string, string> = {};
+  for (const c of conflicts) {
+    const key = `${c.clauseIdA}:${c.clauseIdB}`;
+    resolutionSuggestions[key] = c.resolution ?? "Revisar manualmente";
+  }
+  return {
+    organizationId,
+    clauseIds: clauses.map(c => c.id),
+    conflicts,
+    conflictCount: conflicts.length,
+    criticalConflicts,
+    resolutionSuggestions,
+    generatedAt: new Date().toISOString(),
+  };
+}

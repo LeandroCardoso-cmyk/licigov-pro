@@ -505,3 +505,73 @@ export function addCheckpointToHistory(
     updatedAt: now,
   };
 }
+
+// ─── Sprint 4.3: Drafting Checkpoints ─────────────────────────────────────────
+
+export type DraftingCheckpointType =
+  | "draft_initiated"
+  | "template_selected"
+  | "variables_resolved"
+  | "clauses_validated"
+  | "legal_review"
+  | "compliance_check"
+  | "risk_assessment"
+  | "draft_approved"
+  | "draft_rejected";
+
+export interface DraftingCheckpoint {
+  id: string;
+  organizationId: number;
+  sessionId: string;
+  draftId: string;
+  checkpointType: DraftingCheckpointType;
+  status: "pending" | "in_progress" | "completed" | "failed" | "skipped";
+  score: number;        // 0-1 quality/completeness
+  metadata: Record<string, string | number | boolean>;
+  completedAt: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export function createDraftingCheckpoint(params: {
+  organizationId: number;
+  sessionId: string;
+  draftId: string;
+  checkpointType: DraftingCheckpointType;
+  metadata?: Record<string, string | number | boolean>;
+}): DraftingCheckpoint {
+  const id = createHash("sha256")
+    .update(`${params.organizationId}${params.sessionId}${params.draftId}${params.checkpointType}${Date.now()}`)
+    .digest("hex")
+    .slice(0, 20);
+  return {
+    id,
+    organizationId: params.organizationId,
+    sessionId: params.sessionId,
+    draftId: params.draftId,
+    checkpointType: params.checkpointType,
+    status: "pending",
+    score: 0,
+    metadata: params.metadata ?? {},
+    completedAt: null,
+    failureReason: null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function evaluateDraftCompliance(checkpoint: DraftingCheckpoint, score: number, passed: boolean): DraftingCheckpoint {
+  return {
+    ...checkpoint,
+    status: passed ? "completed" : "failed",
+    score,
+    completedAt: new Date().toISOString(),
+    failureReason: passed ? null : `Score ${score.toFixed(2)} abaixo do threshold`,
+  };
+}
+
+export function addDraftingCheckpointToHistory(
+  history: DraftingCheckpoint[],
+  checkpoint: DraftingCheckpoint,
+): DraftingCheckpoint[] {
+  return [...history, checkpoint];
+}
