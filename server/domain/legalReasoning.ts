@@ -1092,3 +1092,46 @@ export function buildExtendedReasoningExplainability(trace: ExtendedLegalReasoni
 
   return lines.join("\n");
 }
+
+// ─── Sprint 4.3: Canonical-name aliases & re-exports for service layer ────────
+// The service layer (legalReasoningEngine.ts) imports using the spec canonical names.
+// These aliases bridge the extended Sprint 4.3 implementations to those names.
+
+/** Sprint 4.3 canonical LegalReasoningTrace type (with premises & extended fields) */
+export type { ExtendedLegalReasoningTrace as LegalReasoningTraceV2 };
+
+/** Sprint 4.3 canonical ComplianceCheck (with ruleId, ruleName, legalBasis, findings) */
+export type { ExtendedComplianceCheck as ComplianceCheckV2 };
+
+/** Sprint 4.3 canonical LegalRisk (with mitigations, legalBasis string) */
+export type { ExtendedLegalRisk as LegalRiskV2 };
+
+/** Sprint 4.3 canonical LegalRecommendation (with traceId, type, content, priority, rationale) */
+export type { ExtendedLegalRecommendation as LegalRecommendationV2 };
+
+/** @alias createExtendedLegalInference — Sprint 4.3 signature */
+export const createLegalInferenceV2 = createExtendedLegalInference;
+
+/** @alias createExtendedComplianceCheck — Sprint 4.3 signature */
+export const createComplianceCheckV2 = createExtendedComplianceCheck;
+
+/** @alias createExtendedLegalRisk — Sprint 4.3 signature */
+export const createLegalRisk = createExtendedLegalRisk;
+
+/** @alias createExtendedLegalRecommendation — Sprint 4.3 signature */
+export const createLegalRecommendationV2 = createExtendedLegalRecommendation;
+
+/** @alias createExtendedLegalReasoningTrace — Sprint 4.3 object-param signature */
+export const createLegalReasoningTraceV2 = createExtendedLegalReasoningTrace;
+
+/** @alias detectPremiseContradictions */
+export const detectPremiseContradictionsAlias = detectPremiseContradictions;
+
+/** @alias assessExtendedComplianceScore */
+export const assessComplianceScore = assessExtendedComplianceScore;
+
+/** @alias prioritizeExtendedRisks */
+export const prioritizeRisks = prioritizeExtendedRisks;
+
+/** @alias buildExtendedReasoningExplainability */
+export const buildReasoningExplainability = buildExtendedReasoningExplainability;

@@ -897,6 +897,19 @@
     { "idx": 142, "version": "6", "when": 1759257600000, "tag": "0142_context_observability" },
     { "idx": 143, "version": "6", "when": 1759344000000, "tag": "0143_orchestration_executions" },
     { "idx": 144, "version": "6", "when": 1759430400000, "tag": "0144_semantic_compressions" },
-    { "idx": 145, "version": "6", "when": 1759516800000, "tag": "0145_context_policies" }
+    { "idx": 145, "version": "6", "when": 1759516800000, "tag": "0145_context_policies" },
+    { "idx": 146, "version": "6", "when": 1759603200000, "tag": "0146_legal_reasoning_traces" },
+    { "idx": 147, "version": "6", "when": 1759689600000, "tag": "0147_legal_inferences" },
+    { "idx": 148, "version": "6", "when": 1759776000000, "tag": "0148_compliance_checks" },
+    { "idx": 149, "version": "6", "when": 1759862400000, "tag": "0149_legal_risks" },
+    { "idx": 150, "version": "6", "when": 1759948800000, "tag": "0150_draft_templates" },
+    { "idx": 151, "version": "6", "when": 1760035200000, "tag": "0151_draft_sections" },
+    { "idx": 152, "version": "6", "when": 1760121600000, "tag": "0152_draft_generations" },
+    { "idx": 153, "version": "6", "when": 1760208000000, "tag": "0153_draft_recommendations" },
+    { "idx": 154, "version": "6", "when": 1760294400000, "tag": "0154_clause_recommendations" },
+    { "idx": 155, "version": "6", "when": 1760380800000, "tag": "0155_clause_conflicts" },
+    { "idx": 156, "version": "6", "when": 1760467200000, "tag": "0156_jurisprudence_references" },
+    { "idx": 157, "version": "6", "when": 1760553600000, "tag": "0157_jurisprudence_correlations" },
+    { "idx": 158, "version": "6", "when": 1760640000000, "tag": "0158_drafting_observability" }
   ]
 }
