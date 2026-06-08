@@ -14,9 +14,11 @@ import {
 export interface ValidationServiceInput {
   organizationId: number;
   sessionId: string;
-  targetType: string;
-  targetId: string;
-  content: string;
+  targetType?: string;
+  targetId?: string;
+  content?: string;
+  documentContent?: string;
+  documentType?: string;
   context?: Record<string, string>;
   customRules?: Array<{ name: string; description: string; category: ValidationRule["category"]; severity: ValidationRule["severity"]; legalBasis: string; expression: string }>;
 }
@@ -57,7 +59,14 @@ const _validationReports = new Map<number, ValidationServiceOutput[]>();
 
 export function runLegalValidation(input: ValidationServiceInput): ValidationServiceOutput {
   const start = Date.now();
-  const { organizationId, sessionId, targetType, targetId, content, context = {}, customRules = [] } = input;
+  const {
+    organizationId, sessionId,
+    targetType = input.documentType ?? "document",
+    targetId = sessionId,
+    content = input.documentContent ?? "",
+    context = {},
+    customRules = [],
+  } = input;
 
   const defaultRules = buildDefaultRules(organizationId);
   const additionalRules = customRules.map(r => createValidationRule({

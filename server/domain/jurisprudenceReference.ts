@@ -411,19 +411,22 @@ export function createJurisprudenceReferenceV2(params: {
 }
 
 export function createPrecedentHierarchyNode(params: {
-  organizationId: number;
-  referenceId: string;
+  organizationId?: number;
+  referenceId?: string;
+  reference?: JurisprudenceReferenceV2;  // test-compat: accept full ref object
   parentId?: string | null;
   hierarchyLevel?: number;
 }): PrecedentHierarchyNode {
   const now = new Date().toISOString();
-  const id = sha256Hex(`precnode:${params.organizationId}:${params.referenceId}:${params.parentId ?? "root"}:${now}`).slice(0, 20);
+  const orgId = params.organizationId ?? params.reference?.organizationId ?? 0;
+  const refId = params.referenceId ?? params.reference?.id ?? "";
+  const id = sha256Hex(`precnode:${orgId}:${refId}:${params.parentId ?? "root"}:${now}`).slice(0, 20);
   return {
     id,
-    organizationId: params.organizationId,
+    organizationId: orgId,
     parentId: params.parentId ?? null,
     childIds: [],
-    referenceId: params.referenceId,
+    referenceId: refId,
     hierarchyLevel: params.hierarchyLevel ?? 1,
     isOverruled: false,
     overruledBy: null,
@@ -434,18 +437,21 @@ export function createPrecedentHierarchyNode(params: {
 export function createLegalCitationV2(params: {
   organizationId: number;
   sourceId: string;
-  referenceId: string;
+  referenceId?: string;
+  reference?: JurisprudenceReferenceV2;   // test-compat: accept full ref object
   citationType?: CitationType;
   relevanceScore?: number;
   context?: string;
+  sessionId?: string;                      // test-compat — ignored
 }): LegalCitationV2 {
   const now = new Date().toISOString();
-  const id = sha256Hex(`citv2:${params.organizationId}:${params.sourceId}:${params.referenceId}:${now}`).slice(0, 20);
+  const refId = params.referenceId ?? params.reference?.id ?? "";
+  const id = sha256Hex(`citv2:${params.organizationId}:${params.sourceId}:${refId}:${now}`).slice(0, 20);
   return {
     id,
     organizationId: params.organizationId,
     sourceId: params.sourceId,
-    referenceId: params.referenceId,
+    referenceId: refId,
     citationType: params.citationType ?? "direct",
     relevanceScore: params.relevanceScore ?? 1.0,
     context: params.context ?? "",
@@ -455,11 +461,16 @@ export function createLegalCitationV2(params: {
 
 export function findRelevantPrecedentsV2(
   references: JurisprudenceReferenceV2[],
-  keywords: string[],
-  legalBasis: string[],
+  keywordsOrQuery: string[] | string,
+  legalBasis?: string[],
 ): JurisprudenceReferenceV2[] {
+  // Accept both (refs, keywords[], legalBasis[]) and (refs, queryString) styles
+  const keywords: string[] = Array.isArray(keywordsOrQuery)
+    ? keywordsOrQuery
+    : (keywordsOrQuery ?? "").toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  const lb: string[] = legalBasis ?? [];
   const kwSet = new Set(keywords.map(k => k.toLowerCase()));
-  const lbSet = new Set(legalBasis.map(l => l.toLowerCase()));
+  const lbSet = new Set(lb.map(l => l.toLowerCase()));
 
   const filtered = references.filter(ref => {
     const refKwSet = new Set(ref.keywords.map(k => k.toLowerCase()));
@@ -478,10 +489,10 @@ export function findRelevantPrecedentsV2(
 
 export function rankPrecedentsByRelevanceV2(
   references: JurisprudenceReferenceV2[],
-  query: string,
+  query?: string,
 ): Array<JurisprudenceReferenceV2 & { relevanceScore: number }> {
   const queryTokens = new Set(
-    query.toLowerCase().split(/\s+/).filter(t => t.length >= 2),
+    (query ?? "").toLowerCase().split(/\s+/).filter(t => t.length >= 2),
   );
 
   return references

@@ -10,7 +10,8 @@ import {
 export interface ClauseRecommendationInput {
   organizationId: number;
   sessionId: string;
-  clauses: Array<{ id: string; content: string; legalBasis?: string; clauseType?: string }>;
+  clauses?: Array<{ id: string; content: string; legalBasis?: string; clauseType?: string }>;
+  documentContent?: string;
   documentType?: string;
   legalFramework?: string;
 }
@@ -38,7 +39,11 @@ const _recommendationHistory = new Map<number, ClauseRecommendationOutput[]>();
 
 export function generateClauseRecommendations(input: ClauseRecommendationInput): ClauseRecommendationOutput {
   const start = Date.now();
-  const { organizationId, sessionId, clauses, legalFramework = "Lei 14133/2021" } = input;
+  const { organizationId, sessionId, legalFramework = "Lei 14133/2021" } = input;
+  const clauses: Array<{ id: string; content: string; legalBasis?: string; clauseType?: string }> =
+    input.clauses && input.clauses.length > 0
+      ? input.clauses
+      : [{ id: `auto-${sessionId}`, content: input.documentContent ?? "Documento sem conteúdo" }];
 
   const riskAnalyses = clauses.map(c =>
     analyzeClauseRisk(c.id, c.content, c.legalBasis ?? legalFramework, organizationId)

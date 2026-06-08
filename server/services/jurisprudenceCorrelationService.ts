@@ -13,7 +13,8 @@ import {
 export interface JurisprudenceCorrelationInput {
   organizationId: number;
   sessionId: string;
-  documentContent: string;
+  documentContent?: string;
+  query?: string;
   legalBasisRefs: string[];
   keywords?: string[];
 }
@@ -42,7 +43,8 @@ const _correlationHistory = new Map<number, JurisprudenceCorrelationOutput[]>();
 
 export function correlateJurisprudence(input: JurisprudenceCorrelationInput): JurisprudenceCorrelationOutput {
   const start = Date.now();
-  const { organizationId, sessionId, documentContent, legalBasisRefs, keywords = [] } = input;
+  const { organizationId, sessionId, legalBasisRefs, keywords = [] } = input;
+  const documentContent = input.documentContent ?? input.query ?? "";
 
   const allReferences = getBuiltInReferences(organizationId);
   const contentKeywords = [...keywords, ...documentContent.toLowerCase().split(/\s+/).filter(w => w.length > 5).slice(0, 20)];

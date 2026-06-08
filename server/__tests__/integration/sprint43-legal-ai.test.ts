@@ -13,7 +13,7 @@ import {
   assessExtendedComplianceScore,
   prioritizeExtendedRisks,
   buildExtendedReasoningExplainability,
-} from "../../../domain/legalReasoning";
+} from "../../domain/legalReasoning";
 
 import {
   createDraftVariableV2,
@@ -24,7 +24,7 @@ import {
   generateDraftV2,
   extractTemplateSkeleton,
   validateDraftCompletenessV2,
-} from "../../../domain/documentDrafting";
+} from "../../domain/documentDrafting";
 
 import {
   createExtendedValidationRule,
@@ -32,7 +32,7 @@ import {
   applyExtendedValidationRules,
   mergeExtendedValidationReports,
   getExtendedValidationSummary,
-} from "../../../domain/legalValidation";
+} from "../../domain/legalValidation";
 
 import {
   createJurisprudenceReferenceV2,
@@ -42,27 +42,27 @@ import {
   rankPrecedentsByRelevanceV2,
   buildCitationGraphV2,
   formatCitationV2,
-} from "../../../domain/jurisprudenceReference";
+} from "../../domain/jurisprudenceReference";
 
 import {
   checkClauseCompatibility,
   buildClauseHierarchy,
   analyzeClauseRisk,
   buildClauseConflictMap,
-} from "../../../domain/clauseIntelligence";
+} from "../../domain/clauseIntelligence";
 
 import {
   createDraftingCheckpoint,
   evaluateDraftCompliance,
   addDraftingCheckpointToHistory,
-} from "../../../domain/aiWorkflow";
+} from "../../domain/aiWorkflow";
 
 // ─── Service imports ───────────────────────────────────────────────────────────
-import { runLegalReasoning, getReasoningHistory, replayReasoning } from "../../../services/legalReasoningEngine";
-import { runDocumentDrafting, getDraftHistory, replayDrafting, registerTemplate, getTemplate } from "../../../services/documentDraftingEngine";
-import { runLegalValidation, getValidationHistory } from "../../../services/legalValidationService";
-import { generateClauseRecommendations, getRecommendationHistory } from "../../../services/clauseRecommendationService";
-import { correlateJurisprudence, getCorrelationHistory } from "../../../services/jurisprudenceCorrelationService";
+import { runLegalReasoning, getReasoningHistory, replayReasoning } from "../../services/legalReasoningEngine";
+import { runDocumentDrafting, getDraftHistory, replayDrafting, registerTemplate, getTemplate } from "../../services/documentDraftingEngine";
+import { runLegalValidation, getValidationHistory } from "../../services/legalValidationService";
+import { generateClauseRecommendations, getRecommendationHistory } from "../../services/clauseRecommendationService";
+import { correlateJurisprudence, getCorrelationHistory } from "../../services/jurisprudenceCorrelationService";
 import {
   recordDraftingTrace,
   recordDraftingMetric,
@@ -70,8 +70,8 @@ import {
   draftLatency,
   draftCompleteness,
   computeDraftingHealth,
-} from "../../../services/draftingObservabilityService";
-import { runStructuredGeneration, getGenerationHistory } from "../../../services/structuredGenerationService";
+} from "../../services/draftingObservabilityService";
+import { runStructuredGeneration, getGenerationHistory } from "../../services/structuredGenerationService";
 
 const ORG = 9600;
 

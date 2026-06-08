@@ -377,29 +377,44 @@ export interface ClauseConflictMap {
   conflicts: ClauseCompatibilityResult[];
   conflictCount: number;
   criticalConflicts: number;
-  resolutionSuggestions: Record<string, string>;  // conflictKey → suggestion
+  resolutionSuggestions: string[];
   generatedAt: string;
 }
 
 export function checkClauseCompatibility(
-  clauseIdA: string,
-  clauseIdB: string,
-  contentA: string,
-  contentB: string,
-  organizationId: number,
+  clauseIdAOrObj: string | { id: string; content: string; organizationId?: number },
+  clauseIdBOrObj: string | { id: string; content: string },
+  contentA?: string,
+  contentB?: string,
+  organizationId?: number,
 ): ClauseCompatibilityResult {
+  // Support both 5-arg (id, id, content, content, orgId) and 2-object styles
+  let idA: string, idB: string, cA: string, cB: string, orgId: number;
+  if (typeof clauseIdAOrObj === "object") {
+    idA = clauseIdAOrObj.id;
+    idB = (clauseIdBOrObj as { id: string; content: string }).id;
+    cA = clauseIdAOrObj.content;
+    cB = (clauseIdBOrObj as { id: string; content: string }).content;
+    orgId = clauseIdAOrObj.organizationId ?? 0;
+  } else {
+    idA = clauseIdAOrObj as string;
+    idB = clauseIdBOrObj as string;
+    cA = contentA ?? "";
+    cB = contentB ?? "";
+    orgId = organizationId ?? 0;
+  }
   // Simple heuristic: if both contents share >30% token overlap → potentially conflicting
-  const tokensA = new Set(contentA.toLowerCase().split(/\s+/));
-  const tokensB = new Set(contentB.toLowerCase().split(/\s+/));
+  const tokensA = new Set(cA.toLowerCase().split(/\s+/));
+  const tokensB = new Set(cB.toLowerCase().split(/\s+/));
   const tokensAArr = Array.from(tokensA);
   const intersection = tokensAArr.filter(t => tokensB.has(t)).length;
   const union = new Set(tokensAArr.concat(Array.from(tokensB))).size;
   const overlap = union > 0 ? intersection / union : 0;
   const isCompatible = overlap < 0.3;
   return {
-    clauseIdA,
-    clauseIdB,
-    organizationId,
+    clauseIdA: idA,
+    clauseIdB: idB,
+    organizationId: orgId,
     isCompatible,
     compatibilityScore: 1 - overlap,
     conflictType: isCompatible ? "none" : overlap > 0.6 ? "direct" : "indirect",
@@ -443,26 +458,38 @@ export function buildClauseHierarchy(
 }
 
 export function analyzeClauseRisk(
-  clauseId: string,
-  content: string,
-  legalBasis: string,
-  organizationId: number,
+  clauseIdOrObj: string | { id: string; content: string; legalBasis?: string | null; organizationId?: number; type?: string; title?: string; priority?: number; appliesTo?: string[]; baseRelevance?: number },
+  content?: string,
+  legalBasis?: string,
+  organizationId?: number,
 ): ClauseRiskAnalysis {
+  let clauseId: string, cContent: string, cLegalBasis: string, cOrgId: number;
+  if (typeof clauseIdOrObj === "object") {
+    clauseId = clauseIdOrObj.id;
+    cContent = clauseIdOrObj.content;
+    cLegalBasis = clauseIdOrObj.legalBasis ?? "";
+    cOrgId = clauseIdOrObj.organizationId ?? 0;
+  } else {
+    clauseId = clauseIdOrObj;
+    cContent = content ?? "";
+    cLegalBasis = legalBasis ?? "";
+    cOrgId = organizationId ?? 0;
+  }
   const riskFactors: string[] = [];
   let riskScore = 0;
-  if (content.length < 50) { riskFactors.push("Cláusula muito curta"); riskScore += 0.2; }
-  if (!legalBasis || legalBasis.length < 5) { riskFactors.push("Sem embasamento legal"); riskScore += 0.3; }
-  if (/obrigatório|deverá|deve/i.test(content) && !/exceto|salvo/i.test(content)) {
+  if (cContent.length < 50) { riskFactors.push("Cláusula muito curta"); riskScore += 0.2; }
+  if (!cLegalBasis || cLegalBasis.length < 5) { riskFactors.push("Sem embasamento legal"); riskScore += 0.3; }
+  if (/obrigatório|deverá|deve/i.test(cContent) && !/exceto|salvo/i.test(cContent)) {
     riskFactors.push("Obrigação sem exceção explícita");
     riskScore += 0.15;
   }
-  if (/multa|penalidade|rescisão/i.test(content)) { riskFactors.push("Cláusula penal"); riskScore += 0.1; }
+  if (/multa|penalidade|rescisão/i.test(cContent)) { riskFactors.push("Cláusula penal"); riskScore += 0.1; }
   riskScore = Math.min(1, riskScore);
   const level: ClauseRiskAnalysis["riskLevel"] =
     riskScore >= 0.7 ? "critical" : riskScore >= 0.5 ? "high" : riskScore >= 0.3 ? "medium" : riskScore >= 0.1 ? "low" : "none";
   return {
     clauseId,
-    organizationId,
+    organizationId: cOrgId,
     riskLevel: level,
     riskFactors,
     legalExposure: riskFactors.length > 0 ? riskFactors.join("; ") : "Sem exposição identificada",
@@ -488,11 +515,9 @@ export function buildClauseConflictMap(
     }
   }
   const criticalConflicts = conflicts.filter(c => c.conflictType === "direct").length;
-  const resolutionSuggestions: Record<string, string> = {};
-  for (const c of conflicts) {
-    const key = `${c.clauseIdA}:${c.clauseIdB}`;
-    resolutionSuggestions[key] = c.resolution ?? "Revisar manualmente";
-  }
+  const resolutionSuggestions: string[] = conflicts.map(c =>
+    `${c.clauseIdA}:${c.clauseIdB} → ${c.resolution ?? "Revisar manualmente"}`
+  );
   return {
     organizationId,
     clauseIds: clauses.map(c => c.id),

@@ -1132,3 +1132,23 @@ export const prioritizeRisks = prioritizeExtendedRisks;
 
 /** @alias buildExtendedReasoningExplainability */
 export const buildReasoningExplainability = buildExtendedReasoningExplainability;
+
+// ─── Sprint 4.3: Extended aliases used by sprint43 test suite ─────────────────
+export const createExtendedLegalInference = createLegalInference;
+export const createExtendedComplianceCheck = createComplianceCheck;
+export const createExtendedLegalReasoningTrace = createLegalReasoningTrace;
+export const detectPremiseContradictions = detectLegalContradictions;
+
+// createExtendedLegalRecommendation: test uses `recommendationType` field instead of `type`
+export function createExtendedLegalRecommendation(params: {
+  organizationId: number;
+  traceId: string;
+  recommendationType: RecommendationType;
+  content: string;
+  legalBasis: string;
+  priority?: number;
+  rationale: string;
+}): ExtendedLegalRecommendation & { recommendationType: RecommendationType } {
+  const result = createLegalRecommendation({ ...params, type: params.recommendationType });
+  return { ...result, recommendationType: params.recommendationType };
+}

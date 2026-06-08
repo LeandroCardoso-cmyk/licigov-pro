@@ -21,8 +21,11 @@ export interface StructuredGenerationInput {
 
 export interface StructuredGenerationOutput {
   drafting: ReturnType<typeof runDocumentDrafting>;
+  draftingOutput: ReturnType<typeof runDocumentDrafting>;
   reasoning: ReturnType<typeof runLegalReasoning>;
+  reasoningOutput: ReturnType<typeof runLegalReasoning>;
   validation: ReturnType<typeof runLegalValidation>;
+  validationOutput: ReturnType<typeof runLegalValidation>;
   jurisprudence: ReturnType<typeof correlateJurisprudence>;
   clauseRecommendations: ReturnType<typeof generateClauseRecommendations>;
   overallScore: number;
@@ -97,7 +100,10 @@ export function runStructuredGeneration(input: StructuredGenerationInput): Struc
   riskScoreRecorded(correlationId, reasoning.riskScore, organizationId);
 
   const output: StructuredGenerationOutput = {
-    drafting, reasoning, validation, jurisprudence, clauseRecommendations, overallScore, replayKey, processingMs,
+    drafting, draftingOutput: drafting,
+    reasoning, reasoningOutput: reasoning,
+    validation, validationOutput: validation,
+    jurisprudence, clauseRecommendations, overallScore, replayKey, processingMs,
   };
 
   const existing = _generationHistory.get(organizationId) ?? [];
