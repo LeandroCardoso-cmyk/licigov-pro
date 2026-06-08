@@ -47,7 +47,7 @@ export interface LegalEvidence {
   createdAt: string;
 }
 
-export interface LegalInference {
+export interface LegalInferenceLegacy {
   id: string;
   organizationId: number;
   premiseIds: string[];       // IDs das evidências que fundamentam
@@ -63,7 +63,7 @@ export interface LegalInference {
   createdAt: string;
 }
 
-export interface ComplianceCheck {
+export interface ComplianceCheckLegacy {
   id: string;
   organizationId: number;
   documentId: string;
@@ -78,7 +78,7 @@ export interface ComplianceCheck {
   checkedAt: string;
 }
 
-export interface Contradiction {
+export interface ContradictionLegacy {
   id: string;
   organizationId: number;
   inferenceIdA: string;
@@ -90,7 +90,8 @@ export interface Contradiction {
   detectedAt: string;
 }
 
-export interface LegalRisk {
+/** @deprecated Use ExtendedLegalRisk (Sprint 4.3). Kept for Sprint 4.2 backward compat. */
+export interface LegalRiskLegacy {
   id: string;
   organizationId: number;
   riskType: "non_compliance" | "ambiguity" | "missing_justification" | "invalid_reference" | "contradiction" | "procedural";
@@ -107,7 +108,8 @@ export interface LegalRisk {
   createdAt: string;
 }
 
-export interface LegalRecommendation {
+/** @deprecated Use ExtendedLegalRecommendation (Sprint 4.3). Kept for Sprint 4.2 backward compat. */
+export interface LegalRecommendationLegacy {
   id: string;
   organizationId: number;
   recommendationType: "add_section" | "remove_clause" | "modify_clause" | "add_justification" | "cite_precedent" | "escalate";
@@ -121,17 +123,18 @@ export interface LegalRecommendation {
   createdAt: string;
 }
 
-export interface LegalReasoningTrace {
+/** @deprecated Use ExtendedLegalReasoningTrace (Sprint 4.3). Kept for Sprint 4.2 backward compat. */
+export interface LegalReasoningTraceLegacy {
   id: string;
   organizationId: number;
   sessionId: string;
   documentId: string;
   stages: LegalReasoningStageType[];
-  inferences: LegalInference[];
-  complianceChecks: ComplianceCheck[];
-  contradictions: Contradiction[];
-  risks: LegalRisk[];
-  recommendations: LegalRecommendation[];
+  inferences: LegalInferenceLegacy[];
+  complianceChecks: ComplianceCheckLegacy[];
+  contradictions: ContradictionLegacy[];
+  risks: LegalRiskLegacy[];
+  recommendations: LegalRecommendationLegacy[];
   overallCompliance: ComplianceStatus;
   overallConfidence: number;
   totalRisks: number;
@@ -230,7 +233,7 @@ export function createLegalEvidence(params: {
  * confidenceLevel: >= 0.85 → "high", >= 0.65 → "medium", >= 0.45 → "low", else → "uncertain"
  * replayKey = sha256(organizationId + stageType + sorted(premiseIds).join + conclusion)
  */
-export function createLegalInference(params: {
+export function createLegalInferenceLegacy(params: {
   organizationId: number;
   premiseIds: string[];
   conclusion: string;
@@ -239,7 +242,7 @@ export function createLegalInference(params: {
   stageType: LegalReasoningStageType;
   evidenceRefs: string[];
   justification: string;
-}): LegalInference {
+}): LegalInferenceLegacy {
   const score = clamp01(params.confidenceScore);
   const confidenceLevel: LegalConfidenceLevel =
     score >= 0.85 ? "high"
@@ -274,7 +277,7 @@ export function createLegalInference(params: {
  * Cria um check de conformidade com replayKey determinístico.
  * replayKey = sha256(documentId + ruleRef + status + organizationId)
  */
-export function createComplianceCheck(params: {
+export function createComplianceCheckLegacy(params: {
   organizationId: number;
   documentId: string;
   ruleRef: string;
@@ -284,7 +287,7 @@ export function createComplianceCheck(params: {
   mandatorySection?: string | null;
   remediation?: string | null;
   evidenceRef?: string | null;
-}): ComplianceCheck {
+}): ComplianceCheckLegacy {
   const replayKey = sha256Hex(
     `${params.documentId}${params.ruleRef}${params.status}${params.organizationId}`,
   );
@@ -309,9 +312,9 @@ export function createComplianceCheck(params: {
  * Detecta contradições entre pares de inferências buscando palavras opostas.
  * Retorna lista de contradições com severity baseada na quantidade de pares opostos.
  */
-export function detectLegalContradictions(inferences: LegalInference[]): Contradiction[] {
+export function detectLegalContradictionsLegacy(inferences: LegalInferenceLegacy[]): ContradictionLegacy[] {
   const now = new Date().toISOString();
-  const contradictions: Contradiction[] = [];
+  const contradictions: ContradictionLegacy[] = [];
 
   for (let i = 0; i < inferences.length; i++) {
     for (let j = i + 1; j < inferences.length; j++) {
@@ -320,7 +323,7 @@ export function detectLegalContradictions(inferences: LegalInference[]): Contrad
       const opposites = detectOppositeKeywords(a.conclusion, b.conclusion);
       if (opposites.length === 0) continue;
 
-      const severity: Contradiction["severity"] =
+      const severity: ContradictionLegacy["severity"] =
         opposites.length >= 3 ? "critical"
         : opposites.length === 2 ? "moderate"
         : "minor";
@@ -352,14 +355,14 @@ export function detectLegalContradictions(inferences: LegalInference[]): Contrad
  */
 export function assessLegalRisk(params: {
   organizationId: number;
-  riskType: LegalRisk["riskType"];
+  riskType: LegalRiskLegacy["riskType"];
   description: string;
   affectedSection: string;
   legalBasis?: string | null;
   mitigationSuggestion: string;
   probability: number;
   impact: number;
-}): LegalRisk {
+}): LegalRiskLegacy {
   const probability = clamp01(params.probability);
   const impact      = clamp01(params.impact);
   const riskScore   = probability * impact;
@@ -398,16 +401,16 @@ export function assessLegalRisk(params: {
  * Cria uma recomendação jurídica com replayKey determinístico.
  * replayKey = sha256(organizationId + recommendationType + title + legalBasis)
  */
-export function createLegalRecommendation(params: {
+export function createLegalRecommendationLegacy(params: {
   organizationId: number;
-  recommendationType: LegalRecommendation["recommendationType"];
+  recommendationType: LegalRecommendationLegacy["recommendationType"];
   title: string;
   description: string;
   legalBasis: string;
-  priority: LegalRecommendation["priority"];
+  priority: LegalRecommendationLegacy["priority"];
   evidenceRefs: string[];
   confidence: number;
-}): LegalRecommendation {
+}): LegalRecommendationLegacy {
   const replayKey = sha256Hex(
     `${params.organizationId}${params.recommendationType}${params.title}${params.legalBasis}`,
   );
@@ -450,17 +453,23 @@ export function computeOverallCompliance(checks: ComplianceCheck[]): ComplianceS
  * overallConfidence = média ponderada das inferências (índice maior = peso maior).
  * replayKey = sha256(sessionId + documentId + sorted(inferences.map(i=>i.replayKey)).join)
  */
-export function createLegalReasoningTrace(
+export function createLegalReasoningTraceLegacy(
   organizationId:  number,
   sessionId:       string,
   documentId:      string,
-  inferences:      LegalInference[],
-  checks:          ComplianceCheck[],
-  risks:           LegalRisk[],
-  recommendations: LegalRecommendation[],
-): LegalReasoningTrace {
-  const contradictions  = detectLegalContradictions(inferences);
-  const overallCompliance = computeOverallCompliance(checks);
+  inferences:      LegalInferenceLegacy[],
+  checks:          ComplianceCheckLegacy[],
+  risks:           LegalRiskLegacy[],
+  recommendations: LegalRecommendationLegacy[],
+): LegalReasoningTraceLegacy {
+  const contradictions  = detectLegalContradictionsLegacy(inferences);
+  const hasErrorNonCompliant = checks.some(c => c.status === "non_compliant" && c.severity === "error");
+  const allCompliant = checks.every(c => c.status === "compliant");
+  const overallCompliance: ComplianceStatus =
+    checks.length === 0 ? "unknown"
+    : hasErrorNonCompliant ? "non_compliant"
+    : allCompliant ? "compliant"
+    : "partial";
 
   // Média ponderada: índice maior = peso maior (peso = index + 1)
   const totalWeight = inferences.reduce((acc, _, idx) => acc + (idx + 1), 0);
@@ -806,7 +815,7 @@ export function createLegalPremise(params: {
   };
 }
 
-export function createExtendedLegalInference(params: {
+export function createLegalInference(params: {
   organizationId: number;
   traceId: string;
   premiseIds: string[];
@@ -832,7 +841,7 @@ export function createExtendedLegalInference(params: {
   };
 }
 
-export function createExtendedComplianceCheck(params: {
+export function createComplianceCheck(params: {
   organizationId: number;
   traceId: string;
   ruleId: string;
@@ -915,7 +924,7 @@ export function createExtendedLegalRisk(params: {
   };
 }
 
-export function createExtendedLegalRecommendation(params: {
+export function createLegalRecommendation(params: {
   organizationId: number;
   traceId: string;
   type: RecommendationType;
@@ -939,7 +948,7 @@ export function createExtendedLegalRecommendation(params: {
   };
 }
 
-export function createExtendedLegalReasoningTrace(params: {
+export function createLegalReasoningTrace(params: {
   organizationId: number;
   sessionId: string;
   premises?: LegalPremise[];
@@ -988,7 +997,7 @@ export function createExtendedLegalReasoningTrace(params: {
   };
 }
 
-export function detectPremiseContradictions(premises: LegalPremise[]): PremiseContradiction[] {
+export function detectLegalContradictions(premises: LegalPremise[]): PremiseContradiction[] {
   const contradictions: PremiseContradiction[] = [];
   const organizationId = premises[0]?.organizationId ?? 0;
 
@@ -1093,39 +1102,10 @@ export function buildExtendedReasoningExplainability(trace: ExtendedLegalReasoni
   return lines.join("\n");
 }
 
-// ─── Sprint 4.3: Canonical-name aliases & re-exports for service layer ────────
-// The service layer (legalReasoningEngine.ts) imports using the spec canonical names.
-// These aliases bridge the extended Sprint 4.3 implementations to those names.
+// ─── Sprint 4.3: Canonical-name aliases for Sprint 4.3 service layer ─────────
 
-/** Sprint 4.3 canonical LegalReasoningTrace type (with premises & extended fields) */
-export type { ExtendedLegalReasoningTrace as LegalReasoningTraceV2 };
-
-/** Sprint 4.3 canonical ComplianceCheck (with ruleId, ruleName, legalBasis, findings) */
-export type { ExtendedComplianceCheck as ComplianceCheckV2 };
-
-/** Sprint 4.3 canonical LegalRisk (with mitigations, legalBasis string) */
-export type { ExtendedLegalRisk as LegalRiskV2 };
-
-/** Sprint 4.3 canonical LegalRecommendation (with traceId, type, content, priority, rationale) */
-export type { ExtendedLegalRecommendation as LegalRecommendationV2 };
-
-/** @alias createExtendedLegalInference — Sprint 4.3 signature */
-export const createLegalInferenceV2 = createExtendedLegalInference;
-
-/** @alias createExtendedComplianceCheck — Sprint 4.3 signature */
-export const createComplianceCheckV2 = createExtendedComplianceCheck;
-
-/** @alias createExtendedLegalRisk — Sprint 4.3 signature */
+/** @alias createExtendedLegalRisk */
 export const createLegalRisk = createExtendedLegalRisk;
-
-/** @alias createExtendedLegalRecommendation — Sprint 4.3 signature */
-export const createLegalRecommendationV2 = createExtendedLegalRecommendation;
-
-/** @alias createExtendedLegalReasoningTrace — Sprint 4.3 object-param signature */
-export const createLegalReasoningTraceV2 = createExtendedLegalReasoningTrace;
-
-/** @alias detectPremiseContradictions */
-export const detectPremiseContradictionsAlias = detectPremiseContradictions;
 
 /** @alias assessExtendedComplianceScore */
 export const assessComplianceScore = assessExtendedComplianceScore;
