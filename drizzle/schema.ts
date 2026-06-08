@@ -3592,3 +3592,169 @@ export type GroundingEvidenceRow    = typeof groundingEvidenceTable.$inferSelect
 export type AIExecutionAuditRow     = typeof aiExecutionAuditsTable.$inferSelect;
 export type AITokenEstimationRow    = typeof aiTokenEstimationsTable.$inferSelect;
 export type AIWorkflowStateRow      = typeof aiWorkflowStatesTable.$inferSelect;
+
+// ─── Sprint 4.3: Legal AI Tables ─────────────────────────────────────────────
+
+export const legalReasoningTracesTable = mysqlTable("legal_reasoning_traces", {
+  id:                     varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:         int("organization_id").notNull(),
+  sessionId:              varchar("session_id", { length: 255 }).notNull(),
+  overallComplianceScore: decimal("overall_compliance_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  overallRiskScore:       decimal("overall_risk_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  replayKey:              varchar("replay_key", { length: 64 }).notNull(),
+  createdAt:              datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalInferencesTable = mysqlTable("legal_inferences", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  traceId:        varchar("trace_id", { length: 20 }).notNull(),
+  conclusion:     text("conclusion"),
+  inferenceType:  mysqlEnum("inference_type", ["deductive","inductive","analogical","abductive"]).notNull().default("deductive"),
+  confidence:     decimal("confidence", { precision: 5, scale: 4 }).notNull().default("0.75"),
+  legalBasis:     varchar("legal_basis", { length: 500 }).notNull().default(""),
+  justification:  text("justification"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const complianceChecksTable = mysqlTable("compliance_checks", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  traceId:        varchar("trace_id", { length: 20 }).notNull(),
+  ruleId:         varchar("rule_id", { length: 100 }).notNull(),
+  ruleName:       varchar("rule_name", { length: 255 }).notNull(),
+  legalBasis:     varchar("legal_basis", { length: 500 }).notNull().default(""),
+  status:         mysqlEnum("status", ["compliant","non_compliant","uncertain","not_applicable"]).notNull().default("uncertain"),
+  findings:       text("findings"),
+  remediation:    text("remediation"),
+  checkScore:     decimal("check_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalRisksTable = mysqlTable("legal_risks", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  traceId:        varchar("trace_id", { length: 20 }).notNull(),
+  riskType:       varchar("risk_type", { length: 255 }).notNull(),
+  description:    text("description"),
+  level:          mysqlEnum("level", ["critical","high","medium","low","negligible"]).notNull().default("medium"),
+  legalBasis:     varchar("legal_basis", { length: 500 }).notNull().default(""),
+  probability:    decimal("probability", { precision: 5, scale: 4 }).notNull().default("0"),
+  impact:         decimal("impact", { precision: 5, scale: 4 }).notNull().default("0"),
+  riskScore:      decimal("risk_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const draftTemplatesTable = mysqlTable("draft_templates", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name:           varchar("name", { length: 255 }).notNull(),
+  documentType:   varchar("document_type", { length: 100 }).notNull(),
+  version:        varchar("version", { length: 20 }).notNull().default("1.0.0"),
+  legalFramework: varchar("legal_framework", { length: 255 }).notNull().default("Lei 14133/2021"),
+  isActive:       tinyint("is_active").notNull().default(1),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const draftSectionsTable = mysqlTable("draft_sections", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  templateId:          varchar("template_id", { length: 20 }).notNull(),
+  title:               varchar("title", { length: 255 }).notNull(),
+  orderIndex:          int("order_index").notNull().default(0),
+  isOptional:          tinyint("is_optional").notNull().default(0),
+  legalBasis:          varchar("legal_basis", { length: 500 }),
+  conditionExpression: text("condition_expression"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const draftGenerationsTable = mysqlTable("draft_generations", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  sessionId:       varchar("session_id", { length: 255 }).notNull(),
+  templateId:      varchar("template_id", { length: 20 }).notNull(),
+  resolvedContent: text("resolved_content"),
+  generationScore: decimal("generation_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  replayKey:       varchar("replay_key", { length: 64 }).notNull(),
+  generatedAt:     datetime("generated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const draftRecommendationsTable = mysqlTable("draft_recommendations", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  traceId:            varchar("trace_id", { length: 20 }).notNull(),
+  recommendationType: mysqlEnum("recommendation_type", ["mandatory","advisory","optional","warning"]).notNull().default("advisory"),
+  content:            text("content"),
+  legalBasis:         varchar("legal_basis", { length: 500 }).notNull().default(""),
+  priority:           int("priority").notNull().default(1),
+  rationale:          text("rationale"),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const clauseRecommendationsTable = mysqlTable("clause_recommendations", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  sessionId:          varchar("session_id", { length: 255 }).notNull(),
+  clauseId:           varchar("clause_id", { length: 100 }).notNull(),
+  recommendationType: mysqlEnum("recommendation_type", ["add","remove","modify","reorder"]).notNull().default("modify"),
+  content:            text("content"),
+  rationale:          text("rationale"),
+  priority:           int("priority").notNull().default(1),
+  legalBasis:         varchar("legal_basis", { length: 500 }).notNull().default(""),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const clauseConflictsTable = mysqlTable("clause_conflicts", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  sessionId:          varchar("session_id", { length: 255 }).notNull(),
+  clauseIdA:          varchar("clause_id_a", { length: 100 }).notNull(),
+  clauseIdB:          varchar("clause_id_b", { length: 100 }).notNull(),
+  compatibilityScore: decimal("compatibility_score", { precision: 5, scale: 4 }).notNull().default("1"),
+  conflictType:       mysqlEnum("conflict_type", ["direct","indirect","conditional","none"]).notNull().default("none"),
+  explanation:        text("explanation"),
+  resolution:         text("resolution"),
+  checkedAt:          datetime("checked_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const jurisprudenceReferencesTable = mysqlTable("jurisprudence_references", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  caseNumber:       varchar("case_number", { length: 255 }).notNull(),
+  court:            varchar("court", { length: 255 }).notNull(),
+  courtLevel:       mysqlEnum("court_level", ["supreme","superior","regional","federal","state","administrative"]).notNull().default("superior"),
+  judgmentDate:     varchar("judgment_date", { length: 10 }),
+  summary:          text("summary"),
+  precedentStrength: mysqlEnum("precedent_strength", ["binding","persuasive","informative","overruled"]).notNull().default("informative"),
+  isActive:         tinyint("is_active").notNull().default(1),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const jurisprudenceCorrelationsTable = mysqlTable("jurisprudence_correlations", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  sessionId:        varchar("session_id", { length: 255 }).notNull(),
+  sourceId:         varchar("source_id", { length: 255 }).notNull(),
+  referenceId:      varchar("reference_id", { length: 20 }).notNull(),
+  citationType:     mysqlEnum("citation_type", ["direct","analogical","distinguishing","overruling"]).notNull().default("analogical"),
+  relevanceScore:   decimal("relevance_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  correlationScore: decimal("correlation_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const draftingObservabilityTable = mysqlTable("drafting_observability", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  sessionId:        varchar("session_id", { length: 255 }).notNull(),
+  correlationId:    varchar("correlation_id", { length: 20 }).notNull(),
+  draftId:          varchar("draft_id", { length: 20 }).notNull(),
+  documentType:     varchar("document_type", { length: 100 }).notNull(),
+  totalMs:          int("total_ms").notNull().default(0),
+  completenessScore: decimal("completeness_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  riskScore:        decimal("risk_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  complianceScore:  decimal("compliance_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  variableCount:    int("variable_count").notNull().default(0),
+  missingVariables: int("missing_variables").notNull().default(0),
+  recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
