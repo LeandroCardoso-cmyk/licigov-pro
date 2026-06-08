@@ -44,6 +44,8 @@ import { deploymentRouter }  from "./routers/deploymentRouter";
 import { stabilityRouter }   from "./routers/stabilityRouter";
 import { contextRouter }     from "./routers/contextRouter";
 import { promptOrchestrationRouter } from "./routers/promptOrchestrationRouter";
+import { legalReasoningRouter } from "./routers/legalReasoningRouter";
+import { draftingRouter } from "./routers/draftingRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -91,6 +93,8 @@ export const appRouter = router({
   stability:           stabilityRouter,
   context:             contextRouter,
   promptOrchestration: promptOrchestrationRouter,
+  legalReasoning: legalReasoningRouter,
+  drafting:       draftingRouter,
 });
 
 export type AppRouter = typeof appRouter;
