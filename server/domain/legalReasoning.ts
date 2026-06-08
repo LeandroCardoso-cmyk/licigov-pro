@@ -436,7 +436,7 @@ export function createLegalRecommendationLegacy(params: {
  * Se vazio → "unknown"; se algum "non_compliant" com error → "non_compliant";
  * se todos "compliant" → "compliant"; else → "partial"
  */
-export function computeOverallCompliance(checks: ComplianceCheck[]): ComplianceStatus {
+export function computeOverallCompliance(checks: ComplianceCheckLegacy[]): ComplianceStatus {
   if (checks.length === 0) return "unknown";
   const hasErrorNonCompliant = checks.some(
     c => c.status === "non_compliant" && c.severity === "error",
