@@ -46,6 +46,8 @@ import { contextRouter }     from "./routers/contextRouter";
 import { promptOrchestrationRouter } from "./routers/promptOrchestrationRouter";
 import { legalReasoningRouter } from "./routers/legalReasoningRouter";
 import { draftingRouter } from "./routers/draftingRouter";
+import { agentExecutionRouter } from "./routers/agentExecutionRouter";
+import { approvalWorkflowRouter } from "./routers/approvalWorkflowRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -95,6 +97,8 @@ export const appRouter = router({
   promptOrchestration: promptOrchestrationRouter,
   legalReasoning: legalReasoningRouter,
   drafting:       draftingRouter,
+  agentExecution:   agentExecutionRouter,
+  approvalWorkflow: approvalWorkflowRouter,
 });
 
 export type AppRouter = typeof appRouter;

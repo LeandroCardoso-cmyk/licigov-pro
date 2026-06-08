@@ -910,6 +910,20 @@
     { "idx": 155, "version": "6", "when": 1760380800000, "tag": "0155_clause_conflicts" },
     { "idx": 156, "version": "6", "when": 1760467200000, "tag": "0156_jurisprudence_references" },
     { "idx": 157, "version": "6", "when": 1760553600000, "tag": "0157_jurisprudence_correlations" },
-    { "idx": 158, "version": "6", "when": 1760640000000, "tag": "0158_drafting_observability" }
+    { "idx": 158, "version": "6", "when": 1760640000000, "tag": "0158_drafting_observability" },
+    { "idx": 159, "version": "6", "when": 1760726400000, "tag": "0159_agent_executions" },
+    { "idx": 160, "version": "6", "when": 1760812800000, "tag": "0160_execution_stages" },
+    { "idx": 161, "version": "6", "when": 1760899200000, "tag": "0161_execution_checkpoints" },
+    { "idx": 162, "version": "6", "when": 1760985600000, "tag": "0162_execution_replays" },
+    { "idx": 163, "version": "6", "when": 1761072000000, "tag": "0163_execution_rollbacks" },
+    { "idx": 164, "version": "6", "when": 1761158400000, "tag": "0164_execution_plans" },
+    { "idx": 165, "version": "6", "when": 1761244800000, "tag": "0165_execution_tasks" },
+    { "idx": 166, "version": "6", "when": 1761331200000, "tag": "0166_assistant_profiles" },
+    { "idx": 167, "version": "6", "when": 1761417600000, "tag": "0167_assistant_capabilities" },
+    { "idx": 168, "version": "6", "when": 1761504000000, "tag": "0168_approval_workflows" },
+    { "idx": 169, "version": "6", "when": 1761590400000, "tag": "0169_approval_decisions" },
+    { "idx": 170, "version": "6", "when": 1761676800000, "tag": "0170_action_safety_logs" },
+    { "idx": 171, "version": "6", "when": 1761763200000, "tag": "0171_execution_observability" },
+    { "idx": 172, "version": "6", "when": 1761849600000, "tag": "0172_simulation_runs" }
   ]
 }

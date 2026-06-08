@@ -3758,3 +3758,184 @@ export const draftingObservabilityTable = mysqlTable("drafting_observability", {
   missingVariables: int("missing_variables").notNull().default(0),
   recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 4.4: Agent Execution Engine tables ────────────────────────────────
+
+export const agentExecutionsTable = mysqlTable("agent_executions", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId:      varchar("session_id", { length: 255 }).notNull(),
+  agentType:      varchar("agent_type", { length: 255 }).notNull(),
+  status:         mysqlEnum("status", ["pending","running","paused","awaiting_approval","completed","failed","rolled_back","cancelled"]).notNull().default("pending"),
+  currentStage:   varchar("current_stage", { length: 255 }),
+  replayKey:      varchar("replay_key", { length: 64 }).notNull(),
+  correlationId:  varchar("correlation_id", { length: 20 }).notNull(),
+  requestId:      varchar("request_id", { length: 20 }).notNull(),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  completedAt:    datetime("completed_at", { mode: "string", fsp: 3 }),
+  rollbackAt:     datetime("rollback_at", { mode: "string", fsp: 3 }),
+});
+
+export const executionStagesTable = mysqlTable("execution_stages", {
+  id:           varchar("id", { length: 20 }).notNull().primaryKey(),
+  executionId:  varchar("execution_id", { length: 20 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  stageName:    varchar("stage_name", { length: 255 }).notNull(),
+  stageOrder:   int("stage_order").notNull().default(0),
+  status:       mysqlEnum("status", ["pending","running","completed","failed","skipped"]).notNull().default("pending"),
+  durationMs:   int("duration_ms"),
+  errorMessage: text("error_message"),
+  startedAt:    datetime("started_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  completedAt:  datetime("completed_at", { mode: "string", fsp: 3 }),
+});
+
+export const executionCheckpointsTable = mysqlTable("execution_checkpoints", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  executionId:    varchar("execution_id", { length: 20 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  checkpointName: varchar("checkpoint_name", { length: 255 }).notNull(),
+  isRollbackPoint: tinyint("is_rollback_point").notNull().default(0),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const executionReplaysTable = mysqlTable("execution_replays", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  originalExecutionId: varchar("original_execution_id", { length: 20 }).notNull(),
+  organizationId:      int("organization_id").notNull(),
+  reason:              text("reason"),
+  replayKey:           varchar("replay_key", { length: 64 }).notNull(),
+  status:              mysqlEnum("status", ["pending","running","completed","failed"]).notNull().default("pending"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const executionRollbacksTable = mysqlTable("execution_rollbacks", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  executionId:   varchar("execution_id", { length: 20 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  reason:        text("reason"),
+  initiatedBy:   varchar("initiated_by", { length: 255 }).notNull(),
+  checkpointId:  varchar("checkpoint_id", { length: 20 }),
+  status:        mysqlEnum("status", ["pending","executing","completed","failed"]).notNull().default("pending"),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const executionPlansTable = mysqlTable("execution_plans", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  sessionId:           varchar("session_id", { length: 255 }).notNull(),
+  planName:            varchar("plan_name", { length: 255 }).notNull(),
+  goalDescription:     text("goal_description"),
+  estimatedDurationMs: int("estimated_duration_ms").notNull().default(0),
+  replayKey:           varchar("replay_key", { length: 64 }).notNull(),
+  planVersion:         varchar("plan_version", { length: 20 }).notNull().default("1.0.0"),
+  status:              mysqlEnum("status", ["draft","ready","executing","completed","failed"]).notNull().default("draft"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const executionTasksTable = mysqlTable("execution_tasks", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  planId:         varchar("plan_id", { length: 20 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  taskName:       varchar("task_name", { length: 255 }).notNull(),
+  taskType:       varchar("task_type", { length: 255 }).notNull(),
+  description:    text("description"),
+  priority:       mysqlEnum("priority", ["critical","high","medium","low"]).notNull().default("medium"),
+  status:         mysqlEnum("status", ["pending","ready","running","completed","failed","skipped","blocked"]).notNull().default("pending"),
+  parallelizable: tinyint("parallelizable").notNull().default(0),
+  estimatedMs:    int("estimated_ms").notNull().default(1000),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  completedAt:    datetime("completed_at", { mode: "string", fsp: 3 }),
+});
+
+export const assistantProfilesTable = mysqlTable("assistant_profiles", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  role:                varchar("role", { length: 100 }).notNull(),
+  name:                varchar("name", { length: 255 }).notNull(),
+  description:         text("description"),
+  version:             varchar("version", { length: 20 }).notNull().default("1.0.0"),
+  isActive:            tinyint("is_active").notNull().default(1),
+  requiresHumanReview: tinyint("requires_human_review").notNull().default(1),
+  escalationThreshold: decimal("escalation_threshold", { precision: 5, scale: 4 }).notNull().default("0.7000"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:           datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const assistantCapabilitiesTable = mysqlTable("assistant_capabilities", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  profileId:           varchar("profile_id", { length: 20 }).notNull(),
+  organizationId:      int("organization_id").notNull(),
+  capabilityType:      varchar("capability_type", { length: 100 }).notNull(),
+  description:         text("description"),
+  confidenceThreshold: decimal("confidence_threshold", { precision: 5, scale: 4 }).notNull().default("0.7000"),
+  maxInputLength:      int("max_input_length").notNull().default(10000),
+  isEnabled:           tinyint("is_enabled").notNull().default(1),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const approvalWorkflowsTable = mysqlTable("approval_workflows", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  executionId:    varchar("execution_id", { length: 20 }),
+  planId:         varchar("plan_id", { length: 20 }),
+  approvalType:   varchar("approval_type", { length: 255 }).notNull(),
+  status:         mysqlEnum("status", ["pending","approved","rejected","escalated","delegated","expired","overridden"]).notNull().default("pending"),
+  priority:       mysqlEnum("priority", ["urgent","high","normal","low"]).notNull().default("normal"),
+  deadline:       datetime("deadline", { mode: "string", fsp: 3 }),
+  escalateTo:     varchar("escalate_to", { length: 255 }),
+  delegatedTo:    varchar("delegated_to", { length: 255 }),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  resolvedAt:     datetime("resolved_at", { mode: "string", fsp: 3 }),
+});
+
+export const approvalDecisionsTable = mysqlTable("approval_decisions", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  workflowId:     varchar("workflow_id", { length: 20 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  approver:       varchar("approver", { length: 255 }).notNull(),
+  decision:       mysqlEnum("decision", ["approve","reject","delegate","escalate"]).notNull(),
+  justification:  text("justification"),
+  decidedAt:      datetime("decided_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const actionSafetyLogsTable = mysqlTable("action_safety_logs", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  actionType:     varchar("action_type", { length: 255 }).notNull(),
+  executionId:    varchar("execution_id", { length: 20 }),
+  safetyLevel:    mysqlEnum("safety_level", ["safe","low_risk","medium_risk","high_risk","critical","blocked"]).notNull().default("safe"),
+  passed:         tinyint("passed").notNull().default(1),
+  confidenceScore: decimal("confidence_score", { precision: 5, scale: 4 }).notNull().default("0"),
+  recommendation: mysqlEnum("recommendation", ["proceed","pause","block","escalate"]).notNull().default("proceed"),
+  checkedAt:      datetime("checked_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const executionObservabilityTable = mysqlTable("execution_observability", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  correlationId:    varchar("correlation_id", { length: 20 }).notNull(),
+  executionId:      varchar("execution_id", { length: 20 }).notNull(),
+  agentType:        varchar("agent_type", { length: 255 }).notNull(),
+  totalStages:      int("total_stages").notNull().default(0),
+  completedStages:  int("completed_stages").notNull().default(0),
+  failedStages:     int("failed_stages").notNull().default(0),
+  approvalRequired: tinyint("approval_required").notNull().default(0),
+  safetyBlocked:    tinyint("safety_blocked").notNull().default(0),
+  totalMs:          int("total_ms").notNull().default(0),
+  recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const simulationRunsTable = mysqlTable("simulation_runs", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId:      varchar("session_id", { length: 255 }).notNull(),
+  simulationType: mysqlEnum("simulation_type", ["dry_run","full_preview","rollback_preview","impact_estimation"]).notNull().default("dry_run"),
+  overallRisk:    mysqlEnum("overall_risk", ["safe","low_risk","medium_risk","high_risk","critical","blocked"]).notNull().default("safe"),
+  taskCount:      int("task_count").notNull().default(0),
+  impactSummary:  text("impact_summary"),
+  rollbackSummary: text("rollback_summary"),
+  replayKey:      varchar("replay_key", { length: 64 }).notNull(),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
