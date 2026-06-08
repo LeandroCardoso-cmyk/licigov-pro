@@ -575,3 +575,78 @@ export function addDraftingCheckpointToHistory(
 ): DraftingCheckpoint[] {
   return [...history, checkpoint];
 }
+
+// ─── Sprint 4.4: Autonomous Stages ───────────────────────────────────────────
+
+export type AutonomousStageType =
+  | "analysis"
+  | "drafting"
+  | "validation"
+  | "approval_gate"
+  | "safety_check"
+  | "escalation"
+  | "rollback";
+
+export type AutonomousStageStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export type AutonomousSafetyLevel =
+  | "safe"
+  | "low_risk"
+  | "medium_risk"
+  | "high_risk"
+  | "critical"
+  | "blocked";
+
+export interface AutonomousStage {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly stageName: string;
+  readonly stageType: AutonomousStageType;
+  readonly requiresApproval: boolean;
+  readonly safetyLevel: AutonomousSafetyLevel;
+  readonly input: Record<string, unknown>;
+  readonly output: Record<string, unknown> | null;
+  readonly status: AutonomousStageStatus;
+  readonly createdAt: string;
+  readonly completedAt: string | null;
+}
+
+export function createAutonomousStage(params: {
+  workflowId: string;
+  organizationId: number;
+  stageName: string;
+  stageType: AutonomousStageType;
+  requiresApproval?: boolean;
+  safetyLevel?: AutonomousSafetyLevel;
+  input?: Record<string, unknown>;
+}): AutonomousStage {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`autonomous:${params.workflowId}:${params.stageName}:${params.stageType}`)
+    .digest("hex")
+    .slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    stageName: params.stageName,
+    stageType: params.stageType,
+    requiresApproval: params.requiresApproval ?? false,
+    safetyLevel: params.safetyLevel ?? "safe",
+    input: params.input ?? {},
+    output: null,
+    status: "pending",
+    createdAt: now,
+    completedAt: null,
+  };
+}
+
+export function addAutonomousStageToWorkflow<T extends object>(
+  workflow: T,
+  stage: AutonomousStage,
+): T & { stages: AutonomousStage[] } {
+  const existing = (workflow as Record<string, unknown>)["stages"];
+  const stages = Array.isArray(existing) ? [...existing, stage] : [stage];
+  return { ...workflow, stages } as T & { stages: AutonomousStage[] };
+}

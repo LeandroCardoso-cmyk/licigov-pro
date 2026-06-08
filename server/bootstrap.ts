@@ -2473,6 +2473,134 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`),
       INDEX \`idx_dobs_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 4.4: Agent Execution Engine Tables ───────────────────────────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`agent_executions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`session_id\` VARCHAR(255) NOT NULL,
+      \`agent_type\` VARCHAR(255) NOT NULL, \`status\` ENUM('pending','running','paused','awaiting_approval','completed','failed','rolled_back','cancelled') NOT NULL DEFAULT 'pending',
+      \`current_stage\` VARCHAR(255) NULL, \`replay_key\` VARCHAR(64) NOT NULL,
+      \`correlation_id\` VARCHAR(20) NOT NULL, \`request_id\` VARCHAR(20) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`completed_at\` DATETIME(3) NULL, \`rollback_at\` DATETIME(3) NULL,
+      PRIMARY KEY (\`id\`), INDEX \`idx_ae_org\` (\`organization_id\`), INDEX \`idx_ae_sess\` (\`organization_id\`, \`session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_stages\` (
+      \`id\` VARCHAR(20) NOT NULL, \`execution_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`stage_name\` VARCHAR(255) NOT NULL, \`stage_order\` INT NOT NULL DEFAULT 0,
+      \`status\` ENUM('pending','running','completed','failed','skipped') NOT NULL DEFAULT 'pending',
+      \`input\` JSON NULL, \`output\` JSON NULL, \`duration_ms\` INT NULL, \`error_message\` TEXT NULL,
+      \`started_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`completed_at\` DATETIME(3) NULL,
+      PRIMARY KEY (\`id\`), INDEX \`idx_es_org\` (\`organization_id\`), INDEX \`idx_es_exec\` (\`execution_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_checkpoints\` (
+      \`id\` VARCHAR(20) NOT NULL, \`execution_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`checkpoint_name\` VARCHAR(255) NOT NULL, \`snapshot_data\` JSON NULL,
+      \`is_rollback_point\` TINYINT(1) NOT NULL DEFAULT 0, \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ec_org\` (\`organization_id\`), INDEX \`idx_ec_exec\` (\`execution_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_replays\` (
+      \`id\` VARCHAR(20) NOT NULL, \`original_execution_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`reason\` TEXT NULL, \`replay_key\` VARCHAR(64) NOT NULL,
+      \`status\` ENUM('pending','running','completed','failed') NOT NULL DEFAULT 'pending',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_er_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_rollbacks\` (
+      \`id\` VARCHAR(20) NOT NULL, \`execution_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`reason\` TEXT NULL, \`initiated_by\` VARCHAR(255) NOT NULL, \`checkpoint_id\` VARCHAR(20) NULL,
+      \`status\` ENUM('pending','executing','completed','failed') NOT NULL DEFAULT 'pending',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_erb_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_plans\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`session_id\` VARCHAR(255) NOT NULL,
+      \`plan_name\` VARCHAR(255) NOT NULL, \`goal_description\` TEXT NULL,
+      \`estimated_duration_ms\` INT NOT NULL DEFAULT 0, \`replay_key\` VARCHAR(64) NOT NULL,
+      \`plan_version\` VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+      \`status\` ENUM('draft','ready','executing','completed','failed') NOT NULL DEFAULT 'draft',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ep_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_tasks\` (
+      \`id\` VARCHAR(20) NOT NULL, \`plan_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`task_name\` VARCHAR(255) NOT NULL, \`task_type\` VARCHAR(255) NOT NULL, \`description\` TEXT NULL,
+      \`priority\` ENUM('critical','high','medium','low') NOT NULL DEFAULT 'medium',
+      \`status\` ENUM('pending','ready','running','completed','failed','skipped','blocked') NOT NULL DEFAULT 'pending',
+      \`parallelizable\` TINYINT(1) NOT NULL DEFAULT 0, \`estimated_ms\` INT NOT NULL DEFAULT 1000,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`completed_at\` DATETIME(3) NULL,
+      PRIMARY KEY (\`id\`), INDEX \`idx_et_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`assistant_profiles\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`role\` VARCHAR(100) NOT NULL,
+      \`name\` VARCHAR(255) NOT NULL, \`description\` TEXT NULL, \`version\` VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+      \`is_active\` TINYINT(1) NOT NULL DEFAULT 1, \`requires_human_review\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`escalation_threshold\` DECIMAL(5,4) NOT NULL DEFAULT 0.7000,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ap_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`assistant_capabilities\` (
+      \`id\` VARCHAR(20) NOT NULL, \`profile_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`capability_type\` VARCHAR(100) NOT NULL, \`description\` TEXT NULL,
+      \`confidence_threshold\` DECIMAL(5,4) NOT NULL DEFAULT 0.7000, \`max_input_length\` INT NOT NULL DEFAULT 10000,
+      \`is_enabled\` TINYINT(1) NOT NULL DEFAULT 1, \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ac_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`approval_workflows\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`execution_id\` VARCHAR(20) NULL,
+      \`plan_id\` VARCHAR(20) NULL, \`approval_type\` VARCHAR(255) NOT NULL,
+      \`status\` ENUM('pending','approved','rejected','escalated','delegated','expired','overridden') NOT NULL DEFAULT 'pending',
+      \`priority\` ENUM('urgent','high','normal','low') NOT NULL DEFAULT 'normal',
+      \`deadline\` DATETIME(3) NULL, \`escalate_to\` VARCHAR(255) NULL, \`delegated_to\` VARCHAR(255) NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`resolved_at\` DATETIME(3) NULL,
+      PRIMARY KEY (\`id\`), INDEX \`idx_aw_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`approval_decisions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`workflow_id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`approver\` VARCHAR(255) NOT NULL,
+      \`decision\` ENUM('approve','reject','delegate','escalate') NOT NULL,
+      \`justification\` TEXT NULL, \`decided_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ad_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`action_safety_logs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`action_type\` VARCHAR(255) NOT NULL,
+      \`execution_id\` VARCHAR(20) NULL,
+      \`safety_level\` ENUM('safe','low_risk','medium_risk','high_risk','critical','blocked') NOT NULL DEFAULT 'safe',
+      \`passed\` TINYINT(1) NOT NULL DEFAULT 1, \`confidence_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`recommendation\` ENUM('proceed','pause','block','escalate') NOT NULL DEFAULT 'proceed',
+      \`checked_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_asl_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`execution_observability\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`correlation_id\` VARCHAR(20) NOT NULL,
+      \`execution_id\` VARCHAR(20) NOT NULL, \`agent_type\` VARCHAR(255) NOT NULL,
+      \`total_stages\` INT NOT NULL DEFAULT 0, \`completed_stages\` INT NOT NULL DEFAULT 0,
+      \`failed_stages\` INT NOT NULL DEFAULT 0, \`approval_required\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`safety_blocked\` TINYINT(1) NOT NULL DEFAULT 0, \`total_ms\` INT NOT NULL DEFAULT 0,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_eo_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`simulation_runs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`session_id\` VARCHAR(255) NOT NULL,
+      \`simulation_type\` ENUM('dry_run','full_preview','rollback_preview','impact_estimation') NOT NULL DEFAULT 'dry_run',
+      \`overall_risk\` ENUM('safe','low_risk','medium_risk','high_risk','critical','blocked') NOT NULL DEFAULT 'safe',
+      \`task_count\` INT NOT NULL DEFAULT 0, \`impact_summary\` TEXT NULL, \`rollback_summary\` TEXT NULL,
+      \`replay_key\` VARCHAR(64) NOT NULL, \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_sr_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
