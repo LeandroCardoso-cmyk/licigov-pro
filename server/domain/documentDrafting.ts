@@ -30,8 +30,13 @@ export type DraftStatus = "draft" | "review" | "approved" | "rejected" | "archiv
 
 export type BlockType =
   | "heading"
+  | "header"
   | "paragraph"
+  | "list"
+  | "table"
   | "clause"
+  | "signature"
+  | "legal_ref"
   | "legal_basis"
   | "justification"
   | "specification"
@@ -40,14 +45,14 @@ export type BlockType =
 
 export type DraftVariableType = "string" | "number" | "date" | "currency" | "cnpj" | "enum";
 
-export interface DraftTemplate {
+export interface DraftTemplateLegacy {
   id: string;
   organizationId: number;
   templateKey: string;
   name: string;
   documentType: "TR" | "ETP" | "contrato" | "ata" | "edital" | "parecer" | "justificativa";
-  sections: DraftSection[];
-  variables: DraftVariable[];
+  sections: DraftSectionLegacy[];
+  variables: DraftVariableLegacy[];
   legalBasis: string[];
   version: string;
   replayKey: string;
@@ -55,20 +60,20 @@ export interface DraftTemplate {
   createdAt: string;
 }
 
-export interface DraftSection {
+export interface DraftSectionLegacy {
   id: string;
   organizationId: number;
   templateId: string;
   title: string;
   order: number;
-  blocks: DraftBlock[];
+  blocks: DraftBlockLegacy[];
   isRequired: boolean;
   condition: string | null;   // expressão condicional
   legalRef: string | null;
   replayKey: string;
 }
 
-export interface DraftBlock {
+export interface DraftBlockLegacy {
   id: string;
   blockType: BlockType;
   content: string;            // template com {{variables}}
@@ -79,7 +84,7 @@ export interface DraftBlock {
   replayKey: string;
 }
 
-export interface DraftVariable {
+export interface DraftVariableLegacy {
   id: string;
   name: string;               // ex: "objeto"
   label: string;              // ex: "Objeto da Contratação"
@@ -118,11 +123,11 @@ export interface DraftRecommendation {
   replayKey: string;
 }
 
-export interface DraftGeneration {
+export interface DraftGenerationLegacy {
   id: string;
   organizationId: number;
   templateId: string;
-  documentType: DraftTemplate["documentType"];
+  documentType: DraftTemplateLegacy["documentType"];
   status: DraftStatus;
   variables: Record<string, string>;
   renderedSections: RenderedSection[];
@@ -196,10 +201,10 @@ export function createDraftTemplateLegacy(params: {
   organizationId: number;
   templateKey: string;
   name: string;
-  documentType: DraftTemplate["documentType"];
+  documentType: DraftTemplateLegacy["documentType"];
   legalBasis?: string[];
   createdBy: number;
-}): DraftTemplate {
+}): DraftTemplateLegacy {
   const replayKey = sha256Hex(
     `${params.templateKey}${params.documentType}${params.organizationId}`,
   );
@@ -233,7 +238,7 @@ export function createDraftSectionLegacy(params: {
   isRequired?: boolean;
   condition?: string | null;
   legalRef?: string | null;
-}): DraftSection {
+}): DraftSectionLegacy {
   const replayKey = sha256Hex(
     `${params.templateId}${params.title}${params.order.toString()}`,
   );
@@ -263,7 +268,7 @@ export function createDraftBlockLegacy(params: {
   order: number;
   legalBasis?: string | null;
   isRequired?: boolean;
-}): DraftBlock {
+}): DraftBlockLegacy {
   const replayKey = sha256Hex(
     `${params.blockType}${params.content}${params.order.toString()}`,
   );
@@ -310,7 +315,7 @@ export function interpolateVariables(
  * Seções condicionais são filtradas. Seções são ordenadas por `order`.
  */
 export function assembleSections(
-  template: DraftTemplate,
+  template: DraftTemplateLegacy,
   variables: Record<string, string>,
 ): RenderedSection[] {
   const sorted = [...template.sections].sort((a, b) => a.order - b.order);
@@ -347,10 +352,10 @@ export function assembleSections(
  * replayKey = sha256(template.id + sorted(Object.keys(variables)).join + organizationId)
  */
 export function renderDraft(
-  template: DraftTemplate,
+  template: DraftTemplateLegacy,
   variables: Record<string, string>,
   organizationId: number,
-): DraftGeneration {
+): DraftGenerationLegacy {
   const renderedSections = assembleSections(template, variables);
   const totalWordCount   = renderedSections.reduce((acc, s) => acc + s.wordCount, 0);
 
@@ -385,7 +390,7 @@ export function renderDraft(
  * - "forbidden_content": busca keywords proibidas no conteúdo renderizado
  */
 export function validateDraftConstraints(
-  draft: DraftGeneration,
+  draft: DraftGenerationLegacy,
   constraints: DraftConstraint[],
 ): DraftConstraint[] {
   const violated: DraftConstraint[] = [];
@@ -428,7 +433,7 @@ export function validateDraftConstraints(
  * Computa hash do conteúdo renderizado de um draft.
  * sha256(draft.replayKey + draft.renderedSections.map(s=>s.renderedContent).join)
  */
-export function computeDraftHash(draft: DraftGeneration): string {
+export function computeDraftHash(draft: DraftGenerationLegacy): string {
   const contentJoined = draft.renderedSections.map(s => s.renderedContent).join("|");
   return sha256Hex(`${draft.replayKey}${contentJoined}`);
 }
@@ -438,8 +443,8 @@ export function computeDraftHash(draft: DraftGeneration): string {
  * Retorna novo array append-only.
  */
 export function buildDraftLineage(
-  original: DraftGeneration,
-  _revision: DraftGeneration,
+  original: DraftGenerationLegacy,
+  _revision: DraftGenerationLegacy,
 ): string[] {
   return [...original.lineage, original.id];
 }
@@ -728,6 +733,18 @@ export type DraftTemplateV3 = DraftTemplateV2;
 
 /** Sprint 4.3 DraftGeneration type (with sessionId, variableValues, resolvedContent) */
 export type DraftGenerationV3 = DraftGenerationV2;
+
+/** Sprint 4.3 canonical DraftTemplate (service layer uses this type) */
+export type DraftTemplate = DraftTemplateV2;
+
+/** Sprint 4.3 canonical DraftGeneration (service layer uses this type) */
+export type DraftGeneration = DraftGenerationV2;
+
+/** Sprint 4.3 canonical DraftSection (service layer uses this type) */
+export type DraftSection = DraftSectionV2;
+
+/** Sprint 4.3 canonical DraftBlock (service layer uses this type) */
+export type DraftBlock = DraftBlockV2;
 
 /** @alias createDraftVariableV2 */
 export const createDraftVariable = createDraftVariableV2;

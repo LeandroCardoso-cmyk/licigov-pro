@@ -234,7 +234,7 @@ export function replayReasoning(output: ReasoningEngineOutput, newContent?: stri
     organizationId: output.trace.organizationId,
     sessionId: output.trace.sessionId,
     documentContent: newContent ?? output.trace.premises.map(p => p.content).join(". "),
-    legalBasisRefs: [...new Set(output.trace.premises.map(p => p.legalBasis))],
+    legalBasisRefs: Array.from(new Set(output.trace.premises.map(p => p.legalBasis))),
     complianceRules: output.trace.complianceChecks.map(c => ({
       ruleId: c.ruleId,
       ruleName: c.ruleName,

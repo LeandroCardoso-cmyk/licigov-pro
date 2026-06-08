@@ -21,7 +21,7 @@ export type JurisprudenceType = "acórdão" | "súmula" | "decisão" | "orienta�
 export type LegalAuthority = "TCU" | "AGU" | "CGU" | "STJ" | "STF" | "CARF" | "CNJ" | "outros";
 export type ApplicabilityLevel = "directly_applicable" | "analogous" | "contextual" | "not_applicable";
 
-export interface JurisprudenceReference {
+export interface JurisprudenceReferenceLegacy {
   id: string;
   organizationId: number;
   jurisprudenceType: JurisprudenceType;
@@ -40,13 +40,13 @@ export interface JurisprudenceReference {
 }
 
 export interface PrecedentHierarchy {
-  primaryPrecedent: JurisprudenceReference;
-  supportingPrecedents: JurisprudenceReference[];
-  conflictingPrecedents: JurisprudenceReference[];
+  primaryPrecedent: JurisprudenceReferenceLegacy;
+  supportingPrecedents: JurisprudenceReferenceLegacy[];
+  conflictingPrecedents: JurisprudenceReferenceLegacy[];
   hierarchyScore: number;     // 0-1
 }
 
-export interface LegalCitation {
+export interface LegalCitationLegacy {
   referenceId: string;
   citation: string;
   excerpt: string;
@@ -58,9 +58,9 @@ export interface LegalCitation {
 export interface ContextualApplicability {
   organizationId: number;
   query: string;
-  references: JurisprudenceReference[];
-  citations: LegalCitation[];
-  topCitation: LegalCitation | null;
+  references: JurisprudenceReferenceLegacy[];
+  citations: LegalCitationLegacy[];
+  topCitation: LegalCitationLegacy | null;
   overallApplicabilityScore: number;
   replayKey: string;
 }
@@ -109,11 +109,7 @@ function tokenize(text: string): string[] {
 }
 
 function intersect(setA: Set<string>, setB: Set<string>): string[] {
-  const result: string[] = [];
-  for (const item of setA) {
-    if (setB.has(item)) result.push(item);
-  }
-  return result;
+  return Array.from(setA).filter(item => setB.has(item));
 }
 
 function hasConflictingKeywords(keywordsA: string[], keywordsB: string[]): boolean {
@@ -133,7 +129,7 @@ function hasConflictingKeywords(keywordsA: string[], keywordsB: string[]): boole
  * Cria uma referência jurisprudencial com authorityWeight mapeado por autoridade.
  * replayKey = sha256(citation + authority + year.toString() + organizationId)
  */
-export function createJurisprudenceReference(params: {
+export function createJurisprudenceReferenceLegacy(params: {
   organizationId: number;
   jurisprudenceType: JurisprudenceType;
   authority: LegalAuthority;
@@ -145,7 +141,7 @@ export function createJurisprudenceReference(params: {
   year: number;
   isVerified?: boolean;
   url?: string | null;
-}): JurisprudenceReference {
+}): JurisprudenceReferenceLegacy {
   const authorityWeight = AUTHORITY_WEIGHTS[params.authority];
   const replayKey = sha256Hex(
     `${params.citation}${params.authority}${params.year.toString()}${params.organizationId}`,
@@ -176,7 +172,7 @@ export function createJurisprudenceReference(params: {
  * score = authorityWeight * 0.6 + keywordOverlap * 0.4
  */
 export function computeApplicabilityScore(
-  ref: JurisprudenceReference,
+  ref: JurisprudenceReferenceLegacy,
   context: string,
 ): number {
   const contextTokens = new Set(tokenize(context));
@@ -193,9 +189,9 @@ export function computeApplicabilityScore(
  * Desempate: citation asc (lexicográfico).
  */
 export function rankPrecedents(
-  refs: JurisprudenceReference[],
+  refs: JurisprudenceReferenceLegacy[],
   context: string,
-): JurisprudenceReference[] {
+): JurisprudenceReferenceLegacy[] {
   const contextTokens = new Set(tokenize(context));
 
   const scored = refs.map(ref => {
@@ -223,12 +219,12 @@ export function rankPrecedents(
  *                     >= 0.2 → "contextual", else → "not_applicable"
  */
 export function buildCitationChain(
-  refs: JurisprudenceReference[],
+  refs: JurisprudenceReferenceLegacy[],
   context: string,
-): LegalCitation[] {
+): LegalCitationLegacy[] {
   const contextTokens = new Set(tokenize(context));
 
-  const citations: LegalCitation[] = refs.map(ref => {
+  const citations: LegalCitationLegacy[] = refs.map(ref => {
     const score           = computeApplicabilityScore(ref, context);
     const refKeywordSet   = new Set(ref.keywords.map(k => k.toLowerCase()));
     const contextualMatch = intersect(refKeywordSet, contextTokens);
@@ -263,7 +259,7 @@ export function buildCitationChain(
  * replayKey = sha256(query + sorted(refs.map(r=>r.id)).join + organizationId)
  */
 export function correlateWithContext(
-  refs: JurisprudenceReference[],
+  refs: JurisprudenceReferenceLegacy[],
   query: string,
   organizationId: number,
 ): ContextualApplicability {
@@ -297,14 +293,14 @@ export function correlateWithContext(
  * - hierarchyScore = primary.authorityWeight
  */
 export function buildPrecedentHierarchy(
-  primary: JurisprudenceReference,
-  all: JurisprudenceReference[],
+  primary: JurisprudenceReferenceLegacy,
+  all: JurisprudenceReferenceLegacy[],
   context: string,
 ): PrecedentHierarchy {
   const others = all.filter(r => r.id !== primary.id);
 
-  const supporting: JurisprudenceReference[]  = [];
-  const conflicting: JurisprudenceReference[] = [];
+  const supporting: JurisprudenceReferenceLegacy[]  = [];
+  const conflicting: JurisprudenceReferenceLegacy[] = [];
 
   for (const ref of others) {
     const score = computeApplicabilityScore(ref, context);
@@ -519,3 +515,38 @@ export function formatCitationV2(reference: JurisprudenceReferenceV2): string {
     : reference.summary;
   return `${reference.court}, ${reference.caseNumber}, julgado em ${reference.judgmentDate}: ${excerpt}`;
 }
+
+// ─── Sprint 4.3: Canonical-name aliases for jurisprudence service layer ───────
+
+/** Sprint 4.3 canonical JurisprudenceReference type alias */
+export type JurisprudenceReference = JurisprudenceReferenceV2;
+
+/** Sprint 4.3 canonical LegalCitation type alias */
+export type LegalCitation = LegalCitationV2;
+
+/** Sprint 4.3 canonical JurisprudenceReference type (explicit spec name) */
+export type JurisprudenceReferenceSpec = JurisprudenceReferenceV2;
+
+/** Sprint 4.3 canonical LegalCitation type (explicit spec name) */
+export type LegalCitationSpec = LegalCitationV2;
+
+/** @alias createJurisprudenceReferenceV2 — Sprint 4.3 canonical factory */
+export const createJurisprudenceReference = createJurisprudenceReferenceV2;
+
+/** @alias createJurisprudenceReferenceV2 (alt alias) */
+export const createJurisprudenceReferenceSpec = createJurisprudenceReferenceV2;
+
+/** @alias createLegalCitationV2 */
+export const createLegalCitation = createLegalCitationV2;
+
+/** @alias findRelevantPrecedentsV2 */
+export const findRelevantPrecedents = findRelevantPrecedentsV2;
+
+/** @alias rankPrecedentsByRelevanceV2 */
+export const rankPrecedentsByRelevance = rankPrecedentsByRelevanceV2;
+
+/** @alias buildCitationGraphV2 */
+export const buildCitationGraph = buildCitationGraphV2;
+
+/** @alias formatCitationV2 */
+export const formatCitation = formatCitationV2;
