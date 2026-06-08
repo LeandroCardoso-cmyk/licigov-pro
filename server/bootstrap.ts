@@ -2282,6 +2282,197 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
         INDEX \`idx_cp_active\` (\`organization_id\`, \`is_active\`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // ─── Sprint 4.3: Legal AI Tables ─────────────────────────────────────────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_reasoning_traces\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`overall_compliance_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`overall_risk_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`replay_key\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_lrt_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_inferences\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`trace_id\` VARCHAR(20) NOT NULL,
+      \`conclusion\` TEXT NULL,
+      \`inference_type\` ENUM('deductive','inductive','analogical','abductive') NOT NULL DEFAULT 'deductive',
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.7500,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`justification\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_li_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`compliance_checks\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`trace_id\` VARCHAR(20) NOT NULL,
+      \`rule_id\` VARCHAR(100) NOT NULL,
+      \`rule_name\` VARCHAR(255) NOT NULL,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`status\` ENUM('compliant','non_compliant','uncertain','not_applicable') NOT NULL DEFAULT 'uncertain',
+      \`findings\` TEXT NULL,
+      \`remediation\` TEXT NULL,
+      \`check_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_cc_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_risks\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`trace_id\` VARCHAR(20) NOT NULL,
+      \`risk_type\` VARCHAR(255) NOT NULL,
+      \`description\` TEXT NULL,
+      \`level\` ENUM('critical','high','medium','low','negligible') NOT NULL DEFAULT 'medium',
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`probability\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`impact\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`risk_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_lr_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`draft_templates\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`name\` VARCHAR(255) NOT NULL,
+      \`document_type\` VARCHAR(100) NOT NULL,
+      \`version\` VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+      \`legal_framework\` VARCHAR(255) NOT NULL DEFAULT 'Lei 14133/2021',
+      \`is_active\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_dt_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`draft_sections\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`template_id\` VARCHAR(20) NOT NULL,
+      \`title\` VARCHAR(255) NOT NULL,
+      \`order_index\` INT NOT NULL DEFAULT 0,
+      \`is_optional\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`legal_basis\` VARCHAR(500) NULL,
+      \`condition_expression\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_ds_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`draft_generations\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`template_id\` VARCHAR(20) NOT NULL,
+      \`resolved_content\` MEDIUMTEXT NULL,
+      \`generation_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`replay_key\` VARCHAR(64) NOT NULL,
+      \`generated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_dg_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`draft_recommendations\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`trace_id\` VARCHAR(20) NOT NULL,
+      \`recommendation_type\` ENUM('mandatory','advisory','optional','warning') NOT NULL DEFAULT 'advisory',
+      \`content\` TEXT NULL,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`priority\` INT NOT NULL DEFAULT 1,
+      \`rationale\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_drc_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`clause_recommendations\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`clause_id\` VARCHAR(100) NOT NULL,
+      \`recommendation_type\` ENUM('add','remove','modify','reorder') NOT NULL DEFAULT 'modify',
+      \`content\` TEXT NULL,
+      \`rationale\` TEXT NULL,
+      \`priority\` INT NOT NULL DEFAULT 1,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_clrec_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`clause_conflicts\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`clause_id_a\` VARCHAR(100) NOT NULL,
+      \`clause_id_b\` VARCHAR(100) NOT NULL,
+      \`compatibility_score\` DECIMAL(5,4) NOT NULL DEFAULT 1,
+      \`conflict_type\` ENUM('direct','indirect','conditional','none') NOT NULL DEFAULT 'none',
+      \`explanation\` TEXT NULL,
+      \`resolution\` TEXT NULL,
+      \`checked_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_clconf_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`jurisprudence_references\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`case_number\` VARCHAR(255) NOT NULL,
+      \`court\` VARCHAR(255) NOT NULL,
+      \`court_level\` ENUM('supreme','superior','regional','federal','state','administrative') NOT NULL DEFAULT 'superior',
+      \`judgment_date\` DATE NULL,
+      \`summary\` TEXT NULL,
+      \`precedent_strength\` ENUM('binding','persuasive','informative','overruled') NOT NULL DEFAULT 'informative',
+      \`is_active\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_jref_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`jurisprudence_correlations\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`source_id\` VARCHAR(255) NOT NULL,
+      \`reference_id\` VARCHAR(20) NOT NULL,
+      \`citation_type\` ENUM('direct','analogical','distinguishing','overruling') NOT NULL DEFAULT 'analogical',
+      \`relevance_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`correlation_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_jcorr_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`drafting_observability\` (
+      \`id\` VARCHAR(20) NOT NULL,
+      \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(255) NOT NULL,
+      \`correlation_id\` VARCHAR(20) NOT NULL,
+      \`draft_id\` VARCHAR(20) NOT NULL,
+      \`document_type\` VARCHAR(100) NOT NULL,
+      \`total_ms\` INT NOT NULL DEFAULT 0,
+      \`completeness_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`risk_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`compliance_score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`variable_count\` INT NOT NULL DEFAULT 0,
+      \`missing_variables\` INT NOT NULL DEFAULT 0,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`),
+      INDEX \`idx_dobs_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
