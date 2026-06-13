@@ -924,6 +924,16 @@
     { "idx": 169, "version": "6", "when": 1761590400000, "tag": "0169_approval_decisions" },
     { "idx": 170, "version": "6", "when": 1761676800000, "tag": "0170_action_safety_logs" },
     { "idx": 171, "version": "6", "when": 1761763200000, "tag": "0171_execution_observability" },
-    { "idx": 172, "version": "6", "when": 1761849600000, "tag": "0172_simulation_runs" }
+    { "idx": 172, "version": "6", "when": 1761849600000, "tag": "0172_simulation_runs" },
+    { "idx": 173, "version": "6", "when": 1761936000000, "tag": "0173_ai_providers" },
+    { "idx": 174, "version": "6", "when": 1762022400000, "tag": "0174_provider_executions" },
+    { "idx": 175, "version": "6", "when": 1762108800000, "tag": "0175_provider_policies" },
+    { "idx": 176, "version": "6", "when": 1762195200000, "tag": "0176_provider_routing" },
+    { "idx": 177, "version": "6", "when": 1762281600000, "tag": "0177_provider_health_logs" },
+    { "idx": 178, "version": "6", "when": 1762368000000, "tag": "0178_provider_cost_analytics" },
+    { "idx": 179, "version": "6", "when": 1762454400000, "tag": "0179_provider_failover_events" },
+    { "idx": 180, "version": "6", "when": 1762540800000, "tag": "0180_provider_replay_snapshots" },
+    { "idx": 181, "version": "6", "when": 1762627200000, "tag": "0181_provider_usage_quotas" },
+    { "idx": 182, "version": "6", "when": 1762713600000, "tag": "0182_provider_latency_metrics" }
   ]
 }

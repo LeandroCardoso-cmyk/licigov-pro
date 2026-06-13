@@ -3939,3 +3939,138 @@ export const simulationRunsTable = mysqlTable("simulation_runs", {
   replayKey:      varchar("replay_key", { length: 64 }).notNull(),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 4.5: Provider Activation Layer ────────────────────────────────────
+
+export const aiProvidersTable = mysqlTable("ai_providers", {
+  id:                   varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  providerType:         mysqlEnum("provider_type", ["openai","claude","gemini","mock"]).notNull(),
+  providerName:         varchar("provider_name", { length: 255 }).notNull(),
+  enabled:              tinyint("enabled").notNull().default(1),
+  priority:             int("priority").notNull().default(5),
+  supportedCapabilities: text("supported_capabilities"),
+  healthStatus:         mysqlEnum("health_status", ["healthy","degraded","unavailable","unknown"]).notNull().default("unknown"),
+  latencyScore:         decimal("latency_score", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  reliabilityScore:     decimal("reliability_score", { precision: 5, scale: 4 }).notNull().default("0.8"),
+  costScore:            decimal("cost_score", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  rateLimitConfig:      text("rate_limit_config"),
+  retryPolicy:          text("retry_policy"),
+  circuitBreakerState:  mysqlEnum("circuit_breaker_state", ["closed","open","half_open"]).notNull().default("closed"),
+  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:            datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerExecutionsTable = mysqlTable("provider_executions", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  workflowId:        varchar("workflow_id", { length: 255 }).notNull(),
+  providerId:        varchar("provider_id", { length: 20 }).notNull(),
+  model:             varchar("model", { length: 255 }).notNull(),
+  executionType:     mysqlEnum("execution_type", ["inference","embedding","classification","completion"]).notNull().default("inference"),
+  promptHash:        varchar("prompt_hash", { length: 64 }).notNull(),
+  promptVersion:     varchar("prompt_version", { length: 50 }).notNull().default("1.0"),
+  requestPayload:    text("request_payload"),
+  responsePayload:   text("response_payload"),
+  promptTokens:      int("prompt_tokens").notNull().default(0),
+  completionTokens:  int("completion_tokens").notNull().default(0),
+  totalTokens:       int("total_tokens").notNull().default(0),
+  latencyMs:         int("latency_ms").notNull().default(0),
+  retryCount:        int("retry_count").notNull().default(0),
+  fallbackTriggered: tinyint("fallback_triggered").notNull().default(0),
+  executionStatus:   mysqlEnum("execution_status", ["pending","running","completed","failed","fallback_triggered","replay"]).notNull().default("pending"),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull(),
+  reasoningTrace:    text("reasoning_trace"),
+  explainabilityData: text("explainability_data"),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerPoliciesTable = mysqlTable("provider_policies", {
+  id:                     varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:         int("organization_id").notNull(),
+  policyName:             varchar("policy_name", { length: 255 }).notNull(),
+  allowedProviders:       text("allowed_providers"),
+  blockedModels:          text("blocked_models"),
+  maxTokensPerExecution:  int("max_tokens_per_execution").notNull().default(100000),
+  maxCostPerExecution:    decimal("max_cost_per_execution", { precision: 10, scale: 4 }).notNull().default("10.0"),
+  dailyCostLimit:         decimal("daily_cost_limit", { precision: 10, scale: 4 }).notNull().default("100.0"),
+  approvalThreshold:      decimal("approval_threshold", { precision: 10, scale: 4 }).notNull().default("5.0"),
+  requiresHumanApproval:  tinyint("requires_human_approval").notNull().default(0),
+  restrictedCapabilities: text("restricted_capabilities"),
+  active:                 tinyint("active").notNull().default(1),
+  createdAt:              datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerRoutingTable = mysqlTable("provider_routing", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  routingStrategy:     mysqlEnum("routing_strategy", ["lowest_latency","lowest_cost","highest_reliability","deterministic_priority","capability_match"]).notNull().default("deterministic_priority"),
+  fallbackStrategy:    mysqlEnum("fallback_strategy", ["next_provider","mock_fallback","fail_fast","degraded_mode"]).notNull().default("next_provider"),
+  preferredProviders:  text("preferred_providers"),
+  capabilityRouting:   text("capability_routing"),
+  costOptimization:    tinyint("cost_optimization").notNull().default(0),
+  latencyOptimization: tinyint("latency_optimization").notNull().default(0),
+  resilienceMode:      tinyint("resilience_mode").notNull().default(1),
+  active:              tinyint("active").notNull().default(1),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerHealthLogsTable = mysqlTable("provider_health_logs", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  providerId:     varchar("provider_id", { length: 20 }).notNull(),
+  healthStatus:   mysqlEnum("health_status", ["healthy","degraded","unavailable","unknown"]).notNull(),
+  latencyMs:      int("latency_ms").notNull().default(0),
+  errorMessage:   text("error_message"),
+  checkedAt:      datetime("checked_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerCostAnalyticsTable = mysqlTable("provider_cost_analytics", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  providerId:       varchar("provider_id", { length: 20 }).notNull(),
+  model:            varchar("model", { length: 255 }).notNull(),
+  promptTokens:     int("prompt_tokens").notNull().default(0),
+  completionTokens: int("completion_tokens").notNull().default(0),
+  totalCost:        decimal("total_cost", { precision: 10, scale: 6 }).notNull().default("0"),
+  recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerFailoverEventsTable = mysqlTable("provider_failover_events", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  failedProviderId: varchar("failed_provider_id", { length: 20 }).notNull(),
+  newProviderId:    varchar("new_provider_id", { length: 20 }),
+  reason:           text("reason"),
+  occurredAt:       datetime("occurred_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerReplaySnapshotsTable = mysqlTable("provider_replay_snapshots", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  originalExecutionId: varchar("original_execution_id", { length: 20 }).notNull(),
+  snapshotKey:         varchar("snapshot_key", { length: 64 }).notNull(),
+  requestPayload:      text("request_payload"),
+  responsePayload:     text("response_payload"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerUsageQuotasTable = mysqlTable("provider_usage_quotas", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  dailyLimit:     decimal("daily_limit", { precision: 10, scale: 4 }).notNull().default("100.0"),
+  monthlyLimit:   decimal("monthly_limit", { precision: 10, scale: 4 }).notNull().default("2000.0"),
+  alertThreshold: decimal("alert_threshold", { precision: 5, scale: 4 }).notNull().default("0.8"),
+  active:         tinyint("active").notNull().default(1),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const providerLatencyMetricsTable = mysqlTable("provider_latency_metrics", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  providerId:     varchar("provider_id", { length: 20 }).notNull(),
+  model:          varchar("model", { length: 255 }).notNull(),
+  latencyMs:      int("latency_ms").notNull().default(0),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull(),
+  recordedAt:     datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

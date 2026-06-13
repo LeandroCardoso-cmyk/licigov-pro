@@ -2601,6 +2601,115 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`replay_key\` VARCHAR(64) NOT NULL, \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_sr_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`ai_providers\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`provider_type\` ENUM('openai','claude','gemini','mock') NOT NULL,
+      \`provider_name\` VARCHAR(255) NOT NULL, \`enabled\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`priority\` INT NOT NULL DEFAULT 5, \`supported_capabilities\` TEXT NULL,
+      \`health_status\` ENUM('healthy','degraded','unavailable','unknown') NOT NULL DEFAULT 'unknown',
+      \`latency_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.5, \`reliability_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.8,
+      \`cost_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.5, \`rate_limit_config\` TEXT NULL,
+      \`retry_policy\` TEXT NULL,
+      \`circuit_breaker_state\` ENUM('closed','open','half_open') NOT NULL DEFAULT 'closed',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ap_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_executions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workflow_id\` VARCHAR(255) NOT NULL, \`provider_id\` VARCHAR(20) NOT NULL,
+      \`model\` VARCHAR(255) NOT NULL,
+      \`execution_type\` ENUM('inference','embedding','classification','completion') NOT NULL DEFAULT 'inference',
+      \`prompt_hash\` VARCHAR(64) NOT NULL, \`prompt_version\` VARCHAR(50) NOT NULL DEFAULT '1.0',
+      \`request_payload\` TEXT NULL, \`response_payload\` TEXT NULL,
+      \`prompt_tokens\` INT NOT NULL DEFAULT 0, \`completion_tokens\` INT NOT NULL DEFAULT 0,
+      \`total_tokens\` INT NOT NULL DEFAULT 0, \`latency_ms\` INT NOT NULL DEFAULT 0,
+      \`retry_count\` INT NOT NULL DEFAULT 0, \`fallback_triggered\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`execution_status\` ENUM('pending','running','completed','failed','fallback_triggered','replay') NOT NULL DEFAULT 'pending',
+      \`correlation_id\` VARCHAR(64) NOT NULL, \`reasoning_trace\` TEXT NULL,
+      \`explainability_data\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pe_org\` (\`organization_id\`), INDEX \`idx_pe_corr\` (\`correlation_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_policies\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`policy_name\` VARCHAR(255) NOT NULL, \`allowed_providers\` TEXT NULL,
+      \`blocked_models\` TEXT NULL, \`max_tokens_per_execution\` INT NOT NULL DEFAULT 100000,
+      \`max_cost_per_execution\` DECIMAL(10,4) NOT NULL DEFAULT 10.0,
+      \`daily_cost_limit\` DECIMAL(10,4) NOT NULL DEFAULT 100.0,
+      \`approval_threshold\` DECIMAL(10,4) NOT NULL DEFAULT 5.0,
+      \`requires_human_approval\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`restricted_capabilities\` TEXT NULL, \`active\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pp_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_routing\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`routing_strategy\` ENUM('lowest_latency','lowest_cost','highest_reliability','deterministic_priority','capability_match') NOT NULL DEFAULT 'deterministic_priority',
+      \`fallback_strategy\` ENUM('next_provider','mock_fallback','fail_fast','degraded_mode') NOT NULL DEFAULT 'next_provider',
+      \`preferred_providers\` TEXT NULL, \`capability_routing\` TEXT NULL,
+      \`cost_optimization\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`latency_optimization\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`resilience_mode\` TINYINT(1) NOT NULL DEFAULT 1, \`active\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pr_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_health_logs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`provider_id\` VARCHAR(20) NOT NULL,
+      \`health_status\` ENUM('healthy','degraded','unavailable','unknown') NOT NULL,
+      \`latency_ms\` INT NOT NULL DEFAULT 0, \`error_message\` TEXT NULL,
+      \`checked_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_phl_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_cost_analytics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`provider_id\` VARCHAR(20) NOT NULL, \`model\` VARCHAR(255) NOT NULL,
+      \`prompt_tokens\` INT NOT NULL DEFAULT 0, \`completion_tokens\` INT NOT NULL DEFAULT 0,
+      \`total_cost\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pca_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_failover_events\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`failed_provider_id\` VARCHAR(20) NOT NULL, \`new_provider_id\` VARCHAR(20) NULL,
+      \`reason\` TEXT NULL,
+      \`occurred_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pfe_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_replay_snapshots\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`original_execution_id\` VARCHAR(20) NOT NULL, \`snapshot_key\` VARCHAR(64) NOT NULL,
+      \`request_payload\` TEXT NULL, \`response_payload\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_prs_org\` (\`organization_id\`), INDEX \`idx_prs_key\` (\`snapshot_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_usage_quotas\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`daily_limit\` DECIMAL(10,4) NOT NULL DEFAULT 100.0,
+      \`monthly_limit\` DECIMAL(10,4) NOT NULL DEFAULT 2000.0,
+      \`alert_threshold\` DECIMAL(5,4) NOT NULL DEFAULT 0.8,
+      \`active\` TINYINT(1) NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_puq_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`provider_latency_metrics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`provider_id\` VARCHAR(20) NOT NULL, \`model\` VARCHAR(255) NOT NULL,
+      \`latency_ms\` INT NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_plm_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
