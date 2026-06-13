@@ -48,6 +48,8 @@ import { legalReasoningRouter } from "./routers/legalReasoningRouter";
 import { draftingRouter } from "./routers/draftingRouter";
 import { agentExecutionRouter } from "./routers/agentExecutionRouter";
 import { approvalWorkflowRouter } from "./routers/approvalWorkflowRouter";
+import { providerRouter } from "./routers/providerRouter";
+import { providerGovernanceRouter } from "./routers/providerGovernanceRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -99,6 +101,8 @@ export const appRouter = router({
   drafting:       draftingRouter,
   agentExecution:   agentExecutionRouter,
   approvalWorkflow: approvalWorkflowRouter,
+  providers:        providerRouter,
+  providerGovernance: providerGovernanceRouter,
 });
 
 export type AppRouter = typeof appRouter;

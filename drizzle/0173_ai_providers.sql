@@ -1,0 +1,20 @@
+CREATE TABLE `ai_providers` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `provider_type` ENUM('openai','claude','gemini','mock') NOT NULL,
+  `provider_name` VARCHAR(255) NOT NULL,
+  `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `priority` INT NOT NULL DEFAULT 5,
+  `supported_capabilities` TEXT NULL,
+  `health_status` ENUM('healthy','degraded','unavailable','unknown') NOT NULL DEFAULT 'unknown',
+  `latency_score` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+  `reliability_score` DECIMAL(5,4) NOT NULL DEFAULT 0.8,
+  `cost_score` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+  `rate_limit_config` TEXT NULL,
+  `retry_policy` TEXT NULL,
+  `circuit_breaker_state` ENUM('closed','open','half_open') NOT NULL DEFAULT 'closed',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_ap_org` (`organization_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -650,3 +650,66 @@ export function addAutonomousStageToWorkflow<T extends object>(
   const stages = Array.isArray(existing) ? [...existing, stage] : [stage];
   return { ...workflow, stages } as T & { stages: AutonomousStage[] };
 }
+
+// ─── Sprint 4.5: Provider Orchestration ──────────────────────────────────────
+
+export interface ProviderOrchestrationStep {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly providerId: string;
+  readonly model: string;
+  readonly executionType: "inference" | "embedding" | "classification" | "completion";
+  readonly fallbackChain: string[]; // ordered provider IDs
+  readonly snapshotKey: string | null;
+  readonly lineageId: string;
+  readonly createdAt: string;
+}
+
+export interface InferenceSnapshot {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly executionId: string;
+  readonly snapshotKey: string;
+  readonly payload: Record<string, unknown>;
+  readonly createdAt: string;
+}
+
+export function createProviderOrchestrationStep(params: {
+  workflowId: string;
+  organizationId: number;
+  providerId: string;
+  model: string;
+  executionType?: "inference" | "embedding" | "classification" | "completion";
+  fallbackChain?: string[];
+}): ProviderOrchestrationStep {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`orchestration:${params.workflowId}:${params.providerId}:${params.model}`)
+    .digest("hex").slice(0, 20);
+  const lineageId = createHash("sha256")
+    .update(`lineage:${params.organizationId}:${params.workflowId}:${now}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    providerId: params.providerId,
+    model: params.model,
+    executionType: params.executionType ?? "inference",
+    fallbackChain: params.fallbackChain ?? [],
+    snapshotKey: null,
+    lineageId,
+    createdAt: now,
+  };
+}
+
+export function addInferenceSnapshot<T extends object>(
+  workflow: T,
+  snapshot: InferenceSnapshot,
+): T & { inferenceSnapshots: InferenceSnapshot[] } {
+  const existing = (workflow as Record<string, unknown>)["inferenceSnapshots"];
+  const snapshots = Array.isArray(existing) ? [...existing, snapshot] : [snapshot];
+  return { ...workflow, inferenceSnapshots: snapshots } as T & { inferenceSnapshots: InferenceSnapshot[] };
+}
