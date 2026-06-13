@@ -32,11 +32,6 @@ description: Use esta skill para qualquer tarefa que envolva múltiplos arquivos
 ### Objetivo
 [Uma frase do que será implementado]
 
-### Estado da migração Manus (verificar antes)
-- [ ] vite.config.ts limpo de plugins Manus?
-- [ ] server/_core/sdk.ts sem chamadas OAuth Manus?
-- [ ] server/_core/llm.ts usando Gemini direto?
-
 ### Passos em ordem
 1. [arquivo] → [o que muda]
 2. [arquivo] → [o que muda]

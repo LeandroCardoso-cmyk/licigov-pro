@@ -30,8 +30,8 @@ Fluxo principal de documentos: **DFD → ETP → TR → Edital**
 - **Storage:** AWS S3
 - **Infraestrutura:** Railway
 - **Testes:** Vitest (obrigatório — migrations, staging e testes são regras fundamentais)
-- **IA:** Gemini 2.5 Flash via `@google/generative-ai` (SDK instalada — em migração do Manus)
-- **Auth:** JWT em cookie HTTP-only via `jose` (independente — em migração do OAuth Manus)
+- **IA:** Gemini 2.5 Flash via `@google/generative-ai`
+- **Auth:** JWT em cookie HTTP-only via `jose` + bcrypt (email/senha próprio)
 - **Package manager:** pnpm
 
 ## Estrutura de pastas
@@ -46,8 +46,8 @@ licigov-pro/
 │   │   ├── index.ts     # Entry point Express
 │   │   ├── trpc.ts      # Procedures: publicProcedure / protectedProcedure / adminProcedure
 │   │   ├── context.ts   # createContext (auth)
-│   │   ├── sdk.ts       # JWT + OAuth Manus (em migração)
-│   │   ├── llm.ts       # Abstração LLM → Forge Manus (em migração para Gemini direto)
+│   │   ├── sdk.ts       # JWT (jose) — auth próprio email/senha
+│   │   ├── llm.ts       # Abstração LLM → Gemini 2.5 Flash
 │   │   └── env.ts       # ENV vars tipadas
 │   ├── routers.ts       # AppRouter (15+ sub-routers)
 │   ├── db.ts            # Queries Drizzle
@@ -67,7 +67,7 @@ licigov-pro/
 | **Contratos e Aditivos** | Geração contratual, aditivos, reaproveitamento processual | Roadmap |
 | **Gestão** | Calendário, protocolos, andamento, indicadores, produtividade | Implementado |
 | **Documentos** | Upload, versionamento, histórico, rastreabilidade | Parcial |
-| **IA** | Geração contextual, validação, revisão, apoio jurídico-operacional | Em migração |
+| **IA** | Geração contextual, validação, revisão, apoio jurídico-operacional | Em desenvolvimento |
 | **Administração** | Usuários, permissões, auditoria, logs, configurações | Parcial |
 
 ## Módulo Gestão — o que já existe
@@ -83,34 +83,7 @@ licigov-pro/
 - Relatório PDF/Markdown e Excel com formatação
 - Vinculação com processos licitatórios
 
-## ⚠️ PROBLEMAS CRÍTICOS ATIVOS (Migração do Manus)
-
-### CRÍTICO 1 — Plugin Manus no Vite (`vite.config.ts:10`)
-```typescript
-// PROBLEMA — quebra o build fora da Manus:
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
-const plugins = [react(), tailwindcss(), vitePluginManusRuntime()];
-
-// FIX:
-const plugins = [react(), tailwindcss()];
-```
-**Status:** Pendente. Não tocar em vite.config.ts sem aplicar este fix primeiro.
-
-### CRÍTICO 2 — Auth via OAuth Manus (`server/_core/sdk.ts`)
-Todo login depende de `OAUTH_SERVER_URL` da Manus. Sem acesso à Manus = nenhum usuário faz login.
-**Boa notícia:** `signSession`/`verifySession` com `jose` já estão implementados e são independentes.
-**Fix planejado:** Auth próprio com email + senha (bcrypt já no package.json).
-**Status:** Pendente. Não criar novas dependências no fluxo OAuth Manus.
-
-### CRÍTICO 3 — LLM via Forge Manus (`server/_core/llm.ts`)
-Todas as chamadas de IA passam por `BUILT_IN_FORGE_API_URL` + `BUILT_IN_FORGE_API_KEY`.
-**Fix planejado:** Trocar para Gemini direto via `@google/generative-ai` (SDK já instalada).
-**Status:** Pendente. Manter a mesma assinatura `InvokeParams`/`InvokeResult` ao migrar.
-
-### MÉDIO 4 — Sem `.env.example`
-**Fix planejado:** Criar `.env.example` com todas as variáveis comentadas.
-
-## Variáveis de ambiente necessárias (pós-migração)
+## Variáveis de ambiente necessárias
 ```env
 NODE_ENV=development
 PORT=3000
@@ -154,19 +127,15 @@ Toda saída de IA deve ser: **editável, revisável e validada por humano.**
 - Testes Vitest obrigatórios para lógica de negócio nova
 - Rastreabilidade obrigatória (logs, auditoria, versionamento)
 
-### Prioridade absoluta de tarefas
-Antes de qualquer feature nova, verificar se os 3 críticos do Manus estão resolvidos.
-Se não estiverem, qualquer tarefa que dependa de auth ou LLM deve começar pelos fixes.
-
 ### Ao trabalhar em `server/_core/llm.ts`
 - Manter a mesma assinatura de `invokeLLM(params: InvokeParams): Promise<InvokeResult>`
-- Trocar apenas o provedor interno (Forge → Gemini)
+- Provedor: Gemini 2.5 Flash via `@google/generative-ai`
 - Usar variáveis via `env.ts`, nunca `process.env` direto
 
 ### Ao trabalhar em autenticação
 - `signSession` e `verifySession` com `jose` já existem — reutilizar
-- Não criar novo sistema de sessão; apenas trocar o provedor de identidade
-- bcrypt já está no `package.json` — usar para hash de senha
+- Auth próprio: email + senha com bcrypt (já implementado)
+- Sessão via cookie HTTP-only com JWT
 
 ### Ao trabalhar com storage (S3)
 - Uploads sempre via AWS S3 — nunca base64 em banco
@@ -185,7 +154,5 @@ Se não estiverem, qualquer tarefa que dependa de auth ou LLM deve começar pelo
 
 ### Jamais
 - Propor features de ERP, contabilidade, tributação ou RH (fora do escopo)
-- Adicionar novas dependências da plataforma Manus
-- Chamar `BUILT_IN_FORGE_API_URL` ou `OAUTH_SERVER_URL` da Manus em código novo
 - Hardcodar chaves de API
 - Fazer push direto em produção sem staging
