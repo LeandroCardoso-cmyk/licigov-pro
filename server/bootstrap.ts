@@ -2710,6 +2710,140 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_plm_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`semantic_chunks\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`document_id\` VARCHAR(255) NOT NULL,
+      \`source_type\` VARCHAR(50) NOT NULL DEFAULT 'document',
+      \`source_snapshot_id\` VARCHAR(64) NULL,
+      \`chunk_index\` INT NOT NULL DEFAULT 0, \`chunk_hash\` VARCHAR(64) NOT NULL,
+      \`chunk_text\` TEXT NULL, \`normalized_text\` TEXT NULL,
+      \`semantic_metadata\` JSON NULL,
+      \`chunk_strategy\` VARCHAR(50) NOT NULL DEFAULT 'paragraph_chunking',
+      \`token_count\` INT NOT NULL DEFAULT 0, \`language\` VARCHAR(10) NOT NULL DEFAULT 'pt-BR',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_sc_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`vector_embeddings\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`chunk_id\` VARCHAR(20) NOT NULL, \`provider_id\` VARCHAR(255) NOT NULL,
+      \`model\` VARCHAR(255) NOT NULL, \`embedding_version\` VARCHAR(20) NOT NULL DEFAULT 'v1',
+      \`embedding_vector\` JSON NULL, \`embedding_hash\` VARCHAR(64) NOT NULL,
+      \`token_usage\` INT NOT NULL DEFAULT 0, \`generation_latency_ms\` INT NOT NULL DEFAULT 0,
+      \`deterministic_snapshot\` VARCHAR(64) NULL, \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ve_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`retrieval_sessions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`query_text\` TEXT NULL, \`normalized_query\` TEXT NULL,
+      \`retrieval_strategy\` VARCHAR(50) NOT NULL DEFAULT 'vector_similarity',
+      \`reranking_enabled\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`embedding_version\` VARCHAR(20) NOT NULL DEFAULT 'v1',
+      \`retrieved_chunks\` JSON NULL, \`retrieval_trace\` JSON NULL,
+      \`explainability_data\` JSON NULL, \`latency_ms\` INT NOT NULL DEFAULT 0,
+      \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rses_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`retrieval_evidences\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`retrieval_session_id\` VARCHAR(20) NOT NULL, \`chunk_id\` VARCHAR(20) NOT NULL,
+      \`similarity_score\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`bm25_score\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`rerank_score\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`final_score\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`ranking_reason\` TEXT NULL, \`semantic_explanation\` TEXT NULL,
+      \`evidence_type\` VARCHAR(50) NOT NULL DEFAULT 'semantic_match',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rev_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`semantic_corpora\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`corpus_type\` VARCHAR(50) NOT NULL DEFAULT 'custom',
+      \`corpus_name\` VARCHAR(255) NOT NULL, \`corpus_description\` TEXT NULL,
+      \`indexing_strategy\` VARCHAR(50) NOT NULL DEFAULT 'incremental',
+      \`embedding_provider\` VARCHAR(255) NOT NULL DEFAULT 'mock',
+      \`active_embedding_version\` VARCHAR(20) NOT NULL DEFAULT 'v1',
+      \`total_chunks\` INT NOT NULL DEFAULT 0, \`total_embeddings\` INT NOT NULL DEFAULT 0,
+      \`indexing_status\` VARCHAR(50) NOT NULL DEFAULT 'pending',
+      \`last_indexed_at\` DATETIME(3) NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_scorpus_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`embedding_jobs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`corpus_id\` VARCHAR(20) NOT NULL, \`provider_id\` VARCHAR(255) NOT NULL,
+      \`model\` VARCHAR(255) NOT NULL,
+      \`total_chunks\` INT NOT NULL DEFAULT 0, \`processed_chunks\` INT NOT NULL DEFAULT 0,
+      \`failed_chunks\` INT NOT NULL DEFAULT 0,
+      \`status\` VARCHAR(50) NOT NULL DEFAULT 'pending',
+      \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`started_at\` DATETIME(3) NULL, \`completed_at\` DATETIME(3) NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ej_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`retrieval_logs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(20) NOT NULL,
+      \`operation\` VARCHAR(50) NOT NULL DEFAULT 'search',
+      \`latency_ms\` INT NOT NULL DEFAULT 0, \`result_count\` INT NOT NULL DEFAULT 0,
+      \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rl_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`reranking_logs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(20) NOT NULL,
+      \`strategy\` VARCHAR(50) NOT NULL DEFAULT 'semantic',
+      \`candidates_count\` INT NOT NULL DEFAULT 0, \`reranked_count\` INT NOT NULL DEFAULT 0,
+      \`latency_ms\` INT NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rkl_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`semantic_memory_links\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`source_chunk_id\` VARCHAR(20) NOT NULL, \`target_chunk_id\` VARCHAR(20) NOT NULL,
+      \`link_type\` VARCHAR(50) NOT NULL DEFAULT 'correlation',
+      \`strength\` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+      \`context\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_sml_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`reindex_jobs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`corpus_id\` VARCHAR(20) NOT NULL,
+      \`reindex_type\` VARCHAR(50) NOT NULL DEFAULT 'full_reindex',
+      \`status\` VARCHAR(50) NOT NULL DEFAULT 'pending',
+      \`from_version\` VARCHAR(20) NOT NULL, \`to_version\` VARCHAR(20) NOT NULL,
+      \`total_chunks\` INT NOT NULL DEFAULT 0, \`processed_chunks\` INT NOT NULL DEFAULT 0,
+      \`failed_chunks\` INT NOT NULL DEFAULT 0,
+      \`requires_approval\` TINYINT(1) NOT NULL DEFAULT 0,
+      \`approved_by\` VARCHAR(255) NULL, \`correlation_id\` VARCHAR(64) NOT NULL,
+      \`started_at\` DATETIME(3) NULL, \`completed_at\` DATETIME(3) NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rj_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`vector_health_metrics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`corpus_id\` VARCHAR(20) NOT NULL,
+      \`total_chunks\` INT NOT NULL DEFAULT 0, \`total_embeddings\` INT NOT NULL DEFAULT 0,
+      \`orphan_embeddings\` INT NOT NULL DEFAULT 0, \`stale_embeddings\` INT NOT NULL DEFAULT 0,
+      \`avg_similarity_score\` DECIMAL(10,6) NOT NULL DEFAULT 0,
+      \`index_health\` VARCHAR(50) NOT NULL DEFAULT 'healthy',
+      \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_vhm_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

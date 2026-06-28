@@ -4074,3 +4074,168 @@ export const providerLatencyMetricsTable = mysqlTable("provider_latency_metrics"
   correlationId:  varchar("correlation_id", { length: 64 }).notNull(),
   recordedAt:     datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 4.6: Semantic Vector Infrastructure ──────────────────────────────
+
+export const semanticChunksV2Table = mysqlTable("semantic_chunks_v2", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  documentId:       varchar("document_id", { length: 255 }).notNull(),
+  sourceType:       varchar("source_type", { length: 50 }).notNull().default("document"),
+  sourceSnapshotId: varchar("source_snapshot_id", { length: 64 }),
+  chunkIndex:       int("chunk_index").notNull().default(0),
+  chunkHash:        varchar("chunk_hash", { length: 64 }).notNull(),
+  chunkText:        text("chunk_text"),
+  normalizedText:   text("normalized_text"),
+  semanticMetadata: text("semantic_metadata"),
+  chunkStrategy:    varchar("chunk_strategy", { length: 50 }).notNull().default("paragraph_chunking"),
+  tokenCount:       int("token_count").notNull().default(0),
+  language:         varchar("language", { length: 10 }).notNull().default("pt-BR"),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const vectorEmbeddingsTable = mysqlTable("vector_embeddings", {
+  id:                    varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull(),
+  chunkId:               varchar("chunk_id", { length: 20 }).notNull(),
+  providerId:            varchar("provider_id", { length: 255 }).notNull(),
+  model:                 varchar("model", { length: 255 }).notNull(),
+  embeddingVersion:      varchar("embedding_version", { length: 20 }).notNull().default("v1"),
+  embeddingVector:       text("embedding_vector"),
+  embeddingHash:         varchar("embedding_hash", { length: 64 }).notNull(),
+  tokenUsage:            int("token_usage").notNull().default(0),
+  generationLatencyMs:   int("generation_latency_ms").notNull().default(0),
+  deterministicSnapshot: varchar("deterministic_snapshot", { length: 64 }),
+  correlationId:         varchar("correlation_id", { length: 64 }).notNull(),
+  createdAt:             datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const retrievalSessionsV2Table = mysqlTable("retrieval_sessions_v2", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  queryText:         text("query_text"),
+  normalizedQuery:   text("normalized_query"),
+  retrievalStrategy: varchar("retrieval_strategy", { length: 50 }).notNull().default("vector_similarity"),
+  rerankingEnabled:  tinyint("reranking_enabled").notNull().default(0),
+  embeddingVersion:  varchar("embedding_version", { length: 20 }).notNull().default("v1"),
+  retrievedChunks:   text("retrieved_chunks"),
+  retrievalTrace:    text("retrieval_trace"),
+  explainabilityData:text("explainability_data"),
+  latencyMs:         int("latency_ms").notNull().default(0),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull(),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const retrievalEvidencesV2Table = mysqlTable("retrieval_evidences_v2", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  retrievalSessionId:  varchar("retrieval_session_id", { length: 20 }).notNull(),
+  chunkId:             varchar("chunk_id", { length: 20 }).notNull(),
+  similarityScore:     decimal("similarity_score", { precision: 10, scale: 6 }).notNull().default("0"),
+  bm25Score:           decimal("bm25_score", { precision: 10, scale: 6 }).notNull().default("0"),
+  rerankScore:         decimal("rerank_score", { precision: 10, scale: 6 }).notNull().default("0"),
+  finalScore:          decimal("final_score", { precision: 10, scale: 6 }).notNull().default("0"),
+  rankingReason:       text("ranking_reason"),
+  semanticExplanation: text("semantic_explanation"),
+  evidenceType:        varchar("evidence_type", { length: 50 }).notNull().default("semantic_match"),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const semanticCorporaTable = mysqlTable("semantic_corpora", {
+  id:                     varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:         int("organization_id").notNull(),
+  corpusType:             varchar("corpus_type", { length: 50 }).notNull().default("custom"),
+  corpusName:             varchar("corpus_name", { length: 255 }).notNull(),
+  corpusDescription:      text("corpus_description"),
+  indexingStrategy:       varchar("indexing_strategy", { length: 50 }).notNull().default("incremental"),
+  embeddingProvider:      varchar("embedding_provider", { length: 255 }).notNull().default("mock"),
+  activeEmbeddingVersion: varchar("active_embedding_version", { length: 20 }).notNull().default("v1"),
+  totalChunks:            int("total_chunks").notNull().default(0),
+  totalEmbeddings:        int("total_embeddings").notNull().default(0),
+  indexingStatus:         varchar("indexing_status", { length: 50 }).notNull().default("pending"),
+  lastIndexedAt:          datetime("last_indexed_at", { mode: "string", fsp: 3 }),
+  createdAt:              datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const embeddingJobsTable = mysqlTable("embedding_jobs", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  corpusId:        varchar("corpus_id", { length: 20 }).notNull(),
+  providerId:      varchar("provider_id", { length: 255 }).notNull(),
+  model:           varchar("model", { length: 255 }).notNull(),
+  totalChunks:     int("total_chunks").notNull().default(0),
+  processedChunks: int("processed_chunks").notNull().default(0),
+  failedChunks:    int("failed_chunks").notNull().default(0),
+  status:          varchar("status", { length: 50 }).notNull().default("pending"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull(),
+  startedAt:       datetime("started_at", { mode: "string", fsp: 3 }),
+  completedAt:     datetime("completed_at", { mode: "string", fsp: 3 }),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const retrievalLogsTable = mysqlTable("retrieval_logs", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId:      varchar("session_id", { length: 20 }).notNull(),
+  operation:      varchar("operation", { length: 50 }).notNull().default("search"),
+  latencyMs:      int("latency_ms").notNull().default(0),
+  resultCount:    int("result_count").notNull().default(0),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull(),
+  recordedAt:     datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const rerankingLogsTable = mysqlTable("reranking_logs", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  sessionId:       varchar("session_id", { length: 20 }).notNull(),
+  strategy:        varchar("strategy", { length: 50 }).notNull().default("semantic"),
+  candidatesCount: int("candidates_count").notNull().default(0),
+  rerankedCount:   int("reranked_count").notNull().default(0),
+  latencyMs:       int("latency_ms").notNull().default(0),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull(),
+  recordedAt:      datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const semanticMemoryLinksTable = mysqlTable("semantic_memory_links", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sourceChunkId:  varchar("source_chunk_id", { length: 20 }).notNull(),
+  targetChunkId:  varchar("target_chunk_id", { length: 20 }).notNull(),
+  linkType:       varchar("link_type", { length: 50 }).notNull().default("correlation"),
+  strength:       decimal("strength", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  context:        text("context"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull(),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const reindexJobsTable = mysqlTable("reindex_jobs", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  corpusId:         varchar("corpus_id", { length: 20 }).notNull(),
+  reindexType:      varchar("reindex_type", { length: 50 }).notNull().default("full_reindex"),
+  status:           varchar("status", { length: 50 }).notNull().default("pending"),
+  fromVersion:      varchar("from_version", { length: 20 }).notNull(),
+  toVersion:        varchar("to_version", { length: 20 }).notNull(),
+  totalChunks:      int("total_chunks").notNull().default(0),
+  processedChunks:  int("processed_chunks").notNull().default(0),
+  failedChunks:     int("failed_chunks").notNull().default(0),
+  requiresApproval: tinyint("requires_approval").notNull().default(0),
+  approvedBy:       varchar("approved_by", { length: 255 }),
+  correlationId:    varchar("correlation_id", { length: 64 }).notNull(),
+  startedAt:        datetime("started_at", { mode: "string", fsp: 3 }),
+  completedAt:      datetime("completed_at", { mode: "string", fsp: 3 }),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const vectorHealthMetricsTable = mysqlTable("vector_health_metrics", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  corpusId:           varchar("corpus_id", { length: 20 }).notNull(),
+  totalChunks:        int("total_chunks").notNull().default(0),
+  totalEmbeddings:    int("total_embeddings").notNull().default(0),
+  orphanEmbeddings:   int("orphan_embeddings").notNull().default(0),
+  staleEmbeddings:    int("stale_embeddings").notNull().default(0),
+  avgSimilarityScore: decimal("avg_similarity_score", { precision: 10, scale: 6 }).notNull().default("0"),
+  indexHealth:        varchar("index_health", { length: 50 }).notNull().default("healthy"),
+  recordedAt:         datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
