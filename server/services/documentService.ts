@@ -111,7 +111,7 @@ export async function createDocumento(
     requestId:      ctx.requestId,
     actorId:        ctx.user.id,
     actorName:      ctx.user.name ?? undefined,
-    payload:        criadoPayload,
+    payload:        criadoPayload as unknown as Record<string, unknown>,
   });
 
   // Activity log
@@ -294,7 +294,7 @@ export async function updateDocumento(
     correlationId:  ctx.correlationId,
     actorId:        ctx.user.id,
     actorName:      ctx.user.name ?? undefined,
-    payload:        atualizadoPayload,
+    payload:        atualizadoPayload as unknown as Record<string, unknown>,
   });
 
   // Activity log

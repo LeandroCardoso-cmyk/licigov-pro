@@ -554,7 +554,7 @@ const GLOBAL_TEMPLATES: OperationalTemplate[] = [
     ],
     workflowTemplate: {
       stages:              ["elaboration", "technical_review", "legal_review", "authority_approval", "director_approval", "publication", "completed"],
-      defaultDeadlineDays: { elaboration: 20, technical_review: 15, legal_review: 10, authority_approval: 7, director_approval: 5, publication: 3, completed: 0 },
+      defaultDeadlineDays: { elaboration: 20, technical_review: 15, legal_review: 10, authority_approval: 7, director_approval: 5, publication: 3, completed: 0, cancelled: 0 },
     },
     legalBasis:           ["Art. 6, I", "Art. 8", "Art. 46", "Art. 47"],
     estimatedDurationDays: 120,

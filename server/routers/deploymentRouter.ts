@@ -34,7 +34,7 @@ export const deploymentRouter = router({
         phase: z.string(), status: z.string(), targetVersion: z.string(),
         currentVersion: z.string(), rolloutPercentage: z.number(),
         healthScore: z.number(), events: z.array(z.any()),
-        validationResults: z.record(z.boolean()),
+        validationResults: z.record(z.string(), z.boolean()),
         rollbackPoint: z.string().nullable(),
         activatedAt: z.string().nullable(), completedAt: z.string().nullable(),
         createdAt: z.string(),
@@ -48,7 +48,7 @@ export const deploymentRouter = router({
 
   pauseDeployment: publicProcedure
     .input(z.object({
-      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
+      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor:  z.string(),
       reason: z.string(),
     }))
@@ -58,7 +58,7 @@ export const deploymentRouter = router({
 
   resumeDeployment: publicProcedure
     .input(z.object({
-      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
+      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor: z.string(),
     }))
     .mutation(({ input }) =>
@@ -67,7 +67,7 @@ export const deploymentRouter = router({
 
   initiateRollback: publicProcedure
     .input(z.object({
-      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
+      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor:  z.string(),
       reason: z.string(),
     }))
@@ -81,7 +81,7 @@ export const deploymentRouter = router({
 
   computeHealth: publicProcedure
     .input(z.object({
-      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
+      deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
     }))
     .query(({ input }) =>
       computeDeploymentHealth(input.deployment as Parameters<typeof computeDeploymentHealth>[0])
@@ -105,7 +105,7 @@ export const deploymentRouter = router({
 
   applyGovernance: publicProcedure
     .input(z.object({
-      deployment:            z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
+      deployment:            z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       approvedBy:            z.number(),
       approvalJustification: z.string(),
       constraints:           z.array(z.string()),

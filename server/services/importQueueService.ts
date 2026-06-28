@@ -112,6 +112,7 @@ async function processJob(job: ImportJob): Promise<void> {
       sourceFileId:    session.sourceFileId,
       sourceFileName:  session.sourceFileName,
       sourceMimeType:  session.sourceMimeType,
+      sourceChecksum:  "",
       organizationId:  job.organizationId,
     };
 

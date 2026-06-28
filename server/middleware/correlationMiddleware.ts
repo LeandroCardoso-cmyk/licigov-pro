@@ -1,12 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
 
-declare module "express-serve-static-core" {
-  interface Request {
-    correlationId: string;
-    requestId: string;
-  }
-}
-
 /**
  * Gera e propaga correlationId + requestId em cada request HTTP.
  *
@@ -25,8 +18,8 @@ export function correlationMiddleware(
 
   const requestId = crypto.randomUUID();
 
-  req.correlationId = correlationId;
-  req.requestId = requestId;
+  (req as unknown as Record<string, unknown>)["correlationId"] = correlationId;
+  (req as unknown as Record<string, unknown>)["requestId"] = requestId;
 
   res.setHeader("x-correlation-id", correlationId);
   res.setHeader("x-request-id", requestId);

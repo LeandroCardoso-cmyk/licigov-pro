@@ -78,8 +78,8 @@ export function exportItemTRsAsJson(
       description: i.description,
       quantity: i.quantity,
       unit: i.unit,
-      estimatedPrice: i.estimatedPrice,
-      status: i.status,
+      estimatedPrice: i.estimatedUnitPrice,
+      reviewState: i.reviewState,
     })),
     count: items.length,
   };
@@ -110,7 +110,7 @@ export function exportItemTRsAsXml(
   const xmlItems = items
     .map(
       (i) =>
-        `  <item id="${i.id}"><description>${i.description}</description><quantity>${i.quantity}</quantity><unit>${i.unit}</unit><estimatedPrice>${i.estimatedPrice}</estimatedPrice><status>${i.status}</status></item>`,
+        `  <item id="${i.id}"><description>${i.description}</description><quantity>${i.quantity}</quantity><unit>${i.unit}</unit><estimatedPrice>${i.estimatedUnitPrice}</estimatedPrice><reviewState>${i.reviewState}</reviewState></item>`,
     )
     .join("\n");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<items organizationId="${orgId}" count="${items.length}">\n${xmlItems}\n</items>`;

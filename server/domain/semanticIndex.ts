@@ -76,7 +76,7 @@ export function stemPt(token: string): string {
     [/osos?$/, "oso"],
     [/ais?$/, "al"],
     [/eis?$/, "el"],
-    [/[aeiou]s$/, (m) => m.slice(0, -1)],
+    [/([aeiou])s$/, "$1"],
   ];
 
   for (const [pattern, replacement] of rules) {

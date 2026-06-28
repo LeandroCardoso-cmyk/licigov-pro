@@ -147,7 +147,7 @@ export async function cleanupExpiredKeys(): Promise<number> {
     .delete(idempotencyKeys)
     .where(lt(idempotencyKeys.expiresAt, new Date()));
 
-  const deleted = (result as unknown as { rowsAffected?: number })[0]?.rowsAffected ?? 0;
+  const deleted = (result as any)[0]?.rowsAffected ?? 0;
   log.info("cleanup_expired", { deletedCount: deleted });
   return deleted;
 }

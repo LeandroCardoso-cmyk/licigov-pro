@@ -43,8 +43,8 @@ export function createDomainEvent<TPayload>(
   return {
     eventId: crypto.randomUUID(),
     occurredAt: new Date(),
-    eventVersion: 1,
     ...params,
+    eventVersion: params.eventVersion ?? 1,
     metadata: { schemaVersion: 1, ...params.metadata },
   };
 }

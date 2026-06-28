@@ -12,7 +12,7 @@ import {
   createOrganization,
 } from "../db/organizations";
 import { getUserByEmail } from "../db";
-import { logFromCtx } from "../services/activityLogService";
+import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
 
 export const organizationsRouter = router({
   // ─── Listar organizações do usuário autenticado ──────────────────────────
@@ -43,11 +43,11 @@ export const organizationsRouter = router({
       municipio: z.string().max(100).optional(),
     }),
   ).mutation(async ({ ctx, input }) => {
-    await updateOrganization(ctx.organizationId, input);
+    await updateOrganization(ctx.organizationId!, input);
 
-    await logFromCtx(ctx, null, "org.updated", {
+    await logFromCtx(ctx as TrpcAuditCtx, null, "org.updated", {
       entityType: "Organization",
-      entityId: ctx.organizationId,
+      entityId: ctx.organizationId!,
       details: input,
     });
 
@@ -57,7 +57,7 @@ export const organizationsRouter = router({
   // ─── Listar membros da organização ───────────────────────────────────────
 
   listMembers: orgRoleProcedure("operator").query(async ({ ctx }) => {
-    const members = await getMembersOfOrg(ctx.organizationId);
+    const members = await getMembersOfOrg(ctx.organizationId!);
     return members;
   }),
 
@@ -78,7 +78,7 @@ export const organizationsRouter = router({
     }
 
     // Verificar se já é membro
-    const existingMembers = await getMembersOfOrg(ctx.organizationId);
+    const existingMembers = await getMembersOfOrg(ctx.organizationId!);
     const alreadyMember = existingMembers.some(m => m.userId === targetUser.id);
     if (alreadyMember) {
       throw new TRPCError({
@@ -88,14 +88,14 @@ export const organizationsRouter = router({
     }
 
     await addMemberToOrg({
-      organizationId: ctx.organizationId,
+      organizationId: ctx.organizationId!,
       userId: targetUser.id,
       role: input.role,
-      invitedBy: ctx.user.id,
+      invitedBy: ctx.user!.id,
       ativo: true,
     });
 
-    await logFromCtx(ctx, null, "org.member_invited", {
+    await logFromCtx(ctx as TrpcAuditCtx, null, "org.member_invited", {
       entityType: "OrganizationMember",
       entityId: targetUser.id,
       details: { email: input.email, role: input.role },
@@ -113,7 +113,7 @@ export const organizationsRouter = router({
     }),
   ).mutation(async ({ ctx, input }) => {
     // Owners não podem ser rebaixados via API (apenas via DB/admin plataforma)
-    const members = await getMembersOfOrg(ctx.organizationId);
+    const members = await getMembersOfOrg(ctx.organizationId!);
     const target = members.find(m => m.userId === input.userId);
 
     if (!target) {
@@ -127,9 +127,9 @@ export const organizationsRouter = router({
       });
     }
 
-    await updateMemberRole(ctx.organizationId, input.userId, input.role);
+    await updateMemberRole(ctx.organizationId!, input.userId, input.role);
 
-    await logFromCtx(ctx, null, "org.member_role_updated", {
+    await logFromCtx(ctx as TrpcAuditCtx, null, "org.member_role_updated", {
       entityType: "OrganizationMember",
       entityId: input.userId,
       details: { newRole: input.role, previousRole: target.role },
@@ -145,14 +145,14 @@ export const organizationsRouter = router({
       userId: z.number().int().positive(),
     }),
   ).mutation(async ({ ctx, input }) => {
-    if (input.userId === ctx.user.id) {
+    if (input.userId === ctx.user!.id) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Você não pode remover a si mesmo da organização.",
       });
     }
 
-    const members = await getMembersOfOrg(ctx.organizationId);
+    const members = await getMembersOfOrg(ctx.organizationId!);
     const target = members.find(m => m.userId === input.userId);
 
     if (!target) {
@@ -166,9 +166,9 @@ export const organizationsRouter = router({
       });
     }
 
-    await removeMemberFromOrg(ctx.organizationId, input.userId);
+    await removeMemberFromOrg(ctx.organizationId!, input.userId);
 
-    await logFromCtx(ctx, null, "org.member_removed", {
+    await logFromCtx(ctx as TrpcAuditCtx, null, "org.member_removed", {
       entityType: "OrganizationMember",
       entityId: input.userId,
     });

@@ -28,11 +28,11 @@ export async function createContext(
   // requestId: sempre gerado por request, único por chamada HTTP
   const correlationId =
     (opts.req.headers["x-correlation-id"] as string | undefined) ||
-    (opts.req as Record<string, unknown>)["correlationId"] as string ||
+    (opts.req as unknown as Record<string, unknown>)["correlationId"] as string ||
     crypto.randomUUID();
 
   const requestId =
-    (opts.req as Record<string, unknown>)["requestId"] as string ||
+    (opts.req as unknown as Record<string, unknown>)["requestId"] as string ||
     crypto.randomUUID();
 
   return {

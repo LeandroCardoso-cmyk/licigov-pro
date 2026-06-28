@@ -133,7 +133,7 @@ async function applyTransition(
     requestId:      ctx.requestId,
     actorId:        ctx.user.id,
     actorName:      ctx.user.name ?? undefined,
-    payload:        eventPayload,
+    payload:        eventPayload as unknown as Record<string, unknown>,
   });
 
   // Activity log

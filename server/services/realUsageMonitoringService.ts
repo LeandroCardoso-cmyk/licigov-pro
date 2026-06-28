@@ -29,9 +29,11 @@ export interface UXEvent {
   sessionId:      string;
   eventType:      UXEventType;
   feature:        string;
+  action:         string;
   metadata:       Record<string, unknown>;
   durationMs?:    number;
   occurredAt:     string;
+  timestamp:      string;
 }
 
 export interface WorkflowAnalyticsSnapshot {
@@ -65,6 +67,7 @@ export interface SessionSummary {
   eventsCount:    number;
   featuresUsed:   string[];
   totalDurationMs: number;
+  durationMs?:    number;
 }
 
 // ─── In-memory store ──────────────────────────────────────────────────────────
@@ -89,6 +92,7 @@ export function recordUXEvent(params: {
   metadata?:      Record<string, unknown>;
   durationMs?:    number;
 }): UXEvent {
+  const now = new Date().toISOString();
   const event: UXEvent = {
     id:             genId("ux"),
     organizationId: params.organizationId,
@@ -96,9 +100,11 @@ export function recordUXEvent(params: {
     sessionId:      params.sessionId,
     eventType:      params.eventType,
     feature:        params.feature,
+    action:         params.eventType,
     metadata:       params.metadata ?? {},
     durationMs:     params.durationMs,
-    occurredAt:     new Date().toISOString(),
+    occurredAt:     now,
+    timestamp:      now,
   };
   _events.push(event);
   console.info(JSON.stringify({ type: "ux_event", ...event }));

@@ -68,13 +68,13 @@ import {
 } from "../../services/evidenceRetrievalService";
 
 import {
-  recordTrace,
-  buildExplainabilityTree,
-  buildRankingLineage,
-  compareExplainabilities,
-  formatForAudit,
-  getSessionTraces,
+  buildExplanation,
+  formatExplanationForHuman,
+  compareExplanations,
 } from "../../services/retrievalExplainabilityService";
+
+import { createRetrievalSession } from "../../domain/retrievalSession";
+import { createRetrievalEvidence } from "../../domain/retrievalEvidence";
 
 import {
   expandQuery,
@@ -818,81 +818,37 @@ describe("evidenceRetrievalService", () => {
 // ─── retrievalExplainabilityService ──────────────────────────────────────────
 
 describe("retrievalExplainabilityService", () => {
-  const traceParams = {
-    organizationId: ORG,
-    sessionId: "expl-sess-001",
-    query: "licitação pregão",
-    strategy: "hybrid",
-    itemId: "item-expl-001",
-    stageBreakdown: { semantic: 0.8, contextual: 0.7, lexical: 0.6, institutional: 0.5 },
-    rankPosition: 1,
-    semanticMatchReason: "Alta similaridade semântica com termos do edital",
-    contextualMatchReason: "Contexto de pregão eletrônico",
-  };
-
-  it("recordTrace cria trace com replayKey determinístico", () => {
-    const t1 = recordTrace(traceParams);
-    const t2 = recordTrace(traceParams);
-    expect(t1.replayKey).toBe(t2.replayKey);
+  it("buildExplanation gera explicação com campos obrigatórios", () => {
+    const session = createRetrievalSession({ organizationId: ORG, queryText: "licitação pregão", correlationId: "expl-41-1" });
+    const evidences = [
+      createRetrievalEvidence({ organizationId: ORG, retrievalSessionId: session.id, chunkId: "expl-c1", similarityScore: 0.8 }),
+    ];
+    const explanation = buildExplanation(session, evidences);
+    expect(explanation.sessionId).toBe(session.id);
+    expect(explanation.organizationId).toBe(ORG);
+    expect(explanation.queryText).toBe("licitação pregão");
+    expect(explanation.returnedResults).toBe(1);
   });
 
-  it("recordTrace tem todos os campos obrigatórios", () => {
-    const trace = recordTrace(traceParams);
-    expect(trace.organizationId).toBe(ORG);
-    expect(trace.sessionId).toBe("expl-sess-001");
-    expect(trace.itemId).toBe("item-expl-001");
-    expect(trace.rankPosition).toBe(1);
-    expect(trace.stageBreakdown).toEqual(traceParams.stageBreakdown);
+  it("formatExplanationForHuman retorna markdown formatado", () => {
+    const session = createRetrievalSession({ organizationId: ORG, queryText: "pregão eletrônico", correlationId: "expl-41-2" });
+    const evidences = [
+      createRetrievalEvidence({ organizationId: ORG, retrievalSessionId: session.id, chunkId: "expl-c2", similarityScore: 0.9 }),
+    ];
+    const explanation = buildExplanation(session, evidences);
+    const text = formatExplanationForHuman(explanation);
+    expect(typeof text).toBe("string");
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).toContain("Retrieval Explanation");
   });
 
-  it("recordTrace totalScore é média dos stageBreakdown values", () => {
-    const trace = recordTrace(traceParams);
-    const values = Object.values(traceParams.stageBreakdown);
-    const expected = values.reduce((a, b) => a + b, 0) / values.length;
-    expect(trace.totalScore).toBeCloseTo(expected, 5);
-  });
-
-  it("buildExplainabilityTree retorna árvore com 4 branches", () => {
-    const trace = recordTrace(traceParams);
-    const tree = buildExplainabilityTree(trace);
-    expect(tree.branches.length).toBe(4);
-    expect(tree.organizationId).toBe(ORG);
-  });
-
-  it("buildExplainabilityTree tem overallExplanation como string", () => {
-    const trace = recordTrace(traceParams);
-    const tree = buildExplainabilityTree(trace);
-    expect(typeof tree.overallExplanation).toBe("string");
-    expect(tree.overallExplanation.length).toBeGreaterThan(0);
-  });
-
-  it("buildRankingLineage retorna lineage com items", () => {
-    const trace = recordTrace(traceParams);
-    const lineage = buildRankingLineage(traceParams.sessionId, ORG, [trace]);
-    expect(lineage.organizationId).toBe(ORG);
-    expect(Array.isArray(lineage.items)).toBe(true);
-    expect(lineage.totalItems).toBe(1);
-  });
-
-  it("compareExplainabilities retorna string de diferenças", () => {
-    const t1 = recordTrace(traceParams);
-    const t2 = recordTrace({ ...traceParams, itemId: "item-expl-002", rankPosition: 2 });
-    const diff = compareExplainabilities(t1, t2);
-    expect(typeof diff).toBe("string");
-  });
-
-  it("formatForAudit retorna string de auditoria formatada", () => {
-    const trace = recordTrace(traceParams);
-    const audit = formatForAudit(trace);
-    expect(typeof audit).toBe("string");
-    expect(audit.length).toBeGreaterThan(0);
-  });
-
-  it("getSessionTraces retorna traces da sessão", () => {
-    recordTrace(traceParams);
-    const traces = getSessionTraces(ORG, "expl-sess-001");
-    expect(traces.length).toBeGreaterThanOrEqual(1);
-    expect(traces.every((t) => t.sessionId === "expl-sess-001")).toBe(true);
+  it("compareExplanations detecta diferenças entre explicações", () => {
+    const s1 = createRetrievalSession({ organizationId: ORG, queryText: "q1", retrievalStrategy: "vector_similarity", correlationId: "cmp-41-1" });
+    const s2 = createRetrievalSession({ organizationId: ORG, queryText: "q1", retrievalStrategy: "bm25_hybrid", correlationId: "cmp-41-2" });
+    const e1 = buildExplanation(s1, []);
+    const e2 = buildExplanation(s2, []);
+    const result = compareExplanations(e1, e2);
+    expect(result.differences.length).toBeGreaterThan(0);
   });
 });
 

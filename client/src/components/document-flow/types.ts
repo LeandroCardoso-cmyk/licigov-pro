@@ -9,7 +9,7 @@ export interface ProcessDocument {
   fileUrl: string | null;
   version: number;
   createdBy?: number | null;
-  documentStatus?: "draft" | "in_review" | "approved" | "rejected";
+  documentStatus?: "draft" | "in_review" | "approved" | "rejected" | "archived";
   createdAt: Date;
   updatedAt: Date;
 }
