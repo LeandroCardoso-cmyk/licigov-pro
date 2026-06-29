@@ -16,7 +16,7 @@ export const approvalWorkflowRouter = router({
       planId: z.string().optional(),
       priority: z.enum(["urgent","high","normal","low"]).optional(),
       deadline: z.string().optional(),
-      context: z.record(z.unknown()).optional(),
+      context: z.record(z.string(), z.unknown()).optional(),
     }))
     .mutation(({ input, ctx }) => createApprovalRequest({ organizationId: ctx.organizationId, ...input })),
 

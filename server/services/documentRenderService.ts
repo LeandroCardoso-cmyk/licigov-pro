@@ -140,7 +140,7 @@ export async function renderDocument(
       log.debug("render_cache_hit", { documentId, format });
       return {
         format,
-        content:    cached.renderedContent,
+        content:    cached.renderedContent ?? "",
         renderHash,
         renderedAt: cached.renderedAt?.toISOString() ?? now.toISOString(),
         fromCache:  true,
@@ -154,7 +154,7 @@ export async function renderDocument(
   let   rendered   = "";
 
   if (format === "html" || format === "docx" || format === "pdf") {
-    rendered = renderToHtml(title, doc.type, content, opts);
+    rendered = renderToHtml(title, doc.type ?? "", content, opts);
   }
 
   const checksum = createHash("sha256").update(rendered).digest("hex");

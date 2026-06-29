@@ -92,6 +92,7 @@ export interface DocumentBlock {
   id: string;
   type: DocumentBlockType;
   content: string;
+  order?: number;
   metadata?: Record<string, unknown>;
 }
 

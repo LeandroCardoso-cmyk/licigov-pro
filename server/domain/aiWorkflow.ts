@@ -713,3 +713,84 @@ export function addInferenceSnapshot<T extends object>(
   const snapshots = Array.isArray(existing) ? [...existing, snapshot] : [snapshot];
   return { ...workflow, inferenceSnapshots: snapshots } as T & { inferenceSnapshots: InferenceSnapshot[] };
 }
+
+// ─── Sprint 4.6: Semantic Vector Infrastructure ──────────────────────────────
+
+export interface RetrievalOrchestrationStep {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly corpusId: string;
+  readonly queryText: string;
+  readonly retrievalStrategy: string;
+  readonly embeddingVersion: string;
+  readonly resultCount: number;
+  readonly latencyMs: number;
+  readonly rerankingApplied: boolean;
+  readonly correlationId: string;
+  readonly createdAt: string;
+}
+
+export interface SemanticEvidenceGraph {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly retrievalSessionId: string;
+  readonly evidenceNodes: { chunkId: string; score: number; type: string }[];
+  readonly provenanceChain: string[];
+  readonly createdAt: string;
+}
+
+export function createRetrievalOrchestrationStep(params: {
+  workflowId: string;
+  organizationId: number;
+  corpusId: string;
+  queryText: string;
+  retrievalStrategy?: string;
+  embeddingVersion?: string;
+  resultCount?: number;
+  latencyMs?: number;
+  rerankingApplied?: boolean;
+  correlationId: string;
+}): RetrievalOrchestrationStep {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`retorch:${params.workflowId}:${params.corpusId}:${params.correlationId}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    corpusId: params.corpusId,
+    queryText: params.queryText,
+    retrievalStrategy: params.retrievalStrategy ?? "vector_similarity",
+    embeddingVersion: params.embeddingVersion ?? "v1",
+    resultCount: params.resultCount ?? 0,
+    latencyMs: params.latencyMs ?? 0,
+    rerankingApplied: params.rerankingApplied ?? false,
+    correlationId: params.correlationId,
+    createdAt: now,
+  };
+}
+
+export function createSemanticEvidenceGraph(params: {
+  workflowId: string;
+  organizationId: number;
+  retrievalSessionId: string;
+  evidenceNodes: { chunkId: string; score: number; type: string }[];
+  provenanceChain?: string[];
+}): SemanticEvidenceGraph {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`sevg:${params.workflowId}:${params.retrievalSessionId}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    retrievalSessionId: params.retrievalSessionId,
+    evidenceNodes: params.evidenceNodes,
+    provenanceChain: params.provenanceChain ?? [],
+    createdAt: now,
+  };
+}

@@ -10,7 +10,7 @@ export const draftingRouter = router({
     .input(z.object({
       sessionId:      z.string(),
       documentType:   z.string(),
-      variableValues: z.record(z.string()),
+      variableValues: z.record(z.string(), z.string()),
       templateId:     z.string().optional(),
       legalFramework: z.string().optional(),
     }))
@@ -78,7 +78,7 @@ export const draftingRouter = router({
       sessionId: z.string(),
       documentType:   z.string().optional(),
       legalBasisRefs: z.array(z.string()).optional(),
-      variableValues: z.record(z.string()).optional(),
+      variableValues: z.record(z.string(), z.string()).optional(),
     }))
     .mutation(({ ctx, input }) =>
       runStructuredGeneration({

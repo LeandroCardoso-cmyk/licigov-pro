@@ -11,7 +11,7 @@ export const agentExecutionRouter = router({
     .input(z.object({
       sessionId: z.string(),
       agentType: z.string(),
-      stages: z.array(z.object({ name: z.string(), input: z.record(z.unknown()).default({}), estimatedMs: z.number().optional() })),
+      stages: z.array(z.object({ name: z.string(), input: z.record(z.string(), z.unknown()).default({}), estimatedMs: z.number().optional() })),
     }))
     .mutation(({ input, ctx }) => runAgentExecution({ organizationId: ctx.organizationId, ...input })),
 
@@ -27,7 +27,7 @@ export const agentExecutionRouter = router({
   simulateExecution: tenantProcedure
     .input(z.object({
       sessionId: z.string(),
-      tasks: z.array(z.object({ name: z.string(), type: z.string(), input: z.record(z.unknown()).default({}), estimatedMs: z.number().optional() })),
+      tasks: z.array(z.object({ name: z.string(), type: z.string(), input: z.record(z.string(), z.unknown()).default({}), estimatedMs: z.number().optional() })),
       simulationType: z.enum(["dry_run","full_preview","rollback_preview","impact_estimation"]).default("dry_run"),
     }))
     .mutation(({ input, ctx }) => simulateTasks({ organizationId: ctx.organizationId, ...input })),

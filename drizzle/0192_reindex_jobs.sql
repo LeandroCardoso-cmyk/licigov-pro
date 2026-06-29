@@ -1,0 +1,20 @@
+CREATE TABLE `reindex_jobs` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `corpus_id` VARCHAR(20) NOT NULL,
+  `reindex_type` ENUM('full_reindex','incremental','version_migration','orphan_cleanup') NOT NULL DEFAULT 'full_reindex',
+  `status` ENUM('pending','running','completed','failed','cancelled','approved','rejected') NOT NULL DEFAULT 'pending',
+  `from_version` VARCHAR(20) NOT NULL,
+  `to_version` VARCHAR(20) NOT NULL,
+  `total_chunks` INT NOT NULL DEFAULT 0,
+  `processed_chunks` INT NOT NULL DEFAULT 0,
+  `failed_chunks` INT NOT NULL DEFAULT 0,
+  `requires_approval` TINYINT(1) NOT NULL DEFAULT 0,
+  `approved_by` VARCHAR(255) NULL,
+  `correlation_id` VARCHAR(64) NOT NULL,
+  `started_at` DATETIME(3) NULL,
+  `completed_at` DATETIME(3) NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_rj_org` (`organization_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

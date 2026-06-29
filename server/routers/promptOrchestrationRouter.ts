@@ -11,7 +11,7 @@ export const promptOrchestrationRouter = router({
     .input(z.object({
       sessionId: z.string(),
       chainId:   z.string(),
-      variables: z.record(z.string()),
+      variables: z.record(z.string(), z.string()),
       maxTokens: z.number().optional(),
     }))
     .mutation(({ ctx, input }) => {
@@ -49,7 +49,7 @@ export const promptOrchestrationRouter = router({
   replay: tenantProcedure
     .input(z.object({
       sessionId:    z.string(),
-      newVariables: z.record(z.string()).optional(),
+      newVariables: z.record(z.string(), z.string()).optional(),
     }))
     .mutation(({ ctx, input }) => {
       const history = getExecutionHistory(ctx.organizationId, input.sessionId);

@@ -72,7 +72,7 @@ export const stabilityRouter = router({
   getServiceHealth: publicProcedure
     .input(z.object({
       organizationId: z.number(),
-      metrics: z.record(z.number()),
+      metrics: z.record(z.string(), z.number()),
     }))
     .query(({ input }) =>
       buildHealthSnapshot(input.organizationId, input.metrics)
@@ -88,9 +88,9 @@ export const stabilityRouter = router({
       checkpointType: z.enum(["pre_deployment","post_migration","manual","scheduled","pre_rollback"]),
       snapshotData: z.object({
         tablesIncluded: z.array(z.string()),
-        rowCounts:      z.record(z.number()),
+        rowCounts:      z.record(z.string(), z.number()),
         schemaVersion:  z.string(),
-        serviceStates:  z.record(z.string()),
+        serviceStates:  z.record(z.string(), z.string()),
       }),
     }))
     .mutation(({ input }) =>
@@ -119,7 +119,7 @@ export const stabilityRouter = router({
       rules:          z.object({
         conditions:  z.array(z.string()),
         actions:     z.array(z.string()),
-        thresholds:  z.record(z.number()),
+        thresholds:  z.record(z.string(), z.number()),
       }),
       createdBy:      z.number(),
       effectiveTo:    z.string().nullable().optional(),
