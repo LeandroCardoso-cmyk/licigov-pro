@@ -18,7 +18,15 @@ export type WorkflowStepType =
   | "auto_approval"
   | "override"
   | "escalation"
-  | "completion";
+  | "completion"
+  | "institutional_query_pipeline"
+  | "context_assembly_pipeline"
+  | "retrieval_orchestration"
+  | "evidence_graph"
+  | "grounding_graph"
+  | "validation_graph"
+  | "citation_pipeline"
+  | "confidence_pipeline";
 
 export type WorkflowStatus =
   | "pending"
@@ -793,4 +801,53 @@ export function createSemanticEvidenceGraph(params: {
     provenanceChain: params.provenanceChain ?? [],
     createdAt: now,
   };
+}
+
+// ─── Sprint 4.7: Institutional RAG Engine ────────────────────────────────────
+
+export interface PromptContextInput {
+  readonly institutionalContext: string;
+  readonly documents: string[];
+  readonly evidence: string[];
+  readonly history: string[];
+  readonly legislation: string[];
+  readonly constraints: string[];
+  readonly workflowInstructions: string;
+}
+
+export function buildPromptContext(input: PromptContextInput): string {
+  const sections: string[] = [];
+
+  sections.push("=== CONTEXTO INSTITUCIONAL ===");
+  sections.push(input.institutionalContext);
+
+  if (input.legislation.length > 0) {
+    sections.push("\n=== LEGISLAÇÃO APLICÁVEL ===");
+    sections.push(input.legislation.join("\n"));
+  }
+
+  if (input.documents.length > 0) {
+    sections.push("\n=== DOCUMENTOS RELACIONADOS ===");
+    sections.push(input.documents.join("\n"));
+  }
+
+  if (input.evidence.length > 0) {
+    sections.push("\n=== EVIDÊNCIAS ===");
+    sections.push(input.evidence.join("\n"));
+  }
+
+  if (input.history.length > 0) {
+    sections.push("\n=== HISTÓRICO ===");
+    sections.push(input.history.join("\n"));
+  }
+
+  if (input.constraints.length > 0) {
+    sections.push("\n=== RESTRIÇÕES ===");
+    sections.push(input.constraints.join("\n"));
+  }
+
+  sections.push("\n=== INSTRUÇÕES DO WORKFLOW ===");
+  sections.push(input.workflowInstructions);
+
+  return sections.join("\n");
 }

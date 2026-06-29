@@ -945,6 +945,16 @@
     { "idx": 190, "version": "6", "when": 1763404800000, "tag": "0190_reranking_logs" },
     { "idx": 191, "version": "6", "when": 1763491200000, "tag": "0191_semantic_memory_links" },
     { "idx": 192, "version": "6", "when": 1763577600000, "tag": "0192_reindex_jobs" },
-    { "idx": 193, "version": "6", "when": 1763664000000, "tag": "0193_vector_health_metrics" }
+    { "idx": 193, "version": "6", "when": 1763664000000, "tag": "0193_vector_health_metrics" },
+    { "idx": 194, "version": "6", "when": 1763750400000, "tag": "0194_institutional_queries" },
+    { "idx": 195, "version": "6", "when": 1763836800000, "tag": "0195_context_assemblies" },
+    { "idx": 196, "version": "6", "when": 1763923200000, "tag": "0196_legal_evidences" },
+    { "idx": 197, "version": "6", "when": 1764009600000, "tag": "0197_grounding_sessions" },
+    { "idx": 198, "version": "6", "when": 1764096000000, "tag": "0198_response_citations" },
+    { "idx": 199, "version": "6", "when": 1764182400000, "tag": "0199_response_validations" },
+    { "idx": 200, "version": "6", "when": 1764268800000, "tag": "0200_confidence_scores" },
+    { "idx": 201, "version": "6", "when": 1764355200000, "tag": "0201_evidence_graphs" },
+    { "idx": 202, "version": "6", "when": 1764441600000, "tag": "0202_rag_metrics" },
+    { "idx": 203, "version": "6", "when": 1764528000000, "tag": "0203_grounding_logs" }
   ]
 }

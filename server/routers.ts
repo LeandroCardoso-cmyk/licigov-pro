@@ -52,6 +52,8 @@ import { providerRouter } from "./routers/providerRouter";
 import { providerGovernanceRouter } from "./routers/providerGovernanceRouter";
 import { semanticRetrievalRouter } from "./routers/semanticRetrievalRouter";
 import { semanticGovernanceRouter } from "./routers/semanticGovernanceRouter";
+import { institutionalRagRouter } from "./routers/institutionalRagRouter";
+import { ragGovernanceRouter } from "./routers/ragGovernanceRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -107,6 +109,8 @@ export const appRouter = router({
   providerGovernance: providerGovernanceRouter,
   semanticRetrieval:  semanticRetrievalRouter,
   semanticGovernance: semanticGovernanceRouter,
+  institutionalRag:    institutionalRagRouter,
+  ragGovernance:       ragGovernanceRouter,
 });
 
 export type AppRouter = typeof appRouter;
