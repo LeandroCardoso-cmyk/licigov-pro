@@ -61,28 +61,10 @@ Documentos gerados ou consumidos no processo.
 - Aditivo
 
 ### 5. `clausula`
-Clausulas e secoes padrao de documentos licitatorios.
-
-- Objeto
-- Justificativa
-- Fundamentacao Legal
-- Requisitos de Habilitacao
-- Criterios de Aceitabilidade
-- Obrigacoes do Contratado
-- Obrigacoes do Contratante
-- Sancoes
-- Vigencia
+Clausulas padrao: Objeto, Justificativa, Fundamentacao Legal, Requisitos de Habilitacao, Criterios de Aceitabilidade, Obrigacoes do Contratado/Contratante, Sancoes, Vigencia.
 
 ### 6. `entidade_publica`
-Orgaos e entidades participantes do processo.
-
-- Orgao Demandante
-- Setor de Licitacoes
-- Procuradoria / Assessoria Juridica
-- Autoridade Competente
-- Pregoeiro / Comissao de Contratacao
-- Fiscal de Contrato
-- Gestor de Contrato
+Orgaos participantes: Orgao Demandante, Setor de Licitacoes, Procuradoria/Assessoria Juridica, Autoridade Competente, Pregoeiro/Comissao, Fiscal de Contrato, Gestor de Contrato.
 
 ## Hierarquia de Conceitos
 

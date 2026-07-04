@@ -47,42 +47,15 @@ Orgao publico participante (pode ser demandante, fiscalizador, etc.).
 
 ## Tipos de Arestas (EdgeType)
 
-As arestas representam relacoes semanticas direcionadas entre nos:
-
-### `fundamenta`
-Indica que o no origem fornece base legal ou tecnica para o no destino.
-- Direcao: norma -> documento, documento -> documento
-- Exemplo: "Art. 18 da Lei 14.133" `fundamenta` "ETP do Processo 001/2026"
-
-### `compoe`
-Indica que o no origem faz parte da estrutura do no destino.
-- Direcao: clausula -> documento, documento -> processo
-- Exemplo: "Clausula de Objeto" `compoe` "Termo de Referencia"
-
-### `referencia`
-Indica citacao ou mencao sem relacao de dependencia direta.
-- Direcao: documento -> norma, documento -> documento
-- Exemplo: "Edital" `referencia` "Decreto 10.024/2019"
-
-### `exige`
-Indica requisito ou pre-condicao.
-- Direcao: documento -> conceito, fase -> documento
-- Exemplo: "TR" `exige` "Habilitacao Tecnica"
-
-### `complementa`
-Indica que o no origem adiciona informacao ao no destino.
-- Direcao: documento -> documento
-- Exemplo: "Parecer Juridico" `complementa` "Edital"
-
-### `substitui`
-Indica que o no origem torna o no destino obsoleto/superado.
-- Direcao: norma -> norma, documento -> documento
-- Exemplo: "Lei 14.133/2021" `substitui` "Lei 8.666/1993"
-
-### `conflita`
-Indica inconsistencia ou contradicao detectada entre nos.
-- Direcao: bidirecional (ambos conflitam)
-- Exemplo: "Valor no TR" `conflita` "Valor no ETP"
+| EdgeType | Semantica | Direcao tipica | Exemplo |
+|----------|-----------|----------------|---------|
+| `fundamenta` | Base legal/tecnica para o destino | norma -> documento | Art. 18 fundamenta ETP |
+| `compoe` | Origem faz parte do destino | clausula -> documento | Clausula de Objeto compoe TR |
+| `referencia` | Citacao sem dependencia | documento -> norma | Edital referencia Decreto 10.024 |
+| `exige` | Requisito ou pre-condicao | documento -> conceito | TR exige Habilitacao Tecnica |
+| `complementa` | Adiciona informacao | documento -> documento | Parecer complementa Edital |
+| `substitui` | Torna destino obsoleto | norma -> norma | Lei 14.133 substitui Lei 8.666 |
+| `conflita` | Inconsistencia detectada | bidirecional | Valor no TR conflita Valor no ETP |
 
 ## Modelo de Peso e Confianca
 

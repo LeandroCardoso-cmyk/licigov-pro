@@ -44,38 +44,22 @@ O motor de resolucao implementa quatro estrategias, aplicadas em cascata:
 ## Pipeline de Resolucao
 
 ```
-[Mencao extraida do documento]
-         |
-         v
-[1. Normalizacao] ---------> lowercase, trim, remove acentos, 
-         |                    remove pontuacao extra
-         v
-[2. Exact Match] ----------> Encontrou? -> RESOLVIDO (confidence: 1.0)
-         |                         |
-         | nao                     |
-         v                         |
-[3. Alias Match] ----------> Encontrou? -> RESOLVIDO (confidence: 0.95)
-         |                         |
-         | nao                     |
-         v                         |
-[4. Fuzzy Match] ----------> Score >= threshold? -> CANDIDATO
-         |                         |
-         | nao                     |
-         v                         |
-[5. Semantic Match] --------> Score >= threshold? -> CANDIDATO
-         |                         |
-         | nao                     |
-         v                         v
-[NOVO NO] (criar entidade)   [SCORING & RANKING]
-                                    |
-                                    v
-                             [Score final >= merge_threshold?]
-                                /              \
-                              sim               nao
-                               |                 |
-                               v                 v
-                           [MERGE]          [REVISAO MANUAL]
+Mencao -> Normalizacao -> Exact Match -> Alias Match -> Fuzzy -> Semantic
+              |               |              |            |         |
+              v               v              v            v         v
+         (lowercase,     RESOLVIDO      RESOLVIDO    CANDIDATO  CANDIDATO
+          trim, etc)    conf: 1.0      conf: 0.95       |         |
+                                                        v         v
+                                                   [SCORING & RANKING]
+                                                        |
+                                              Score >= merge_threshold?
+                                                /              \
+                                              sim              nao
+                                               |                |
+                                            [MERGE]      [REVISAO MANUAL]
 ```
+
+Se nenhuma estrategia produz candidato, um novo no e criado no grafo.
 
 ## Regras de Merge
 
