@@ -955,6 +955,16 @@
     { "idx": 200, "version": "6", "when": 1764268800000, "tag": "0200_confidence_scores" },
     { "idx": 201, "version": "6", "when": 1764355200000, "tag": "0201_evidence_graphs" },
     { "idx": 202, "version": "6", "when": 1764441600000, "tag": "0202_rag_metrics" },
-    { "idx": 203, "version": "6", "when": 1764528000000, "tag": "0203_grounding_logs" }
+    { "idx": 203, "version": "6", "when": 1764528000000, "tag": "0203_grounding_logs" },
+    { "idx": 204, "version": "6", "when": 1764614400000, "tag": "0204_knowledge_nodes" },
+    { "idx": 205, "version": "6", "when": 1764700800000, "tag": "0205_knowledge_edges" },
+    { "idx": 206, "version": "6", "when": 1764787200000, "tag": "0206_legal_reference_nodes" },
+    { "idx": 207, "version": "6", "when": 1764873600000, "tag": "0207_procurement_concepts" },
+    { "idx": 208, "version": "6", "when": 1764960000000, "tag": "0208_clause_knowledge" },
+    { "idx": 209, "version": "6", "when": 1765046400000, "tag": "0209_entity_resolutions" },
+    { "idx": 210, "version": "6", "when": 1765132800000, "tag": "0210_ontology_taxonomy" },
+    { "idx": 211, "version": "6", "when": 1765219200000, "tag": "0211_graph_metrics" },
+    { "idx": 212, "version": "6", "when": 1765305600000, "tag": "0212_graph_versions" },
+    { "idx": 213, "version": "6", "when": 1765392000000, "tag": "0213_graph_change_log" }
   ]
 }

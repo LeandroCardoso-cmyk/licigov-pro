@@ -4394,3 +4394,152 @@ export const groundingLogsTable = mysqlTable("grounding_logs", {
   correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 4.8 — Procurement Knowledge Graph ────────────────────────────────
+
+export const knowledgeNodesTable = mysqlTable("knowledge_nodes", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  nodeType:        varchar("node_type", { length: 50 }).notNull().default("concept"),
+  externalId:      varchar("external_id", { length: 255 }),
+  title:           varchar("title", { length: 500 }).notNull().default(""),
+  normalizedTitle: varchar("normalized_title", { length: 500 }).notNull().default(""),
+  description:     text("description"),
+  aliases:         json("aliases"),
+  metadata:        json("metadata"),
+  confidence:      decimal("confidence", { precision: 5, scale: 4 }).notNull().default("1.0"),
+  source:          varchar("source", { length: 100 }).notNull().default("manual"),
+  version:         int("version").notNull().default(1),
+  active:          tinyint("active").notNull().default(1),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const knowledgeEdgesTable = mysqlTable("knowledge_edges", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  sourceNodeId:     varchar("source_node_id", { length: 20 }).notNull(),
+  targetNodeId:     varchar("target_node_id", { length: 20 }).notNull(),
+  relationshipType: varchar("relationship_type", { length: 50 }).notNull().default("related_to"),
+  weight:           decimal("weight", { precision: 5, scale: 4 }).notNull().default("1.0"),
+  confidence:       decimal("confidence", { precision: 5, scale: 4 }).notNull().default("1.0"),
+  justification:    text("justification"),
+  provenance:       varchar("provenance", { length: 100 }).notNull().default("manual"),
+  direction:        varchar("direction", { length: 20 }).notNull().default("unidirectional"),
+  active:           tinyint("active").notNull().default(1),
+  correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalReferenceNodesTable = mysqlTable("legal_reference_nodes", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  referenceType:  varchar("reference_type", { length: 50 }).notNull().default("lei"),
+  numero:         varchar("numero", { length: 50 }).notNull().default(""),
+  ano:            int("ano").notNull().default(0),
+  orgao:          varchar("orgao", { length: 255 }).notNull().default(""),
+  artigo:         varchar("artigo", { length: 100 }),
+  inciso:         varchar("inciso", { length: 100 }),
+  alinea:         varchar("alinea", { length: 100 }),
+  texto:          text("texto"),
+  vigencia:       varchar("vigencia", { length: 50 }).notNull().default("vigente"),
+  ementa:         text("ementa"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const procurementConceptsTable = mysqlTable("procurement_concepts", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  category:        varchar("category", { length: 50 }).notNull().default("conceito"),
+  name:            varchar("name", { length: 255 }).notNull().default(""),
+  normalizedName:  varchar("normalized_name", { length: 255 }).notNull().default(""),
+  definition:      text("definition"),
+  legalBasis:      varchar("legal_basis", { length: 500 }).notNull().default(""),
+  parentConceptId: varchar("parent_concept_id", { length: 20 }),
+  aliases:         json("aliases"),
+  examples:        json("examples"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const clauseKnowledgeTable = mysqlTable("clause_knowledge", {
+  id:                   varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  category:             varchar("category", { length: 50 }).notNull().default("objeto"),
+  title:                varchar("title", { length: 500 }).notNull().default(""),
+  content:              text("content"),
+  purpose:              text("purpose"),
+  riskLevel:            varchar("risk_level", { length: 20 }).notNull().default("baixo"),
+  legalBasis:           varchar("legal_basis", { length: 500 }).notNull().default(""),
+  relatedDocumentTypes: json("related_document_types"),
+  prerequisites:        json("prerequisites"),
+  active:               tinyint("active").notNull().default(1),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const entityResolutionsTable = mysqlTable("entity_resolutions", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sourceEntityId: varchar("source_entity_id", { length: 20 }).notNull(),
+  targetEntityId: varchar("target_entity_id", { length: 20 }).notNull(),
+  strategy:       varchar("strategy", { length: 50 }).notNull().default("fuzzy"),
+  status:         varchar("status", { length: 50 }).notNull().default("pending"),
+  confidence:     decimal("confidence", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  reasoning:      text("reasoning"),
+  resolvedBy:     varchar("resolved_by", { length: 255 }).notNull().default("system"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const ontologyTaxonomyTable = mysqlTable("ontology_taxonomy", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name:           varchar("name", { length: 255 }).notNull().default(""),
+  category:       varchar("category", { length: 50 }).notNull().default(""),
+  parentId:       varchar("parent_id", { length: 20 }),
+  definition:     text("definition"),
+  legalBasis:     varchar("legal_basis", { length: 500 }).notNull().default(""),
+  aliases:        json("aliases"),
+  level:          int("level").notNull().default(0),
+  sortOrder:      int("sort_order").notNull().default(0),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const graphMetricsTable = mysqlTable("graph_metrics", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  metricName:     varchar("metric_name", { length: 100 }).notNull().default(""),
+  metricValue:    decimal("metric_value", { precision: 10, scale: 4 }).notNull().default("0"),
+  metricUnit:     varchar("metric_unit", { length: 50 }).notNull().default("count"),
+  tags:           json("tags"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const graphVersionsTable = mysqlTable("graph_versions", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  versionNumber:  int("version_number").notNull().default(1),
+  nodeCount:      int("node_count").notNull().default(0),
+  edgeCount:      int("edge_count").notNull().default(0),
+  changeSummary:  text("change_summary"),
+  createdBy:      varchar("created_by", { length: 255 }).notNull().default("system"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const graphChangeLogTable = mysqlTable("graph_change_log", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  entityType:     varchar("entity_type", { length: 50 }).notNull().default("node"),
+  entityId:       varchar("entity_id", { length: 20 }).notNull(),
+  operation:      varchar("operation", { length: 50 }).notNull().default("create"),
+  beforeState:    json("before_state"),
+  afterState:     json("after_state"),
+  changedBy:      varchar("changed_by", { length: 255 }).notNull().default("system"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
