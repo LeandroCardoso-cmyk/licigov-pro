@@ -19,3 +19,4 @@ export * from "./platforms";
 export * from "./directContracts";
 export * from "./contracts";
 export * from "./legalOpinions";
+export * from "./knowledgeGraph";

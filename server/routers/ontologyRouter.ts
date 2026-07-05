@@ -1,12 +1,38 @@
+/**
+ * Sprint 4.8.1 — Ontology Router (operational).
+ *
+ * Sem stubs: persistência real de conceitos + validação de ontologia real.
+ * Multi-tenant via tenantProcedure. IDs determinísticos do domínio.
+ */
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { router, tenantProcedure } from "../_core/trpc";
+import { createProcurementConcept, type ConceptCategory } from "../domain/procurementConcept";
+import { validateEdge, allowedRelationships } from "../services/ontologyValidationService";
+import type { RelationshipType } from "../domain/knowledgeEdge";
+import {
+  insertProcurementConcept,
+  listProcurementConcepts,
+  searchProcurementConcepts,
+} from "../db/knowledgeGraph";
+
+const CONCEPT_CATEGORIES = [
+  "modalidade", "criterio_julgamento", "regime_contratacao", "tipo_documento",
+  "tipo_risco", "tipo_objeto", "fase_licitacao", "qualificacao", "recurso", "sancao",
+] as const;
+
+const RELATIONSHIP_TYPES = [
+  "regulates", "references", "supersedes", "contradicts", "supports", "requires",
+  "part_of", "instance_of", "related_to", "derived_from", "applies_to", "supplies",
+  "risks", "mitigates", "justifies", "precedes", "follows",
+] as const;
 
 export const ontologyRouter = router({
-  createConcept: protectedProcedure
+  createConcept: tenantProcedure
     .input(z.object({
       name: z.string().min(1),
-      category: z.string().min(1),
-      definition: z.string().optional(),
+      category: z.enum(CONCEPT_CATEGORIES),
+      definition: z.string().min(1),
       legalBasis: z.string().optional(),
       parentConceptId: z.string().optional(),
       aliases: z.array(z.string()).optional(),
@@ -14,133 +40,96 @@ export const ontologyRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      return {
-        success: true,
+      const concept = createProcurementConcept({
         organizationId: orgId,
-        conceptId: `pc_${Date.now()}`,
+        category: input.category as ConceptCategory,
         name: input.name,
-        category: input.category,
-      };
+        definition: input.definition,
+        legalBasis: input.legalBasis,
+        parentConceptId: input.parentConceptId,
+        aliases: input.aliases,
+        examples: input.examples,
+      });
+      await insertProcurementConcept(concept, ctx.correlationId);
+      return { success: true, concept };
     }),
 
-  updateConcept: protectedProcedure
-    .input(z.object({
-      conceptId: z.string().min(1),
-      name: z.string().optional(),
-      category: z.string().optional(),
-      definition: z.string().optional(),
-      legalBasis: z.string().optional(),
-      aliases: z.array(z.string()).optional(),
-      examples: z.array(z.string()).optional(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      return {
-        success: true,
-        organizationId: orgId,
-        conceptId: input.conceptId,
-        updated: true,
-      };
-    }),
-
-  linkConcept: protectedProcedure
-    .input(z.object({
-      sourceConceptId: z.string().min(1),
-      targetConceptId: z.string().min(1),
-      relationshipType: z.enum(["is_a", "part_of", "related_to", "requires", "excludes"]),
-      weight: z.number().min(0).max(1).optional(),
-      justification: z.string().optional(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      return {
-        success: true,
-        organizationId: orgId,
-        linkId: `ol_${Date.now()}`,
-        sourceConceptId: input.sourceConceptId,
-        targetConceptId: input.targetConceptId,
-        relationshipType: input.relationshipType,
-      };
-    }),
-
-  searchOntology: protectedProcedure
+  searchOntology: tenantProcedure
     .input(z.object({
       query: z.string().min(1),
-      category: z.string().optional(),
-      includeAliases: z.boolean().optional(),
       limit: z.number().min(1).max(100).optional(),
     }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      return {
-        organizationId: orgId,
-        query: input.query,
-        results: [] as Array<{ id: string; name: string; category: string; relevance: number }>,
-        total: 0,
-      };
+      const results = await searchProcurementConcepts(orgId, input.query, input.limit ?? 50);
+      return { results, total: results.length };
     }),
 
-  classifyDocument: protectedProcedure
+  listConcepts: tenantProcedure
+    .input(z.object({ category: z.enum(CONCEPT_CATEGORIES).optional() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const concepts = await listProcurementConcepts(orgId, input.category);
+      return { concepts, total: concepts.length };
+    }),
+
+  validateRelationship: tenantProcedure
+    .input(z.object({
+      sourceNodeType: z.string().min(1),
+      targetNodeType: z.string().min(1),
+      relationshipType: z.enum(RELATIONSHIP_TYPES),
+    }))
+    .query(async ({ input }) => {
+      const result = validateEdge(
+        input.sourceNodeType,
+        input.targetNodeType,
+        input.relationshipType as RelationshipType,
+      );
+      return result;
+    }),
+
+  allowedRelationships: tenantProcedure
+    .input(z.object({
+      sourceNodeType: z.string().min(1),
+      targetNodeType: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      return { allowed: allowedRelationships(input.sourceNodeType, input.targetNodeType) };
+    }),
+
+  classifyDocument: tenantProcedure
     .input(z.object({
       documentContent: z.string().min(1),
-      documentType: z.string().optional(),
       maxConcepts: z.number().min(1).max(20).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      return {
-        success: true,
-        organizationId: orgId,
-        classifications: [] as Array<{ conceptId: string; conceptName: string; confidence: number; reasoning: string }>,
-        suggestedTaxonomyPath: [] as string[],
-      };
+      const concepts = await listProcurementConcepts(orgId);
+      const content = input.documentContent.toLowerCase();
+      const matches = concepts
+        .filter(c =>
+          content.includes(c.normalizedName) ||
+          c.aliases.some(a => content.includes(a.toLowerCase())),
+        )
+        .slice(0, input.maxConcepts ?? 10)
+        .map(c => ({ conceptId: c.id, conceptName: c.name, category: c.category }));
+      if (concepts.length === 0) {
+        // Sem base de conceitos persistida ainda: não é erro, apenas vazio.
+        return { classifications: [] as Array<{ conceptId: string; conceptName: string; category: string }> };
+      }
+      return { classifications: matches };
     }),
 
-  resolveAlias: protectedProcedure
-    .input(z.object({
-      alias: z.string().min(1),
-      context: z.string().optional(),
-    }))
+  exportOntology: tenantProcedure
+    .input(z.object({ category: z.enum(CONCEPT_CATEGORIES).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      const concepts = await listProcurementConcepts(orgId, input.category);
       return {
-        organizationId: orgId,
-        alias: input.alias,
-        resolvedConcepts: [] as Array<{ id: string; name: string; confidence: number }>,
-        ambiguous: false,
-      };
-    }),
-
-  getRecommendations: protectedProcedure
-    .input(z.object({
-      conceptId: z.string().min(1),
-      recommendationType: z.enum(["related", "children", "siblings", "legal_basis"]).optional(),
-      limit: z.number().min(1).max(50).optional(),
-    }))
-    .query(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      return {
-        organizationId: orgId,
-        conceptId: input.conceptId,
-        recommendations: [] as Array<{ id: string; name: string; type: string; score: number; reason: string }>,
-      };
-    }),
-
-  exportOntology: protectedProcedure
-    .input(z.object({
-      format: z.enum(["json", "csv", "owl"]).optional(),
-      category: z.string().optional(),
-      includeRelationships: z.boolean().optional(),
-    }))
-    .query(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      return {
-        organizationId: orgId,
-        format: input.format ?? "json",
+        format: "json" as const,
         data: {
-          concepts: [] as Array<{ id: string; name: string; category: string }>,
-          relationships: [] as Array<{ source: string; target: string; type: string }>,
-          metadata: { exportedAt: new Date().toISOString(), totalConcepts: 0, totalRelationships: 0 },
+          concepts: concepts.map(c => ({ id: c.id, name: c.name, category: c.category })),
+          metadata: { totalConcepts: concepts.length },
         },
       };
     }),

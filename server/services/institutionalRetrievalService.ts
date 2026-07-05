@@ -1,4 +1,9 @@
 import { createHash } from "crypto";
+import {
+  searchKnowledgeNodes,
+  getEdgesForNodes,
+  getNodesByIds,
+} from "../db/knowledgeGraph";
 
 export interface RetrievedChunk {
   readonly id: string;
@@ -175,6 +180,64 @@ export function retrieveFromTemplates(
   ];
 }
 
+/**
+ * Sprint 4.8.1 — Knowledge Graph lookup para o pipeline RAG.
+ *
+ * Busca nós relevantes no grafo, expande as arestas incidentes (adjacência) e
+ * transforma nós + relacionamentos em evidências que enriquecem o retrieval.
+ * Degradação graciosa: sem DB (getDb null) retorna []. Multi-tenant por orgId.
+ */
+export async function retrieveFromKnowledgeGraph(
+  query: string,
+  orgId: number
+): Promise<RetrievedChunk[]> {
+  const seeds = await searchKnowledgeNodes(orgId, { query, limit: 5 });
+  if (seeds.length === 0) return [];
+
+  const seedIds = seeds.map((n) => n.id);
+  const edges = await getEdgesForNodes(seedIds, orgId);
+
+  const neighborIds = new Set<string>();
+  for (const e of edges) {
+    neighborIds.add(e.sourceNodeId);
+    neighborIds.add(e.targetNodeId);
+  }
+  for (const id of seedIds) neighborIds.delete(id);
+
+  const neighbors = await getNodesByIds([...neighborIds], orgId);
+  const nodeById = new Map([...seeds, ...neighbors].map((n) => [n.id, n]));
+
+  const chunks: RetrievedChunk[] = [];
+
+  for (const seed of seeds) {
+    chunks.push({
+      id: generateId(`kg-node-${seed.id}`),
+      content: seed.description ? `${seed.title}: ${seed.description}` : seed.title,
+      similarity: seed.confidence,
+      source: "knowledge_graph",
+      chunkType: seed.nodeType,
+      organizationId: orgId,
+    });
+  }
+
+  for (const edge of edges) {
+    const s = nodeById.get(edge.sourceNodeId);
+    const t = nodeById.get(edge.targetNodeId);
+    if (!s || !t) continue;
+    const relation = `${s.title} —[${edge.relationshipType}]→ ${t.title}`;
+    chunks.push({
+      id: generateId(`kg-edge-${edge.id}`),
+      content: edge.justification ? `${relation}: ${edge.justification}` : relation,
+      similarity: edge.confidence * edge.weight,
+      source: "knowledge_graph",
+      chunkType: "graph_relationship",
+      organizationId: orgId,
+    });
+  }
+
+  return chunks;
+}
+
 export async function retrieveAll(
   query: string,
   orgId: number
@@ -184,12 +247,14 @@ export async function retrieveAll(
   similarTRs: SimilarTR[];
   history: HistoryItem[];
   evidence: EvidenceItem[];
+  graphChunks: RetrievedChunk[];
 }> {
-  const [chunks, legalRefs, similarTRs, history] = await Promise.all([
+  const [chunks, legalRefs, similarTRs, history, graphChunks] = await Promise.all([
     Promise.resolve(retrieveFromDocuments(query, orgId)),
     Promise.resolve(retrieveFromLegal(query, orgId)),
     Promise.resolve(retrieveFromTRs(query, orgId)),
     Promise.resolve(retrieveFromHistory(query, orgId)),
+    retrieveFromKnowledgeGraph(query, orgId),
   ]);
 
   const evidence: EvidenceItem[] = chunks.map((chunk) => ({
@@ -201,7 +266,7 @@ export async function retrieveAll(
     organizationId: chunk.organizationId,
   }));
 
-  return { chunks, legalRefs, similarTRs, history, evidence };
+  return { chunks, legalRefs, similarTRs, history, evidence, graphChunks };
 }
 
 export function weightedMerge(
@@ -211,6 +276,7 @@ export function weightedMerge(
     similarTRs: SimilarTR[];
     history: HistoryItem[];
     evidence: EvidenceItem[];
+    graphChunks?: RetrievedChunk[];
   },
   weights?: Record<string, number>
 ): RetrievedChunk[] {
@@ -220,9 +286,22 @@ export function weightedMerge(
     trs: weights?.trs ?? 0.9,
     history: weights?.history ?? 0.7,
     evidence: weights?.evidence ?? 1.1,
+    // Relacionamentos do grafo são evidências fortemente fundamentadas
+    graph: weights?.graph ?? 1.15,
   };
 
   const merged: RetrievedChunk[] = [];
+
+  for (const gchunk of sources.graphChunks ?? []) {
+    merged.push({
+      id: gchunk.id,
+      content: gchunk.content,
+      similarity: gchunk.similarity * w.graph,
+      source: gchunk.source,
+      chunkType: gchunk.chunkType,
+      organizationId: gchunk.organizationId,
+    });
+  }
 
   for (const chunk of sources.chunks) {
     merged.push({

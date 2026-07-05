@@ -2999,7 +2999,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`external_id\` VARCHAR(255) NULL,
       \`title\` VARCHAR(500) NOT NULL DEFAULT '',
       \`normalized_title\` VARCHAR(500) NOT NULL DEFAULT '',
-      \`description\` TEXT NULL, \`aliases\` JSON NULL, \`metadata\` JSON NULL,
+      \`description\` TEXT NULL, \`aliases\` TEXT NULL, \`metadata\` TEXT NULL,
       \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
       \`source\` VARCHAR(100) NOT NULL DEFAULT 'manual',
       \`version\` INT NOT NULL DEFAULT 1,
@@ -3008,7 +3008,9 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_kn_org\` (\`organization_id\`),
       INDEX \`idx_kn_type\` (\`node_type\`),
-      INDEX \`idx_kn_title\` (\`normalized_title\`(191))
+      INDEX \`idx_kn_title\` (\`normalized_title\`(191)),
+      INDEX \`idx_kn_org_active\` (\`organization_id\`, \`active\`),
+      INDEX \`idx_kn_org_type\` (\`organization_id\`, \`node_type\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`knowledge_edges\` (
@@ -3027,7 +3029,10 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`), INDEX \`idx_ke_org\` (\`organization_id\`),
       INDEX \`idx_ke_source\` (\`source_node_id\`),
       INDEX \`idx_ke_target\` (\`target_node_id\`),
-      INDEX \`idx_ke_type\` (\`relationship_type\`)
+      INDEX \`idx_ke_type\` (\`relationship_type\`),
+      INDEX \`idx_ke_org_source\` (\`organization_id\`, \`source_node_id\`),
+      INDEX \`idx_ke_org_target\` (\`organization_id\`, \`target_node_id\`),
+      INDEX \`idx_ke_org_active\` (\`organization_id\`, \`active\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_reference_nodes\` (
@@ -3055,7 +3060,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`definition\` TEXT NULL,
       \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
       \`parent_concept_id\` VARCHAR(20) NULL,
-      \`aliases\` JSON NULL, \`examples\` JSON NULL,
+      \`aliases\` TEXT NULL, \`examples\` TEXT NULL,
       \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_pcon_org\` (\`organization_id\`),
@@ -3070,7 +3075,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`content\` TEXT NULL, \`purpose\` TEXT NULL,
       \`risk_level\` VARCHAR(20) NOT NULL DEFAULT 'baixo',
       \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
-      \`related_document_types\` JSON NULL, \`prerequisites\` JSON NULL,
+      \`related_document_types\` TEXT NULL, \`prerequisites\` TEXT NULL,
       \`active\` TINYINT NOT NULL DEFAULT 1,
       \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -3100,7 +3105,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`category\` VARCHAR(50) NOT NULL DEFAULT '',
       \`parent_id\` VARCHAR(20) NULL, \`definition\` TEXT NULL,
       \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
-      \`aliases\` JSON NULL,
+      \`aliases\` TEXT NULL,
       \`level\` INT NOT NULL DEFAULT 0,
       \`sort_order\` INT NOT NULL DEFAULT 0,
       \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
@@ -3116,7 +3121,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`metric_name\` VARCHAR(100) NOT NULL DEFAULT '',
       \`metric_value\` DECIMAL(10,4) NOT NULL DEFAULT 0,
       \`metric_unit\` VARCHAR(50) NOT NULL DEFAULT 'count',
-      \`tags\` JSON NULL,
+      \`tags\` TEXT NULL,
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_gm_org\` (\`organization_id\`),
       INDEX \`idx_gm_name\` (\`metric_name\`)
@@ -3140,7 +3145,7 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`entity_type\` VARCHAR(50) NOT NULL DEFAULT 'node',
       \`entity_id\` VARCHAR(20) NOT NULL,
       \`operation\` VARCHAR(50) NOT NULL DEFAULT 'create',
-      \`before_state\` JSON NULL, \`after_state\` JSON NULL,
+      \`before_state\` TEXT NULL, \`after_state\` TEXT NULL,
       \`changed_by\` VARCHAR(255) NOT NULL DEFAULT 'system',
       \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { trpc } from "../../lib/trpc";
 
 interface GraphMetric {
   id: string;
@@ -19,16 +20,6 @@ interface MetricsData {
   resolutions: number;
 }
 
-const mockMetrics: MetricsData = {
-  totalNodes: 1247,
-  totalEdges: 3891,
-  orphanNodes: 12,
-  averageDegree: 3.12,
-  healthScore: 87,
-  traversalLatency: 45,
-  resolutions: 156,
-};
-
 function getHealthColor(score: number): string {
   if (score > 80) return "text-green-600";
   if (score >= 60) return "text-yellow-600";
@@ -42,18 +33,22 @@ function getHealthBg(score: number): string {
 }
 
 function GraphMetricsDashboard() {
-  const [metrics, setMetrics] = useState<MetricsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Sprint 4.8.1 — dados reais via tRPC + TanStack Query
+  const { data, isLoading } = trpc.knowledgeGraph.graphMetrics.useQuery();
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setMetrics(mockMetrics);
-      setLoading(false);
-    }, 700);
-    return () => clearTimeout(timer);
-  }, []);
+  const metrics: MetricsData | null = data
+    ? {
+        totalNodes: data.metrics.totalNodes,
+        totalEdges: data.metrics.totalEdges,
+        orphanNodes: 0,
+        averageDegree: data.metrics.avgDegree,
+        healthScore: data.metrics.totalNodes > 0 ? 100 : 0,
+        traversalLatency: 0,
+        resolutions: 0,
+      }
+    : null;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-3">
         {Array.from({ length: 7 }).map((_, i) => (

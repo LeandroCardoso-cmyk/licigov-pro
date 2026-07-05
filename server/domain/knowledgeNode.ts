@@ -34,6 +34,12 @@ export interface KnowledgeNode {
   readonly source: string;
   readonly version: number;
   readonly active: boolean;
+  // ─── Sprint 4.8.1 — operational wiring (replay safety + lineage) ───────────
+  readonly correlationId: string;
+  readonly lineageId: string;
+  readonly graphVersion: number;
+  readonly createdBy: string;
+  readonly updatedBy: string;
   readonly createdAt: string;
 }
 
@@ -51,11 +57,20 @@ export function createKnowledgeNode(params: {
   metadata?: Record<string, unknown>;
   confidence?: number;
   source?: string;
+  correlationId?: string;
+  graphVersion?: number;
+  createdBy?: string;
+  createdAt?: string;
 }): KnowledgeNode {
   const normalizedTitle = normalizeTitle(params.title);
   const id = createHash("sha256")
     .update(`kn:${params.organizationId}:${params.nodeType}:${normalizedTitle}`)
     .digest("hex").slice(0, 20);
+  // lineageId é determinístico, derivado do id canônico do nó
+  const lineageId = createHash("sha256")
+    .update(`ln:${id}`)
+    .digest("hex").slice(0, 20);
+  const createdBy = params.createdBy ?? "system";
   return {
     id,
     organizationId: params.organizationId,
@@ -70,7 +85,12 @@ export function createKnowledgeNode(params: {
     source: params.source ?? "manual",
     version: 1,
     active: true,
-    createdAt: new Date().toISOString(),
+    correlationId: params.correlationId ?? "",
+    lineageId,
+    graphVersion: params.graphVersion ?? 1,
+    createdBy,
+    updatedBy: createdBy,
+    createdAt: params.createdAt ?? new Date().toISOString(),
   };
 }
 
@@ -80,12 +100,17 @@ export function matchesAlias(node: KnowledgeNode, query: string): boolean {
   return node.aliases.some(a => normalizeTitle(a).includes(normalized));
 }
 
-export function updateNodeVersion(node: KnowledgeNode, changes: Partial<Pick<KnowledgeNode, "title" | "description" | "aliases" | "metadata" | "confidence">>): KnowledgeNode {
+export function updateNodeVersion(
+  node: KnowledgeNode,
+  changes: Partial<Pick<KnowledgeNode, "title" | "description" | "aliases" | "metadata" | "confidence">>,
+  updatedBy?: string,
+): KnowledgeNode {
   return {
     ...node,
     ...changes,
     normalizedTitle: changes.title ? normalizeTitle(changes.title) : node.normalizedTitle,
     version: node.version + 1,
+    updatedBy: updatedBy ?? node.updatedBy,
   };
 }
 
