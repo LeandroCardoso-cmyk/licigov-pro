@@ -303,3 +303,208 @@ export function isContextStale(fragment: ContextFragment, maxAgeMs: number): boo
   if (isNaN(fragmentTime)) return false;
   return Date.now() - fragmentTime > maxAgeMs;
 }
+
+// ─── Sprint 4.7: Institutional RAG Context Assembly ─────────────────────────
+
+export interface RetrievedChunk {
+  readonly chunkId: string;
+  readonly content: string;
+  readonly similarity: number;
+  readonly source: string;
+}
+
+export interface LegalReference {
+  readonly lawRef: string;
+  readonly article: string;
+  readonly clause: string;
+  readonly text: string;
+}
+
+export interface MunicipalityHistoryEntry {
+  readonly processId: string;
+  readonly description: string;
+  readonly date: string;
+  readonly relevance: number;
+}
+
+export interface SimilarTR {
+  readonly trId: string;
+  readonly title: string;
+  readonly similarity: number;
+  readonly keyTerms: readonly string[];
+}
+
+export interface SemanticEvidenceEntry {
+  readonly evidenceId: string;
+  readonly type: string;
+  readonly content: string;
+  readonly confidence: number;
+}
+
+export interface RAGContextAssembly {
+  readonly id: string;
+  readonly organizationId: number;
+  readonly queryId: string;
+  readonly retrievedChunks: readonly RetrievedChunk[];
+  readonly legalReferences: readonly LegalReference[];
+  readonly municipalityHistory: readonly MunicipalityHistoryEntry[];
+  readonly similarTRs: readonly SimilarTR[];
+  readonly semanticEvidence: readonly SemanticEvidenceEntry[];
+  readonly promptContext: string;
+  readonly totalTokens: number;
+  readonly assemblyStrategy: string;
+  readonly compressionApplied: boolean;
+  readonly createdAt: string;
+}
+
+export function assembleRAGContext(
+  query: { id: string; organizationId: number },
+  chunks: readonly RetrievedChunk[],
+  legalRefs: readonly LegalReference[],
+  history: readonly MunicipalityHistoryEntry[],
+  trs: readonly SimilarTR[],
+  evidence: readonly SemanticEvidenceEntry[],
+): RAGContextAssembly {
+  const id = createHash("sha256")
+    .update(`ctx:${query.organizationId}:${query.id}`)
+    .digest("hex").slice(0, 20);
+
+  const sections: string[] = [];
+
+  if (legalRefs.length > 0) {
+    sections.push("=== REFERÊNCIAS LEGAIS ===");
+    for (const ref of legalRefs) {
+      sections.push(`${ref.lawRef}, Art. ${ref.article}: ${ref.text}`);
+    }
+  }
+
+  if (chunks.length > 0) {
+    sections.push("\n=== TRECHOS RECUPERADOS ===");
+    for (const chunk of chunks) {
+      sections.push(`[${chunk.source}] (sim: ${chunk.similarity.toFixed(2)}) ${chunk.content}`);
+    }
+  }
+
+  if (history.length > 0) {
+    sections.push("\n=== HISTÓRICO MUNICIPAL ===");
+    for (const entry of history) {
+      sections.push(`[${entry.date}] ${entry.description} (rel: ${entry.relevance.toFixed(2)})`);
+    }
+  }
+
+  if (trs.length > 0) {
+    sections.push("\n=== TERMOS DE REFERÊNCIA SIMILARES ===");
+    for (const tr of trs) {
+      sections.push(`${tr.title} (sim: ${tr.similarity.toFixed(2)}) — ${tr.keyTerms.join(", ")}`);
+    }
+  }
+
+  if (evidence.length > 0) {
+    sections.push("\n=== EVIDÊNCIAS SEMÂNTICAS ===");
+    for (const ev of evidence) {
+      sections.push(`[${ev.type}] (conf: ${ev.confidence.toFixed(2)}) ${ev.content}`);
+    }
+  }
+
+  const promptContext = sections.join("\n");
+  const totalTokens = estimateRAGTokens(promptContext);
+
+  return {
+    id,
+    organizationId: query.organizationId,
+    queryId: query.id,
+    retrievedChunks: chunks,
+    legalReferences: legalRefs,
+    municipalityHistory: history,
+    similarTRs: trs,
+    semanticEvidence: evidence,
+    promptContext,
+    totalTokens,
+    assemblyStrategy: "hybrid",
+    compressionApplied: false,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function compressRAGContext(
+  assembly: RAGContextAssembly,
+  maxTokens: number,
+): RAGContextAssembly {
+  if (assembly.totalTokens <= maxTokens) return assembly;
+
+  // Trim items with lowest relevance/confidence/similarity until within token budget
+  const sortedChunks = [...assembly.retrievedChunks].sort((a, b) => b.similarity - a.similarity);
+  const sortedHistory = [...assembly.municipalityHistory].sort((a, b) => b.relevance - a.relevance);
+  const sortedTRs = [...assembly.similarTRs].sort((a, b) => b.similarity - a.similarity);
+  const sortedEvidence = [...assembly.semanticEvidence].sort((a, b) => b.confidence - a.confidence);
+
+  let currentChunks = sortedChunks;
+  let currentHistory = sortedHistory;
+  let currentTRs = sortedTRs;
+  let currentEvidence = sortedEvidence;
+
+  // Iteratively remove lowest-scoring items from each category
+  let iterations = 0;
+  const maxIterations = currentChunks.length + currentHistory.length + currentTRs.length + currentEvidence.length;
+
+  while (iterations < maxIterations) {
+    const tempAssembly = assembleRAGContext(
+      { id: assembly.queryId, organizationId: assembly.organizationId },
+      currentChunks,
+      assembly.legalReferences, // never trim legal references
+      currentHistory,
+      currentTRs,
+      currentEvidence,
+    );
+    if (tempAssembly.totalTokens <= maxTokens) {
+      return { ...tempAssembly, compressionApplied: true };
+    }
+
+    // Remove the lowest-scoring item across all categories
+    const candidates: { category: string; score: number }[] = [];
+    if (currentChunks.length > 0) {
+      candidates.push({ category: "chunks", score: currentChunks[currentChunks.length - 1].similarity });
+    }
+    if (currentHistory.length > 0) {
+      candidates.push({ category: "history", score: currentHistory[currentHistory.length - 1].relevance });
+    }
+    if (currentTRs.length > 0) {
+      candidates.push({ category: "trs", score: currentTRs[currentTRs.length - 1].similarity });
+    }
+    if (currentEvidence.length > 0) {
+      candidates.push({ category: "evidence", score: currentEvidence[currentEvidence.length - 1].confidence });
+    }
+
+    if (candidates.length === 0) break;
+
+    candidates.sort((a, b) => a.score - b.score);
+    const toRemove = candidates[0].category;
+
+    if (toRemove === "chunks") currentChunks = currentChunks.slice(0, -1);
+    else if (toRemove === "history") currentHistory = currentHistory.slice(0, -1);
+    else if (toRemove === "trs") currentTRs = currentTRs.slice(0, -1);
+    else if (toRemove === "evidence") currentEvidence = currentEvidence.slice(0, -1);
+
+    iterations++;
+  }
+
+  const finalAssembly = assembleRAGContext(
+    { id: assembly.queryId, organizationId: assembly.organizationId },
+    currentChunks,
+    assembly.legalReferences,
+    currentHistory,
+    currentTRs,
+    currentEvidence,
+  );
+  return { ...finalAssembly, compressionApplied: true };
+}
+
+export function estimateRAGTokens(text: string): number {
+  return Math.ceil(text.split(/\s+/).length / 0.75);
+}
+
+export function prioritizeEvidence(
+  evidence: readonly SemanticEvidenceEntry[],
+): SemanticEvidenceEntry[] {
+  return [...evidence].sort((a, b) => b.confidence - a.confidence);
+}

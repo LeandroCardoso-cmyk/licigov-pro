@@ -1,0 +1,21 @@
+CREATE TABLE `legal_evidences` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `source_type` VARCHAR(50) NOT NULL DEFAULT 'lei_14133',
+  `source_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `law_reference` VARCHAR(255) NOT NULL DEFAULT '',
+  `article` VARCHAR(100) NOT NULL DEFAULT '',
+  `clause` VARCHAR(100) NULL,
+  `paragraph` VARCHAR(100) NULL,
+  `jurisprudence_reference` VARCHAR(500) NULL,
+  `text` TEXT NULL,
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+  `explanation` TEXT NULL,
+  `tags` JSON NULL,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_le_org` (`organization_id`),
+  INDEX `idx_le_source` (`source_type`),
+  INDEX `idx_le_law` (`law_reference`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

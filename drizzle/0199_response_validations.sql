@@ -1,0 +1,20 @@
+CREATE TABLE `response_validations` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `response_id` VARCHAR(20) NOT NULL,
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+  `hallucination_risk` VARCHAR(50) NOT NULL DEFAULT 'none',
+  `unsupported_claims` JSON NULL,
+  `contradictions` JSON NULL,
+  `missing_evidence` JSON NULL,
+  `validation_result` VARCHAR(50) NOT NULL DEFAULT 'approved',
+  `requires_human_approval` TINYINT NOT NULL DEFAULT 0,
+  `validation_explanation` TEXT NULL,
+  `grounding_coverage` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+  `evidence_utilization` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_rval_org` (`organization_id`),
+  INDEX `idx_rval_response` (`response_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

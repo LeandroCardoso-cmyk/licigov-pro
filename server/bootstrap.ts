@@ -2844,6 +2844,315 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`recorded_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_vhm_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 4.7: Institutional RAG Engine ──────────────────────────────
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`institutional_queries\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workflow_id\` VARCHAR(20) NULL, \`user_id\` VARCHAR(255) NOT NULL,
+      \`query\` TEXT NULL, \`normalized_query\` TEXT NULL,
+      \`intent\` VARCHAR(50) NOT NULL DEFAULT 'general',
+      \`query_type\` VARCHAR(50) NOT NULL DEFAULT 'factual',
+      \`context_strategy\` VARCHAR(50) NOT NULL DEFAULT 'selective',
+      \`retrieval_strategy\` VARCHAR(50) NOT NULL DEFAULT 'hybrid',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_iq_org\` (\`organization_id\`),
+      INDEX \`idx_iq_user\` (\`user_id\`), INDEX \`idx_iq_intent\` (\`intent\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`context_assemblies\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`query_id\` VARCHAR(20) NOT NULL,
+      \`retrieved_chunks\` JSON NULL, \`legal_references\` JSON NULL,
+      \`municipality_history\` JSON NULL, \`similar_trs\` JSON NULL,
+      \`semantic_evidence\` JSON NULL, \`prompt_context\` TEXT NULL,
+      \`total_tokens\` INT NOT NULL DEFAULT 0,
+      \`assembly_strategy\` VARCHAR(50) NOT NULL DEFAULT 'selective',
+      \`compression_applied\` TINYINT NOT NULL DEFAULT 0,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ca_org\` (\`organization_id\`),
+      INDEX \`idx_ca_query\` (\`query_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_evidences\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`source_type\` VARCHAR(50) NOT NULL DEFAULT 'lei_14133',
+      \`source_id\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`law_reference\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`article\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`clause\` VARCHAR(100) NULL, \`paragraph\` VARCHAR(100) NULL,
+      \`jurisprudence_reference\` VARCHAR(500) NULL,
+      \`text\` TEXT NULL, \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`explanation\` TEXT NULL, \`tags\` JSON NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_le_org\` (\`organization_id\`),
+      INDEX \`idx_le_source\` (\`source_type\`), INDEX \`idx_le_law\` (\`law_reference\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`grounding_sessions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`query_id\` VARCHAR(20) NOT NULL, \`provider_execution_id\` VARCHAR(20) NULL,
+      \`grounding_version\` VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+      \`evidence_graph\` JSON NULL, \`final_prompt\` TEXT NULL,
+      \`grounding_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`confidence_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`replay_snapshot\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gsess_org\` (\`organization_id\`),
+      INDEX \`idx_gsess_query\` (\`query_id\`), INDEX \`idx_gsess_corr\` (\`correlation_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`response_citations\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`response_id\` VARCHAR(20) NOT NULL, \`evidence_id\` VARCHAR(20) NULL,
+      \`chunk_id\` VARCHAR(20) NULL, \`citation_text\` TEXT NULL,
+      \`source_document\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`page\` VARCHAR(50) NULL, \`section\` VARCHAR(255) NULL,
+      \`similarity\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`citation_type\` VARCHAR(50) NOT NULL DEFAULT 'direct_quote',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rcit_org\` (\`organization_id\`),
+      INDEX \`idx_rcit_response\` (\`response_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`response_validations\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`response_id\` VARCHAR(20) NOT NULL,
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`hallucination_risk\` VARCHAR(50) NOT NULL DEFAULT 'none',
+      \`unsupported_claims\` JSON NULL, \`contradictions\` JSON NULL,
+      \`missing_evidence\` JSON NULL,
+      \`validation_result\` VARCHAR(50) NOT NULL DEFAULT 'approved',
+      \`requires_human_approval\` TINYINT NOT NULL DEFAULT 0,
+      \`validation_explanation\` TEXT NULL,
+      \`grounding_coverage\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`evidence_utilization\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rval_org\` (\`organization_id\`),
+      INDEX \`idx_rval_response\` (\`response_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`confidence_scores\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`query_id\` VARCHAR(20) NOT NULL,
+      \`retrieval_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`evidence_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`legal_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`grounding_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`response_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`consolidated_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`weights\` JSON NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cs_org\` (\`organization_id\`),
+      INDEX \`idx_cs_query\` (\`query_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`evidence_graphs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`grounding_session_id\` VARCHAR(20) NOT NULL,
+      \`nodes\` JSON NULL, \`edges\` JSON NULL,
+      \`version\` VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_eg_org\` (\`organization_id\`),
+      INDEX \`idx_eg_session\` (\`grounding_session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`rag_metrics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`operation\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`retrieval_ms\` INT NOT NULL DEFAULT 0, \`grounding_ms\` INT NOT NULL DEFAULT 0,
+      \`inference_ms\` INT NOT NULL DEFAULT 0, \`total_ms\` INT NOT NULL DEFAULT 0,
+      \`chunk_count\` INT NOT NULL DEFAULT 0, \`evidence_count\` INT NOT NULL DEFAULT 0,
+      \`token_count\` INT NOT NULL DEFAULT 0,
+      \`confidence_score\` DECIMAL(5,4) NOT NULL DEFAULT 0.0,
+      \`hallucination_risk\` VARCHAR(50) NOT NULL DEFAULT 'none',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rm_org\` (\`organization_id\`),
+      INDEX \`idx_rm_corr\` (\`correlation_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`grounding_logs\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`grounding_session_id\` VARCHAR(20) NOT NULL,
+      \`log_level\` VARCHAR(20) NOT NULL DEFAULT 'info',
+      \`message\` TEXT NULL, \`metadata\` JSON NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gl_org\` (\`organization_id\`),
+      INDEX \`idx_gl_session\` (\`grounding_session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 4.8 — Procurement Knowledge Graph ──────────────────────────────
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`knowledge_nodes\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`node_type\` VARCHAR(50) NOT NULL DEFAULT 'concept',
+      \`external_id\` VARCHAR(255) NULL,
+      \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`normalized_title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`description\` TEXT NULL, \`aliases\` TEXT NULL, \`metadata\` TEXT NULL,
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+      \`source\` VARCHAR(100) NOT NULL DEFAULT 'manual',
+      \`version\` INT NOT NULL DEFAULT 1,
+      \`active\` TINYINT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_kn_org\` (\`organization_id\`),
+      INDEX \`idx_kn_type\` (\`node_type\`),
+      INDEX \`idx_kn_title\` (\`normalized_title\`(191)),
+      INDEX \`idx_kn_org_active\` (\`organization_id\`, \`active\`),
+      INDEX \`idx_kn_org_type\` (\`organization_id\`, \`node_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`knowledge_edges\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`source_node_id\` VARCHAR(20) NOT NULL,
+      \`target_node_id\` VARCHAR(20) NOT NULL,
+      \`relationship_type\` VARCHAR(50) NOT NULL DEFAULT 'related_to',
+      \`weight\` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+      \`justification\` TEXT NULL,
+      \`provenance\` VARCHAR(100) NOT NULL DEFAULT 'manual',
+      \`direction\` VARCHAR(20) NOT NULL DEFAULT 'unidirectional',
+      \`active\` TINYINT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ke_org\` (\`organization_id\`),
+      INDEX \`idx_ke_source\` (\`source_node_id\`),
+      INDEX \`idx_ke_target\` (\`target_node_id\`),
+      INDEX \`idx_ke_type\` (\`relationship_type\`),
+      INDEX \`idx_ke_org_source\` (\`organization_id\`, \`source_node_id\`),
+      INDEX \`idx_ke_org_target\` (\`organization_id\`, \`target_node_id\`),
+      INDEX \`idx_ke_org_active\` (\`organization_id\`, \`active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_reference_nodes\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`reference_type\` VARCHAR(50) NOT NULL DEFAULT 'lei',
+      \`numero\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`ano\` INT NOT NULL DEFAULT 0,
+      \`orgao\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`artigo\` VARCHAR(100) NULL, \`inciso\` VARCHAR(100) NULL,
+      \`alinea\` VARCHAR(100) NULL, \`texto\` TEXT NULL,
+      \`vigencia\` VARCHAR(50) NOT NULL DEFAULT 'vigente',
+      \`ementa\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_lrn_org\` (\`organization_id\`),
+      INDEX \`idx_lrn_type\` (\`reference_type\`),
+      INDEX \`idx_lrn_numero\` (\`numero\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`procurement_concepts\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`category\` VARCHAR(50) NOT NULL DEFAULT 'conceito',
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`normalized_name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`definition\` TEXT NULL,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`parent_concept_id\` VARCHAR(20) NULL,
+      \`aliases\` TEXT NULL, \`examples\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pcon_org\` (\`organization_id\`),
+      INDEX \`idx_pcon_cat\` (\`category\`),
+      INDEX \`idx_pcon_parent\` (\`parent_concept_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`clause_knowledge\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`category\` VARCHAR(50) NOT NULL DEFAULT 'objeto',
+      \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`content\` TEXT NULL, \`purpose\` TEXT NULL,
+      \`risk_level\` VARCHAR(20) NOT NULL DEFAULT 'baixo',
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`related_document_types\` TEXT NULL, \`prerequisites\` TEXT NULL,
+      \`active\` TINYINT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_clk_org\` (\`organization_id\`),
+      INDEX \`idx_clk_cat\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`entity_resolutions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`source_entity_id\` VARCHAR(20) NOT NULL,
+      \`target_entity_id\` VARCHAR(20) NOT NULL,
+      \`strategy\` VARCHAR(50) NOT NULL DEFAULT 'fuzzy',
+      \`status\` VARCHAR(50) NOT NULL DEFAULT 'pending',
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+      \`reasoning\` TEXT NULL,
+      \`resolved_by\` VARCHAR(255) NOT NULL DEFAULT 'system',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_er_org\` (\`organization_id\`),
+      INDEX \`idx_er_source\` (\`source_entity_id\`),
+      INDEX \`idx_er_target\` (\`target_entity_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`ontology_taxonomy\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`category\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`parent_id\` VARCHAR(20) NULL, \`definition\` TEXT NULL,
+      \`legal_basis\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`aliases\` TEXT NULL,
+      \`level\` INT NOT NULL DEFAULT 0,
+      \`sort_order\` INT NOT NULL DEFAULT 0,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ot_org\` (\`organization_id\`),
+      INDEX \`idx_ot_parent\` (\`parent_id\`),
+      INDEX \`idx_ot_cat\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`graph_metrics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`metric_name\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`metric_value\` DECIMAL(10,4) NOT NULL DEFAULT 0,
+      \`metric_unit\` VARCHAR(50) NOT NULL DEFAULT 'count',
+      \`tags\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gm_org\` (\`organization_id\`),
+      INDEX \`idx_gm_name\` (\`metric_name\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`graph_versions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`version_number\` INT NOT NULL DEFAULT 1,
+      \`node_count\` INT NOT NULL DEFAULT 0,
+      \`edge_count\` INT NOT NULL DEFAULT 0,
+      \`change_summary\` TEXT NULL,
+      \`created_by\` VARCHAR(255) NOT NULL DEFAULT 'system',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gv_org\` (\`organization_id\`),
+      INDEX \`idx_gv_version\` (\`version_number\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`graph_change_log\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`entity_type\` VARCHAR(50) NOT NULL DEFAULT 'node',
+      \`entity_id\` VARCHAR(20) NOT NULL,
+      \`operation\` VARCHAR(50) NOT NULL DEFAULT 'create',
+      \`before_state\` TEXT NULL, \`after_state\` TEXT NULL,
+      \`changed_by\` VARCHAR(255) NOT NULL DEFAULT 'system',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gcl_org\` (\`organization_id\`),
+      INDEX \`idx_gcl_entity\` (\`entity_id\`),
+      INDEX \`idx_gcl_op\` (\`operation\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

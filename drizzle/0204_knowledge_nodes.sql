@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS `knowledge_nodes` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `node_type` VARCHAR(50) NOT NULL DEFAULT 'concept',
+  `external_id` VARCHAR(255) NULL,
+  `title` VARCHAR(500) NOT NULL DEFAULT '',
+  `normalized_title` VARCHAR(500) NOT NULL DEFAULT '',
+  `description` TEXT NULL,
+  `aliases` TEXT NULL,
+  `metadata` TEXT NULL,
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+  `source` VARCHAR(100) NOT NULL DEFAULT 'manual',
+  `version` INT NOT NULL DEFAULT 1,
+  `active` TINYINT NOT NULL DEFAULT 1,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_kn_org` (`organization_id`),
+  INDEX `idx_kn_type` (`node_type`),
+  INDEX `idx_kn_title` (`normalized_title`(191)),
+  INDEX `idx_kn_org_active` (`organization_id`, `active`),
+  INDEX `idx_kn_org_type` (`organization_id`, `node_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

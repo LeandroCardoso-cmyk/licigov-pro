@@ -7,8 +7,10 @@ import {
   type ContextPriority,
   createFragment,
   createLayer,
+  createWindow,
   addFragmentToLayer,
   assembleContext as domainAssembleContext,
+  estimateTokens,
 } from "../domain/contextAssembly";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -322,4 +324,123 @@ export function getContextStats(assembled: AssembledContext): {
     utilizationPercent: Math.ceil((assembled.totalTokens / assembled.maxTokens) * 100),
     truncated:          assembled.truncated,
   };
+}
+
+// ─── Sprint 4.7 — Institutional RAG Engine ──────────────────────────────────
+
+export function assembleForQuery(
+  query: { readonly normalizedQuery: string; readonly intent: string; readonly organizationId: number },
+  orgId: number,
+): ContextAssembly {
+  const promptContext = `Query: ${query.normalizedQuery}\nIntent: ${query.intent}`;
+  const idSeed = `${orgId}${query.normalizedQuery}`;
+  const id = sha256(idSeed).slice(0, 20);
+  const replayKey = sha256(`${idSeed}${query.intent}`);
+
+  return {
+    id,
+    organizationId: orgId,
+    window: createWindow(orgId, 4096),
+    orderedFragments: [],
+    suppressedFragments: [],
+    staleFragments: [],
+    totalTokensUsed: estimateTokens(promptContext),
+    compressionApplied: false,
+    assemblyReasonKey: query.intent,
+    lineage: [],
+    replayKey,
+    assembledAt: new Date().toISOString(),
+  };
+}
+
+export function semanticGrouping(
+  chunks: ReadonlyArray<{ readonly chunkId: string; readonly content: string; readonly similarity: number; readonly source: string }>,
+): Array<{ readonly group: string; readonly chunks: Array<{ readonly chunkId: string; readonly content: string; readonly similarity: number; readonly source: string }> }> {
+  const groupMap = new Map<string, Array<{ readonly chunkId: string; readonly content: string; readonly similarity: number; readonly source: string }>>();
+
+  for (const chunk of chunks) {
+    const existing = groupMap.get(chunk.source) ?? [];
+    groupMap.set(chunk.source, [...existing, chunk]);
+  }
+
+  const result: Array<{ readonly group: string; readonly chunks: Array<{ readonly chunkId: string; readonly content: string; readonly similarity: number; readonly source: string }> }> = [];
+  for (const [group, groupChunks] of groupMap) {
+    result.push({ group, chunks: groupChunks });
+  }
+
+  return result;
+}
+
+export function contextualCompression(
+  assembly: ContextAssembly,
+  maxTokens: number,
+): ContextAssembly {
+  if (assembly.totalTokensUsed <= maxTokens) {
+    return { ...assembly };
+  }
+
+  // Sort by relevanceScore ascending so we can remove lowest first
+  const sorted = [...assembly.orderedFragments].sort(
+    (a, b) => a.relevanceScore - b.relevanceScore,
+  );
+
+  const kept: ContextFragment[] = [];
+  const trimmed: ContextFragment[] = [];
+  let total = 0;
+
+  // Accumulate from highest relevance (end of sorted array) backward
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const f = sorted[i];
+    if (total + f.tokenEstimate <= maxTokens) {
+      kept.push(f);
+      total += f.tokenEstimate;
+    } else {
+      trimmed.push(f);
+    }
+  }
+
+  // Restore original ordering (highest relevance first)
+  kept.reverse();
+
+  const newSuppressed = [...assembly.suppressedFragments, ...trimmed];
+  const replayKey = sha256(
+    kept.map(f => f.replayKey).sort().join("") + assembly.organizationId,
+  );
+
+  return {
+    ...assembly,
+    orderedFragments: kept,
+    suppressedFragments: newSuppressed,
+    totalTokensUsed: total,
+    compressionApplied: true,
+    replayKey,
+    assembledAt: new Date().toISOString(),
+  };
+}
+
+export function evidencePrioritization(
+  evidence: ReadonlyArray<{ readonly evidenceId: string; readonly type: string; readonly content: string; readonly confidence: number }>,
+): Array<{ readonly evidenceId: string; readonly type: string; readonly content: string; readonly confidence: number }> {
+  return [...evidence].sort((a, b) => b.confidence - a.confidence);
+}
+
+export function legalGrouping(
+  legalRefs: ReadonlyArray<{ readonly lawRef: string; readonly article: string; readonly clause: string | null; readonly text: string }>,
+): Map<string, Array<{ readonly lawRef: string; readonly article: string; readonly clause: string | null; readonly text: string }>> {
+  const result = new Map<string, Array<{ readonly lawRef: string; readonly article: string; readonly clause: string | null; readonly text: string }>>();
+
+  for (const ref of legalRefs) {
+    const existing = result.get(ref.lawRef) ?? [];
+    result.set(ref.lawRef, [...existing, ref]);
+  }
+
+  return result;
+}
+
+export function municipalityMemoryEnrichment(
+  _orgId: number,
+  _query: string,
+): Array<{ readonly processId: string; readonly description: string; readonly date: string; readonly relevance: number }> {
+  // Stub for future sprint — returns empty array
+  return [];
 }

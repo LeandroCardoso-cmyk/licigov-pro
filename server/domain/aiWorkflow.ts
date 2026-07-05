@@ -18,7 +18,21 @@ export type WorkflowStepType =
   | "auto_approval"
   | "override"
   | "escalation"
-  | "completion";
+  | "completion"
+  | "institutional_query_pipeline"
+  | "context_assembly_pipeline"
+  | "retrieval_orchestration"
+  | "evidence_graph"
+  | "grounding_graph"
+  | "validation_graph"
+  | "citation_pipeline"
+  | "confidence_pipeline"
+  | "graph_traversal"
+  | "ontology_lookup"
+  | "entity_resolution"
+  | "graph_evidence"
+  | "graph_recommendation"
+  | "legal_path_reasoning";
 
 export type WorkflowStatus =
   | "pending"
@@ -791,6 +805,136 @@ export function createSemanticEvidenceGraph(params: {
     retrievalSessionId: params.retrievalSessionId,
     evidenceNodes: params.evidenceNodes,
     provenanceChain: params.provenanceChain ?? [],
+    createdAt: now,
+  };
+}
+
+// ─── Sprint 4.7: Institutional RAG Engine ────────────────────────────────────
+
+export interface PromptContextInput {
+  readonly institutionalContext: string;
+  readonly documents: string[];
+  readonly evidence: string[];
+  readonly history: string[];
+  readonly legislation: string[];
+  readonly constraints: string[];
+  readonly workflowInstructions: string;
+}
+
+export function buildPromptContext(input: PromptContextInput): string {
+  const sections: string[] = [];
+
+  sections.push("=== CONTEXTO INSTITUCIONAL ===");
+  sections.push(input.institutionalContext);
+
+  if (input.legislation.length > 0) {
+    sections.push("\n=== LEGISLAÇÃO APLICÁVEL ===");
+    sections.push(input.legislation.join("\n"));
+  }
+
+  if (input.documents.length > 0) {
+    sections.push("\n=== DOCUMENTOS RELACIONADOS ===");
+    sections.push(input.documents.join("\n"));
+  }
+
+  if (input.evidence.length > 0) {
+    sections.push("\n=== EVIDÊNCIAS ===");
+    sections.push(input.evidence.join("\n"));
+  }
+
+  if (input.history.length > 0) {
+    sections.push("\n=== HISTÓRICO ===");
+    sections.push(input.history.join("\n"));
+  }
+
+  if (input.constraints.length > 0) {
+    sections.push("\n=== RESTRIÇÕES ===");
+    sections.push(input.constraints.join("\n"));
+  }
+
+  sections.push("\n=== INSTRUÇÕES DO WORKFLOW ===");
+  sections.push(input.workflowInstructions);
+
+  return sections.join("\n");
+}
+
+// ─── Sprint 4.8: Procurement Knowledge Graph ─────────────────────────────────
+
+export interface GraphTraversalStep {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly startNodeId: string;
+  readonly strategy: string;
+  readonly maxDepth: number;
+  readonly nodesVisited: number;
+  readonly edgesTraversed: number;
+  readonly correlationId: string;
+  readonly createdAt: string;
+}
+
+export interface GraphRecommendation {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly queryNodeId: string;
+  readonly recommendedNodes: readonly string[];
+  readonly pathExplanation: string;
+  readonly score: number;
+  readonly correlationId: string;
+  readonly createdAt: string;
+}
+
+export function createGraphTraversalStep(params: {
+  workflowId: string;
+  organizationId: number;
+  startNodeId: string;
+  strategy?: string;
+  maxDepth?: number;
+  nodesVisited?: number;
+  edgesTraversed?: number;
+  correlationId: string;
+}): GraphTraversalStep {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`gts:${params.workflowId}:${params.startNodeId}:${params.correlationId}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    startNodeId: params.startNodeId,
+    strategy: params.strategy ?? "bfs",
+    maxDepth: params.maxDepth ?? 3,
+    nodesVisited: params.nodesVisited ?? 0,
+    edgesTraversed: params.edgesTraversed ?? 0,
+    correlationId: params.correlationId,
+    createdAt: now,
+  };
+}
+
+export function createGraphRecommendation(params: {
+  workflowId: string;
+  organizationId: number;
+  queryNodeId: string;
+  recommendedNodes: string[];
+  pathExplanation?: string;
+  score?: number;
+  correlationId: string;
+}): GraphRecommendation {
+  const now = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(`gr:${params.workflowId}:${params.queryNodeId}:${params.correlationId}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    queryNodeId: params.queryNodeId,
+    recommendedNodes: params.recommendedNodes,
+    pathExplanation: params.pathExplanation ?? "",
+    score: params.score ?? 0,
+    correlationId: params.correlationId,
     createdAt: now,
   };
 }

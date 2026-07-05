@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS `knowledge_edges` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `source_node_id` VARCHAR(20) NOT NULL,
+  `target_node_id` VARCHAR(20) NOT NULL,
+  `relationship_type` VARCHAR(50) NOT NULL DEFAULT 'related_to',
+  `weight` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 1.0,
+  `justification` TEXT NULL,
+  `provenance` VARCHAR(100) NOT NULL DEFAULT 'manual',
+  `direction` VARCHAR(20) NOT NULL DEFAULT 'unidirectional',
+  `active` TINYINT NOT NULL DEFAULT 1,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_ke_org` (`organization_id`),
+  INDEX `idx_ke_source` (`source_node_id`),
+  INDEX `idx_ke_target` (`target_node_id`),
+  INDEX `idx_ke_type` (`relationship_type`),
+  INDEX `idx_ke_org_source` (`organization_id`, `source_node_id`),
+  INDEX `idx_ke_org_target` (`organization_id`, `target_node_id`),
+  INDEX `idx_ke_org_active` (`organization_id`, `active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
