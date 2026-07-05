@@ -877,94 +877,581 @@
       "when": 1757702400000,
       "breakpoints": true
     },
-    { "idx": 125, "version": "6", "when": 1757788800000, "tag": "0125_semantic_chunks" },
-    { "idx": 126, "version": "6", "when": 1757875200000, "tag": "0126_retrieval_queries" },
-    { "idx": 127, "version": "6", "when": 1757961600000, "tag": "0127_retrieval_results" },
-    { "idx": 128, "version": "6", "when": 1758048000000, "tag": "0128_semantic_relationships" },
-    { "idx": 129, "version": "6", "when": 1758134400000, "tag": "0129_institutional_memories" },
-    { "idx": 130, "version": "6", "when": 1758220800000, "tag": "0130_evidence_chains" },
-    { "idx": 131, "version": "6", "when": 1758307200000, "tag": "0131_retrieval_explanations" },
-    { "idx": 132, "version": "6", "when": 1758393600000, "tag": "0132_semantic_indexes" },
-    { "idx": 133, "version": "6", "when": 1758480000000, "tag": "0133_retrieval_observability" },
-    { "idx": 134, "version": "6", "when": 1758566400000, "tag": "0134_memory_retention_snapshots" },
-    { "idx": 135, "version": "6", "when": 1758652800000, "tag": "0135_context_assemblies" },
-    { "idx": 136, "version": "6", "when": 1758739200000, "tag": "0136_context_fragments" },
-    { "idx": 137, "version": "6", "when": 1758825600000, "tag": "0137_prompt_chains" },
-    { "idx": 138, "version": "6", "when": 1758912000000, "tag": "0138_prompt_stages" },
-    { "idx": 139, "version": "6", "when": 1758998400000, "tag": "0139_prompt_templates" },
-    { "idx": 140, "version": "6", "when": 1759084800000, "tag": "0140_reasoning_traces" },
-    { "idx": 141, "version": "6", "when": 1759171200000, "tag": "0141_grounding_evidences" },
-    { "idx": 142, "version": "6", "when": 1759257600000, "tag": "0142_context_observability" },
-    { "idx": 143, "version": "6", "when": 1759344000000, "tag": "0143_orchestration_executions" },
-    { "idx": 144, "version": "6", "when": 1759430400000, "tag": "0144_semantic_compressions" },
-    { "idx": 145, "version": "6", "when": 1759516800000, "tag": "0145_context_policies" },
-    { "idx": 146, "version": "6", "when": 1759603200000, "tag": "0146_legal_reasoning_traces" },
-    { "idx": 147, "version": "6", "when": 1759689600000, "tag": "0147_legal_inferences" },
-    { "idx": 148, "version": "6", "when": 1759776000000, "tag": "0148_compliance_checks" },
-    { "idx": 149, "version": "6", "when": 1759862400000, "tag": "0149_legal_risks" },
-    { "idx": 150, "version": "6", "when": 1759948800000, "tag": "0150_draft_templates" },
-    { "idx": 151, "version": "6", "when": 1760035200000, "tag": "0151_draft_sections" },
-    { "idx": 152, "version": "6", "when": 1760121600000, "tag": "0152_draft_generations" },
-    { "idx": 153, "version": "6", "when": 1760208000000, "tag": "0153_draft_recommendations" },
-    { "idx": 154, "version": "6", "when": 1760294400000, "tag": "0154_clause_recommendations" },
-    { "idx": 155, "version": "6", "when": 1760380800000, "tag": "0155_clause_conflicts" },
-    { "idx": 156, "version": "6", "when": 1760467200000, "tag": "0156_jurisprudence_references" },
-    { "idx": 157, "version": "6", "when": 1760553600000, "tag": "0157_jurisprudence_correlations" },
-    { "idx": 158, "version": "6", "when": 1760640000000, "tag": "0158_drafting_observability" },
-    { "idx": 159, "version": "6", "when": 1760726400000, "tag": "0159_agent_executions" },
-    { "idx": 160, "version": "6", "when": 1760812800000, "tag": "0160_execution_stages" },
-    { "idx": 161, "version": "6", "when": 1760899200000, "tag": "0161_execution_checkpoints" },
-    { "idx": 162, "version": "6", "when": 1760985600000, "tag": "0162_execution_replays" },
-    { "idx": 163, "version": "6", "when": 1761072000000, "tag": "0163_execution_rollbacks" },
-    { "idx": 164, "version": "6", "when": 1761158400000, "tag": "0164_execution_plans" },
-    { "idx": 165, "version": "6", "when": 1761244800000, "tag": "0165_execution_tasks" },
-    { "idx": 166, "version": "6", "when": 1761331200000, "tag": "0166_assistant_profiles" },
-    { "idx": 167, "version": "6", "when": 1761417600000, "tag": "0167_assistant_capabilities" },
-    { "idx": 168, "version": "6", "when": 1761504000000, "tag": "0168_approval_workflows" },
-    { "idx": 169, "version": "6", "when": 1761590400000, "tag": "0169_approval_decisions" },
-    { "idx": 170, "version": "6", "when": 1761676800000, "tag": "0170_action_safety_logs" },
-    { "idx": 171, "version": "6", "when": 1761763200000, "tag": "0171_execution_observability" },
-    { "idx": 172, "version": "6", "when": 1761849600000, "tag": "0172_simulation_runs" },
-    { "idx": 173, "version": "6", "when": 1761936000000, "tag": "0173_ai_providers" },
-    { "idx": 174, "version": "6", "when": 1762022400000, "tag": "0174_provider_executions" },
-    { "idx": 175, "version": "6", "when": 1762108800000, "tag": "0175_provider_policies" },
-    { "idx": 176, "version": "6", "when": 1762195200000, "tag": "0176_provider_routing" },
-    { "idx": 177, "version": "6", "when": 1762281600000, "tag": "0177_provider_health_logs" },
-    { "idx": 178, "version": "6", "when": 1762368000000, "tag": "0178_provider_cost_analytics" },
-    { "idx": 179, "version": "6", "when": 1762454400000, "tag": "0179_provider_failover_events" },
-    { "idx": 180, "version": "6", "when": 1762540800000, "tag": "0180_provider_replay_snapshots" },
-    { "idx": 181, "version": "6", "when": 1762627200000, "tag": "0181_provider_usage_quotas" },
-    { "idx": 182, "version": "6", "when": 1762713600000, "tag": "0182_provider_latency_metrics" },
-    { "idx": 183, "version": "6", "when": 1762800000000, "tag": "0183_semantic_chunks" },
-    { "idx": 184, "version": "6", "when": 1762886400000, "tag": "0184_vector_embeddings" },
-    { "idx": 185, "version": "6", "when": 1762972800000, "tag": "0185_retrieval_sessions" },
-    { "idx": 186, "version": "6", "when": 1763059200000, "tag": "0186_retrieval_evidences" },
-    { "idx": 187, "version": "6", "when": 1763145600000, "tag": "0187_semantic_corpora" },
-    { "idx": 188, "version": "6", "when": 1763232000000, "tag": "0188_embedding_jobs" },
-    { "idx": 189, "version": "6", "when": 1763318400000, "tag": "0189_retrieval_logs" },
-    { "idx": 190, "version": "6", "when": 1763404800000, "tag": "0190_reranking_logs" },
-    { "idx": 191, "version": "6", "when": 1763491200000, "tag": "0191_semantic_memory_links" },
-    { "idx": 192, "version": "6", "when": 1763577600000, "tag": "0192_reindex_jobs" },
-    { "idx": 193, "version": "6", "when": 1763664000000, "tag": "0193_vector_health_metrics" },
-    { "idx": 194, "version": "6", "when": 1763750400000, "tag": "0194_institutional_queries" },
-    { "idx": 195, "version": "6", "when": 1763836800000, "tag": "0195_context_assemblies" },
-    { "idx": 196, "version": "6", "when": 1763923200000, "tag": "0196_legal_evidences" },
-    { "idx": 197, "version": "6", "when": 1764009600000, "tag": "0197_grounding_sessions" },
-    { "idx": 198, "version": "6", "when": 1764096000000, "tag": "0198_response_citations" },
-    { "idx": 199, "version": "6", "when": 1764182400000, "tag": "0199_response_validations" },
-    { "idx": 200, "version": "6", "when": 1764268800000, "tag": "0200_confidence_scores" },
-    { "idx": 201, "version": "6", "when": 1764355200000, "tag": "0201_evidence_graphs" },
-    { "idx": 202, "version": "6", "when": 1764441600000, "tag": "0202_rag_metrics" },
-    { "idx": 203, "version": "6", "when": 1764528000000, "tag": "0203_grounding_logs" },
-    { "idx": 204, "version": "6", "when": 1764614400000, "tag": "0204_knowledge_nodes" },
-    { "idx": 205, "version": "6", "when": 1764700800000, "tag": "0205_knowledge_edges" },
-    { "idx": 206, "version": "6", "when": 1764787200000, "tag": "0206_legal_reference_nodes" },
-    { "idx": 207, "version": "6", "when": 1764873600000, "tag": "0207_procurement_concepts" },
-    { "idx": 208, "version": "6", "when": 1764960000000, "tag": "0208_clause_knowledge" },
-    { "idx": 209, "version": "6", "when": 1765046400000, "tag": "0209_entity_resolutions" },
-    { "idx": 210, "version": "6", "when": 1765132800000, "tag": "0210_ontology_taxonomy" },
-    { "idx": 211, "version": "6", "when": 1765219200000, "tag": "0211_graph_metrics" },
-    { "idx": 212, "version": "6", "when": 1765305600000, "tag": "0212_graph_versions" },
-    { "idx": 213, "version": "6", "when": 1765392000000, "tag": "0213_graph_change_log" }
+    {
+      "idx": 125,
+      "version": "6",
+      "when": 1757788800000,
+      "tag": "0125_semantic_chunks"
+    },
+    {
+      "idx": 126,
+      "version": "6",
+      "when": 1757875200000,
+      "tag": "0126_retrieval_queries"
+    },
+    {
+      "idx": 127,
+      "version": "6",
+      "when": 1757961600000,
+      "tag": "0127_retrieval_results"
+    },
+    {
+      "idx": 128,
+      "version": "6",
+      "when": 1758048000000,
+      "tag": "0128_semantic_relationships"
+    },
+    {
+      "idx": 129,
+      "version": "6",
+      "when": 1758134400000,
+      "tag": "0129_institutional_memories"
+    },
+    {
+      "idx": 130,
+      "version": "6",
+      "when": 1758220800000,
+      "tag": "0130_evidence_chains"
+    },
+    {
+      "idx": 131,
+      "version": "6",
+      "when": 1758307200000,
+      "tag": "0131_retrieval_explanations"
+    },
+    {
+      "idx": 132,
+      "version": "6",
+      "when": 1758393600000,
+      "tag": "0132_semantic_indexes"
+    },
+    {
+      "idx": 133,
+      "version": "6",
+      "when": 1758480000000,
+      "tag": "0133_retrieval_observability"
+    },
+    {
+      "idx": 134,
+      "version": "6",
+      "when": 1758566400000,
+      "tag": "0134_memory_retention_snapshots"
+    },
+    {
+      "idx": 135,
+      "version": "6",
+      "when": 1758652800000,
+      "tag": "0135_context_assemblies"
+    },
+    {
+      "idx": 136,
+      "version": "6",
+      "when": 1758739200000,
+      "tag": "0136_context_fragments"
+    },
+    {
+      "idx": 137,
+      "version": "6",
+      "when": 1758825600000,
+      "tag": "0137_prompt_chains"
+    },
+    {
+      "idx": 138,
+      "version": "6",
+      "when": 1758912000000,
+      "tag": "0138_prompt_stages"
+    },
+    {
+      "idx": 139,
+      "version": "6",
+      "when": 1758998400000,
+      "tag": "0139_prompt_templates"
+    },
+    {
+      "idx": 140,
+      "version": "6",
+      "when": 1759084800000,
+      "tag": "0140_reasoning_traces"
+    },
+    {
+      "idx": 141,
+      "version": "6",
+      "when": 1759171200000,
+      "tag": "0141_grounding_evidences"
+    },
+    {
+      "idx": 142,
+      "version": "6",
+      "when": 1759257600000,
+      "tag": "0142_context_observability"
+    },
+    {
+      "idx": 143,
+      "version": "6",
+      "when": 1759344000000,
+      "tag": "0143_orchestration_executions"
+    },
+    {
+      "idx": 144,
+      "version": "6",
+      "when": 1759430400000,
+      "tag": "0144_semantic_compressions"
+    },
+    {
+      "idx": 145,
+      "version": "6",
+      "when": 1759516800000,
+      "tag": "0145_context_policies"
+    },
+    {
+      "idx": 146,
+      "version": "6",
+      "when": 1759603200000,
+      "tag": "0146_legal_reasoning_traces"
+    },
+    {
+      "idx": 147,
+      "version": "6",
+      "when": 1759689600000,
+      "tag": "0147_legal_inferences"
+    },
+    {
+      "idx": 148,
+      "version": "6",
+      "when": 1759776000000,
+      "tag": "0148_compliance_checks"
+    },
+    {
+      "idx": 149,
+      "version": "6",
+      "when": 1759862400000,
+      "tag": "0149_legal_risks"
+    },
+    {
+      "idx": 150,
+      "version": "6",
+      "when": 1759948800000,
+      "tag": "0150_draft_templates"
+    },
+    {
+      "idx": 151,
+      "version": "6",
+      "when": 1760035200000,
+      "tag": "0151_draft_sections"
+    },
+    {
+      "idx": 152,
+      "version": "6",
+      "when": 1760121600000,
+      "tag": "0152_draft_generations"
+    },
+    {
+      "idx": 153,
+      "version": "6",
+      "when": 1760208000000,
+      "tag": "0153_draft_recommendations"
+    },
+    {
+      "idx": 154,
+      "version": "6",
+      "when": 1760294400000,
+      "tag": "0154_clause_recommendations"
+    },
+    {
+      "idx": 155,
+      "version": "6",
+      "when": 1760380800000,
+      "tag": "0155_clause_conflicts"
+    },
+    {
+      "idx": 156,
+      "version": "6",
+      "when": 1760467200000,
+      "tag": "0156_jurisprudence_references"
+    },
+    {
+      "idx": 157,
+      "version": "6",
+      "when": 1760553600000,
+      "tag": "0157_jurisprudence_correlations"
+    },
+    {
+      "idx": 158,
+      "version": "6",
+      "when": 1760640000000,
+      "tag": "0158_drafting_observability"
+    },
+    {
+      "idx": 159,
+      "version": "6",
+      "when": 1760726400000,
+      "tag": "0159_agent_executions"
+    },
+    {
+      "idx": 160,
+      "version": "6",
+      "when": 1760812800000,
+      "tag": "0160_execution_stages"
+    },
+    {
+      "idx": 161,
+      "version": "6",
+      "when": 1760899200000,
+      "tag": "0161_execution_checkpoints"
+    },
+    {
+      "idx": 162,
+      "version": "6",
+      "when": 1760985600000,
+      "tag": "0162_execution_replays"
+    },
+    {
+      "idx": 163,
+      "version": "6",
+      "when": 1761072000000,
+      "tag": "0163_execution_rollbacks"
+    },
+    {
+      "idx": 164,
+      "version": "6",
+      "when": 1761158400000,
+      "tag": "0164_execution_plans"
+    },
+    {
+      "idx": 165,
+      "version": "6",
+      "when": 1761244800000,
+      "tag": "0165_execution_tasks"
+    },
+    {
+      "idx": 166,
+      "version": "6",
+      "when": 1761331200000,
+      "tag": "0166_assistant_profiles"
+    },
+    {
+      "idx": 167,
+      "version": "6",
+      "when": 1761417600000,
+      "tag": "0167_assistant_capabilities"
+    },
+    {
+      "idx": 168,
+      "version": "6",
+      "when": 1761504000000,
+      "tag": "0168_approval_workflows"
+    },
+    {
+      "idx": 169,
+      "version": "6",
+      "when": 1761590400000,
+      "tag": "0169_approval_decisions"
+    },
+    {
+      "idx": 170,
+      "version": "6",
+      "when": 1761676800000,
+      "tag": "0170_action_safety_logs"
+    },
+    {
+      "idx": 171,
+      "version": "6",
+      "when": 1761763200000,
+      "tag": "0171_execution_observability"
+    },
+    {
+      "idx": 172,
+      "version": "6",
+      "when": 1761849600000,
+      "tag": "0172_simulation_runs"
+    },
+    {
+      "idx": 173,
+      "version": "6",
+      "when": 1761936000000,
+      "tag": "0173_ai_providers"
+    },
+    {
+      "idx": 174,
+      "version": "6",
+      "when": 1762022400000,
+      "tag": "0174_provider_executions"
+    },
+    {
+      "idx": 175,
+      "version": "6",
+      "when": 1762108800000,
+      "tag": "0175_provider_policies"
+    },
+    {
+      "idx": 176,
+      "version": "6",
+      "when": 1762195200000,
+      "tag": "0176_provider_routing"
+    },
+    {
+      "idx": 177,
+      "version": "6",
+      "when": 1762281600000,
+      "tag": "0177_provider_health_logs"
+    },
+    {
+      "idx": 178,
+      "version": "6",
+      "when": 1762368000000,
+      "tag": "0178_provider_cost_analytics"
+    },
+    {
+      "idx": 179,
+      "version": "6",
+      "when": 1762454400000,
+      "tag": "0179_provider_failover_events"
+    },
+    {
+      "idx": 180,
+      "version": "6",
+      "when": 1762540800000,
+      "tag": "0180_provider_replay_snapshots"
+    },
+    {
+      "idx": 181,
+      "version": "6",
+      "when": 1762627200000,
+      "tag": "0181_provider_usage_quotas"
+    },
+    {
+      "idx": 182,
+      "version": "6",
+      "when": 1762713600000,
+      "tag": "0182_provider_latency_metrics"
+    },
+    {
+      "idx": 183,
+      "version": "6",
+      "when": 1762800000000,
+      "tag": "0183_semantic_chunks"
+    },
+    {
+      "idx": 184,
+      "version": "6",
+      "when": 1762886400000,
+      "tag": "0184_vector_embeddings"
+    },
+    {
+      "idx": 185,
+      "version": "6",
+      "when": 1762972800000,
+      "tag": "0185_retrieval_sessions"
+    },
+    {
+      "idx": 186,
+      "version": "6",
+      "when": 1763059200000,
+      "tag": "0186_retrieval_evidences"
+    },
+    {
+      "idx": 187,
+      "version": "6",
+      "when": 1763145600000,
+      "tag": "0187_semantic_corpora"
+    },
+    {
+      "idx": 188,
+      "version": "6",
+      "when": 1763232000000,
+      "tag": "0188_embedding_jobs"
+    },
+    {
+      "idx": 189,
+      "version": "6",
+      "when": 1763318400000,
+      "tag": "0189_retrieval_logs"
+    },
+    {
+      "idx": 190,
+      "version": "6",
+      "when": 1763404800000,
+      "tag": "0190_reranking_logs"
+    },
+    {
+      "idx": 191,
+      "version": "6",
+      "when": 1763491200000,
+      "tag": "0191_semantic_memory_links"
+    },
+    {
+      "idx": 192,
+      "version": "6",
+      "when": 1763577600000,
+      "tag": "0192_reindex_jobs"
+    },
+    {
+      "idx": 193,
+      "version": "6",
+      "when": 1763664000000,
+      "tag": "0193_vector_health_metrics"
+    },
+    {
+      "idx": 194,
+      "version": "6",
+      "when": 1763750400000,
+      "tag": "0194_institutional_queries"
+    },
+    {
+      "idx": 195,
+      "version": "6",
+      "when": 1763836800000,
+      "tag": "0195_context_assemblies"
+    },
+    {
+      "idx": 196,
+      "version": "6",
+      "when": 1763923200000,
+      "tag": "0196_legal_evidences"
+    },
+    {
+      "idx": 197,
+      "version": "6",
+      "when": 1764009600000,
+      "tag": "0197_grounding_sessions"
+    },
+    {
+      "idx": 198,
+      "version": "6",
+      "when": 1764096000000,
+      "tag": "0198_response_citations"
+    },
+    {
+      "idx": 199,
+      "version": "6",
+      "when": 1764182400000,
+      "tag": "0199_response_validations"
+    },
+    {
+      "idx": 200,
+      "version": "6",
+      "when": 1764268800000,
+      "tag": "0200_confidence_scores"
+    },
+    {
+      "idx": 201,
+      "version": "6",
+      "when": 1764355200000,
+      "tag": "0201_evidence_graphs"
+    },
+    {
+      "idx": 202,
+      "version": "6",
+      "when": 1764441600000,
+      "tag": "0202_rag_metrics"
+    },
+    {
+      "idx": 203,
+      "version": "6",
+      "when": 1764528000000,
+      "tag": "0203_grounding_logs"
+    },
+    {
+      "idx": 204,
+      "version": "6",
+      "when": 1764614400000,
+      "tag": "0204_knowledge_nodes"
+    },
+    {
+      "idx": 205,
+      "version": "6",
+      "when": 1764700800000,
+      "tag": "0205_knowledge_edges"
+    },
+    {
+      "idx": 206,
+      "version": "6",
+      "when": 1764787200000,
+      "tag": "0206_legal_reference_nodes"
+    },
+    {
+      "idx": 207,
+      "version": "6",
+      "when": 1764873600000,
+      "tag": "0207_procurement_concepts"
+    },
+    {
+      "idx": 208,
+      "version": "6",
+      "when": 1764960000000,
+      "tag": "0208_clause_knowledge"
+    },
+    {
+      "idx": 209,
+      "version": "6",
+      "when": 1765046400000,
+      "tag": "0209_entity_resolutions"
+    },
+    {
+      "idx": 210,
+      "version": "6",
+      "when": 1765132800000,
+      "tag": "0210_ontology_taxonomy"
+    },
+    {
+      "idx": 211,
+      "version": "6",
+      "when": 1765219200000,
+      "tag": "0211_graph_metrics"
+    },
+    {
+      "idx": 212,
+      "version": "6",
+      "when": 1765305600000,
+      "tag": "0212_graph_versions"
+    },
+    {
+      "idx": 213,
+      "version": "6",
+      "when": 1765392000000,
+      "tag": "0213_graph_change_log"
+    },
+    {
+      "idx": 214,
+      "version": "5",
+      "when": 1765478400000,
+      "tag": "0214_copilots",
+      "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "5",
+      "when": 1765564800000,
+      "tag": "0215_copilot_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "5",
+      "when": 1765651200000,
+      "tag": "0216_copilot_recommendations",
+      "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "5",
+      "when": 1765737600000,
+      "tag": "0217_copilot_decision_traces",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "5",
+      "when": 1765824000000,
+      "tag": "0218_copilot_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "5",
+      "when": 1765910400000,
+      "tag": "0219_copilot_metrics",
+      "breakpoints": true
+    }
   ]
 }

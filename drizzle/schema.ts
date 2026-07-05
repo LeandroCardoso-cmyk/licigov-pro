@@ -4543,3 +4543,94 @@ export const graphChangeLogTable = mysqlTable("graph_change_log", {
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 4.9 — Institutional Cognitive Copilots ───────────────────────────
+
+export const copilotsTable = mysqlTable("copilots", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  copilotType:      varchar("copilot_type", { length: 50 }).notNull().default("agente_contratacao"),
+  name:             varchar("name", { length: 255 }).notNull().default(""),
+  description:      text("description"),
+  domain:           varchar("domain", { length: 100 }).notNull().default(""),
+  capabilities:     text("capabilities"),
+  permissions:      text("permissions"),
+  forbiddenActions: text("forbidden_actions"),
+  active:           tinyint("active").notNull().default(1),
+  version:          int("version").notNull().default(1),
+  correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const copilotSessionsTable = mysqlTable("copilot_sessions", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workflowId:     varchar("workflow_id", { length: 64 }).notNull().default(""),
+  copilotId:      varchar("copilot_id", { length: 20 }).notNull(),
+  copilotType:    varchar("copilot_type", { length: 50 }).notNull().default("agente_contratacao"),
+  userId:         int("user_id").notNull().default(0),
+  contextId:      varchar("context_id", { length: 20 }).notNull().default(""),
+  reasoningId:    varchar("reasoning_id", { length: 20 }).notNull().default(""),
+  query:          text("query"),
+  status:         varchar("status", { length: 30 }).notNull().default("open"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const copilotRecommendationsTable = mysqlTable("copilot_recommendations", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  sessionId:           varchar("session_id", { length: 20 }).notNull(),
+  copilotType:         varchar("copilot_type", { length: 50 }).notNull().default("agente_contratacao"),
+  kind:                varchar("kind", { length: 30 }).notNull().default("orientacao"),
+  summary:             text("summary"),
+  suggestions:         text("suggestions"),
+  risks:               text("risks"),
+  alternatives:        text("alternatives"),
+  justification:       text("justification"),
+  legalBasis:          text("legal_basis"),
+  evidenceIds:         text("evidence_ids"),
+  confidence:          decimal("confidence", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  requiresHumanReview: tinyint("requires_human_review").notNull().default(1),
+  correlationId:       varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const copilotDecisionTracesTable = mysqlTable("copilot_decision_traces", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  sessionId:      varchar("session_id", { length: 20 }).notNull(),
+  reasoningId:    varchar("reasoning_id", { length: 20 }).notNull().default(""),
+  steps:          text("steps"),
+  replaySnapshot: varchar("replay_snapshot", { length: 64 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const copilotPoliciesTable = mysqlTable("copilot_policies", {
+  id:                    varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull(),
+  copilotType:           varchar("copilot_type", { length: 50 }).notNull().default("agente_contratacao"),
+  name:                  varchar("name", { length: 255 }).notNull().default(""),
+  allowedActions:        text("allowed_actions"),
+  forbiddenActions:      text("forbidden_actions"),
+  minConfidence:         decimal("min_confidence", { precision: 5, scale: 4 }).notNull().default("0.4"),
+  approvalRiskThreshold: varchar("approval_risk_threshold", { length: 20 }).notNull().default("alto"),
+  active:                tinyint("active").notNull().default(1),
+  version:               int("version").notNull().default(1),
+  correlationId:         varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:             datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const copilotMetricsTable = mysqlTable("copilot_metrics", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  copilotType:    varchar("copilot_type", { length: 50 }).notNull().default("agente_contratacao"),
+  metricName:     varchar("metric_name", { length: 100 }).notNull().default(""),
+  metricValue:    decimal("metric_value", { precision: 10, scale: 4 }).notNull().default("0"),
+  metricUnit:     varchar("metric_unit", { length: 50 }).notNull().default("count"),
+  tags:           text("tags"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

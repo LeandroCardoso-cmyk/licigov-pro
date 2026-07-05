@@ -32,7 +32,14 @@ export type WorkflowStepType =
   | "entity_resolution"
   | "graph_evidence"
   | "graph_recommendation"
-  | "legal_path_reasoning";
+  | "legal_path_reasoning"
+  // Sprint 4.9 — Institutional Cognitive Copilots
+  | "copilot_selection"
+  | "copilot_context_assembly"
+  | "copilot_reasoning"
+  | "copilot_recommendation"
+  | "copilot_validation"
+  | "copilot_explainability";
 
 export type WorkflowStatus =
   | "pending"
@@ -936,5 +943,56 @@ export function createGraphRecommendation(params: {
     score: params.score ?? 0,
     correlationId: params.correlationId,
     createdAt: now,
+  };
+}
+
+// ─── Sprint 4.9 — Institutional Cognitive Copilots ───────────────────────────
+
+/** Ordem oficial do pipeline cognitivo de um copiloto. */
+export const COPILOT_PIPELINE: readonly WorkflowStepType[] = [
+  "copilot_selection",
+  "copilot_context_assembly",
+  "graph_traversal",
+  "retrieval_orchestration",
+  "copilot_reasoning",
+  "copilot_recommendation",
+  "copilot_validation",
+  "copilot_explainability",
+];
+
+export interface CopilotPipelineStep {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly organizationId: number;
+  readonly copilotId: string;
+  readonly stepType: WorkflowStepType;
+  readonly order: number;
+  readonly summary: string;
+  readonly correlationId: string;
+  readonly createdAt: string;
+}
+
+export function createCopilotPipelineStep(params: {
+  workflowId: string;
+  organizationId: number;
+  copilotId: string;
+  stepType: WorkflowStepType;
+  order: number;
+  summary?: string;
+  correlationId: string;
+}): CopilotPipelineStep {
+  const id = createHash("sha256")
+    .update(`cpstep:${params.workflowId}:${params.copilotId}:${params.stepType}:${params.order}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workflowId: params.workflowId,
+    organizationId: params.organizationId,
+    copilotId: params.copilotId,
+    stepType: params.stepType,
+    order: params.order,
+    summary: params.summary ?? "",
+    correlationId: params.correlationId,
+    createdAt: new Date().toISOString(),
   };
 }
