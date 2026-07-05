@@ -3153,6 +3153,94 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       INDEX \`idx_gcl_entity\` (\`entity_id\`),
       INDEX \`idx_gcl_op\` (\`operation\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 4.9 — Institutional Cognitive Copilots ───────────────────────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilots\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`copilot_type\` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '', \`description\` TEXT NULL,
+      \`domain\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`capabilities\` TEXT NULL, \`permissions\` TEXT NULL, \`forbidden_actions\` TEXT NULL,
+      \`active\` TINYINT NOT NULL DEFAULT 1, \`version\` INT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cop_org\` (\`organization_id\`),
+      INDEX \`idx_cop_type\` (\`copilot_type\`),
+      INDEX \`idx_cop_org_type\` (\`organization_id\`, \`copilot_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilot_sessions\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workflow_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`copilot_id\` VARCHAR(20) NOT NULL,
+      \`copilot_type\` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+      \`user_id\` INT NOT NULL DEFAULT 0,
+      \`context_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`reasoning_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`query\` TEXT NULL, \`status\` VARCHAR(30) NOT NULL DEFAULT 'open',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cps_org\` (\`organization_id\`),
+      INDEX \`idx_cps_copilot\` (\`copilot_id\`),
+      INDEX \`idx_cps_status\` (\`status\`),
+      INDEX \`idx_cps_org_copilot\` (\`organization_id\`, \`copilot_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilot_recommendations\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(20) NOT NULL,
+      \`copilot_type\` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+      \`kind\` VARCHAR(30) NOT NULL DEFAULT 'orientacao',
+      \`summary\` TEXT NULL, \`suggestions\` TEXT NULL, \`risks\` TEXT NULL,
+      \`alternatives\` TEXT NULL, \`justification\` TEXT NULL,
+      \`legal_basis\` TEXT NULL, \`evidence_ids\` TEXT NULL,
+      \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+      \`requires_human_review\` TINYINT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_crec_org\` (\`organization_id\`),
+      INDEX \`idx_crec_session\` (\`session_id\`),
+      INDEX \`idx_crec_org_session\` (\`organization_id\`, \`session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilot_decision_traces\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`session_id\` VARCHAR(20) NOT NULL,
+      \`reasoning_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`steps\` TEXT NULL, \`replay_snapshot\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ctr_org\` (\`organization_id\`),
+      INDEX \`idx_ctr_session\` (\`session_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilot_policies\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`copilot_type\` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`allowed_actions\` TEXT NULL, \`forbidden_actions\` TEXT NULL,
+      \`min_confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.4,
+      \`approval_risk_threshold\` VARCHAR(20) NOT NULL DEFAULT 'alto',
+      \`active\` TINYINT NOT NULL DEFAULT 1, \`version\` INT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cpol_org\` (\`organization_id\`),
+      INDEX \`idx_cpol_type\` (\`copilot_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`copilot_metrics\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`copilot_type\` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+      \`metric_name\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`metric_value\` DECIMAL(10,4) NOT NULL DEFAULT 0,
+      \`metric_unit\` VARCHAR(50) NOT NULL DEFAULT 'count', \`tags\` TEXT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cmet_org\` (\`organization_id\`),
+      INDEX \`idx_cmet_type\` (\`copilot_type\`),
+      INDEX \`idx_cmet_name\` (\`metric_name\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

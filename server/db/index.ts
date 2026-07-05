@@ -20,3 +20,4 @@ export * from "./directContracts";
 export * from "./contracts";
 export * from "./legalOpinions";
 export * from "./knowledgeGraph";
+export * from "./copilots";

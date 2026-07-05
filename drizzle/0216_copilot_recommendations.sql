@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `copilot_recommendations` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `session_id` VARCHAR(20) NOT NULL,
+  `copilot_type` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+  `kind` VARCHAR(30) NOT NULL DEFAULT 'orientacao',
+  `summary` TEXT NULL,
+  `suggestions` TEXT NULL,
+  `risks` TEXT NULL,
+  `alternatives` TEXT NULL,
+  `justification` TEXT NULL,
+  `legal_basis` TEXT NULL,
+  `evidence_ids` TEXT NULL,
+  `confidence` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+  `requires_human_review` TINYINT NOT NULL DEFAULT 1,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_crec_org` (`organization_id`),
+  INDEX `idx_crec_session` (`session_id`),
+  INDEX `idx_crec_org_session` (`organization_id`, `session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

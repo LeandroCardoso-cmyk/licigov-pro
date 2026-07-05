@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `copilot_sessions` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `workflow_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `copilot_id` VARCHAR(20) NOT NULL,
+  `copilot_type` VARCHAR(50) NOT NULL DEFAULT 'agente_contratacao',
+  `user_id` INT NOT NULL DEFAULT 0,
+  `context_id` VARCHAR(20) NOT NULL DEFAULT '',
+  `reasoning_id` VARCHAR(20) NOT NULL DEFAULT '',
+  `query` TEXT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'open',
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_cps_org` (`organization_id`),
+  INDEX `idx_cps_copilot` (`copilot_id`),
+  INDEX `idx_cps_status` (`status`),
+  INDEX `idx_cps_org_copilot` (`organization_id`, `copilot_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
