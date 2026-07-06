@@ -60,6 +60,8 @@ import { copilotRouter } from "./routers/copilotRouter";
 import { copilotGovernanceRouter } from "./routers/copilotGovernanceRouter";
 import { workspaceRouter } from "./routers/workspaceRouter";
 import { workspaceGovernanceRouter } from "./routers/workspaceGovernanceRouter";
+import { businessDomainRouter } from "./routers/businessDomainRouter";
+import { moduleLicensingRouter } from "./routers/moduleLicensingRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -123,6 +125,8 @@ export const appRouter = router({
   copilotGovernance:   copilotGovernanceRouter,
   workspace:           workspaceRouter,
   workspaceGovernance: workspaceGovernanceRouter,
+  businessDomain:      businessDomainRouter,
+  moduleLicensing:     moduleLicensingRouter,
 });
 
 export type AppRouter = typeof appRouter;

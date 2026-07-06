@@ -1494,6 +1494,62 @@
       "when": 1766428800000,
       "tag": "0225_workspace_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "5",
+      "when": 1766515200000,
+      "tag": "0226_business_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "5",
+      "when": 1766601600000,
+      "tag": "0227_domain_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "5",
+      "when": 1766688000000,
+      "tag": "0228_licensed_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 229,
+      "version": "5",
+      "when": 1766774400000,
+      "tag": "0229_module_dependencies",
+      "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "5",
+      "when": 1766860800000,
+      "tag": "0230_module_feature_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "5",
+      "when": 1766947200000,
+      "tag": "0231_organization_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "5",
+      "when": 1767033600000,
+      "tag": "0232_kernel_services",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "5",
+      "when": 1767120000000,
+      "tag": "0233_domain_navigation",
+      "breakpoints": true
     }
   ]
 }

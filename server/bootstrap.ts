@@ -3332,6 +3332,99 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`), INDEX \`idx_wm_org\` (\`organization_id\`),
       INDEX \`idx_wm_workspace\` (\`workspace_id\`), INDEX \`idx_wm_name\` (\`metric_name\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 5.0.1 — Business Domain Architecture & Modular Licensing ──────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`business_domains\` (
+      \`id\` VARCHAR(20) NOT NULL, \`code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '', \`description\` TEXT NULL,
+      \`category\` VARCHAR(30) NOT NULL DEFAULT 'core',
+      \`active\` TINYINT NOT NULL DEFAULT 1, \`version\` INT NOT NULL DEFAULT 1,
+      \`dependencies\` TEXT NULL, \`required_kernel_services\` TEXT NULL,
+      \`supported_workflows\` TEXT NULL,
+      \`workspace_type\` VARCHAR(50) NOT NULL DEFAULT 'generico',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), UNIQUE KEY \`uq_bd_code\` (\`code\`),
+      INDEX \`idx_bd_category\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`domain_workspaces\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`business_domain_id\` VARCHAR(20) NOT NULL,
+      \`business_domain_code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`workspace_type\` VARCHAR(50) NOT NULL DEFAULT 'generico',
+      \`current_workflow\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`active_copilots\` TEXT NULL, \`active_documents\` TEXT NULL, \`active_tasks\` TEXT NULL,
+      \`permissions\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_dws_org\` (\`organization_id\`),
+      INDEX \`idx_dws_domain\` (\`business_domain_code\`),
+      INDEX \`idx_dws_org_domain\` (\`organization_id\`, \`business_domain_code\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`licensed_modules\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`business_domain_code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`plan\` VARCHAR(30) NOT NULL DEFAULT 'trial',
+      \`active\` TINYINT NOT NULL DEFAULT 1,
+      \`activation_date\` VARCHAR(30) NOT NULL DEFAULT '',
+      \`expiration_date\` VARCHAR(30) NULL, \`licensed_features\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_lm_org\` (\`organization_id\`),
+      INDEX \`idx_lm_domain\` (\`business_domain_code\`),
+      INDEX \`idx_lm_org_domain\` (\`organization_id\`, \`business_domain_code\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`module_dependencies\` (
+      \`id\` VARCHAR(20) NOT NULL, \`dependent_code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`kind\` VARCHAR(20) NOT NULL DEFAULT 'domain',
+      \`depends_on\` VARCHAR(50) NOT NULL DEFAULT '', \`required\` TINYINT NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_mdep_dependent\` (\`dependent_code\`),
+      INDEX \`idx_mdep_kind\` (\`kind\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`module_feature_flags\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`business_domain_code\` VARCHAR(50) NULL,
+      \`feature_key\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`enabled\` TINYINT NOT NULL DEFAULT 0,
+      \`rollout_strategy\` VARCHAR(20) NOT NULL DEFAULT 'off',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_mff_org\` (\`organization_id\`),
+      INDEX \`idx_mff_key\` (\`feature_key\`),
+      INDEX \`idx_mff_org_key\` (\`organization_id\`, \`feature_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`organization_features\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`feature_key\` VARCHAR(100) NOT NULL DEFAULT '',
+      \`enabled\` TINYINT NOT NULL DEFAULT 0,
+      \`source\` VARCHAR(50) NOT NULL DEFAULT 'license',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_of_org\` (\`organization_id\`),
+      INDEX \`idx_of_org_key\` (\`organization_id\`, \`feature_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`kernel_services\` (
+      \`id\` VARCHAR(20) NOT NULL, \`service_id\` VARCHAR(60) NOT NULL DEFAULT '',
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`category\` VARCHAR(30) NOT NULL DEFAULT 'platform',
+      \`active\` TINYINT NOT NULL DEFAULT 1,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), UNIQUE KEY \`uq_ks_service\` (\`service_id\`),
+      INDEX \`idx_ks_category\` (\`category\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`domain_navigation\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`business_domain_code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`visible\` TINYINT NOT NULL DEFAULT 1, \`sort_order\` INT NOT NULL DEFAULT 0,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_dnav_org\` (\`organization_id\`),
+      INDEX \`idx_dnav_org_visible\` (\`organization_id\`, \`visible\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

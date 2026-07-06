@@ -22,3 +22,4 @@ export * from "./legalOpinions";
 export * from "./knowledgeGraph";
 export * from "./copilots";
 export * from "./workspace";
+export * from "./businessDomains";
