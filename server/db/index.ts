@@ -21,3 +21,4 @@ export * from "./contracts";
 export * from "./legalOpinions";
 export * from "./knowledgeGraph";
 export * from "./copilots";
+export * from "./workspace";

@@ -39,7 +39,15 @@ export type WorkflowStepType =
   | "copilot_reasoning"
   | "copilot_recommendation"
   | "copilot_validation"
-  | "copilot_explainability";
+  | "copilot_explainability"
+  // Sprint 5.0 — Cognitive Procurement Workspace
+  | "workspace_lifecycle"
+  | "task_lifecycle"
+  | "multi_agent_coordination"
+  | "decision_flow"
+  | "collaboration_flow"
+  | "approval_flow"
+  | "risk_flow";
 
 export type WorkflowStatus =
   | "pending"
@@ -989,6 +997,53 @@ export function createCopilotPipelineStep(params: {
     workflowId: params.workflowId,
     organizationId: params.organizationId,
     copilotId: params.copilotId,
+    stepType: params.stepType,
+    order: params.order,
+    summary: params.summary ?? "",
+    correlationId: params.correlationId,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ─── Sprint 5.0 — Cognitive Procurement Workspace ────────────────────────────
+
+/** Ordem oficial do fluxo do Workspace (lifecycle + coordenação + decisão). */
+export const WORKSPACE_PIPELINE: readonly WorkflowStepType[] = [
+  "workspace_lifecycle",
+  "task_lifecycle",
+  "multi_agent_coordination",
+  "risk_flow",
+  "decision_flow",
+  "collaboration_flow",
+  "approval_flow",
+];
+
+export interface WorkspaceFlowStep {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly organizationId: number;
+  readonly stepType: WorkflowStepType;
+  readonly order: number;
+  readonly summary: string;
+  readonly correlationId: string;
+  readonly createdAt: string;
+}
+
+export function createWorkspaceFlowStep(params: {
+  workspaceId: string;
+  organizationId: number;
+  stepType: WorkflowStepType;
+  order: number;
+  summary?: string;
+  correlationId: string;
+}): WorkspaceFlowStep {
+  const id = createHash("sha256")
+    .update(`wfstep:${params.workspaceId}:${params.stepType}:${params.order}`)
+    .digest("hex").slice(0, 20);
+  return {
+    id,
+    workspaceId: params.workspaceId,
+    organizationId: params.organizationId,
     stepType: params.stepType,
     order: params.order,
     summary: params.summary ?? "",
