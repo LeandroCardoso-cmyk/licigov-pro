@@ -3425,6 +3425,132 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`), INDEX \`idx_dnav_org\` (\`organization_id\`),
       INDEX \`idx_dnav_org_visible\` (\`organization_id\`, \`visible\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Sprint 5.1 — Business Domain: Processo Licitatório ──────────────────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`procurement_processes\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_number\` VARCHAR(64) NOT NULL DEFAULT '', \`object\` TEXT NULL,
+      \`modality\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`current_stage\` VARCHAR(30) NOT NULL DEFAULT 'NEW_PROCESS',
+      \`status\` VARCHAR(30) NOT NULL DEFAULT 'rascunho',
+      \`start_option\` VARCHAR(30) NOT NULL DEFAULT 'criar_dfd',
+      \`responsible_user\` INT NOT NULL DEFAULT 0, \`participants\` TEXT NULL, \`active_copilots\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pp_org\` (\`organization_id\`),
+      INDEX \`idx_pp_number\` (\`process_number\`), INDEX \`idx_pp_stage\` (\`current_stage\`),
+      INDEX \`idx_pp_org_status\` (\`organization_id\`, \`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`process_stages\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`stage\` VARCHAR(30) NOT NULL DEFAULT 'NEW_PROCESS',
+      \`state\` VARCHAR(30) NOT NULL DEFAULT '', \`entered_at\` VARCHAR(30) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ps_org\` (\`organization_id\`), INDEX \`idx_ps_process\` (\`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`price_research\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`source\` VARCHAR(20) NOT NULL DEFAULT 'manual',
+      \`item_count\` INT NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pr_org\` (\`organization_id\`), INDEX \`idx_pr_process\` (\`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`price_research_items\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`research_id\` VARCHAR(20) NOT NULL, \`process_id\` VARCHAR(20) NOT NULL,
+      \`description\` TEXT NULL, \`quantity\` DECIMAL(14,3) NOT NULL DEFAULT 0,
+      \`unit\` VARCHAR(30) NOT NULL DEFAULT 'un', \`supplier\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`brand\` VARCHAR(255) NOT NULL DEFAULT '', \`model\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`value\` DECIMAL(14,2) NOT NULL DEFAULT 0, \`observations\` TEXT NULL,
+      \`source\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pri_org\` (\`organization_id\`),
+      INDEX \`idx_pri_research\` (\`research_id\`), INDEX \`idx_pri_process\` (\`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`intelligent_items\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`source_research_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`description\` TEXT NULL, \`quantity\` DECIMAL(14,3) NOT NULL DEFAULT 0,
+      \`unit\` VARCHAR(30) NOT NULL DEFAULT 'un', \`average_price\` DECIMAL(14,2) NOT NULL DEFAULT 0,
+      \`suppliers\` TEXT NULL, \`suggested_catmat\` VARCHAR(50) NULL, \`alternative_catmat\` TEXT NULL,
+      \`specifications\` TEXT NULL, \`risks\` TEXT NULL, \`recommendations\` TEXT NULL,
+      \`status\` VARCHAR(20) NOT NULL DEFAULT 'pendente', \`approved_by\` INT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ii_org\` (\`organization_id\`),
+      INDEX \`idx_ii_process\` (\`process_id\`), INDEX \`idx_ii_status\` (\`status\`),
+      INDEX \`idx_ii_org_process\` (\`organization_id\`, \`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_catmat_matches\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`item_id\` VARCHAR(20) NOT NULL, \`catmat_code\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`catmat_description\` TEXT NULL, \`score\` DECIMAL(5,4) NOT NULL DEFAULT 0,
+      \`match_rank\` INT NOT NULL DEFAULT 0, \`decision\` VARCHAR(20) NOT NULL DEFAULT 'sugerido',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_icm_org\` (\`organization_id\`), INDEX \`idx_icm_item\` (\`item_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_recommendations\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`item_id\` VARCHAR(20) NOT NULL, \`rec_type\` VARCHAR(30) NOT NULL DEFAULT 'catmat',
+      \`summary\` TEXT NULL, \`reasoning\` TEXT NULL, \`explainability\` TEXT NULL,
+      \`provenance\` VARCHAR(100) NOT NULL DEFAULT 'kernel', \`confidence\` DECIMAL(5,4) NOT NULL DEFAULT 0.5,
+      \`accepted\` TINYINT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ir_org\` (\`organization_id\`), INDEX \`idx_ir_item\` (\`item_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_risks\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`item_id\` VARCHAR(20) NOT NULL, \`risk_type\` VARCHAR(40) NOT NULL DEFAULT 'inconsistencia',
+      \`severity\` VARCHAR(20) NOT NULL DEFAULT 'medio', \`description\` TEXT NULL, \`explanation\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_irk_org\` (\`organization_id\`), INDEX \`idx_irk_item\` (\`item_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_history\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`item_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`object\` TEXT NULL, \`year\` INT NOT NULL DEFAULT 0,
+      \`winning_supplier\` VARCHAR(255) NOT NULL DEFAULT '', \`homologated_price\` DECIMAL(14,2) NOT NULL DEFAULT 0,
+      \`catmat_used\` VARCHAR(50) NOT NULL DEFAULT '', \`outcome\` VARCHAR(30) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ih_org\` (\`organization_id\`), INDEX \`idx_ih_process\` (\`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`process_timeline\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`event_order\` INT NOT NULL DEFAULT 0,
+      \`event_type\` VARCHAR(40) NOT NULL DEFAULT 'change', \`actor\` VARCHAR(100) NOT NULL DEFAULT 'system',
+      \`summary\` TEXT NULL, \`ref_id\` VARCHAR(40) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ptl_org\` (\`organization_id\`),
+      INDEX \`idx_ptl_process\` (\`process_id\`), INDEX \`idx_ptl_org_process\` (\`organization_id\`, \`process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`generated_documents\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`kind\` VARCHAR(20) NOT NULL DEFAULT 'etp',
+      \`title\` VARCHAR(500) NOT NULL DEFAULT '', \`content\` TEXT NULL,
+      \`status\` VARCHAR(20) NOT NULL DEFAULT 'rascunho', \`sources\` TEXT NULL,
+      \`modality\` VARCHAR(40) NULL, \`form\` VARCHAR(20) NULL, \`platform\` VARCHAR(40) NULL,
+      \`legal_justification\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_gd_org\` (\`organization_id\`),
+      INDEX \`idx_gd_process\` (\`process_id\`), INDEX \`idx_gd_kind\` (\`kind\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

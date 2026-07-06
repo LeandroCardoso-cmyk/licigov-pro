@@ -1550,6 +1550,83 @@
       "when": 1767120000000,
       "tag": "0233_domain_navigation",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "5",
+      "when": 1767206400000,
+      "tag": "0234_procurement_processes",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "5",
+      "when": 1767292800000,
+      "tag": "0235_process_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "5",
+      "when": 1767379200000,
+      "tag": "0236_price_research",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "5",
+      "when": 1767465600000,
+      "tag": "0237_price_research_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "5",
+      "when": 1767552000000,
+      "tag": "0238_intelligent_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "5",
+      "when": 1767638400000,
+      "tag": "0239_item_catmat_matches",
+      "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "5",
+      "when": 1767724800000,
+      "tag": "0240_item_recommendations",
+      "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "5",
+      "when": 1767811200000,
+      "tag": "0241_item_risks",
+      "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "5",
+      "when": 1767897600000,
+      "tag": "0242_item_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "5",
+      "when": 1767984000000,
+      "tag": "0243_process_timeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "5",
+      "when": 1768070400000,
+      "tag": "0244_generated_documents",
+      "breakpoints": true
     }
   ]
 }
