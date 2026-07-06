@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `cognitive_workspaces` (
+  `id` VARCHAR(20) NOT NULL,
+  `organization_id` INT NOT NULL,
+  `process_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `workspace_type` VARCHAR(50) NOT NULL DEFAULT 'generico',
+  `title` VARCHAR(500) NOT NULL DEFAULT '',
+  `status` VARCHAR(30) NOT NULL DEFAULT 'draft',
+  `owner` INT NOT NULL DEFAULT 0,
+  `participants` TEXT NULL,
+  `current_stage` VARCHAR(30) NOT NULL DEFAULT 'planejamento',
+  `active_copilots` TEXT NULL,
+  `active_tasks` TEXT NULL,
+  `active_documents` TEXT NULL,
+  `correlation_id` VARCHAR(64) NOT NULL DEFAULT '',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  INDEX `idx_cws_org` (`organization_id`),
+  INDEX `idx_cws_process` (`process_id`),
+  INDEX `idx_cws_status` (`status`),
+  INDEX `idx_cws_org_status` (`organization_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

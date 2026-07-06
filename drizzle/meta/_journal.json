@@ -1452,6 +1452,48 @@
       "when": 1765910400000,
       "tag": "0219_copilot_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "5",
+      "when": 1765996800000,
+      "tag": "0220_cognitive_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "5",
+      "when": 1766083200000,
+      "tag": "0221_workspace_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "5",
+      "when": 1766169600000,
+      "tag": "0222_workspace_timeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "5",
+      "when": 1766256000000,
+      "tag": "0223_workspace_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "5",
+      "when": 1766342400000,
+      "tag": "0224_workspace_risks",
+      "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "5",
+      "when": 1766428800000,
+      "tag": "0225_workspace_metrics",
+      "breakpoints": true
     }
   ]
 }

@@ -4634,3 +4634,97 @@ export const copilotMetricsTable = mysqlTable("copilot_metrics", {
   tags:           text("tags"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 5.0 — Cognitive Procurement Workspace ────────────────────────────
+
+export const cognitiveWorkspacesTable = mysqlTable("cognitive_workspaces", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  processId:       varchar("process_id", { length: 64 }).notNull().default(""),
+  workspaceType:   varchar("workspace_type", { length: 50 }).notNull().default("generico"),
+  title:           varchar("title", { length: 500 }).notNull().default(""),
+  status:          varchar("status", { length: 30 }).notNull().default("draft"),
+  owner:           int("owner").notNull().default(0),
+  participants:    text("participants"),
+  currentStage:    varchar("current_stage", { length: 30 }).notNull().default("planejamento"),
+  activeCopilots:  text("active_copilots"),
+  activeTasks:     text("active_tasks"),
+  activeDocuments: text("active_documents"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const workspaceTasksTable = mysqlTable("workspace_tasks", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  workspaceId:      varchar("workspace_id", { length: 20 }).notNull(),
+  taskType:         varchar("task_type", { length: 50 }).notNull().default("generico"),
+  title:            varchar("title", { length: 500 }).notNull().default(""),
+  assignedCopilot:  varchar("assigned_copilot", { length: 50 }),
+  assignedUser:     int("assigned_user"),
+  priority:         varchar("priority", { length: 20 }).notNull().default("media"),
+  status:           varchar("status", { length: 30 }).notNull().default("pending"),
+  dependencies:     text("dependencies"),
+  dueDate:          varchar("due_date", { length: 30 }),
+  approvalRequired: tinyint("approval_required").notNull().default(0),
+  correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:        datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const workspaceTimelineTable = mysqlTable("workspace_timeline", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  eventOrder:     int("event_order").notNull().default(0),
+  eventType:      varchar("event_type", { length: 40 }).notNull().default("change"),
+  actor:          varchar("actor", { length: 100 }).notNull().default("system"),
+  summary:        text("summary"),
+  refId:          varchar("ref_id", { length: 40 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const workspaceDecisionsTable = mysqlTable("workspace_decisions", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  workspaceId:     varchar("workspace_id", { length: 20 }).notNull(),
+  title:           varchar("title", { length: 500 }).notNull().default(""),
+  decision:        text("decision"),
+  justification:   text("justification"),
+  responsibleUser: int("responsible_user").notNull().default(0),
+  outcome:         varchar("outcome", { length: 30 }).notNull().default("adiada"),
+  status:          varchar("status", { length: 30 }).notNull().default("registrada"),
+  evidenceIds:     text("evidence_ids"),
+  involvedCopilots: text("involved_copilots"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const workspaceRisksTable = mysqlTable("workspace_risks", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  workspaceId:       varchar("workspace_id", { length: 20 }).notNull(),
+  category:          varchar("category", { length: 30 }).notNull().default("operacional"),
+  description:       text("description"),
+  severity:          varchar("severity", { length: 20 }).notNull().default("medio"),
+  likelihood:        decimal("likelihood", { precision: 5, scale: 4 }).notNull().default("0.5"),
+  status:            varchar("status", { length: 30 }).notNull().default("identificado"),
+  mitigation:        text("mitigation"),
+  correlatedRiskIds: text("correlated_risk_ids"),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const workspaceMetricsTable = mysqlTable("workspace_metrics", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  metricName:     varchar("metric_name", { length: 100 }).notNull().default(""),
+  metricValue:    decimal("metric_value", { precision: 10, scale: 4 }).notNull().default("0"),
+  metricUnit:     varchar("metric_unit", { length: 50 }).notNull().default("count"),
+  tags:           text("tags"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

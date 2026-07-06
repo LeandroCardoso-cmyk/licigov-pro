@@ -58,6 +58,8 @@ import { knowledgeGraphRouter } from "./routers/knowledgeGraphRouter";
 import { ontologyRouter } from "./routers/ontologyRouter";
 import { copilotRouter } from "./routers/copilotRouter";
 import { copilotGovernanceRouter } from "./routers/copilotGovernanceRouter";
+import { workspaceRouter } from "./routers/workspaceRouter";
+import { workspaceGovernanceRouter } from "./routers/workspaceGovernanceRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -119,6 +121,8 @@ export const appRouter = router({
   ontology:            ontologyRouter,
   copilot:             copilotRouter,
   copilotGovernance:   copilotGovernanceRouter,
+  workspace:           workspaceRouter,
+  workspaceGovernance: workspaceGovernanceRouter,
 });
 
 export type AppRouter = typeof appRouter;
