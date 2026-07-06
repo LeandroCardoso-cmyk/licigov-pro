@@ -4728,3 +4728,95 @@ export const workspaceMetricsTable = mysqlTable("workspace_metrics", {
   tags:           text("tags"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Sprint 5.0.1 — Business Domain Architecture & Modular Licensing ─────────
+
+export const businessDomainsTable = mysqlTable("business_domains", {
+  id:                     varchar("id", { length: 20 }).notNull().primaryKey(),
+  code:                   varchar("code", { length: 50 }).notNull().default(""),
+  name:                   varchar("name", { length: 255 }).notNull().default(""),
+  description:            text("description"),
+  category:               varchar("category", { length: 30 }).notNull().default("core"),
+  active:                 tinyint("active").notNull().default(1),
+  version:                int("version").notNull().default(1),
+  dependencies:           text("dependencies"),
+  requiredKernelServices: text("required_kernel_services"),
+  supportedWorkflows:     text("supported_workflows"),
+  workspaceType:          varchar("workspace_type", { length: 50 }).notNull().default("generico"),
+  createdAt:              datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const domainWorkspacesTable = mysqlTable("domain_workspaces", {
+  id:               varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  businessDomainId: varchar("business_domain_id", { length: 20 }).notNull(),
+  businessDomainCode: varchar("business_domain_code", { length: 50 }).notNull().default(""),
+  workspaceType:    varchar("workspace_type", { length: 50 }).notNull().default("generico"),
+  currentWorkflow:  varchar("current_workflow", { length: 50 }).notNull().default(""),
+  activeCopilots:   text("active_copilots"),
+  activeDocuments:  text("active_documents"),
+  activeTasks:      text("active_tasks"),
+  permissions:      text("permissions"),
+  correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const licensedModulesTable = mysqlTable("licensed_modules", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  businessDomainCode: varchar("business_domain_code", { length: 50 }).notNull().default(""),
+  plan:               varchar("plan", { length: 30 }).notNull().default("trial"),
+  active:             tinyint("active").notNull().default(1),
+  activationDate:     varchar("activation_date", { length: 30 }).notNull().default(""),
+  expirationDate:     varchar("expiration_date", { length: 30 }),
+  licensedFeatures:   text("licensed_features"),
+  correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const moduleDependenciesTable = mysqlTable("module_dependencies", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  dependentCode: varchar("dependent_code", { length: 50 }).notNull().default(""),
+  kind:          varchar("kind", { length: 20 }).notNull().default("domain"),
+  dependsOn:     varchar("depends_on", { length: 50 }).notNull().default(""),
+  required:      tinyint("required").notNull().default(1),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const moduleFeatureFlagsTable = mysqlTable("module_feature_flags", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  businessDomainCode: varchar("business_domain_code", { length: 50 }),
+  featureKey:         varchar("feature_key", { length: 100 }).notNull().default(""),
+  enabled:            tinyint("enabled").notNull().default(0),
+  rolloutStrategy:    varchar("rollout_strategy", { length: 20 }).notNull().default("off"),
+  correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const organizationFeaturesTable = mysqlTable("organization_features", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  featureKey:     varchar("feature_key", { length: 100 }).notNull().default(""),
+  enabled:        tinyint("enabled").notNull().default(0),
+  source:         varchar("source", { length: 50 }).notNull().default("license"),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const kernelServicesTable = mysqlTable("kernel_services", {
+  id:        varchar("id", { length: 20 }).notNull().primaryKey(),
+  serviceId: varchar("service_id", { length: 60 }).notNull().default(""),
+  name:      varchar("name", { length: 255 }).notNull().default(""),
+  category:  varchar("category", { length: 30 }).notNull().default("platform"),
+  active:    tinyint("active").notNull().default(1),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const domainNavigationTable = mysqlTable("domain_navigation", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  businessDomainCode: varchar("business_domain_code", { length: 50 }).notNull().default(""),
+  visible:            tinyint("visible").notNull().default(1),
+  sortOrder:          int("sort_order").notNull().default(0),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
