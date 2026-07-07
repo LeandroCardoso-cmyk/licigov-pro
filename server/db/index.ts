@@ -24,3 +24,4 @@ export * from "./copilots";
 export * from "./workspace";
 export * from "./businessDomains";
 export * from "./procurement";
+export * from "./institutionalRequests";
