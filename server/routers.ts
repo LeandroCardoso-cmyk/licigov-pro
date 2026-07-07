@@ -64,6 +64,7 @@ import { businessDomainRouter } from "./routers/businessDomainRouter";
 import { moduleLicensingRouter } from "./routers/moduleLicensingRouter";
 import { procurementProcessRouter } from "./routers/procurementProcessRouter";
 import { itemIntelligenceRouter } from "./routers/itemIntelligenceRouter";
+import { institutionalRequestRouter } from "./routers/institutionalRequestRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -131,6 +132,7 @@ export const appRouter = router({
   moduleLicensing:     moduleLicensingRouter,
   procurementProcess:  procurementProcessRouter,
   itemIntelligence:    itemIntelligenceRouter,
+  institutionalRequest: institutionalRequestRouter,
 });
 
 export type AppRouter = typeof appRouter;

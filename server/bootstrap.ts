@@ -3551,6 +3551,75 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`), INDEX \`idx_gd_org\` (\`organization_id\`),
       INDEX \`idx_gd_process\` (\`process_id\`), INDEX \`idx_gd_kind\` (\`kind\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // ─── Kernel — Institutional Request Engine ───────────────────────────────
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`institutional_requests\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`source_domain\` VARCHAR(50) NOT NULL DEFAULT '', \`destination_domain\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`request_type\` VARCHAR(40) NOT NULL DEFAULT 'INFORMATION_REQUEST',
+      \`reference_process_id\` VARCHAR(20) NOT NULL DEFAULT '', \`reference_document_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`title\` VARCHAR(500) NOT NULL DEFAULT '', \`description\` TEXT NULL,
+      \`priority\` VARCHAR(20) NOT NULL DEFAULT 'media', \`status\` VARCHAR(30) NOT NULL DEFAULT 'NEW',
+      \`requested_by\` INT NOT NULL DEFAULT 0, \`assigned_to\` INT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ireq_org\` (\`organization_id\`),
+      INDEX \`idx_ireq_dest\` (\`destination_domain\`), INDEX \`idx_ireq_src\` (\`source_domain\`),
+      INDEX \`idx_ireq_status\` (\`status\`), INDEX \`idx_ireq_org_dest\` (\`organization_id\`, \`destination_domain\`),
+      INDEX \`idx_ireq_process\` (\`reference_process_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`institutional_responses\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`responder\` INT NOT NULL DEFAULT 0,
+      \`response_type\` VARCHAR(30) NOT NULL DEFAULT 'informacao',
+      \`response_status\` VARCHAR(30) NOT NULL DEFAULT 'concluido',
+      \`comments\` TEXT NULL, \`attached_documents\` TEXT NULL,
+      \`signed\` TINYINT NOT NULL DEFAULT 0, \`signature_method\` VARCHAR(30) NULL, \`signed_at\` VARCHAR(30) NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ires_org\` (\`organization_id\`), INDEX \`idx_ires_request\` (\`request_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`request_assignments\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`user_id\` INT NULL,
+      \`sector\` VARCHAR(100) NOT NULL DEFAULT '', \`queue\` VARCHAR(100) NOT NULL DEFAULT 'geral',
+      \`priority\` VARCHAR(20) NOT NULL DEFAULT 'media', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rasg_org\` (\`organization_id\`), INDEX \`idx_rasg_request\` (\`request_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`request_timelines\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`event_order\` INT NOT NULL DEFAULT 0,
+      \`event_type\` VARCHAR(40) NOT NULL DEFAULT 'created', \`actor\` VARCHAR(100) NOT NULL DEFAULT 'system',
+      \`summary\` TEXT NULL, \`ref_id\` VARCHAR(40) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rtl_org\` (\`organization_id\`),
+      INDEX \`idx_rtl_request\` (\`request_id\`), INDEX \`idx_rtl_org_request\` (\`organization_id\`, \`request_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`request_notifications\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`recipient_user\` INT NOT NULL DEFAULT 0,
+      \`channel\` VARCHAR(20) NOT NULL DEFAULT 'sistema', \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`message\` TEXT NULL, \`status\` VARCHAR(20) NOT NULL DEFAULT 'pendente', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rnot_org\` (\`organization_id\`),
+      INDEX \`idx_rnot_request\` (\`request_id\`), INDEX \`idx_rnot_recipient\` (\`recipient_user\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`document_references\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`origin_domain\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`document_id\` VARCHAR(20) NOT NULL DEFAULT '', \`version\` INT NOT NULL DEFAULT 1,
+      \`snapshot\` VARCHAR(64) NOT NULL DEFAULT '', \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_docref_org\` (\`organization_id\`), INDEX \`idx_docref_request\` (\`request_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

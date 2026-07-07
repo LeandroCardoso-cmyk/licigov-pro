@@ -30,7 +30,8 @@ export type KernelServiceId =
   | "catmat_catser_engine"
   | "adaptive_process_engine"
   | "import_engine"
-  | "audit_engine";
+  | "audit_engine"
+  | "institutional_request_engine";
 
 export type KernelServiceCategory =
   | "ai"
@@ -70,6 +71,7 @@ export const KERNEL_SERVICES: Record<KernelServiceId, KernelService> = {
   adaptive_process_engine: { id: "adaptive_process_engine", name: "Adaptive Process Engine", category: "workflow", description: "Montagem dinâmica de fluxos por domínio." },
   import_engine: { id: "import_engine", name: "Import Engine", category: "document", description: "Ingestão e normalização de dados importados." },
   audit_engine: { id: "audit_engine", name: "Audit Engine", category: "governance", description: "Trilhas de auditoria." },
+  institutional_request_engine: { id: "institutional_request_engine", name: "Institutional Request Engine", category: "integration", description: "Troca de solicitações institucionais entre Business Domains sem acoplamento direto." },
 };
 
 export const ALL_KERNEL_SERVICE_IDS: KernelServiceId[] = Object.keys(KERNEL_SERVICES) as KernelServiceId[];

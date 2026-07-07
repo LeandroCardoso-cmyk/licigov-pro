@@ -4984,3 +4984,91 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:         datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── Kernel — Institutional Request Engine ───────────────────────────────────
+
+export const institutionalRequestsTable = mysqlTable("institutional_requests", {
+  id:                  varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  sourceDomain:        varchar("source_domain", { length: 50 }).notNull().default(""),
+  destinationDomain:   varchar("destination_domain", { length: 50 }).notNull().default(""),
+  requestType:         varchar("request_type", { length: 40 }).notNull().default("INFORMATION_REQUEST"),
+  referenceProcessId:  varchar("reference_process_id", { length: 20 }).notNull().default(""),
+  referenceDocumentId: varchar("reference_document_id", { length: 20 }).notNull().default(""),
+  title:               varchar("title", { length: 500 }).notNull().default(""),
+  description:         text("description"),
+  priority:            varchar("priority", { length: 20 }).notNull().default("media"),
+  status:              varchar("status", { length: 30 }).notNull().default("NEW"),
+  requestedBy:         int("requested_by").notNull().default(0),
+  assignedTo:          int("assigned_to"),
+  correlationId:       varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:           datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const institutionalResponsesTable = mysqlTable("institutional_responses", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  requestId:         varchar("request_id", { length: 20 }).notNull(),
+  responder:         int("responder").notNull().default(0),
+  responseType:      varchar("response_type", { length: 30 }).notNull().default("informacao"),
+  responseStatus:    varchar("response_status", { length: 30 }).notNull().default("concluido"),
+  comments:          text("comments"),
+  attachedDocuments: text("attached_documents"),
+  signed:            tinyint("signed").notNull().default(0),
+  signatureMethod:   varchar("signature_method", { length: 30 }),
+  signedAt:          varchar("signed_at", { length: 30 }),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const requestAssignmentsTable = mysqlTable("request_assignments", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  requestId:     varchar("request_id", { length: 20 }).notNull(),
+  userId:        int("user_id"),
+  sector:        varchar("sector", { length: 100 }).notNull().default(""),
+  queue:         varchar("queue", { length: 100 }).notNull().default("geral"),
+  priority:      varchar("priority", { length: 20 }).notNull().default("media"),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const requestTimelinesTable = mysqlTable("request_timelines", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  requestId:     varchar("request_id", { length: 20 }).notNull(),
+  eventOrder:    int("event_order").notNull().default(0),
+  eventType:     varchar("event_type", { length: 40 }).notNull().default("created"),
+  actor:         varchar("actor", { length: 100 }).notNull().default("system"),
+  summary:       text("summary"),
+  refId:         varchar("ref_id", { length: 40 }).notNull().default(""),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const requestNotificationsTable = mysqlTable("request_notifications", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  requestId:     varchar("request_id", { length: 20 }).notNull(),
+  recipientUser: int("recipient_user").notNull().default(0),
+  channel:       varchar("channel", { length: 20 }).notNull().default("sistema"),
+  title:         varchar("title", { length: 500 }).notNull().default(""),
+  message:       text("message"),
+  status:        varchar("status", { length: 20 }).notNull().default("pendente"),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const documentReferencesTable = mysqlTable("document_references", {
+  id:            varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  requestId:     varchar("request_id", { length: 20 }).notNull(),
+  originDomain:  varchar("origin_domain", { length: 50 }).notNull().default(""),
+  documentId:    varchar("document_id", { length: 20 }).notNull().default(""),
+  version:       int("version").notNull().default(1),
+  snapshot:      varchar("snapshot", { length: 64 }).notNull().default(""),
+  title:         varchar("title", { length: 500 }).notNull().default(""),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

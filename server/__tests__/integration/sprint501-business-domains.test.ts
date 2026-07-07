@@ -50,8 +50,8 @@ describe("Sprint 5.0.1 — Business Domain Architecture & Modular Licensing", ()
   // ─── Cognitive Kernel ──────────────────────────────────────────────────────
 
   describe("cognitiveKernel", () => {
-    it("registra 21 Kernel Services", () => {
-      expect(ALL_KERNEL_SERVICE_IDS).toHaveLength(21);
+    it("registra 22 Kernel Services", () => {
+      expect(ALL_KERNEL_SERVICE_IDS).toHaveLength(22);
       expect(KERNEL_SERVICES.institutional_rag.name).toBe("Institutional RAG");
     });
 
@@ -233,7 +233,7 @@ describe("Sprint 5.0.1 — Business Domain Architecture & Modular Licensing", ()
 
     it("listKernelServicesForDomain e listAllKernelServices", () => {
       expect(listKernelServicesForDomain("processo_licitatorio")).toContain("workflow_engine");
-      expect(listAllKernelServices()).toHaveLength(21);
+      expect(listAllKernelServices()).toHaveLength(22);
     });
   });
 
@@ -262,7 +262,7 @@ describe("Sprint 5.0.1 — Business Domain Architecture & Modular Licensing", ()
     it("registerAll degrada sem DB", async () => {
       const result = await registerAll();
       expect(result.domains).toBe(5);
-      expect(result.kernelServices).toBe(21);
+      expect(result.kernelServices).toBe(22);
     });
   });
 
