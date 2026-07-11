@@ -5072,3 +5072,101 @@ export const documentReferencesTable = mysqlTable("document_references", {
   correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:     datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── FASE 5 — Business Domain: Parecer Jurídico ──────────────────────────────
+// Domínio workspace-cêntrico que consome solicitações do Institutional Request
+// Engine e devolve o parecer à origem. Nomes namespaced para não colidir com o
+// módulo legado `legal_opinions` (LLM standalone). Multi-tenant, replay-safe.
+
+export const legalOpinionWorkspacesTable = mysqlTable("legal_opinion_workspaces", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  requestId:         varchar("request_id", { length: 20 }).notNull(),
+  sourceDomain:      varchar("source_domain", { length: 50 }).notNull().default(""),
+  referenceProcessId: varchar("reference_process_id", { length: 64 }).notNull().default(""),
+  requestType:       varchar("request_type", { length: 50 }).notNull().default(""),
+  currentStage:      varchar("current_stage", { length: 30 }).notNull().default("INBOX"),
+  status:            varchar("status", { length: 30 }).notNull().default("na_caixa"),
+  assignedLawyer:    int("assigned_lawyer"),
+  responsibleSector: varchar("responsible_sector", { length: 120 }).notNull().default(""),
+  priority:          varchar("priority", { length: 20 }).notNull().default("media"),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:         datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalOpinionDraftsTable = mysqlTable("legal_opinion_drafts", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  workspaceId:     varchar("workspace_id", { length: 20 }).notNull(),
+  requestId:       varchar("request_id", { length: 20 }).notNull(),
+  opinionType:     varchar("opinion_type", { length: 40 }).notNull().default("LEGAL_OPINION_INITIAL"),
+  report:          text("report"),
+  foundation:      text("foundation"),
+  conclusion:      text("conclusion"),
+  conclusionType:  varchar("conclusion_type", { length: 30 }),
+  recommendations: text("recommendations"),
+  reservations:    text("reservations"),
+  attachments:     text("attachments"),
+  status:          varchar("status", { length: 20 }).notNull().default("rascunho"),
+  version:         int("version").notNull().default(1),
+  signed:          int("signed").notNull().default(0),
+  signatureMethod: varchar("signature_method", { length: 30 }),
+  signedBy:        int("signed_by"),
+  signedAt:        varchar("signed_at", { length: 40 }),
+  author:          int("author").notNull().default(0),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalOpinionVersionsTable = mysqlTable("legal_opinion_versions", {
+  id:             varchar("id", { length: 32 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  draftId:        varchar("draft_id", { length: 20 }).notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  version:        int("version").notNull().default(1),
+  contentHash:    varchar("content_hash", { length: 64 }).notNull().default(""),
+  snapshot:       text("snapshot"),
+  author:         int("author").notNull().default(0),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalOpinionTemplatesTable = mysqlTable("legal_opinion_templates", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name:           varchar("name", { length: 255 }).notNull().default(""),
+  opinionType:    varchar("opinion_type", { length: 40 }).notNull().default("LEGAL_OPINION_INITIAL"),
+  reportTemplate: text("report_template"),
+  foundationTemplate: text("foundation_template"),
+  conclusionTemplate: text("conclusion_template"),
+  active:         int("active").notNull().default(1),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const legalOpinionHistoryTable = mysqlTable("legal_opinion_history", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  eventOrder:     int("event_order").notNull().default(0),
+  eventType:      varchar("event_type", { length: 50 }).notNull().default(""),
+  actor:          varchar("actor", { length: 60 }).notNull().default(""),
+  summary:        text("summary"),
+  refId:          varchar("ref_id", { length: 64 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const lawyerAssignmentsTable = mysqlTable("lawyer_assignments", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  requestId:      varchar("request_id", { length: 20 }).notNull(),
+  lawyerId:       int("lawyer_id"),
+  sector:         varchar("sector", { length: 120 }).notNull().default(""),
+  priority:       varchar("priority", { length: 20 }).notNull().default("media"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  assignedAt:     datetime("assigned_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

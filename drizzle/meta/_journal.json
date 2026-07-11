@@ -1669,6 +1669,48 @@
       "when": 1768588800000,
       "tag": "0250_document_references",
       "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "5",
+      "when": 1768675200000,
+      "tag": "0251_legal_opinion_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "5",
+      "when": 1768761600000,
+      "tag": "0252_legal_opinion_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "5",
+      "when": 1768848000000,
+      "tag": "0253_legal_opinion_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "5",
+      "when": 1768934400000,
+      "tag": "0254_legal_opinion_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "5",
+      "when": 1769020800000,
+      "tag": "0255_legal_opinion_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "5",
+      "when": 1769107200000,
+      "tag": "0256_lawyer_assignments",
+      "breakpoints": true
     }
   ]
 }

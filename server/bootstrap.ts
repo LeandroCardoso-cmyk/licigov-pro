@@ -3620,6 +3620,74 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_docref_org\` (\`organization_id\`), INDEX \`idx_docref_request\` (\`request_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // FASE 5 — Business Domain: Parecer Jurídico (workspace-cêntrico)
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_opinion_workspaces\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`request_id\` VARCHAR(20) NOT NULL, \`source_domain\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`reference_process_id\` VARCHAR(64) NOT NULL DEFAULT '', \`request_type\` VARCHAR(50) NOT NULL DEFAULT '',
+      \`current_stage\` VARCHAR(30) NOT NULL DEFAULT 'INBOX', \`status\` VARCHAR(30) NOT NULL DEFAULT 'na_caixa',
+      \`assigned_lawyer\` INT NULL, \`responsible_sector\` VARCHAR(120) NOT NULL DEFAULT '',
+      \`priority\` VARCHAR(20) NOT NULL DEFAULT 'media', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_low_org\` (\`organization_id\`),
+      INDEX \`idx_low_request\` (\`request_id\`), INDEX \`idx_low_org_stage\` (\`organization_id\`, \`current_stage\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_opinion_drafts\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workspace_id\` VARCHAR(20) NOT NULL, \`request_id\` VARCHAR(20) NOT NULL,
+      \`opinion_type\` VARCHAR(40) NOT NULL DEFAULT 'LEGAL_OPINION_INITIAL',
+      \`report\` TEXT NULL, \`foundation\` TEXT NULL, \`conclusion\` TEXT NULL,
+      \`conclusion_type\` VARCHAR(30) NULL, \`recommendations\` TEXT NULL, \`reservations\` TEXT NULL, \`attachments\` TEXT NULL,
+      \`status\` VARCHAR(20) NOT NULL DEFAULT 'rascunho', \`version\` INT NOT NULL DEFAULT 1,
+      \`signed\` INT NOT NULL DEFAULT 0, \`signature_method\` VARCHAR(30) NULL, \`signed_by\` INT NULL, \`signed_at\` VARCHAR(40) NULL,
+      \`author\` INT NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_lod_org\` (\`organization_id\`),
+      INDEX \`idx_lod_workspace\` (\`workspace_id\`), INDEX \`idx_lod_request\` (\`request_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_opinion_versions\` (
+      \`id\` VARCHAR(32) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`draft_id\` VARCHAR(20) NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`version\` INT NOT NULL DEFAULT 1, \`content_hash\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`snapshot\` TEXT NULL, \`author\` INT NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_lov_org\` (\`organization_id\`),
+      INDEX \`idx_lov_draft\` (\`draft_id\`), INDEX \`idx_lov_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_opinion_templates\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`name\` VARCHAR(255) NOT NULL DEFAULT '', \`opinion_type\` VARCHAR(40) NOT NULL DEFAULT 'LEGAL_OPINION_INITIAL',
+      \`report_template\` TEXT NULL, \`foundation_template\` TEXT NULL, \`conclusion_template\` TEXT NULL,
+      \`active\` INT NOT NULL DEFAULT 1, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_lot_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`legal_opinion_history\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workspace_id\` VARCHAR(20) NOT NULL, \`event_order\` INT NOT NULL DEFAULT 0,
+      \`event_type\` VARCHAR(50) NOT NULL DEFAULT '', \`actor\` VARCHAR(60) NOT NULL DEFAULT '',
+      \`summary\` TEXT NULL, \`ref_id\` VARCHAR(64) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_loh_org\` (\`organization_id\`),
+      INDEX \`idx_loh_workspace\` (\`workspace_id\`), INDEX \`idx_loh_ws_order\` (\`workspace_id\`, \`event_order\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`lawyer_assignments\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`workspace_id\` VARCHAR(20) NOT NULL, \`request_id\` VARCHAR(20) NOT NULL,
+      \`lawyer_id\` INT NULL, \`sector\` VARCHAR(120) NOT NULL DEFAULT '', \`priority\` VARCHAR(20) NOT NULL DEFAULT 'media',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`assigned_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_las_org\` (\`organization_id\`),
+      INDEX \`idx_las_workspace\` (\`workspace_id\`), INDEX \`idx_las_lawyer\` (\`lawyer_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
