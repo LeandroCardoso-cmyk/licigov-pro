@@ -1,0 +1,3 @@
+# Cache de AST local e efêmero (atrelado à versão do graphify e à máquina).
+# Regenerado por `graphify update .` — não deve ser versionado.
+cache/
