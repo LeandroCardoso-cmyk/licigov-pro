@@ -3768,6 +3768,70 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_pub_org\` (\`organization_id\`), INDEX \`idx_pub_workspace\` (\`workspace_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // FASE 5 — Business Domain: Contratos e Instrumentos Contratuais
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_workspaces\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`origin_type\` VARCHAR(30) NOT NULL DEFAULT 'externo', \`origin_process\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`contract_number\` VARCHAR(80) NOT NULL DEFAULT '', \`contractor\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`object\` TEXT NULL, \`value\` DECIMAL(15,2) NOT NULL DEFAULT 0, \`term\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`status\` VARCHAR(30) NOT NULL DEFAULT 'minuta', \`manager\` VARCHAR(255) NOT NULL DEFAULT '', \`inspector\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ctw_org\` (\`organization_id\`),
+      INDEX \`idx_ctw_org_origin\` (\`organization_id\`, \`origin_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_ws_documents\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`contract_id\` VARCHAR(20) NOT NULL,
+      \`kind\` VARCHAR(30) NOT NULL DEFAULT 'contrato', \`title\` VARCHAR(500) NOT NULL DEFAULT '', \`content\` TEXT NULL,
+      \`ref_id\` VARCHAR(64) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cwd_org\` (\`organization_id\`), INDEX \`idx_cwd_contract\` (\`contract_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_addenda\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`contract_id\` VARCHAR(20) NOT NULL,
+      \`addendum_type\` VARCHAR(20) NOT NULL DEFAULT 'prazo', \`sequence\` INT NOT NULL DEFAULT 1, \`justification\` TEXT NULL,
+      \`new_value\` DECIMAL(15,2) NOT NULL DEFAULT 0, \`new_term\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`status\` VARCHAR(30) NOT NULL DEFAULT 'solicitado', \`document_reference\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`legal_opinion_request_id\` VARCHAR(20) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cad_org\` (\`organization_id\`), INDEX \`idx_cad_contract\` (\`contract_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_ws_apostilles\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`contract_id\` VARCHAR(20) NOT NULL,
+      \`kind\` VARCHAR(20) NOT NULL DEFAULT 'reajuste', \`sequence\` INT NOT NULL DEFAULT 1, \`description\` TEXT NULL,
+      \`new_value\` DECIMAL(15,2) NOT NULL DEFAULT 0, \`new_manager\` VARCHAR(255) NOT NULL DEFAULT '', \`new_inspector\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`document_reference\` VARCHAR(500) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cap_org\` (\`organization_id\`), INDEX \`idx_cap_contract\` (\`contract_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_occurrences\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`contract_id\` VARCHAR(20) NOT NULL,
+      \`description\` TEXT NULL, \`occurred_on\` VARCHAR(40) NOT NULL DEFAULT '', \`attachments\` TEXT NULL, \`notes\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cocc_org\` (\`organization_id\`), INDEX \`idx_cocc_contract\` (\`contract_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`imported_contracts\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`contract_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`source\` VARCHAR(10) NOT NULL DEFAULT 'pdf', \`raw_text_hash\` VARCHAR(64) NOT NULL DEFAULT '', \`extracted\` TEXT NULL,
+      \`confidence\` DECIMAL(5,2) NOT NULL DEFAULT 0, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_imp_org\` (\`organization_id\`), INDEX \`idx_imp_contract\` (\`contract_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_templates\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`name\` VARCHAR(255) NOT NULL DEFAULT '',
+      \`kind\` VARCHAR(30) NOT NULL DEFAULT 'contrato', \`body\` TEXT NULL, \`active\` INT NOT NULL DEFAULT 1,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_ctpl_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

@@ -5295,3 +5295,105 @@ export const generatedPublicationsTable = mysqlTable("generated_publications", {
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── FASE 5 — Business Domain: Contratos e Instrumentos Contratuais ──────────
+// Foco EXCLUSIVO: engenharia documental contratual (não ERP). Nomes namespaced
+// para não colidir com o módulo legado `contracts`/`contract_documents`/
+// `contract_apostilles`. Multi-tenant, replay-safe.
+
+export const contractWorkspacesTable = mysqlTable("contract_workspaces", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  originType:     varchar("origin_type", { length: 30 }).notNull().default("externo"),
+  originProcess:  varchar("origin_process", { length: 64 }).notNull().default(""),
+  contractNumber: varchar("contract_number", { length: 80 }).notNull().default(""),
+  contractor:     varchar("contractor", { length: 255 }).notNull().default(""),
+  object:         text("object"),
+  value:          decimal("value", { precision: 15, scale: 2 }).notNull().default("0"),
+  term:           varchar("term", { length: 255 }).notNull().default(""),
+  status:         varchar("status", { length: 30 }).notNull().default("minuta"),
+  manager:        varchar("manager", { length: 255 }).notNull().default(""),
+  inspector:      varchar("inspector", { length: 255 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractWsDocumentsTable = mysqlTable("contract_ws_documents", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  contractId:     varchar("contract_id", { length: 20 }).notNull(),
+  kind:           varchar("kind", { length: 30 }).notNull().default("contrato"),
+  title:          varchar("title", { length: 500 }).notNull().default(""),
+  content:        text("content"),
+  refId:          varchar("ref_id", { length: 64 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractAddendaTable = mysqlTable("contract_addenda", {
+  id:                   varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  contractId:           varchar("contract_id", { length: 20 }).notNull(),
+  addendumType:         varchar("addendum_type", { length: 20 }).notNull().default("prazo"),
+  sequence:             int("sequence").notNull().default(1),
+  justification:        text("justification"),
+  newValue:             decimal("new_value", { precision: 15, scale: 2 }).notNull().default("0"),
+  newTerm:              varchar("new_term", { length: 255 }).notNull().default(""),
+  status:               varchar("status", { length: 30 }).notNull().default("solicitado"),
+  documentReference:    varchar("document_reference", { length: 500 }).notNull().default(""),
+  legalOpinionRequestId: varchar("legal_opinion_request_id", { length: 20 }).notNull().default(""),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:            datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractWsApostillesTable = mysqlTable("contract_ws_apostilles", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  contractId:     varchar("contract_id", { length: 20 }).notNull(),
+  kind:           varchar("kind", { length: 20 }).notNull().default("reajuste"),
+  sequence:       int("sequence").notNull().default(1),
+  description:    text("description"),
+  newValue:       decimal("new_value", { precision: 15, scale: 2 }).notNull().default("0"),
+  newManager:     varchar("new_manager", { length: 255 }).notNull().default(""),
+  newInspector:   varchar("new_inspector", { length: 255 }).notNull().default(""),
+  documentReference: varchar("document_reference", { length: 500 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractOccurrencesTable = mysqlTable("contract_occurrences", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  contractId:     varchar("contract_id", { length: 20 }).notNull(),
+  description:    text("description"),
+  occurredOn:     varchar("occurred_on", { length: 40 }).notNull().default(""),
+  attachments:    text("attachments"),
+  notes:          text("notes"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const importedContractsTable = mysqlTable("imported_contracts", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  contractId:     varchar("contract_id", { length: 20 }).notNull().default(""),
+  source:         varchar("source", { length: 10 }).notNull().default("pdf"),
+  rawTextHash:    varchar("raw_text_hash", { length: 64 }).notNull().default(""),
+  extracted:      text("extracted"),
+  confidence:     decimal("confidence", { precision: 5, scale: 2 }).notNull().default("0"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractTemplatesTable = mysqlTable("contract_templates", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  name:           varchar("name", { length: 255 }).notNull().default(""),
+  kind:           varchar("kind", { length: 30 }).notNull().default("contrato"),
+  body:           text("body"),
+  active:         int("active").notNull().default(1),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
