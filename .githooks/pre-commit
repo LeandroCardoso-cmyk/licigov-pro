@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# LiciGov Pro — pre-commit: mantém o grafo de conhecimento Graphify atualizado.
+#
+# Sempre que o commit tocar código (server/ ou client/), regenera o grafo
+# localmente (100% local, sem LLM) e re-inclui os artefatos versionados.
+# Não bloqueia o commit se o Graphify não estiver instalado.
+#
+set -u
+
+# Não roda durante merge/rebase/cherry-pick (evita ruído em operações do git).
+git_dir="$(git rev-parse --git-dir 2>/dev/null || echo .git)"
+if [ -f "$git_dir/MERGE_HEAD" ] || [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ] || [ -f "$git_dir/CHERRY_PICK_HEAD" ]; then
+  exit 0
+fi
+
+# Só age quando há mudança staged em código.
+if ! git diff --cached --name-only | grep -qE '^(server|client)/'; then
+  exit 0
+fi
+
+# Localiza o graphify (PATH ou ~/.local/bin) ou usa "python -m graphify".
+GRAPHIFY=""
+if command -v graphify >/dev/null 2>&1; then GRAPHIFY="graphify"
+elif [ -x "$HOME/.local/bin/graphify" ]; then GRAPHIFY="$HOME/.local/bin/graphify"
+elif python3 -c "import graphify" >/dev/null 2>&1; then GRAPHIFY="python3 -m graphify"
+fi
+
+if [ -z "$GRAPHIFY" ]; then
+  echo "[pre-commit] Graphify não encontrado — pulando atualização do grafo."
+  echo "[pre-commit] Instale com: pip install graphifyy --break-system-packages"
+  exit 0
+fi
+
+echo "[pre-commit] Atualizando grafo de conhecimento (Graphify, 100% local)…"
+if ! $GRAPHIFY update . >/dev/null 2>&1; then
+  echo "[pre-commit] Falha ao atualizar o grafo — commit segue sem alteração do grafo."
+  exit 0
+fi
+
+# Re-inclui apenas os artefatos versionados (cache/ e snapshots datados são ignorados).
+for f in graphify-out/graph.json graphify-out/GRAPH_REPORT.md graphify-out/manifest.json graphify-out/.graphify_labels.json; do
+  [ -f "$f" ] && git add "$f"
+done
+
+echo "[pre-commit] Grafo atualizado e incluído no commit."
+exit 0
