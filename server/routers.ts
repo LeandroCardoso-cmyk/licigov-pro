@@ -68,6 +68,7 @@ import { institutionalRequestRouter } from "./routers/institutionalRequestRouter
 import { legalOpinionWorkspaceRouter } from "./routers/legalOpinionWorkspaceRouter";
 import { directProcurementRouter } from "./routers/directProcurementRouter";
 import { contractWorkspaceRouter } from "./routers/contractWorkspaceRouter";
+import { adaptiveRecommendationRouter } from "./routers/adaptiveRecommendationRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -139,6 +140,7 @@ export const appRouter = router({
   legalOpinionWorkspace: legalOpinionWorkspaceRouter,
   directProcurement: directProcurementRouter,
   contractWorkspace: contractWorkspaceRouter,
+  adaptiveRecommendation: adaptiveRecommendationRouter,
 });
 
 export type AppRouter = typeof appRouter;
