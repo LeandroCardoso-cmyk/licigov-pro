@@ -4395,8 +4395,8 @@
     "semantic_hash": ""
   },
   "server/domain/adaptiveProcessEngine.ts": {
-    "mtime": 1783309541.696365,
-    "ast_hash": "1ed3557c4b6031c776f5b2441dea9e84",
+    "mtime": 1783974790.945563,
+    "ast_hash": "b3478ee4a39933a8d711886db77d6413",
     "semantic_hash": ""
   },
   "server/domain/agentExecution.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1783972454.807793,
-    "ast_hash": "23d9445372bb1ccf06684a549f44c6c9",
+    "mtime": 1783974769.8055618,
+    "ast_hash": "b2924993908e4e332c862cfd43c745de",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -8217,6 +8217,41 @@
   "docs/business-domains/contracts/workflow.md": {
     "mtime": 1783972218.3557825,
     "ast_hash": "de9be9fa63198d945aa523fda204356e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sprint5xx-consolidation.test.ts": {
+    "mtime": 1783974835.3375657,
+    "ast_hash": "4878a9fca915db61de975363b7b91f19",
+    "semantic_hash": ""
+  },
+  "server/domain/adaptiveRecommendationEngine.ts": {
+    "mtime": 1783974692.5495572,
+    "ast_hash": "ee28f22ddcc6a7e4d3600a33cbe3c597",
+    "semantic_hash": ""
+  },
+  "server/domain/documentFormats.ts": {
+    "mtime": 1783974705.4815578,
+    "ast_hash": "04e5bc1544297618da8d9230f5b9ecf0",
+    "semantic_hash": ""
+  },
+  "server/domain/domainPhilosophy.ts": {
+    "mtime": 1783974889.8375688,
+    "ast_hash": "7aba1d907d2f38f15e75a4dd93cf5004",
+    "semantic_hash": ""
+  },
+  "server/routers/adaptiveRecommendationRouter.ts": {
+    "mtime": 1783974760.2415612,
+    "ast_hash": "732fa606176e8485f1ae07a0f30c6fdd",
+    "semantic_hash": ""
+  },
+  "server/services/adaptiveRecommendationService.ts": {
+    "mtime": 1783974742.95756,
+    "ast_hash": "ccb469965a9e179663b672f0fdab4735",
+    "semantic_hash": ""
+  },
+  "docs/architecture/business-domains-consolidation.md": {
+    "mtime": 1783974955.1895728,
+    "ast_hash": "01fac811e0304dd22c6528e12326dfc7",
     "semantic_hash": ""
   }
 }

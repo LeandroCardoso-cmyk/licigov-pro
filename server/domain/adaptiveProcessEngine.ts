@@ -1,11 +1,14 @@
 /**
  * Sprint 5.0.1 — Adaptive Process Engine (componente oficial do Kernel)
+ * Sprint 5.X.X — Consolidação: filosofia de RECOMENDAÇÃO (nunca de decisão).
  *
- * Monta dinamicamente o fluxo de cada Business Domain. Cada domínio DEFINE suas
- * etapas, documentos, exceções, obrigatoriedades, aprovações e copilotos
- * predominantes; o Kernel EXECUTA (assembla e valida) o fluxo. Determinístico.
- *
- * Esta sprint apenas fornece a estrutura — os fluxos concretos vêm nas Sprints 5.1-5.5.
+ * Monta a estrutura do fluxo de cada Business Domain (etapas, documentos, copilotos
+ * predominantes). IMPORTANTE: nesta consolidação, o Engine NÃO decide nem obriga —
+ * a etapa marcada como `mandatory` é tratada apenas como fortemente RECOMENDADA. A
+ * decisão de percorrer ou pular qualquer etapa é SEMPRE do servidor. As recomendações
+ * orientadoras (fundamentação, base legal, confiança, alternativas) são produzidas
+ * pelo Adaptive Recommendation Engine (server/domain/adaptiveRecommendationEngine.ts).
+ * Determinístico.
  */
 
 import { createHash } from "crypto";
@@ -66,6 +69,21 @@ export function assembleProcess(def: ProcessDefinition): AssembledProcess {
     predominantCopilots,
     signature,
   };
+}
+
+/**
+ * Converte as etapas de um fluxo em RECOMENDAÇÕES não vinculantes. Nenhuma etapa é
+ * obrigatória: `mandatory` vira "fortemente recomendada" e o servidor sempre pode
+ * seguir sem ela (o Engine nunca bloqueia). Determinístico.
+ */
+export function recommendSteps(def: ProcessDefinition): Array<{ key: string; name: string; recommended: boolean; stronglyRecommended: boolean; canSkip: true }> {
+  return def.steps.map(s => ({
+    key: s.key,
+    name: s.name,
+    recommended: true,
+    stronglyRecommended: s.mandatory,
+    canSkip: true,
+  }));
 }
 
 /** Valida a definição de um fluxo (chaves únicas, ao menos uma etapa). */
