@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1783374447.08043,
-    "ast_hash": "a067d934067169db9bfd31a9a9402727",
+    "mtime": 1783962259.05953,
+    "ast_hash": "48badecf33d6cedd4e912c0c527d3431",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1783374416.6624703,
-    "ast_hash": "506850f241141c0f9b099eb4a258a616",
+    "mtime": 1783961993.027514,
+    "ast_hash": "84540ac60592f4d236df8ac0c3525a52",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1783374494.4784687,
-    "ast_hash": "a694a9bd3d74f330b283515cf0fb894b",
+    "mtime": 1783962298.7195323,
+    "ast_hash": "7170653637fd07369542f3473189ffcf",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4310,8 +4310,8 @@
     "semantic_hash": ""
   },
   "server/db/index.ts": {
-    "mtime": 1783374564.270467,
-    "ast_hash": "263c8eee826b6fd8e5a1f5a8834a0d61",
+    "mtime": 1783962202.3955266,
+    "ast_hash": "350b8271a14c77606a2a55579fea67cc",
     "semantic_hash": ""
   },
   "server/db/institutionalRequests.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1783374695.062464,
-    "ast_hash": "3582a93fd7d62419b1dbcc7dc46b58a6",
+    "mtime": 1783962201.2875264,
+    "ast_hash": "556f58f4e91b8c9c4407626db3af81f1",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -7712,6 +7712,321 @@
   "client/public/og-image.png": {
     "mtime": 1782612418.2664268,
     "ast_hash": "11d27afeb10c899e9cb47d153fa85548",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/InstitutionalInbox.tsx": {
+    "mtime": 1783807336.0094836,
+    "ast_hash": "07c2756baadd39ec9f8c790645bb28b7",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/LawyerDashboard.tsx": {
+    "mtime": 1783807365.4774852,
+    "ast_hash": "301dcb2d921d0cb444a3871af6bff268",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/LegalOpinionEditor.tsx": {
+    "mtime": 1783807295.757481,
+    "ast_hash": "8806643f135e582ad3f34baae06a4f64",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/LegalOpinionHome.tsx": {
+    "mtime": 1783807388.9534867,
+    "ast_hash": "6f7b464ce4da158f1f1bc449eef9d4bb",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/LegalOpinionViewer.tsx": {
+    "mtime": 1783807309.9214818,
+    "ast_hash": "514b83475dd11183670e72fdce4e6818",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/OpinionHistory.tsx": {
+    "mtime": 1783807233.1094773,
+    "ast_hash": "a93a81ef53bc105e5b53530a17db3723",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/PendingRequests.tsx": {
+    "mtime": 1783807350.5934844,
+    "ast_hash": "fae17d1cc9a0177290bc2866941356c1",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/RequestContextPanel.tsx": {
+    "mtime": 1783807253.0854785,
+    "ast_hash": "383e17e4368ef20cd5a7458897097398",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/SignaturePanel.tsx": {
+    "mtime": 1783807272.7654798,
+    "ast_hash": "7ffa7325a91104cdcb9e344eae9d23da",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/TimelinePanel.tsx": {
+    "mtime": 1783807221.2774765,
+    "ast_hash": "1c39c599513731f7fb683f8f738e6532",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/labels.ts": {
+    "mtime": 1783807204.8614757,
+    "ast_hash": "2f503e4bd4926b9e43760ae3f66983b7",
+    "semantic_hash": ""
+  },
+  "drizzle/0251_legal_opinion_workspaces.sql": {
+    "mtime": 1783806969.6600404,
+    "ast_hash": "5ab6ae4bf3b61e0793207cbcb2b6bdbd",
+    "semantic_hash": ""
+  },
+  "drizzle/0252_legal_opinion_drafts.sql": {
+    "mtime": 1783806969.6615043,
+    "ast_hash": "b92cfb9179fd318b94d4ebb72cb6ae16",
+    "semantic_hash": ""
+  },
+  "drizzle/0253_legal_opinion_versions.sql": {
+    "mtime": 1783806969.6629062,
+    "ast_hash": "fdc718ea810a7a721a117e9148fa2bf7",
+    "semantic_hash": ""
+  },
+  "drizzle/0254_legal_opinion_templates.sql": {
+    "mtime": 1783806969.664473,
+    "ast_hash": "f09d8df9eceaa45f6d72a3b193ab4cae",
+    "semantic_hash": ""
+  },
+  "drizzle/0255_legal_opinion_history.sql": {
+    "mtime": 1783806969.6661193,
+    "ast_hash": "7a6638d906acf3870c13329c34381b35",
+    "semantic_hash": ""
+  },
+  "drizzle/0256_lawyer_assignments.sql": {
+    "mtime": 1783806969.6675928,
+    "ast_hash": "db7819e65ea234ecd8fb20bb460a8375",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sprint5y-legal-opinion.test.ts": {
+    "mtime": 1783807146.4094722,
+    "ast_hash": "838246a59985553a11623d53d8ad1c4f",
+    "semantic_hash": ""
+  },
+  "server/db/legalOpinionWorkspace.ts": {
+    "mtime": 1783806780.1294503,
+    "ast_hash": "fb776f6d9e0399d48d253cc24d657e10",
+    "semantic_hash": ""
+  },
+  "server/domain/lawyerAssignment.ts": {
+    "mtime": 1783806689.725445,
+    "ast_hash": "e33b434e5ed9c973d28130d30f38985c",
+    "semantic_hash": ""
+  },
+  "server/domain/legalOpinionDraft.ts": {
+    "mtime": 1783806679.6934445,
+    "ast_hash": "44b23992d9faa28ef7cd4307298e154d",
+    "semantic_hash": ""
+  },
+  "server/domain/legalOpinionWorkspace.ts": {
+    "mtime": 1783806655.185443,
+    "ast_hash": "060dc4dbabfe2fd457dd1dbadb1baa72",
+    "semantic_hash": ""
+  },
+  "server/routers/legalOpinionWorkspaceRouter.ts": {
+    "mtime": 1783806919.2854588,
+    "ast_hash": "cfcefd7d5bc8f7d25626621d2a7b5f4a",
+    "semantic_hash": ""
+  },
+  "server/services/legalOpinionObservabilityService.ts": {
+    "mtime": 1783806886.7814567,
+    "ast_hash": "23183d38a1d91b7eade5c465d80eeeb7",
+    "semantic_hash": ""
+  },
+  "server/services/legalOpinionWorkspaceService.ts": {
+    "mtime": 1783806867.1134555,
+    "ast_hash": "fe0e68f39033bc9d269b1a9a32d02e50",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
+    "mtime": 1783962579.999549,
+    "ast_hash": "c9f333461c6b0a78105c9d59475b08d4",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/DirectProcurementHome.tsx": {
+    "mtime": 1783962715.727557,
+    "ast_hash": "8d824eab88decfc88e97f261333e2436",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/DirectProcurementOverview.tsx": {
+    "mtime": 1783962678.9475548,
+    "ast_hash": "662811bddd1e31c60022427262a71375",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/LegalBasisWorkspace.tsx": {
+    "mtime": 1783962554.8315475,
+    "ast_hash": "f8761abd511080944d86ecf43a5210a0",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/NeedCharacterizationWorkspace.tsx": {
+    "mtime": 1783962566.1995482,
+    "ast_hash": "d063a07315d7f735dab56b7934443318",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/NewDirectProcurementWizard.tsx": {
+    "mtime": 1783962535.6755464,
+    "ast_hash": "f1c6a16a5037db45653c735465c82d82",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/PriceJustificationWorkspace.tsx": {
+    "mtime": 1783962597.65155,
+    "ast_hash": "094778dec4eb8d3cc702d6490edf16a6",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx": {
+    "mtime": 1783962617.2595513,
+    "ast_hash": "423a3a2df34bfa72036f5455678f3a87",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/PublicationWorkspace.tsx": {
+    "mtime": 1783962661.2115538,
+    "ast_hash": "11e8026440e870942dfec121a7fba751",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/RatificationWorkspace.tsx": {
+    "mtime": 1783962646.911553,
+    "ast_hash": "ddf4aa71f2d037085046fbdf0c5aa618",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx": {
+    "mtime": 1783962633.4875522,
+    "ast_hash": "7085d5205efb6360a50a154bb26d23a0",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/TimelinePanel.tsx": {
+    "mtime": 1783962510.811545,
+    "ast_hash": "ae82d23483460c38f1b0b4f0abdfa8c9",
+    "semantic_hash": ""
+  },
+  "client/src/components/direct-procurement/labels.ts": {
+    "mtime": 1783962492.1715438,
+    "ast_hash": "e19aa4bfbceb18876700516f9872b345",
+    "semantic_hash": ""
+  },
+  "drizzle/0257_direct_procurement_workspaces.sql": {
+    "mtime": 1783962246.1595292,
+    "ast_hash": "5eea63b9e4c5f6a91beabbf31e11556f",
+    "semantic_hash": ""
+  },
+  "drizzle/0258_direct_procurement_procedures.sql": {
+    "mtime": 1783962246.1646667,
+    "ast_hash": "bf616d75bc92a7cbf82db8e12357fe13",
+    "semantic_hash": ""
+  },
+  "drizzle/0259_proposal_collections.sql": {
+    "mtime": 1783962246.166218,
+    "ast_hash": "9b83397265732ef353b2fd2e63616709",
+    "semantic_hash": ""
+  },
+  "drizzle/0260_proposal_documents.sql": {
+    "mtime": 1783962246.1682394,
+    "ast_hash": "cf4f4c1b540256111d5aae445acbd747",
+    "semantic_hash": ""
+  },
+  "drizzle/0261_contract_justifications.sql": {
+    "mtime": 1783962246.170554,
+    "ast_hash": "4ff88ce01185b6e6c4ea4a793cece0ec",
+    "semantic_hash": ""
+  },
+  "drizzle/0262_price_justifications.sql": {
+    "mtime": 1783962246.1721551,
+    "ast_hash": "029d444b3121b8ae832d88f5e7dcc1ba",
+    "semantic_hash": ""
+  },
+  "drizzle/0263_required_documents.sql": {
+    "mtime": 1783962246.1735158,
+    "ast_hash": "f7a90c6e419540ce6692cc9bbce99823",
+    "semantic_hash": ""
+  },
+  "drizzle/0264_ratifications.sql": {
+    "mtime": 1783962246.1749618,
+    "ast_hash": "b51a923f7dac7a9fbf28bc8d6c019f49",
+    "semantic_hash": ""
+  },
+  "drizzle/0265_generated_publications.sql": {
+    "mtime": 1783962246.1763537,
+    "ast_hash": "562f7c3b1a5cef040dfbb425c88e9dfc",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sprint5z-direct-procurement.test.ts": {
+    "mtime": 1783962404.2435386,
+    "ast_hash": "475a7d22e5ed7aa5702ed7438f008270",
+    "semantic_hash": ""
+  },
+  "server/db/directProcurement.ts": {
+    "mtime": 1783962059.071518,
+    "ast_hash": "d0d77431fea5e94fa773be2327ea4495",
+    "semantic_hash": ""
+  },
+  "server/domain/directProcurementJustifications.ts": {
+    "mtime": 1783961952.1475117,
+    "ast_hash": "b7bf4aba35b30ddb3f38cfdb7a12118f",
+    "semantic_hash": ""
+  },
+  "server/domain/directProcurementProcedure.ts": {
+    "mtime": 1783961920.7395098,
+    "ast_hash": "a98e4f67c478485bc1a7fe5041bb8c03",
+    "semantic_hash": ""
+  },
+  "server/domain/directProcurementWorkspace.ts": {
+    "mtime": 1783961894.6315084,
+    "ast_hash": "b2cd119a4e05f8c3d908be6ae57f3a9d",
+    "semantic_hash": ""
+  },
+  "server/routers/directProcurementRouter.ts": {
+    "mtime": 1783962195.143526,
+    "ast_hash": "a9a320e9ad4b89a2b3f05b76df2fb01a",
+    "semantic_hash": ""
+  },
+  "server/services/directProcurementObservabilityService.ts": {
+    "mtime": 1783962129.4995222,
+    "ast_hash": "f7574791126321e5dcd9afec7f04b752",
+    "semantic_hash": ""
+  },
+  "server/services/directProcurementService.ts": {
+    "mtime": 1783962117.1155214,
+    "ast_hash": "19a5d9b6a309d751f2d8466266b58478",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/architecture.md": {
+    "mtime": 1783962502.5675445,
+    "ast_hash": "52e659b5e481f5269556bd5844907fa2",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/legal-basis.md": {
+    "mtime": 1783962540.7555466,
+    "ast_hash": "a2dbd5ead81bf53d18da0abd3d9a5482",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/legal-opinion.md": {
+    "mtime": 1783962590.7075496,
+    "ast_hash": "8fcd61ba3dce7fca578d4c85e925c4a8",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/procedures.md": {
+    "mtime": 1783962555.5635476,
+    "ast_hash": "3d4e33327bdbb276186c71913769d0f2",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/proposal-collection.md": {
+    "mtime": 1783962576.4955487,
+    "ast_hash": "ac4e3d5cba30d9318a2654a7df32b51a",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/publication.md": {
+    "mtime": 1783962604.2035503,
+    "ast_hash": "bd11f390033ce0525098da1766338996",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/roadmap.md": {
+    "mtime": 1783962621.3235514,
+    "ast_hash": "2db4df8ea6300acb47af5aa3e96d3513",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/direct-procurement/workflow.md": {
+    "mtime": 1783962523.1955457,
+    "ast_hash": "9a48d44f2a46bb7da4df880d355aa5ba",
     "semantic_hash": ""
   }
 }

@@ -5170,3 +5170,128 @@ export const lawyerAssignmentsTable = mysqlTable("lawyer_assignments", {
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   assignedAt:     datetime("assigned_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── FASE 5 — Business Domain: Contratação Direta ────────────────────────────
+// Domínio workspace-cêntrico (Dispensa/Inexigibilidade) que reutiliza Price
+// Research, Institutional Request Engine e Parecer Jurídico. Nomes namespaced
+// para não colidir com o módulo legado `direct_contracts`. Multi-tenant.
+
+export const directProcurementWorkspacesTable = mysqlTable("direct_procurement_workspaces", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  processNumber:   varchar("process_number", { length: 60 }).notNull().default(""),
+  object:          text("object"),
+  procurementType: varchar("procurement_type", { length: 30 }).notNull().default("dispensa"),
+  procedureType:   varchar("procedure_type", { length: 20 }).notNull().default("indefinido"),
+  legalBasis:      varchar("legal_basis", { length: 255 }).notNull().default(""),
+  startOption:     varchar("start_option", { length: 30 }).notNull().default("criar_dfd"),
+  currentStage:    varchar("current_stage", { length: 30 }).notNull().default("NEW"),
+  status:          varchar("status", { length: 30 }).notNull().default("rascunho"),
+  responsibleUser: int("responsible_user").notNull().default(0),
+  participants:    text("participants"),
+  activeCopilots:  text("active_copilots"),
+  flags:           text("flags"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const directProcurementProceduresTable = mysqlTable("direct_procurement_procedures", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  procedureType:  varchar("procedure_type", { length: 20 }).notNull().default("eletronico"),
+  platform:       varchar("platform", { length: 30 }),
+  receiptMethod:  varchar("receipt_method", { length: 30 }),
+  instructions:   text("instructions"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const proposalCollectionsTable = mysqlTable("proposal_collections", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  workspaceId:     varchar("workspace_id", { length: 20 }).notNull(),
+  supplierName:    varchar("supplier_name", { length: 255 }).notNull().default(""),
+  supplierDocument: varchar("supplier_document", { length: 40 }).notNull().default(""),
+  proposalValue:   decimal("proposal_value", { precision: 15, scale: 2 }).notNull().default("0"),
+  protocol:        varchar("protocol", { length: 120 }).notNull().default(""),
+  receivedVia:     varchar("received_via", { length: 30 }).notNull().default("protocolo"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const proposalDocumentsTable = mysqlTable("proposal_documents", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  proposalId:        varchar("proposal_id", { length: 20 }).notNull(),
+  workspaceId:       varchar("workspace_id", { length: 20 }).notNull(),
+  kind:              varchar("kind", { length: 30 }).notNull().default("proposta_pdf"),
+  title:             varchar("title", { length: 500 }).notNull().default(""),
+  documentReference: varchar("document_reference", { length: 500 }).notNull().default(""),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const contractJustificationsTable = mysqlTable("contract_justifications", {
+  id:              varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  workspaceId:     varchar("workspace_id", { length: 20 }).notNull(),
+  need:            text("need"),
+  publicInterest:  text("public_interest"),
+  motivation:      text("motivation"),
+  legalFoundation: text("legal_foundation"),
+  benefits:        text("benefits"),
+  alternatives:    text("alternatives"),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const priceJustificationsTable = mysqlTable("price_justifications", {
+  id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  workspaceId:        varchar("workspace_id", { length: 20 }).notNull(),
+  source:             varchar("source", { length: 20 }).notNull().default("pesquisa"),
+  justification:      text("justification"),
+  referenceValue:     decimal("reference_value", { precision: 15, scale: 2 }).notNull().default("0"),
+  researchId:         varchar("research_id", { length: 20 }).notNull().default(""),
+  documentReferences: text("document_references"),
+  correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const requiredDocumentsTable = mysqlTable("required_documents", {
+  id:                varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  workspaceId:       varchar("workspace_id", { length: 20 }).notNull(),
+  name:              varchar("name", { length: 500 }).notNull().default(""),
+  required:          int("required").notNull().default(1),
+  status:            varchar("status", { length: 20 }).notNull().default("pendente"),
+  documentReference: varchar("document_reference", { length: 500 }).notNull().default(""),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const ratificationsTable = mysqlTable("ratifications", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  responsible:    int("responsible").notNull().default(0),
+  decision:       varchar("decision", { length: 30 }).notNull().default("ratificado"),
+  justification:  text("justification"),
+  evidence:       text("evidence"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  ratifiedAt:     datetime("ratified_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const generatedPublicationsTable = mysqlTable("generated_publications", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  workspaceId:    varchar("workspace_id", { length: 20 }).notNull(),
+  kind:           varchar("kind", { length: 30 }).notNull().default("aviso"),
+  title:          varchar("title", { length: 500 }).notNull().default(""),
+  content:        text("content"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

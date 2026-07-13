@@ -1711,6 +1711,69 @@
       "when": 1769107200000,
       "tag": "0256_lawyer_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "5",
+      "when": 1769193600000,
+      "tag": "0257_direct_procurement_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "5",
+      "when": 1769280000000,
+      "tag": "0258_direct_procurement_procedures",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "5",
+      "when": 1769366400000,
+      "tag": "0259_proposal_collections",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "5",
+      "when": 1769452800000,
+      "tag": "0260_proposal_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "5",
+      "when": 1769539200000,
+      "tag": "0261_contract_justifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "5",
+      "when": 1769625600000,
+      "tag": "0262_price_justifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "5",
+      "when": 1769712000000,
+      "tag": "0263_required_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "5",
+      "when": 1769798400000,
+      "tag": "0264_ratifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "5",
+      "when": 1769884800000,
+      "tag": "0265_generated_publications",
+      "breakpoints": true
     }
   ]
 }
