@@ -1774,6 +1774,55 @@
       "when": 1769884800000,
       "tag": "0265_generated_publications",
       "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "5",
+      "when": 1769971200000,
+      "tag": "0266_contract_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "5",
+      "when": 1770057600000,
+      "tag": "0267_contract_ws_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "5",
+      "when": 1770144000000,
+      "tag": "0268_contract_addenda",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "5",
+      "when": 1770230400000,
+      "tag": "0269_contract_ws_apostilles",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "5",
+      "when": 1770316800000,
+      "tag": "0270_contract_occurrences",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "5",
+      "when": 1770403200000,
+      "tag": "0271_imported_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "5",
+      "when": 1770489600000,
+      "tag": "0272_contract_templates",
+      "breakpoints": true
     }
   ]
 }
