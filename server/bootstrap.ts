@@ -3688,6 +3688,86 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       PRIMARY KEY (\`id\`), INDEX \`idx_las_org\` (\`organization_id\`),
       INDEX \`idx_las_workspace\` (\`workspace_id\`), INDEX \`idx_las_lawyer\` (\`lawyer_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // FASE 5 — Business Domain: Contratação Direta (Dispensa/Inexigibilidade)
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`direct_procurement_workspaces\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`process_number\` VARCHAR(60) NOT NULL DEFAULT '', \`object\` TEXT NULL,
+      \`procurement_type\` VARCHAR(30) NOT NULL DEFAULT 'dispensa', \`procedure_type\` VARCHAR(20) NOT NULL DEFAULT 'indefinido',
+      \`legal_basis\` VARCHAR(255) NOT NULL DEFAULT '', \`start_option\` VARCHAR(30) NOT NULL DEFAULT 'criar_dfd',
+      \`current_stage\` VARCHAR(30) NOT NULL DEFAULT 'NEW', \`status\` VARCHAR(30) NOT NULL DEFAULT 'rascunho',
+      \`responsible_user\` INT NOT NULL DEFAULT 0, \`participants\` TEXT NULL, \`active_copilots\` TEXT NULL, \`flags\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_dpw_org\` (\`organization_id\`),
+      INDEX \`idx_dpw_org_stage\` (\`organization_id\`, \`current_stage\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`direct_procurement_procedures\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`procedure_type\` VARCHAR(20) NOT NULL DEFAULT 'eletronico', \`platform\` VARCHAR(30) NULL, \`receipt_method\` VARCHAR(30) NULL,
+      \`instructions\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_dpp_org\` (\`organization_id\`), INDEX \`idx_dpp_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`proposal_collections\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`supplier_name\` VARCHAR(255) NOT NULL DEFAULT '', \`supplier_document\` VARCHAR(40) NOT NULL DEFAULT '',
+      \`proposal_value\` DECIMAL(15,2) NOT NULL DEFAULT 0, \`protocol\` VARCHAR(120) NOT NULL DEFAULT '',
+      \`received_via\` VARCHAR(30) NOT NULL DEFAULT 'protocolo', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_prc_org\` (\`organization_id\`), INDEX \`idx_prc_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`proposal_documents\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`proposal_id\` VARCHAR(20) NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`kind\` VARCHAR(30) NOT NULL DEFAULT 'proposta_pdf', \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`document_reference\` VARCHAR(500) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_prd_org\` (\`organization_id\`), INDEX \`idx_prd_proposal\` (\`proposal_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`contract_justifications\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`need\` TEXT NULL, \`public_interest\` TEXT NULL, \`motivation\` TEXT NULL, \`legal_foundation\` TEXT NULL,
+      \`benefits\` TEXT NULL, \`alternatives\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_cjs_org\` (\`organization_id\`), INDEX \`idx_cjs_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`price_justifications\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`source\` VARCHAR(20) NOT NULL DEFAULT 'pesquisa', \`justification\` TEXT NULL,
+      \`reference_value\` DECIMAL(15,2) NOT NULL DEFAULT 0, \`research_id\` VARCHAR(20) NOT NULL DEFAULT '',
+      \`document_references\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pjs_org\` (\`organization_id\`), INDEX \`idx_pjs_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`required_documents\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`name\` VARCHAR(500) NOT NULL DEFAULT '', \`required\` INT NOT NULL DEFAULT 1, \`status\` VARCHAR(20) NOT NULL DEFAULT 'pendente',
+      \`document_reference\` VARCHAR(500) NOT NULL DEFAULT '', \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rqd_org\` (\`organization_id\`), INDEX \`idx_rqd_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`ratifications\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`responsible\` INT NOT NULL DEFAULT 0, \`decision\` VARCHAR(30) NOT NULL DEFAULT 'ratificado', \`justification\` TEXT NULL,
+      \`evidence\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`ratified_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_rat_org\` (\`organization_id\`), INDEX \`idx_rat_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`generated_publications\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`workspace_id\` VARCHAR(20) NOT NULL,
+      \`kind\` VARCHAR(30) NOT NULL DEFAULT 'aviso', \`title\` VARCHAR(500) NOT NULL DEFAULT '', \`content\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_pub_org\` (\`organization_id\`), INDEX \`idx_pub_workspace\` (\`workspace_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
