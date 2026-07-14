@@ -81,6 +81,10 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
   await addColumnIfMissing("documents", "createdBy",      "int");
   await addColumnIfMissing("documents", "documentStatus", "enum('draft','in_review','approved','rejected') NOT NULL DEFAULT 'draft'");
 
+  // SPRINT 5.3.1 — Contratos: metadados auditáveis de minuta + origem do aditivo.
+  await addColumnIfMissing("contract_ws_documents", "metadata",       "TEXT NULL");
+  await addColumnIfMissing("contract_addenda",      "request_origin", "varchar(30) NOT NULL DEFAULT 'contract_workspace'");
+
   // Sprint 1 — Multi-tenant columns (zero-gap safety net)
   await addColumnIfMissing("processes",        "organizationId", "int");
   await addColumnIfMissing("documents",        "organizationId", "int");

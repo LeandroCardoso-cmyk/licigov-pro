@@ -34,6 +34,8 @@ describe("SPRINT 5.X.X — Business Domains Architectural Consolidation", () => 
     it("toda recomendação traz reasoning, base legal e confiança (0–1)", () => {
       for (const step of ["dfd", "etp", "pesquisa_precos", "tr", "edital", "parecer_juridico", "aditivo", "apostilamento", "publicacao", "proposta"] as const) {
         const rec = recommendStep({ step });
+        expect(rec.analysis.toLowerCase()).toContain("análise");
+        expect(rec.analysis.toLowerCase()).toContain("decisão é sempre do servidor");
         expect(rec.reasoning.length).toBeGreaterThan(0);
         expect(rec.legalBasis.length).toBeGreaterThan(0);
         expect(rec.confidence).toBeGreaterThan(0);

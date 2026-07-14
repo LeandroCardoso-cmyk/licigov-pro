@@ -23,6 +23,7 @@ import { listProcessTimeline } from "../db/procurement";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
+const ADDENDUM_ORIGINS = ["contract_workspace", "institutional_request", "documento_externo", "solicitacao_manual"] as const;
 const APOSTILLE_KINDS = ["reajuste", "gestor", "fiscal", "legal"] as const;
 const OPINION_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"] as const;
 const CONTRACT_STATUSES = ["minuta", "vigente", "aditado", "apostilado", "encerrado", "rescindido", "arquivado"] as const;
@@ -120,11 +121,11 @@ export const contractWorkspaceRouter = router({
     }),
 
   createAddendum: tenantProcedure
-    .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional() }))
+    .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(), requestOrigin: z.enum(ADDENDUM_ORIGINS).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, correlationId: ctx.correlationId });
+      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, correlationId: ctx.correlationId });
     }),
 
   createApostille: tenantProcedure

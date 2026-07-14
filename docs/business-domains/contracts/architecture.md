@@ -23,7 +23,7 @@ um agregado que concentra todo o ciclo de vida documental de um contrato.
 |---|---|
 | `id` | Identificador determinístico (sha256) |
 | `organizationId` | Tenant (multi-tenant) |
-| `originType` | `processo_licitatorio` \| `contratacao_direta` \| `externo` |
+| `originType` | `processo_licitatorio` \| `contratacao_direta` \| `externo` (via Reconstrução Assistida) |
 | `originProcess` | Referência ao processo de origem (quando houver) |
 | `contractNumber` | Número do contrato |
 | `contractor` | Contratada |
@@ -71,7 +71,8 @@ conforme o contexto de cada contrato.
 O domínio **não reinventa** engines já existentes. Todo acesso passa pelo
 **Kernel Access Service**, única porta de entrada ao Kernel:
 
-- **Document Engine** — gera DOCX/PDF das minutas.
+- **Institutional Document Engine** (nome institucional de display do Document Engine) — gera
+  DOCX/PDF das minutas.
 - **Institutional Request Engine** — solicita Parecer Jurídico ao Business Domain Parecer
   Jurídico (`LEGAL_OPINION_INITIAL` / `LEGAL_OPINION_FINAL`). Nunca integra diretamente.
 - **Timeline Engine** — registra o histórico e a rastreabilidade do contrato.
@@ -85,6 +86,21 @@ O domínio **não reinventa** engines já existentes. Todo acesso passa pelo
 Documentos **nunca são duplicados**. O Workspace referencia os artefatos gerados pelo
 Document Engine e os pareceres produzidos pelo domínio Parecer Jurídico. Não há
 upload/download manual entre domínios: os resultados são **disponibilizados automaticamente**.
+
+## Minutas inteligentes e metadados auditáveis
+
+Toda minuta gerada pelo domínio registra **metadados institucionais auditáveis**, garantindo
+rastreabilidade completa da sua origem:
+
+- **origem da cláusula**, **template** e **versão do template**
+- **base legal** aplicada
+- **copilotos participantes** e **recomendações aplicadas**
+- **confidence**, **reasoning**, **explainability** e **provenance**
+
+Esses metadados permitem auditar exatamente como cada trecho da minuta foi construído. Note-se
+que contratos externos entram por **Reconstrução Assistida** (nunca extração perfeita) e nascem
+como **minuta**, dependendo da validação do servidor. Ver
+[`imported-contracts.md`](./imported-contracts.md).
 
 ## Multi-tenant e replay-safety
 

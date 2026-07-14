@@ -5327,6 +5327,7 @@ export const contractWsDocumentsTable = mysqlTable("contract_ws_documents", {
   title:          varchar("title", { length: 500 }).notNull().default(""),
   content:        text("content"),
   refId:          varchar("ref_id", { length: 64 }).notNull().default(""),
+  metadata:       text("metadata"),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
@@ -5341,6 +5342,7 @@ export const contractAddendaTable = mysqlTable("contract_addenda", {
   newValue:             decimal("new_value", { precision: 15, scale: 2 }).notNull().default("0"),
   newTerm:              varchar("new_term", { length: 255 }).notNull().default(""),
   status:               varchar("status", { length: 30 }).notNull().default("solicitado"),
+  requestOrigin:        varchar("request_origin", { length: 30 }).notNull().default("contract_workspace"),
   documentReference:    varchar("document_reference", { length: 500 }).notNull().default(""),
   legalOpinionRequestId: varchar("legal_opinion_request_id", { length: 20 }).notNull().default(""),
   correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),

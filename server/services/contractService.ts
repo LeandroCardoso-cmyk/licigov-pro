@@ -24,9 +24,9 @@ import {
 import {
   createContractAddendum, advanceAddendum, createContractApostille, createContractOccurrence,
   createContractGeneratedDocument,
-  type AddendumType, type ApostilleKind, type ContractDocumentKind,
+  type AddendumType, type AddendumRequestOrigin, type ApostilleKind, type ContractDocumentKind,
 } from "../domain/contractInstruments";
-import { createImportedContract, type ImportedContractSource } from "../domain/contractExtraction";
+import { createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER, type ImportedContractSource } from "../domain/contractReconstruction";
 import {
   insertContractWorkspace, getContractWorkspace, updateContractWorkspaceStatus,
   insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda,
@@ -81,21 +81,26 @@ export async function createFromDirectProcurement(params: {
   return ws;
 }
 
-/** FLUXO 3 (obrigatório) — importa contrato externo (PDF/DOCX → texto), extrai e reconstrói. */
+/**
+ * FLUXO 3 (obrigatório) — RECONSTRUÇÃO ASSISTIDA de contrato externo (PDF/DOCX →
+ * texto). Identifica fornecedor/objeto/prazo/valor/cláusulas e APRESENTA ao servidor
+ * para revisão. A reconstrução é assistida (nunca perfeita) e depende da validação
+ * do servidor — por isso o workspace nasce como MINUTA, não como contrato vigente.
+ */
 export async function importExternalContract(params: {
   organizationId: number; source: ImportedContractSource; rawText: string; contractNumber?: string; correlationId: string;
-}): Promise<{ workspace: ContractWorkspace; confidence: number; extracted: ReturnType<typeof createImportedContract>["extracted"] }> {
-  const imported = createImportedContract({ organizationId: params.organizationId, source: params.source, rawText: params.rawText, correlationId: params.correlationId });
+}): Promise<{ workspace: ContractWorkspace; confidence: number; reconstructed: ReturnType<typeof createAssistedReconstruction>["reconstructed"]; assisted: true; disclaimer: string }> {
+  const reconstruction = createAssistedReconstruction({ organizationId: params.organizationId, source: params.source, rawText: params.rawText, correlationId: params.correlationId });
   const ws = createContractWorkspace({
     organizationId: params.organizationId, originType: "externo", originProcess: "",
-    contractNumber: params.contractNumber || imported.extracted.contractNumber || "IMPORTADO",
-    contractor: imported.extracted.contractor, object: imported.extracted.object, value: imported.extracted.value,
-    term: imported.extracted.term, status: "vigente", correlationId: params.correlationId,
+    contractNumber: params.contractNumber || reconstruction.reconstructed.contractNumber || "IMPORTADO",
+    contractor: reconstruction.reconstructed.contractor, object: reconstruction.reconstructed.object, value: reconstruction.reconstructed.value,
+    term: reconstruction.reconstructed.term, status: "minuta", correlationId: params.correlationId,
   });
   await insertContractWorkspace(ws);
-  await insertImportedContract(imported, ws.id);
-  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: "sistema", summary: `Contrato externo importado (${params.source}), confiança ${Math.round(imported.confidence * 100)}%.`, refId: imported.id, correlationId: params.correlationId });
-  return { workspace: ws, confidence: imported.confidence, extracted: imported.extracted };
+  await insertImportedContract(reconstruction, ws.id);
+  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: "sistema", summary: `Reconstrução assistida de contrato externo (${params.source}), confiança ${Math.round(reconstruction.confidence * 100)}% — pendente de revisão do servidor.`, refId: reconstruction.id, correlationId: params.correlationId });
+  return { workspace: ws, confidence: reconstruction.confidence, reconstructed: reconstruction.reconstructed, assisted: true, disclaimer: RECONSTRUCTION_DISCLAIMER };
 }
 
 // ─── Geração inteligente de minutas (Document Engine + copilotos) ─────────────
@@ -131,9 +136,23 @@ export async function generateContractDocument(params: {
     "> Minuta gerada com apoio dos copilotos. Revisão obrigatória — nunca automática.",
   ].join("\n");
 
+  // SPRINT 5.3.1 — metadados institucionais auditáveis da minuta.
   const doc = createContractGeneratedDocument({
     organizationId: params.organizationId, contractId: ws.id, kind: params.kind,
-    title: `${titleForKind(params.kind)} — ${ws.contractNumber}`, content, refId: params.refId, correlationId: params.correlationId,
+    title: `${titleForKind(params.kind)} — ${ws.contractNumber}`, content, refId: params.refId,
+    metadata: {
+      clauseOrigin: "template_institucional",
+      template: `contrato_${params.kind}`,
+      templateVersion: "1.0",
+      legalBasis: orchestration.consolidated.legalBasis,
+      copilots: orchestration.selectedCopilots,
+      appliedRecommendations: orchestration.consolidated.suggestions,
+      confidence: orchestration.consolidated.confidence,
+      reasoning: orchestration.consolidated.summary,
+      explainability: orchestration.consolidated.suggestions.join(" · "),
+      provenance: `document_engine+copilotos:${orchestration.selectedCopilots.join(",")}`,
+    },
+    correlationId: params.correlationId,
   });
   const document = await insertContractWsDocument(doc);
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: "multi_copilot", summary: `Minuta de ${params.kind} gerada (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
@@ -163,18 +182,21 @@ function titleForKind(kind: ContractDocumentKind): string {
 // ─── Aditivos ─────────────────────────────────────────────────────────────────
 
 /**
- * Cria um aditivo e gera sua minuta. O Adaptive Process Engine decide se o parecer
- * jurídico é necessário (aditivos de valor/quantitativo exigem; prazo simples não).
+ * Cria um aditivo e gera sua minuta. Registra a ORIGEM DA SOLICITAÇÃO (Contract
+ * Workspace, Institutional Request, Documento Externo ou Solicitação Manual). O
+ * Adaptive Recommendation Engine apenas RECOMENDA parecer (valor/quantitativo);
+ * o servidor sempre decide — nunca há bloqueio.
  */
 export async function createAddendum(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
-  newValue?: number; newTerm?: string; correlationId: string;
+  newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string;
 }): Promise<{ addendum: Awaited<ReturnType<typeof insertContractAddendum>>; requiresLegalOpinion: boolean }> {
   const ws = await requireContract(params.contractId, params.organizationId);
   const sequence = (await countContractAddenda(ws.id, params.organizationId)) + 1;
   let addendum = createContractAddendum({
     organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence,
-    justification: params.justification, newValue: params.newValue, newTerm: params.newTerm, correlationId: params.correlationId,
+    justification: params.justification, newValue: params.newValue, newTerm: params.newTerm,
+    requestOrigin: params.requestOrigin, correlationId: params.correlationId,
   });
   addendum = advanceAddendum(addendum, "minuta");
   await insertContractAddendum(addendum);

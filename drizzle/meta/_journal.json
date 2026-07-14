@@ -1823,6 +1823,13 @@
       "when": 1770489600000,
       "tag": "0272_contract_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "5",
+      "when": 1770576000000,
+      "tag": "0273_contract_minuta_metadata_addendum_origin",
+      "breakpoints": true
     }
   ]
 }

@@ -18,12 +18,22 @@ Router: `createAddendum` · Tabela: `contract_addenda`
 ## Fluxo do aditivo
 
 ```
-Solicitar → Justificar → Gerar minuta → Parecer Jurídico (quando necessário) → Documento Final
+Solicitar → Justificar → Gerar minuta → Parecer Jurídico (recomendado) → Documento Final
 ```
 
 ### 1. Solicitar
 O usuário abre a solicitação do aditivo indicando o **tipo** (prazo, valor, quantitativo,
 qualitativo) e os parâmetros pretendidos.
+
+Todo aditivo registra **obrigatoriamente** a **Origem da Solicitação**, com um dos quatro
+valores:
+
+| Origem da Solicitação | Descrição |
+|---|---|
+| **Contract Workspace** | Solicitação nascida dentro do próprio Workspace do contrato. |
+| **Institutional Request** | Solicitação originada de uma requisição institucional. |
+| **Documento Externo** | Solicitação derivada de um documento externo. |
+| **Solicitação Manual** | Solicitação registrada manualmente pelo servidor. |
 
 ### 2. Justificar
 Registra-se a **justificativa técnica e legal** da alteração. Esta motivação é insumo tanto
@@ -36,10 +46,13 @@ legislação, jurisprudência, templates institucionais e cláusulas obrigatóri
 A geração final do DOCX/PDF ocorre via **Document Engine**. Ver
 [`document-generation.md`](./document-generation.md).
 
-### 4. Parecer Jurídico (quando necessário)
-A necessidade de parecer **não é fixa**: o **Adaptive Process Engine** decide, conforme o
-tipo e o contexto do aditivo, se o parecer é exigido. Quando for, o pedido é encaminhado ao
-Business Domain Parecer Jurídico via **Institutional Request Engine**
+### 4. Parecer Jurídico (recomendado, nunca obrigatório)
+Para aditivos, o parecer jurídico é **apenas recomendado** — em especial para aditivos de
+**valor** e **quantitativo** — **nunca obrigatório**. O **Adaptive Recommendation Engine**
+apenas **recomenda** (ANÁLISE → RECOMENDAÇÃO → MOTIVOS → BASE LEGAL → CONFIANÇA →
+ALTERNATIVAS → DECISÃO DO SERVIDOR): ele nunca decide, obriga ou executa, e **nunca bloqueia
+o fluxo**. A decisão de solicitar o parecer é sempre do servidor. Quando solicitado, o pedido
+é encaminhado ao Business Domain Parecer Jurídico via **Institutional Request Engine**
 (`LEGAL_OPINION_INITIAL` / `LEGAL_OPINION_FINAL`). Ver
 [`legal-opinion.md`](./legal-opinion.md).
 
@@ -53,7 +66,7 @@ Workspace (`aditado`).
 ```
 Workspace: vigente
    └─ createAddendum(tipo = prazo)
-        └─ minuta revisada + parecer (se necessário)
+        └─ minuta revisada + parecer (recomendado, a critério do servidor)
              └─ documento final → Workspace: aditado
 ```
 
@@ -61,7 +74,8 @@ Workspace: vigente
 
 - **Revisável sempre:** toda sugestão de cláusula ou justificativa vem com *reasoning*,
   *explainability*, *provenance* e *confidence*, e pode ser **rejeitada**.
-- **Adaptativo:** o caminho (com ou sem parecer) é decidido pelo Adaptive Process Engine.
+- **Adaptativo, não impositivo:** o Adaptive Recommendation Engine apenas **recomenda** o
+  caminho (com ou sem parecer); a decisão é sempre do servidor e o fluxo nunca é bloqueado.
 - **Sem duplicação:** documentos e pareceres são referenciados, nunca copiados.
 - **Determinístico:** IDs derivam de `sha256`; sem `Date.now()`/`Math.random()`.
 

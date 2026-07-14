@@ -8,6 +8,14 @@ apenas **interfaces e pontos de extensão** — a lógica de negócio ainda não
 > capacidades. O núcleo atual foca **exclusivamente na geração inteligente de documentos
 > contratuais**.
 
+> **Consolidação da Sprint 5.3.1:** sem novas funcionalidades, a Sprint 5.3.1 consolidou a
+> **Reconstrução Assistida** do contrato externo (que nasce como minuta, dependente da
+> validação do servidor), os **metadados auditáveis das minutas inteligentes** (origem da
+> cláusula, template/versão, base legal, copilotos, recomendações, confidence, reasoning,
+> explainability, provenance) e a **Origem da Solicitação** dos aditivos (Contract Workspace,
+> Institutional Request, Documento Externo, Solicitação Manual). O Adaptive Recommendation
+> Engine apenas recomenda — nunca decide, obriga ou bloqueia o fluxo.
+
 ## Biblioteca de conhecimento contratual
 - Biblioteca de **cláusulas** reutilizáveis.
 - Biblioteca de **contratos** modelo.

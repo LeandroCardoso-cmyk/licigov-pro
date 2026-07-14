@@ -58,7 +58,7 @@ export const KERNEL_SERVICES: Record<KernelServiceId, KernelService> = {
   provider_layer: { id: "provider_layer", name: "Provider Layer", category: "ai", description: "Abstração de provedores de IA." },
   knowledge_retrieval: { id: "knowledge_retrieval", name: "Knowledge Retrieval", category: "knowledge", description: "Recuperação de conhecimento multi-fonte." },
   copilot_infrastructure: { id: "copilot_infrastructure", name: "Copilot Infrastructure", category: "ai", description: "Infraestrutura dos copilotos cognitivos." },
-  document_engine: { id: "document_engine", name: "Document Engine", category: "document", description: "Geração e versionamento de documentos." },
+  document_engine: { id: "document_engine", name: "Institutional Document Engine", category: "document", description: "Geração inteligente, versionamento e formatos oficiais (DOCX/PDF) de documentos institucionais." },
   timeline_engine: { id: "timeline_engine", name: "Timeline Engine", category: "platform", description: "Linha do tempo institucional." },
   version_engine: { id: "version_engine", name: "Version Engine", category: "document", description: "Versionamento e histórico." },
   approval_engine: { id: "approval_engine", name: "Approval Engine", category: "governance", description: "Aprovações humanas supervisionadas." },

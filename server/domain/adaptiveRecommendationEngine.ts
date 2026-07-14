@@ -43,6 +43,11 @@ export interface RecommendationOption {
 
 export interface StepRecommendation {
   readonly step: RecommendableStep;
+  /**
+   * Análise da contratação/etapa (cabeçalho do fluxo orientador):
+   * ANÁLISE → RECOMENDAÇÃO → MOTIVOS → BASE LEGAL → CONFIANÇA → ALTERNATIVAS → DECISÃO DO SERVIDOR.
+   */
+  readonly analysis: string;
   /** A recomendação (sim/não). NUNCA é uma obrigação. */
   readonly recommended: boolean;
   readonly title: string;
@@ -150,8 +155,10 @@ const RULES: Record<RecommendableStep, Rule> = {
 export function recommendStep(ctx: RecommendationContext): StepRecommendation {
   const rule = RULES[ctx.step];
   const recommended = rule.recommended(ctx);
+  const contexto = [ctx.objeto && `objeto "${ctx.objeto}"`, ctx.modalidade && `modalidade ${ctx.modalidade}`, ctx.valor && `valor de referência`, ctx.variant && `tipo ${ctx.variant}`].filter(Boolean).join(", ");
   return {
     step: ctx.step,
+    analysis: `Análise da contratação${contexto ? ` (${contexto})` : ""}: com base na legislação e no contexto informado, o sistema apresenta a recomendação a seguir. A decisão é sempre do servidor.`,
     recommended,
     title: rule.title,
     reasoning: rule.reasoning(ctx),

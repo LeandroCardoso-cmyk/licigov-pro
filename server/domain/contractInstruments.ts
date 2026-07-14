@@ -12,6 +12,17 @@ import { createHash } from "crypto";
 export type AddendumType = "prazo" | "valor" | "quantitativo" | "qualitativo";
 export type AddendumStatus = "solicitado" | "justificado" | "minuta" | "aguardando_parecer" | "finalizado";
 
+/** SPRINT 5.3.1 — Origem da Solicitação do aditivo (registro obrigatório). */
+export type AddendumRequestOrigin =
+  | "contract_workspace"
+  | "institutional_request"
+  | "documento_externo"
+  | "solicitacao_manual";
+
+export const ADDENDUM_REQUEST_ORIGINS: readonly AddendumRequestOrigin[] = [
+  "contract_workspace", "institutional_request", "documento_externo", "solicitacao_manual",
+];
+
 export interface ContractAddendum {
   readonly id: string;
   readonly organizationId: number;
@@ -22,6 +33,8 @@ export interface ContractAddendum {
   readonly newValue: number;
   readonly newTerm: string;
   readonly status: AddendumStatus;
+  /** Origem da solicitação do aditivo — sempre registrada. */
+  readonly requestOrigin: AddendumRequestOrigin;
   readonly documentReference: string;
   readonly legalOpinionRequestId: string;
   readonly correlationId: string;
@@ -37,6 +50,7 @@ export function createContractAddendum(params: {
   justification?: string;
   newValue?: number;
   newTerm?: string;
+  requestOrigin?: AddendumRequestOrigin;
   correlationId: string;
   createdAt?: string;
 }): ContractAddendum {
@@ -48,6 +62,7 @@ export function createContractAddendum(params: {
     id, organizationId: params.organizationId, contractId: params.contractId, addendumType: params.addendumType,
     sequence: params.sequence, justification: params.justification ?? "", newValue: params.newValue ?? 0,
     newTerm: params.newTerm ?? "", status: params.justification ? "justificado" : "solicitado",
+    requestOrigin: params.requestOrigin ?? "contract_workspace",
     documentReference: "", legalOpinionRequestId: "", correlationId: params.correlationId, createdAt: ts, updatedAt: ts,
   };
 }
@@ -149,6 +164,39 @@ export function createContractOccurrence(params: {
 
 export type ContractDocumentKind = "contrato" | "aditivo" | "apostilamento" | "rescisao" | "anexo";
 
+/**
+ * SPRINT 5.3.1 — Metadados institucionais de uma minuta (auditáveis). Registram
+ * a proveniência completa da geração: origem da cláusula, template, base legal,
+ * copilotos, recomendações, confiança e explicabilidade.
+ */
+export interface MinutaMetadata {
+  readonly clauseOrigin: string;
+  readonly template: string;
+  readonly templateVersion: string;
+  readonly legalBasis: readonly string[];
+  readonly copilots: readonly string[];
+  readonly appliedRecommendations: readonly string[];
+  readonly confidence: number;
+  readonly reasoning: string;
+  readonly explainability: string;
+  readonly provenance: string;
+}
+
+export function createMinutaMetadata(params: Partial<MinutaMetadata>): MinutaMetadata {
+  return {
+    clauseOrigin: params.clauseOrigin ?? "template_institucional",
+    template: params.template ?? "padrao",
+    templateVersion: params.templateVersion ?? "1.0",
+    legalBasis: params.legalBasis ?? [],
+    copilots: params.copilots ?? [],
+    appliedRecommendations: params.appliedRecommendations ?? [],
+    confidence: params.confidence ?? 0,
+    reasoning: params.reasoning ?? "",
+    explainability: params.explainability ?? "",
+    provenance: params.provenance ?? "",
+  };
+}
+
 export interface ContractGeneratedDocument {
   readonly id: string;
   readonly organizationId: number;
@@ -157,6 +205,8 @@ export interface ContractGeneratedDocument {
   readonly title: string;
   readonly content: string;
   readonly refId: string;
+  /** Metadados institucionais para auditoria (SPRINT 5.3.1). */
+  readonly metadata: MinutaMetadata;
   readonly correlationId: string;
   readonly createdAt: string;
 }
@@ -168,6 +218,7 @@ export function createContractGeneratedDocument(params: {
   title: string;
   content: string;
   refId?: string;
+  metadata?: Partial<MinutaMetadata>;
   correlationId: string;
   createdAt?: string;
 }): ContractGeneratedDocument {
@@ -176,7 +227,7 @@ export function createContractGeneratedDocument(params: {
     .digest("hex").slice(0, 20);
   return {
     id, organizationId: params.organizationId, contractId: params.contractId, kind: params.kind, title: params.title,
-    content: params.content, refId: params.refId ?? "", correlationId: params.correlationId,
-    createdAt: params.createdAt ?? new Date().toISOString(),
+    content: params.content, refId: params.refId ?? "", metadata: createMinutaMetadata(params.metadata ?? {}),
+    correlationId: params.correlationId, createdAt: params.createdAt ?? new Date().toISOString(),
   };
 }
