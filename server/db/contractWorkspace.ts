@@ -16,9 +16,9 @@ import {
 import type { ContractWorkspace, ContractOriginType, ContractStatus } from "../domain/contractWorkspace";
 import type {
   ContractAddendum, AddendumType, AddendumStatus, ContractApostille, ApostilleKind,
-  ContractOccurrence, ContractGeneratedDocument, ContractDocumentKind,
+  ContractOccurrence, ContractGeneratedDocument, ContractDocumentKind, MinutaMetadata,
 } from "../domain/contractInstruments";
-import type { ImportedContract, ImportedContractSource, ExtractedContractFields } from "../domain/contractExtraction";
+import type { ImportedContract, ImportedContractSource, ReconstructedContractFields } from "../domain/contractReconstruction";
 
 function parseArr(raw: string | null): string[] {
   if (!raw) return [];
@@ -90,18 +90,22 @@ export async function insertContractWsDocument(d: ContractGeneratedDocument): Pr
   if (!db) return null;
   await db.insert(contractWsDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, contractId: d.contractId, kind: d.kind, title: d.title,
-    content: d.content, refId: d.refId, correlationId: d.correlationId, createdAt: d.createdAt,
-  }).onDuplicateKeyUpdate({ set: { content: d.content, title: d.title } });
+    content: d.content, refId: d.refId, metadata: JSON.stringify(d.metadata), correlationId: d.correlationId, createdAt: d.createdAt,
+  }).onDuplicateKeyUpdate({ set: { content: d.content, title: d.title, metadata: JSON.stringify(d.metadata) } });
   return d;
 }
 
-export async function listContractWsDocuments(contractId: string, orgId: number): Promise<Array<{ id: string; kind: string; title: string; createdAt: string }>> {
+export async function listContractWsDocuments(contractId: string, orgId: number): Promise<Array<{ id: string; kind: string; title: string; metadata: MinutaMetadata | null; createdAt: string }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(contractWsDocumentsTable)
     .where(and(eq(contractWsDocumentsTable.contractId, contractId), eq(contractWsDocumentsTable.organizationId, orgId)))
     .orderBy(asc(contractWsDocumentsTable.createdAt));
-  return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, createdAt: r.createdAt }));
+  return rows.map(r => {
+    let metadata: MinutaMetadata | null = null;
+    try { metadata = r.metadata ? JSON.parse(r.metadata) as MinutaMetadata : null; } catch { metadata = null; }
+    return { id: r.id, kind: r.kind, title: r.title, metadata, createdAt: r.createdAt };
+  });
 }
 
 // ─── Addenda ─────────────────────────────────────────────────────────────────
@@ -119,20 +123,20 @@ export async function insertContractAddendum(a: ContractAddendum): Promise<Contr
   if (!db) return null;
   await db.insert(contractAddendaTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, addendumType: a.addendumType, sequence: a.sequence,
-    justification: a.justification, newValue: String(a.newValue), newTerm: a.newTerm, status: a.status,
+    justification: a.justification, newValue: String(a.newValue), newTerm: a.newTerm, status: a.status, requestOrigin: a.requestOrigin,
     documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, correlationId: a.correlationId,
     createdAt: a.createdAt, updatedAt: a.updatedAt,
   }).onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: a.updatedAt } });
   return a;
 }
 
-export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string }>> {
+export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin: string }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(contractAddendaTable)
     .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
     .orderBy(asc(contractAddendaTable.sequence));
-  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status }));
+  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin }));
 }
 
 // ─── Apostilles ──────────────────────────────────────────────────────────────
@@ -191,21 +195,22 @@ export async function listContractOccurrences(contractId: string, orgId: number)
 export async function insertImportedContract(ic: ImportedContract, contractId: string): Promise<ImportedContract | null> {
   const db = await getDb();
   if (!db) return null;
+  // A coluna `extracted` (nome físico legado) guarda a reconstrução assistida.
   await db.insert(importedContractsTable).values({
     id: ic.id, organizationId: ic.organizationId, contractId, source: ic.source, rawTextHash: ic.rawTextHash,
-    extracted: JSON.stringify(ic.extracted), confidence: String(ic.confidence), correlationId: ic.correlationId, createdAt: ic.createdAt,
-  }).onDuplicateKeyUpdate({ set: { contractId, extracted: JSON.stringify(ic.extracted), confidence: String(ic.confidence) } });
+    extracted: JSON.stringify(ic.reconstructed), confidence: String(ic.confidence), correlationId: ic.correlationId, createdAt: ic.createdAt,
+  }).onDuplicateKeyUpdate({ set: { contractId, extracted: JSON.stringify(ic.reconstructed), confidence: String(ic.confidence) } });
   return ic;
 }
 
-export async function getImportedContract(id: string, orgId: number): Promise<{ id: string; contractId: string; source: ImportedContractSource; extracted: ExtractedContractFields | null; confidence: number } | null> {
+export async function getImportedContract(id: string, orgId: number): Promise<{ id: string; contractId: string; source: ImportedContractSource; reconstructed: ReconstructedContractFields | null; confidence: number } | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(importedContractsTable)
     .where(and(eq(importedContractsTable.id, id), eq(importedContractsTable.organizationId, orgId))).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  let extracted: ExtractedContractFields | null = null;
-  try { extracted = r.extracted ? JSON.parse(r.extracted) as ExtractedContractFields : null; } catch { extracted = null; }
-  return { id: r.id, contractId: r.contractId, source: r.source as ImportedContractSource, extracted, confidence: Number(r.confidence) };
+  let reconstructed: ReconstructedContractFields | null = null;
+  try { reconstructed = r.extracted ? JSON.parse(r.extracted) as ReconstructedContractFields : null; } catch { reconstructed = null; }
+  return { id: r.id, contractId: r.contractId, source: r.source as ImportedContractSource, reconstructed, confidence: Number(r.confidence) };
 }

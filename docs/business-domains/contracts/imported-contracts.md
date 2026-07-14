@@ -15,17 +15,28 @@ sem ele, o sistema não conseguiria representar a realidade contratual do órgã
 Upload PDF/DOCX
       │
       ▼
-Extração determinística (heurística sobre o texto)
+Reconstrução Assistida do Contrato
       │
       ▼
-Reconstrução da estrutura contratual
+Identificação (fornecedor, objeto, prazo, valor, cláusulas)
       │
       ▼
-Criação do ContractWorkspace (status: vigente)
+Apresentação ao servidor
+      │
+      ▼
+Servidor revisa e valida
+      │
+      ▼
+Criação do ContractWorkspace (status: minuta — não vigente)
       │
       ▼
 Disponível para Aditivos, Apostilamentos, Ocorrências e geração documental
 ```
+
+> **Reconstrução Assistida, nunca perfeita.** O sistema **não** promete extração exata do
+> contrato: a reconstrução é **assistida** e **depende integralmente da validação do
+> servidor**. O contrato externo nasce como **minuta (não vigente)**, pendente de revisão
+> humana antes de qualquer efeito.
 
 ## Etapas
 
@@ -33,42 +44,46 @@ Disponível para Aditivos, Apostilamentos, Ocorrências e geração documental
 O usuário envia o arquivo do contrato já assinado. O conteúdo é registrado em
 `imported_contracts`, preservando o documento original **por referência** (sem duplicação).
 
-### 2. Extração de informações
-A extração é feita por **heurística determinística sobre o texto** do documento. O objetivo
-é identificar os campos-chave do contrato:
+### 2. Identificação (Reconstrução Assistida)
+A **Reconstrução Assistida** processa o texto do documento para **identificar** os
+campos-chave do contrato, sempre como sugestão sujeita à validação do servidor:
 
-- Número do contrato (`contractNumber`)
-- Contratada (`contractor`)
+- Fornecedor / Contratada (`contractor`)
 - Objeto (`object`)
-- Valor (`value`)
 - Vigência / prazo (`term`)
+- Valor (`value`)
+- Cláusulas do contrato
+- Número do contrato (`contractNumber`)
 - Gestor e fiscal, quando presentes (`manager`, `inspector`)
 
-> A extração é **determinística e replay-safe**: o mesmo texto sempre produz o mesmo
-> resultado. Não há dependência de `Date.now()` ou `Math.random()`, e os identificadores
-> derivam de `sha256`.
+> A Reconstrução Assistida é **determinística e replay-safe**: o mesmo texto sempre produz o
+> mesmo resultado. Não há dependência de `Date.now()` ou `Math.random()`, e os
+> identificadores derivam de `sha256`.
 
-### 3. Reconstrução da estrutura
-A partir dos campos extraídos, o domínio **reconstrói a estrutura** do contrato no formato
-canônico do `ContractWorkspace`, mapeando cláusulas e metadados para o modelo interno. Isso
-permite que um contrato externo seja tratado exatamente como um contrato nascido internamente.
+### 3. Apresentação ao servidor e revisão
+Os campos identificados pela Reconstrução Assistida são **apresentados ao servidor**, que
+**revisa e valida** cada informação. Nenhum dado reconstruído é tratado como definitivo antes
+dessa validação — a reconstrução é assistida, não automática.
 
 ### 4. Criação do Workspace
-Com a estrutura reconstruída, cria-se o `ContractWorkspace` (tipicamente já como `vigente`,
-pois o contrato externo já está em execução). A partir daí, todo o ferramental do domínio
-fica disponível: aditivos, apostilamentos, ocorrências e geração inteligente de minutas.
+Somente após a revisão do servidor cria-se o `ContractWorkspace`. O contrato externo nasce
+como **minuta (não vigente)**, pendente de confirmação. A partir daí, todo o ferramental do
+domínio fica disponível: aditivos, apostilamentos, ocorrências e geração inteligente de
+minutas.
 
 ## Revisão humana obrigatória
 
-A extração heurística é uma **sugestão**. Todos os campos reconstruídos são
-**revisáveis** pelo usuário antes da confirmação do Workspace, acompanhados de *confidence*
-e *provenance* (de qual trecho do texto o dado foi extraído). Nada é gravado como definitivo
-sem validação humana.
+A Reconstrução Assistida é uma **sugestão**. Todos os campos identificados são
+**revisáveis** pelo servidor antes da confirmação do Workspace, acompanhados de *confidence*
+e *provenance* (de qual trecho do texto o dado foi identificado). Nada é gravado como
+definitivo sem validação humana, e o contrato permanece como minuta até essa validação.
 
 ## O que este fluxo NÃO faz
 
+- Não promete reconstrução **perfeita**: é assistida e depende da validação do servidor.
+- Não coloca o contrato externo diretamente como `vigente` — ele nasce como **minuta**.
 - Não importa histórico financeiro, empenhos ou pagamentos.
 - Não faz OCR de documentos que não tenham camada de texto extraível como parte do escopo
-  central (o foco é a heurística determinística sobre o texto disponível).
-- Não integra automaticamente com sistemas externos de origem — apenas reconstrói o
-  documento fornecido.
+  central (o foco é a Reconstrução Assistida sobre o texto disponível).
+- Não integra automaticamente com sistemas externos de origem — apenas reconstrói, de forma
+  assistida, o documento fornecido.

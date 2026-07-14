@@ -8,12 +8,13 @@ import {
 // Domain — Instruments
 import {
   createContractAddendum, advanceAddendum, createContractApostille,
-  createContractOccurrence, createContractGeneratedDocument,
+  createContractOccurrence, createContractGeneratedDocument, createMinutaMetadata,
+  ADDENDUM_REQUEST_ORIGINS,
 } from "../../domain/contractInstruments";
-// Domain — Extraction
+// Domain — Reconstrução Assistida
 import {
-  extractContractFields, extractionConfidence, createImportedContract,
-} from "../../domain/contractExtraction";
+  reconstructContractFields, reconstructionConfidence, createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER,
+} from "../../domain/contractReconstruction";
 
 // Services
 import {
@@ -111,11 +112,29 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       const d = createContractGeneratedDocument({ organizationId: ORG_ID, contractId: "c1", kind: "contrato", title: "T", content: "c", correlationId: CORR });
       expect(d.id).toBe(createContractGeneratedDocument({ organizationId: ORG_ID, contractId: "c1", kind: "contrato", title: "x", content: "y", correlationId: CORR }).id);
     });
+
+    // AJUSTE 3 — metadados institucionais auditáveis da minuta
+    it("minuta registra metadados institucionais auditáveis", () => {
+      const meta = createMinutaMetadata({ template: "contrato_aditivo", legalBasis: ["art. 124"], copilots: ["juridico"], confidence: 0.8, reasoning: "r", provenance: "p" });
+      const d = createContractGeneratedDocument({ organizationId: ORG_ID, contractId: "c1", kind: "aditivo", title: "T", content: "c", metadata: meta, correlationId: CORR });
+      expect(d.metadata.template).toBe("contrato_aditivo");
+      expect(d.metadata.legalBasis).toContain("art. 124");
+      expect(d.metadata.copilots).toContain("juridico");
+      expect(d.metadata.templateVersion).toBe("1.0");
+      expect(d.metadata.confidence).toBe(0.8);
+    });
+
+    // AJUSTE 4 — origem da solicitação do aditivo
+    it("aditivo registra a origem da solicitação (padrão contract_workspace)", () => {
+      expect(createContractAddendum({ organizationId: ORG_ID, contractId: "c1", addendumType: "prazo", sequence: 1, justification: "j", correlationId: CORR }).requestOrigin).toBe("contract_workspace");
+      expect(createContractAddendum({ organizationId: ORG_ID, contractId: "c1", addendumType: "valor", sequence: 2, justification: "j", requestOrigin: "institutional_request", correlationId: CORR }).requestOrigin).toBe("institutional_request");
+      expect(ADDENDUM_REQUEST_ORIGINS).toEqual(["contract_workspace", "institutional_request", "documento_externo", "solicitacao_manual"]);
+    });
   });
 
-  // ─── Extraction (contrato externo) ──────────────────────────────────────────
+  // ─── AJUSTE 1 — Reconstrução Assistida (antes "extração") ───────────────────
 
-  describe("contractExtraction", () => {
+  describe("contractReconstruction (assistida)", () => {
     const SAMPLE = [
       "CONTRATO Nº 045/2026",
       "CONTRATADO: Empresa XPTO LTDA",
@@ -126,8 +145,8 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       "CLÁUSULA SEGUNDA - Do valor",
     ].join("\n");
 
-    it("extrai campos do texto de forma determinística", () => {
-      const f = extractContractFields(SAMPLE);
+    it("reconstrói campos do texto de forma determinística", () => {
+      const f = reconstructContractFields(SAMPLE);
       expect(f.contractNumber).toContain("045/2026");
       expect(f.contractor).toContain("XPTO");
       expect(f.object.toLowerCase()).toContain("equipamentos");
@@ -135,14 +154,22 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(f.clauses.length).toBe(2);
     });
 
-    it("confiança reflete campos preenchidos", () => {
-      expect(extractionConfidence(extractContractFields(SAMPLE))).toBeGreaterThan(0.5);
-      expect(extractionConfidence(extractContractFields("texto irrelevante"))).toBeLessThan(0.5);
+    it("confiança reflete campos identificados", () => {
+      expect(reconstructionConfidence(reconstructContractFields(SAMPLE))).toBeGreaterThan(0.5);
+      expect(reconstructionConfidence(reconstructContractFields("texto irrelevante"))).toBeLessThan(0.5);
     });
 
-    it("createImportedContract é replay-safe (mesmo texto → mesmo id/hash)", () => {
-      const a = createImportedContract({ organizationId: ORG_ID, source: "pdf", rawText: SAMPLE, correlationId: CORR });
-      const b = createImportedContract({ organizationId: ORG_ID, source: "pdf", rawText: SAMPLE, correlationId: CORR });
+    it("a reconstrução é ASSISTIDA e pendente de revisão do servidor", () => {
+      const rec = createAssistedReconstruction({ organizationId: ORG_ID, source: "pdf", rawText: SAMPLE, correlationId: CORR });
+      expect(rec.assisted).toBe(true);
+      expect(rec.reviewedByServer).toBe(false);
+      expect(rec.disclaimer).toBe(RECONSTRUCTION_DISCLAIMER);
+      expect(rec.disclaimer.toLowerCase()).toContain("assistida");
+    });
+
+    it("é replay-safe (mesmo texto → mesmo id/hash)", () => {
+      const a = createAssistedReconstruction({ organizationId: ORG_ID, source: "pdf", rawText: SAMPLE, correlationId: CORR });
+      const b = createAssistedReconstruction({ organizationId: ORG_ID, source: "pdf", rawText: SAMPLE, correlationId: CORR });
       expect(a.id).toBe(b.id);
       expect(a.rawTextHash).toBe(b.rawTextHash);
     });
@@ -203,10 +230,13 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(ws.originType).toBe("contratacao_direta");
     });
 
-    it("FLUXO 3 — importExternalContract extrai e reconstrói", async () => {
+    it("FLUXO 3 — importExternalContract faz reconstrução assistida (minuta pendente de revisão)", async () => {
       const res = await importExternalContract({ organizationId: ORG_ID, source: "pdf", rawText: "CONTRATO Nº 9/2026\nCONTRATADO: Fulano ME\nVALOR: R$ 1.000,00", correlationId: CORR });
       expect(res.workspace.originType).toBe("externo");
+      expect(res.workspace.status).toBe("minuta"); // depende da validação do servidor
+      expect(res.assisted).toBe(true);
       expect(res.confidence).toBeGreaterThan(0);
+      expect(res.reconstructed.contractNumber).toContain("9/2026");
     });
 
     it("operações que exigem contrato existente lançam sem DB", async () => {

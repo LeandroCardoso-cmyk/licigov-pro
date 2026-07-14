@@ -41,7 +41,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       <h2 className="text-base font-semibold text-gray-900">Novo Contrato</h2>
 
       <div className="grid grid-cols-3 gap-2">
-        {([["processo_licitatorio", "Do Processo"], ["contratacao_direta", "Da Contratação Direta"], ["externo", "Externo (import)"]] as const).map(([v, label]) => (
+        {([["processo_licitatorio", "Do Processo"], ["contratacao_direta", "Da Contratação Direta"], ["externo", "Externo (reconstrução)"]] as const).map(([v, label]) => (
           <button key={v} type="button" onClick={() => setOrigin(v)}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${origin === v ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-gray-200 text-gray-600 hover:border-indigo-300"}`}>{label}</button>
         ))}
@@ -62,15 +62,20 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         <label className="block text-xs font-medium text-gray-700">Texto do contrato (PDF/DOCX convertido)
           <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} rows={5} placeholder="Cole aqui o texto do contrato externo…"
             className="mt-1 w-full resize-y rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-          <span className="text-[11px] text-gray-400">O sistema extrai número, contratado, objeto, valor e vigência automaticamente.</span>
+          <span className="text-[11px] text-gray-400">O sistema faz a <strong>reconstrução assistida</strong> (fornecedor, objeto, prazo, valor, cláusulas) — uma sugestão que você revisa antes de criar o workspace.</span>
         </label>
       )}
 
       {err && <p className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
-      {importExt.data && <p className="text-xs text-green-700">Importado com confiança {Math.round(importExt.data.confidence * 100)}%.</p>}
+      {importExt.data && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-medium">Reconstrução assistida — confiança {Math.round(importExt.data.confidence * 100)}%.</p>
+          <p className="mt-0.5">{importExt.data.disclaimer}</p>
+        </div>
+      )}
 
       <button type="submit" disabled={busy} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-        {busy ? "Criando…" : origin === "externo" ? "Importar contrato" : "Gerar contrato"}
+        {busy ? "Processando…" : origin === "externo" ? "Reconstruir contrato (assistido)" : "Gerar contrato"}
       </button>
     </form>
   );
