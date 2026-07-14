@@ -101,7 +101,9 @@ export const BUSINESS_DOMAIN_DEFINITIONS: Record<BusinessDomainCode, Omit<Busine
     active: true,
     version: 1,
     dependencies: [],
-    requiredKernelServices: ["workflow_engine", "timeline_engine", "observability", "governance_engine"],
+    // Centro de Operações (FASE 5): consolida, recomenda (explainability) e gera
+    // relatórios (document_engine). NÃO usa institutional_rag/knowledge_graph.
+    requiredKernelServices: ["workflow_engine", "timeline_engine", "observability", "governance_engine", "explainability", "document_engine"],
     supportedWorkflows: ["gestao_tarefas", "indicadores"],
     workspaceType: "generico",
   },

@@ -3836,6 +3836,66 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_ctpl_org\` (\`organization_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // FASE 5 — Business Domain 5: Centro de Operações do Departamento
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`operation_records\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`record_type\` VARCHAR(40) NOT NULL DEFAULT 'outro', \`origin\` VARCHAR(10) NOT NULL DEFAULT 'externa',
+      \`number\` VARCHAR(80) NOT NULL DEFAULT '', \`object\` TEXT NULL, \`modality\` VARCHAR(60) NOT NULL DEFAULT '',
+      \`current_stage\` VARCHAR(60) NOT NULL DEFAULT '', \`responsible\` INT NULL,
+      \`reference_type\` VARCHAR(40) NOT NULL DEFAULT '', \`reference_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`document_references\` TEXT NULL, \`notes\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_oprec_org\` (\`organization_id\`), INDEX \`idx_oprec_type\` (\`organization_id\`, \`record_type\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`operational_events\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`event_type\` VARCHAR(40) NOT NULL DEFAULT 'manual', \`title\` VARCHAR(500) NOT NULL DEFAULT '',
+      \`event_date\` VARCHAR(10) NOT NULL DEFAULT '', \`event_time\` VARCHAR(5) NOT NULL DEFAULT '',
+      \`reference_type\` VARCHAR(40) NOT NULL DEFAULT '', \`reference_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`auto_generated\` INT NOT NULL DEFAULT 0, \`alert_offset_days\` INT NOT NULL DEFAULT 0,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_opevt_org\` (\`organization_id\`), INDEX \`idx_opevt_date\` (\`organization_id\`, \`event_date\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`operational_milestones\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`reference_type\` VARCHAR(40) NOT NULL DEFAULT '', \`reference_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`milestone_type\` VARCHAR(30) NOT NULL DEFAULT 'outro', \`date\` VARCHAR(10) NOT NULL DEFAULT '', \`time\` VARCHAR(5) NOT NULL DEFAULT '',
+      \`result\` VARCHAR(255) NOT NULL DEFAULT '', \`observation\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_opms_org\` (\`organization_id\`), INDEX \`idx_opms_ref\` (\`reference_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`operational_timeline\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL, \`event_order\` INT NOT NULL DEFAULT 0,
+      \`actor\` VARCHAR(60) NOT NULL DEFAULT '', \`action\` VARCHAR(60) NOT NULL DEFAULT '',
+      \`reference_type\` VARCHAR(40) NOT NULL DEFAULT '', \`reference_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`summary\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_optl_org\` (\`organization_id\`), INDEX \`idx_optl_org_order\` (\`organization_id\`, \`event_order\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`publication_records\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`reference_type\` VARCHAR(40) NOT NULL DEFAULT '', \`reference_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`channel\` VARCHAR(30) NOT NULL DEFAULT 'pncp', \`status\` VARCHAR(20) NOT NULL DEFAULT 'nao_iniciado', \`date\` VARCHAR(10) NOT NULL DEFAULT '',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_oppub_org\` (\`organization_id\`), INDEX \`idx_oppub_ref\` (\`reference_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`operational_settings\` (
+      \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+      \`orgao_oficial_name\` VARCHAR(255) NOT NULL DEFAULT 'Órgão Oficial do Município',
+      \`jornal_name\` VARCHAR(255) NOT NULL DEFAULT 'Jornal de Grande Circulação',
+      \`portal_name\` VARCHAR(255) NOT NULL DEFAULT 'Portal Eletrônico',
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), INDEX \`idx_opset_org\` (\`organization_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
