@@ -1,5 +1,10 @@
 # LiciGov Pro — Instruções para o Agente
 
+> 📜 **Constituição do Produto:** [`docs/architecture/PRODUCT_NORTH_STAR.md`](docs/architecture/PRODUCT_NORTH_STAR.md)
+> é a filosofia permanente do LiciGov Pro e a **fonte oficial da verdade**, com precedência
+> sobre qualquer documento de visão anterior. Toda implementação futura deve respeitá-la
+> (missão, posicionamento não-ERP, IA supervisionada, Regra de Ouro, princípios arquiteturais).
+
 ## O que é este projeto
 Plataforma SaaS especializada em automação documental, apoio operacional e inteligência aplicada
 para departamentos de licitações e jurídico-administrativo de órgãos públicos.

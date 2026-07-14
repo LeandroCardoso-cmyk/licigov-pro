@@ -2,6 +2,11 @@
 
 > Este diretório centraliza toda a documentação técnica e funcional do projeto LiciGov Pro.
 
+> **📜 Constituição do Produto:** [architecture/PRODUCT_NORTH_STAR.md](./architecture/PRODUCT_NORTH_STAR.md)
+> é a **fonte oficial da verdade** sobre a filosofia permanente do LiciGov Pro e tem
+> **precedência** sobre qualquer documento de visão anterior. Toda implementação e
+> documentação deve respeitá-la. Em caso de conflito, o PRODUCT_NORTH_STAR prevalece.
+
 ---
 
 ## Padrão Documental
@@ -39,6 +44,7 @@
 
 | Diretório | Conteúdo |
 |---|---|
+| [architecture/PRODUCT_NORTH_STAR.md](./architecture/PRODUCT_NORTH_STAR.md) | **📜 Constituição do Produto — filosofia permanente (fonte oficial da verdade)** |
 | [technical/](./technical/README.md) | Documentação técnica do sistema (APIs, schemas, serviços) |
 | [functional/](./functional/README.md) | Documentação funcional (user stories, fluxos, regras de negócio) |
 | [domain/](./domain/README.md) | Domínio jurídico-operacional (Lei 14.133/2021, tipos de documento) |
