@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1783993447.8401127,
-    "ast_hash": "550259ae0b369b729f3e0f500d7d958f",
+    "mtime": 1784041296.0475812,
+    "ast_hash": "4149c904ecd4032659d2ddd4a5f5b060",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1783993447.8401127,
-    "ast_hash": "af8c51d77d05f26f9a86ef4132f1ee63",
+    "mtime": 1784041015.6395926,
+    "ast_hash": "40060c93757054fd8998b528d19c79ef",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1783993447.8401127,
-    "ast_hash": "7db415a7c69e3223dbb568efe6f3d2ea",
+    "mtime": 1784041332.1755798,
+    "ast_hash": "7f932ba387896d357edc76ebdc60f078",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4310,8 +4310,8 @@
     "semantic_hash": ""
   },
   "server/db/index.ts": {
-    "mtime": 1783972455.6837928,
-    "ast_hash": "d7ed1b339416a22c414720f2ba775246",
+    "mtime": 1784041251.579583,
+    "ast_hash": "3115de9e863de37b5c1ce2768c300e6e",
     "semantic_hash": ""
   },
   "server/db/institutionalRequests.ts": {
@@ -4440,8 +4440,8 @@
     "semantic_hash": ""
   },
   "server/domain/businessDomain.ts": {
-    "mtime": 1783309469.2523668,
-    "ast_hash": "2ade09b2978dd2cb5f9fa0f61bfcabd5",
+    "mtime": 1784041568.8275702,
+    "ast_hash": "faf6f3c09ed367a02b787e62012cbce2",
     "semantic_hash": ""
   },
   "server/domain/candidateConsensus.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1783974769.8055618,
-    "ast_hash": "b2924993908e4e332c862cfd43c745de",
+    "mtime": 1784041244.9235833,
+    "ast_hash": "fcef1f9e8236e128bc92c2e4f4881cfa",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -8250,8 +8250,8 @@
     "semantic_hash": ""
   },
   "drizzle/0273_contract_minuta_metadata_addendum_origin.sql": {
-    "mtime": 1783976328.4012103,
-    "ast_hash": "743d47da613a1657bf4730e3ac677ffd",
+    "mtime": 1783994483.5121744,
+    "ast_hash": "1fd840f8e7aa9ef5e8cca37ea2e53792",
     "semantic_hash": ""
   },
   "server/domain/contractReconstruction.ts": {
@@ -8262,6 +8262,196 @@
   "docs/business-domains/business-domain-pattern.md": {
     "mtime": 1783993198.724098,
     "ast_hash": "7509400d8d9197fe31d63e5b21d3ba92",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/DepartmentOperationHome.tsx": {
+    "mtime": 1784041862.9035583,
+    "ast_hash": "822e606a3566228cd351b0e22e7a1ee3",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/LegacyImportWizard.tsx": {
+    "mtime": 1784041842.823559,
+    "ast_hash": "9ee2468342f7c4ffd18408fdd8020678",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationRecordWizard.tsx": {
+    "mtime": 1784041817.35156,
+    "ast_hash": "db0b19b12ac53c1b8b23938fece76617",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalCalendar.tsx": {
+    "mtime": 1784041755.0915625,
+    "ast_hash": "fd2d4215e4c78613336b969c610fe849",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalDashboard.tsx": {
+    "mtime": 1784041716.8715641,
+    "ast_hash": "375f16307650ac08e45597603741ed57",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalInbox.tsx": {
+    "mtime": 1784041781.4915617,
+    "ast_hash": "8d7805c6e0bc17492ca01cfb7cd5a0cd",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalIndicators.tsx": {
+    "mtime": 1784041702.5595648,
+    "ast_hash": "04013c4a05ddf8f317e275057be2b902",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalMonitoringPanel.tsx": {
+    "mtime": 1784041735.5715635,
+    "ast_hash": "fb541561f10449bbd268fb4f8248e9ad",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalRecommendations.tsx": {
+    "mtime": 1784041796.823561,
+    "ast_hash": "3f7e14d855bbea40bd175af3132d4b16",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/OperationalTimeline.tsx": {
+    "mtime": 1784041766.2995622,
+    "ast_hash": "81655718810f43f32e50b5b1dee172ff",
+    "semantic_hash": ""
+  },
+  "client/src/components/department-operation/labels.ts": {
+    "mtime": 1784041682.5755656,
+    "ast_hash": "af350a033a4286ae2c1c65a58e03e1b5",
+    "semantic_hash": ""
+  },
+  "drizzle/0274_operation_records.sql": {
+    "mtime": 1784041284.7217567,
+    "ast_hash": "6e73a38635a3f3f3b2d866e4ff8a9984",
+    "semantic_hash": ""
+  },
+  "drizzle/0275_operational_events.sql": {
+    "mtime": 1784041284.7235234,
+    "ast_hash": "4e66cd79b637ec6a7a49e6e2ef689bd2",
+    "semantic_hash": ""
+  },
+  "drizzle/0276_operational_milestones.sql": {
+    "mtime": 1784041284.7235816,
+    "ast_hash": "8b85450700133e72dc2967ee357b6e03",
+    "semantic_hash": ""
+  },
+  "drizzle/0277_operational_timeline.sql": {
+    "mtime": 1784041284.7271423,
+    "ast_hash": "ef224d24ee5c60043c8520dff36bfc60",
+    "semantic_hash": ""
+  },
+  "drizzle/0278_publication_records.sql": {
+    "mtime": 1784041284.7275817,
+    "ast_hash": "9cb1cf08c6af21ad5fcf4866bee159c9",
+    "semantic_hash": ""
+  },
+  "drizzle/0279_operational_settings.sql": {
+    "mtime": 1784041284.7314534,
+    "ast_hash": "132ecff12132d5000acf2fe6af1efee6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sprint5op-department-operation.test.ts": {
+    "mtime": 1784041497.127573,
+    "ast_hash": "119bc53006c2da392784e0de4347cfc4",
+    "semantic_hash": ""
+  },
+  "server/db/departmentOperation.ts": {
+    "mtime": 1784041059.3595908,
+    "ast_hash": "0809c5bbc56bee41ed090e5f22f5f34d",
+    "semantic_hash": ""
+  },
+  "server/domain/operationRecord.ts": {
+    "mtime": 1784040885.083598,
+    "ast_hash": "65ed48a399b2c1814315ad41371533b2",
+    "semantic_hash": ""
+  },
+  "server/domain/operationalDashboard.ts": {
+    "mtime": 1784040985.3395936,
+    "ast_hash": "6406e831c67af53430f16379a10650ce",
+    "semantic_hash": ""
+  },
+  "server/domain/operationalEvent.ts": {
+    "mtime": 1784040912.4515967,
+    "ast_hash": "87b29d18d9d03f4ce07f1a8586ecaf9d",
+    "semantic_hash": ""
+  },
+  "server/domain/operationalMilestone.ts": {
+    "mtime": 1784040929.3875961,
+    "ast_hash": "abb57a167c23267559c1150f58f24a52",
+    "semantic_hash": ""
+  },
+  "server/domain/operationalTimeline.ts": {
+    "mtime": 1784040941.3755956,
+    "ast_hash": "3111d357526f4dcd9ba827a1f956f38b",
+    "semantic_hash": ""
+  },
+  "server/domain/publicationRecord.ts": {
+    "mtime": 1784040961.8875947,
+    "ast_hash": "c3ace0bdb64e457e8a508d1a193d255d",
+    "semantic_hash": ""
+  },
+  "server/routers/departmentOperationRouter.ts": {
+    "mtime": 1784041189.7795856,
+    "ast_hash": "3159e8a929b748a00b0ed63a45818071",
+    "semantic_hash": ""
+  },
+  "server/routers/operationRecordRouter.ts": {
+    "mtime": 1784041219.9475842,
+    "ast_hash": "15870e53554d61989034a5444c9aa96e",
+    "semantic_hash": ""
+  },
+  "server/services/departmentOperationService.ts": {
+    "mtime": 1784041105.371589,
+    "ast_hash": "e4e709909513943b2ac539bccb1ed8c4",
+    "semantic_hash": ""
+  },
+  "server/services/operationRecordService.ts": {
+    "mtime": 1784041143.7195873,
+    "ast_hash": "45699e16c766f41dca569ff866874b73",
+    "semantic_hash": ""
+  },
+  "server/services/operationalObservabilityService.ts": {
+    "mtime": 1784041158.2235868,
+    "ast_hash": "af4d909bcf606f53c22e8f31c8f0820b",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/architecture.md": {
+    "mtime": 1784040887.5115976,
+    "ast_hash": "89c4691153e38dd09ec52c9527298d3e",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/calendar.md": {
+    "mtime": 1784040948.0515952,
+    "ast_hash": "843b97ffb4a1075182635f0f58fa04e8",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/dashboard.md": {
+    "mtime": 1784040906.211597,
+    "ast_hash": "761257e9c6666969e8d4a46da65335ae",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/legacy-records.md": {
+    "mtime": 1784040985.6395938,
+    "ast_hash": "ad03ad01b0c1c14cda1e1a8542cb439d",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/monitoring-panel.md": {
+    "mtime": 1784040932.147596,
+    "ast_hash": "43610b870ca6ee6faad0c3331fea2fe8",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/recommendations.md": {
+    "mtime": 1784041008.5875928,
+    "ast_hash": "f3ba9574273836ca0e084bc2a239a029",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/roadmap.md": {
+    "mtime": 1784041024.347592,
+    "ast_hash": "7d7fce85c3c7f3f81c670f17b223b9d4",
+    "semantic_hash": ""
+  },
+  "docs/business-domains/department-operation/timeline.md": {
+    "mtime": 1784040969.1515944,
+    "ast_hash": "5c2b39ef85e15b12e8a15d1343b6bde3",
     "semantic_hash": ""
   }
 }
