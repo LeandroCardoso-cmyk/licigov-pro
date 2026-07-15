@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1782612418.270427,
-    "ast_hash": "2a3b5947fe127d9c65f9228bc9985566",
+    "mtime": 1784147516.009194,
+    "ast_hash": "abaaf3ef0af2101a5191aeeb7d574839",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1782612418.274427,
-    "ast_hash": "b2dd3ab384d15e1b41b73bbee0fa3532",
+    "mtime": 1784147578.6971977,
+    "ast_hash": "e553b16931afc84cba5573481c93ae15",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -2325,8 +2325,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ModuleSelectionDashboard.tsx": {
-    "mtime": 1782612418.382427,
-    "ast_hash": "3ba686593621a4f5375babe20941c22f",
+    "mtime": 1784147557.9571965,
+    "ast_hash": "cf02b53e0d8489f4789ea21b3bf6755e",
     "semantic_hash": ""
   },
   "client/src/pages/Modules.tsx": {
@@ -6440,8 +6440,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782612418.0237951,
-    "ast_hash": "c4a6b7d9efbe12e3fb37fcb0a602b093",
+    "mtime": 1784062146.3336432,
+    "ast_hash": "8f9b8905e926cafc88f03905e5fd9764",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1782612418.0264268,
-    "ast_hash": "d8a3fc4430392ff5071d8cef4edead8d",
+    "mtime": 1784062081.6176453,
+    "ast_hash": "0fddf1c2a43c0f73c540e6cf344c7481",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6660,8 +6660,8 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1782612419.178427,
-    "ast_hash": "bea9c26f1e1e40b78fac0bd4ae34eb17",
+    "mtime": 1784062074.7816455,
+    "ast_hash": "26c205fd8f9daeaf8368bc456766e025",
     "semantic_hash": ""
   },
   "docs/ai/README.md": {
@@ -7235,8 +7235,8 @@
     "semantic_hash": ""
   },
   "docs/workspace/roadmap.md": {
-    "mtime": 1783302647.417164,
-    "ast_hash": "9b5dbc423cbb1f7994b896505136b133",
+    "mtime": 1784062161.3456426,
+    "ast_hash": "aa3a6a528fb742803c884a93317a7479",
     "semantic_hash": ""
   },
   "docs/workspace/timeline.md": {
@@ -8245,8 +8245,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/business-domains-consolidation.md": {
-    "mtime": 1783974955.1895728,
-    "ast_hash": "01fac811e0304dd22c6528e12326dfc7",
+    "mtime": 1784062089.789645,
+    "ast_hash": "626b9c39475a36dbe20e3445bf3ae16e",
     "semantic_hash": ""
   },
   "drizzle/0273_contract_minuta_metadata_addendum_origin.sql": {
@@ -8260,8 +8260,8 @@
     "semantic_hash": ""
   },
   "docs/business-domains/business-domain-pattern.md": {
-    "mtime": 1783993198.724098,
-    "ast_hash": "7509400d8d9197fe31d63e5b21d3ba92",
+    "mtime": 1784062097.1696448,
+    "ast_hash": "0e77c7bdfa432b1e0b025ceaecdadde8",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/DepartmentOperationHome.tsx": {
@@ -8452,6 +8452,41 @@
   "docs/business-domains/department-operation/timeline.md": {
     "mtime": 1784040969.1515944,
     "ast_hash": "5c2b39ef85e15b12e8a15d1343b6bde3",
+    "semantic_hash": ""
+  },
+  "docs/architecture/PRODUCT_NORTH_STAR.md": {
+    "mtime": 1784046721.3407032,
+    "ast_hash": "74bd883c3d222b02dfcb9d04afa3fb8d",
+    "semantic_hash": ""
+  },
+  "client/src/config/businessDomains.ts": {
+    "mtime": 1784147443.9171896,
+    "ast_hash": "ea1f84a97e1f977f822ca5e9ad93b710",
+    "semantic_hash": ""
+  },
+  "client/src/pages/CentroOperacoes.tsx": {
+    "mtime": 1784147489.9371924,
+    "ast_hash": "d724b0ff19a0f67ef71ecde0b2573664",
+    "semantic_hash": ""
+  },
+  "client/src/pages/ContratosWorkspace.tsx": {
+    "mtime": 1784147479.793192,
+    "ast_hash": "17a2fb978214b8c4643ad054078a86b5",
+    "semantic_hash": ""
+  },
+  "client/src/pages/DirectProcurement.tsx": {
+    "mtime": 1784147455.0171905,
+    "ast_hash": "72b39dbea8adad10191d561c1f194ab2",
+    "semantic_hash": ""
+  },
+  "client/src/pages/ParecerJuridico.tsx": {
+    "mtime": 1784147465.657191,
+    "ast_hash": "4eb2136ec76b9d7721800e340194b053",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc1-frontend-navigation.test.ts": {
+    "mtime": 1784147610.9291997,
+    "ast_hash": "d8843957d7319aaeb23fdaf26572d8ce",
     "semantic_hash": ""
   }
 }

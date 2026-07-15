@@ -21,14 +21,22 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
+// RC-1 — navegação principal consolidada (Business Domains conectados).
+// Caminhos alinhados ao registro canônico client/src/config/businessDomains.ts.
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: Gauge, label: "Centro de Operações", path: "/centro-operacoes" },
+  { icon: FileText, label: "Processo Licitatório", path: "/processos" },
+  { icon: FileCheck, label: "Contratação Direta", path: "/contratacao-direta" },
+  { icon: Scale, label: "Parecer Jurídico", path: "/parecer" },
+  { icon: ScrollText, label: "Contratos", path: "/contratos" },
+  { icon: LibraryBig, label: "Templates", path: "/templates" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
 ];
 
