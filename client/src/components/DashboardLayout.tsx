@@ -37,6 +37,7 @@ const menuItems = [
   { icon: Scale, label: "Parecer Jurídico", path: "/parecer" },
   { icon: ScrollText, label: "Contratos", path: "/contratos" },
   { icon: LibraryBig, label: "Templates", path: "/templates" },
+  { icon: Settings, label: "Configurações", path: "/configuracoes" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
 ];
 

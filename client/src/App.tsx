@@ -148,6 +148,10 @@ function Router() {
       <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />      <Route path={"/admin/ai-costs"} component={AIUsageDashboardRoute} />
       <Route path={"/admin/platforms"} component={AdminPlatformsRoute} />
       <Route path={'/admin/publication-logs'} component={PublicationLogsRoute} />
+      {/* ── RC-2: rotas LEGADAS — mantidas apenas por COMPATIBILIDADE (acesso por URL direta).
+              NÃO fazem parte da navegação oficial. A operação usa os Business Domains acima:
+              /contratacao-direta, /parecer, /contratos, /centro-operacoes. Ver
+              docs/architecture/LEGACY_INVENTORY.md. Remoção planejada só após RC-5. ── */}
       <Route path={'/direct-contracts'} component={DirectContractsRoute} />
       <Route path={'/direct-contracts/analytics'} component={() => <AuthenticatedRoute component={DirectContractsAnalytics} />} />
       <Route path={'/direct-contracts/new'} component={NewDirectContractRoute} />

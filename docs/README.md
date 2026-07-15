@@ -45,6 +45,8 @@
 | Diretório | Conteúdo |
 |---|---|
 | [architecture/PRODUCT_NORTH_STAR.md](./architecture/PRODUCT_NORTH_STAR.md) | **📜 Constituição do Produto — filosofia permanente (fonte oficial da verdade)** |
+| [architecture/LEGACY_INVENTORY.md](./architecture/LEGACY_INVENTORY.md) | **Inventário de legado — módulos mantidos só por compatibilidade (RC-2)** |
+| [business-domains/](./business-domains/) | **Arquitetura oficial — os 5 Business Domains** |
 | [technical/](./technical/README.md) | Documentação técnica do sistema (APIs, schemas, serviços) |
 | [functional/](./functional/README.md) | Documentação funcional (user stories, fluxos, regras de negócio) |
 | [domain/](./domain/README.md) | Domínio jurídico-operacional (Lei 14.133/2021, tipos de documento) |
