@@ -1,5 +1,9 @@
 # Business Domain Pattern (obrigatório)
 
+> **Fonte oficial da verdade:** [../architecture/PRODUCT_NORTH_STAR.md](../architecture/PRODUCT_NORTH_STAR.md)
+> é a Constituição do Produto e define a filosofia permanente. Este padrão operacionaliza
+> aqueles princípios para novos Business Domains; em conflito, prevalece o PRODUCT_NORTH_STAR.
+
 > A partir da Sprint 5.3.1, **todo novo Business Domain** do LiciGov Pro deve
 > responder às perguntas abaixo **antes** de ser implementado. Este documento é
 > parte obrigatória do escopo de qualquer futura Sprint que crie ou evolua um domínio.

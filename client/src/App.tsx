@@ -48,6 +48,11 @@ import LegalOpinions from "./pages/LegalOpinions";
 import NewLegalOpinion from "./pages/NewLegalOpinion";
 import LegalOpinionDetails from "./pages/LegalOpinionDetails";
 import LegalOpinionsAnalytics from "./pages/LegalOpinionsAnalytics";
+// RC-1 — Business Domains conectados à navegação principal
+import DirectProcurement from "./pages/DirectProcurement";
+import ParecerJuridico from "./pages/ParecerJuridico";
+import ContratosWorkspace from "./pages/ContratosWorkspace";
+import CentroOperacoes from "./pages/CentroOperacoes";
 import Register from "./pages/Register";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
@@ -118,11 +123,21 @@ const LegalOpinionsRoute = () => <AuthenticatedRoute component={LegalOpinions} /
 const LegalOpinionsAnalyticsRoute = () => <AuthenticatedRoute component={LegalOpinionsAnalytics} />;
 const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
 const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
+// RC-1 — rotas canônicas dos Business Domains (o legado permanece, mas sai da navegação)
+const DirectProcurementRoute = () => <AuthenticatedRoute component={DirectProcurement} />;
+const ParecerJuridicoRoute = () => <AuthenticatedRoute component={ParecerJuridico} />;
+const ContratosWorkspaceRoute = () => <AuthenticatedRoute component={ContratosWorkspace} />;
+const CentroOperacoesRoute = () => <AuthenticatedRoute component={CentroOperacoes} />;
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={LandingPage} />
+      {/* RC-1 — Business Domains (rotas canônicas do produto) */}
+      <Route path={"/contratacao-direta"} component={DirectProcurementRoute} />
+      <Route path={"/parecer"} component={ParecerJuridicoRoute} />
+      <Route path={"/contratos"} component={ContratosWorkspaceRoute} />
+      <Route path={"/centro-operacoes"} component={CentroOperacoesRoute} />
       <Route path={"/dashboard"} component={ModuleSelectionRoute} />
       <Route path={"/processos"} component={ProcessesRoute} />
       <Route path={"/gestao-comercial"} component={CommercialManagementRoute} />

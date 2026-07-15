@@ -61,6 +61,8 @@ padronizam a operação entre processos semelhantes, reduzindo esforço de
 configuração inicial e reforçando a consistência jurídica das entregas.
 
 ### 3. Integração com ERPs municipais
+> Posicionamento oficial em [`../architecture/PRODUCT_NORTH_STAR.md`](../architecture/PRODUCT_NORTH_STAR.md) (Constituição do Produto).
+
 Integração como **camada cognitiva sobre o ERP**, sem substituí-lo. O Workspace
 consome e devolve dados ao ERP (empenho, contrato, dotação) mantendo-se fiel ao
 escopo do LiciGov Pro: **sistema satélite especializado**, nunca um ERP,

@@ -1,5 +1,9 @@
 # Consolidação Arquitetural dos Business Domains (Sprint 5.X.X)
 
+> **Fonte oficial da verdade:** [PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md) é a
+> Constituição do Produto e tem precedência sobre este documento. Este texto detalha a
+> consolidação técnica; em qualquer conflito filosófico, prevalece o PRODUCT_NORTH_STAR.
+
 > O LiciGov Pro é uma **camada cognitiva e operacional do departamento de licitações**.
 > Não é um ERP. Não decide. Não obriga. Não executa atos administrativos.
 
