@@ -204,6 +204,15 @@ Todo acesso ocorre pelo Kernel.
 > **MySQL**. Storage oficial: **Amazon S3**. `JWT_SECRET` é **obrigatório** (o sistema não
 > inicia com segredo vazio). Ver [KERNEL_INFRASTRUCTURE.md](./KERNEL_INFRASTRUCTURE.md).
 
+> **RC-3.5.2 — Fronteiras obrigatórias:** cada porta é agora **aplicada pelo código** e
+> validada por testes automatizados. **AIExecutionEngine** = única porta cognitiva;
+> **Provider Adapter** = única porta para Providers; **Document Engine** = única porta
+> documental; **OfficialDocumentLifecycleService** = única porta do ciclo documental;
+> **Storage Service** = única porta de armazenamento. **Embeddings** são infraestrutura
+> exclusiva do **Knowledge Graph** (não pertencem ao AIExecutionEngine). **Legacy Exporters**
+> = compatibilidade apenas. Toda exceção arquitetural vive num ponto único:
+> `server/kernel/architecture/legacyBoundaries.ts`.
+
 ---
 
 # Filosofia dos Documentos

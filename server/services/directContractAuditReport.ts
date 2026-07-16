@@ -1,3 +1,11 @@
+/**
+ * RC-3.5.2 — Classificação: **LEGACY** (compatibilidade apenas).
+ *
+ * Exportador ad-hoc (pdfkit direto) de relatório de auditoria, fora do pipeline
+ * oficial (OfficialDocumentLifecycleService). Registrado na allowlist central
+ * (`LEGACY_EXPORTERS`). Não remover, não reescrever, não migrar. Novos fluxos DEVEM
+ * usar o Document Engine oficial.
+ */
 import PDFDocument from "pdfkit";
 import { getDirectContractById, getDirectContractAuditLogs } from "../db";
 

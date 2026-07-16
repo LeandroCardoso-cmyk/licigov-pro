@@ -1,16 +1,17 @@
 /**
- * Sprint 4.9 — Copilot Reasoning Service
+ * Sprint 4.9 — Copilot Reasoning Service · RC-3.5.2 (fronteira obrigatória).
  *
  * Reasoning especializado de um copiloto. Monta contexto fundamentado (RAG + KG),
- * constrói um prompt aterrado (NUNCA prompt cru), roteia a inferência pelo
- * pipeline oficial (server/_core/llm.ts) e produz recomendação + decision trace.
+ * constrói um prompt aterrado (NUNCA prompt cru) e roteia a inferência OBRIGATORIAMENTE
+ * pelo AIExecutionEngine (única porta cognitiva) → AIExecutionPolicy → Provider Adapter.
+ * Nenhum Business Domain chega a um Provider sem passar pelo AIExecutionEngine.
  *
  * Governança: nenhuma decisão; toda saída exige revisão humana. Sem provider
  * configurado, opera em modo grounding-only (determinístico), sem chamadas de rede.
  */
 
 import { ENV } from "../_core/env";
-import { generateText } from "../_core/llm";
+import { executeAITask } from "./aiExecutionEngine";
 import type { CopilotType } from "../domain/institutionalCopilot";
 import { getCopilotDefinition } from "../domain/institutionalCopilot";
 import {
@@ -29,7 +30,7 @@ export interface ReasoningInput {
   reasoningId: string;
   query: string;
   correlationId: string;
-  /** Ponto de injeção do pipeline oficial (default: generateText). Facilita replay/testes. */
+  /** Ponto de injeção do pipeline oficial (default: AIExecutionEngine). Facilita replay/testes. */
   invoke?: (prompt: string) => Promise<string>;
 }
 
@@ -58,12 +59,23 @@ export function buildGroundedPrompt(copilotType: CopilotType, context: CopilotCo
   ].join("\n");
 }
 
-/** Invocação padrão via pipeline oficial. Sem chave de provider → grounding-only. */
-async function defaultInvoke(prompt: string): Promise<string> {
-  if (!ENV.geminiApiKey || ENV.geminiApiKey.trim().length === 0) {
-    return "";
-  }
-  return generateText(prompt);
+/**
+ * Invocação padrão: roteia pelo AIExecutionEngine (única porta cognitiva).
+ * Sem chave de provider → grounding-only (determinístico, sem rede).
+ */
+function makeDefaultInvoke(organizationId: number, correlationId: string) {
+  return async (prompt: string): Promise<string> => {
+    if (!ENV.geminiApiKey || ENV.geminiApiKey.trim().length === 0) {
+      return "";
+    }
+    const result = await executeAITask({
+      task: "generic",
+      organizationId,
+      prompt,
+      correlationId,
+    });
+    return result.text;
+  };
 }
 
 export async function runCopilotReasoning(input: ReasoningInput): Promise<ReasoningResult> {
@@ -92,7 +104,7 @@ export async function runCopilotReasoning(input: ReasoningInput): Promise<Reason
 
   // Reasoning via pipeline oficial (aterrado). Degrada para grounding-only.
   const prompt = buildGroundedPrompt(copilotType, context);
-  const invoke = input.invoke ?? defaultInvoke;
+  const invoke = input.invoke ?? makeDefaultInvoke(organizationId, correlationId);
   let reasoningText = "";
   try {
     reasoningText = await invoke(prompt);

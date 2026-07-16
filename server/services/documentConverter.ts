@@ -1,10 +1,13 @@
 /**
- * RC-3.5 — Classificação: **OFICIAL** (Document Engine).
+ * RC-3.5.2 — Classificação: **INTERNAL RENDERER** (implementação interna).
  *
- * Conversor canônico Markdown → DOCX/PDF (binário real, sem Chromium). É o
- * workhorse oficial usado pelo Document Engine (documentEngineService) para
- * exportar todo documento oficial. Não conhece storage nem S3 — apenas produz
- * o binário; a persistência é responsabilidade do Storage Service.
+ * Conversor Markdown → DOCX/PDF (binário real, sem Chromium). NÃO é API pública:
+ * é a implementação interna de renderização do Document Engine. Toda chamada DEVE
+ * passar pelo `documentEngineService` (única fachada pública de geração documental).
+ * Chamadas diretas só são permitidas para os LEGACY exporters registrados na
+ * allowlist central (`server/kernel/architecture/legacyBoundaries.ts`) — nenhum novo
+ * componente pode chamá-lo diretamente (garantido por teste de fronteira).
+ * Não conhece storage nem S3 — apenas produz o binário.
  */
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
