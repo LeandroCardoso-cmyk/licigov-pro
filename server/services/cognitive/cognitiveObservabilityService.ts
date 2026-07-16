@@ -8,7 +8,7 @@
  */
 
 import type { AIExecutionContext } from "../../domain/aiExecutionContext";
-import type { CognitiveResponse, CognitiveResponseValidation } from "../../domain/cognitiveResponse";
+import { structuredDataSize, responseShapeHash, type CognitiveResponse, type CognitiveResponseValidation, type CognitiveResponseType } from "../../domain/cognitiveResponse";
 import type { CognitiveTaskId } from "../../domain/cognitiveTask";
 
 export interface CognitiveObservability {
@@ -24,6 +24,12 @@ export interface CognitiveObservability {
   readonly tokenUsage: { inputTokens: number; outputTokens: number; totalTokens: number };
   readonly structuredOutputValid: boolean;
   readonly structuredOutputErrors: readonly string[];
+  // RC-4.0.1 — contrato universal
+  readonly responseType: CognitiveResponseType;
+  readonly structuredDataPresent: boolean;
+  readonly structuredDataSize: number;
+  readonly responseShapeHash: string;
+  readonly contractVersion: string;
 }
 
 const _byCorrelation = new Map<string, CognitiveObservability>();
@@ -39,6 +45,7 @@ export function recordCognitiveObservability(params: {
 }): CognitiveObservability {
   const { context, response, validation } = params;
   const g = context.grounding;
+  const dataSize = structuredDataSize(response.structuredData);
 
   const obs: CognitiveObservability = {
     correlationId: context.request.correlationId,
@@ -53,6 +60,11 @@ export function recordCognitiveObservability(params: {
     tokenUsage: response.tokens,
     structuredOutputValid: validation.valid,
     structuredOutputErrors: validation.errors,
+    responseType: response.responseType,
+    structuredDataPresent: response.structuredData !== undefined && response.structuredData !== null,
+    structuredDataSize: dataSize,
+    responseShapeHash: responseShapeHash(response, dataSize),
+    contractVersion: response.contractVersion,
   };
 
   _byCorrelation.set(context.request.correlationId, obs);
@@ -60,6 +72,7 @@ export function recordCognitiveObservability(params: {
   try {
     console.info("[cognitive-observability]", JSON.stringify({
       correlationId: obs.correlationId, task: obs.task, provider: context.outcome.provider,
+      responseType: obs.responseType, structuredData: obs.structuredDataPresent, contract: obs.contractVersion,
       latencyMs: obs.latencyMs, tokens: obs.tokenUsage.totalTokens, structuredOutputValid: obs.structuredOutputValid,
     }));
   } catch { /* noop */ }

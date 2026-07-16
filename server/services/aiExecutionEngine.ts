@@ -23,11 +23,12 @@ import {
   getCognitiveTask, isBusinessDomainAllowed, type CognitiveTaskId,
 } from "../domain/cognitiveTask";
 import {
-  createExecutionContext, type AIExecutionContext, type CognitiveRequest,
+  createExecutionContext, officialReplayHash,
+  type AIExecutionContext, type CognitiveRequest, type CognitiveGroundingUsage,
 } from "../domain/aiExecutionContext";
 import {
-  createCognitiveResponse, validateCognitiveResponse, responseReplayHash,
-  type CognitiveResponse, type CognitiveExplainability, type CognitiveResponseValidation,
+  createCognitiveResponse, validateCognitiveResponse, InvalidCognitiveResponse,
+  type CognitiveResponse, type CognitiveExplainability, type CognitiveResponseValidation, type CognitiveResponseType,
 } from "../domain/cognitiveResponse";
 import { getPromptBuilder } from "./cognitive/promptBuilders";
 import { recordCognitiveObservability, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
@@ -181,6 +182,10 @@ export interface CognitiveTaskInput {
   readonly groundingBlock?: string;
   readonly documentRefs?: readonly string[];
   readonly lawRefs?: readonly string[];
+  /** Tipo de resposta esperado (o contrato não presume texto). Default "text". */
+  readonly responseType?: CognitiveResponseType;
+  /** Payload estruturado a carregar na resposta (opcional/nullable) — fase de ativação. */
+  readonly structuredData?: unknown;
 }
 
 export interface CognitiveExecution {
@@ -250,15 +255,30 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const latencyMs = Math.max(0, Date.now() - startedAt);
   push("llm", "applied", `Inferência concluída (${resolution.provider.name}).`);
 
-  // Coerção do output do modelo em forma estruturada (dados determinísticos).
+  // Coerção do output do modelo. O provider/modelo vêm da política; o conteúdo do LLM.
   const provider = resolution.provider.name;
   const model = policy.model;
   const content = generated.text;
-  const replayHash = responseReplayHash(input.task, content, provider, model);
-  const confidence = deterministicConfidence(replayHash);
   const documentsUsed = [...(input.documentRefs ?? [])];
   const lawsUsed = [...(input.lawRefs ?? [])];
   const tokens = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+  // Recursos cognitivos efetivamente usados (para hash lógico + contexto + observabilidade).
+  const groundingUsage: CognitiveGroundingUsage = {
+    groundingApplied: g.usesGrounding, ragApplied: g.usesRAG, knowledgeGraphApplied: g.usesKnowledgeGraph,
+    documentsUsed, lawsUsed, knowledgeGraphNodes: [], copilot,
+  };
+
+  const request: CognitiveRequest = {
+    tenantId: input.tenantId, userId: input.userId, businessDomain: input.businessDomain,
+    workspaceId: input.workspaceId, processId: input.processId, stage: input.stage,
+    task: input.task, prompt: prompt.user, correlationId: input.correlationId,
+  };
+
+  // Replay Hash OFICIAL: só a execução lógica (task/context/grounding/policy/prompt/provider/
+  // modelo). NUNCA conteúdo/tempo/tokens/saída do LLM. Estável independente da resposta.
+  const replayHash = officialReplayHash({ request, provider, model, grounding: groundingUsage });
+  const confidence = deterministicConfidence(replayHash);
 
   const reasoning = `Cognitive Task ${task.id} conduzida pelo copiloto ${copilot} via ${provider} (modelo ${model}); ` +
     `grounding=${g.usesGrounding}, kg=${g.usesKnowledgeGraph}, rag=${g.usesRAG}, fallback=${resolution.usedFallback}.`;
@@ -267,32 +287,21 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
     documentsUsed, lawsUsed, discardedRecommendations: [], confidence, limitations: ["Fase de fundação: sem inferência jurídica real; saída estrutural."],
   };
   const response = createCognitiveResponse({
-    task: input.task, content, reasoning, confidence,
-    sources: documentsUsed, laws: lawsUsed, jurisprudence: [], documentsUsed,
+    task: input.task, responseType: input.responseType ?? "text", content, structuredData: input.structuredData,
+    reasoning, confidence, sources: documentsUsed, laws: lawsUsed, jurisprudence: [], documentsUsed,
     recommendations: [], alternatives: [], risks: [], limitations: explainability.limitations,
     explainability, tokens, latencyMs, provider, model, replayHash,
   });
-  const validation = validateCognitiveResponse(response);
 
-  // Stages na ordem oficial: Structured Output → Reasoning → Explainability
+  // Validação OBRIGATÓRIA: nenhuma resposta inválida sai do Engine (Part 3/4).
+  const validation = validateCognitiveResponse(response);
   push("structured_output", validation.valid ? "applied" : "skipped", `Structured Output ${validation.valid ? "válido" : "inválido: " + validation.errors.join(", ")}.`);
   push("reasoning", "applied", "Traço de raciocínio registrado.");
   push("explainability", "applied", "Explicabilidade obrigatória montada.");
+  if (!validation.valid) throw new InvalidCognitiveResponse(validation.errors);
 
   // Stage: Result (contexto + observabilidade)
-  const request: CognitiveRequest = {
-    tenantId: input.tenantId, userId: input.userId, businessDomain: input.businessDomain,
-    workspaceId: input.workspaceId, processId: input.processId, stage: input.stage,
-    task: input.task, prompt: prompt.user, correlationId: input.correlationId,
-  };
-  const context = createExecutionContext({
-    request,
-    grounding: {
-      groundingApplied: g.usesGrounding, ragApplied: g.usesRAG, knowledgeGraphApplied: g.usesKnowledgeGraph,
-      documentsUsed, lawsUsed, knowledgeGraphNodes: [], copilot,
-    },
-    outcome: { provider, model, latencyMs, tokens, confidence, reasoning },
-  });
+  const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning } });
   const observability = recordCognitiveObservability({ context, response, validation });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 

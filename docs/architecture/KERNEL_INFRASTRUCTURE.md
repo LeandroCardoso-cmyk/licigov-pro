@@ -77,6 +77,12 @@ Provider → LLM → Reasoning → Explainability → Result
 > [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md) e
 > [COGNITIVE_PIPELINE.md](./COGNITIVE_PIPELINE.md).
 
+> **RC-4.0.1 — Contrato cognitivo definitivo:** o `CognitiveResponse` é o **contrato
+> universal** da IA (texto **ou** `structuredData` estruturado — nunca presume texto). O
+> **Replay Hash** é semântico (só execução lógica; nunca output/tempo/tokens). A **validação
+> é obrigatória**: nenhuma resposta inválida sai do Engine (`InvalidCognitiveResponse`). O
+> contrato Business Domains → AIExecutionEngine → Provider Adapter → LLM está **estável**.
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,
