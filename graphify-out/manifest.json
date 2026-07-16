@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784147516.009194,
-    "ast_hash": "abaaf3ef0af2101a5191aeeb7d574839",
+    "mtime": 1784151247.308081,
+    "ast_hash": "0bebe0d512f375d31bcd4c1317a0b5a3",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1784147578.6971977,
-    "ast_hash": "e553b16931afc84cba5573481c93ae15",
+    "mtime": 1784151235.0600805,
+    "ast_hash": "66d6bcc17b54f394aa1eeae3544fc2cb",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -2330,8 +2330,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Modules.tsx": {
-    "mtime": 1782612418.382427,
-    "ast_hash": "3a295635e0cebc4779595966c92ca2a0",
+    "mtime": 1784151223.3200803,
+    "ast_hash": "12f312c5b8ac39b8b7a400ea984c2097",
     "semantic_hash": ""
   },
   "client/src/pages/NewContract.tsx": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784062081.6176453,
-    "ast_hash": "0fddf1c2a43c0f73c540e6cf344c7481",
+    "mtime": 1784151297.7000823,
+    "ast_hash": "5ac21ed0fcb8ee81bc8db52322d496cd",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6660,8 +6660,8 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1784062074.7816455,
-    "ast_hash": "26c205fd8f9daeaf8368bc456766e025",
+    "mtime": 1784151308.8440826,
+    "ast_hash": "dd1cdba0440b0a8b9a75f1376475afd8",
     "semantic_hash": ""
   },
   "docs/ai/README.md": {
@@ -8487,6 +8487,16 @@
   "server/__tests__/integration/rc1-frontend-navigation.test.ts": {
     "mtime": 1784147610.9291997,
     "ast_hash": "d8843957d7319aaeb23fdaf26572d8ce",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc2-legacy-consolidation.test.ts": {
+    "mtime": 1784151345.1760833,
+    "ast_hash": "723329ed62aa1fc4ab75c58939ff20b1",
+    "semantic_hash": ""
+  },
+  "docs/architecture/LEGACY_INVENTORY.md": {
+    "mtime": 1784151282.4120817,
+    "ast_hash": "b7b8e15e579b4b4a2f35392d9af199b0",
     "semantic_hash": ""
   }
 }
