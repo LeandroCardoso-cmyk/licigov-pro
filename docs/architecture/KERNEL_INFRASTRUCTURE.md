@@ -102,6 +102,13 @@ Provider → LLM → Reasoning → Explainability → Result
 > sem fallback silencioso); **Storage/Provider readiness** (diagnóstico, sem conectar providers);
 > Legacy classificado (mantém/migração/remoção futura). Ver [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md).
 
+> **RC-4.2.2 — Production Monitoring:** o **Monitor Operacional Institucional**
+> (`productionMonitoringService`) verifica automaticamente a saúde do ambiente e responde "está
+> apto para operar?" — **sem executar IA/Providers, sem gerar documentos, sem expor secrets**.
+> Health Score **determinístico** (100/90/70/50/0), Production Report por módulo
+> (status/mensagem/detalhe/recomendação), endpoint read-only `/system/health` e observabilidade
+> do health check com retenção simples. Ver [PRODUCTION_MONITORING.md](./PRODUCTION_MONITORING.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

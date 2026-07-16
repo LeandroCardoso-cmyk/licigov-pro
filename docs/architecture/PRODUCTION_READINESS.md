@@ -63,3 +63,11 @@ Observabilidade recuperável por correlationId; persistência degrada sem DB (nu
 storage validado + signed URL falha explícita sem config; Provider Adapter íntegro; Health Check
 completo (9 componentes); AWS obrigatória só em produção; `validateRequiredEnv` falha sem
 JWT_SECRET; report de produção agrega tudo. **Kernel inalterado.**
+
+---
+
+## Monitoramento (RC-4.2.2)
+
+A prontidão passou a ser **verificável automaticamente** pelo Monitor Operacional
+Institucional (`productionMonitoringService`), com Health Score determinístico e endpoint
+`/system/health` (somente leitura). Ver [PRODUCTION_MONITORING.md](./PRODUCTION_MONITORING.md).
