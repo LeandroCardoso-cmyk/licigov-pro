@@ -102,6 +102,10 @@ conteúdo jurídico.** Reutilizável por Business Domains, Knowledge Graph, AIEx
 Copilotos, Document Engine e Reasoning Framework — **somente consulta**, sem alterar o Kernel.
 A ontologia foi **validada exaustivamente** (RC-4.3.1): 20 cenários representáveis, 100% de cobertura, zero ciclos. Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md) e [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
 
+## Estrutura do conhecimento jurídico (RC-4.4)
+
+Além da ontologia operacional, o sistema modela a **estrutura** do conhecimento jurídico (não o conteúdo) — a **Institutional Legal Ontology**: tipos normativos, hierarquia, estrutura interna da norma, conceitos, relacionamentos e classificações. **Declarativa, determinística e independente** de qualquer lei/tribunal/país. Permite inserir futuras normas sem alterar a arquitetura. Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor

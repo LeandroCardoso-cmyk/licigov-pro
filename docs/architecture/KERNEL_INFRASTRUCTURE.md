@@ -119,6 +119,11 @@ Provider → LLM → Reasoning → Explainability → Result
 > (integridade por seção, **20 cenários representáveis**, cobertura 100%, zero ciclos, resiliência,
 > determinismo) — **sem alterações estruturais**. Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
 
+> **RC-4.4 — Institutional Legal Ontology:** modela a **estrutura do conhecimento jurídico**
+> (não o conteúdo) — tipos normativos, hierarquia (Lei→Decreto→IN→Portaria→…), estrutura interna
+> (Título→…→Item), conceitos, relacionamentos (11) e classificações. Declarativa, determinística,
+> acíclica e **independente de qualquer lei/tribunal/país**. Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

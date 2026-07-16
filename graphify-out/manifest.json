@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784241862.9256701,
-    "ast_hash": "85d7ed3e0b73a065b81a364bcdd1fa41",
+    "mtime": 1784245137.5279531,
+    "ast_hash": "047d3066f2d2f82ed1dc42791b45fc09",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784241862.910918,
-    "ast_hash": "e5c4b2168afa463955132f8530b81f27",
+    "mtime": 1784245137.5276701,
+    "ast_hash": "19f9dd18340820471d509c1e9e1cc7d1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784241862.8963287,
-    "ast_hash": "25bdacf885ecb88760d6a05545732529",
+    "mtime": 1784245137.527408,
+    "ast_hash": "513653b0b74547ba048504eb40187ee1",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8782,6 +8782,36 @@
   "docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md": {
     "mtime": 1784241841.3003924,
     "ast_hash": "935f7f41d069ed7233f4aa48683d55f6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc44-legal-ontology.test.ts": {
+    "mtime": 1784245056.0014367,
+    "ast_hash": "f651fe3ee42bbd33237fc9fd8c1d42a7",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/legalConcepts.ts": {
+    "mtime": 1784244892.8934405,
+    "ast_hash": "78ebe0cd0e3dde2c73980d94ffe3bd14",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/legalOntology.ts": {
+    "mtime": 1784244969.5854387,
+    "ast_hash": "b9d80a61022b868e41305de7e636c1a1",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normStructure.ts": {
+    "mtime": 1784245012.9374378,
+    "ast_hash": "361f4288fa6a1f97656a69ada5f1e07a",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normTypes.ts": {
+    "mtime": 1784244862.0654411,
+    "ast_hash": "fc18efc2e38562e488540d6c743902e7",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md": {
+    "mtime": 1784245120.4614353,
+    "ast_hash": "037c9723084fd8fcad57d3b375ca832a",
     "semantic_hash": ""
   }
 }
