@@ -100,7 +100,7 @@ operacional permanente do Departamento de Licitações (papéis, objetos, estado
 dependências, relacionamentos, regras operacionais). **Declarativa, determinística, sem
 conteúdo jurídico.** Reutilizável por Business Domains, Knowledge Graph, AIExecutionEngine,
 Copilotos, Document Engine e Reasoning Framework — **somente consulta**, sem alterar o Kernel.
-Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md).
+A ontologia foi **validada exaustivamente** (RC-4.3.1): 20 cenários representáveis, 100% de cobertura, zero ciclos. Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md) e [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
 
 ## Monitoramento operacional (RC-4.2.2)
 

@@ -59,3 +59,12 @@ API de consulta pura (`getObjectDependencies`, `getDependents`, `getEventsForObj
 13 papéis, 18 objetos, 10 estados, 10 eventos, regras declarativas, relacionamentos (8 tipos),
 dependências acíclicas, `validateOperatingModel` sem erros, projeção KG determinística,
 fingerprint estável. **Zero regressões. Kernel/Business Domains inalterados.**
+
+---
+
+## Validação exaustiva (RC-4.3.1)
+
+A ontologia foi validada exaustivamente: integridade por seção (zero issues), **20 cenários
+institucionais representáveis** (pregão, dispensa, registro de preços, convênio, legados,
+híbridos ERP+LiciGov, incompletos), cobertura de **100%** dos elementos e detecção de
+inconsistências (resiliência). Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).

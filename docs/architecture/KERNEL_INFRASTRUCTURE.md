@@ -115,6 +115,10 @@ Provider → LLM → Reasoning → Explainability → Result
 > declarativa, determinística, sem conteúdo jurídico. Reutilizável por toda a camada cognitiva
 > (somente consulta). Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md).
 
+> **RC-4.3.1 — Ontology Validation:** a Ontologia Operacional foi validada exaustivamente
+> (integridade por seção, **20 cenários representáveis**, cobertura 100%, zero ciclos, resiliência,
+> determinismo) — **sem alterações estruturais**. Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,
