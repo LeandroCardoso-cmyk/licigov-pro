@@ -204,6 +204,16 @@ Todo acesso ocorre pelo Kernel.
 > **MySQL**. Storage oficial: **Amazon S3**. `JWT_SECRET` é **obrigatório** (o sistema não
 > inicia com segredo vazio). Ver [KERNEL_INFRASTRUCTURE.md](./KERNEL_INFRASTRUCTURE.md).
 
+> **RC-4.0 — Fundação Cognitiva:** o **AIExecutionEngine** é oficialmente o **cérebro
+> institucional**. Os Business Domains não conversam mais com componentes cognitivos —
+> apenas solicitam **Cognitive Tasks** (13 tarefas oficiais). Toda cognição passa pelo
+> engine, produz uma **Cognitive Response** estruturada (nunca texto solto), com
+> **Explainability obrigatória**, contexto de execução único, observabilidade e replayHash.
+> Grounding é sempre **declarado** (nada implícito). Prompts são montados por **Prompt
+> Builders tipados** — nenhum serviço concatena prompt. Toda IA permanece supervisionada,
+> explicável, auditável, reproduzível e rejeitável pelo servidor. Ver
+> [COGNITIVE_ARCHITECTURE.md](./COGNITIVE_ARCHITECTURE.md).
+
 > **RC-3.5.2 — Fronteiras obrigatórias:** cada porta é agora **aplicada pelo código** e
 > validada por testes automatizados. **AIExecutionEngine** = única porta cognitiva;
 > **Provider Adapter** = única porta para Providers; **Document Engine** = única porta
