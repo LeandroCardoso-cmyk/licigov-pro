@@ -42,6 +42,24 @@ Obrigatórios: **DOCX** e **PDF** (binários reais via `documentConverter.conver
 `convertToPDF` — `docx` + `pdfkit`, sem Chromium). O Markdown é apenas representação
 intermediária — **nunca** entregue como documento oficial final.
 
+## Ciclo de vida via OfficialDocumentLifecycleService (RC-3.5.1)
+
+A partir da RC-3.5.1, o Document Engine tem responsabilidade **única: gerar documentos**
+(receber conteúdo → converter → renderizar → retornar artefato). Ele **NÃO** versiona,
+**NÃO** registra timeline, **NÃO** faz upload, **NÃO** acessa Storage e **NÃO** conhece o
+Amazon S3. Todo o ciclo de vida pertence ao **OfficialDocumentLifecycleService**.
+
+```
+Business Domain → Document Engine → OfficialDocumentLifecycleService → Storage Service → Amazon S3 → Signed URL → OfficialDocument
+```
+
+O Lifecycle Service faz `storagePut` do binário, obtém a **URL assinada** e grava as
+**referências** no `OfficialDocument` (`storageKey`, `mimeType`, `size`, `hash`) — **nunca
+binários no banco**. A **Storage Policy** (dentro do Storage Service) decide o fallback:
+Base64 só em desenvolvimento/testes; produção/staging exigem storage (falha explícita).
+Migration `0282_official_documents_storage_refs`. Detalhes em
+[KERNEL_INFRASTRUCTURE.md](./KERNEL_INFRASTRUCTURE.md).
+
 ## Serviço e Router
 
 - **Serviço:** `server/services/documentEngineService.ts`

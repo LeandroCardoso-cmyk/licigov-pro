@@ -5,7 +5,7 @@
 ### Infraestrutura e Configuração
 - [x] Inicializar projeto com estrutura frontend e backend
 - [x] Configurar autenticação com Manus OAuth
-- [x] Configurar banco de dados PostgreSQL
+- [x] Configurar banco de dados MySQL (Railway)
 - [x] Definir paleta de cores baseada no logo
 - [x] Configurar tema dark/light
 

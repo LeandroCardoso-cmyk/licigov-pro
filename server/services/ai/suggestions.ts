@@ -1,4 +1,12 @@
 /**
+ * RC-3.5.1 — Classificação: **LEGADO** (acesso direto ao Gemini).
+ *
+ * Sugestões contextuais que instanciam o Gemini diretamente, anterior ao Provider
+ * Adapter/AIExecutionEngine. Usado apenas pelo router legado aiAssistantRouter — NÃO
+ * pelos Business Domains oficiais. Mantido por compatibilidade (não removido). Novos
+ * fluxos DEVEM usar AIExecutionEngine → Provider Adapter. Consta na allowlist de
+ * exceções legadas dos testes de fronteira.
+ *
  * Funções de sugestão contextual usando Gemini.
  * Cada função usa processBlock/documentsBlock do promptBuilder
  * para manter os prompts enxutos e reutilizáveis.

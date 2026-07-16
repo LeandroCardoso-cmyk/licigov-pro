@@ -1,4 +1,11 @@
 /**
+ * RC-3.5 — Classificação: **LEGADO** (compatibilidade).
+ *
+ * Pipeline de render antigo (apenas HTML, atrelado à tabela legada `documents`).
+ * Substituído pelo Document Engine oficial (documentEngineService + documentConverter,
+ * DOCX/PDF reais + Storage Service). Mantido apenas por compatibilidade — não deve
+ * ser usado por novos módulos. Não removido (código legado permanece).
+ *
  * Sprint 2.5 — Document Render Pipeline.
  *
  * Renderização oficial de documentos: HTML (base), DOCX e PDF (adapters).

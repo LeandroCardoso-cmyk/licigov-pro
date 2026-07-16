@@ -5511,6 +5511,11 @@ export const officialDocumentsTable = mysqlTable("official_documents", {
   lineageId:      varchar("lineage_id", { length: 20 }).notNull().default(""),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   replayHash:     varchar("replay_hash", { length: 64 }).notNull().default(""),
+  // RC-3.5 — referências de storage (nunca binários no banco): S3 key + integridade.
+  storageKey:     varchar("storage_key", { length: 255 }).notNull().default(""),
+  mimeType:       varchar("mime_type", { length: 120 }).notNull().default(""),
+  size:           int("size_bytes").notNull().default(0),
+  hash:           varchar("content_hash", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });

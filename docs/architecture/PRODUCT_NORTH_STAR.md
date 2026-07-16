@@ -189,10 +189,20 @@ Incluindo:
 - Multi-Copilot
 - Observabilidade
 - Replay Safety
+- **AIExecutionEngine** — pipeline oficial de execução de IA (RC-3.5)
+- **Provider Adapter** — camada agnóstica de providers, único instanciador (RC-3.5 / RC-3.5.1)
+- **OfficialDocumentLifecycleService** — ciclo de vida documental (RC-3.5.1)
+- **Storage Service** — único ponto de acesso ao Amazon S3 (RC-3.5)
 
 Nenhum domínio acessa infraestrutura diretamente.
 
 Todo acesso ocorre pelo Kernel.
+
+> **RC-3.5 — Componentes permanentes:** o AIExecutionEngine, o Provider Adapter e o
+> Storage Service são componentes **permanentes** do Kernel. Business Domains **nunca**
+> falam diretamente com Providers ou com o Amazon S3 — sempre pelo Kernel. Banco oficial:
+> **MySQL**. Storage oficial: **Amazon S3**. `JWT_SECRET` é **obrigatório** (o sistema não
+> inicia com segredo vazio). Ver [KERNEL_INFRASTRUCTURE.md](./KERNEL_INFRASTRUCTURE.md).
 
 ---
 

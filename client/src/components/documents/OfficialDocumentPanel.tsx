@@ -41,7 +41,15 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
   const [previewId, setPreviewId] = React.useState<string>("");
 
   const download = trpc.documentEngine.download.useMutation({
-    onSuccess: (res) => downloadBase64(res.base64, res.filename, res.format),
+    onSuccess: (res) => {
+      // RC-3.5 — prefere a URL assinada do Storage Service (S3); base64 é fallback.
+      if (res.downloadUrl) {
+        const a = document.createElement("a");
+        a.href = res.downloadUrl; a.download = res.filename; a.click();
+      } else if (res.base64) {
+        downloadBase64(res.base64, res.filename, res.format);
+      }
+    },
   });
   const preview = trpc.documentEngine.preview.useQuery({ documentId: previewId }, { enabled: previewId.length > 0 });
 

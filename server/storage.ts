@@ -1,18 +1,65 @@
+/**
+ * RC-3.5 — Storage Service (componente PERMANENTE do Cognitive Kernel)
+ *
+ * ÚNICO ponto de acesso ao Amazon S3 em todo o LiciGov Pro. Nenhum outro módulo
+ * (Document Engine, Business Domains, routers, healthcheck) pode falar diretamente
+ * com a AWS: todo upload/download/delete/exists/signedUrl passa por aqui.
+ *
+ * Contrato oficial: upload, download, delete, exists, signedUrl, healthCheck.
+ * Chaves organizadas por: {modulo}/{escopo}/{timestamp|id}-{filename}.
+ * Nunca armazenar binários no banco — apenas referências (storageKey) + URL assinada.
+ */
+
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
+import { IS_PRODUCTION, IS_STAGING } from "./config/env";
 
 // ─── S3 client (lazy) ─────────────────────────────────────────────────────────
 
 let _s3: S3Client | null = null;
 
+/** Indica se o Storage Service está configurado (credenciais + bucket presentes). */
+export function isStorageConfigured(): boolean {
+  return Boolean(ENV.awsAccessKeyId && ENV.awsSecretAccessKey && ENV.awsS3Bucket);
+}
+
+// ─── Storage Policy (RC-3.5.1) ────────────────────────────────────────────────
+// A decisão sobre armazenamento vive EXCLUSIVAMENTE aqui. Nenhum Business Domain
+// conhece esta política.
+//
+// - Development/Testes: é permitido usar Buffer/Base64 (facilita dev e a suíte).
+// - Production/Staging: o Storage Service DEVE estar operacional. Sem storage, a
+//   geração do documento oficial FALHA explicitamente — nunca há fallback para Base64.
+
+/** true apenas em desenvolvimento/testes: permite fallback Base64 quando o storage não está configurado. */
+export function storageFallbackAllowed(): boolean {
+  return !IS_PRODUCTION && !IS_STAGING;
+}
+
+/**
+ * Garante que o armazenamento é viável no ambiente atual. Em produção/staging sem
+ * storage configurado, lança erro explícito (nunca inicia geração com base64).
+ */
+export function assertStorageUsable(): void {
+  if (isStorageConfigured()) return;
+  if (!storageFallbackAllowed()) {
+    throw new Error(
+      "Storage Service indisponível: em produção/staging o armazenamento é obrigatório para gerar documentos oficiais. Configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_S3_BUCKET."
+    );
+  }
+}
+
 function getS3(): S3Client {
   if (!_s3) {
-    if (!ENV.awsAccessKeyId || !ENV.awsSecretAccessKey || !ENV.awsS3Bucket) {
+    if (!isStorageConfigured()) {
       throw new Error(
         "S3 storage is not configured. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET in .env"
       );
@@ -42,11 +89,11 @@ function buildPublicUrl(key: string): string {
   return `https://${ENV.awsS3Bucket}.s3.${ENV.awsS3Region}.amazonaws.com/${key}`;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Public API (contrato oficial do Storage Service) ─────────────────────────
 
 /**
- * Upload a file to S3.
- * Returns the normalized key and the public (or pre-signed) URL.
+ * Upload de um arquivo para o S3.
+ * Retorna a chave normalizada e a URL pública (ou pré-assinada).
  */
 export async function storagePut(
   relKey: string,
@@ -70,8 +117,8 @@ export async function storagePut(
 }
 
 /**
- * Generate a pre-signed download URL for a private S3 object.
- * URL expires in 1 hour by default.
+ * Gera uma URL de download pré-assinada para um objeto privado do S3.
+ * Expira em 1 hora por padrão.
  */
 export async function storageGet(
   relKey: string,
@@ -87,4 +134,55 @@ export async function storageGet(
   );
 
   return { key, url };
+}
+
+/**
+ * Alias semântico de `storageGet` — URL assinada de download (contrato oficial).
+ */
+export async function storageSignedUrl(
+  relKey: string,
+  expiresInSeconds = 3600
+): Promise<{ key: string; url: string }> {
+  return storageGet(relKey, expiresInSeconds);
+}
+
+/**
+ * Remove um objeto do S3. Idempotente (não falha se a chave não existir).
+ */
+export async function storageDelete(relKey: string): Promise<{ key: string; deleted: boolean }> {
+  const s3 = getS3();
+  const key = normalizeKey(relKey);
+  await s3.send(new DeleteObjectCommand({ Bucket: ENV.awsS3Bucket, Key: key }));
+  return { key, deleted: true };
+}
+
+/**
+ * Verifica se um objeto existe no S3 (HEAD). Retorna false em qualquer erro
+ * (objeto ausente ou acesso negado), nunca lança.
+ */
+export async function storageExists(relKey: string): Promise<boolean> {
+  const key = normalizeKey(relKey);
+  try {
+    const s3 = getS3();
+    await s3.send(new HeadObjectCommand({ Bucket: ENV.awsS3Bucket, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Healthcheck do Storage Service (HEAD bucket). Retorna false se não configurado
+ * ou se o bucket estiver inacessível. Usado pelo systemRouter — nunca acessar
+ * o S3 diretamente fora deste módulo.
+ */
+export async function storageHealthCheck(): Promise<boolean> {
+  if (!isStorageConfigured()) return false;
+  try {
+    const s3 = getS3();
+    await s3.send(new HeadBucketCommand({ Bucket: ENV.awsS3Bucket }));
+    return true;
+  } catch {
+    return false;
+  }
 }

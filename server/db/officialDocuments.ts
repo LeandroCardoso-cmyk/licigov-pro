@@ -19,6 +19,7 @@ function rowToDoc(r: typeof officialDocumentsTable.$inferSelect): OfficialDocume
     documentType: r.documentType as OfficialDocumentType, origin: r.origin, title: r.title, version: r.version,
     status: r.status as OfficialDocumentStatus, template: r.template, content: r.content ?? "", metadata,
     author: r.author, lineageId: r.lineageId, correlationId: r.correlationId, replayHash: r.replayHash,
+    storageKey: r.storageKey ?? "", mimeType: r.mimeType ?? "", size: r.size ?? 0, hash: r.hash ?? "",
     createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }
@@ -30,9 +31,25 @@ export async function insertOfficialDocument(doc: OfficialDocument): Promise<Off
     id: doc.id, tenantId: doc.tenantId, businessDomain: doc.businessDomain, documentType: doc.documentType,
     origin: doc.origin, title: doc.title, version: doc.version, status: doc.status, template: doc.template,
     content: doc.content, metadata: JSON.stringify(doc.metadata), author: doc.author, lineageId: doc.lineageId,
-    correlationId: doc.correlationId, replayHash: doc.replayHash, createdAt: doc.createdAt, updatedAt: doc.updatedAt,
+    correlationId: doc.correlationId, replayHash: doc.replayHash,
+    storageKey: doc.storageKey, mimeType: doc.mimeType, size: doc.size, hash: doc.hash,
+    createdAt: doc.createdAt, updatedAt: doc.updatedAt,
   }).onDuplicateKeyUpdate({ set: { content: doc.content, status: doc.status, metadata: JSON.stringify(doc.metadata), updatedAt: doc.updatedAt } });
   return doc;
+}
+
+/**
+ * RC-3.5 — Atualiza as referências de storage de um documento oficial após o export
+ * (Document Engine → Storage Service → S3). Nunca grava binário; apenas a referência.
+ */
+export async function updateOfficialDocumentStorageRefs(params: {
+  id: string; tenantId: number; storageKey: string; mimeType: string; size: number; hash: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(officialDocumentsTable)
+    .set({ storageKey: params.storageKey, mimeType: params.mimeType, size: params.size, hash: params.hash })
+    .where(and(eq(officialDocumentsTable.id, params.id), eq(officialDocumentsTable.tenantId, params.tenantId)));
 }
 
 export async function getOfficialDocument(id: string, tenantId: number): Promise<OfficialDocument | null> {

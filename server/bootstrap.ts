@@ -3918,6 +3918,12 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
       \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`), INDEX \`idx_odtl_tenant\` (\`tenant_id\`), INDEX \`idx_odtl_lineage\` (\`lineage_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // RC-3.5 — referências de storage no OfficialDocument (nunca binários no banco).
+    await addColumnIfMissing("official_documents", "storage_key",  "VARCHAR(255) NOT NULL DEFAULT ''");
+    await addColumnIfMissing("official_documents", "mime_type",    "VARCHAR(120) NOT NULL DEFAULT ''");
+    await addColumnIfMissing("official_documents", "size_bytes",   "INT NOT NULL DEFAULT 0");
+    await addColumnIfMissing("official_documents", "content_hash", "VARCHAR(64) NOT NULL DEFAULT ''");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

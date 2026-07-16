@@ -1,3 +1,11 @@
+/**
+ * RC-3.5 — Classificação: **OFICIAL** (Document Engine).
+ *
+ * Conversor canônico Markdown → DOCX/PDF (binário real, sem Chromium). É o
+ * workhorse oficial usado pelo Document Engine (documentEngineService) para
+ * exportar todo documento oficial. Não conhece storage nem S3 — apenas produz
+ * o binário; a persistência é responsabilidade do Storage Service.
+ */
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
