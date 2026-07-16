@@ -7,6 +7,8 @@ import { APP_CONFIG } from "../config/app";
 import { AI_CONFIG } from "../config/ai";
 // RC-3.5 — o healthcheck do S3 passa pelo Storage Service (nunca acessa a AWS direto).
 import { storageHealthCheck } from "../storage";
+// RC-4.2.2 — Monitor Operacional Institucional (diagnóstico consolidado, read-only).
+import { runProductionHealthCheck, toPublicSummary } from "../services/productionMonitoringService";
 
 const REQUIRED_ENV_KEYS = ["DATABASE_URL", "JWT_SECRET", "GEMINI_API_KEY"] as const;
 
@@ -53,6 +55,17 @@ export const systemRouter = router({
         version: APP_CONFIG.version,
         node:    process.version,
       };
+    }),
+
+  /**
+   * RC-4.2.2 — Monitor Operacional Institucional (/system/health).
+   * SOMENTE LEITURA. Nunca executa IA/Providers, nunca retorna secrets/valores de ambiente.
+   */
+  productionHealth: publicProcedure
+    .input(z.object({ correlationId: z.string().optional() }).optional())
+    .query(async ({ input }) => {
+      const report = await runProductionHealthCheck({ correlationId: input?.correlationId });
+      return toPublicSummary(report);
     }),
 
   notifyOwner: adminProcedure

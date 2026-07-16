@@ -108,6 +108,51 @@ export const BUSINESS_DOMAIN_SERVICES: readonly string[] = [
   "server/services/contractService.ts",
 ];
 
+// ─── Document Renderers (RC-4.2.1) ────────────────────────────────────────────
+// Motores de renderização documental e sua classificação oficial.
+export const DOCUMENT_RENDERERS: readonly string[] = [
+  "server/services/documentConverter.ts",       // Internal Renderer (oficial)
+  "server/services/officialExportEngine.ts",    // Internal Specialized Renderer
+  "server/services/documentRenderService.ts",   // LEGACY (órfão)
+];
+
+// ─── Classificação oficial das fronteiras (RC-4.2.1) ──────────────────────────
+// Cada item recebe uma disposição institucional. NENHUMA remoção nesta RC.
+export type BoundaryDisposition = "mantem" | "migracao_futura" | "remocao_futura";
+
+export interface BoundaryClassificationEntry {
+  readonly path: string;
+  readonly allowlist: string;
+  readonly disposition: BoundaryDisposition;
+  readonly note: string;
+}
+
+export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = [
+  // AI SDK — mantém (camada oficial) / legado migração futura
+  { path: "server/_core/ai/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "GeminiProvider — provider canônico." },
+  { path: "server/services/embeddings.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "Infra de embeddings do Knowledge Graph." },
+  { path: "server/services/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Geração legada — migrar para AIExecutionEngine." },
+  { path: "server/services/ai/suggestions.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Sugestões legadas — migrar para AIExecutionEngine." },
+  // invokeLLM — migração futura (bypass do pipeline cognitivo)
+  { path: "server/services/legalFrameworkAssistant.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para executeCognitiveTask." },
+  { path: "server/services/catmatMatcher.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para CATMAT_MATCHING task." },
+  { path: "server/services/directContractDocuments.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para DIRECT_PROCUREMENT_REASONING." },
+  { path: "server/services/legalOpinionService.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para LEGAL_ANALYSIS/REASONING." },
+  { path: "server/services/examples/legalValidationExample.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "remocao_futura", note: "Exemplo — remover em limpeza." },
+  // Document renderers
+  { path: "server/services/documentConverter.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Internal Renderer oficial." },
+  { path: "server/services/officialExportEngine.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Renderer especializado interno (exportRouter)." },
+  { path: "server/services/documentRenderService.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "remocao_futura", note: "Órfão — remover em limpeza pós-RC-5." },
+  // Legacy exporters
+  { path: "server/services/zipService.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Compatibilidade — pacote ZIP." },
+  { path: "server/services/pdfChecklistService.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Compatibilidade — checklist PDF." },
+  { path: "server/services/legalOpinionExportService.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Compatibilidade — export de parecer." },
+  { path: "server/services/directContractAuditReport.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Compatibilidade — relatório de auditoria." },
+  { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Router legado de documentos." },
+  // executeAITask — aposentado
+  { path: "server/services/aiExecutionEngine.ts", allowlist: "EXECUTE_AI_TASK_ALLOWLIST", disposition: "mantem", note: "Definição; executeAITask aposentado (0 callers)." },
+];
+
 /** Normaliza um caminho para comparação (remove ./ inicial e barras duplicadas). */
 export function normalizeBoundaryPath(p: string): string {
   return p.replace(/^\.\//, "").replace(/\/+/g, "/");

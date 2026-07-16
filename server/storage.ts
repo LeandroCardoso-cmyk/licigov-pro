@@ -31,6 +31,27 @@ export function isStorageConfigured(): boolean {
   return Boolean(ENV.awsAccessKeyId && ENV.awsSecretAccessKey && ENV.awsS3Bucket);
 }
 
+export interface StorageReadiness {
+  readonly configured: boolean;
+  readonly fallbackAllowed: boolean;
+  readonly bucketConfigured: boolean;
+  readonly regionConfigured: boolean;
+  readonly credentialsConfigured: boolean;
+  readonly publicUrlConfigured: boolean;
+}
+
+/** Diagnóstico (somente leitura) da prontidão do Storage Service — não acessa a AWS. */
+export function storageReadiness(): StorageReadiness {
+  return {
+    configured: isStorageConfigured(),
+    fallbackAllowed: storageFallbackAllowed(),
+    bucketConfigured: Boolean(ENV.awsS3Bucket),
+    regionConfigured: Boolean(ENV.awsS3Region),
+    credentialsConfigured: Boolean(ENV.awsAccessKeyId && ENV.awsSecretAccessKey),
+    publicUrlConfigured: Boolean(ENV.awsS3PublicUrl),
+  };
+}
+
 // ─── Storage Policy (RC-3.5.1) ────────────────────────────────────────────────
 // A decisão sobre armazenamento vive EXCLUSIVAMENTE aqui. Nenhum Business Domain
 // conhece esta política.

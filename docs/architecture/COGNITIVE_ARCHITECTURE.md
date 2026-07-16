@@ -93,4 +93,11 @@ Separação definitiva **Conhecimento → Raciocínio → Resposta**. O AIExecut
 regras aplicadas, alternativas consideradas e descartadas (com motivo). Mock Provider mantido —
 valida o raciocínio, não o texto. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
 
+## Monitoramento operacional (RC-4.2.2)
+
+A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor
+Operacional Institucional: `cognitive_kernel`, `reasoning_framework`, `replay_safety`,
+`explainability`, `observability` e `document_engine` compõem o Production Report, com Health
+Score determinístico. Ver [PRODUCTION_MONITORING.md](./PRODUCTION_MONITORING.md).
+
 Ver [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md) e [COGNITIVE_PIPELINE.md](./COGNITIVE_PIPELINE.md).

@@ -112,3 +112,31 @@ oficiais. Novos fluxos DEVEM usar `AIExecutionEngine → Provider Adapter`.
 > (`text-embedding-004`), um concern distinto da geração de texto do Provider Adapter.
 > Ambos os legados constam na allowlist explícita dos testes de fronteira
 > (`rc351-kernel-refinement.test.ts`) — qualquer novo acesso direto a provider falha o teste.
+
+---
+
+## Inventário classificado (RC-4.2.1)
+
+Classificação oficial (dados em `server/kernel/architecture/legacyBoundaries.ts` →
+`BOUNDARY_CLASSIFICATIONS`). **Nenhuma remoção nesta fase** — apenas classificação.
+
+| Componente | Classe | Disposição |
+|---|---|---|
+| `server/services/gemini.ts` | LEGACY (AI) | migração futura → AIExecutionEngine |
+| `server/services/ai/suggestions.ts` | LEGACY (AI) | migração futura → AIExecutionEngine |
+| `server/services/legalFrameworkAssistant.ts` | LEGACY (invokeLLM) | migração futura |
+| `server/services/catmatMatcher.ts` | LEGACY (invokeLLM) | migração futura (CATMAT_MATCHING) |
+| `server/services/directContractDocuments.ts` | LEGACY (invokeLLM) | migração futura |
+| `server/services/legalOpinionService.ts` | LEGACY (invokeLLM) | migração futura |
+| `server/services/examples/legalValidationExample.ts` | EXAMPLE | remoção futura |
+| `server/services/documentRenderService.ts` | ORPHAN/LEGACY | remoção futura (pós-RC-5) |
+| `server/services/officialExportEngine.ts` | INTERNAL SPECIALIZED RENDERER | mantém |
+| `server/services/documentConverter.ts` | INTERNAL RENDERER | mantém |
+| `server/services/{zipService,pdfChecklistService,legalOpinionExportService,directContractAuditReport}.ts` | LEGACY EXPORTERS | mantém (compatibilidade) |
+| `server/routers/documentsRouter.ts` | LEGACY | mantém (compatibilidade) |
+| `server/_core/ai/placeholderProviders.ts` (Claude/OpenAI) | FUTURE EVOLUTION | mantém (preparado) |
+| `server/services/aiExecutionEngine.ts` → `executeAITask` | DEPRECATED (aposentado, 0 callers) | mantém (definição/testes) |
+| `server/routers/proposalRouter.ts.backup`, `server/routers.ts.backup` | BACKUP | remoção futura (pós-RC-5) |
+
+> A classificação é aplicada por dados (não por comentários espalhados) e é a fonte única de
+> exceções arquiteturais, validada pelos testes de fronteira.

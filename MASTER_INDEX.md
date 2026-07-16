@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.9.3 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
+> Versão: 0.9.5 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -19,6 +19,8 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | **🧠 Fundação Cognitiva** | [docs/architecture/COGNITIVE_ARCHITECTURE.md](docs/architecture/COGNITIVE_ARCHITECTURE.md) | **AIExecutionEngine = ÚNICO ponto de entrada cognitiva (RC-4.1). Cognitive Tasks, Pipeline, Cognitive Response universal, Replay Hash semântico, validação obrigatória. executeAITask aposentado; invokeLLM só no legado; Mock Provider ativo (RC-4.0 → RC-4.1)** |
 | Pipeline Cognitivo | [docs/architecture/COGNITIVE_PIPELINE.md](docs/architecture/COGNITIVE_PIPELINE.md) | As etapas observáveis do `executeCognitiveTask` (com raciocínio institucional) |
 | Raciocínio Institucional | [docs/architecture/INSTITUTIONAL_REASONING.md](docs/architecture/INSTITUTIONAL_REASONING.md) | **Institutional Reasoning Framework: Reasoning Plan (12 etapas), Institutional Rules, Explainability expandida (RC-4.2)** |
+| 🚀 Production Readiness | [docs/architecture/PRODUCTION_READINESS.md](docs/architecture/PRODUCTION_READINESS.md) | **Observabilidade persistente, Health Check institucional, validação de ambiente, Storage/Provider readiness (RC-4.2.1)** |
+| 🩺 Production Monitoring | [docs/architecture/PRODUCTION_MONITORING.md](docs/architecture/PRODUCTION_MONITORING.md) | **Monitor Operacional Institucional: Health Engine, Health Score determinístico, endpoint /system/health (RC-4.2.2)** |
 | AIExecutionEngine | [docs/architecture/AI_EXECUTION_ENGINE.md](docs/architecture/AI_EXECUTION_ENGINE.md) | Contrato do cérebro cognitivo (única porta de IA) |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
