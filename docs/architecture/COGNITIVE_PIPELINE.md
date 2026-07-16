@@ -42,11 +42,19 @@ Cada etapa é registrada em `stages[]` com `status` (`applied`/`skipped`) e `det
 
 ## Saídas
 
-- **Cognitive Response** — conteúdo, reasoning, confidence, fontes, leis, jurisprudência,
-  documentos, recomendações, alternativas, riscos, limitações, tokens, latência, provider,
-  modelo, replayHash, `requiresHumanReview: true`.
+- **Cognitive Response (contrato universal)** — `content` + `structuredData` (opcional/nullable),
+  `responseType`, reasoning, confidence, fontes, leis, jurisprudência, documentos, recomendações,
+  alternativas, riscos, limitações, tokens, latência, provider, modelo, replayHash, `contractVersion`,
+  `requiresHumanReview: true`. **Validação obrigatória** — inválida → `InvalidCognitiveResponse`.
 - **AI Execution Context** — o contexto único da execução (quem pediu, o que usou, resultado).
-- **Cognitive Observability** — logs estruturados + validação de Structured Output.
+- **Cognitive Observability** — logs estruturados + tipo/payload/tamanho/hash/versão do contrato + validação.
+
+## Replay Hash (RC-4.0.1)
+
+O `replayHash` oficial (`officialReplayHash`) representa **apenas a execução lógica**: task,
+context, grounding, policy, prompt, provider, modelo. **Nunca** conteúdo, tempo, latência, tokens
+ou saída do LLM. Assim, o replay identifica a mesma execução lógica independentemente da resposta.
+`response.replayHash === context.replayHash`.
 
 ## Grounding declarado (nada implícito)
 

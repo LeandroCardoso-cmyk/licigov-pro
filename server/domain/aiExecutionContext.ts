@@ -58,15 +58,34 @@ export interface AIExecutionContext {
   readonly createdAt: string;
 }
 
-/** Hash determinístico do contexto (insumos estáveis — nunca tempo/tokens). */
-export function contextReplayHash(request: CognitiveRequest, provider: string, model: string): string {
+/**
+ * RC-4.0.1 — Replay Hash OFICIAL (semântica consolidada).
+ *
+ * Representa EXCLUSIVAMENTE a execução lógica: Task, Context (tenant/domínio/workspace/
+ * processo/etapa), Grounding, Policy (provider/modelo) e Prompt. NUNCA inclui conteúdo
+ * produzido, tempo, latência, tokens ou saída do LLM. Assim, o replay identifica a mesma
+ * execução lógica independentemente da resposta textual/estruturada.
+ */
+export function officialReplayHash(params: {
+  request: CognitiveRequest;
+  provider: string;
+  model: string;
+  grounding: Pick<CognitiveGroundingUsage, "groundingApplied" | "ragApplied" | "knowledgeGraphApplied">;
+}): string {
+  const { request, provider, model, grounding } = params;
   return createHash("sha256")
     .update(JSON.stringify({
       tenant: request.tenantId, task: request.task, domain: request.businessDomain ?? "",
       workspace: request.workspaceId ?? "", process: request.processId ?? "", stage: request.stage ?? "",
       prompt: request.prompt, provider, model,
+      grounding: grounding.groundingApplied, rag: grounding.ragApplied, kg: grounding.knowledgeGraphApplied,
     }))
     .digest("hex").slice(0, 32);
+}
+
+/** @deprecated Use officialReplayHash — mantido para compatibilidade (insumos, sem grounding). */
+export function contextReplayHash(request: CognitiveRequest, provider: string, model: string): string {
+  return officialReplayHash({ request, provider, model, grounding: { groundingApplied: false, ragApplied: false, knowledgeGraphApplied: false } });
 }
 
 export function createExecutionContext(params: {
@@ -75,7 +94,9 @@ export function createExecutionContext(params: {
   outcome: CognitiveOutcome;
   createdAt?: string;
 }): AIExecutionContext {
-  const replayHash = contextReplayHash(params.request, params.outcome.provider, params.outcome.model);
+  const replayHash = officialReplayHash({
+    request: params.request, provider: params.outcome.provider, model: params.outcome.model, grounding: params.grounding,
+  });
   const id = createHash("sha256")
     .update(`ctx:${params.request.tenantId}:${params.request.correlationId}:${replayHash}`)
     .digest("hex").slice(0, 20);

@@ -27,10 +27,13 @@ executeCognitiveTask({
   `task.allowedBusinessDomains`, a execução é negada.
 - **Decisão de provider:** vem exclusivamente da `policy` da tarefa (preferido → fallback →
   mock), via Provider Adapter. Nunca no domínio.
-- **Determinístico e replay-safe:** `response.replayHash` e `context.replayHash` cobrem
-  apenas insumos estáveis (task, tenant, prompt, provider, modelo) — nunca tempo/tokens.
-- **Structured Output:** a resposta é validada (`validateCognitiveResponse`); nenhum
-  copiloto devolve texto solto.
+- **Determinístico e replay-safe (RC-4.0.1):** `officialReplayHash` cobre **apenas a
+  execução lógica** (task, context, grounding, policy, prompt, provider, modelo) — **nunca**
+  conteúdo, tempo, latência, tokens ou saída do LLM. `response.replayHash === context.replayHash`.
+- **Validação obrigatória (RC-4.0.1):** o Engine SEMPRE valida a resposta; inválida →
+  `InvalidCognitiveResponse`. Nenhuma resposta inválida sai do Engine.
+- **Structured Cognitive Response (RC-4.0.1):** o Engine pode produzir texto **ou** payload
+  estruturado (`responseType` + `structuredData`) — o contrato não presume texto.
 
 ## Decisões delegadas à AIExecutionPolicy
 

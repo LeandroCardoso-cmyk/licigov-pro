@@ -23,7 +23,7 @@ Business Domain → (Cognitive Task) → AIExecutionEngine → … → Cognitive
 |---|---|---|
 | **Cognitive Task** | `server/domain/cognitiveTask.ts` | Catálogo oficial de 13 tarefas cognitivas, cada uma com política, grounding declarado, criticidade, domínios permitidos, copiloto e Structured Output. |
 | **AI Execution Context** | `server/domain/aiExecutionContext.ts` | Contexto único que acompanha toda execução (tenant, usuário, domínio, processo, task, grounding, provider, tokens, confidence, reasoning, replayHash, correlationId). |
-| **Cognitive Response** | `server/domain/cognitiveResponse.ts` | Modelo único de resposta — nenhum copiloto devolve texto solto. Explainability obrigatória. |
+| **Cognitive Response** | `server/domain/cognitiveResponse.ts` | **Contrato universal** de resposta — nenhum copiloto devolve texto solto. Suporta payload estruturado (`structuredData` opcional/nullable) além de `content`. Explainability e validação obrigatórias. |
 | **Prompt Builders** | `server/services/cognitive/promptBuilders.ts` | Um builder tipado por tarefa. Nenhum serviço concatena prompt manualmente. |
 | **Cognitive Observability** | `server/services/cognitive/cognitiveObservabilityService.ts` | Logs de execução/reasoning/provider/grounding/RAG/KG + latência/tokens + validação de Structured Output. Infraestrutura, não dashboard. |
 | **AIExecutionEngine** | `server/services/aiExecutionEngine.ts` | `executeCognitiveTask(...)` — o pipeline cognitivo oficial. |
@@ -49,5 +49,22 @@ context window, custo).
 - **Auditável/Observável:** toda execução gera observabilidade estruturada.
 - **Reproduzível:** `replayHash` determinístico (insumos estáveis, sem tempo/tokens).
 - **Rejeitável:** a saída é sempre revisada por servidor competente.
+
+## Contrato cognitivo definitivo (RC-4.0.1)
+
+Após a RC-4.0.1, o contrato entre Business Domains → AIExecutionEngine → Provider Adapter → LLM
+é **estável**:
+
+- **CognitiveResponse Genérico / Structured Cognitive Response:** o contrato **não presume
+  texto**. Além de `content` (compatibilidade), carrega `structuredData` (opcional, nullable) —
+  objeto, lista, matriz, árvore, grafo, comparação, matching, classificação, análise. Versionado
+  por `contractVersion` (`cognitive-response/1.1`).
+- **Replay Hash Semântico:** `officialReplayHash` representa **exclusivamente a execução lógica**
+  (task, context, grounding, policy, prompt, provider, modelo). **Nunca** inclui conteúdo, tempo,
+  latência, tokens ou saída do LLM. `response.replayHash === context.replayHash`.
+- **Validação Obrigatória:** nenhuma `CognitiveResponse` sai do Engine sem `validateCognitiveResponse`.
+  Resposta inválida → `InvalidCognitiveResponse` (falha explícita).
+- **Explainability Contract:** toda resposta válida contém obrigatoriamente reasoning, confidence,
+  sources, limitations, requiresHumanReview, replayHash e explicabilidade.
 
 Ver [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md) e [COGNITIVE_PIPELINE.md](./COGNITIVE_PIPELINE.md).
