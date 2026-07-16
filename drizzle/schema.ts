@@ -5532,3 +5532,23 @@ export const officialDocumentTimelineTable = mysqlTable("official_document_timel
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── RC-4.2.1 — Cognitive Observability (persistente) ─────────────────────────
+// Persistência da observabilidade cognitiva: recuperação posterior por correlationId,
+// sem depender apenas de Map em memória. Multi-tenant, replay-safe.
+export const cognitiveObservabilityTable = mysqlTable("cognitive_observability", {
+  id:                   varchar("id", { length: 20 }).notNull().primaryKey(),
+  tenantId:             int("tenant_id").notNull(),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  task:                 varchar("task", { length: 40 }).notNull().default(""),
+  replayHash:           varchar("replay_hash", { length: 64 }).notNull().default(""),
+  reasoningPlanId:      varchar("reasoning_plan_id", { length: 20 }).notNull().default(""),
+  reasoningPlanHash:    varchar("reasoning_plan_hash", { length: 64 }).notNull().default(""),
+  provider:             varchar("provider", { length: 40 }).notNull().default(""),
+  latencyMs:            int("latency_ms").notNull().default(0),
+  totalTokens:          int("total_tokens").notNull().default(0),
+  structuredOutputValid: int("structured_output_valid").notNull().default(1),
+  executionStatus:      varchar("execution_status", { length: 20 }).notNull().default("completed"),
+  payload:              longtext("payload"),
+  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

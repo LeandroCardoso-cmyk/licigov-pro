@@ -1,16 +1,18 @@
 /**
  * RC-4.0 — Cognitive Observability (infraestrutura, não dashboard).
+ * RC-4.2.1 — persistência: além do cache em memória, persiste (recuperável por
+ * correlationId) via Observability Repository. Nunca depende apenas de Map em memória.
  *
  * Toda execução cognitiva emite logs estruturados: execução, reasoning, provider,
  * grounding, RAG, Knowledge Graph, latência, uso de tokens e validação de Structured
- * Output. Determinístico e multi-tenant; mantém um registro em memória por
- * correlationId (para replay/testes) além de emitir log estruturado.
+ * Output. Determinístico e multi-tenant.
  */
 
 import type { AIExecutionContext } from "../../domain/aiExecutionContext";
 import { structuredDataSize, responseShapeHash, type CognitiveResponse, type CognitiveResponseValidation, type CognitiveResponseType } from "../../domain/cognitiveResponse";
 import type { CognitiveTaskId } from "../../domain/cognitiveTask";
 import { splitAlternatives, type InstitutionalReasoningPlan } from "../../domain/institutionalReasoning";
+import { persistObservability, recoverObservabilityRow } from "./observabilityRepository";
 
 export interface CognitiveObservability {
   readonly correlationId: string;
@@ -86,6 +88,14 @@ export function recordCognitiveObservability(params: {
   };
 
   _byCorrelation.set(context.request.correlationId, obs);
+
+  // Persistência (recuperável por correlationId) — nunca depende só do Map. Fire-and-forget
+  // seguro: degrada sem DB e jamais quebra o pipeline cognitivo.
+  void persistObservability(obs, {
+    tenantId: context.request.tenantId, replayHash: context.replayHash, provider: context.outcome.provider,
+    executionStatus: validation.valid ? "completed" : "invalid",
+  });
+
   // Emissão estruturada (infraestrutura). Nunca lança.
   try {
     console.info("[cognitive-observability]", JSON.stringify({
@@ -98,6 +108,18 @@ export function recordCognitiveObservability(params: {
   return obs;
 }
 
+/** Recuperação rápida (cache em memória do processo). */
 export function getCognitiveObservability(correlationId: string): CognitiveObservability | null {
   return _byCorrelation.get(correlationId) ?? null;
+}
+
+/**
+ * Recuperação COMPLETA por correlationId: memória primeiro; se ausente (ex.: após
+ * restart / outra instância), recupera do repositório persistente.
+ */
+export async function recoverCognitiveObservability(correlationId: string): Promise<CognitiveObservability | null> {
+  const cached = _byCorrelation.get(correlationId);
+  if (cached) return cached;
+  const row = await recoverObservabilityRow(correlationId);
+  return row && row.payload ? (row.payload as CognitiveObservability) : null;
 }

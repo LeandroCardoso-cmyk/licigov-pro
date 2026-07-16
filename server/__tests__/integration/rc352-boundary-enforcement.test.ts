@@ -27,7 +27,10 @@ function walk(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const SERVER_TS = walk("server").filter(f => !f.includes("__tests__") && !f.endsWith(".test.ts"));
+const SERVER_TS = walk("server")
+  .filter(f => !f.includes("__tests__") && !f.endsWith(".test.ts"))
+  // RC-4.2.1 — o próprio arquivo de allowlist referencia os caminhos das fronteiras (dados).
+  .filter(f => !f.endsWith("kernel/architecture/legacyBoundaries.ts"));
 const read = (f: string) => fs.readFileSync(f, "utf-8");
 
 /** Arquivos (repo-relativos) cujo fonte casa com o predicado. */

@@ -95,6 +95,13 @@ Provider → LLM → Reasoning → Explainability → Result
 > responder. Explainability expandida (regras aplicadas, alternativas consideradas/descartadas
 > com motivo). Determinístico. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
 
+> **RC-4.2.1 — Production Readiness:** resolve as pendências operacionais **sem alterar o
+> Kernel**. **Observabilidade persistente** (tabela `cognitive_observability`, recuperável por
+> correlationId — não depende só de memória); **Health Check institucional**
+> (`operationalHealthService`); **validação de ambiente explícita** (AWS obrigatório em produção,
+> sem fallback silencioso); **Storage/Provider readiness** (diagnóstico, sem conectar providers);
+> Legacy classificado (mantém/migração/remoção futura). Ver [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

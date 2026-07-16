@@ -30,11 +30,27 @@ export const ENV_TAG = `[${APP_ENV}]`;
  * Valida variáveis obrigatórias no momento do bootstrap.
  * Lança erro descritivo com todas as variáveis faltantes de uma vez.
  */
+/** Variáveis obrigatórias para PRODUÇÃO (validação explícita, sem fallback silencioso). */
+export const PRODUCTION_REQUIRED_ENV: ReadonlyArray<{ key: string; hint: string; productionOnly: boolean }> = [
+  { key: "DATABASE_URL",          hint: "connection string MySQL (ex: mysql://user:pass@host/db)", productionOnly: false },
+  { key: "JWT_SECRET",            hint: "segredo JWT — mínimo 32 caracteres", productionOnly: false },
+  { key: "AWS_ACCESS_KEY_ID",     hint: "credencial AWS S3 (Storage Service)", productionOnly: true },
+  { key: "AWS_SECRET_ACCESS_KEY", hint: "credencial AWS S3 (Storage Service)", productionOnly: true },
+  { key: "AWS_S3_REGION",         hint: "região do bucket S3", productionOnly: true },
+  { key: "AWS_S3_BUCKET",         hint: "nome do bucket S3", productionOnly: true },
+  // GEMINI_API_KEY é OPCIONAL nesta RC (Provider real ainda não conectado).
+];
+
 export function validateRequiredEnv(): void {
   const required: Array<{ key: string; hint: string; condition?: boolean }> = [
     { key: "DATABASE_URL",   hint: "connection string MySQL (ex: mysql://user:pass@host/db)" },
     { key: "JWT_SECRET",     hint: "segredo JWT — mínimo 32 caracteres" },
     { key: "GEMINI_API_KEY", hint: "chave da API Google Gemini para geração de documentos" },
+    // RC-4.2.1 — Storage/AWS obrigatório APENAS em produção (nunca fallback silencioso).
+    { key: "AWS_ACCESS_KEY_ID",     hint: "credencial AWS S3 (Storage Service)", condition: IS_PRODUCTION },
+    { key: "AWS_SECRET_ACCESS_KEY", hint: "credencial AWS S3 (Storage Service)", condition: IS_PRODUCTION },
+    { key: "AWS_S3_REGION",         hint: "região do bucket S3", condition: IS_PRODUCTION },
+    { key: "AWS_S3_BUCKET",         hint: "nome do bucket S3", condition: IS_PRODUCTION },
   ];
 
   const missing = required
@@ -54,4 +70,22 @@ export function validateRequiredEnv(): void {
       `[BOOT]${ENV_TAG} JWT_SECRET deve ter no mínimo 32 caracteres (atual: ${jwtSecret.length})`
     );
   }
+}
+
+export interface EnvVarDiagnostic {
+  readonly key: string;
+  readonly present: boolean;
+  readonly productionOnly: boolean;
+  /** Obrigatória no ambiente ATUAL. */
+  readonly requiredNow: boolean;
+}
+
+/** Diagnóstico (somente leitura) das variáveis de ambiente — sem lançar. */
+export function environmentDiagnostic(): { env: AppEnv; vars: EnvVarDiagnostic[]; ok: boolean } {
+  const vars: EnvVarDiagnostic[] = PRODUCTION_REQUIRED_ENV.map(v => {
+    const requiredNow = v.productionOnly ? IS_PRODUCTION : true;
+    return { key: v.key, present: Boolean(process.env[v.key]?.trim()), productionOnly: v.productionOnly, requiredNow };
+  });
+  const ok = vars.every(v => !v.requiredNow || v.present);
+  return { env: APP_ENV, vars, ok };
 }
