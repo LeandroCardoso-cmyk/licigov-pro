@@ -29,3 +29,4 @@ export * from "./legalOpinionWorkspace";
 export * from "./directProcurement";
 export * from "./contractWorkspace";
 export * from "./departmentOperation";
+export * from "./officialDocuments";
