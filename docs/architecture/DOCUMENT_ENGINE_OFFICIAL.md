@@ -42,6 +42,12 @@ Obrigatórios: **DOCX** e **PDF** (binários reais via `documentConverter.conver
 `convertToPDF` — `docx` + `pdfkit`, sem Chromium). O Markdown é apenas representação
 intermediária — **nunca** entregue como documento oficial final.
 
+> **RC-3.5.2:** o `documentConverter` é um **Internal Renderer** — implementação interna,
+> **nunca API pública**. Toda chamada passa pelo Document Engine (`documentEngineService`),
+> a **única fachada pública** de geração documental. Chamadas diretas ao converter só são
+> permitidas para os Legacy Exporters registrados na allowlist central
+> (`server/kernel/architecture/legacyBoundaries.ts`), garantido por teste de fronteira.
+
 ## Ciclo de vida via OfficialDocumentLifecycleService (RC-3.5.1)
 
 A partir da RC-3.5.1, o Document Engine tem responsabilidade **única: gerar documentos**

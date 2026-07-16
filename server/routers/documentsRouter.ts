@@ -1,3 +1,12 @@
+/**
+ * RC-3.5.2 — Classificação: **LEGACY** (compatibilidade apenas).
+ *
+ * Router legado que chama o DocumentConverter e o caminho Gemini diretamente, fora
+ * do pipeline oficial (Document Engine / OfficialDocumentLifecycleService / AIExecution
+ * Engine). Registrado na allowlist central (`DOCUMENT_CONVERTER_ALLOWLIST` /
+ * `LEGACY_EXPORTERS`). Não remover, não reescrever, não migrar. Novos fluxos DEVEM usar
+ * as portas oficiais do Kernel.
+ */
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";

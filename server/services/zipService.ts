@@ -1,4 +1,11 @@
 /**
+ * RC-3.5.2 — Classificação: **LEGACY** (compatibilidade apenas).
+ *
+ * Gera artefatos (ZIP/PDF) chamando o DocumentConverter diretamente, sem passar pelo
+ * OfficialDocumentLifecycleService. Registrado na allowlist central
+ * (`DOCUMENT_CONVERTER_ALLOWLIST` / `LEGACY_EXPORTERS`). Não remover, não reescrever,
+ * não migrar. Novos fluxos DEVEM usar o Document Engine oficial.
+ *
  * Serviço de geração de arquivos ZIP
  * Cria pacote completo com todos os documentos para publicação
  */

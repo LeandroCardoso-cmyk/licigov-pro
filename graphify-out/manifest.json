@@ -5125,8 +5125,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentsRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "c022a37dfaba9c06b7dd7eb1e3f98435",
+    "mtime": 1784213941.9999406,
+    "ast_hash": "c12769fadef4e3dc95e775b07ce60f99",
     "semantic_hash": ""
   },
   "server/routers/downloadRouter.ts": {
@@ -5395,8 +5395,8 @@
     "semantic_hash": ""
   },
   "server/services/_core/documentConverter.ts": {
-    "mtime": 1782612419.322986,
-    "ast_hash": "80c6ee1132c5362eb3be8b8746deefeb",
+    "mtime": 1784214084.4959493,
+    "ast_hash": "35750cfed05d6a091ceb36f381a979cf",
     "semantic_hash": ""
   },
   "server/services/activityLogService.ts": {
@@ -5585,8 +5585,8 @@
     "semantic_hash": ""
   },
   "server/services/copilotReasoningService.ts": {
-    "mtime": 1783264943.3231926,
-    "ast_hash": "3d2c71663b079742f68fc12203a5a6e8",
+    "mtime": 1784214000.3559442,
+    "ast_hash": "7230dee7aef215874622ad01ac8cc1bf",
     "semantic_hash": ""
   },
   "server/services/copilotRecommendationService.ts": {
@@ -5605,8 +5605,8 @@
     "semantic_hash": ""
   },
   "server/services/directContractAuditReport.ts": {
-    "mtime": 1782612419.3264267,
-    "ast_hash": "59ff99b573ca47ad0b18501e07102484",
+    "mtime": 1784213935.8399403,
+    "ast_hash": "a66099be6474ea0583030fa8f004958b",
     "semantic_hash": ""
   },
   "server/services/directContractDocuments.ts": {
@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1784209759.62378,
-    "ast_hash": "5bdc4f194323d2d1c96d0b94df1ba49f",
+    "mtime": 1784213895.759938,
+    "ast_hash": "97ab1b0bab8c820c419d5aeac7f9b4f6",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -5920,8 +5920,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionExportService.ts": {
-    "mtime": 1782612419.3352816,
-    "ast_hash": "67b3157b03524e7c1f37f2ab6df674d3",
+    "mtime": 1784213930.48794,
+    "ast_hash": "3a6bbc36e9fea2fbd5b8c6ad73a85a3b",
     "semantic_hash": ""
   },
   "server/services/legalOpinionService.ts": {
@@ -5965,8 +5965,8 @@
     "semantic_hash": ""
   },
   "server/services/officialExportEngine.ts": {
-    "mtime": 1784209767.7397804,
-    "ast_hash": "329154a2907b0b54af16afc59cc3ae47",
+    "mtime": 1784213905.8119385,
+    "ast_hash": "eed5da55e0aa84765f71504808f71265",
     "semantic_hash": ""
   },
   "server/services/ontologyValidationService.ts": {
@@ -6005,8 +6005,8 @@
     "semantic_hash": ""
   },
   "server/services/pdfChecklistService.ts": {
-    "mtime": 1782612419.3384268,
-    "ast_hash": "0656739a7f17572b5673636bc86f2923",
+    "mtime": 1784213924.6199396,
+    "ast_hash": "777426b7ecc2d8bae8917eb883bd4f17",
     "semantic_hash": ""
   },
   "server/services/performanceOptimizationService.ts": {
@@ -6335,8 +6335,8 @@
     "semantic_hash": ""
   },
   "server/services/zipService.ts": {
-    "mtime": 1782612419.346427,
-    "ast_hash": "c1a404116f6d52afdec676e40e4004ce",
+    "mtime": 1784213919.1239393,
+    "ast_hash": "a68421aa6ce44eb80c4938be735f4b03",
     "semantic_hash": ""
   },
   "server/storage.ts": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784212593.1038606,
-    "ast_hash": "8ebdb3cd82fb559d084e91399eaa3628",
+    "mtime": 1784214178.4399548,
+    "ast_hash": "c788088c6ffb70f5dc8210e2bca1b03f",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8455,8 +8455,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRODUCT_NORTH_STAR.md": {
-    "mtime": 1784212598.7318609,
-    "ast_hash": "eea5f8cdbae4192f547d6d8f3aed2670",
+    "mtime": 1784214189.5279555,
+    "ast_hash": "7f209c70ea8ed65115ad447f78d846dd",
     "semantic_hash": ""
   },
   "client/src/config/businessDomains.ts": {
@@ -8540,8 +8540,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md": {
-    "mtime": 1784212610.3718615,
-    "ast_hash": "bab1e24b4c98b87e1e72407787bfbce4",
+    "mtime": 1784214196.9479558,
+    "ast_hash": "f3fafc8d010a82f9f9570da5a8d13a26",
     "semantic_hash": ""
   },
   "drizzle/0282_official_documents_storage_refs.sql": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784212579.3318596,
-    "ast_hash": "376247c32a7bdb17c0084617b16094f3",
+    "mtime": 1784214212.2199569,
+    "ast_hash": "aa7dc286d6e3ba628ae6bbd9ee8ece5c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8592,6 +8592,16 @@
   "server/services/officialDocumentLifecycleService.ts": {
     "mtime": 1784211092.863839,
     "ast_hash": "2857b0026da661201b6c5ec763fe6e78",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
+    "mtime": 1784214039.1199465,
+    "ast_hash": "53e85ee0cdb42d930298bf051650b410",
+    "semantic_hash": ""
+  },
+  "server/kernel/architecture/legacyBoundaries.ts": {
+    "mtime": 1784214078.1119487,
+    "ast_hash": "8c87bd85f7f266171aad3fd38bd17f00",
     "semantic_hash": ""
   }
 }

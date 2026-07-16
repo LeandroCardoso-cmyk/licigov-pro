@@ -12,16 +12,43 @@ Componentes permanentes registrados no Cognitive Kernel:
 
 ## Responsabilidade única (mapa definitivo)
 
-| Componente | Responsabilidade |
-|---|---|
-| **AIExecutionEngine** | Executa tarefas cognitivas (pipeline de IA). |
-| **Provider Adapter** | Seleciona e instancia o Provider. Único ponto de acesso a modelos. |
-| **Document Engine** | **Apenas gera documentos** (recebe conteúdo → converte → renderiza → retorna artefato). |
-| **OfficialDocumentLifecycleService** | Gerencia o ciclo de vida documental (versão, timeline, hash, metadados, Storage, Signed URL). |
-| **Storage Service** | Gerencia armazenamento (única porta AWS/S3 + Storage Policy). |
-| **Business Domains** | Apenas consomem serviços do Kernel. |
+| Componente | Responsabilidade | Fronteira |
+|---|---|---|
+| **AIExecutionEngine** | Executa tarefas cognitivas (pipeline de IA). | **única porta cognitiva** |
+| **AIExecutionPolicy** | Decide provider, modelo, grounding, KG, temperature, contexto, explicabilidade. | única responsável por decisões cognitivas |
+| **Provider Adapter** | Seleciona e instancia o Provider. | **única porta para Providers** |
+| **Document Engine** | **Apenas gera documentos** (recebe conteúdo → converte → renderiza → retorna artefato). | **única porta documental** |
+| **OfficialDocumentLifecycleService** | Ciclo de vida documental (versão, timeline, hash, metadados, Storage, Signed URL). | **única porta do ciclo documental** |
+| **Storage Service** | Armazenamento (única porta AWS/S3 + Storage Policy). | **única porta de armazenamento** |
+| **Embeddings** | `text-embedding-004` — infraestrutura exclusiva do **Knowledge Graph** (NÃO é IA cognitiva). | fora do AIExecutionEngine |
+| **Legacy Exporters** | Compatibilidade apenas (allowlist central). | não removidos, não migrados |
+| **Business Domains** | Apenas consomem serviços do Kernel. | nunca cruzam fronteiras |
 
 Nenhum componente conhece detalhes de implementação de outro. Cada um tem responsabilidade única.
+
+## Fronteiras OBRIGATÓRIAS (RC-3.5.2 — Boundary Enforcement)
+
+A arquitetura deixou de ser conceitual e passou a ser **aplicada pelo código**. Toda
+fronteira é validada por teste automatizado (`rc352-boundary-enforcement.test.ts`), e toda
+exceção vive em um **ponto único**: `server/kernel/architecture/legacyBoundaries.ts`
+(nunca espalhada pelo projeto).
+
+Regras obrigatórias enforçadas:
+
+- **Nenhum Business Domain** chega a um Provider sem passar pelo **AIExecutionEngine**
+  (o copiloto — `copilotReasoningService` — roteia por `executeAITask`, não por `generateText`).
+- **Somente o Provider Adapter** instancia Providers (`new GeminiProvider`).
+- **Somente o AIExecutionEngine** acessa a AIExecutionPolicy.
+- **Somente o Document Engine** (+ legados na allowlist) chama o **DocumentConverter**
+  (renderer interno — nunca API pública).
+- **Somente o OfficialDocumentLifecycleService** versiona/timeline/persiste.
+- **Somente o Storage Service** acessa o AWS SDK.
+- **OfficialExportEngine** permanece interno (renderer especializado); nenhum novo componente o usa.
+- **Legacy Exporters** (`documentsRouter`, `zipService`, `pdfChecklistService`,
+  `legalOpinionExportService`, `directContractAuditReport`) só existem na allowlist.
+
+> Adicionar um caminho a uma allowlist é uma **decisão arquitetural explícita e revisável**
+> — não um atalho para contornar a fronteira.
 
 ---
 
@@ -192,3 +219,12 @@ Eliminado o antigo fallback de string vazia (`JWT_SECRET` nunca é vazio):
 - Storage Policy: Base64 só em dev; produção/staging exigem storage.
 - Isolamento: nenhum Business Domain importa `@aws-sdk`, `../storage`, `_core/ai/provider`,
   `@google/generative-ai` nem chama `model.generateContent`.
+
+**`rc352-boundary-enforcement.test.ts` (fronteiras obrigatórias, via allowlist central):**
+- Allowlist central íntegra (sem entradas obsoletas).
+- Só o Provider Adapter instancia Providers; só a camada de IA acessa o SDK do modelo.
+- Só o AIExecutionEngine acessa a AIExecutionPolicy; o CopilotReasoning roteia por `executeAITask`.
+- Só o Document Engine (+ legados) chama o DocumentConverter; só o Lifecycle versiona.
+- Só o Storage Service acessa o AWS SDK; OfficialExportEngine permanece interno.
+- Legacy Exporters carregam classificação LEGACY; Embeddings fora do AIExecutionEngine.
+- Nenhum Business Domain oficial cruza qualquer fronteira do Kernel.
