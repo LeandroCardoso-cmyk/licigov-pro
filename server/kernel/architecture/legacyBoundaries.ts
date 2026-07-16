@@ -41,6 +41,23 @@ export const EXECUTION_POLICY_ALLOWLIST: readonly string[] = [
   "server/services/aiExecutionEngine.ts",
 ];
 
+// ─── AI Entry Allowlist (RC-4.1 — ativação cognitiva) ─────────────────────────
+// invokeLLM permanece APENAS em código legado allowlistado. Nenhum novo componente
+// pode usar invokeLLM — a cognição oficial passa por executeCognitiveTask.
+export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [
+  "server/services/legalFrameworkAssistant.ts",
+  "server/services/catmatMatcher.ts",
+  "server/services/directContractDocuments.ts",
+  "server/services/legalOpinionService.ts",
+  "server/services/examples/legalValidationExample.ts",
+];
+
+// executeAITask é o pipeline de baixo nível (RC-3.5), APOSENTADO na ativação: não possui
+// callers oficiais. Definido apenas no Engine; exercitado só por testes.
+export const EXECUTE_AI_TASK_ALLOWLIST: readonly string[] = [
+  "server/services/aiExecutionEngine.ts", // definição
+];
+
 // ─── Document Allowlist ───────────────────────────────────────────────────────
 // Componentes autorizados a chamar o DocumentConverter (renderer INTERNO).
 // documentEngineService = porta oficial; os demais são LEGACY (compatibilidade).

@@ -83,6 +83,12 @@ Provider → LLM → Reasoning → Explainability → Result
 > é obrigatória**: nenhuma resposta inválida sai do Engine (`InvalidCognitiveResponse`). O
 > contrato Business Domains → AIExecutionEngine → Provider Adapter → LLM está **estável**.
 
+> **RC-4.1 — Ativação cognitiva:** o AIExecutionEngine é agora o **ÚNICO ponto de entrada
+> cognitiva do produto**. Todos os Business Domains passam por `executeCognitiveTask` (via
+> orquestrador + copilotos). `executeAITask` **aposentado** (sem callers oficiais); `invokeLLM`
+> restrito ao legado allowlistado. **Mock Provider** ativo (replay determinístico, sem APIs
+> externas). Fronteiras validadas por `rc41-cognitive-activation.test.ts`.
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

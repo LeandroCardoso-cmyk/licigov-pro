@@ -17,6 +17,23 @@ AIExecutionEngine. Toda cognição passa pelo engine.
 Business Domain → (Cognitive Task) → AIExecutionEngine → … → Cognitive Response
 ```
 
+## Ativação cognitiva (RC-4.1)
+
+O **AIExecutionEngine é o ÚNICO ponto de entrada cognitiva do produto**. Ativação concluída:
+
+- Os 5 Business Domains (Processo Licitatório, Contratação Direta, Parecer Jurídico,
+  Contratos, Centro de Operações), via `WorkspaceOrchestrator → CopilotReasoning`, chamam
+  exclusivamente **`executeCognitiveTask`**.
+- **`executeAITask` está aposentado** — sem callers oficiais (só definição no Engine e testes).
+- **`invokeLLM`** permanece **apenas em código legado allowlistado**
+  (`INVOKE_LLM_LEGACY_ALLOWLIST` em `server/kernel/architecture/legacyBoundaries.ts`) —
+  nenhum código novo pode usá-lo.
+- **Copilotos** são apenas **especialistas de domínio**: montam contexto, selecionam grounding,
+  indicam documentos/legislação e preparam o payload. **Não executam provider nem montam o
+  prompt final** — o Prompt Builder tipado do Engine faz a montagem.
+- **Mock Provider** ativo nesta fase — valida toda a arquitetura sem APIs externas, sem custo,
+  com replay determinístico.
+
 ## Componentes da fundação
 
 | Componente | Arquivo | Papel |

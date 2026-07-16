@@ -1,3 +1,11 @@
+/**
+ * RC-4.1 — Classificação: **LEGADO (AI)**.
+ *
+ * Usa invokeLLM diretamente (anterior à ativação cognitiva). Mantido por
+ * compatibilidade e registrado em INVOKE_LLM_LEGACY_ALLOWLIST
+ * (server/kernel/architecture/legacyBoundaries.ts). NÃO usar em código novo: a
+ * cognição oficial passa por executeCognitiveTask (AIExecutionEngine).
+ */
 import { invokeLLM } from "../_core/llm";
 import * as db from "../db";
 import { validateLegalCitations } from "./legalValidation";
