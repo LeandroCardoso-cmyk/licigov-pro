@@ -33,12 +33,17 @@ Explainability        (obrigatória: por quê, docs, leis, descartes, confiança
 Resultado             (Cognitive Response + AI Execution Context + Observability)
 ```
 
-## As 13 etapas (observáveis)
+## As etapas (observáveis)
 
-Cada etapa é registrada em `stages[]` com `status` (`applied`/`skipped`) e `detail`:
+Cada etapa é registrada em `stages[]` com `status` (`applied`/`skipped`) e `detail`.
+A partir da **RC-4.2** o pipeline inclui o raciocínio institucional
+(`institutional_rules` + `reasoning_plan`) **antes** do provider:
 
-`task` → `policy` → `grounding` → `knowledge_graph` → `rag` → `copilot` → `prompt` →
-`provider` → `llm` → `structured_output` → `reasoning` → `explainability` → `result`.
+`task` → `policy` → `grounding` → `knowledge_graph` → `rag` → **`institutional_rules`** →
+**`reasoning_plan`** → `copilot` → `prompt` → `provider` → `llm` → `structured_output` →
+`reasoning` → `explainability` → `result`.
+
+Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
 
 ## Saídas
 

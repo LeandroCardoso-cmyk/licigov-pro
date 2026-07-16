@@ -32,10 +32,12 @@ import {
 } from "../domain/cognitiveResponse";
 import { getPromptBuilder } from "./cognitive/promptBuilders";
 import { recordCognitiveObservability, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
+import { getRulesForTask } from "../domain/institutionalRules";
+import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
 
 export type PipelineStageName =
   | "task" | "policy" | "prompt" | "grounding" | "knowledge_graph"
-  | "rag" | "copilot" | "provider" | "llm" | "structured_output"
+  | "rag" | "institutional_rules" | "reasoning_plan" | "copilot" | "provider" | "llm" | "structured_output"
   | "reasoning" | "explainability" | "result";
 
 export interface PipelineStageResult {
@@ -193,6 +195,7 @@ export interface CognitiveExecution {
   readonly context: AIExecutionContext;
   readonly observability: CognitiveObservability;
   readonly validation: CognitiveResponseValidation;
+  readonly reasoningPlan: InstitutionalReasoningPlan;
   readonly stages: PipelineStageResult[];
 }
 
@@ -228,6 +231,18 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   push("grounding", g.usesGrounding ? "applied" : "skipped", g.usesGrounding ? "Grounding declarado." : "Grounding não usado.");
   push("knowledge_graph", g.usesKnowledgeGraph ? "applied" : "skipped", g.usesKnowledgeGraph ? "Knowledge Graph declarado." : "KG não usado.");
   push("rag", g.usesRAG ? "applied" : "skipped", g.usesRAG ? "RAG declarado." : "RAG não usado.");
+
+  // Stage: Institutional Rules (regras declarativas aplicáveis — nada implícito)
+  const applicableRules = getRulesForTask(input.task, input.businessDomain);
+  push("institutional_rules", applicableRules.length > 0 ? "applied" : "skipped", `${applicableRules.length} regra(s) institucional(is) aplicável(is).`);
+
+  // Stage: Reasoning Plan (raciocínio institucional ANTES da resposta)
+  const reasoningPlan = buildReasoningPlan({
+    task: input.task, objective: `${task.name}: ${input.query}`.slice(0, 200), correlationId: input.correlationId,
+    businessDomain: input.businessDomain, stage: input.stage,
+    laws: input.lawRefs, documents: input.documentRefs, criticality: task.criticality,
+  });
+  push("reasoning_plan", "applied", `Plano de raciocínio com ${reasoningPlan.steps.length} etapas (plan=${reasoningPlan.id}).`);
 
   // Stage: Copilot
   const copilot = task.recommendedCopilot;
@@ -282,9 +297,14 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
 
   const reasoning = `Cognitive Task ${task.id} conduzida pelo copiloto ${copilot} via ${provider} (modelo ${model}); ` +
     `grounding=${g.usesGrounding}, kg=${g.usesKnowledgeGraph}, rag=${g.usesRAG}, fallback=${resolution.usedFallback}.`;
+  const alt = splitAlternatives(reasoningPlan);
   const explainability: CognitiveExplainability = {
-    whyAnswered: `Resposta produzida para a tarefa ${task.name} sob supervisão humana, aterrada no contexto declarado.`,
-    documentsUsed, lawsUsed, discardedRecommendations: [], confidence, limitations: ["Fase de fundação: sem inferência jurídica real; saída estrutural."],
+    whyAnswered: `Resposta produzida para a tarefa ${task.name} sob supervisão humana, seguindo o plano de raciocínio institucional (${reasoningPlan.id}) aterrado no contexto declarado.`,
+    documentsUsed, lawsUsed, discardedRecommendations: [], confidence,
+    limitations: ["Fase de fundação: sem inferência jurídica real; saída estrutural."],
+    rulesApplied: reasoningPlan.rules,
+    alternativesConsidered: reasoningPlan.alternatives,
+    discardedAlternatives: alt.discarded,
   };
   const response = createCognitiveResponse({
     task: input.task, responseType: input.responseType ?? "text", content, structuredData: input.structuredData,
@@ -302,8 +322,8 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
 
   // Stage: Result (contexto + observabilidade)
   const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning } });
-  const observability = recordCognitiveObservability({ context, response, validation });
+  const observability = recordCognitiveObservability({ context, response, validation, reasoningPlan });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
-  return { response, context, observability, validation, stages };
+  return { response, context, observability, validation, reasoningPlan, stages };
 }

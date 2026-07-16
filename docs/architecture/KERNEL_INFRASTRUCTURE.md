@@ -89,6 +89,12 @@ Provider → LLM → Reasoning → Explainability → Result
 > restrito ao legado allowlistado. **Mock Provider** ativo (replay determinístico, sem APIs
 > externas). Fronteiras validadas por `rc41-cognitive-activation.test.ts`.
 
+> **RC-4.2 — Institutional Reasoning Framework:** separa **Conhecimento → Raciocínio →
+> Resposta**. O Engine constrói um **InstitutionalReasoningPlan** (12 etapas declarativas) a
+> partir das **Institutional Rules** (regras declarativas) + grounding/KG, **antes** de
+> responder. Explainability expandida (regras aplicadas, alternativas consideradas/descartadas
+> com motivo). Determinístico. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

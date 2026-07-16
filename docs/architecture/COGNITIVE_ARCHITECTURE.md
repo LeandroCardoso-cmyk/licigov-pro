@@ -84,4 +84,13 @@ Após a RC-4.0.1, o contrato entre Business Domains → AIExecutionEngine → Pr
 - **Explainability Contract:** toda resposta válida contém obrigatoriamente reasoning, confidence,
   sources, limitations, requiresHumanReview, replayHash e explicabilidade.
 
+## Institutional Reasoning Framework (RC-4.2)
+
+Separação definitiva **Conhecimento → Raciocínio → Resposta**. O AIExecutionEngine
+**raciocina institucionalmente antes de responder**: constrói um **InstitutionalReasoningPlan**
+(12 etapas declarativas) a partir do grounding, do Knowledge Graph e das **Institutional Rules**
+(regras declarativas), e só então produz a Structured Cognitive Response. Toda resposta registra
+regras aplicadas, alternativas consideradas e descartadas (com motivo). Mock Provider mantido —
+valida o raciocínio, não o texto. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
+
 Ver [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md) e [COGNITIVE_PIPELINE.md](./COGNITIVE_PIPELINE.md).

@@ -85,7 +85,8 @@ describe("RC-4.0 — Cognitive Foundation", () => {
   describe("Cognitive Pipeline", () => {
     it("executa as 13 etapas na ordem oficial", async () => {
       const exec = await executeCognitiveTask(baseInput("PROCUREMENT_REASONING", { businessDomain: "processo_licitatorio" }));
-      const order = ["task", "policy", "grounding", "knowledge_graph", "rag", "copilot", "prompt", "provider", "llm", "structured_output", "reasoning", "explainability", "result"];
+      // RC-4.2 — pipeline expandido com institutional_rules + reasoning_plan.
+      const order = ["task", "policy", "grounding", "knowledge_graph", "rag", "institutional_rules", "reasoning_plan", "copilot", "prompt", "provider", "llm", "structured_output", "reasoning", "explainability", "result"];
       expect(exec.stages.map(s => s.stage)).toEqual(order);
     });
 
