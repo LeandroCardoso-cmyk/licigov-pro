@@ -1,3 +1,12 @@
+/**
+ * RC-3.5.1 — Classificação: **LEGADO** (acesso direto ao Gemini).
+ *
+ * Caminho antigo de geração (ETP/DFD/etc.) que instancia o Gemini diretamente,
+ * anterior ao Provider Adapter/AIExecutionEngine. Usado apenas pelos routers legados
+ * (documentsRouter, processesRouter) — NÃO pelos Business Domains oficiais. Mantido
+ * por compatibilidade (não removido). Novos fluxos DEVEM usar AIExecutionEngine →
+ * Provider Adapter. Consta na allowlist de exceções legadas dos testes de fronteira.
+ */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 import { getPlatformInstructions } from "./platformTemplates";

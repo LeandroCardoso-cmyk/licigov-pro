@@ -1,26 +1,28 @@
 /**
- * RC-3.5 — Provider Adapter (componente PERMANENTE do Cognitive Kernel).
+ * RC-3.5.1 — Provider Adapter (componente PERMANENTE do Cognitive Kernel).
  *
- * Camada ÚNICA e agnóstica de resolução de provider:
- *   AIExecutionEngine → Provider Adapter → Gemini | Claude | OpenAI | Future
+ * ÚNICA porta de acesso aos modelos de IA e ÚNICO ponto que instancia providers:
+ *   AIExecutionEngine → Provider Adapter → Gemini | Claude | OpenAI | Mock | Future
  *
- * Os Business Domains NUNCA falam diretamente com um provider — falam com o
- * AIExecutionEngine, que resolve o provider aqui a partir da AI Execution Policy.
- * Gemini é o provider canônico ativo; Claude/OpenAI ficam PREPARADOS como
- * adaptadores (Future Evolution) — a arquitetura existe, a implementação não.
- *
- * Consolidação: unifica o caminho `_core/ai` (invokeLLM/getProvider) sem remover
- * o suporte existente nem quebrar compatibilidade.
+ * Regras:
+ * - Nenhum outro componente instancia providers diretamente.
+ * - Gemini e Mock são implementados; Claude/OpenAI existem como contratos
+ *   (placeholders) que lançam ProviderNotImplemented se usados.
+ * - Toda seleção de provider ocorre aqui (via AI Execution Policy) — nunca nos domínios.
+ * - Mantém compatibilidade: getActiveProvider/setActiveProvider (reexportados por
+ *   `provider.ts` como getProvider/setProvider) alimentam invokeLLM/generateText.
  */
 
+import { ENV } from "../env";
 import type { ProviderName } from "./executionPolicy";
 import type { AIProvider } from "./types";
-import { getProvider } from "./provider";
+import { GeminiProvider } from "./gemini";
 import { MockAIProvider } from "./mockProvider";
+import { ClaudeProvider, OpenAIProvider } from "./placeholderProviders";
 
 export interface ProviderAdapterInfo {
   readonly name: ProviderName;
-  /** true → adaptador implementado e utilizável; false → preparado (Future Evolution). */
+  /** true → adaptador implementado e utilizável; false → contrato preparado (Future Evolution). */
   readonly implemented: boolean;
   readonly description: string;
 }
@@ -29,14 +31,29 @@ export interface ProviderAdapterInfo {
 export const PROVIDER_ADAPTERS: Record<ProviderName, ProviderAdapterInfo> = {
   gemini: { name: "gemini", implemented: true, description: "Google Gemini — provider canônico ativo (via @google/generative-ai)." },
   mock:   { name: "mock",   implemented: true, description: "Provider determinístico para testes e fallback offline." },
-  claude: { name: "claude", implemented: false, description: "Anthropic Claude — adaptador preparado (Future Evolution)." },
-  openai: { name: "openai", implemented: false, description: "OpenAI — adaptador preparado (Future Evolution)." },
+  claude: { name: "claude", implemented: false, description: "Anthropic Claude — contrato preparado (Future Evolution)." },
+  openai: { name: "openai", implemented: false, description: "OpenAI — contrato preparado (Future Evolution)." },
 };
 
+// ─── Provider ativo (singleton) — ÚNICO ponto de instanciação do Gemini ───────
+
+let _active: AIProvider | null = null;
 let _mock: MockAIProvider | null = null;
+
 function mockProvider(): MockAIProvider {
   if (!_mock) _mock = new MockAIProvider();
   return _mock;
+}
+
+/** Provider canônico ativo (Gemini por padrão). Pode ser trocado em testes via setActiveProvider. */
+export function getActiveProvider(): AIProvider {
+  if (!_active) _active = new GeminiProvider(ENV.geminiApiKey);
+  return _active;
+}
+
+/** Substitui o provider ativo (testes / troca em runtime). */
+export function setActiveProvider(provider: AIProvider | null): void {
+  _active = provider;
 }
 
 export function isProviderImplemented(name: ProviderName): boolean {
@@ -44,22 +61,22 @@ export function isProviderImplemented(name: ProviderName): boolean {
 }
 
 /**
- * Resolve o AIProvider concreto para um provider nomeado.
- * - `gemini` → provider canônico ativo (getProvider()).
+ * Resolve o AIProvider concreto para um provider nomeado. Único lugar autorizado a
+ * instanciar/entregar providers.
+ * - `gemini` → provider canônico ativo.
  * - `mock`   → provider determinístico.
- * - `claude`/`openai` → NÃO implementados nesta fase → lança (o Adapter faz fallback).
+ * - `claude`/`openai` → contrato preparado (lança ProviderNotImplemented se usado).
  */
 export function resolveProviderByName(name: ProviderName): AIProvider {
   switch (name) {
     case "gemini":
-      return getProvider();
+      return getActiveProvider();
     case "mock":
       return mockProvider();
     case "claude":
+      return new ClaudeProvider();
     case "openai":
-      throw new Error(
-        `Provider "${name}" ainda não implementado (Future Evolution). Adaptador preparado, sem execução.`
-      );
+      return new OpenAIProvider();
     default:
       throw new Error(`Provider desconhecido: "${String(name)}".`);
   }
@@ -75,7 +92,8 @@ export interface ProviderResolution {
 /**
  * Seleciona o provider seguindo a AI Execution Policy: tenta o preferido, cai no
  * fallback e, por fim, no mock determinístico. A decisão de provider vive AQUI —
- * jamais nos Business Domains.
+ * jamais nos Business Domains. Providers não implementados (claude/openai) são
+ * pulados na seleção automática (mas continuam resolvíveis como contrato).
  */
 export function selectProvider(preferred: ProviderName, fallback: ProviderName): ProviderResolution {
   if (isProviderImplemented(preferred)) {

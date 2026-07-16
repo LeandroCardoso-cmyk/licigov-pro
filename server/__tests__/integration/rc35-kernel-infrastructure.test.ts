@@ -83,10 +83,13 @@ describe("RC-3.5 — Kernel Infrastructure Consolidation", () => {
       expect(Object.keys(PROVIDER_ADAPTERS)).toHaveLength(4);
     });
 
-    it("resolveProviderByName retorna provider para mock; lança para claude/openai", () => {
+    it("resolveProviderByName retorna provider para mock; contratos claude/openai lançam no uso (RC-3.5.1)", async () => {
       expect(resolveProviderByName("mock")).toBeInstanceOf(MockAIProvider);
-      expect(() => resolveProviderByName("claude")).toThrow(/Future Evolution|não implementado/);
-      expect(() => resolveProviderByName("openai")).toThrow(/Future Evolution|não implementado/);
+      // RC-3.5.1 — claude/openai existem como contratos (placeholders); lançam ao serem usados.
+      const claude = resolveProviderByName("claude");
+      const openai = resolveProviderByName("openai");
+      await expect(claude.generate({ messages: [{ role: "user", content: "x" }] })).rejects.toThrow(/não implementado|ProviderNotImplemented|Future/);
+      await expect(openai.generateText("x")).rejects.toThrow(/não implementado|ProviderNotImplemented|Future/);
     });
 
     it("selectProvider: preferido implementado é usado sem fallback", () => {
@@ -211,10 +214,16 @@ describe("RC-3.5 — Kernel Infrastructure Consolidation", () => {
         .rejects.toThrow("não encontrado");
     });
 
-    it("documentEngineService fala com o Storage Service, nunca com o S3 diretamente", () => {
-      const src = fs.readFileSync("server/services/documentEngineService.ts", "utf-8");
-      expect(src).toContain("../storage");
-      expect(src).not.toContain("@aws-sdk");
+    it("Document Engine NÃO acessa Storage; o Lifecycle Service é quem fala com o Storage (RC-3.5.1)", () => {
+      const engine = fs.readFileSync("server/services/documentEngineService.ts", "utf-8");
+      // Document Engine não conhece Storage/S3 — delega ao Lifecycle.
+      expect(engine).not.toContain("@aws-sdk");
+      expect(engine).not.toMatch(/from ["']\.\.\/storage["']/);
+      expect(engine).toContain("officialDocumentLifecycleService");
+      // O Lifecycle Service é o consumidor do Storage Service.
+      const lifecycle = fs.readFileSync("server/services/officialDocumentLifecycleService.ts", "utf-8");
+      expect(lifecycle).toContain("../storage");
+      expect(lifecycle).not.toContain("@aws-sdk");
     });
   });
 

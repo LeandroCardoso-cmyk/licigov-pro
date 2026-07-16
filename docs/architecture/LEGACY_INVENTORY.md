@@ -94,3 +94,21 @@ direta**, mas **saíram da navegação principal**. Nenhum código legado foi re
 
 > Nenhum código foi removido: o legado permanece por compatibilidade. Novos módulos usam
 > exclusivamente o Document Engine oficial (`documentEngineService` + `documentConverter`).
+
+---
+
+## Callers legados de IA (RC-3.5.1)
+
+Acessam o Gemini **diretamente** (anterior ao Provider Adapter/AIExecutionEngine). Mantidos
+por compatibilidade; usados apenas por routers legados — **nunca** pelos Business Domains
+oficiais. Novos fluxos DEVEM usar `AIExecutionEngine → Provider Adapter`.
+
+| Componente | Classe | Consumido por |
+|---|---|---|
+| `server/services/gemini.ts` | **LEGADO** | `documentsRouter`, `processesRouter` |
+| `server/services/ai/suggestions.ts` | **LEGADO** | `aiAssistantRouter` |
+
+> `server/services/embeddings.ts` **não** é legado: é infraestrutura de **embeddings**
+> (`text-embedding-004`), um concern distinto da geração de texto do Provider Adapter.
+> Ambos os legados constam na allowlist explícita dos testes de fronteira
+> (`rc351-kernel-refinement.test.ts`) — qualquer novo acesso direto a provider falha o teste.

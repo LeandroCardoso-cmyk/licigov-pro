@@ -20,6 +20,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
+import { IS_PRODUCTION, IS_STAGING } from "./config/env";
 
 // ─── S3 client (lazy) ─────────────────────────────────────────────────────────
 
@@ -28,6 +29,32 @@ let _s3: S3Client | null = null;
 /** Indica se o Storage Service está configurado (credenciais + bucket presentes). */
 export function isStorageConfigured(): boolean {
   return Boolean(ENV.awsAccessKeyId && ENV.awsSecretAccessKey && ENV.awsS3Bucket);
+}
+
+// ─── Storage Policy (RC-3.5.1) ────────────────────────────────────────────────
+// A decisão sobre armazenamento vive EXCLUSIVAMENTE aqui. Nenhum Business Domain
+// conhece esta política.
+//
+// - Development/Testes: é permitido usar Buffer/Base64 (facilita dev e a suíte).
+// - Production/Staging: o Storage Service DEVE estar operacional. Sem storage, a
+//   geração do documento oficial FALHA explicitamente — nunca há fallback para Base64.
+
+/** true apenas em desenvolvimento/testes: permite fallback Base64 quando o storage não está configurado. */
+export function storageFallbackAllowed(): boolean {
+  return !IS_PRODUCTION && !IS_STAGING;
+}
+
+/**
+ * Garante que o armazenamento é viável no ambiente atual. Em produção/staging sem
+ * storage configurado, lança erro explícito (nunca inicia geração com base64).
+ */
+export function assertStorageUsable(): void {
+  if (isStorageConfigured()) return;
+  if (!storageFallbackAllowed()) {
+    throw new Error(
+      "Storage Service indisponível: em produção/staging o armazenamento é obrigatório para gerar documentos oficiais. Configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_S3_BUCKET."
+    );
+  }
 }
 
 function getS3(): S3Client {

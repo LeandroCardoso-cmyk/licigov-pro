@@ -1,21 +1,23 @@
-import { ENV } from "../env";
-import { GeminiProvider } from "./gemini";
+/**
+ * RC-3.5.1 — Compatibilidade da camada de provider.
+ *
+ * O ÚNICO ponto de instanciação/seleção de providers é o Provider Adapter
+ * (`providerAdapter.ts`). Este módulo apenas reexporta o provider ativo para
+ * manter compatibilidade com `invokeLLM`/`generateText` (llm.ts) e testes:
+ *   getProvider = provider canônico ativo (Gemini) via Provider Adapter.
+ */
+
+import { getActiveProvider, setActiveProvider } from "./providerAdapter";
 import type { AIProvider } from "./types";
 
-// Singleton — swap this export to change the active provider globally.
-// Future: select provider via ENV.AI_PROVIDER ("gemini" | "openai" | "llama")
-let _provider: AIProvider | null = null;
-
+/** Provider canônico ativo, resolvido exclusivamente pelo Provider Adapter. */
 export function getProvider(): AIProvider {
-  if (!_provider) {
-    _provider = new GeminiProvider(ENV.geminiApiKey);
-  }
-  return _provider;
+  return getActiveProvider();
 }
 
-/** Replace the active provider (useful in tests or for runtime switching). */
+/** Substitui o provider ativo (útil em testes ou troca em runtime). */
 export function setProvider(provider: AIProvider): void {
-  _provider = provider;
+  setActiveProvider(provider);
 }
 
 export type { AIProvider };

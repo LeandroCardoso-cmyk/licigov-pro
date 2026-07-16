@@ -1,12 +1,27 @@
-# Kernel Infrastructure — Consolidação (RC-3.5)
+# Kernel Infrastructure — Consolidação (RC-3.5 / RC-3.5.1)
 
 > **Fonte oficial da verdade:** [PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md).
-> A RC-3.5 consolida a infraestrutura permanente do Cognitive Kernel: execução de IA,
-> camada de providers, storage, documentos oficiais, banco e autenticação. Nada de
-> regra de negócio ou fluxo operacional foi alterado — apenas a base técnica foi unificada.
+> A RC-3.5 consolidou a infraestrutura permanente do Cognitive Kernel; a **RC-3.5.1**
+> refina a separação de responsabilidades: extrai o **ciclo de vida documental** do
+> Document Engine, torna o **Provider Adapter** o único instanciador de providers e
+> formaliza a **Storage Policy**. Nenhuma regra de negócio, fluxo ou UX foi alterado.
 
-A RC-3.5 registra **três novos componentes permanentes do Cognitive Kernel**:
-`ai_execution_engine`, `provider_adapter` e `storage_service`.
+Componentes permanentes registrados no Cognitive Kernel:
+`ai_execution_engine`, `provider_adapter`, `storage_service` (RC-3.5) e
+`official_document_lifecycle` (RC-3.5.1).
+
+## Responsabilidade única (mapa definitivo)
+
+| Componente | Responsabilidade |
+|---|---|
+| **AIExecutionEngine** | Executa tarefas cognitivas (pipeline de IA). |
+| **Provider Adapter** | Seleciona e instancia o Provider. Único ponto de acesso a modelos. |
+| **Document Engine** | **Apenas gera documentos** (recebe conteúdo → converte → renderiza → retorna artefato). |
+| **OfficialDocumentLifecycleService** | Gerencia o ciclo de vida documental (versão, timeline, hash, metadados, Storage, Signed URL). |
+| **Storage Service** | Gerencia armazenamento (única porta AWS/S3 + Storage Policy). |
+| **Business Domains** | Apenas consomem serviços do Kernel. |
+
+Nenhum componente conhece detalhes de implementação de outro. Cada um tem responsabilidade única.
 
 ---
 
@@ -49,10 +64,14 @@ AIExecutionEngine → Provider Adapter → Gemini | Claude | OpenAI | Future
 
 - **Arquivo:** `server/_core/ai/providerAdapter.ts`.
 - `resolveProviderByName(name)` e `selectProvider(preferred, fallback)`.
-- **Gemini** e **mock** estão implementados; **Claude/OpenAI** ficam **preparados**
-  (Future Evolution) — a arquitetura existe, a implementação não. Não há remoção do
-  suporte existente (compatibilidade preservada com `getProvider`/`setProvider` e `invokeLLM`).
-- Cadeia de fallback: preferido → fallback → mock determinístico (nunca quebra).
+- **Único instanciador de providers (RC-3.5.1):** somente o Provider Adapter executa
+  `new GeminiProvider(...)`. `provider.ts` (`getProvider`/`setProvider`) apenas reexporta o
+  provider ativo do Adapter — compatibilidade com `invokeLLM`/`generateText` preservada.
+- **Gemini** e **mock** implementados; **Claude/OpenAI** existem como **contratos**
+  (`placeholderProviders.ts`) que lançam `ProviderNotImplemented` se usados — Future
+  Evolution, sem chamadas reais. Não há remoção de suporte existente.
+- Cadeia de fallback: preferido → fallback → mock determinístico (nunca quebra); a seleção
+  automática nunca escolhe claude/openai (não implementados).
 
 ---
 
@@ -77,21 +96,48 @@ AIExecutionEngine → Provider Adapter → Gemini | Claude | OpenAI | Future
 - **Versionamento futuro:** o `OfficialDocument` já guarda `storageKey/mimeType/size/hash`
   por versão — versionamento nativo de bucket é evolução futura.
 
+### Storage Policy (RC-3.5.1)
+
+A decisão sobre armazenamento vive **exclusivamente** no Storage Service — nenhum Business
+Domain a conhece:
+
+- **Development/Testes:** é permitido `Buffer`/Base64 (`storageFallbackAllowed()` → true).
+- **Production/Staging:** o Storage Service **deve** estar operacional. Sem storage,
+  `assertStorageUsable()` **falha explicitamente** na geração do documento oficial — **nunca**
+  há fallback automático para Base64.
+
 ---
 
-## 4. Document Engine → Storage Service
+## 4. Document Engine → OfficialDocumentLifecycleService → Storage Service
 
-O **Document Engine** (`documentEngineService.ts`) **nunca conhece o S3**: toda a
-comunicação passa pelo Storage Service.
+**Fluxo oficial (RC-3.5.1):**
 
 ```
-Business Domain → OfficialDocument → Document Engine → Storage Service → Amazon S3 → Signed URL → Download
+Business Domain → Document Engine → OfficialDocumentLifecycleService → Storage Service → Amazon S3 → Signed URL → OfficialDocument
 ```
 
-- `renderOfficialDocument(...)`: gera o binário (DOCX/PDF via `documentConverter`),
-  faz `storagePut`, obtém a URL assinada e **persiste as referências** no `OfficialDocument`
-  (`storageKey/mimeType/size/hash`). Quando o storage não está configurado, degrada para
-  base64 (nunca binário no banco).
+### Document Engine — apenas gera (`documentEngineService.ts`)
+
+Responsabilidade única: **receber conteúdo → converter → renderizar → retornar artefato**.
+O Document Engine **NÃO** versiona, **NÃO** registra timeline, **NÃO** faz upload, **NÃO**
+acessa o Storage e **NÃO** conhece o Amazon S3. `renderOfficialDocument` apenas converte
+(via `documentConverter`) e entrega o buffer ao Lifecycle.
+
+### OfficialDocumentLifecycleService (`official_document_lifecycle`)
+
+Componente **permanente** com responsabilidade exclusiva pelo ciclo de vida:
+
+```
+receber documento → versionar → registrar timeline → calcular hash →
+persistir metadados → utilizar Storage Service → armazenar StorageKey →
+gerar Signed URL → devolver OfficialDocument
+```
+
+- **Arquivo:** `server/services/officialDocumentLifecycleService.ts`.
+- `createDocument(...)` (versão + timeline + hash + persistência) e
+  `storeRenderedArtifact(...)` (hash + Storage Policy + `storagePut` + Signed URL +
+  persistência das referências + timeline).
+- É o **único** consumidor do Storage Service no fluxo documental.
 
 ### OfficialDocument — referências de storage
 
@@ -128,13 +174,21 @@ Eliminado o antigo fallback de string vazia (`JWT_SECRET` nunca é vazio):
 
 ---
 
-## Garantias verificadas por teste (`rc35-kernel-infrastructure.test.ts`, ORG 11300)
+## Garantias verificadas por teste
 
+**`rc35-kernel-infrastructure.test.ts` (ORG 11300):**
 - AIExecutionEngine: 11 etapas na ordem oficial, replay-safe, explicabilidade, Kernel gate.
-- Provider Adapter: gemini/mock implementados, claude/openai preparados, fallback → mock.
+- Provider Adapter: gemini/mock implementados, claude/openai como contratos, fallback → mock.
 - AI Execution Policy: campos obrigatórios, Gemini preferido, seleção só na política.
 - Storage Service: contrato completo; `@aws-sdk` só em `storage.ts`.
 - OfficialDocument: `storageKey/mimeType/size/hash` presentes (default vazio).
-- Document Engine: fala com Storage Service, nunca com S3 direto.
 - JWT: nunca vazio; sem `JWT_SECRET` a init é bloqueada.
-- Isolamento: nenhum Business Domain importa `@aws-sdk`, `../storage` ou `_core/ai/provider`.
+
+**`rc351-kernel-refinement.test.ts` (ORG 11400):**
+- OfficialDocumentLifecycleService controla o ciclo (createDocument, storeRenderedArtifact).
+- Document Engine NÃO faz upload, NÃO versiona, NÃO registra timeline, NÃO acessa Storage.
+- Provider Adapter é o único a instanciar `GeminiProvider`; Claude/OpenAI lançam `ProviderNotImplemented`.
+- Fronteira: só a camada de IA importa `@google/generative-ai` / chama `model.generateContent`.
+- Storage Policy: Base64 só em dev; produção/staging exigem storage.
+- Isolamento: nenhum Business Domain importa `@aws-sdk`, `../storage`, `_core/ai/provider`,
+  `@google/generative-ai` nem chama `model.generateContent`.

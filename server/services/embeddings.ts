@@ -1,3 +1,12 @@
+/**
+ * RC-3.5.1 — Infraestrutura de EMBEDDINGS do Kernel (text-embedding-004).
+ *
+ * Gera embeddings vetoriais (não é geração de texto). O Provider Adapter cobre
+ * inferência de texto; embeddings são um concern distinto (o contrato AIProvider
+ * lista embedText como evolução futura). Componente de infraestrutura sancionado —
+ * consta na allowlist da camada de IA nos testes de fronteira. Não é um bypass do
+ * Provider Adapter para geração de texto.
+ */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ENV } from "../_core/env";
 import { createHash } from "crypto";

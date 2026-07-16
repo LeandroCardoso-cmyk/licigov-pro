@@ -190,7 +190,8 @@ Incluindo:
 - Observabilidade
 - Replay Safety
 - **AIExecutionEngine** — pipeline oficial de execução de IA (RC-3.5)
-- **Provider Adapter** — camada agnóstica de providers (RC-3.5)
+- **Provider Adapter** — camada agnóstica de providers, único instanciador (RC-3.5 / RC-3.5.1)
+- **OfficialDocumentLifecycleService** — ciclo de vida documental (RC-3.5.1)
 - **Storage Service** — único ponto de acesso ao Amazon S3 (RC-3.5)
 
 Nenhum domínio acessa infraestrutura diretamente.

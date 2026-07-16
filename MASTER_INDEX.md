@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.8.5 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
+> Versão: 0.8.6 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -14,7 +14,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | **Arquitetura oficial** | Cognitive Kernel + **Business Domains** + Centro de Operações | A operação ocorre exclusivamente pelos Business Domains (Processo Licitatório, Contratação Direta, Parecer Jurídico, Contratos, Centro de Operações) |
 | **Legado (compatibilidade)** | [docs/architecture/LEGACY_INVENTORY.md](docs/architecture/LEGACY_INVENTORY.md) | **Módulos legados permanecem apenas por compatibilidade — fora da navegação oficial (RC-2)** |
 | **Document Engine** | [docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md](docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md) | **Pipeline ÚNICO oficial de documentos (DOCX/PDF, versionado) — componente permanente do Kernel (RC-3)** |
-| **Infraestrutura do Kernel** | [docs/architecture/KERNEL_INFRASTRUCTURE.md](docs/architecture/KERNEL_INFRASTRUCTURE.md) | **AIExecutionEngine + Provider Adapter + Storage Service + MySQL + S3 + JWT obrigatório — componentes permanentes do Kernel (RC-3.5)** |
+| **Infraestrutura do Kernel** | [docs/architecture/KERNEL_INFRASTRUCTURE.md](docs/architecture/KERNEL_INFRASTRUCTURE.md) | **AIExecutionEngine + Provider Adapter + OfficialDocumentLifecycleService + Storage Service + MySQL + S3 + JWT obrigatório — componentes permanentes do Kernel (RC-3.5 / RC-3.5.1)** |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
 | Multi-tenant | [architecture/MULTI_TENANT_MODEL.md](architecture/MULTI_TENANT_MODEL.md) | Isolamento e RBAC |
