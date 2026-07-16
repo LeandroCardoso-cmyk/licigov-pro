@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.9.2 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
+> Versão: 0.9.3 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -17,7 +17,8 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | **Infraestrutura do Kernel** | [docs/architecture/KERNEL_INFRASTRUCTURE.md](docs/architecture/KERNEL_INFRASTRUCTURE.md) | **AIExecutionEngine + Provider Adapter + OfficialDocumentLifecycleService + Storage Service + MySQL + S3 + JWT — componentes permanentes com fronteiras OBRIGATÓRIAS aplicadas por testes (RC-3.5 → RC-3.5.2)** |
 | **Fronteiras arquiteturais** | [server/kernel/architecture/legacyBoundaries.ts](server/kernel/architecture/legacyBoundaries.ts) | **Ponto ÚNICO de exceções (allowlists de Provider/Document/Legacy/AWS) — toda fronteira validada por `rc352-boundary-enforcement.test.ts` (RC-3.5.2)** |
 | **🧠 Fundação Cognitiva** | [docs/architecture/COGNITIVE_ARCHITECTURE.md](docs/architecture/COGNITIVE_ARCHITECTURE.md) | **AIExecutionEngine = ÚNICO ponto de entrada cognitiva (RC-4.1). Cognitive Tasks, Pipeline, Cognitive Response universal, Replay Hash semântico, validação obrigatória. executeAITask aposentado; invokeLLM só no legado; Mock Provider ativo (RC-4.0 → RC-4.1)** |
-| Pipeline Cognitivo | [docs/architecture/COGNITIVE_PIPELINE.md](docs/architecture/COGNITIVE_PIPELINE.md) | As 13 etapas observáveis do `executeCognitiveTask` |
+| Pipeline Cognitivo | [docs/architecture/COGNITIVE_PIPELINE.md](docs/architecture/COGNITIVE_PIPELINE.md) | As etapas observáveis do `executeCognitiveTask` (com raciocínio institucional) |
+| Raciocínio Institucional | [docs/architecture/INSTITUTIONAL_REASONING.md](docs/architecture/INSTITUTIONAL_REASONING.md) | **Institutional Reasoning Framework: Reasoning Plan (12 etapas), Institutional Rules, Explainability expandida (RC-4.2)** |
 | AIExecutionEngine | [docs/architecture/AI_EXECUTION_ENGINE.md](docs/architecture/AI_EXECUTION_ENGINE.md) | Contrato do cérebro cognitivo (única porta de IA) |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |

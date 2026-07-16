@@ -10,6 +10,7 @@
 import type { AIExecutionContext } from "../../domain/aiExecutionContext";
 import { structuredDataSize, responseShapeHash, type CognitiveResponse, type CognitiveResponseValidation, type CognitiveResponseType } from "../../domain/cognitiveResponse";
 import type { CognitiveTaskId } from "../../domain/cognitiveTask";
+import { splitAlternatives, type InstitutionalReasoningPlan } from "../../domain/institutionalReasoning";
 
 export interface CognitiveObservability {
   readonly correlationId: string;
@@ -30,6 +31,14 @@ export interface CognitiveObservability {
   readonly structuredDataSize: number;
   readonly responseShapeHash: string;
   readonly contractVersion: string;
+  // RC-4.2 — Institutional Reasoning
+  readonly reasoningPlanId: string;
+  readonly reasoningPlanHash: string;
+  readonly appliedRules: readonly string[];
+  readonly alternativePaths: readonly string[];
+  readonly discardedPaths: readonly string[];
+  readonly knowledgeSources: readonly string[];
+  readonly groundingUsed: boolean;
 }
 
 const _byCorrelation = new Map<string, CognitiveObservability>();
@@ -42,10 +51,12 @@ export function recordCognitiveObservability(params: {
   context: AIExecutionContext;
   response: CognitiveResponse;
   validation: CognitiveResponseValidation;
+  reasoningPlan?: InstitutionalReasoningPlan;
 }): CognitiveObservability {
-  const { context, response, validation } = params;
+  const { context, response, validation, reasoningPlan } = params;
   const g = context.grounding;
   const dataSize = structuredDataSize(response.structuredData);
+  const alt = reasoningPlan ? splitAlternatives(reasoningPlan) : { recommended: "", discarded: [] };
 
   const obs: CognitiveObservability = {
     correlationId: context.request.correlationId,
@@ -65,6 +76,13 @@ export function recordCognitiveObservability(params: {
     structuredDataSize: dataSize,
     responseShapeHash: responseShapeHash(response, dataSize),
     contractVersion: response.contractVersion,
+    reasoningPlanId: reasoningPlan?.id ?? "",
+    reasoningPlanHash: reasoningPlan?.replayHash ?? "",
+    appliedRules: reasoningPlan?.rules ?? [],
+    alternativePaths: reasoningPlan?.alternatives ?? [],
+    discardedPaths: alt.discarded.map(d => d.alternative),
+    knowledgeSources: [...g.documentsUsed, ...g.lawsUsed],
+    groundingUsed: g.groundingApplied,
   };
 
   _byCorrelation.set(context.request.correlationId, obs);

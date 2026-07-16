@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784226302.914916,
-    "ast_hash": "7d3c1647d38b05519c83d910891567a1",
+    "mtime": 1784227406.760801,
+    "ast_hash": "d209782463567aa3e4b2ea39996c651c",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8570,13 +8570,13 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784224045.2510056,
-    "ast_hash": "f395628b39c427c21f647706b9bb8c1d",
+    "mtime": 1784227200.216789,
+    "ast_hash": "0bde98d8ec751850dca755c8027b21a6",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784226290.7109153,
-    "ast_hash": "11e70f70116962988f8e4c03198949f7",
+    "mtime": 1784227396.2088006,
+    "ast_hash": "871a862f3e26d0031732cd11c0948f24",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8605,8 +8605,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
-    "mtime": 1784222444.1088743,
-    "ast_hash": "085d2d915a6eb5424f6af437bba5798b",
+    "mtime": 1784227262.1927927,
+    "ast_hash": "2503d9d4ebb70e13acac7653f01faa6b",
     "semantic_hash": ""
   },
   "server/domain/aiExecutionContext.ts": {
@@ -8615,8 +8615,8 @@
     "semantic_hash": ""
   },
   "server/domain/cognitiveResponse.ts": {
-    "mtime": 1784223995.7430027,
-    "ast_hash": "c5182d57742440ed13bd3910ab990bfd",
+    "mtime": 1784227150.0767858,
+    "ast_hash": "72f0e7b5be08d299b1d141477ab48c06",
     "semantic_hash": ""
   },
   "server/domain/cognitiveTask.ts": {
@@ -8625,8 +8625,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveObservabilityService.ts": {
-    "mtime": 1784224069.779007,
-    "ast_hash": "460bc7e4af4ddd8840a3c38ce617fedc",
+    "mtime": 1784227228.2807906,
+    "ast_hash": "6379cdd13c526cf110a7837c91f76a6b",
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
@@ -8635,18 +8635,18 @@
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
-    "mtime": 1784226273.9989142,
-    "ast_hash": "5ad2e95fa0eaf30ea453d0e14a28c735",
+    "mtime": 1784227386.7608,
+    "ast_hash": "7c986bc12f0d72adfcb4d83d1b0ea9b5",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784226266.130914,
-    "ast_hash": "15fdb537d5b1d7b3712e3462446dbc26",
+    "mtime": 1784227379.2727995,
+    "ast_hash": "3f90b94934d62d4506e6f08f81998e9a",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
-    "mtime": 1784226281.3509147,
-    "ast_hash": "aac2dd6a63b3e9cce3b94f4cca9750dd",
+    "mtime": 1784227371.492799,
+    "ast_hash": "40ea5d20cb913b0952f5eb67a59ae6d1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc401-cognitive-contract.test.ts": {
@@ -8657,6 +8657,26 @@
   "server/__tests__/integration/rc41-cognitive-activation.test.ts": {
     "mtime": 1784226138.3989062,
     "ast_hash": "a6f4d76cecc3510865fefc89c190ba00",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc42-institutional-reasoning.test.ts": {
+    "mtime": 1784227304.544795,
+    "ast_hash": "d4f59f367218379cdfbbdc7f98abbb23",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalReasoning.ts": {
+    "mtime": 1784227139.3887854,
+    "ast_hash": "1c0e4ad0965ff3710a5e75b913a0e2ff",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalRules.ts": {
+    "mtime": 1784227108.0487833,
+    "ast_hash": "7f48cd52c4f01c36bd718ca6ca8427a7",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_REASONING.md": {
+    "mtime": 1784227363.6887987,
+    "ast_hash": "9337714e6fb004f49a6e2a4446f386be",
     "semantic_hash": ""
   }
 }

@@ -29,6 +29,13 @@ export interface CognitiveExplainability {
   readonly discardedRecommendations: readonly string[];
   readonly confidence: number;
   readonly limitations: readonly string[];
+  // RC-4.2 — Institutional Reasoning (opcionais para compatibilidade):
+  /** Regras institucionais aplicadas no raciocínio. */
+  readonly rulesApplied?: readonly string[];
+  /** Alternativas consideradas no plano de raciocínio. */
+  readonly alternativesConsidered?: readonly string[];
+  /** Alternativas descartadas + motivo (nada implícito). */
+  readonly discardedAlternatives?: readonly { readonly alternative: string; readonly reason: string }[];
 }
 
 export interface CognitiveResponse {

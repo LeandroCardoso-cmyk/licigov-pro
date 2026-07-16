@@ -38,6 +38,14 @@ executeCognitiveTask({
 - **Structured Cognitive Response (RC-4.0.1):** o Engine pode produzir texto **ou** payload
   estruturado (`responseType` + `structuredData`) — o contrato não presume texto.
 
+## Raciocínio institucional (RC-4.2)
+
+Antes de qualquer resposta, o Engine constrói um **InstitutionalReasoningPlan** (12 etapas
+declarativas) a partir das **Institutional Rules** aplicáveis, do grounding e do Knowledge
+Graph. O plano acompanha a `CognitiveExecution` (`reasoningPlan`) e alimenta a Explainability
+(regras aplicadas, alternativas consideradas/descartadas com motivo). Determinístico e
+reproduzível. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
+
 ## Decisões delegadas à AIExecutionPolicy
 
 O engine **nunca** decide diretamente provider, modelo, grounding, Knowledge Graph,
