@@ -93,6 +93,15 @@ Separação definitiva **Conhecimento → Raciocínio → Resposta**. O AIExecut
 regras aplicadas, alternativas consideradas e descartadas (com motivo). Mock Provider mantido —
 valida o raciocínio, não o texto. Ver [INSTITUTIONAL_REASONING.md](./INSTITUTIONAL_REASONING.md).
 
+## Conhecimento institucional (RC-4.3)
+
+A partir da RC-4.3, o sistema possui um **Institutional Operating Model** — a ontologia
+operacional permanente do Departamento de Licitações (papéis, objetos, estados, eventos,
+dependências, relacionamentos, regras operacionais). **Declarativa, determinística, sem
+conteúdo jurídico.** Reutilizável por Business Domains, Knowledge Graph, AIExecutionEngine,
+Copilotos, Document Engine e Reasoning Framework — **somente consulta**, sem alterar o Kernel.
+Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor

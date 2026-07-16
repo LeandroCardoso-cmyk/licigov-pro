@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784232665.8702652,
-    "ast_hash": "4327122f17919877b34df455421d9e66",
+    "mtime": 1784234457.522772,
+    "ast_hash": "e120b2d02c6729ed27efebf7271bf7c3",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784232678.4043167,
-    "ast_hash": "66de5ed07fbfd69004764997a55f1c53",
+    "mtime": 1784234449.1910386,
+    "ast_hash": "1a983d2d9ca6923d7470e1a028a83934",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784232688.2403166,
-    "ast_hash": "b2b269c046b38a05496a4701ff43b720",
+    "mtime": 1784234438.2030387,
+    "ast_hash": "b7a99ad63f06843d1284f42416edbfe1",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8722,6 +8722,46 @@
   "docs/architecture/PRODUCTION_MONITORING.md": {
     "mtime": 1784232654.4683173,
     "ast_hash": "a371ffc312e8a81cba17edff347704a7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc43-institutional-operating-model.test.ts": {
+    "mtime": 1784234361.6870406,
+    "ast_hash": "617c37ad987b4cffa7eaacf374821a51",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/events.ts": {
+    "mtime": 1784234219.2550437,
+    "ast_hash": "952d88879deb72f7ef887c046a4c2af3",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/objects.ts": {
+    "mtime": 1784234174.8150449,
+    "ast_hash": "fc5c36f8ce35c6efe4651b1a26bc8eb2",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/operatingModel.ts": {
+    "mtime": 1784234308.6830418,
+    "ast_hash": "0c82a5d393b2184c75c7b54d518945a4",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/operationalRules.ts": {
+    "mtime": 1784234232.6430435,
+    "ast_hash": "7bdcad08ca5d815bc3803349a0e43c43",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/roles.ts": {
+    "mtime": 1784234201.1310441,
+    "ast_hash": "9f05c807b654ba0a609f851b029cc403",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/states.ts": {
+    "mtime": 1784234133.1590457,
+    "ast_hash": "3a1ff6d883d7f2f1977e039586393c51",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md": {
+    "mtime": 1784234428.183039,
+    "ast_hash": "bf037d37762e3ff2b8309198c6aea411",
     "semantic_hash": ""
   }
 }

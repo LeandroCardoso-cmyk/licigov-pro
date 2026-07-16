@@ -109,6 +109,12 @@ Provider → LLM → Reasoning → Explainability → Result
 > (status/mensagem/detalhe/recomendação), endpoint read-only `/system/health` e observabilidade
 > do health check com retenção simples. Ver [PRODUCTION_MONITORING.md](./PRODUCTION_MONITORING.md).
 
+> **RC-4.3 — Institutional Operating Model:** inaugura a fase de **Conhecimento Institucional**.
+> Ontologia operacional permanente do Departamento de Licitações (`server/domain/institutional/`):
+> **papéis, objetos, estados, eventos, dependências, relacionamentos, regras operacionais** —
+> declarativa, determinística, sem conteúdo jurídico. Reutilizável por toda a camada cognitiva
+> (somente consulta). Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,
