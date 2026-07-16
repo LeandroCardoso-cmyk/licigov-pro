@@ -62,12 +62,20 @@ Task → Policy → Prompt → Grounding → Knowledge Graph → RAG →
 Provider → LLM → Reasoning → Explainability → Result
 ```
 
-- **Arquivo:** `server/services/aiExecutionEngine.ts` — `executeAITask(input)`.
+- **Arquivo:** `server/services/aiExecutionEngine.ts` — `executeAITask(input)` (baixo nível)
+  e **`executeCognitiveTask(input)`** (RC-4.0 — pipeline cognitivo).
 - Determinístico e **replay-safe** (`replayHash` via sha256 dos insumos).
 - **Multi-tenant** (`organizationId`).
 - **Kernel-gated:** quando o domínio é informado, o acesso é validado contra
   `requiredKernelServices` via `assertKernelAccess(domain, "ai_orchestration")`.
 - Cada etapa é registrada em `stages[]` (aplicada/pulada) para observabilidade.
+
+> **RC-4.0 — Fase Cognitiva:** o AIExecutionEngine é o **cérebro institucional**. Os
+> Business Domains solicitam **Cognitive Tasks** (13 oficiais) e recebem uma **Cognitive
+> Response** estruturada, com Explainability obrigatória, contexto de execução e
+> observabilidade. Ver [COGNITIVE_ARCHITECTURE.md](./COGNITIVE_ARCHITECTURE.md),
+> [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md) e
+> [COGNITIVE_PIPELINE.md](./COGNITIVE_PIPELINE.md).
 
 ### AI Execution Policy
 
