@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.9.5 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
+> Versão: 0.10.0 | Branch: claude/rc-4.3 | Atualizado: 2026-07-16
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -21,6 +21,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | Raciocínio Institucional | [docs/architecture/INSTITUTIONAL_REASONING.md](docs/architecture/INSTITUTIONAL_REASONING.md) | **Institutional Reasoning Framework: Reasoning Plan (12 etapas), Institutional Rules, Explainability expandida (RC-4.2)** |
 | 🚀 Production Readiness | [docs/architecture/PRODUCTION_READINESS.md](docs/architecture/PRODUCTION_READINESS.md) | **Observabilidade persistente, Health Check institucional, validação de ambiente, Storage/Provider readiness (RC-4.2.1)** |
 | 🩺 Production Monitoring | [docs/architecture/PRODUCTION_MONITORING.md](docs/architecture/PRODUCTION_MONITORING.md) | **Monitor Operacional Institucional: Health Engine, Health Score determinístico, endpoint /system/health (RC-4.2.2)** |
+| 🏛️ Conhecimento Institucional | [docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md](docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md) | **Institutional Operating Model: ontologia do Departamento de Licitações (papéis, objetos, estados, eventos, dependências, regras) — declarativa e determinística (RC-4.3)** |
 | AIExecutionEngine | [docs/architecture/AI_EXECUTION_ENGINE.md](docs/architecture/AI_EXECUTION_ENGINE.md) | Contrato do cérebro cognitivo (única porta de IA) |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
