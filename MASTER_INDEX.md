@@ -13,6 +13,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | **📜 Constituição** | [docs/architecture/PRODUCT_NORTH_STAR.md](docs/architecture/PRODUCT_NORTH_STAR.md) | **Filosofia permanente do produto — fonte oficial da verdade, com precedência sobre docs de visão anteriores** |
 | **Arquitetura oficial** | Cognitive Kernel + **Business Domains** + Centro de Operações | A operação ocorre exclusivamente pelos Business Domains (Processo Licitatório, Contratação Direta, Parecer Jurídico, Contratos, Centro de Operações) |
 | **Legado (compatibilidade)** | [docs/architecture/LEGACY_INVENTORY.md](docs/architecture/LEGACY_INVENTORY.md) | **Módulos legados permanecem apenas por compatibilidade — fora da navegação oficial (RC-2)** |
+| **Document Engine** | [docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md](docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md) | **Pipeline ÚNICO oficial de documentos (DOCX/PDF, versionado) — componente permanente do Kernel (RC-3)** |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
 | Multi-tenant | [architecture/MULTI_TENANT_MODEL.md](architecture/MULTI_TENANT_MODEL.md) | Isolamento e RBAC |

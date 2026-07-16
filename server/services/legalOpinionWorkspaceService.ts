@@ -11,6 +11,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { receiveRequest as receiveInstitutionalRequest, respondRequest } from "./institutionalRequestService";
 import {
@@ -193,6 +194,16 @@ export async function createOpinionDraft(params: {
     organizationId: params.organizationId, draftId: draft.id, workspaceId: ws.id, version: draft.version,
     contentHash: draftContentHash(draft), snapshot: JSON.stringify({ report: draft.report, conclusion: draft.conclusion }),
     author: params.author, correlationId: params.correlationId,
+  });
+
+  // RC-3 — parecer oficial pelo pipeline ÚNICO (Document Engine).
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: "parecer_juridico",
+    documentType: params.opinionType === "LEGAL_OPINION_FINAL" ? "parecer_final" : "parecer_inicial",
+    origin: ws.id, title: `Parecer — ${ws.referenceProcessId || ws.id}`,
+    content: `# Parecer Jurídico\n\n## Relatório\n${draft.report}\n\n## Fundamentação\n${draft.foundation}\n\n## Conclusão\n${draft.conclusion}`,
+    author: String(params.author), correlationId: params.correlationId,
+    metadata: { opinionType: params.opinionType, conclusionType: draft.conclusionType },
   });
 
   const moved = ws.currentStage === "DRAFT" ? ws : transitionLegalStage(ws, "DRAFT");

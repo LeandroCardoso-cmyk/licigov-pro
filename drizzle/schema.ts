@@ -5489,3 +5489,41 @@ export const operationalSettingsTable = mysqlTable("operational_settings", {
   createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:          datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── RC-3 — Official Document Engine (componente permanente do Kernel) ────────
+// Pipeline ÚNICO de documentos oficiais de todos os Business Domains. Cada linha
+// de official_documents é uma VERSÃO (nunca sobrescreve); a timeline é append-only.
+// Multi-tenant, replay-safe.
+
+export const officialDocumentsTable = mysqlTable("official_documents", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  tenantId:       int("tenant_id").notNull(),
+  businessDomain: varchar("business_domain", { length: 40 }).notNull().default(""),
+  documentType:   varchar("document_type", { length: 40 }).notNull().default("outro"),
+  origin:         varchar("origin", { length: 64 }).notNull().default(""),
+  title:          varchar("title", { length: 500 }).notNull().default(""),
+  version:        int("version").notNull().default(1),
+  status:         varchar("status", { length: 20 }).notNull().default("gerado"),
+  template:       varchar("template", { length: 120 }).notNull().default(""),
+  content:        longtext("content"),
+  metadata:       text("metadata"),
+  author:         varchar("author", { length: 60 }).notNull().default(""),
+  lineageId:      varchar("lineage_id", { length: 20 }).notNull().default(""),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  replayHash:     varchar("replay_hash", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const officialDocumentTimelineTable = mysqlTable("official_document_timeline", {
+  id:             varchar("id", { length: 20 }).notNull().primaryKey(),
+  tenantId:       int("tenant_id").notNull(),
+  lineageId:      varchar("lineage_id", { length: 20 }).notNull().default(""),
+  documentId:     varchar("document_id", { length: 20 }).notNull().default(""),
+  eventOrder:     int("event_order").notNull().default(0),
+  eventType:      varchar("event_type", { length: 40 }).notNull().default(""),
+  actor:          varchar("actor", { length: 60 }).notNull().default(""),
+  summary:        text("summary"),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});

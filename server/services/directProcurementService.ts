@@ -11,6 +11,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
@@ -100,6 +101,14 @@ export async function generateContractJustification(params: {
     correlationId: params.correlationId,
   });
   const justification = await upsertContractJustification(draft);
+  // RC-3 — justificativa oficial pelo pipeline ÚNICO (Document Engine).
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_contratacao",
+    origin: ws.id, title: `Justificativa da Contratação — ${ws.processNumber}`,
+    content: `# Justificativa da Contratação\n\n## Necessidade\n${draft.need}\n\n## Motivação\n${draft.motivation}\n\n## Fundamento\n${draft.legalFoundation}`,
+    author: "multi_copilot", correlationId: params.correlationId,
+    metadata: { copilots: orchestration.selectedCopilots, confidence: orchestration.consolidated.confidence },
+  });
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "recommendation",
     actor: "multi_copilot", summary: "Justificativa da contratação gerada (rascunho revisável).", refId: draft.id, correlationId: params.correlationId,
@@ -243,6 +252,13 @@ export async function generatePublications(params: {
       correlationId: params.correlationId,
     });
     await insertGeneratedPublication(pub);
+    // RC-3 — publicação oficial pelo pipeline ÚNICO (Document Engine).
+    const officialType = kind === "ratificacao" ? "ratificacao" : kind === "extrato_contrato" ? "extrato_contrato" : "aviso";
+    await generateOfficialDocument({
+      organizationId: params.organizationId, businessDomain: DOMAIN, documentType: officialType,
+      origin: ws.id, title: pub.title, content: pub.content, author: "sistema", correlationId: params.correlationId,
+      metadata: { kind, modality: ws.procurementType },
+    });
     out.push({ id: pub.id, kind, title: pub.title });
   }
   await recordProcessEvent({

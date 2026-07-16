@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784041296.0475812,
-    "ast_hash": "4149c904ecd4032659d2ddd4a5f5b060",
+    "mtime": 1784204444.0360126,
+    "ast_hash": "ffa2a5d0864e3fbc3f6d948a9b9ece23",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784041015.6395926,
-    "ast_hash": "40060c93757054fd8998b528d19c79ef",
+    "mtime": 1784204422.5320127,
+    "ast_hash": "0b905e7d1d457834c69b6b90dc163fb9",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784041332.1755798,
-    "ast_hash": "7f932ba387896d357edc76ebdc60f078",
+    "mtime": 1784204462.6120126,
+    "ast_hash": "76765b1e7d64cdd14018ea744a177cb5",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4310,8 +4310,8 @@
     "semantic_hash": ""
   },
   "server/db/index.ts": {
-    "mtime": 1784041251.579583,
-    "ast_hash": "3115de9e863de37b5c1ce2768c300e6e",
+    "mtime": 1784204564.5040126,
+    "ast_hash": "58b16399bad533a549ee4f54068acee9",
     "semantic_hash": ""
   },
   "server/db/institutionalRequests.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1784041244.9235833,
-    "ast_hash": "fcef1f9e8236e128bc92c2e4f4881cfa",
+    "mtime": 1784204559.4920125,
+    "ast_hash": "17a19175c6b698857c63c765481d51db",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1783350715.5501764,
-    "ast_hash": "cbc81a139346d6107a06ae85a8d4aaa3",
+    "mtime": 1784204652.4040124,
+    "ast_hash": "3a6310a2e9e06dc00d4f15174d5036ac",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784151297.7000823,
-    "ast_hash": "5ac21ed0fcb8ee81bc8db52322d496cd",
+    "mtime": 1784205047.9320118,
+    "ast_hash": "44911c611c29a15a29f0cc6ab41b886d",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1783806867.1134555,
-    "ast_hash": "fe0e68f39033bc9d269b1a9a32d02e50",
+    "mtime": 1784204732.4360123,
+    "ast_hash": "488cfa624374085addc2306364d19df7",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -7985,8 +7985,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1783962117.1155214,
-    "ast_hash": "19a5d9b6a309d751f2d8466266b58478",
+    "mtime": 1784204697.4080124,
+    "ast_hash": "8ab67e17ca8cc4daac18191ec28215ef",
     "semantic_hash": ""
   },
   "docs/business-domains/direct-procurement/architecture.md": {
@@ -8060,8 +8060,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractWorkspace.tsx": {
-    "mtime": 1783972882.443812,
-    "ast_hash": "90fe41b052a7584fcdc1e68cbe04f839",
+    "mtime": 1784205004.188012,
+    "ast_hash": "ed98c85eac415f89a082017e24dd63e2",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractsHome.tsx": {
@@ -8170,8 +8170,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1783993447.8401127,
-    "ast_hash": "5684d0b0b3f3fd5350b68a8a6b7ccdca",
+    "mtime": 1784204837.952012,
+    "ast_hash": "572859ab32935aa92aceecf567a2bdf6",
     "semantic_hash": ""
   },
   "docs/business-domains/contracts/addenda.md": {
@@ -8497,6 +8497,51 @@
   "docs/architecture/LEGACY_INVENTORY.md": {
     "mtime": 1784151282.4120817,
     "ast_hash": "b7b8e15e579b4b4a2f35392d9af199b0",
+    "semantic_hash": ""
+  },
+  "client/src/components/documents/OfficialDocumentPanel.tsx": {
+    "mtime": 1784204984.8240118,
+    "ast_hash": "a82dcab5dbc2b8aa19cd4eb624b34d7d",
+    "semantic_hash": ""
+  },
+  "drizzle/0280_official_documents.sql": {
+    "mtime": 1784204436.736418,
+    "ast_hash": "8f3a916218f39ac326884c7db2431cf7",
+    "semantic_hash": ""
+  },
+  "drizzle/0281_official_document_timeline.sql": {
+    "mtime": 1784204436.7381835,
+    "ast_hash": "63fefc8449915d4db5574fa7d4f9c974",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc3-document-engine.test.ts": {
+    "mtime": 1784204909.020012,
+    "ast_hash": "51e63303853252fcf05662a8565a0271",
+    "semantic_hash": ""
+  },
+  "server/db/officialDocuments.ts": {
+    "mtime": 1784204493.4600127,
+    "ast_hash": "8f4e5470373b957b3008e593fea0f2b1",
+    "semantic_hash": ""
+  },
+  "server/domain/officialDocument.ts": {
+    "mtime": 1784204401.4120128,
+    "ast_hash": "6b5dc0bc293291a62c977cc083155732",
+    "semantic_hash": ""
+  },
+  "server/routers/documentEngineRouter.ts": {
+    "mtime": 1784204548.0120125,
+    "ast_hash": "3c55ad4768e1902ca12c4cba10616c5e",
+    "semantic_hash": ""
+  },
+  "server/services/documentEngineService.ts": {
+    "mtime": 1784204521.0480125,
+    "ast_hash": "a1a0b73fbc89a78f170217a4d3a3a455",
+    "semantic_hash": ""
+  },
+  "docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md": {
+    "mtime": 1784205036.4240117,
+    "ast_hash": "ae56c1989dfd300d3fdbd08ab528b2c7",
     "semantic_hash": ""
   }
 }

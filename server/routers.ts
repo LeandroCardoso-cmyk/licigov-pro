@@ -70,6 +70,7 @@ import { directProcurementRouter } from "./routers/directProcurementRouter";
 import { contractWorkspaceRouter } from "./routers/contractWorkspaceRouter";
 import { departmentOperationRouter } from "./routers/departmentOperationRouter";
 import { operationRecordRouter } from "./routers/operationRecordRouter";
+import { documentEngineRouter } from "./routers/documentEngineRouter";
 import { adaptiveRecommendationRouter } from "./routers/adaptiveRecommendationRouter";
 
 export const appRouter = router({
@@ -145,6 +146,7 @@ export const appRouter = router({
   adaptiveRecommendation: adaptiveRecommendationRouter,
   departmentOperation: departmentOperationRouter,
   operationRecord: operationRecordRouter,
+  documentEngine: documentEngineRouter,
 });
 
 export type AppRouter = typeof appRouter;

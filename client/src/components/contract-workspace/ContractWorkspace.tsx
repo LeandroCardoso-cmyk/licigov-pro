@@ -6,6 +6,7 @@ import ApostilleWorkspace from "./ApostilleWorkspace";
 import OccurrenceWorkspace from "./OccurrenceWorkspace";
 import DocumentsWorkspace from "./DocumentsWorkspace";
 import TimelinePanel from "./TimelinePanel";
+import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 import { originLabel, statusLabel, STATUS_CLASSES } from "./labels";
 
 /**
@@ -80,7 +81,12 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
           </div>
         </div>
       )}
-      {tab === "documentos" && <DocumentsWorkspace contractId={contractId} documents={data?.documents ?? []} />}
+      {tab === "documentos" && (
+        <div className="space-y-4">
+          <DocumentsWorkspace contractId={contractId} documents={data?.documents ?? []} />
+          <OfficialDocumentPanel businessDomain="contratos" origin={contractId} title="Documentos Oficiais (DOCX/PDF)" />
+        </div>
+      )}
       {tab === "aditivos" && <AddendumWorkspace contractId={contractId} addenda={data?.addenda ?? []} />}
       {tab === "apostilamentos" && <ApostilleWorkspace contractId={contractId} apostilles={data?.apostilles ?? []} />}
       {tab === "ocorrencias" && <OccurrenceWorkspace contractId={contractId} occurrences={data?.occurrences ?? []} />}

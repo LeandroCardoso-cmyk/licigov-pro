@@ -11,6 +11,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
@@ -109,7 +110,7 @@ export async function importExternalContract(params: {
 export async function generateContractDocument(params: {
   organizationId: number; contractId: string; kind: ContractDocumentKind; refId?: string; correlationId: string;
   invoke?: (prompt: string) => Promise<string>;
-}): Promise<{ document: Awaited<ReturnType<typeof insertContractWsDocument>>; recommendation: Recommendation }> {
+}): Promise<{ document: Awaited<ReturnType<typeof insertContractWsDocument>>; officialDocumentId: string; recommendation: Recommendation }> {
   const ws = await requireContract(params.contractId, params.organizationId);
   assertKernelAccess(DOMAIN, "document_engine");
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -155,10 +156,18 @@ export async function generateContractDocument(params: {
     correlationId: params.correlationId,
   });
   const document = await insertContractWsDocument(doc);
+  // RC-3 — documento oficial gerado/versionado pelo pipeline ÚNICO (Document Engine).
+  const official = await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: "contratos",
+    documentType: params.kind === "rescisao" ? "rescisao" : params.kind === "aditivo" ? "aditivo" : params.kind === "apostilamento" ? "apostilamento" : "contrato",
+    origin: ws.id, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
+    metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, confidence: orchestration.consolidated.confidence },
+  });
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: "multi_copilot", summary: `Minuta de ${params.kind} gerada (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
 
   return {
     document,
+    officialDocumentId: official.id,
     recommendation: {
       reasoning: orchestration.consolidated.summary,
       explainability: orchestration.consolidated.suggestions.join(" · "),

@@ -8,6 +8,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { DOMAIN_COPILOTS } from "../domain/procurementProcess";
 import {
@@ -79,6 +80,12 @@ export async function generateDocument(params: {
     correlationId: params.correlationId,
   });
   await insertGeneratedDocument(doc);
+  // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine).
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: DOMAIN, documentType: params.kind,
+    origin: params.processId, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
+    metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, approvedItems: approved.length },
+  });
   await recordProcessEvent({
     organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
     actor: "multi_copilot", summary: `${params.kind.toUpperCase()} gerado (rascunho) a partir de ${approved.length} item(ns).`,
@@ -122,6 +129,12 @@ export async function generateNotice(params: {
   const validation = validateEdital(doc);
   if (validation.valid) {
     await insertGeneratedDocument(doc);
+    // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine).
+    await generateOfficialDocument({
+      organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "edital",
+      origin: params.processId, title: doc.title, content: doc.content, author: "sistema", correlationId: params.correlationId,
+      metadata: { modality: params.modality, form: params.form, platform: params.platform ?? null },
+    });
     await recordProcessEvent({
       organizationId: params.organizationId, processId: params.processId, eventType: "decision",
       actor: "sistema", summary: `Edital gerado: ${params.modality}/${params.form}.`, refId: doc.id,
