@@ -11,6 +11,9 @@ import { createHash } from "crypto";
 
 export type KernelServiceId =
   | "ai_orchestration"
+  | "ai_execution_engine"
+  | "provider_adapter"
+  | "storage_service"
   | "workflow_engine"
   | "institutional_rag"
   | "procurement_knowledge_graph"
@@ -51,6 +54,9 @@ export interface KernelService {
 
 export const KERNEL_SERVICES: Record<KernelServiceId, KernelService> = {
   ai_orchestration: { id: "ai_orchestration", name: "AI Orchestration", category: "ai", description: "Orquestração de inferência via pipeline oficial." },
+  ai_execution_engine: { id: "ai_execution_engine", name: "AI Execution Engine", category: "ai", description: "Pipeline oficial de execução de IA (Task→Policy→Prompt→Grounding→KG→RAG→Provider→LLM→Reasoning→Explainability→Result)." },
+  provider_adapter: { id: "provider_adapter", name: "Provider Adapter", category: "ai", description: "Camada agnóstica de resolução de provider (Gemini/Claude/OpenAI/Future). Domínios nunca falam direto com providers." },
+  storage_service: { id: "storage_service", name: "Storage Service", category: "platform", description: "Único ponto de acesso ao Amazon S3 (upload/download/delete/exists/signedUrl). Nunca binários no banco — apenas referências." },
   workflow_engine: { id: "workflow_engine", name: "Workflow Engine", category: "workflow", description: "Motor de workflows supervisionados." },
   institutional_rag: { id: "institutional_rag", name: "Institutional RAG", category: "knowledge", description: "Retrieval aumentado institucional." },
   procurement_knowledge_graph: { id: "procurement_knowledge_graph", name: "Procurement Knowledge Graph", category: "knowledge", description: "Grafo de conhecimento de licitações." },

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { getDb } from "../db/connection";
 import { APP_CONFIG } from "../config/app";
-import { AWS_CONFIG } from "../config/aws";
 import { AI_CONFIG } from "../config/ai";
+// RC-3.5 — o healthcheck do S3 passa pelo Storage Service (nunca acessa a AWS direto).
+import { storageHealthCheck } from "../storage";
 
 const REQUIRED_ENV_KEYS = ["DATABASE_URL", "JWT_SECRET", "GEMINI_API_KEY"] as const;
 
@@ -22,20 +22,8 @@ async function checkDb(): Promise<boolean> {
 }
 
 async function checkS3(): Promise<boolean> {
-  if (!AWS_CONFIG.isConfigured) return false;
-  try {
-    const client = new S3Client({
-      region: AWS_CONFIG.region,
-      credentials: {
-        accessKeyId: AWS_CONFIG.accessKeyId,
-        secretAccessKey: AWS_CONFIG.secretAccessKey,
-      },
-    });
-    await client.send(new HeadBucketCommand({ Bucket: AWS_CONFIG.bucket }));
-    return true;
-  } catch {
-    return false;
-  }
+  // RC-3.5 — delega ao Storage Service (único ponto de acesso ao Amazon S3).
+  return storageHealthCheck();
 }
 
 function checkAi(): boolean {

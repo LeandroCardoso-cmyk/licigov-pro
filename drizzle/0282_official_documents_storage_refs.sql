@@ -1,0 +1,5 @@
+ALTER TABLE `official_documents`
+  ADD COLUMN `storage_key` VARCHAR(255) NOT NULL DEFAULT '',
+  ADD COLUMN `mime_type` VARCHAR(120) NOT NULL DEFAULT '',
+  ADD COLUMN `size_bytes` INT NOT NULL DEFAULT 0,
+  ADD COLUMN `content_hash` VARCHAR(64) NOT NULL DEFAULT '';

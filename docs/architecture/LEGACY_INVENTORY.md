@@ -81,3 +81,16 @@ direta**, mas **saíram da navegação principal**. Nenhum código legado foi re
 - **Sidebar:** Dashboard · Centro de Operações · Business Domains · Templates · Configurações.
 - **Página Modules:** apenas rotas canônicas dos Business Domains.
 - **App.tsx:** rotas legadas mantidas, mas marcadas como *compatibilidade* — nunca entradas oficiais.
+
+---
+
+## Classificação dos Document Engines (RC-3.5)
+
+| Componente | Classe | Papel |
+|---|---|---|
+| `server/services/documentConverter.ts` | **OFICIAL** | Conversor canônico Markdown → DOCX/PDF, usado pelo Document Engine oficial. |
+| `server/services/officialExportEngine.ts` | **INTERNO** | Renderizador estruturado (sections → DOCX/PDF) do router `exports`. Não é o pipeline oficial. |
+| `server/services/documentRenderService.ts` | **LEGADO** | Render antigo (HTML, tabela `documents`). Substituído pelo Document Engine — só compatibilidade, não usar em novos módulos. |
+
+> Nenhum código foi removido: o legado permanece por compatibilidade. Novos módulos usam
+> exclusivamente o Document Engine oficial (`documentEngineService` + `documentConverter`).

@@ -51,9 +51,24 @@ export interface OfficialDocument {
   readonly correlationId: string;
   /** Hash determinístico do conteúdo+metadados (replay-safe). */
   readonly replayHash: string;
+  // ── RC-3.5 — Referências de storage (nunca armazenar binários no banco) ──────
+  /** Chave do objeto no Storage Service (S3) do último export. Vazio se ainda não exportado. */
+  readonly storageKey: string;
+  /** MIME type do binário exportado (DOCX/PDF). Vazio se ainda não exportado. */
+  readonly mimeType: string;
+  /** Tamanho em bytes do binário exportado. 0 se ainda não exportado. */
+  readonly size: number;
+  /** Hash sha256 do binário exportado (integridade do arquivo no storage). */
+  readonly hash: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+/** MIME type oficial por formato de exportação. */
+export const OFFICIAL_MIME_TYPES: Record<OfficialFormat, string> = {
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf: "application/pdf",
+};
 
 /** Linhagem estável de um documento (mesma origem+tipo → mesma linhagem, versões acumulam). */
 export function computeLineageId(params: { tenantId: number; businessDomain: string; documentType: string; origin: string }): string {
@@ -104,6 +119,10 @@ export function createOfficialDocument(params: {
     lineageId,
     correlationId: params.correlationId,
     replayHash: computeReplayHash(params.content, metadata),
+    storageKey: "",
+    mimeType: "",
+    size: 0,
+    hash: "",
     createdAt: ts,
     updatedAt: ts,
   };

@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.8.0 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-05-27
+> Versão: 0.8.5 | Branch: claude/rebuild-licigov-pro-bFyTO | Atualizado: 2026-07-16
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -14,6 +14,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | **Arquitetura oficial** | Cognitive Kernel + **Business Domains** + Centro de Operações | A operação ocorre exclusivamente pelos Business Domains (Processo Licitatório, Contratação Direta, Parecer Jurídico, Contratos, Centro de Operações) |
 | **Legado (compatibilidade)** | [docs/architecture/LEGACY_INVENTORY.md](docs/architecture/LEGACY_INVENTORY.md) | **Módulos legados permanecem apenas por compatibilidade — fora da navegação oficial (RC-2)** |
 | **Document Engine** | [docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md](docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md) | **Pipeline ÚNICO oficial de documentos (DOCX/PDF, versionado) — componente permanente do Kernel (RC-3)** |
+| **Infraestrutura do Kernel** | [docs/architecture/KERNEL_INFRASTRUCTURE.md](docs/architecture/KERNEL_INFRASTRUCTURE.md) | **AIExecutionEngine + Provider Adapter + Storage Service + MySQL + S3 + JWT obrigatório — componentes permanentes do Kernel (RC-3.5)** |
 | Arquitetura | [architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md) | Visão completa do sistema |
 | Domínio | [architecture/DOMAIN_OVERVIEW.md](architecture/DOMAIN_OVERVIEW.md) | Modelo de domínio DDD |
 | Multi-tenant | [architecture/MULTI_TENANT_MODEL.md](architecture/MULTI_TENANT_MODEL.md) | Isolamento e RBAC |
@@ -56,7 +57,9 @@ licigov-pro/
 |--------|------------|--------|
 | API | tRPC | v11 |
 | ORM | Drizzle ORM | latest |
-| Banco de Dados | MySQL | 8.x |
+| Banco de Dados | MySQL (Railway) — **oficial e único** | 8.x |
+| Storage | Amazon S3 (via Storage Service) — **único ponto de acesso** | - |
+| IA | Gemini via AIExecutionEngine + Provider Adapter | 2.5 |
 | Frontend | React | 19 |
 | Backend | Express | 4.x |
 | Infraestrutura | Railway | - |

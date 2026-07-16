@@ -1,5 +1,10 @@
 # pgvector Infrastructure — Sprint 4.6
 
+> **RC-3.5 — Banco oficial:** o LiciGov Pro usa **MySQL (Railway)** como banco oficial e único.
+> Os embeddings são armazenados em colunas JSON no MySQL. A seção "Future Migration Path"
+> abaixo (PostgreSQL + pgvector) é apenas uma **hipótese de evolução futura NÃO adotada** —
+> não descreve a infraestrutura atual.
+
 ## Current State
 - Storage: MySQL (JSON arrays for vectors)
 - Similarity: Cosine computed in JavaScript

@@ -1,4 +1,11 @@
 /**
+ * RC-3.5 — Classificação: **INTERNO** (renderizador estruturado).
+ *
+ * Motor de exportação estruturado (sections → DOCX/PDF) usado exclusivamente pelo
+ * exportRouter (`exports`) para Termos de Referência. NÃO é o pipeline oficial de
+ * documentos (esse é o Document Engine + documentConverter). Permanece como
+ * componente interno de compatibilidade — não removido.
+ *
  * Sprint 3.2 — Official Export Engine.
  *
  * Real DOCX and PDF generation for Termos de Referencia (TR).

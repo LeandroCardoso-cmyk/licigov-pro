@@ -13,13 +13,16 @@
 import { assertKernelAccess } from "./kernelAccessService";
 import { convertToDOCX, convertToPDF } from "./documentConverter";
 import {
-  createOfficialDocument, computeLineageId, officialFilename,
+  createOfficialDocument, computeLineageId, officialFilename, OFFICIAL_MIME_TYPES,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
 } from "../domain/officialDocument";
 import {
   insertOfficialDocument, getOfficialDocument, getLatestByLineage, countVersions,
   listVersions, listOfficialDocuments, countDocumentTimeline, insertDocumentTimelineEntry, listDocumentTimeline,
+  updateOfficialDocumentStorageRefs,
 } from "../db/officialDocuments";
+// RC-3.5 — o Document Engine NUNCA conhece o Amazon S3: fala apenas com o Storage Service.
+import { isStorageConfigured, storagePut, storageSignedUrl } from "../storage";
 import { createHash } from "crypto";
 
 async function recordDocEvent(doc: OfficialDocument, eventType: string, summary: string): Promise<void> {
@@ -70,25 +73,54 @@ export interface RenderedOfficialDocument {
   readonly documentId: string;
   readonly format: OfficialFormat;
   readonly filename: string;
-  readonly base64: string;
   readonly contentHash: string;
   readonly bytes: number;
+  readonly mimeType: string;
+  /** Chave do objeto no Storage Service (S3), quando o storage está configurado. */
+  readonly storageKey?: string;
+  /** URL de download assinada (S3), quando o storage está configurado. */
+  readonly downloadUrl?: string;
+  /** Binário em base64 — fallback quando o Storage Service NÃO está configurado. */
+  readonly base64?: string;
 }
 
-/** Exporta um documento oficial em DOCX ou PDF (binário real). Registra timeline. */
+/**
+ * Exporta um documento oficial em DOCX ou PDF (binário real). Fluxo oficial:
+ * Document Engine → OfficialDocument → Storage Service → Amazon S3 → URL assinada.
+ * O Document Engine não conhece o S3 — usa apenas o Storage Service. Quando o storage
+ * não está configurado, degrada para base64 (nunca binário no banco). Registra timeline.
+ */
 export async function renderOfficialDocument(params: { organizationId: number; documentId: string; format: OfficialFormat }): Promise<RenderedOfficialDocument> {
   const doc = await getOfficialDocument(params.documentId, params.organizationId);
   if (!doc) throw new Error("Documento oficial não encontrado.");
   assertKernelAccess(doc.businessDomain, "document_engine");
 
   const filename = officialFilename(doc, params.format);
+  const mimeType = OFFICIAL_MIME_TYPES[params.format];
   const buffer = params.format === "docx"
     ? await convertToDOCX(doc.content, filename)
     : await convertToPDF(doc.content, filename);
   const contentHash = createHash("sha256").update(buffer).digest("hex");
-  await recordDocEvent(doc, "documento_exportado", `Documento "${doc.title}" exportado em ${params.format.toUpperCase()}.`);
 
-  return { documentId: doc.id, format: params.format, filename, base64: buffer.toString("base64"), contentHash, bytes: buffer.length };
+  const base: RenderedOfficialDocument = {
+    documentId: doc.id, format: params.format, filename, contentHash, bytes: buffer.length, mimeType,
+  };
+
+  if (isStorageConfigured()) {
+    // Chave organizada por: document-engine/{tenantId}/{lineage}/{documentId}-{filename}
+    const storageKey = `document-engine/${doc.tenantId}/${doc.lineageId}/${doc.id}-${filename}`;
+    await storagePut(storageKey, buffer, mimeType);
+    const { url } = await storageSignedUrl(storageKey);
+    await updateOfficialDocumentStorageRefs({
+      id: doc.id, tenantId: doc.tenantId, storageKey, mimeType, size: buffer.length, hash: contentHash,
+    });
+    await recordDocEvent(doc, "documento_exportado", `Documento "${doc.title}" exportado em ${params.format.toUpperCase()} e persistido no Storage Service (S3).`);
+    return { ...base, storageKey, downloadUrl: url };
+  }
+
+  // Fallback (storage não configurado): entrega base64, sem binário em banco.
+  await recordDocEvent(doc, "documento_exportado", `Documento "${doc.title}" exportado em ${params.format.toUpperCase()}.`);
+  return { ...base, base64: buffer.toString("base64") };
 }
 
 /** Prévia (conteúdo Markdown) do documento oficial — sem gerar binário. */

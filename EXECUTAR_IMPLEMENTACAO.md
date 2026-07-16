@@ -108,4 +108,4 @@ Se houver problemas durante execução:
 
 **Tempo Total Estimado**: 1h45min  
 **Complexidade**: Média  
-**Dependências**: Gemini API, PostgreSQL, arquivo da Lei 14.133/21
+**Dependências**: Gemini API, MySQL (Railway), arquivo da Lei 14.133/21

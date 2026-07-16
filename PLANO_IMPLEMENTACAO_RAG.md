@@ -40,7 +40,7 @@ Criar sistema de Retrieval Augmented Generation para melhorar precisão e confor
 
 **Stack de RAG:**
 - **Embeddings**: `text-embedding-004` (Google) - US$ 0,00001 por 1k tokens
-- **Vector Store**: Tabela PostgreSQL com extensão `pgvector` (já disponível no projeto)
+- **Vector Store**: Tabela MySQL com embeddings em JSON (banco oficial do projeto — RC-3.5)
 - **Chunking Strategy**: 512 tokens por chunk, overlap de 50 tokens
 - **Retrieval**: Top-5 chunks mais relevantes por consulta
 - **Reranking**: Gemini reordena chunks por relevância antes de gerar

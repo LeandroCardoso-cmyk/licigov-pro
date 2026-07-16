@@ -42,6 +42,21 @@ Obrigatórios: **DOCX** e **PDF** (binários reais via `documentConverter.conver
 `convertToPDF` — `docx` + `pdfkit`, sem Chromium). O Markdown é apenas representação
 intermediária — **nunca** entregue como documento oficial final.
 
+## Persistência via Storage Service (RC-3.5)
+
+O Document Engine **nunca conhece o Amazon S3**: toda persistência do binário exportado
+passa pelo **Storage Service** (`server/storage.ts`), único ponto de acesso à AWS.
+
+```
+Business Domain → OfficialDocument → Document Engine → Storage Service → Amazon S3 → Signed URL → Download
+```
+
+`renderOfficialDocument(...)` faz `storagePut` do binário, obtém a **URL assinada** e grava
+as **referências** no `OfficialDocument` (`storageKey`, `mimeType`, `size`, `hash`) —
+**nunca binários no banco**. Sem storage configurado, degrada para base64. Migration
+`0282_official_documents_storage_refs`. Detalhes em
+[KERNEL_INFRASTRUCTURE.md](./KERNEL_INFRASTRUCTURE.md).
+
 ## Serviço e Router
 
 - **Serviço:** `server/services/documentEngineService.ts`
