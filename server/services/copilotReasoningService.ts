@@ -1,19 +1,20 @@
 /**
- * Sprint 4.9 — Copilot Reasoning Service · RC-3.5.2 (fronteira obrigatória).
+ * Sprint 4.9 — Copilot Reasoning Service · RC-4.1 (ativação cognitiva).
  *
- * Reasoning especializado de um copiloto. Monta contexto fundamentado (RAG + KG),
- * constrói um prompt aterrado (NUNCA prompt cru) e roteia a inferência OBRIGATORIAMENTE
- * pelo AIExecutionEngine (única porta cognitiva) → AIExecutionPolicy → Provider Adapter.
- * Nenhum Business Domain chega a um Provider sem passar pelo AIExecutionEngine.
+ * Reasoning especializado de um copiloto. O copiloto é apenas ESPECIALISTA DE DOMÍNIO:
+ * monta contexto (RAG + KG), seleciona grounding, indica documentos/legislação e prepara
+ * o payload. Ele NÃO executa provider nem monta o prompt final — solicita uma Cognitive
+ * Task ao AIExecutionEngine (única porta cognitiva), que usa o Prompt Builder tipado,
+ * seleciona o provider (Mock nesta fase) e valida a CognitiveResponse.
  *
- * Governança: nenhuma decisão; toda saída exige revisão humana. Sem provider
- * configurado, opera em modo grounding-only (determinístico), sem chamadas de rede.
+ * O ponto de injeção `invoke` permanece para testes/legado (allowlist). Governança:
+ * nenhuma decisão; toda saída exige revisão humana.
  */
 
-import { ENV } from "../_core/env";
-import { executeAITask } from "./aiExecutionEngine";
+import { executeCognitiveTask } from "./aiExecutionEngine";
 import type { CopilotType } from "../domain/institutionalCopilot";
 import { getCopilotDefinition } from "../domain/institutionalCopilot";
+import type { CognitiveTaskId } from "../domain/cognitiveTask";
 import {
   createCopilotDecisionTrace,
   appendTraceStep,
@@ -60,23 +61,19 @@ export function buildGroundedPrompt(copilotType: CopilotType, context: CopilotCo
 }
 
 /**
- * Invocação padrão: roteia pelo AIExecutionEngine (única porta cognitiva).
- * Sem chave de provider → grounding-only (determinístico, sem rede).
+ * Mapeia cada copiloto especialista → a Cognitive Task que o AIExecutionEngine executa.
+ * O copiloto define O QUE precisa; a Task carrega policy/grounding/prompt builder.
  */
-function makeDefaultInvoke(organizationId: number, correlationId: string) {
-  return async (prompt: string): Promise<string> => {
-    if (!ENV.geminiApiKey || ENV.geminiApiKey.trim().length === 0) {
-      return "";
-    }
-    const result = await executeAITask({
-      task: "generic",
-      organizationId,
-      prompt,
-      correlationId,
-    });
-    return result.text;
-  };
-}
+const COPILOT_TASK: Record<CopilotType, CognitiveTaskId> = {
+  agente_contratacao: "GENERATE_DOCUMENT",
+  pregoeiro: "PROCUREMENT_REASONING",
+  planejamento: "PROCUREMENT_REASONING",
+  tr_intelligence: "ITEM_REASONING",
+  juridico: "LEGAL_REASONING",
+  pesquisa_precos: "PROCUREMENT_REASONING",
+  contratos: "CONTRACT_REASONING",
+  controle_interno: "COMPLIANCE_CHECK",
+};
 
 export async function runCopilotReasoning(input: ReasoningInput): Promise<ReasoningResult> {
   const { organizationId, copilotType, sessionId, reasoningId, query, correlationId } = input;
@@ -102,12 +99,29 @@ export async function runCopilotReasoning(input: ReasoningInput): Promise<Reason
     inputRef: query.slice(0, 40), outputRef: `refs:${context.legalRefs.length}`, evidenceCount: context.legalRefs.length,
   });
 
-  // Reasoning via pipeline oficial (aterrado). Degrada para grounding-only.
+  // Reasoning: o copiloto prepara o contexto aterrado; o Engine faz a cognição.
   const prompt = buildGroundedPrompt(copilotType, context);
-  const invoke = input.invoke ?? makeDefaultInvoke(organizationId, correlationId);
   let reasoningText = "";
   try {
-    reasoningText = await invoke(prompt);
+    if (input.invoke) {
+      // Ponto de injeção (testes/legado allowlist): usa o prompt aterrado diretamente.
+      reasoningText = await input.invoke(prompt);
+    } else {
+      // Ativação cognitiva (RC-4.1): default roteia pelo AIExecutionEngine.
+      // O copiloto entrega contexto/grounding/documentos/legislação; o Prompt Builder
+      // tipado do Engine monta o prompt final e o Provider Adapter usa o Mock Provider.
+      const exec = await executeCognitiveTask({
+        task: COPILOT_TASK[copilotType],
+        tenantId: organizationId,
+        userId: "system",
+        correlationId,
+        query,
+        groundingBlock: renderContextBlock(context),
+        documentRefs: context.evidences.map(e => e.id),
+        lawRefs: context.legalRefs.map(r => `${r.lawRef} art. ${r.article}`),
+      });
+      reasoningText = exec.response.content;
+    }
   } catch {
     reasoningText = "";
   }

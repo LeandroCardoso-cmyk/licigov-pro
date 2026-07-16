@@ -5475,8 +5475,8 @@
     "semantic_hash": ""
   },
   "server/services/catmatMatcher.ts": {
-    "mtime": 1782612419.324606,
-    "ast_hash": "75e832ed9813d5901dc9389d891c6a0d",
+    "mtime": 1784226109.8393087,
+    "ast_hash": "fd3fe333a574675917845f4cf9555e68",
     "semantic_hash": ""
   },
   "server/services/chunkingService.ts": {
@@ -5585,8 +5585,8 @@
     "semantic_hash": ""
   },
   "server/services/copilotReasoningService.ts": {
-    "mtime": 1784214000.3559442,
-    "ast_hash": "7230dee7aef215874622ad01ac8cc1bf",
+    "mtime": 1784226028.9548998,
+    "ast_hash": "8d46381363ef49ed64f57d9631eb3278",
     "semantic_hash": ""
   },
   "server/services/copilotRecommendationService.ts": {
@@ -5610,8 +5610,8 @@
     "semantic_hash": ""
   },
   "server/services/directContractDocuments.ts": {
-    "mtime": 1782612419.3264267,
-    "ast_hash": "0616c9fdf07b7828b08de2586577f401",
+    "mtime": 1784226109.8395216,
+    "ast_hash": "0d6ec9b40fc21859e8dd8327f6c45031",
     "semantic_hash": ""
   },
   "server/services/directContractPackage.ts": {
@@ -5910,8 +5910,8 @@
     "semantic_hash": ""
   },
   "server/services/legalFrameworkAssistant.ts": {
-    "mtime": 1782612419.3352816,
-    "ast_hash": "c2b7fde6ea4e63ce08056ae5cb17896e",
+    "mtime": 1784226109.8390114,
+    "ast_hash": "f5f80808f8dc2912cf2bb6d23e7bfd90",
     "semantic_hash": ""
   },
   "server/services/legalKnowledgeService.ts": {
@@ -5925,8 +5925,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionService.ts": {
-    "mtime": 1782612419.3352816,
-    "ast_hash": "fb6ec24e4be54da5882f4466a9ccae56",
+    "mtime": 1784226109.8396647,
+    "ast_hash": "3a245c630447fcbe68694f15be89ed36",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784224281.2150197,
-    "ast_hash": "7cc8f3f82fc1f2541ab667184640eddb",
+    "mtime": 1784226302.914916,
+    "ast_hash": "7d3c1647d38b05519c83d910891567a1",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784224270.839019,
-    "ast_hash": "46e7dd7e4f99aefb093175d65b514704",
+    "mtime": 1784226290.7109153,
+    "ast_hash": "11e70f70116962988f8e4c03198949f7",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8595,13 +8595,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
-    "mtime": 1784214039.1199465,
-    "ast_hash": "53e85ee0cdb42d930298bf051650b410",
+    "mtime": 1784226224.6909113,
+    "ast_hash": "41efe1dccaf5d5713f6bb207b3bf023e",
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1784214078.1119487,
-    "ast_hash": "8c87bd85f7f266171aad3fd38bd17f00",
+    "mtime": 1784226094.5269036,
+    "ast_hash": "e2451dfc34ea84e0b75fd847b26e187d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -8635,23 +8635,28 @@
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
-    "mtime": 1784224249.0270178,
-    "ast_hash": "038e89ebee5590ff12571846d842db09",
+    "mtime": 1784226273.9989142,
+    "ast_hash": "5ad2e95fa0eaf30ea453d0e14a28c735",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784224240.8950171,
-    "ast_hash": "b485cd06e71f3ca4b96a80ce2927d72f",
+    "mtime": 1784226266.130914,
+    "ast_hash": "15fdb537d5b1d7b3712e3462446dbc26",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
-    "mtime": 1784224258.8990183,
-    "ast_hash": "a014be6e30265d19152c0d0eca19f3c6",
+    "mtime": 1784226281.3509147,
+    "ast_hash": "aac2dd6a63b3e9cce3b94f4cca9750dd",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc401-cognitive-contract.test.ts": {
     "mtime": 1784224184.9830139,
     "ast_hash": "b1b2187f7ed4c736d78d25417dd3339a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc41-cognitive-activation.test.ts": {
+    "mtime": 1784226138.3989062,
+    "ast_hash": "a6f4d76cecc3510865fefc89c190ba00",
     "semantic_hash": ""
   }
 }

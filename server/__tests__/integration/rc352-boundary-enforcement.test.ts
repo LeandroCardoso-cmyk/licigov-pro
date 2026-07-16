@@ -81,7 +81,8 @@ describe("RC-3.5.2 — Kernel Boundary Enforcement", () => {
 
     it("CopilotReasoning roteia pelo AIExecutionEngine (não chama generateText/invokeLLM direto)", () => {
       const src = read("server/services/copilotReasoningService.ts");
-      expect(src).toContain("executeAITask");
+      // RC-4.1 — ativação cognitiva: o default roteia por executeCognitiveTask.
+      expect(src).toContain("executeCognitiveTask");
       expect(src).not.toMatch(/from ["']\.\.\/_core\/llm["']/);
       expect(src).not.toContain("invokeLLM");
     });

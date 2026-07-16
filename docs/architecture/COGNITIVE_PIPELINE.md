@@ -68,4 +68,11 @@ O prompt é montado por um **builder tipado** da tarefa (`getPromptBuilder`). Ne
 concatena prompt manualmente. Na fase RC-4.0 os builders são **estruturais** (papel,
 objetivo, grounding, formato de saída) — sem conteúdo jurídico.
 
+## Ativação (RC-4.1)
+
+O pipeline está **ativo**: `Business Domain → WorkspaceOrchestrator → CopilotReasoning →
+executeCognitiveTask` (Mock Provider). O copiloto entrega contexto/grounding/documentos/
+legislação; o **Prompt Builder tipado** do Engine monta o prompt final (nenhuma montagem
+manual no caminho oficial). `executeAITask` aposentado; `invokeLLM` só no legado allowlistado.
+
 Ver [COGNITIVE_ARCHITECTURE.md](./COGNITIVE_ARCHITECTURE.md) e [AI_EXECUTION_ENGINE.md](./AI_EXECUTION_ENGINE.md).

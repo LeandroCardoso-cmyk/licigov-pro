@@ -1,8 +1,11 @@
-# AIExecutionEngine — O Cérebro Institucional (RC-4.0)
+# AIExecutionEngine — O Cérebro Institucional (RC-4.0 / RC-4.1)
 
-> Componente permanente do Cognitive Kernel (`ai_execution_engine`). A partir da RC-4.0,
-> é a **única porta cognitiva**: os Business Domains solicitam Cognitive Tasks; o engine
-> resolve política, grounding, copiloto, provider e produz uma Cognitive Response.
+> Componente permanente do Cognitive Kernel (`ai_execution_engine`). A partir da RC-4.1,
+> é o **ÚNICO ponto de entrada cognitiva do produto**: todos os Business Domains, via
+> orquestrador e copilotos, solicitam Cognitive Tasks; o engine resolve política, grounding,
+> copiloto, Prompt Builder tipado, provider (Mock nesta fase) e produz/valida uma Cognitive
+> Response. `executeAITask` está aposentado (sem callers oficiais); `invokeLLM` só no legado
+> allowlistado.
 
 ## Entradas oficiais
 
