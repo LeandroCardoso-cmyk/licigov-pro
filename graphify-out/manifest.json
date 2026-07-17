@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784307898.3853838,
-    "ast_hash": "22f91fd26c8b1bb4d7d330752a76972a",
+    "mtime": 1784311324.5268605,
+    "ast_hash": "fc76bdae98e1be4847201b7ed731fb22",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784307936.9893835,
-    "ast_hash": "5ca5e44d880672b9e230d2085c1d753e",
+    "mtime": 1784311365.738859,
+    "ast_hash": "8102839ce764eb7910cc0cc6467efc56",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -9365,13 +9365,13 @@
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/knowledgePipeline.ts": {
-    "mtime": 1784307569.7613869,
-    "ast_hash": "06c9d8828f637791bca8c0e36e55a31f",
+    "mtime": 1784310663.6508846,
+    "ast_hash": "a9868c680ac881bdebdb0de6f4d53589",
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/pipelineExecution.ts": {
-    "mtime": 1784307685.965386,
-    "ast_hash": "23e9786b22427fae4a64fde51bef78e1",
+    "mtime": 1784310680.7428842,
+    "ast_hash": "5e89b9eab92c7fb9cfc66dfd8ddb31ff",
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/pipelineExplainability.ts": {
@@ -9395,13 +9395,13 @@
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/publicationEngine.ts": {
-    "mtime": 1784307626.0573864,
-    "ast_hash": "3835d533752ba37bc87fb1334f4e3929",
+    "mtime": 1784310915.0868754,
+    "ast_hash": "8c4859769182be1ce35df368a4ea50af",
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/qualityGates.ts": {
-    "mtime": 1784307586.7133868,
-    "ast_hash": "d21fd40f5c7d0a0975973b2d4caf00f7",
+    "mtime": 1784310655.822885,
+    "ast_hash": "f05158e35758938f499d9aff87a2f77d",
     "semantic_hash": ""
   },
   "server/domain/knowledge/pipeline/validationEngine.ts": {
@@ -9415,8 +9415,53 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md": {
-    "mtime": 1784307848.7173843,
-    "ast_hash": "07d0bc2b03250c90d255762f1f3b9a1a",
+    "mtime": 1784311336.0868602,
+    "ast_hash": "bc5c03226f7ea049a4b1f12edc3a9c2e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc49-official-knowledge-corpus.test.ts": {
+    "mtime": 1784311290.6857905,
+    "ast_hash": "944569b1b872bc8db2561d8c733f4e8e",
+    "semantic_hash": ""
+  },
+  "server/domain/officialCorpus/officialCorpusExplainability.ts": {
+    "mtime": 1784310842.994878,
+    "ast_hash": "22ee9bd785fd08d5e1d9491d20a84214",
+    "semantic_hash": ""
+  },
+  "server/domain/officialCorpus/officialCorpusIngestion.ts": {
+    "mtime": 1784311290.6854444,
+    "ast_hash": "6b364e027b2bfab06cabe703e5f8bf61",
+    "semantic_hash": ""
+  },
+  "server/domain/officialCorpus/officialCorpusRegistry.ts": {
+    "mtime": 1784310799.7268798,
+    "ast_hash": "02f4d963e19e2108a02e193d28a283fc",
+    "semantic_hash": ""
+  },
+  "server/domain/officialCorpus/officialDocument.ts": {
+    "mtime": 1784311290.6849718,
+    "ast_hash": "7bacb58d94c43f2f650ae00c1929c7e3",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/officialCorpusObservabilityService.ts": {
+    "mtime": 1784310693.9788835,
+    "ast_hash": "dd5e8c3e51e6a9ca5cf4f5d29927a725",
+    "semantic_hash": ""
+  },
+  "server/services/officialCorpus/officialCorpusBuilder.ts": {
+    "mtime": 1784310977.5548732,
+    "ast_hash": "6db24739dc3854393fd3a4bef8f91115",
+    "semantic_hash": ""
+  },
+  "server/services/officialCorpus/officialTextParser.ts": {
+    "mtime": 1784310568.9148881,
+    "ast_hash": "7254ee6acc939aaf7c9ec7a5678511d0",
+    "semantic_hash": ""
+  },
+  "docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md": {
+    "mtime": 1784311125.7948678,
+    "ast_hash": "5ce40edda4331e6bb233a57828e64b1f",
     "semantic_hash": ""
   }
 }

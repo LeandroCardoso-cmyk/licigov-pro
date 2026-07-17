@@ -24,9 +24,17 @@ export interface QualityGateResult {
   readonly coverage: number;
 }
 
+/**
+ * Perfil de gate. "general" (padrão) = documentos institucionais gerais (exige blocos recomendados).
+ * "official_norm" = documento oficial/normativo verbatim (RC-4.9): SEM resumos/interpretações —
+ * a cobertura é satisfeita por texto oficial (OfficialText) + Explainability (origem factual).
+ */
+export type QualityProfile = "general" | "official_norm";
+
 export interface GateInputs {
   readonly document: KnowledgeDocument;
   readonly bindingConsistent?: boolean;
+  readonly profile?: QualityProfile;
 }
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
@@ -36,10 +44,17 @@ export function evaluateQualityGates(inputs: GateInputs): QualityGateResult {
   const { document } = inputs;
   const failures: GateFailure[] = [];
   const blocks = allBlocks(document);
+  const profile: QualityProfile = inputs.profile ?? "general";
 
-  // Coverage: todos os blocos recomendados presentes (== 100%).
+  // Coverage: depende do perfil.
   const completeness = computeCompleteness(document);
-  if (completeness.score < 1) {
+  let coverageScore = completeness.score;
+  if (profile === "official_norm") {
+    // Documento oficial verbatim: cobertura = presença de texto oficial + explainability (origem).
+    const hasOfficial = blocks.some(b => b.kind === "OfficialText") && blocks.some(b => b.kind === "Explainability");
+    coverageScore = hasOfficial ? 1 : 0;
+    if (!hasOfficial) failures.push({ gate: "coverage", detail: "Documento oficial requer OfficialTextBlock + ExplainabilityBlock." });
+  } else if (completeness.score < 1) {
     failures.push({ gate: "coverage", detail: `Cobertura ${Math.round(completeness.score * 100)}% (<100%): faltam ${completeness.missingRecommended.join(", ")}.` });
   }
 
@@ -70,5 +85,5 @@ export function evaluateQualityGates(inputs: GateInputs): QualityGateResult {
     failures.push({ gate: "versioning", detail: `Versionamento inválido (rev ${document.revision}, semver ${document.semver}).` });
   }
 
-  return { passed: failures.length === 0, failures, coverage: completeness.score };
+  return { passed: failures.length === 0, failures, coverage: coverageScore };
 }

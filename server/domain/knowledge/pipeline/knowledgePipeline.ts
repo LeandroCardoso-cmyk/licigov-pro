@@ -32,6 +32,8 @@ export interface KnowledgePipelineContext {
   readonly correlationId: string;
   readonly document: KnowledgeDocument;
   readonly bindingConsistent?: boolean;
+  /** Perfil de quality gate ("official_norm" p/ documentos oficiais verbatim — RC-4.9). */
+  readonly qualityProfile?: "general" | "official_norm";
   readonly metadata?: Record<string, unknown>;
 }
 

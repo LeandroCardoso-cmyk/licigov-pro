@@ -8,7 +8,7 @@
 
 import { createHash } from "crypto";
 import type { KnowledgeDocument } from "../knowledgeDocument";
-import { evaluateQualityGates, type QualityGateResult } from "./qualityGates";
+import { evaluateQualityGates, type QualityGateResult, type QualityProfile } from "./qualityGates";
 
 export interface PublicationContext {
   readonly tenantId: number;
@@ -17,6 +17,8 @@ export interface PublicationContext {
   readonly approvedBy: string;
   readonly reason: string;
   readonly bindingConsistent?: boolean;
+  /** Perfil de quality gate ("official_norm" p/ documentos oficiais verbatim — RC-4.9). */
+  readonly profile?: QualityProfile;
   readonly publishedAt?: string;
 }
 
@@ -63,7 +65,7 @@ export const KnowledgePublisher = {
    * gera um snapshot imutável. Se os gates falharem, retorna `published: false` (sem snapshot).
    */
   publish(context: PublicationContext): PublishOutcome {
-    const gates = evaluateQualityGates({ document: context.document, bindingConsistent: context.bindingConsistent });
+    const gates = evaluateQualityGates({ document: context.document, bindingConsistent: context.bindingConsistent, profile: context.profile });
     if (!gates.passed) return { published: false, snapshot: null, gates };
 
     const doc = context.document;

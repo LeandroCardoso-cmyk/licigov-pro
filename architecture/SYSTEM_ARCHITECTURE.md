@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.4 | Atualizado em: 2026-07-17
+> Versão: 3.5 | Atualizado em: 2026-07-17
 
 ---
 
@@ -355,6 +355,28 @@ Princípios:
 - **Multi-Tenant / Determinismo / Explainability / Observabilidade / Baixo Acoplamento** preservados.
 
 Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md).
+
+---
+
+## Official Knowledge Corpus (RC-4.9)
+
+Primeiro **conteúdo institucional oficial** do sistema — **não** cria frameworks; **popula** o
+sistema com texto oficial **verbatim** (fontes reais em `data/`) usando a infraestrutura já
+existente. `server/domain/officialCorpus/` + `server/services/officialCorpus/`. **Sem** RAG/IA/chat.
+
+```
+data/*.txt → parseOfficialText (verbatim)
+   → KnowledgeDocument (OfficialTextBlock/artigo + Explainability de origem)
+   → Institutional Knowledge Pipeline (perfil official_norm: 16 estágios + gates + publicação)
+   → OfficialDocument (classificação) + Corpus (Federal → Paraná → Moreira Sales)
+```
+
+Escopo incorporado: **Federal** (Lei 14.133, Decreto 11.462, IN SEGES 65, LC 123, Manual TCU),
+**Paraná** (TCE-PR), **Moreira Sales** (tenant/corpus preparado — sem documentos fabricados).
+Resolução hierárquica **Federal → Estado → Município** (municipal complementa, nunca substitui).
+Modelo de referência para expansão a outros estados/municípios.
+
+Ver [docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md](../docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md).
 
 ---
 

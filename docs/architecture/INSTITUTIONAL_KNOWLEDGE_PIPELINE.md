@@ -83,3 +83,12 @@ change detection (diff/impact/migration/upgrade/rollback), projeção KG determi
 Pipeline institucional completo para criação e evolução de qualquer corpus. Todo novo conhecimento
 passa obrigatoriamente por ele. As próximas RCs usarão este pipeline para ingerir conteúdo (ex.: a
 Lei nº 14.133 como `KnowledgeDocument`s), sem qualquer alteração da arquitetura.
+
+## Perfil de gate oficial (RC-4.9)
+
+Os quality gates aceitam um **perfil aditivo e retrocompatível**: `general` (padrão, exige blocos
+recomendados) e `official_norm`. Para documentos **oficiais verbatim** (sem resumos/interpretações),
+a cobertura é satisfeita por **OfficialTextBlock + ExplainabilityBlock** (origem factual) — permitindo
+publicar texto legal oficial sem violar o gate de cobertura. O padrão permanece inalterado
+(zero regressões). É por este perfil que o **Official Knowledge Corpus** (RC-4.9) publica a Lei nº
+14.133 e demais normas. Ver [OFFICIAL_KNOWLEDGE_CORPUS.md](./OFFICIAL_KNOWLEDGE_CORPUS.md).
