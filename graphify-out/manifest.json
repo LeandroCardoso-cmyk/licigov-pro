@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784296679.546624,
-    "ast_hash": "d55b4f320ed68527979cc14ad8ca492e",
+    "mtime": 1784297632.6992052,
+    "ast_hash": "98b085b2f6e0d3674d2843ead9069dea",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784296729.610623,
-    "ast_hash": "ddaf95e989d97d51a2624567f5bb76f8",
+    "mtime": 1784297650.091205,
+    "ast_hash": "498b39b7b94298a30ad6cb9d1c2f8b88",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784296690.7226238,
-    "ast_hash": "71492f69ac5832c60addbb85aec96536",
+    "mtime": 1784297657.0872047,
+    "ast_hash": "9ef37005771a7c9b9685d1e8e2c79b7d",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -9105,8 +9105,73 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md": {
-    "mtime": 1784296651.7866247,
-    "ast_hash": "dfe3404612b405dfd53837e09fe0b328",
+    "mtime": 1784297668.6352043,
+    "ast_hash": "9a553d48debb5f07929c39249f6674fd",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rcx2-institutional-bootstrap-framework.test.ts": {
+    "mtime": 1784297568.2112067,
+    "ast_hash": "4ccc30d8f1376d8e30f008dba7df92ab",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapDependencyGraph.ts": {
+    "mtime": 1784297408.6192102,
+    "ast_hash": "cdee86e7ec86eb72b8dabbefcc785625",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapExplainability.ts": {
+    "mtime": 1784297502.415208,
+    "ast_hash": "7a9e96d53257f774ae38f892d2735aaf",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapHealth.ts": {
+    "mtime": 1784297378.275211,
+    "ast_hash": "0aede41b53d790b2675ce722e0cbdb85",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapKernel.ts": {
+    "mtime": 1784297476.9312086,
+    "ast_hash": "79c8643d1f93f5161daa5a760a9d5ce3",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapPipeline.ts": {
+    "mtime": 1784297442.4112096,
+    "ast_hash": "58304dbc7acf7319d0d1bcd1eef3772b",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapRegistry.ts": {
+    "mtime": 1784297430.3632097,
+    "ast_hash": "ba792e25f820874c6083de016eb8b51d",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapSample.ts": {
+    "mtime": 1784297517.0472078,
+    "ast_hash": "2cb09a8eadeb77b33c431c07d15ac799",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/bootstrapStage.ts": {
+    "mtime": 1784297389.2672107,
+    "ast_hash": "66416cf746ab445eef1ed832544c7f3a",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/contextReload.ts": {
+    "mtime": 1784297492.3312085,
+    "ast_hash": "c726f186d5b3a27b5b6be642d6079fa9",
+    "semantic_hash": ""
+  },
+  "server/domain/bootstrap/platformState.ts": {
+    "mtime": 1784297365.2992113,
+    "ast_hash": "3d309c9fa3fd0ce3acb77102b02239ea",
+    "semantic_hash": ""
+  },
+  "server/services/bootstrap/bootstrapObservabilityService.ts": {
+    "mtime": 1784297454.6752093,
+    "ast_hash": "ce97167a9cf9eb907e1a95e942729b54",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md": {
+    "mtime": 1784297610.0152056,
+    "ast_hash": "0aa6cc2c4001bd5443fdce586aa8e9c5",
     "semantic_hash": ""
   }
 }

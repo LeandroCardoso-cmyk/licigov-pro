@@ -126,6 +126,10 @@ O **Federal Procurement Corpus** é o **primeiro pacote oficial instalável** do
 
 Além dos pilares Cognitivo e de Business Domains, o sistema passa a ter um terceiro pilar: o **Institutional Experience Framework** (`server/domain/experience/`). Um **Experience Kernel** organiza permanentemente toda a experiência do usuário a partir de um **InstitutionContext** imutável: **Capability Matrix**, **Workspace Registry**, **Navigation Builder** (sidebar/topnav/quick actions/breadcrumbs/menus dinâmicos), **Home Composer** e **Copilot EntryPoint** (sem IA). Nenhum módulo constrói menus/navegação diretamente — cada um registra apenas Workspace/Capabilities/Actions/Routes. Multi-tenant (cada tenant vê só o contratado), replay-safe, explicável, observável. **NÃO implementa UX definitiva/React/Design System/IA.** Ver [INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md](./INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md).
 
+## Inicialização da plataforma (RC-X.2)
+
+O **Institutional Bootstrap Framework** (`server/domain/bootstrap/`) orquestra a inicialização dos três pilares (Cognitivo, Experiência e Business Domains): **Bootstrap Kernel**, **Pipeline** declarativo (Authentication → Institution Context → Corpus → Package → Capability → Workspace → Navigation → Home → Copilot → Business → Ready), **Dependency Graph** (ordem determinística, sem ciclos), **Platform State**, **Registry**, **Health** e **Context Reload**. Cada novo módulo registra apenas Stage/Dependencies/Initializer/HealthCheck. Multi-tenant, replay-safe, explicável, observável. **NÃO executa regra de negócio, NÃO contém IA, NÃO conhece Lei 14.133.** Ver [INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md](./INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor
