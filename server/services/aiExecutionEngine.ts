@@ -34,6 +34,8 @@ import { getPromptBuilder } from "./cognitive/promptBuilders";
 import { recordCognitiveObservability, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
 import { getRulesForTask } from "../domain/institutionalRules";
 import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
+// RC-5.0 — o engine apenas CONSOME o ContextPackage (tipo puro; nunca acessa o Corpus diretamente).
+import type { ContextPackage } from "../domain/institutionalIntegration/contextPackage";
 
 export type PipelineStageName =
   | "task" | "policy" | "prompt" | "grounding" | "knowledge_graph"
@@ -188,6 +190,12 @@ export interface CognitiveTaskInput {
   readonly responseType?: CognitiveResponseType;
   /** Payload estruturado a carregar na resposta (opcional/nullable) — fase de ativação. */
   readonly structuredData?: unknown;
+  /**
+   * RC-5.0 — ContextPackage institucional resolvido pela Integration Layer (Orchestrator).
+   * O engine apenas o CONSOME (documentos/citações/replay) — jamais resolve tenant/legislação/
+   * hierarquia/corpus. Opcional: ausência preserva o comportamento anterior (zero regressões).
+   */
+  readonly contextPackage?: ContextPackage;
 }
 
 export interface CognitiveExecution {
@@ -197,6 +205,8 @@ export interface CognitiveExecution {
   readonly validation: CognitiveResponseValidation;
   readonly reasoningPlan: InstitutionalReasoningPlan;
   readonly stages: PipelineStageResult[];
+  /** RC-5.0 — referência (replayHash) do ContextPackage consumido, quando fornecido. */
+  readonly institutionalContextRef?: string;
 }
 
 /** Confidence determinística (fase de fundação — sem LLM real) derivada do replayHash. */
@@ -274,8 +284,11 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const provider = resolution.provider.name;
   const model = policy.model;
   const content = generated.text;
-  const documentsUsed = [...(input.documentRefs ?? [])];
-  const lawsUsed = [...(input.lawRefs ?? [])];
+  // RC-5.0 — o engine CONSOME o ContextPackage institucional (documentos + citações), quando
+  // presente, enriquecendo os insumos declarados. Nunca acessa o Corpus; apenas usa o pacote pronto.
+  const pkg = input.contextPackage;
+  const documentsUsed = [...new Set([...(input.documentRefs ?? []), ...(pkg?.documents.map(d => d.documentId) ?? [])])];
+  const lawsUsed = [...new Set([...(input.lawRefs ?? []), ...(pkg?.citations.map(c => c.reference) ?? [])])];
   const tokens = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
   // Recursos cognitivos efetivamente usados (para hash lógico + contexto + observabilidade).
@@ -325,5 +338,5 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const observability = recordCognitiveObservability({ context, response, validation, reasoningPlan });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
-  return { response, context, observability, validation, reasoningPlan, stages };
+  return { response, context, observability, validation, reasoningPlan, stages, institutionalContextRef: pkg?.replayHash };
 }

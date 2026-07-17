@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.5 | Atualizado em: 2026-07-17
+> Versão: 3.6 | Atualizado em: 2026-07-17
 
 ---
 
@@ -377,6 +377,34 @@ Resolução hierárquica **Federal → Estado → Município** (municipal comple
 Modelo de referência para expansão a outros estados/municípios.
 
 Ver [docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md](../docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md).
+
+---
+
+## Institutional Knowledge Integration Layer (RC-5.0)
+
+Única camada que integra o **Kernel Cognitivo** ao **Official Knowledge Corpus** com **baixo
+acoplamento** — `server/domain/institutionalIntegration/` + `server/services/institutionalIntegration/`.
+Exclusivamente arquitetural; **sem** IA/chat/RAG paralelo. O Corpus **jamais** é acessado diretamente
+pelos Copilots ou pelo AIExecutionEngine.
+
+```
+Business Domain → executeCognitiveTask() → Orchestrator →
+   InstitutionalContextResolver → KnowledgeRetrieval → ContextPackage (imutável) → AIExecutionEngine
+```
+
+- **InstitutionalContextResolver:** tenant/domínio/task → Federal → Estado → Município → documentos
+  (reusa a resolução hierárquica da RC-4.9; isolamento multi-tenant absoluto).
+- **KnowledgeRetrievalService:** consulta só o Corpus; recupera trechos por correspondência lexical
+  determinística; preserva documentId/authority/version/jurisdiction/bindingLevel/citation/lineage.
+- **ContextPackage:** estrutura única, imutável (frozen), replay-safe, versionada, auditável.
+- **AIExecutionEngine:** recebe o `contextPackage` **opcional** e apenas o **consome** (sem novos
+  estágios; ausência preserva o comportamento anterior). **Não** resolve tenant/legislação/hierarquia/corpus.
+- **Orchestrator:** parâmetro **opcional** `institutional` → resolve o ContextPackage antes da execução.
+
+Multi-tenant: federais compartilhados; estaduais por estado; **municipais pertencem apenas ao
+respectivo tenant**. Replay-safe (mesma entrada → mesmo replayHash).
+
+Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md).
 
 ---
 

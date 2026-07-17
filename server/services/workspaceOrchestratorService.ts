@@ -14,6 +14,10 @@ import type { CopilotType } from "../domain/institutionalCopilot";
 import { rankCopilots } from "./copilotOrchestratorService";
 import { runCopilotReasoning } from "./copilotReasoningService";
 import { aggregateRiskLevel, type RecommendationRisk } from "../domain/copilotRecommendation";
+// RC-5.0 — Institutional Knowledge Integration Layer (Orchestrator → Resolver → ContextPackage).
+import { resolveInstitutionalContextPackage } from "./institutionalIntegration/institutionalKnowledgeIntegration";
+import type { ContextPackage } from "../domain/institutionalIntegration/contextPackage";
+import type { OfficialCorpusBuildResult } from "./officialCorpus/officialCorpusBuilder";
 
 export interface PerCopilotResult {
   readonly copilotType: CopilotType;
@@ -42,6 +46,18 @@ export interface MultiCopilotResult {
   readonly perCopilot: readonly PerCopilotResult[];
   readonly consolidated: ConsolidatedRecommendation;
   readonly conflicts: readonly string[];
+  /** RC-5.0 — ContextPackage institucional resolvido (quando `institutional` é informado). */
+  readonly contextPackage?: ContextPackage;
+}
+
+/** RC-5.0 — parâmetros de resolução do contexto institucional (opcional, aditivo). */
+export interface InstitutionalOrchestrationInput {
+  readonly corpus: OfficialCorpusBuildResult;
+  readonly tenantId: number;
+  readonly taskType: string;
+  readonly businessDomain?: string | null;
+  readonly query?: string;
+  readonly userContext?: { state?: string | null; municipality?: string | null };
 }
 
 function uniq<T>(arr: T[]): T[] {
@@ -58,8 +74,20 @@ export async function orchestrateMultiCopilot(params: {
   copilotTypes?: CopilotType[];
   correlationId: string;
   invoke?: (prompt: string) => Promise<string>;
+  /** RC-5.0 — quando presente, o Orchestrator resolve o ContextPackage institucional (Resolver → Retrieval). */
+  institutional?: InstitutionalOrchestrationInput;
 }): Promise<MultiCopilotResult> {
   const { organizationId: orgId, request, correlationId } = params;
+
+  // RC-5.0 — passo institucional do Orchestrator: solicita o ContextPackage ANTES da execução.
+  // O Corpus é acessado SOMENTE pela Integration Layer (nunca pelos copilotos/engine).
+  const contextPackage: ContextPackage | undefined = params.institutional
+    ? resolveInstitutionalContextPackage(params.institutional.corpus, {
+        tenantId: params.institutional.tenantId, businessDomain: params.institutional.businessDomain,
+        taskType: params.institutional.taskType, query: params.institutional.query ?? request,
+        correlationId, userContext: params.institutional.userContext,
+      })
+    : undefined;
 
   // 1) Classificação + seleção dos copilotos necessários
   const selected = params.copilotTypes && params.copilotTypes.length > 0
@@ -127,5 +155,5 @@ export async function orchestrateMultiCopilot(params: {
     requiresHumanReview: true,
   };
 
-  return { request, selectedCopilots: selected, perCopilot, consolidated, conflicts };
+  return { request, selectedCopilots: selected, perCopilot, consolidated, conflicts, contextPackage };
 }

@@ -6315,8 +6315,8 @@
     "semantic_hash": ""
   },
   "server/services/workspaceOrchestratorService.ts": {
-    "mtime": 1783302598.1811612,
-    "ast_hash": "ce90413f191dee1df685b11770fb2e3e",
+    "mtime": 1784315826.5379233,
+    "ast_hash": "1590efa3576a0a7eafb079943ff68ff4",
     "semantic_hash": ""
   },
   "server/services/workspaceRiskService.ts": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784311324.5268605,
-    "ast_hash": "fc76bdae98e1be4847201b7ed731fb22",
+    "mtime": 1784316017.8299274,
+    "ast_hash": "7144837350365b4f47e11f16c7a47865",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784311365.738859,
-    "ast_hash": "8102839ce764eb7910cc0cc6467efc56",
+    "mtime": 1784316042.965928,
+    "ast_hash": "1d4497e5c6439053c75747830affa288",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784227200.216789,
-    "ast_hash": "0bde98d8ec751850dca755c8027b21a6",
+    "mtime": 1784315775.3979223,
+    "ast_hash": "0f1a2a81a279c18b9985f6f8ad3cfc4c",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -9477,6 +9477,41 @@
   "data/prejulgado_27_tce_pr.txt": {
     "mtime": 1784313038.0267925,
     "ast_hash": "ce2754e6d05fdf821f0e6fd57012a124",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc50-institutional-knowledge-integration.test.ts": {
+    "mtime": 1784315901.4379249,
+    "ast_hash": "74bee21770eb2dcc10563ae17c115ed7",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalIntegration/contextPackage.ts": {
+    "mtime": 1784315620.6659188,
+    "ast_hash": "dba01c8126eb36756e5d9eb3b5f015ad",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalIntegration/institutionalContextResolver.ts": {
+    "mtime": 1784315643.1459193,
+    "ast_hash": "6a66cc7cce8607b16dcc4da46dff02f3",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalIntegration/institutionalIntegrationObservabilityService.ts": {
+    "mtime": 1784315693.0259204,
+    "ast_hash": "3fa743ef9d5bdfd8362676fbef5ba0f5",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
+    "mtime": 1784315721.341921,
+    "ast_hash": "7fbc85734ffcdff8fc10bb38e2d5ed81",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
+    "mtime": 1784315676.36192,
+    "ast_hash": "25ce712a68a638e05897c790ea80fa07",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
+    "mtime": 1784315957.0019262,
+    "ast_hash": "6c8b4766571296c29fb5052458cea6cc",
     "semantic_hash": ""
   }
 }
