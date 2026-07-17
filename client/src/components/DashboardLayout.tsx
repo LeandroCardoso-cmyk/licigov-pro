@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -36,6 +36,7 @@ const menuItems = [
   { icon: FileCheck, label: "Contratação Direta", path: "/contratacao-direta" },
   { icon: Scale, label: "Parecer Jurídico", path: "/parecer" },
   { icon: ScrollText, label: "Contratos", path: "/contratos" },
+  { icon: HelpCircle, label: "Tirar Dúvidas", path: "/tirar-duvidas" },
   { icon: LibraryBig, label: "Templates", path: "/templates" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
