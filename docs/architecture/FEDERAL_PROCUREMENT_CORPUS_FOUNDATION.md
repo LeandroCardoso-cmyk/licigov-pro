@@ -48,6 +48,11 @@ Cada `NormativeNode` carrega `knowledgeUnitId` — a ligação futura com `Legal
 (RC-4.5). **Nesta RC é sempre `null`** (validado por teste): a estrutura existe, o conteúdo será
 preenchido incrementalmente nas próximas RCs, preservando replay safety, versionamento e lineage.
 
+A infraestrutura que realiza essa ligação é o **Knowledge Binding Framework** (RC-4.6.2): um
+`KnowledgeBinding` versionado (append-only) conecta cada `NormativeNode` a uma ou mais
+`LegalKnowledgeUnit`, com tipo, autoridade, escopo e explainability — **sem alterar a árvore
+normativa**. Ver [KNOWLEDGE_BINDING_FRAMEWORK.md](./KNOWLEDGE_BINDING_FRAMEWORK.md).
+
 ## Compatibilidade futura (Part 10)
 
 O modelo é genérico: `normId` + `authority` + `scope` permitem instanciar, **sem alterar a
