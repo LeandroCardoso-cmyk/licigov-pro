@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784293535.235732,
-    "ast_hash": "8d64bb398a0929d413c0dbdb1961267a",
+    "mtime": 1784295159.831547,
+    "ast_hash": "f909c652643b13c61e3cbb0c7416d058",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784293549.2677317,
-    "ast_hash": "e46c87be8505543b0ff68cd1d07aa1c1",
+    "mtime": 1784295197.479546,
+    "ast_hash": "6e3236fd55d45d8b1faf0a461c145600",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8895,8 +8895,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
-    "mtime": 1784293560.7317314,
-    "ast_hash": "d3283733d3990971d22c918a245fb897",
+    "mtime": 1784295187.9195464,
+    "ast_hash": "d79c3c566ae949d1938b04fc9448e1d3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc451-institutional-corpus-framework.test.ts": {
@@ -8970,8 +8970,78 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_CORPUS_FRAMEWORK.md": {
-    "mtime": 1784293510.5597327,
-    "ast_hash": "d5d8c4fc2636329258943970e4402dc6",
+    "mtime": 1784295183.7795465,
+    "ast_hash": "9d708859a7a5068f5555db6d4cf1b9fb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc46-federal-procurement-corpus-package.test.ts": {
+    "mtime": 1784295100.0315483,
+    "ast_hash": "35695546178334ec1db99462acc1fe4e",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/collectionManifest.ts": {
+    "mtime": 1784294904.6235528,
+    "ast_hash": "3374e002a4d5391bcbd7488b3bd6196c",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/corpusManifest.ts": {
+    "mtime": 1784294891.347553,
+    "ast_hash": "b73bbafcd95106472c3470c6706655c3",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/corpusPackage.ts": {
+    "mtime": 1784294926.4315522,
+    "ast_hash": "977150837f6a6cbcdef9d9001461857b",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/corpusPackageRegistry.ts": {
+    "mtime": 1784294976.075551,
+    "ast_hash": "c967386d065a6844f52d6ed23b6a2abb",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/federalCollections.ts": {
+    "mtime": 1784294943.6235518,
+    "ast_hash": "47b1beb1778f2b3bf02844726a2153d6",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/federalProcurementCorpus.ts": {
+    "mtime": 1784294958.7835515,
+    "ast_hash": "f2b7bffb3ac1e0756643c29576f2cecc",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/packageExplainability.ts": {
+    "mtime": 1784295038.4795496,
+    "ast_hash": "01dcd4cff163b24c533026d7c24e5efd",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/packageProjection.ts": {
+    "mtime": 1784295011.8475504,
+    "ast_hash": "2b18c9ba5f0c6a7be51b64d670c0dab0",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/packageQueries.ts": {
+    "mtime": 1784295023.96355,
+    "ast_hash": "bb6a6080c595c0131feae9f97a62e8a6",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/packageValidation.ts": {
+    "mtime": 1784294997.0555506,
+    "ast_hash": "c7de891a500d2d5e7a4d1c1faf8582b0",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/package/semver.ts": {
+    "mtime": 1784294865.0595536,
+    "ast_hash": "17eb26288696679a3bbf9fac678fdf8f",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/corpusPackageObservabilityService.ts": {
+    "mtime": 1784295047.9315495,
+    "ast_hash": "20f58be82ace19485a02abfe1286e48a",
+    "semantic_hash": ""
+  },
+  "docs/architecture/FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md": {
+    "mtime": 1784295148.159547,
+    "ast_hash": "fae178152c6acf38270561b4542a6619",
     "semantic_hash": ""
   }
 }

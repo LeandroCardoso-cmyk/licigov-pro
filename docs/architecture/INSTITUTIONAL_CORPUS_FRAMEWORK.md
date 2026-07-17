@@ -87,3 +87,11 @@ toda expansão futura ocorre apenas **adicionando novos Corpora**, nunca modific
 
 > A futura Lei 14.133 será apenas um conjunto de `LegalKnowledgeUnit` (RC-4.5), organizado em
 > **Coleções** de um **Corpus Federal** (RC-4.5.1).
+
+## Primeiro pacote instalável (RC-4.6)
+
+Sobre este framework, a RC-4.6 cria o **primeiro pacote oficial** do sistema — o **Federal
+Procurement Corpus** (`server/domain/corpus/package/`): um `CorpusPackage` instalável com
+`CorpusManifest`, 5 coleções federais **vazias** (Lei 14.133, Decretos, IN SEGES, AGU, TCU),
+integridade/checksums, lifecycle, registro, validação e projeção KG — **sem conteúdo jurídico**.
+Ver [FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](./FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md).
