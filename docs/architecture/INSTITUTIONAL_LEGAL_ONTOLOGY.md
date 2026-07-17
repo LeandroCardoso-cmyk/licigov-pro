@@ -83,3 +83,12 @@ Sobre a **estrutura** definida aqui, a **Legal Knowledge Foundation** cria o *co
 permanente para armazenar qualquer conhecimento jurídico futuro (unidades, referências,
 versões, conflitos, projeção, consultas) — **sem** inserir Lei 14.133/acórdãos/jurisprudência/
 doutrina. Ver [LEGAL_KNOWLEDGE_FOUNDATION.md](./LEGAL_KNOWLEDGE_FOUNDATION.md).
+
+---
+
+## Organização em Corpus (RC-4.5.1)
+
+As unidades armazenadas na fundação são organizadas por um **Institutional Corpus Framework**
+(Corpus → Coleções), com hierarquia configurável e registro declarativo — a estrutura permanente
+onde qualquer conhecimento institucional futuro viverá, **sem** conteúdo jurídico. Ver
+[INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).

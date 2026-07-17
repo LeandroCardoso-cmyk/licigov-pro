@@ -77,3 +77,12 @@ duplicadas/circulares; cardinalidade válida), ids únicos, fingerprint estável
 verificado**. **Zero regressões. Ontologias e Kernel inalterados.**
 
 > A futura Lei 14.133 será apenas **uma instância** desta arquitetura.
+
+---
+
+## Organização em Corpus (RC-4.5.1)
+
+O conhecimento conectado por esta camada é organizado pelo **Institutional Corpus Framework**
+(Corpus → Coleções → unidades), com hierarquia configurável, registro declarativo e projeção KG.
+É a organização permanente onde qualquer conhecimento institucional futuro viverá, **sem**
+conteúdo jurídico. Ver [INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).

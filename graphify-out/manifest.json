@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784254880.6216745,
-    "ast_hash": "e713e4b200fd20d7516b8954e19bcf4c",
+    "mtime": 1784293535.235732,
+    "ast_hash": "8d64bb398a0929d413c0dbdb1961267a",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784254880.6055522,
-    "ast_hash": "2e98b802a50025b4b28f2a93e6fd1665",
+    "mtime": 1784293549.2677317,
+    "ast_hash": "e46c87be8505543b0ff68cd1d07aa1c1",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8810,8 +8810,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md": {
-    "mtime": 1784254880.5616448,
-    "ast_hash": "9b03ad376fddcffdb7beb40eabbddad0",
+    "mtime": 1784293577.6797311,
+    "ast_hash": "f740697a0a1e5ddac16f39b21f791efa",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc441-ontology-integration.test.ts": {
@@ -8835,8 +8835,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/ONTOLOGY_INTEGRATION_LAYER.md": {
-    "mtime": 1784252939.388165,
-    "ast_hash": "6e486410310ebd80d0b5a5b8280db169",
+    "mtime": 1784293591.8477306,
+    "ast_hash": "09cd9b876700f55961b1caa65fc24d16",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc45-legal-knowledge-foundation.test.ts": {
@@ -8895,8 +8895,83 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
-    "mtime": 1784254857.1616452,
-    "ast_hash": "d384ec994a04ac06774e50b84cae7eae",
+    "mtime": 1784293560.7317314,
+    "ast_hash": "d3283733d3990971d22c918a245fb897",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc451-institutional-corpus-framework.test.ts": {
+    "mtime": 1784293453.239734,
+    "ast_hash": "e8e471e32a2f574ed5d58a0f819fd8e7",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusExplainability.ts": {
+    "mtime": 1784293349.6757362,
+    "ast_hash": "f1025efd5392d63914b81a0576f9d1d7",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusFramework.ts": {
+    "mtime": 1784293255.9877384,
+    "ast_hash": "51792a5d03318cdc80c54b123fe9ec00",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusHierarchy.ts": {
+    "mtime": 1784293212.3317394,
+    "ast_hash": "f41ffaa3d88c470be7851e8393a31238",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusIntegration.ts": {
+    "mtime": 1784293239.6317387,
+    "ast_hash": "8bac4b3dfc7baefab0ca6da6748c99bb",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusProjection.ts": {
+    "mtime": 1784293312.167737,
+    "ast_hash": "7581641f89f7a46ffbe2f024c1bd667e",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusQueries.ts": {
+    "mtime": 1784293331.8717368,
+    "ast_hash": "bd9f79a2860ddbeaf71a87443bc54f5f",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusRegistry.ts": {
+    "mtime": 1784293274.691738,
+    "ast_hash": "7a78a65e2eb5eba820436ac2b7f319cd",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusTypes.ts": {
+    "mtime": 1784293150.0237408,
+    "ast_hash": "9cb60841a14aa2a9e1ec98ab7459955a",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusValidation.ts": {
+    "mtime": 1784293368.8237357,
+    "ast_hash": "403a03c0f415989fc0bd0a8c97c33d45",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/corpusVersion.ts": {
+    "mtime": 1784293291.9077375,
+    "ast_hash": "787bb31475f9f9bed9039c987fba15cf",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/institutionalCorpus.ts": {
+    "mtime": 1784293169.6917403,
+    "ast_hash": "8e34d2b41020c5908070eb21d86a70b2",
+    "semantic_hash": ""
+  },
+  "server/domain/corpus/knowledgeCollection.ts": {
+    "mtime": 1784293192.38374,
+    "ast_hash": "8ee4c43a047e2a6dd329e4f0a6c60b0e",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/corpusObservabilityService.ts": {
+    "mtime": 1784293384.9077353,
+    "ast_hash": "f3dad09c408b5511d20d7017b60c094a",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_CORPUS_FRAMEWORK.md": {
+    "mtime": 1784293510.5597327,
+    "ast_hash": "d5d8c4fc2636329258943970e4402dc6",
     "semantic_hash": ""
   }
 }
