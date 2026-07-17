@@ -68,7 +68,7 @@ const pass = (detail: string): StageOutcome => ({ status: "completed", detail })
 /** Handlers padrão dos quality gates — aplicam a governança institucional. Determinísticos. */
 export const DEFAULT_STAGE_HANDLERS: Partial<Record<PipelineStageId, StageHandler>> = {
   quality_validation: (ctx) => {
-    const gates = evaluateQualityGates({ document: ctx.document, bindingConsistent: ctx.bindingConsistent });
+    const gates = evaluateQualityGates({ document: ctx.document, bindingConsistent: ctx.bindingConsistent, profile: ctx.qualityProfile });
     const cov = gates.failures.filter(f => f.gate === "coverage");
     return cov.length ? { status: "failed", detail: cov[0].detail, errors: cov.map(f => f.detail) } : pass("qualidade ok (cobertura 100%)");
   },
@@ -81,7 +81,7 @@ export const DEFAULT_STAGE_HANDLERS: Partial<Record<PipelineStageId, StageHandle
     return present ? pass("explainability presente") : { status: "failed", detail: "explainability ausente", errors: ["bloco Explainability ausente"] };
   },
   approval: (ctx) => {
-    const gates = evaluateQualityGates({ document: ctx.document, bindingConsistent: ctx.bindingConsistent });
+    const gates = evaluateQualityGates({ document: ctx.document, bindingConsistent: ctx.bindingConsistent, profile: ctx.qualityProfile });
     return gates.passed ? pass("aprovado (todos os gates)") : { status: "failed", detail: "aprovação bloqueada por gates", errors: gates.failures.map(f => `${f.gate}: ${f.detail}`) };
   },
 };
