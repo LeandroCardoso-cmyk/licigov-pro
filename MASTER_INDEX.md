@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.13.0 | Branch: claude/rc-4.6 | Atualizado: 2026-07-17
+> Versão: 0.14.0 | Branch: claude/rc-x.1 | Atualizado: 2026-07-17
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -26,6 +26,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | 📚 Fundação de Conhecimento Jurídico | [docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md](docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md) | **Camada estrutural para qualquer conhecimento jurídico futuro (unidades, referências, versionamento, conflitos, projeção, consultas) — SEM Lei 14.133; multi-tenant, replay-safe (RC-4.5)** |
 | 🗂️ Framework de Corpus Institucional | [docs/architecture/INSTITUTIONAL_CORPUS_FRAMEWORK.md](docs/architecture/INSTITUTIONAL_CORPUS_FRAMEWORK.md) | **Organização permanente do conhecimento: Corpus, Coleções, Registry, Hierarquia configurável, integração com a Legal Knowledge Foundation, projeção KG — SEM conteúdo jurídico; multi-tenant, replay-safe, append-only (RC-4.5.1)** |
 | 📦 Pacote do Corpus Federal | [docs/architecture/FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](docs/architecture/FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md) | **Primeiro pacote oficial instalável: Corpus Manifest, Corpus Package (integrity/checksums/lifecycle), 5 coleções federais vazias (Lei 14.133, Decretos, IN SEGES, AGU, TCU), Registry, validação e projeção KG — SEM conteúdo jurídico; multi-tenant, replay-safe (RC-4.6)** |
+| 🖥️ Framework de Experiência | [docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md](docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md) | **Terceiro pilar: Experience Kernel, Institution Context (imutável), Capability Matrix, Workspace Registry, Navigation Builder, Home Composer, Copilot EntryPoint — navegação/home montadas dinamicamente; SEM UX definitiva/IA; multi-tenant, replay-safe, explicável (RC-X.1)** |
 | ✅ Validação da Ontologia | [docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md](docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md) | **Validação exaustiva: 20 cenários representáveis, cobertura 100%, zero ciclos, resiliência (RC-4.3.1)** |
 | ⚖️ Ontologia Jurídica | [docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md](docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md) | **Estrutura do conhecimento jurídico (tipos normativos, hierarquia, estrutura interna, conceitos, relacionamentos, classificações) — independente de lei específica (RC-4.4)** |
 | AIExecutionEngine | [docs/architecture/AI_EXECUTION_ENGINE.md](docs/architecture/AI_EXECUTION_ENGINE.md) | Contrato do cérebro cognitivo (única porta de IA) |
