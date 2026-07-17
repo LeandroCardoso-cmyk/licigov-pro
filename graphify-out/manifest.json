@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784299551.0051801,
-    "ast_hash": "ffe04660b382e641aca814a1a0307526",
+    "mtime": 1784300827.7189472,
+    "ast_hash": "4b49e3dafed7f6e76b68346c997fd548",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784299588.3331792,
-    "ast_hash": "940089077b48d712cf182d878935609b",
+    "mtime": 1784300867.9469461,
+    "ast_hash": "ca24b6e59365fd03c35fc9552f93f543",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8895,8 +8895,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
-    "mtime": 1784299567.3211799,
-    "ast_hash": "8061c31f1f1f1d2d391105fe9efd532e",
+    "mtime": 1784300846.4389467,
+    "ast_hash": "cd82b9563ff83143df4fd6958a1ff865",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc451-institutional-corpus-framework.test.ts": {
@@ -9285,8 +9285,73 @@
     "semantic_hash": ""
   },
   "docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md": {
-    "mtime": 1784299525.9771807,
-    "ast_hash": "235a721210974684f19ae39fc50bd0a3",
+    "mtime": 1784300841.4709468,
+    "ast_hash": "bdf062dfb33a80de81dec5cf678af0be",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc47-institutional-knowledge-framework.test.ts": {
+    "mtime": 1784300751.098949,
+    "ast_hash": "aa01b61582a1cff627034590668b7f67",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeBlocks.ts": {
+    "mtime": 1784300466.4189553,
+    "ast_hash": "13d85be7acf35c716eb7a0e343464028",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeDocument.ts": {
+    "mtime": 1784300523.314954,
+    "ast_hash": "55e02a6372a2dd5a122f971b0ccf8fbc",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeExplainability.ts": {
+    "mtime": 1784300663.406951,
+    "ast_hash": "1e2f50cce4b70d1327be6c4e5788440b",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeLifecycle.ts": {
+    "mtime": 1784300492.4389548,
+    "ast_hash": "b2252c1cb29e30825335207356190ffd",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeProjection.ts": {
+    "mtime": 1784300645.9709513,
+    "ast_hash": "05f5d58bfb4d536c1f6ecd8082d5bd35",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeQuality.ts": {
+    "mtime": 1784300574.5949528,
+    "ast_hash": "5f7b2e03d322683c6b2f6187ae767363",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeRegistry.ts": {
+    "mtime": 1784300625.8429518,
+    "ast_hash": "aad39279bca5b8f2c9791a91379bde18",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeRenderer.ts": {
+    "mtime": 1784300595.6989524,
+    "ast_hash": "ae1b386495b9ee4bc783cbeea20cf97a",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeSample.ts": {
+    "mtime": 1784300699.55095,
+    "ast_hash": "bf1f30c25835621bb560c2a6ad43e358",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/knowledgeVersion.ts": {
+    "mtime": 1784300546.8349535,
+    "ast_hash": "0e97984550e0c2b532c1e881327abd6f",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/institutionalKnowledgeObservabilityService.ts": {
+    "mtime": 1784300681.4349506,
+    "ast_hash": "3b7b8446ad13fe6ef28538628b75fa98",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md": {
+    "mtime": 1784300802.0709476,
+    "ast_hash": "d8d20148c3fa513e0e1afd6570774c90",
     "semantic_hash": ""
   }
 }

@@ -77,3 +77,10 @@ Após esta RC, o sistema recebe milhares de `LegalKnowledgeUnits` **sem alteraç
 artigo da Lei nº 14.133 pode possuir uma ou mais KnowledgeUnits vinculadas de forma **versionada,
 explicável, auditável e replay-safe** — bastando popular a árvore normativa (RC-4.6.1) e o container
 de conhecimento (RC-4.5) e registrar os bindings.
+
+## Padrão do conhecimento vinculado (RC-4.7)
+
+A representação de cada unidade de conhecimento segue o **Institutional Knowledge Framework**
+(RC-4.7): `KnowledgeDocument` genérico com blocos cognitivos, qualidade, renderer (6 visões),
+lifecycle e versionamento. Os bindings desta RC apontam para o conteúdo estruturado por esse
+framework. Ver [INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md](./INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md).

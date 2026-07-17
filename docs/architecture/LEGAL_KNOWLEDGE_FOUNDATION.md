@@ -72,3 +72,7 @@ ingestão incremental do conteúdo jurídico. Ver
 A ligação entre `NormativeNode` e `LegalKnowledgeUnit` é realizada pelo **Knowledge Binding
 Framework** (RC-4.6.2): bindings versionados (append-only), tipados, explicáveis e auditáveis — sem
 alterar nenhuma das fundações. Ver [KNOWLEDGE_BINDING_FRAMEWORK.md](./KNOWLEDGE_BINDING_FRAMEWORK.md).
+
+O **conteúdo** de cada unidade é estruturado pelo **Institutional Knowledge Framework** (RC-4.7) —
+o padrão genérico (documentos, blocos, qualidade, renderer, lifecycle, versionamento) que rege todo
+conhecimento institucional. Ver [INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md](./INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md).
