@@ -37,7 +37,12 @@ const SOURCES: SourceSpec[] = [
   { file: "lc_123_2006.txt", classification: { normId: "lc-123-2006", documentType: "lei_complementar", authority: "Congresso Nacional", jurisdiction: "federal", effectiveDate: "2006-12-15", source: "planalto.gov.br", version: "1.0.0", status: "vigente" } },
   { file: "manual_tcu_5ed.txt", chunked: true, title: "Licitações e Contratos — Orientações e Jurisprudência do TCU (5ª ed.)", classification: { normId: "manual-tcu-licitacoes-5ed", documentType: "manual", authority: "Tribunal de Contas da União", jurisdiction: "federal", source: "portal.tcu.gov.br", version: "5.0.0", status: "vigente" } },
   // ── FASE 3 — ESTADO DO PARANÁ ────────────────────────────────────────────────
-  { file: "manual_tce_pr.txt", chunked: true, title: "Orientações Técnicas do TCE-PR — Licitações e Contratos", classification: { normId: "manual-tce-pr", documentType: "orientacao_tecnica", authority: "TCE-PR", jurisdiction: "estadual", state: "PR", source: "tce.pr.gov.br", version: "1.0.0", status: "vigente" } },
+  { file: "manual_tce_pr.txt", chunked: true, title: "Orientações Técnicas do TCE-PR — Licitações e Contratos", classification: { normId: "manual-tce-pr", documentType: "orientacao_tecnica", authority: "TCE-PR", jurisdiction: "estadual", state: "PR", source: "tce.pr.gov.br", version: "1.0.0", status: "vigente", bindingLevel: "orientacao" } },
+  // RC-4.9.1 — Prejulgado nº 27 (TCE-PR).
+  { file: "prejulgado_27_tce_pr.txt", chunked: true, title: "Prejulgado nº 27 — Tribunal de Contas do Estado do Paraná", classification: { normId: "prejulgado-27-tce-pr", documentType: "prejulgado", authority: "TCE-PR", jurisdiction: "estadual", state: "PR", source: "tce.pr.gov.br", version: "1.0.0", status: "vigente", bindingLevel: "prejulgado_tce" } },
+  // ── FASE 4 — MUNICÍPIO DE MOREIRA SALES ──────────────────────────────────────
+  // RC-4.9.1 — Lei Municipal nº 769/2021 (texto oficial via OCR do PDF fornecido).
+  { file: "lei_municipal_769_2021_moreira_sales.txt", buildTree: true, title: "Lei Municipal nº 769/2021 — Município de Moreira Sales", classification: { normId: "lei-municipal-769-2021-moreira-sales", documentType: "municipal_law", authority: "Município de Moreira Sales", jurisdiction: "municipal", state: "PR", municipality: "Moreira Sales", tenantId: MOREIRA_SALES_TENANT_ID, effectiveDate: "2021-03-03", source: "Prefeitura Municipal de Moreira Sales", version: "1.0.0", status: "vigente", bindingLevel: "mandatory" } },
 ];
 
 export interface OfficialCorpusBuildResult {

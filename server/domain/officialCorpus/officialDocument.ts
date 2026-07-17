@@ -10,10 +10,14 @@ import { createHash } from "crypto";
 
 export type OfficialDocumentType =
   | "lei" | "lei_complementar" | "decreto" | "instrucao_normativa" | "acordao"
-  | "orientacao_tecnica" | "parecer" | "manual" | "decreto_municipal" | "normativa_interna" | "modelo_oficial";
+  | "orientacao_tecnica" | "parecer" | "manual" | "decreto_municipal" | "normativa_interna" | "modelo_oficial"
+  | "prejulgado" | "municipal_law";
 
 export type Esfera = "federal" | "estadual" | "municipal";
 export type OfficialDocumentStatus = "vigente" | "revogado" | "publicado";
+
+/** Nível de vinculação institucional do documento (RC-4.9.1). */
+export type BindingLevel = "mandatory" | "prejulgado_tce" | "orientacao" | "referencia";
 
 export interface OfficialDocument {
   readonly documentId: string;
@@ -30,6 +34,8 @@ export interface OfficialDocument {
   readonly version: string;
   readonly status: OfficialDocumentStatus;
   readonly language: string;
+  /** Nível de vinculação institucional (mandatory/prejulgado_tce/orientacao/referencia). */
+  readonly bindingLevel: BindingLevel;
   /** Identificador oficial da norma (ex.: "lei-14133-2021"). */
   readonly normId: string;
   readonly title: string;
@@ -42,8 +48,8 @@ function computeReplayHash(d: Omit<OfficialDocument, "documentId" | "replayHash"
   return createHash("sha256").update(JSON.stringify({
     type: d.documentType, authority: d.authority, jurisdiction: d.jurisdiction, scope: d.scope,
     tenant: d.tenantId, state: d.state, municipality: d.municipality, effective: d.effectiveDate,
-    source: d.source, version: d.version, status: d.status, language: d.language, norm: d.normId,
-    title: d.title, kdoc: d.knowledgeDocumentId,
+    source: d.source, version: d.version, status: d.status, language: d.language, binding: d.bindingLevel,
+    norm: d.normId, title: d.title, kdoc: d.knowledgeDocumentId,
   })).digest("hex").slice(0, 32);
 }
 
@@ -60,6 +66,7 @@ export interface CreateOfficialDocumentParams {
   version?: string;
   status?: OfficialDocumentStatus;
   language?: string;
+  bindingLevel?: BindingLevel;
   normId: string;
   title: string;
   knowledgeDocumentId?: string | null;
@@ -72,7 +79,8 @@ export function classifyOfficialDocument(params: CreateOfficialDocumentParams): 
     scope: params.scope ?? params.jurisdiction, tenantId: params.tenantId ?? null,
     state: params.state ?? null, municipality: params.municipality ?? null,
     effectiveDate: params.effectiveDate ?? null, source: params.source, version: params.version ?? "1.0.0",
-    status: params.status ?? "vigente", language: params.language ?? "pt-BR", normId: params.normId,
+    status: params.status ?? "vigente", language: params.language ?? "pt-BR",
+    bindingLevel: params.bindingLevel ?? "referencia", normId: params.normId,
     title: params.title, knowledgeDocumentId: params.knowledgeDocumentId ?? null,
   };
   const replayHash = computeReplayHash(base);
