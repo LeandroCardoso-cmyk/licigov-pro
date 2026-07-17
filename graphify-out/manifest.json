@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784297632.6992052,
-    "ast_hash": "98b085b2f6e0d3674d2843ead9069dea",
+    "mtime": 1784298723.7052832,
+    "ast_hash": "ac1e4675da95742230bddf77bb1ac1a4",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784297650.091205,
-    "ast_hash": "498b39b7b94298a30ad6cb9d1c2f8b88",
+    "mtime": 1784298767.8572822,
+    "ast_hash": "ffa1f02c086dd07bc64511628ede4848",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784297657.0872047,
-    "ast_hash": "9ef37005771a7c9b9685d1e8e2c79b7d",
+    "mtime": 1784298738.6412828,
+    "ast_hash": "5cfd75a7305c4fc87f9efe1853f5f07a",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8895,8 +8895,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
-    "mtime": 1784295187.9195464,
-    "ast_hash": "d79c3c566ae949d1938b04fc9448e1d3",
+    "mtime": 1784298744.3132827,
+    "ast_hash": "19096a8ccaff7d5525ee368b5e49dd36",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc451-institutional-corpus-framework.test.ts": {
@@ -8970,8 +8970,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_CORPUS_FRAMEWORK.md": {
-    "mtime": 1784295183.7795465,
-    "ast_hash": "9d708859a7a5068f5555db6d4cf1b9fb",
+    "mtime": 1784298753.3692825,
+    "ast_hash": "acea180914341d07dd55355e8197bec5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc46-federal-procurement-corpus-package.test.ts": {
@@ -9172,6 +9172,61 @@
   "docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md": {
     "mtime": 1784297610.0152056,
     "ast_hash": "0aa6cc2c4001bd5443fdce586aa8e9c5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc461-normative-foundation.test.ts": {
+    "mtime": 1784298650.1772847,
+    "ast_hash": "3c578fe342314c244ceb269e0dc664f7",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeExplainability.ts": {
+    "mtime": 1784298569.7012866,
+    "ast_hash": "cd2d904e0b2d6306b3e591e28c66d2fc",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeHierarchy.ts": {
+    "mtime": 1784298419.6452901,
+    "ast_hash": "5506cfac6a0bc84774393b9ff170e09b",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeNode.ts": {
+    "mtime": 1784298500.3732882,
+    "ast_hash": "087195280f33b11c2d5fe53056aa12b3",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeProjection.ts": {
+    "mtime": 1784298541.1372874,
+    "ast_hash": "471f3b5f5556261c3e465472dfbe3f41",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeQueries.ts": {
+    "mtime": 1784298555.8452868,
+    "ast_hash": "fc56e56966e01c3192ed154ad1e7ce67",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeReference.ts": {
+    "mtime": 1784298460.529289,
+    "ast_hash": "123847fc459a99907d1cbcce3d335ef2",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeTree.ts": {
+    "mtime": 1784298527.0092876,
+    "ast_hash": "50e6f5718b2b9d3f272332b0a3725a77",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normative/normativeValidation.ts": {
+    "mtime": 1784298589.1172862,
+    "ast_hash": "cc21c7d76d3879dcdf278d71e2edc83a",
+    "semantic_hash": ""
+  },
+  "server/services/legal/normativeObservabilityService.ts": {
+    "mtime": 1784298600.8292859,
+    "ast_hash": "df77a52d1b6b0c95b50b476d84e50999",
+    "semantic_hash": ""
+  },
+  "docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md": {
+    "mtime": 1784298700.8852837,
+    "ast_hash": "c7bc460be4667762eb0b30d307cb7a6b",
     "semantic_hash": ""
   }
 }

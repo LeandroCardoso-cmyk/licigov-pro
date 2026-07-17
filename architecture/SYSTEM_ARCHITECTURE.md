@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.0 | Atualizado em: 2026-07-17
+> Versão: 3.1 | Atualizado em: 2026-07-17
 
 ---
 
@@ -235,6 +235,37 @@ Princípios:
 - **Explainability/Observabilidade/Multi-Tenant/Baixo Acoplamento** preservados.
 
 Ver [docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md).
+
+---
+
+## Normative Foundation (RC-4.6.1)
+
+Início oficial do **Corpus Federal da Lei nº 14.133/2021**: a **Fundação Normativa**
+(`server/domain/legal/normative/`) modela a **estrutura** da norma — **sem** texto jurídico,
+Knowledge Units, IA ou banco.
+
+```
+NormativeHierarchy (Lei → Livro → Título → Capítulo → Seção → Subseção →
+                    Artigo → Parágrafo → Inciso → Alínea → Item)
+        │
+        ▼
+NormativeNode (árvore estrutural, reutilizável para qualquer norma)
+        │  knowledgeUnitId = null (ligação futura com LegalKnowledgeUnit)
+        ▼
+Cross References (remissão/dependência/correlação/regulamentadora)
+        │
+        ▼
+Graph Projection · Declarative Queries · Explainability · Observability
+```
+
+Princípios:
+- **Genérico + otimizado para a Lei 14.133:** `normId`/`authority`/`scope` permitem instanciar
+  Decretos, IN SEGES, TCU, AGU, Constituição e normas municipais **sem alterar a arquitetura**.
+- **Ingestão incremental:** os nós existem; `knowledgeUnitId` (hoje null) receberá
+  `LegalKnowledgeUnit` nas próximas RCs, preservando replay safety, versionamento e lineage.
+- **Replay Safety / Determinismo / Multi-Tenant / Explainability / Observabilidade** preservados.
+
+Ver [docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md](../docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md).
 
 ---
 

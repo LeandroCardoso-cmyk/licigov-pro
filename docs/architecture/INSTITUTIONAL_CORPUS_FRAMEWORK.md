@@ -95,3 +95,7 @@ Procurement Corpus** (`server/domain/corpus/package/`): um `CorpusPackage` insta
 `CorpusManifest`, 5 coleções federais **vazias** (Lei 14.133, Decretos, IN SEGES, AGU, TCU),
 integridade/checksums, lifecycle, registro, validação e projeção KG — **sem conteúdo jurídico**.
 Ver [FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](./FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md).
+
+A **Fundação Normativa** (RC-4.6.1) cria a estrutura permanente da Lei nº 14.133 (hierarquia oficial
++ árvore de nós estruturais, sem texto), reutilizável por qualquer norma federal. Ver
+[FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md](./FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md).
