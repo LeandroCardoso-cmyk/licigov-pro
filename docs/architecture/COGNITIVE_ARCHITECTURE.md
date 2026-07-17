@@ -110,6 +110,10 @@ Além da ontologia operacional, o sistema modela a **estrutura** do conhecimento
 
 Uma **camada semântica** permanente e desacoplada conecta a Ontologia Operacional e a Jurídica (Semantic Links explicáveis, cross references, mapa semântico, consultas). O AIExecutionEngine pode **navegar entre os dois mundos** (somente consulta) sem alterar o pipeline. Ambas as ontologias permanecem independentes. Ver [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
 
+## Fundação de conhecimento jurídico (RC-4.5)
+
+A **Legal Knowledge Foundation** cria a camada estrutural permanente para inserir qualquer conhecimento jurídico institucional futuro (LegalKnowledgeUnit, referências, versionamento append-only, conflitos, projeção KG, consultas declarativas, validação, explainability, observabilidade). Multi-tenant, replay-safe, determinística. **NÃO contém Lei 14.133** — apenas a fundação. Ver [LEGAL_KNOWLEDGE_FOUNDATION.md](./LEGAL_KNOWLEDGE_FOUNDATION.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor

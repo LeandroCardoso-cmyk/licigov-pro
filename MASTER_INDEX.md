@@ -1,6 +1,6 @@
 # LiciGov Pro — Master Index
 
-> Versão: 0.11.1 | Branch: claude/rc-4.4.1 | Atualizado: 2026-07-17
+> Versão: 0.12.0 | Branch: claude/rc-4.5 | Atualizado: 2026-07-17
 
 LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamentado na Lei 14.133/2021 (Nova Lei de Licitações). Oferece fluxo documental completo, multi-tenant com RBAC granular, motor de importação de planilhas e PDFs, e renderização de documentos em HTML/DOCX/PDF.
 
@@ -23,6 +23,7 @@ LiciGov Pro é um SaaS brasileiro de gestão de licitações públicas, fundamen
 | 🩺 Production Monitoring | [docs/architecture/PRODUCTION_MONITORING.md](docs/architecture/PRODUCTION_MONITORING.md) | **Monitor Operacional Institucional: Health Engine, Health Score determinístico, endpoint /system/health (RC-4.2.2)** |
 | 🏛️ Conhecimento Institucional | [docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md](docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md) | **Institutional Operating Model: ontologia do Departamento de Licitações (papéis, objetos, estados, eventos, dependências, regras) — declarativa e determinística (RC-4.3)** |
 | 🔗 Integração de Ontologias | [docs/architecture/ONTOLOGY_INTEGRATION_LAYER.md](docs/architecture/ONTOLOGY_INTEGRATION_LAYER.md) | **Camada semântica que conecta as ontologias operacional e jurídica (Semantic Links, cross references, mapa semântico, consultas) — desacoplada e determinística (RC-4.4.1)** |
+| 📚 Fundação de Conhecimento Jurídico | [docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md](docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md) | **Camada estrutural para qualquer conhecimento jurídico futuro (unidades, referências, versionamento, conflitos, projeção, consultas) — SEM Lei 14.133; multi-tenant, replay-safe (RC-4.5)** |
 | ✅ Validação da Ontologia | [docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md](docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md) | **Validação exaustiva: 20 cenários representáveis, cobertura 100%, zero ciclos, resiliência (RC-4.3.1)** |
 | ⚖️ Ontologia Jurídica | [docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md](docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md) | **Estrutura do conhecimento jurídico (tipos normativos, hierarquia, estrutura interna, conceitos, relacionamentos, classificações) — independente de lei específica (RC-4.4)** |
 | AIExecutionEngine | [docs/architecture/AI_EXECUTION_ENGINE.md](docs/architecture/AI_EXECUTION_ENGINE.md) | Contrato do cérebro cognitivo (única porta de IA) |

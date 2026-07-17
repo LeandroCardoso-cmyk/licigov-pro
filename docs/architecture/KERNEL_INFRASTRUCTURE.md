@@ -117,6 +117,8 @@ Provider → LLM → Reasoning → Explainability → Result
 
 > **RC-4.4 / RC-4.4.1 — Conhecimento jurídico + integração:** o sistema modela a **estrutura** do conhecimento jurídico (Institutional Legal Ontology) e uma **camada semântica** desacoplada que a conecta à ontologia operacional (Ontology Integration Layer). Ambas independentes; o Engine navega entre os dois mundos (somente consulta). Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md) e [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
 
+> **RC-4.5 — Legal Knowledge Foundation:** camada estrutural permanente para armazenar qualquer conhecimento jurídico futuro (unidades/referências/versionamento/conflitos/projeção/consultas/validação/explainability/observabilidade). Multi-tenant, replay-safe, determinística. **NÃO contém Lei 14.133** — apenas a fundação. Ver [LEGAL_KNOWLEDGE_FOUNDATION.md](./LEGAL_KNOWLEDGE_FOUNDATION.md).
+
 > **RC-4.3.1 — Ontology Validation:** a Ontologia Operacional foi validada exaustivamente
 > (integridade por seção, **20 cenários representáveis**, cobertura 100%, zero ciclos, resiliência,
 > determinismo) — **sem alterações estruturais**. Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
