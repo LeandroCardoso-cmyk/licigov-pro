@@ -44,11 +44,28 @@ data/*.txt (texto oficial)
 | Federal | LC nº 123/2006 | lei_complementar | Congresso Nacional | planalto.gov.br |
 | Federal | Manual de Licitações e Contratos do TCU (5ª ed.) | manual | TCU | portal.tcu.gov.br |
 | **Paraná** | Orientações Técnicas do TCE-PR | orientacao_tecnica | TCE-PR | tce.pr.gov.br |
-| **Moreira Sales** | *(corpus preparado — nenhum documento-fonte municipal disponível)* | — | Município de Moreira Sales | — |
+| **Paraná** | **Prejulgado nº 27** *(RC-4.9.1)* | prejulgado | TCE-PR | tce.pr.gov.br |
+| **Moreira Sales** | **Lei Municipal nº 769/2021** *(RC-4.9.1 — texto oficial via OCR do PDF fornecido)* | municipal_law | Município de Moreira Sales | Prefeitura de Moreira Sales |
 
-**Moreira Sales:** o tenant municipal e o corpus são registrados e **preparados** na hierarquia; **nenhum
-documento municipal é fabricado**. Decreto municipal, normativas internas e modelos oficiais serão
-incorporados quando suas fontes oficiais estiverem disponíveis (mesma arquitetura, sem alteração).
+### Expansão RC-4.9.1
+
+Dois documentos oficiais **reais** foram incorporados pela mesma pipeline da RC-4.9 (parser →
+classificação → validation → pipeline → publicação), **sem** qualquer novo framework/serviço:
+
+- **Prejulgado nº 27 (TCE-PR):** `documentType: prejulgado`, `jurisdiction: estadual`, `state: PR`,
+  `bindingLevel: prejulgado_tce`. Incorporado por trechos verbatim (25 páginas).
+- **Lei Municipal nº 769/2021 (Moreira Sales):** `documentType: municipal_law`, `jurisdiction: municipal`,
+  `state: PR`, `municipality: Moreira Sales`, `tenantId` municipal, `bindingLevel: mandatory`,
+  vigência `2021-03-03`. Texto oficial extraído por **OCR** (PDF escaneado) e parseado em artigos
+  (Art. 1º–10) → árvore normativa municipal.
+
+Foi adicionado ao modelo de classificação um campo `bindingLevel` (mandatory / prejulgado_tce /
+orientacao / referencia) e dois `documentType` (`prejulgado`, `municipal_law`) — **extensões aditivas**,
+sem alterar a arquitetura.
+
+**Nota (RC-4.9):** anteriormente Moreira Sales estava apenas **preparado** (0 documentos, sem fonte).
+Com a RC-4.9.1, recebe seu **primeiro documento oficial real**. Nenhum conteúdo é fabricado — todo
+texto provém das fontes fornecidas.
 
 ## Hierarquia e resolução (Fase 6)
 

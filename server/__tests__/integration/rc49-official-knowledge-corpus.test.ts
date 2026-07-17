@@ -85,10 +85,10 @@ describe("RC-4.9 — Official Knowledge Corpus", () => {
       expect(tce.authority).toBe("TCE-PR");
       expect(tce.jurisdiction).toBe("estadual");
     });
-    it("Moreira Sales: corpus/tenant preparado, ZERO documentos fabricados", () => {
-      // corpus municipal existe na hierarquia; nenhum documento municipal (sem fonte oficial)
-      expect(RESULT.counts.moreiraSales).toBe(0);
-      expect(findByTenant(RESULT.registry, MOREIRA_SALES_TENANT_ID)).toHaveLength(0);
+    it("Moreira Sales: corpus/tenant na hierarquia; documentos apenas de fontes reais (não fabricados)", () => {
+      // corpus municipal existe na hierarquia; documentos municipais vêm SÓ de fontes oficiais reais (RC-4.9.1)
+      expect(RESULT.counts.moreiraSales).toBeGreaterThanOrEqual(1);
+      expect(findByTenant(RESULT.registry, MOREIRA_SALES_TENANT_ID).length).toBe(RESULT.counts.moreiraSales);
       const corpora = buildOfficialCorpora(MOREIRA_SALES_TENANT_ID);
       expect(corpora.some(c => c.metadata.municipality === "Moreira Sales" && c.tenantId === MOREIRA_SALES_TENANT_ID)).toBe(true);
     });
@@ -151,7 +151,7 @@ describe("RC-4.9 — Official Knowledge Corpus", () => {
       expect(findByState(RESULT.registry, "PR").length).toBeGreaterThanOrEqual(1);
       expect(findByType(RESULT.registry, "lei").length).toBeGreaterThanOrEqual(1);
       expect(findVigentes(RESULT.registry).length).toBe(RESULT.registry.documents.length);
-      expect(findByTenant(RESULT.registry, MOREIRA_SALES_TENANT_ID)).toHaveLength(0);
+      expect(findByTenant(RESULT.registry, MOREIRA_SALES_TENANT_ID).length).toBe(RESULT.counts.moreiraSales);
     });
   });
 

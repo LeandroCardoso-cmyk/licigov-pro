@@ -9420,8 +9420,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc49-official-knowledge-corpus.test.ts": {
-    "mtime": 1784311290.6857905,
-    "ast_hash": "944569b1b872bc8db2561d8c733f4e8e",
+    "mtime": 1784313301.3108828,
+    "ast_hash": "450b29411310fcd38d98395af10e4e03",
     "semantic_hash": ""
   },
   "server/domain/officialCorpus/officialCorpusExplainability.ts": {
@@ -9440,8 +9440,8 @@
     "semantic_hash": ""
   },
   "server/domain/officialCorpus/officialDocument.ts": {
-    "mtime": 1784311290.6849718,
-    "ast_hash": "7bacb58d94c43f2f650ae00c1929c7e3",
+    "mtime": 1784313188.3228762,
+    "ast_hash": "578e644b5c3c7c1862919f80b7851c11",
     "semantic_hash": ""
   },
   "server/services/knowledge/officialCorpusObservabilityService.ts": {
@@ -9450,8 +9450,8 @@
     "semantic_hash": ""
   },
   "server/services/officialCorpus/officialCorpusBuilder.ts": {
-    "mtime": 1784310977.5548732,
-    "ast_hash": "6db24739dc3854393fd3a4bef8f91115",
+    "mtime": 1784313206.0588772,
+    "ast_hash": "06f1096e3fe709b1013f4ed02e924342",
     "semantic_hash": ""
   },
   "server/services/officialCorpus/officialTextParser.ts": {
@@ -9460,8 +9460,23 @@
     "semantic_hash": ""
   },
   "docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md": {
-    "mtime": 1784311125.7948678,
-    "ast_hash": "5ce40edda4331e6bb233a57828e64b1f",
+    "mtime": 1784313347.3428857,
+    "ast_hash": "9a94ea9522c9d2d4920ca05e35caac5b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc491-official-corpus-expansion.test.ts": {
+    "mtime": 1784313282.8748817,
+    "ast_hash": "2643fcb0ec4117d743d744261ee01289",
+    "semantic_hash": ""
+  },
+  "data/lei_municipal_769_2021_moreira_sales.txt": {
+    "mtime": 1784313090.0039861,
+    "ast_hash": "1f090110faa904890e0ec01a2e6fd864",
+    "semantic_hash": ""
+  },
+  "data/prejulgado_27_tce_pr.txt": {
+    "mtime": 1784313038.0267925,
+    "ast_hash": "ce2754e6d05fdf821f0e6fd57012a124",
     "semantic_hash": ""
   }
 }
