@@ -59,3 +59,7 @@ Corpus Framework**, que organiza cada `LegalKnowledgeUnit` em **Coleções** de 
 (Federal, Estadual, Municipal, Institucional, …). O vínculo (`attachLegalKnowledge`) preserva
 versionamento, replay safety, explainability e auditabilidade. Baixo acoplamento: esta fundação
 **não importa** o framework de corpus. Ver [INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).
+
+O primeiro pacote instalável que consumirá estas unidades é o **Federal Procurement Corpus**
+(RC-4.6) — cuja coleção `Lei 14.133` será, no futuro, **preenchida** por `LegalKnowledgeUnit`.
+Ver [FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](./FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md).

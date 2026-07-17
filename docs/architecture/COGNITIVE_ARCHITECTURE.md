@@ -118,6 +118,10 @@ A **Legal Knowledge Foundation** cria a camada estrutural permanente para inseri
 
 O **Institutional Corpus Framework** cria a camada organizacional permanente onde todo conhecimento institucional viverá: **Corpus** (Federal, Estadual, Municipal, Institucional, Organizacional, …), **Coleções** (sempre dentro de um Corpus, nunca soltas no sistema), **Registry** declarativo, **hierarquia configurável** (sem assumir país) e integração que vincula cada `LegalKnowledgeUnit` (RC-4.5) a um Corpus preservando versionamento/replay/explainability. Projeção para o Knowledge Graph (Corpus/Collection Nodes, Ownership, Hierarchy, Grouping). Multi-tenant, replay-safe, append-only, determinística. **NÃO adiciona conhecimento jurídico.** Ver [INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).
 
+## Primeiro pacote de conhecimento (RC-4.6)
+
+O **Federal Procurement Corpus** é o **primeiro pacote oficial instalável** do sistema (`server/domain/corpus/package/`): `CorpusManifest`, `CorpusPackage` (integridade/checksums/lifecycle), 5 coleções federais **vazias** (Lei 14.133, Decretos, IN SEGES, AGU, TCU), `CorpusPackageRegistry`, validação declarativa (sem instalação) e projeção KG. Multi-tenant, replay-safe, determinístico. **NÃO adiciona conteúdo jurídico** — apenas a estrutura instalável. Ver [FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](./FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor
