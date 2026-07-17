@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 2.8 | Atualizado em: 2026-05-27
+> Versão: 2.9 | Atualizado em: 2026-07-17
 
 ---
 
@@ -169,6 +169,37 @@ organizations (1)
 | Production | main | licigov-pro.railway.app |
 | Staging | develop | licigov-staging.railway.app |
 | Development | local | localhost:3000 |
+
+---
+
+## Experience Architecture (RC-X.1)
+
+Terceiro pilar arquitetural, ao lado do **Cognitive Architecture** e dos **Business Domains**: o
+**Institutional Experience Framework** (`server/domain/experience/`) organiza permanentemente toda
+a experiência do usuário — **sem** implementar UX definitiva, React, Design System ou IA.
+
+```
+InstitutionContext (imutável)
+        │
+        ▼
+   ExperienceKernel ──► Capability Matrix ──► Workspace Registry
+        │                                            │
+        ├──► Navigation Builder (sidebar/topnav/quick actions/breadcrumbs/menus)
+        ├──► Home Composer (widgets/cards/recentes/favoritos/workspaces)
+        └──► Copilot EntryPoint (sem IA)
+```
+
+Princípios:
+- **Nenhum módulo constrói menus/navegação/home diretamente.** Cada módulo registra apenas
+  **Workspace + Capabilities + Actions + Routes**; o Framework monta a experiência dinamicamente.
+- **Licenciamento & Multi-Tenant:** capacidade habilitada = módulo ativo **E** contratada; um
+  workspace só aparece se todas as suas capacidades exigidas estiverem habilitadas. Cada tenant
+  (município pequeno/grande, consórcio, câmara, autarquia) vê apenas o que contratou.
+- **Explainability:** todo item de navegação explica por que apareceu, qual capacidade habilitou,
+  qual módulo registrou, a qual workspace pertence e qual tenant autorizou.
+- **Replay Safety / Determinismo / Observabilidade / Baixo Acoplamento** preservados.
+
+Ver [docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md).
 
 ---
 

@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784295159.831547,
-    "ast_hash": "f909c652643b13c61e3cbb0c7416d058",
+    "mtime": 1784296679.546624,
+    "ast_hash": "d55b4f320ed68527979cc14ad8ca492e",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1782612418.0330188,
-    "ast_hash": "bdd25133d01d168fec335f0e94b3fce6",
+    "mtime": 1784296729.610623,
+    "ast_hash": "ddaf95e989d97d51a2624567f5bb76f8",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784295197.479546,
-    "ast_hash": "6e3236fd55d45d8b1faf0a461c145600",
+    "mtime": 1784296690.7226238,
+    "ast_hash": "71492f69ac5832c60addbb85aec96536",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -9042,6 +9042,71 @@
   "docs/architecture/FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md": {
     "mtime": 1784295148.159547,
     "ast_hash": "fae178152c6acf38270561b4542a6619",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rcx1-institutional-experience-framework.test.ts": {
+    "mtime": 1784296555.2466269,
+    "ast_hash": "3d46c0ebdd8fd427f06bc4fe8c280883",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/capability.ts": {
+    "mtime": 1784296323.6306322,
+    "ast_hash": "63ab10d68e019abf10f2b4a28b5906b7",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/copilotEntrypoint.ts": {
+    "mtime": 1784296408.3066301,
+    "ast_hash": "95ed29d34baaf2cd73c23c010f798213",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/experienceExplainability.ts": {
+    "mtime": 1784296422.8466299,
+    "ast_hash": "6807f87e0342ecc085b2fbce5be85b37",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/experienceKernel.ts": {
+    "mtime": 1784296466.254629,
+    "ast_hash": "d1328efaf858f6df46ad4e5d01a1ac9b",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/experienceSample.ts": {
+    "mtime": 1784296496.1666281,
+    "ast_hash": "2bf4ede9d065f2a27d24e61e83abb47c",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/experienceValidation.ts": {
+    "mtime": 1784296436.1706295,
+    "ast_hash": "5531a025c7da693f3ced6f23a4c1105b",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/homeComposer.ts": {
+    "mtime": 1784296393.4346306,
+    "ast_hash": "f8896562fc45df6ebbe18482aeb28486",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/institutionContext.ts": {
+    "mtime": 1784296307.6706326,
+    "ast_hash": "49d8ebd32e347296a887d43dcbd82bb8",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/navigationBuilder.ts": {
+    "mtime": 1784296604.8546257,
+    "ast_hash": "607765bf5101ff0b4e2451b0fea89470",
+    "semantic_hash": ""
+  },
+  "server/domain/experience/workspace.ts": {
+    "mtime": 1784296595.950626,
+    "ast_hash": "1bca78210c1c479f61cb7a0842ae0819",
+    "semantic_hash": ""
+  },
+  "server/services/experience/experienceObservabilityService.ts": {
+    "mtime": 1784296446.5746293,
+    "ast_hash": "8fdc72c25ff78f814299c1086b904949",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md": {
+    "mtime": 1784296651.7866247,
+    "ast_hash": "dfe3404612b405dfd53837e09fe0b328",
     "semantic_hash": ""
   }
 }
