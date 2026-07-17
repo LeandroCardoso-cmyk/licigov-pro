@@ -13,6 +13,118 @@ import type { ContextPackage } from "./institutionalIntegration/contextPackage";
 export const CONSULTATION_DOMAIN_CODE = "institutional_consultation";
 export const CONSULTATION_DOMAIN_NAME = "Tirar Dúvidas";
 
+/**
+ * Estados explícitos da consulta:
+ * - pending: registrada, ainda não executada.
+ * - processing: execução em andamento.
+ * - completed: resposta válida COM base documental.
+ * - limited: resposta VÁLIDA porém SEM base documental suficiente (não é erro técnico).
+ * - failed: falha técnica na execução.
+ */
+export type ConsultationStatus = "pending" | "processing" | "completed" | "limited" | "failed";
+
+/** Pergunta normalizada (para comparação/auditoria/contextReplayHash). Determinística. */
+export function normalizeQuestion(raw: string): string {
+  return sanitizeQuestion(raw).toLowerCase();
+}
+
+// ── Semântica de identidade (documentada em BUSINESS_DOMAIN_TIRAR_DUVIDAS.md) ──
+
+/** executionId — identifica uma EXECUÇÃO concreta. Único por (tenant, correlationId); cada request
+ *  novo (correlationId distinto) gera nova execução, MESMO com contexto idêntico. */
+export function computeExecutionId(tenantId: number, correlationId: string): string {
+  return createHash("sha256").update(`exec:${tenantId}:${correlationId}`).digest("hex").slice(0, 20);
+}
+/** answerId — identifica a RESPOSTA persistida de uma execução (uma resposta por execução). Não é
+ *  derivado do contextReplayHash: contexto igual não implica resposta idêntica. */
+export function computeAnswerId(executionId: string): string {
+  return createHash("sha256").update(`ans:${executionId}`).digest("hex").slice(0, 20);
+}
+/** replayId — identifica uma OPERAÇÃO de replay institucional (só em replay real). */
+export function computeReplayId(newCorrelationId: string, replayOfExecutionId: string): string {
+  return createHash("sha256").update(`replay:${newCorrelationId}:${replayOfExecutionId}`).digest("hex").slice(0, 20);
+}
+
+/** Fonte/evidência utilizada em uma consulta (persistida e vinculada ao tenant+consulta). */
+export interface ConsultationSource {
+  readonly id: string;
+  readonly tenantId: number;
+  readonly consultationId: string;
+  readonly documentId: string;
+  readonly documentVersion: string;
+  readonly documentTitle: string;
+  readonly documentType: string;
+  readonly authority: string;
+  readonly jurisdiction: string;
+  readonly bindingLevel: string;
+  readonly citation: string;
+  readonly passage: string;
+  readonly lineage: string;
+  readonly sourceOrder: number;
+  readonly createdAt: string;
+}
+
+/** Registro persistido de uma consulta institucional (fonte de verdade = PostgreSQL/MySQL). */
+export interface ConsultationRecord {
+  readonly id: string; // = executionId (uma consulta por execução)
+  readonly tenantId: number;
+  readonly userId: number;
+  readonly question: string;
+  readonly normalizedQuestion: string;
+  readonly answer: string;
+  readonly status: ConsultationStatus;
+  readonly limitationReason: string;
+  readonly contextPackageVersion: string;
+  readonly contextReplayHash: string;
+  readonly executionId: string;
+  readonly answerId: string;
+  readonly replayId: string | null;
+  readonly replayOfExecutionId: string | null;
+  readonly correlationId: string;
+  readonly businessDomain: string;
+  readonly taskType: string;
+  readonly documentsCount: number;
+  readonly passagesCount: number;
+  readonly retrievalDurationMs: number;
+  readonly executionDurationMs: number;
+  readonly totalDurationMs: number;
+  /** Snapshot versionado do ContextPackage (schemaVersion/contextReplayHash/createdAt + críticos). */
+  readonly contextSnapshot: string | null;
+  readonly errorCode: string;
+  readonly errorMessage: string;
+  readonly createdAt: string;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly failedAt: string | null;
+  readonly updatedAt: string;
+}
+
+/** Sanitiza mensagem de erro para persistência (sem stack trace/segredos expostos). */
+export function sanitizeErrorMessage(raw: string): string {
+  return raw.split("\n")[0].replace(new RegExp("[\\u0000-\\u001F\\u007F]", "g"), " ").trim().slice(0, 500);
+}
+
+export interface ListOpts { readonly limit?: number; readonly offset?: number; }
+
+/**
+ * Contrato do repositório de consultas — a FONTE DE VERDADE é o banco (PostgreSQL/MySQL). Toda
+ * operação exige tenantId (boundary multi-tenant); nenhum método busca por id sem validar o tenant.
+ */
+export interface ConsultationRepository {
+  createConsultation(record: ConsultationRecord): Promise<ConsultationRecord>;
+  markProcessing(tenantId: number, id: string, startedAt: string): Promise<void>;
+  /** Finalização atômica: persiste resposta + métricas + fontes e marca completed/limited. */
+  completeConsultation(record: ConsultationRecord, sources: readonly ConsultationSource[]): Promise<ConsultationRecord>;
+  failConsultation(tenantId: number, id: string, errorCode: string, errorMessage: string, failedAt: string): Promise<void>;
+  saveSources(sources: readonly ConsultationSource[]): Promise<void>;
+  findByIdForTenant(tenantId: number, id: string): Promise<ConsultationRecord | null>;
+  getSourcesForTenant(tenantId: number, consultationId: string): Promise<ConsultationSource[]>;
+  listByTenant(tenantId: number, opts?: ListOpts): Promise<ConsultationRecord[]>;
+  listByUserForTenant(tenantId: number, userId: number, opts?: ListOpts): Promise<ConsultationRecord[]>;
+  findReplayCandidate(tenantId: number, contextReplayHash: string): Promise<ConsultationRecord | null>;
+  verifyTenantOwnership(tenantId: number, id: string): Promise<boolean>;
+}
+
 export interface ConsultationFoundationItem {
   readonly documentId: string;
   readonly reference: string;
@@ -45,8 +157,11 @@ export interface ConsultationCitation {
 
 export interface InstitutionalConsultationAnswer {
   readonly answerId: string;
+  readonly executionId: string;
+  readonly status: ConsultationStatus;
   readonly correlationId: string;
-  readonly replayId: string;
+  readonly replayId: string | null;
+  readonly replayOfExecutionId: string | null;
   readonly contextReplayHash: string;
   readonly tenantId: number;
   readonly userId: number;
@@ -66,9 +181,11 @@ export interface InstitutionalConsultationAnswer {
 }
 
 /**
- * Sanitiza a pergunta (segurança): remove caracteres de controle e limita tamanho. A execução
- * SEMPRE ocorre pelo fluxo institucional (ContextPackage + prompt builder tipado), de modo que
- * tentativas de injeção de prompt não alteram o comportamento do sistema.
+ * Sanitiza a pergunta (camada AUXILIAR de segurança): remove caracteres de controle e limita
+ * tamanho. NÃO é, por si só, proteção contra prompt injection — é apenas uma das camadas. As
+ * proteções reais são estruturais (separação instrução/dado via prompt builder tipado, ContextPackage
+ * tratado como evidência, sem execução autônoma de ferramentas, fluxo fechado pelo Orchestrator,
+ * validação de saída, limites de tamanho e auditoria). Ver BUSINESS_DOMAIN_TIRAR_DUVIDAS.md.
  */
 export function sanitizeQuestion(raw: string): string {
   // eslint-disable-next-line no-control-regex
@@ -94,6 +211,9 @@ export function buildConsultationAnswer(params: {
   question: string;
   engineContent: string;
   contextPackage: ContextPackage;
+  executionId: string;
+  replayId?: string | null;
+  replayOfExecutionId?: string | null;
   createdAt: string;
 }): InstitutionalConsultationAnswer {
   const { contextPackage: pkg } = params;
@@ -129,9 +249,11 @@ export function buildConsultationAnswer(params: {
     limitations.push("Base documental insuficiente no Official Knowledge Corpus para esta consulta.");
   }
 
-  const answerId = createHash("sha256").update(`consult:${params.tenantId}:${pkg.replayHash}:${params.question}`).digest("hex").slice(0, 20);
+  const answerId = computeAnswerId(params.executionId);
   return {
-    answerId, correlationId: pkg.correlationId, replayId: pkg.replayId, contextReplayHash: pkg.replayHash,
+    answerId, executionId: params.executionId, status: hasSufficientBasis ? "completed" : "limited",
+    correlationId: pkg.correlationId, replayId: params.replayId ?? null, replayOfExecutionId: params.replayOfExecutionId ?? null,
+    contextReplayHash: pkg.replayHash,
     tenantId: params.tenantId, userId: params.userId, question: params.question,
     answer, foundation, documents, passages, citations, observations, explainabilityLines, limitations,
     hasSufficientBasis, createdAt: params.createdAt,

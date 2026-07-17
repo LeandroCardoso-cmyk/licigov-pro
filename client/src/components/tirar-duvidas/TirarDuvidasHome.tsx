@@ -11,6 +11,8 @@ import { trpc } from "../../lib/trpc";
 
 type ConsultationAnswer = {
   answerId: string;
+  executionId: string;
+  status: string;
   answer: string;
   hasSufficientBasis: boolean;
   foundation: readonly { reference: string; authority: string; jurisdiction: string; bindingLevel: string; version: string }[];
@@ -21,7 +23,7 @@ type ConsultationAnswer = {
   explainabilityLines: readonly string[];
   limitations: readonly string[];
   correlationId: string;
-  replayId: string;
+  replayId: string | null;
 };
 
 const JURIS_LABEL: Record<string, string> = { federal: "Federal", estadual: "Estadual", municipal: "Municipal" };
@@ -36,8 +38,10 @@ export default function TirarDuvidasHome() {
   const [answer, setAnswer] = useState<ConsultationAnswer | null>(null);
 
   const suggestionsQuery = trpc.institutionalConsultation.suggestions.useQuery();
+  const utils = trpc.useUtils();
+  const historyQuery = trpc.institutionalConsultation.history.useQuery({ limit: 8 });
   const ask = trpc.institutionalConsultation.ask.useMutation({
-    onSuccess: (data) => setAnswer(data.answer as ConsultationAnswer),
+    onSuccess: (data) => { setAnswer(data.answer as ConsultationAnswer); void utils.institutionalConsultation.history.invalidate(); },
   });
 
   const submit = (q: string) => {
@@ -85,6 +89,28 @@ export default function TirarDuvidasHome() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Consultas recentes (histórico institucional durável) */}
+      {!answer && !ask.isPending && (historyQuery.data?.entries?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-gray-800">Consultas recentes</h2>
+          <ul className="mt-3 divide-y divide-gray-100">
+            {historyQuery.data!.entries.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-3 py-2">
+                <button onClick={() => submit(e.question)} className="min-w-0 flex-1 truncate text-left text-sm text-gray-700 hover:text-indigo-700" title={e.question}>
+                  {e.question}
+                </button>
+                <span className="shrink-0 text-[11px] text-gray-400">{new Date(e.createdAt).toLocaleDateString("pt-BR")}</span>
+                {e.status === "limited"
+                  ? <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">limitada</span>
+                  : e.status === "failed"
+                    ? <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">falha</span>
+                    : <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">fundamentada</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

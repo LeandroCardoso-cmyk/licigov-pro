@@ -56,12 +56,84 @@ base oficial.
 Toda consulta respeita Tenant → Município → Estado → Federal (via ContextPackage). Um tenant **jamais**
 recupera documentos municipais de outro tenant (federais compartilhados; estaduais por estado).
 
+## Persistência institucional (fonte de verdade = banco)
+
+O histórico e a observabilidade são **persistidos no banco (MySQL/Drizzle)** — nunca em memória de
+processo. Tabelas (migration `0284`):
+
+- **`institutional_consultations`** — id (=executionId), organization_id (tenant), user_id, question,
+  normalized_question, answer, **status**, limitation_reason, context_package_version,
+  context_replay_hash, execution_id, answer_id, replay_id, replay_of_execution_id, correlation_id,
+  business_domain, task_type, documents_count, passages_count, retrieval/execution/total_duration_ms,
+  context_snapshot (JSON versionado), error_code, error_message (sanitizada), created/started/completed/
+  failed/updated_at. Índices: `(org)`, `(org, created_at)`, `(org, user_id, created_at)`,
+  `(org, context_replay_hash)`, `(correlation_id)`, `(execution_id)`.
+- **`institutional_consultation_sources`** — id, organization_id, consultation_id, document_id,
+  document_version, document_title, document_type, authority, jurisdiction, binding_level, citation,
+  passage, lineage, source_order. Índices: `(org)`, `(org, consultation_id)`.
+
+O **ContextPackage** é persistido como snapshot versionado (`schemaVersion`, `contextReplayHash`,
+documentos/citações/trechos críticos) — **não** como JSON opaco; os elementos auditáveis (documento,
+versão, autoridade, jurisdição, binding level, citação, trecho, lineage, posição) permanecem
+consultáveis também via a tabela de fontes.
+
+### Estados da consulta
+
+`pending → processing → completed | limited | failed`. **`limited`** = resposta **válida** sem base
+documental suficiente (não é erro técnico). **`failed`** = falha técnica (com `error_code` + mensagem
+sanitizada; nunca fica falsamente `completed`).
+
+### Repository (`server/db/institutionalConsultations.ts`) — fonte de verdade
+
+`ConsultationRepository`: createConsultation, markProcessing, completeConsultation (persiste fontes
+ANTES de concluir), failConsultation, saveSources, findByIdForTenant, getSourcesForTenant, listByTenant,
+listByUserForTenant, findReplayCandidate, verifyTenantOwnership. **Toda operação exige tenantId**;
+nenhum método busca por id sem validar o tenant (boundary multi-tenant em Router → Service →
+Repository → query). O adaptador **in-memory** (`InMemoryConsultationRepository`) é **exclusivo de
+testes/dev sem banco** — nunca a fonte oficial em produção.
+
+### Transação
+
+`completeConsultation` persiste **resposta + métricas + fontes** e só então marca `completed`/`limited`;
+em falha, `failConsultation` marca `failed`. Resposta e fontes nunca ficam parcialmente persistidas
+como execução válida.
+
+### Semântica de identidade
+
+- **contextReplayHash** — identidade determinística do **contexto** (tenant, pergunta normalizada via
+  trechos recuperados, município/estado, versões dos documentos, versão do ContextPackage). Identifica o
+  contexto, **não** uma resposta específica.
+- **executionId** — identifica uma **execução concreta**; único por (tenant, correlationId). Cada request
+  novo gera nova execução, **mesmo com contexto idêntico**.
+- **answerId** — identifica a **resposta persistida** (derivada do executionId, **não** do
+  contextReplayHash). Contexto igual não implica resposta idêntica.
+- **replayId** — identifica uma **operação de replay** institucional (só em replay real).
+- **replayOfExecutionId** — aponta a **execução original** em um replay real.
+
+### Replay
+
+`replayConsultation` distingue **nova execução** (independente) de **replay real** (nova execução
+vinculada à original: `replayOfExecutionId` + `replayId`, preservando contexto/versões/lineage) de
+**reuso de resultado persistido**. **Não** há deduplicação automática irreversível: cada execução é
+independente; `contextReplayHash` serve para comparação/auditoria (via `findReplayCandidate`).
+
+### Comportamento após restart
+
+O histórico não depende de memória de processo: após reiniciar o serviço, as consultas e fontes são
+recuperadas do banco (validado por teste de restart lógico). Múltiplas instâncias compartilham a mesma
+fonte de verdade.
+
 ## Segurança
 
-- Entrada sanitizada (`sanitizeQuestion`).
-- **Toda** execução ocorre pelo fluxo institucional (ContextPackage + prompt builder tipado) — não há
-  acesso direto ao Corpus/AIExecutionEngine, nem bypass do ContextPackage. Injeção de prompt não altera
-  o comportamento do sistema.
+- **Entrada sanitizada** (`sanitizeQuestion`) é apenas uma **camada auxiliar** — por si só **não impede
+  prompt injection**. Mensagens de erro persistidas são sanitizadas (1ª linha, sem stack/segredos). Não
+  se persistem segredos, credenciais, tokens nem stack traces expostos ao usuário.
+- **Proteções reais (estruturais):** separação instrução/dado (prompt builder tipado — documentos são
+  tratados como **evidência**, não podem alterar instruções do sistema); ContextPackage como evidência;
+  ausência de execução autônoma de ferramentas; fluxo fechado pelo Orchestrator (sem acesso direto ao
+  Corpus/AIExecutionEngine nem bypass do ContextPackage); validação de saída (Structured Output do
+  engine); allowlist de capacidades (tarefa cognitiva fixa `LEGAL_ANALYSIS`); limites de tamanho;
+  logging e auditoria persistida. Estas são camadas de mitigação — não uma garantia absoluta.
 
 ## Integração com o Kernel e o Corpus
 
