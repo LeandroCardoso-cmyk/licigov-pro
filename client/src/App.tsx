@@ -52,6 +52,7 @@ import LegalOpinionsAnalytics from "./pages/LegalOpinionsAnalytics";
 import DirectProcurement from "./pages/DirectProcurement";
 import ParecerJuridico from "./pages/ParecerJuridico";
 import ContratosWorkspace from "./pages/ContratosWorkspace";
+import TirarDuvidas from "./pages/TirarDuvidas";
 import CentroOperacoes from "./pages/CentroOperacoes";
 import Register from "./pages/Register";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -127,6 +128,7 @@ const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpini
 const DirectProcurementRoute = () => <AuthenticatedRoute component={DirectProcurement} />;
 const ParecerJuridicoRoute = () => <AuthenticatedRoute component={ParecerJuridico} />;
 const ContratosWorkspaceRoute = () => <AuthenticatedRoute component={ContratosWorkspace} />;
+const TirarDuvidasRoute = () => <AuthenticatedRoute component={TirarDuvidas} />;
 const CentroOperacoesRoute = () => <AuthenticatedRoute component={CentroOperacoes} />;
 
 function Router() {
@@ -137,6 +139,7 @@ function Router() {
       <Route path={"/contratacao-direta"} component={DirectProcurementRoute} />
       <Route path={"/parecer"} component={ParecerJuridicoRoute} />
       <Route path={"/contratos"} component={ContratosWorkspaceRoute} />
+      <Route path={"/tirar-duvidas"} component={TirarDuvidasRoute} />
       <Route path={"/centro-operacoes"} component={CentroOperacoesRoute} />
       <Route path={"/dashboard"} component={ModuleSelectionRoute} />
       <Route path={"/processos"} component={ProcessesRoute} />

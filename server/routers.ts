@@ -72,6 +72,7 @@ import { departmentOperationRouter } from "./routers/departmentOperationRouter";
 import { operationRecordRouter } from "./routers/operationRecordRouter";
 import { documentEngineRouter } from "./routers/documentEngineRouter";
 import { adaptiveRecommendationRouter } from "./routers/adaptiveRecommendationRouter";
+import { institutionalConsultationRouter } from "./routers/institutionalConsultationRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -147,6 +148,7 @@ export const appRouter = router({
   departmentOperation: departmentOperationRouter,
   operationRecord: operationRecordRouter,
   documentEngine: documentEngineRouter,
+  institutionalConsultation: institutionalConsultationRouter,
 });
 
 export type AppRouter = typeof appRouter;

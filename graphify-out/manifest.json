@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784151247.308081,
-    "ast_hash": "0bebe0d512f375d31bcd4c1317a0b5a3",
+    "mtime": 1784317916.5730603,
+    "ast_hash": "33958cbbc4704c23c63ac5801526d02d",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1784151235.0600805,
-    "ast_hash": "66d6bcc17b54f394aa1eeae3544fc2cb",
+    "mtime": 1784317933.00906,
+    "ast_hash": "ecf0c814764c4dab39ab8ceedcc6347f",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784230640.4021237,
-    "ast_hash": "4f128bb1e2c7646d8a3c129ab9569f55",
+    "mtime": 1784319604.9747555,
+    "ast_hash": "7a2433deece587b19000891f3b693749",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784230622.0381227,
-    "ast_hash": "9f043b6c3c3277ae98eb498f91254d8b",
+    "mtime": 1784319585.315814,
+    "ast_hash": "e55b3d20a64de6ec24bae257f5a88244",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784230658.8301249,
-    "ast_hash": "467b546d338289af2191d105398c5c86",
+    "mtime": 1784319647.3798127,
+    "ast_hash": "7db08786c238d944ae4d8819d21c4853",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1784204559.4920125,
-    "ast_hash": "17a19175c6b698857c63c765481d51db",
+    "mtime": 1784317755.761064,
+    "ast_hash": "0c39e062e246e3a205163998db2f6b2e",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784316017.8299274,
-    "ast_hash": "7144837350365b4f47e11f16c7a47865",
+    "mtime": 1784318261.3490524,
+    "ast_hash": "d8e13ff846f6b09ed3d382752928c458",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784316042.965928,
-    "ast_hash": "1d4497e5c6439053c75747830affa288",
+    "mtime": 1784318286.072342,
+    "ast_hash": "d94c88439c1f561160a15844e530d841",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -9512,6 +9512,61 @@
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
     "mtime": 1784315957.0019262,
     "ast_hash": "6c8b4766571296c29fb5052458cea6cc",
+    "semantic_hash": ""
+  },
+  "client/src/components/tirar-duvidas/TirarDuvidasHome.tsx": {
+    "mtime": 1784320061.6758032,
+    "ast_hash": "dcb2134520a630e492f6092e581f44bd",
+    "semantic_hash": ""
+  },
+  "client/src/pages/TirarDuvidas.tsx": {
+    "mtime": 1784317895.3090608,
+    "ast_hash": "fe98c3615dfaf73755c1b5f2bcb18568",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc51-tirar-duvidas.test.ts": {
+    "mtime": 1784319873.4358075,
+    "ast_hash": "79e3bfc925cb48fb803628fb10eb493e",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalConsultation.ts": {
+    "mtime": 1784319556.3558147,
+    "ast_hash": "c29867df7a06b5582cabf92ba4a7528f",
+    "semantic_hash": ""
+  },
+  "server/routers/institutionalConsultationRouter.ts": {
+    "mtime": 1784319827.6398087,
+    "ast_hash": "ebb52dbe03c1a537a8fced4b365e27f1",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalConsultationService.ts": {
+    "mtime": 1784319798.7078092,
+    "ast_hash": "6ef03f19f260bdc2d86cef7f6bf69722",
+    "semantic_hash": ""
+  },
+  "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
+    "mtime": 1784320107.5278022,
+    "ast_hash": "3145547bd65291efe4b13e5d10bc249a",
+    "semantic_hash": ""
+  },
+  "drizzle/0284_institutional_consultations.sql": {
+    "mtime": 1784319604.954648,
+    "ast_hash": "c38f157227e2c13cae31e23bbea5fa26",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc51-persistence.test.ts": {
+    "mtime": 1784320018.9038043,
+    "ast_hash": "87b7cadc77a95dbc81c584cad68d441f",
+    "semantic_hash": ""
+  },
+  "server/db/institutionalConsultations.ts": {
+    "mtime": 1784319726.683811,
+    "ast_hash": "f10869ea5949a0d1b7891032670b517f",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalConsultationRepository.ts": {
+    "mtime": 1784319754.7358103,
+    "ast_hash": "df544e7fc0ddf927512be2eac8246ea8",
     "semantic_hash": ""
   }
 }

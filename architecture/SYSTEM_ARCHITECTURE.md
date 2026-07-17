@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.6 | Atualizado em: 2026-07-17
+> Versão: 3.7 | Atualizado em: 2026-07-17
 
 ---
 
@@ -405,6 +405,31 @@ Multi-tenant: federais compartilhados; estaduais por estado; **municipais perten
 respectivo tenant**. Replay-safe (mesma entrada → mesmo replayHash).
 
 Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md).
+
+---
+
+## Business Domain "Tirar Dúvidas" (RC-5.1)
+
+Primeira funcionalidade **visível ao usuário** — um **domínio institucional de consulta normativa**
+(não um chat). Reutiliza integralmente a infraestrutura existente; **não** cria IA/pipeline/engine.
+
+```
+Servidor → Página "Tirar Dúvidas" → tRPC institutionalConsultation.ask →
+  answerConsultation() → executeCognitiveTaskWithInstitutionalContext() (RC-5.0) →
+    Resolver → Retrieval → ContextPackage → AIExecutionEngine → Resposta fundamentada
+```
+
+- **Backend:** `server/domain/institutionalConsultation.ts` + `server/services/institutionalConsultationService.ts`
+  + `institutionalConsultationObservabilityService.ts` (histórico/auditoria) + router `institutionalConsultation`.
+- **Frontend:** `client/src/pages/TirarDuvidas.tsx` + `components/tirar-duvidas/TirarDuvidasHome.tsx`;
+  rota `/tirar-duvidas` + item no menu lateral.
+- **Resposta estruturada:** resposta elaborada · fundamentação · documentos · trechos verbatim ·
+  citações · observações · explainability (“construída utilizando ✓ …”). Nunca texto livre; nunca
+  inventa fundamento; declara limitações quando não há base.
+- **Multi-tenant / replay-safe / auditável;** toda execução pelo fluxo institucional (sem bypass do
+  ContextPackage). Kernel/Engine/Corpus/Pipeline/Integration Layer/domínios existentes **inalterados**.
+
+Ver [docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md](../docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md).
 
 ---
 

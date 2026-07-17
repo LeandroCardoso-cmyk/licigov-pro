@@ -5552,3 +5552,57 @@ export const cognitiveObservabilityTable = mysqlTable("cognitive_observability",
   payload:              longtext("payload"),
   createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+// ─── RC-5.1 (correção) — "Tirar Dúvidas" · Persistência institucional ─────────
+// Fonte de verdade das consultas institucionais e das fontes/evidências utilizadas.
+// Multi-tenant (organization_id), auditável, replay-safe. Substitui o histórico em memória.
+export const institutionalConsultationsTable = mysqlTable("institutional_consultations", {
+  id:                    varchar("id", { length: 20 }).notNull().primaryKey(), // = executionId
+  organizationId:        int("organization_id").notNull(),
+  userId:                int("user_id").notNull(),
+  question:              text("question"),
+  normalizedQuestion:    text("normalized_question"),
+  answer:                longtext("answer"),
+  status:                varchar("status", { length: 20 }).notNull().default("pending"),
+  limitationReason:      varchar("limitation_reason", { length: 500 }).notNull().default(""),
+  contextPackageVersion: varchar("context_package_version", { length: 40 }).notNull().default(""),
+  contextReplayHash:     varchar("context_replay_hash", { length: 64 }).notNull().default(""),
+  executionId:           varchar("execution_id", { length: 40 }).notNull().default(""),
+  answerId:              varchar("answer_id", { length: 40 }).notNull().default(""),
+  replayId:              varchar("replay_id", { length: 40 }),
+  replayOfExecutionId:   varchar("replay_of_execution_id", { length: 40 }),
+  correlationId:         varchar("correlation_id", { length: 64 }).notNull().default(""),
+  businessDomain:        varchar("business_domain", { length: 60 }).notNull().default(""),
+  taskType:              varchar("task_type", { length: 40 }).notNull().default(""),
+  documentsCount:        int("documents_count").notNull().default(0),
+  passagesCount:         int("passages_count").notNull().default(0),
+  retrievalDurationMs:   int("retrieval_duration_ms").notNull().default(0),
+  executionDurationMs:   int("execution_duration_ms").notNull().default(0),
+  totalDurationMs:       int("total_duration_ms").notNull().default(0),
+  contextSnapshot:       longtext("context_snapshot"),
+  errorCode:             varchar("error_code", { length: 60 }).notNull().default(""),
+  errorMessage:          varchar("error_message", { length: 1000 }).notNull().default(""),
+  createdAt:             datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  startedAt:             datetime("started_at", { mode: "string", fsp: 3 }),
+  completedAt:           datetime("completed_at", { mode: "string", fsp: 3 }),
+  failedAt:              datetime("failed_at", { mode: "string", fsp: 3 }),
+  updatedAt:             datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+
+export const institutionalConsultationSourcesTable = mysqlTable("institutional_consultation_sources", {
+  id:              varchar("id", { length: 32 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  consultationId:  varchar("consultation_id", { length: 20 }).notNull(),
+  documentId:      varchar("document_id", { length: 40 }).notNull().default(""),
+  documentVersion: varchar("document_version", { length: 20 }).notNull().default(""),
+  documentTitle:   varchar("document_title", { length: 500 }).notNull().default(""),
+  documentType:    varchar("document_type", { length: 40 }).notNull().default(""),
+  authority:       varchar("authority", { length: 160 }).notNull().default(""),
+  jurisdiction:    varchar("jurisdiction", { length: 20 }).notNull().default(""),
+  bindingLevel:    varchar("binding_level", { length: 40 }).notNull().default(""),
+  citation:        varchar("citation", { length: 1000 }).notNull().default(""),
+  passage:         text("passage"),
+  lineage:         varchar("lineage", { length: 64 }).notNull().default(""),
+  sourceOrder:     int("source_order").notNull().default(0),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
