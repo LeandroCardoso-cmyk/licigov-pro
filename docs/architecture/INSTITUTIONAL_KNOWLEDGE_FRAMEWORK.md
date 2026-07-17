@@ -78,3 +78,10 @@ Com esta RC, o **framework institucional de representação de conhecimento est�
 corpora futuros o utilizam. A arquitetura da camada cognitiva é considerada **estável** — as próximas
 implementações concentram-se **exclusivamente na criação de conteúdo institucional** (ex.: a ingestão
 da Lei nº 14.133 como `KnowledgeDocument`s vinculados aos `NormativeNode` via Knowledge Binding).
+
+## Orquestração pelo Pipeline (RC-4.8)
+
+A criação e evolução de todo `KnowledgeDocument` é orquestrada pelo **Institutional Knowledge
+Pipeline** (RC-4.8): 16 estágios com quality gates obrigatórios, validation/publication engines e
+change detection. **Nenhum Knowledge Package nasce fora do pipeline.** Ver
+[INSTITUTIONAL_KNOWLEDGE_PIPELINE.md](./INSTITUTIONAL_KNOWLEDGE_PIPELINE.md).

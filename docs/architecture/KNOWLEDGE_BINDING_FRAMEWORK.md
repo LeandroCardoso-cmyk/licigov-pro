@@ -84,3 +84,7 @@ A representação de cada unidade de conhecimento segue o **Institutional Knowle
 (RC-4.7): `KnowledgeDocument` genérico com blocos cognitivos, qualidade, renderer (6 visões),
 lifecycle e versionamento. Os bindings desta RC apontam para o conteúdo estruturado por esse
 framework. Ver [INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md](./INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md).
+
+A produção/evolução desses documentos (e, portanto, dos bindings resultantes) ocorre pelo
+**Institutional Knowledge Pipeline** (RC-4.8), com quality gates obrigatórios e publicação
+governada. Ver [INSTITUTIONAL_KNOWLEDGE_PIPELINE.md](./INSTITUTIONAL_KNOWLEDGE_PIPELINE.md).

@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784300827.7189472,
-    "ast_hash": "4b49e3dafed7f6e76b68346c997fd548",
+    "mtime": 1784307898.3853838,
+    "ast_hash": "22f91fd26c8b1bb4d7d330752a76972a",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784300867.9469461,
-    "ast_hash": "ca24b6e59365fd03c35fc9552f93f543",
+    "mtime": 1784307936.9893835,
+    "ast_hash": "5ca5e44d880672b9e230d2085c1d753e",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -9285,8 +9285,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md": {
-    "mtime": 1784300841.4709468,
-    "ast_hash": "bdf062dfb33a80de81dec5cf678af0be",
+    "mtime": 1784307916.1093836,
+    "ast_hash": "929baaa1cc9420de87723888713e3155",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc47-institutional-knowledge-framework.test.ts": {
@@ -9350,8 +9350,73 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md": {
-    "mtime": 1784300802.0709476,
-    "ast_hash": "d8d20148c3fa513e0e1afd6570774c90",
+    "mtime": 1784307910.1053839,
+    "ast_hash": "590d341ade62fbb99742a9a8a0089eef",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc48-institutional-knowledge-pipeline.test.ts": {
+    "mtime": 1784307805.9933848,
+    "ast_hash": "76f196c6a8a2f2906a9dd90ecc31acad",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/changeDetection.ts": {
+    "mtime": 1784307648.1293862,
+    "ast_hash": "941121e258302455e3aa246ec6982fcf",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/knowledgePipeline.ts": {
+    "mtime": 1784307569.7613869,
+    "ast_hash": "06c9d8828f637791bca8c0e36e55a31f",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/pipelineExecution.ts": {
+    "mtime": 1784307685.965386,
+    "ast_hash": "23e9786b22427fae4a64fde51bef78e1",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/pipelineExplainability.ts": {
+    "mtime": 1784307721.6533856,
+    "ast_hash": "8ffec49f13aaa33c32136586707bd678",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/pipelineProjection.ts": {
+    "mtime": 1784307703.0613856,
+    "ast_hash": "05bb79d0dcb1713a0c116b54ea8c6e18",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/pipelineSample.ts": {
+    "mtime": 1784307746.9213853,
+    "ast_hash": "5607fd6888f6c3ff5975157affef7061",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/pipelineStages.ts": {
+    "mtime": 1784307545.4213872,
+    "ast_hash": "ec1f3754494639cd656cde69cecd33e7",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/publicationEngine.ts": {
+    "mtime": 1784307626.0573864,
+    "ast_hash": "3835d533752ba37bc87fb1334f4e3929",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/qualityGates.ts": {
+    "mtime": 1784307586.7133868,
+    "ast_hash": "d21fd40f5c7d0a0975973b2d4caf00f7",
+    "semantic_hash": ""
+  },
+  "server/domain/knowledge/pipeline/validationEngine.ts": {
+    "mtime": 1784307606.2053866,
+    "ast_hash": "1401ff1fc4fbd7846751f9d820ecf974",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/pipelineObservabilityService.ts": {
+    "mtime": 1784307734.0733855,
+    "ast_hash": "717869ade61890cdc549164268cd5553",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md": {
+    "mtime": 1784307848.7173843,
+    "ast_hash": "07d0bc2b03250c90d255762f1f3b9a1a",
     "semantic_hash": ""
   }
 }

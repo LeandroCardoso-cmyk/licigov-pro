@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.3 | Atualizado em: 2026-07-17
+> Versão: 3.4 | Atualizado em: 2026-07-17
 
 ---
 
@@ -323,6 +323,38 @@ Após esta RC, a arquitetura da camada cognitiva é considerada **estável** —
 focam **apenas na criação de conteúdo institucional**.
 
 Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md).
+
+---
+
+## Institutional Knowledge Pipeline (RC-4.8)
+
+Pipeline que **orquestra o ciclo de vida** de todo conhecimento institucional — nenhum Knowledge
+Package nasce fora dele. `server/domain/knowledge/pipeline/`. **Sem** conteúdo jurídico, IA, RAG,
+banco ou React.
+
+```
+16 estágios (ordem determinística):
+  Source Acquisition → Corpus Validation → Normative Resolution → Knowledge Mapping →
+  Knowledge Document Generation → Binding Resolution → Relationship Resolution →
+  [Quality] → [Consistency] → [Explainability] → Review → [Approval] →
+  Publication → Index Update → Graph Projection → Registry Update       ([...] = quality gate)
+        │
+        ├─ Execution (execId · status · executedStages · failedStage · metrics · replayHash)
+        ├─ Quality Gates (coverage 100% · binding · explainability · refs · rels · versioning)
+        ├─ Validation Engine (rules · health report)
+        ├─ Publication Engine (manifest · snapshot imutável · history append-only)
+        ├─ Change Detection (diff · impact · migration · upgrade · rollback)
+        └─ Graph Orchestration · Explainability · Observability
+```
+
+Princípios:
+- **Approval-aware / governável:** gates obrigatórios bloqueiam publicação; falha interrompe e pula
+  os estágios seguintes.
+- **Replay Safety:** `replayHash` da execução exclui tempos; mesma entrada lógica → mesmo hash.
+- **Publicação imutável e append-only;** rollback lógico preserva histórico.
+- **Multi-Tenant / Determinismo / Explainability / Observabilidade / Baixo Acoplamento** preservados.
+
+Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_PIPELINE.md).
 
 ---
 
