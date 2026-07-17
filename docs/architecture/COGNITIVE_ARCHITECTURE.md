@@ -106,6 +106,10 @@ A ontologia foi **validada exaustivamente** (RC-4.3.1): 20 cenários representá
 
 Além da ontologia operacional, o sistema modela a **estrutura** do conhecimento jurídico (não o conteúdo) — a **Institutional Legal Ontology**: tipos normativos, hierarquia, estrutura interna da norma, conceitos, relacionamentos e classificações. **Declarativa, determinística e independente** de qualquer lei/tribunal/país. Permite inserir futuras normas sem alterar a arquitetura. Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md).
 
+## Integração das ontologias (RC-4.4.1)
+
+Uma **camada semântica** permanente e desacoplada conecta a Ontologia Operacional e a Jurídica (Semantic Links explicáveis, cross references, mapa semântico, consultas). O AIExecutionEngine pode **navegar entre os dois mundos** (somente consulta) sem alterar o pipeline. Ambas as ontologias permanecem independentes. Ver [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor

@@ -68,3 +68,10 @@ A ontologia foi validada exaustivamente: integridade por seção (zero issues), 
 institucionais representáveis** (pregão, dispensa, registro de preços, convênio, legados,
 híbridos ERP+LiciGov, incompletos), cobertura de **100%** dos elementos e detecção de
 inconsistências (resiliência). Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
+
+---
+
+## Integração semântica (RC-4.4.1)
+
+A ontologia operacional é conectada à Ontologia Jurídica por uma **camada semântica** desacoplada
+(a operacional **não** importa a integração). Ver [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).

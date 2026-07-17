@@ -67,3 +67,10 @@ específica pode ser instanciada no futuro **sem** alterar a ontologia (só a es
 monotônica, taxonomias, `validateLegalOntology` sem erros, **zero ciclos** (dependência + árvore
 estrutural), projeção KG determinística, fingerprint estável, independência de lei específica.
 **Zero regressões. Kernel/Business Domains inalterados.**
+
+---
+
+## Integração semântica (RC-4.4.1)
+
+A ontologia jurídica é conectada à Ontologia Operacional por uma **camada semântica** desacoplada
+(a jurídica **não** importa a integração). Ver [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
