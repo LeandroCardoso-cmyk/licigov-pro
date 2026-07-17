@@ -63,3 +63,8 @@ versionamento, replay safety, explainability e auditabilidade. Baixo acoplamento
 O primeiro pacote instalável que consumirá estas unidades é o **Federal Procurement Corpus**
 (RC-4.6) — cuja coleção `Lei 14.133` será, no futuro, **preenchida** por `LegalKnowledgeUnit`.
 Ver [FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md](./FEDERAL_PROCUREMENT_CORPUS_PACKAGE.md).
+
+A **Fundação Normativa da Lei nº 14.133** (RC-4.6.1) cria a árvore estrutural (nós sem texto) cujos
+`NormativeNode` apontarão para `LegalKnowledgeUnit` via `knowledgeUnitId` (hoje `null`) — o ponto de
+ingestão incremental do conteúdo jurídico. Ver
+[FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md](./FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md).
