@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 2.9 | Atualizado em: 2026-07-17
+> Versão: 3.0 | Atualizado em: 2026-07-17
 
 ---
 
@@ -200,6 +200,41 @@ Princípios:
 - **Replay Safety / Determinismo / Observabilidade / Baixo Acoplamento** preservados.
 
 Ver [docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_EXPERIENCE_FRAMEWORK.md).
+
+---
+
+## Platform Bootstrap (RC-X.2)
+
+Camada que **orquestra a inicialização** dos três pilares (Cognitive Architecture, Experience
+Framework e Business Domains): o **Institutional Bootstrap Framework** (`server/domain/bootstrap/`).
+**Sem** regra de negócio, login, JWT, sessão, banco, React ou IA.
+
+```
+BootstrapRegistry (subsistemas: id, deps, initializer, healthCheck, shutdown)
+        │
+        ▼
+   BootstrapKernel ──► Dependency Graph (ordem determinística, sem ciclos)
+        │
+        ▼
+   Bootstrap Pipeline (execução determinística das etapas)
+        │
+   Authentication → Institution Context → Corpus → Package → Capability →
+   Workspace → Navigation → Home → Copilot → Business → Ready
+        │
+        ▼
+   PlatformState (BOOTING/INITIALIZING/READY/FAILED/RELOADING/SUSPENDED) + Health + Reload
+```
+
+Princípios:
+- **Ordem determinística** por grafo de dependências (Kahn, desempate por id); **sem ciclos**.
+- **Replay Safety:** `replayHash` da execução lógica (etapa/status/saúde/dependências), **sem tempo**.
+- **Extensibilidade:** novo módulo registra apenas Stage/Dependencies/Initializer/HealthCheck —
+  nunca altera o BootstrapKernel.
+- **Context Reload:** planeja quais etapas reexecutar por gatilho (tenant/município/licença/
+  capabilities/workspaces/corpora/branding) — arquitetura, sem execução.
+- **Explainability/Observabilidade/Multi-Tenant/Baixo Acoplamento** preservados.
+
+Ver [docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md).
 
 ---
 

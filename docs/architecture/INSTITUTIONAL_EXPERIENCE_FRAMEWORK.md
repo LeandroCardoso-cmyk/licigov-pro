@@ -83,3 +83,11 @@ Após esta RC, nenhum novo módulo precisa alterar a navegação, a Home ou cria
 registra apenas Workspace/Capabilities/Actions/Routes, e o **Experience Framework** monta toda a
 experiência institucional dinamicamente — para qualquer tipo de tenant, com explainability e
 observabilidade completas.
+
+## Inicialização pelo Bootstrap (RC-X.2)
+
+A resolução de capacidades/workspaces/navegação/home/copiloto desta camada é orquestrada, na
+inicialização, pelo **Institutional Bootstrap Framework** — cujas etapas `capability_resolution`,
+`workspace_resolution`, `navigation_resolution`, `home_resolution` e `copilot_resolution` compõem
+o pipeline determinístico da plataforma. Ver
+[INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md](./INSTITUTIONAL_BOOTSTRAP_FRAMEWORK.md).
