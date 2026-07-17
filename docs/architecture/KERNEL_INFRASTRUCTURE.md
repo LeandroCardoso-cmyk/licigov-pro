@@ -115,6 +115,17 @@ Provider → LLM → Reasoning → Explainability → Result
 > declarativa, determinística, sem conteúdo jurídico. Reutilizável por toda a camada cognitiva
 > (somente consulta). Ver [INSTITUTIONAL_OPERATING_MODEL.md](./INSTITUTIONAL_OPERATING_MODEL.md).
 
+> **RC-4.4 / RC-4.4.1 — Conhecimento jurídico + integração:** o sistema modela a **estrutura** do conhecimento jurídico (Institutional Legal Ontology) e uma **camada semântica** desacoplada que a conecta à ontologia operacional (Ontology Integration Layer). Ambas independentes; o Engine navega entre os dois mundos (somente consulta). Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md) e [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
+
+> **RC-4.3.1 — Ontology Validation:** a Ontologia Operacional foi validada exaustivamente
+> (integridade por seção, **20 cenários representáveis**, cobertura 100%, zero ciclos, resiliência,
+> determinismo) — **sem alterações estruturais**. Ver [INSTITUTIONAL_ONTOLOGY_VALIDATION.md](./INSTITUTIONAL_ONTOLOGY_VALIDATION.md).
+
+> **RC-4.4 — Institutional Legal Ontology:** modela a **estrutura do conhecimento jurídico**
+> (não o conteúdo) — tipos normativos, hierarquia (Lei→Decreto→IN→Portaria→…), estrutura interna
+> (Título→…→Item), conceitos, relacionamentos (11) e classificações. Declarativa, determinística,
+> acíclica e **independente de qualquer lei/tribunal/país**. Ver [INSTITUTIONAL_LEGAL_ONTOLOGY.md](./INSTITUTIONAL_LEGAL_ONTOLOGY.md).
+
 ### AI Execution Policy
 
 Cada tarefa declara **sua** política — e a **decisão de provider ocorre SOMENTE aqui**,

@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784234457.522772,
-    "ast_hash": "e120b2d02c6729ed27efebf7271bf7c3",
+    "mtime": 1784253719.621662,
+    "ast_hash": "6ce5d648ac916646594f97fe48a62ffb",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784234449.1910386,
-    "ast_hash": "1a983d2d9ca6923d7470e1a028a83934",
+    "mtime": 1784253719.6616619,
+    "ast_hash": "6dc4ce43d4cc391256401d9384ef12f0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784234438.2030387,
-    "ast_hash": "b7a99ad63f06843d1284f42416edbfe1",
+    "mtime": 1784253719.637662,
+    "ast_hash": "18e30e1c4b87bd529e05a149b39cecc7",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8760,8 +8760,83 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_OPERATING_MODEL.md": {
-    "mtime": 1784234428.183039,
-    "ast_hash": "bf037d37762e3ff2b8309198c6aea411",
+    "mtime": 1784253719.6496618,
+    "ast_hash": "350386c7607bd2f7940c7d31197c3a86",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc431-ontology-validation.test.ts": {
+    "mtime": 1784252559.4321704,
+    "ast_hash": "8b649f2c4bcd2d73e134ea964f2b7b02",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/ontologyValidation.ts": {
+    "mtime": 1784252559.4361706,
+    "ast_hash": "306926d36041c38ffbfec3f76188a228",
+    "semantic_hash": ""
+  },
+  "server/domain/institutional/scenarios.ts": {
+    "mtime": 1784252559.4361706,
+    "ast_hash": "9b7a9f3a88ae9bd66b2d891375981c3b",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_ONTOLOGY_VALIDATION.md": {
+    "mtime": 1784252559.3961704,
+    "ast_hash": "935f7f41d069ed7233f4aa48683d55f6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc44-legal-ontology.test.ts": {
+    "mtime": 1784252559.4321704,
+    "ast_hash": "f651fe3ee42bbd33237fc9fd8c1d42a7",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/legalConcepts.ts": {
+    "mtime": 1784252559.4361706,
+    "ast_hash": "78ebe0cd0e3dde2c73980d94ffe3bd14",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/legalOntology.ts": {
+    "mtime": 1784252559.4377131,
+    "ast_hash": "b9d80a61022b868e41305de7e636c1a1",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normStructure.ts": {
+    "mtime": 1784252559.4377131,
+    "ast_hash": "361f4288fa6a1f97656a69ada5f1e07a",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/normTypes.ts": {
+    "mtime": 1784252559.4377131,
+    "ast_hash": "fc18efc2e38562e488540d6c743902e7",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md": {
+    "mtime": 1784252963.6001647,
+    "ast_hash": "a616e4f3f6b98a1bf1a27c2a1f411676",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc441-ontology-integration.test.ts": {
+    "mtime": 1784252861.952166,
+    "ast_hash": "c8829ae28455527b450be829730a1094",
+    "semantic_hash": ""
+  },
+  "server/domain/integration/integrationLayer.ts": {
+    "mtime": 1784252798.728167,
+    "ast_hash": "fe2ead9fbcd796cb2c2ffed28b666396",
+    "semantic_hash": ""
+  },
+  "server/domain/integration/ontologyLinks.ts": {
+    "mtime": 1784252740.1681678,
+    "ast_hash": "459114c82d4dab4b712ffaf69164d568",
+    "semantic_hash": ""
+  },
+  "server/domain/integration/semanticLinkTypes.ts": {
+    "mtime": 1784252710.0161684,
+    "ast_hash": "9f394ab6b0ccc36c4a882658761cd304",
+    "semantic_hash": ""
+  },
+  "docs/architecture/ONTOLOGY_INTEGRATION_LAYER.md": {
+    "mtime": 1784252939.388165,
+    "ast_hash": "6e486410310ebd80d0b5a5b8280db169",
     "semantic_hash": ""
   }
 }
