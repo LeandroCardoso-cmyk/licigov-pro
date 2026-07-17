@@ -114,6 +114,10 @@ Uma **camada semântica** permanente e desacoplada conecta a Ontologia Operacion
 
 A **Legal Knowledge Foundation** cria a camada estrutural permanente para inserir qualquer conhecimento jurídico institucional futuro (LegalKnowledgeUnit, referências, versionamento append-only, conflitos, projeção KG, consultas declarativas, validação, explainability, observabilidade). Multi-tenant, replay-safe, determinística. **NÃO contém Lei 14.133** — apenas a fundação. Ver [LEGAL_KNOWLEDGE_FOUNDATION.md](./LEGAL_KNOWLEDGE_FOUNDATION.md).
 
+## Organização do conhecimento (RC-4.5.1)
+
+O **Institutional Corpus Framework** cria a camada organizacional permanente onde todo conhecimento institucional viverá: **Corpus** (Federal, Estadual, Municipal, Institucional, Organizacional, …), **Coleções** (sempre dentro de um Corpus, nunca soltas no sistema), **Registry** declarativo, **hierarquia configurável** (sem assumir país) e integração que vincula cada `LegalKnowledgeUnit` (RC-4.5) a um Corpus preservando versionamento/replay/explainability. Projeção para o Knowledge Graph (Corpus/Collection Nodes, Ownership, Hierarchy, Grouping). Multi-tenant, replay-safe, append-only, determinística. **NÃO adiciona conhecimento jurídico.** Ver [INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).
+
 ## Monitoramento operacional (RC-4.2.2)
 
 A saúde do Cognitive Kernel é verificável automaticamente (sem executar IA) pelo Monitor

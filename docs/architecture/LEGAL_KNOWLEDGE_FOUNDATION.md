@@ -51,3 +51,11 @@ referencial/revogação/temporal), validação (base válida + detecção de cic
 duplicado), explainability, observabilidade por correlationId, replay safety. **Zero regressões.**
 
 > A futura Lei 14.133 será apenas **um conjunto de LegalKnowledgeUnits** inserido nesta fundação.
+
+## Organização em Corpus (RC-4.5.1)
+
+As unidades desta fundação **não vivem soltas no sistema**: a RC-4.5.1 cria o **Institutional
+Corpus Framework**, que organiza cada `LegalKnowledgeUnit` em **Coleções** de um **Corpus**
+(Federal, Estadual, Municipal, Institucional, …). O vínculo (`attachLegalKnowledge`) preserva
+versionamento, replay safety, explainability e auditabilidade. Baixo acoplamento: esta fundação
+**não importa** o framework de corpus. Ver [INSTITUTIONAL_CORPUS_FRAMEWORK.md](./INSTITUTIONAL_CORPUS_FRAMEWORK.md).
