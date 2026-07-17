@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.1 | Atualizado em: 2026-07-17
+> Versão: 3.2 | Atualizado em: 2026-07-17
 
 ---
 
@@ -266,6 +266,33 @@ Princípios:
 - **Replay Safety / Determinismo / Multi-Tenant / Explainability / Observabilidade** preservados.
 
 Ver [docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md](../docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md).
+
+---
+
+## Knowledge Binding (RC-4.6.2)
+
+Camada que **liga** a estrutura normativa (RC-4.6.1) ao conhecimento jurídico (RC-4.5): o
+**Knowledge Binding Framework** (`server/domain/legal/binding/`). **Sem** conteúdo jurídico, IA,
+RAG, banco ou Business Domains.
+
+```
+NormativeNode  ←──  KnowledgeBinding  ──→  LegalKnowledgeUnit
+                    (tipo · versão · autoridade · escopo · status)
+                            │ append-only, versionado, replay-safe
+                            ▼
+        Registry · Resolver · Graph Projection · Queries · Explainability
+```
+
+Princípios:
+- **6 tipos de vínculo:** PRIMARY, SECONDARY, SUPPLEMENTAL, INTERPRETATIVE, REFERENCE, REGULATORY.
+- **Append-only/versionado:** linhagem estável por (tenant, nó, unidade, tipo); resolver retorna a
+  última versão `active`.
+- **Genérico:** vincula qualquer norma (Lei 14.133, LC 123, Constituição, Decretos, IN SEGES, TCU,
+  AGU, TCE, municipais) sem alteração estrutural.
+- **Replay Safety / Determinismo / Multi-Tenant / Explainability / Observabilidade / Auditabilidade**
+  preservados.
+
+Ver [docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md](../docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md).
 
 ---
 

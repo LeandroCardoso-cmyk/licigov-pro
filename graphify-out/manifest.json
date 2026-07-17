@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784298723.7052832,
-    "ast_hash": "ac1e4675da95742230bddf77bb1ac1a4",
+    "mtime": 1784299551.0051801,
+    "ast_hash": "ffe04660b382e641aca814a1a0307526",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784298767.8572822,
-    "ast_hash": "ffa1f02c086dd07bc64511628ede4848",
+    "mtime": 1784299588.3331792,
+    "ast_hash": "940089077b48d712cf182d878935609b",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8895,8 +8895,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
-    "mtime": 1784298744.3132827,
-    "ast_hash": "19096a8ccaff7d5525ee368b5e49dd36",
+    "mtime": 1784299567.3211799,
+    "ast_hash": "8061c31f1f1f1d2d391105fe9efd532e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc451-institutional-corpus-framework.test.ts": {
@@ -9225,8 +9225,68 @@
     "semantic_hash": ""
   },
   "docs/architecture/FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md": {
-    "mtime": 1784298700.8852837,
-    "ast_hash": "c7bc460be4667762eb0b30d307cb7a6b",
+    "mtime": 1784299561.3211799,
+    "ast_hash": "a136bbb4ae1764ca22003b28e50695e2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc462-knowledge-binding-framework.test.ts": {
+    "mtime": 1784299482.3051817,
+    "ast_hash": "46fa0bba884ca5c24ff237593896a23e",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingExplainability.ts": {
+    "mtime": 1784299383.497184,
+    "ast_hash": "e8560b62e86c1c8429b7b7393ad49765",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingProjection.ts": {
+    "mtime": 1784299370.6891844,
+    "ast_hash": "b1b068389a14eeab83eacfd4ac1d8993",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingQueries.ts": {
+    "mtime": 1784299353.3451848,
+    "ast_hash": "f3eb3623bc0c21bddfe745598e8e70ba",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingSample.ts": {
+    "mtime": 1784299427.425183,
+    "ast_hash": "efa7a3c74daa358485baf16e0af00040",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingValidation.ts": {
+    "mtime": 1784299396.9211838,
+    "ast_hash": "39359c5225d09c4390690f7a0df6a7df",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/bindingVersion.ts": {
+    "mtime": 1784299314.2051857,
+    "ast_hash": "d741f4e54cf4b4cf5f82386b8cc43eb5",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/knowledgeBinding.ts": {
+    "mtime": 1784299293.397186,
+    "ast_hash": "94ea1fb01d30f348e7117b7286cf8245",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/knowledgeBindingRegistry.ts": {
+    "mtime": 1784299323.4171853,
+    "ast_hash": "7245bf0a448794dba9fad0c0fed4c6e8",
+    "semantic_hash": ""
+  },
+  "server/domain/legal/binding/knowledgeBindingResolver.ts": {
+    "mtime": 1784299338.8731852,
+    "ast_hash": "5742d95a7d667eea7b113c8bf2a7e2c5",
+    "semantic_hash": ""
+  },
+  "server/services/legal/bindingObservabilityService.ts": {
+    "mtime": 1784299410.9331834,
+    "ast_hash": "200974e3e7982a2b91a1f8f567748a85",
+    "semantic_hash": ""
+  },
+  "docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md": {
+    "mtime": 1784299525.9771807,
+    "ast_hash": "235a721210974684f19ae39fc50bd0a3",
     "semantic_hash": ""
   }
 }

@@ -68,3 +68,7 @@ A **Fundação Normativa da Lei nº 14.133** (RC-4.6.1) cria a árvore estrutura
 `NormativeNode` apontarão para `LegalKnowledgeUnit` via `knowledgeUnitId` (hoje `null`) — o ponto de
 ingestão incremental do conteúdo jurídico. Ver
 [FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md](./FEDERAL_PROCUREMENT_CORPUS_FOUNDATION.md).
+
+A ligação entre `NormativeNode` e `LegalKnowledgeUnit` é realizada pelo **Knowledge Binding
+Framework** (RC-4.6.2): bindings versionados (append-only), tipados, explicáveis e auditáveis — sem
+alterar nenhuma das fundações. Ver [KNOWLEDGE_BINDING_FRAMEWORK.md](./KNOWLEDGE_BINDING_FRAMEWORK.md).
