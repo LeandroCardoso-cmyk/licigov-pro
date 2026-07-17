@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS `institutional_consultations` (
   INDEX `idx_icons_corr` (`correlation_id`),
   INDEX `idx_icons_exec` (`execution_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `institutional_consultation_sources` (
   `id` VARCHAR(32) NOT NULL,
   `organization_id` INT NOT NULL,
