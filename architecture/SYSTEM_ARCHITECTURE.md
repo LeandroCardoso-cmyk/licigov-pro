@@ -1,7 +1,7 @@
 # LiciGov Pro — Arquitetura do Sistema
 
 > Visão arquitetural completa do LiciGov Pro: componentes, fluxos e integrações.
-> Versão: 3.2 | Atualizado em: 2026-07-17
+> Versão: 3.3 | Atualizado em: 2026-07-17
 
 ---
 
@@ -293,6 +293,36 @@ Princípios:
   preservados.
 
 Ver [docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md](../docs/architecture/KNOWLEDGE_BINDING_FRAMEWORK.md).
+
+---
+
+## Institutional Knowledge Framework (RC-4.7)
+
+Padrão **genérico** que rege TODO conhecimento institucional — a **última grande RC de
+infraestrutura cognitiva**. `server/domain/knowledge/`. **Sem** conteúdo jurídico, IA, RAG, banco
+ou React; corpora futuros são apenas consumidores.
+
+```
+KnowledgeDocument ── Sections ── Blocks (20 tipos cognitivos) ── Fragments
+        │  semver · revision · lifecycle · lineage · quality/health
+        ├──► Renderer: Institutional | Copilot | Explainability | Audit | Review | Export
+        ├──► Registry · Resolver · Index · Catalog · SearchMetadata
+        ├──► Graph Projection (document/block/lifecycle/version/health)
+        └──► Explainability (origem/estrutura/versão/validações/estado/lineage)
+```
+
+Princípios:
+- **20 blocos cognitivos** modulares (OfficialText, ExecutiveSummary, PlainLanguage, …, Explainability).
+- **Lifecycle:** draft → review → approval → published → deprecated → archived (replay-safe).
+- **Versionamento:** append-only, immutable snapshots, semver, lineage, rollback lógico, histórico.
+- **Quality/Health:** completeness, coverage, consistency determinísticos.
+- **Replay Safety / Determinismo / Multi-Tenant / Explainability / Observabilidade / Baixo
+  Acoplamento** preservados.
+
+Após esta RC, a arquitetura da camada cognitiva é considerada **estável** — próximas implementações
+focam **apenas na criação de conteúdo institucional**.
+
+Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_FRAMEWORK.md).
 
 ---
 
