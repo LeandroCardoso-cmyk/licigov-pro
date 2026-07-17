@@ -74,3 +74,12 @@ estrutural), projeção KG determinística, fingerprint estável, independência
 
 A ontologia jurídica é conectada à Ontologia Operacional por uma **camada semântica** desacoplada
 (a jurídica **não** importa a integração). Ver [ONTOLOGY_INTEGRATION_LAYER.md](./ONTOLOGY_INTEGRATION_LAYER.md).
+
+---
+
+## Fundação de conhecimento jurídico (RC-4.5)
+
+Sobre a **estrutura** definida aqui, a **Legal Knowledge Foundation** cria o *container*
+permanente para armazenar qualquer conhecimento jurídico futuro (unidades, referências,
+versões, conflitos, projeção, consultas) — **sem** inserir Lei 14.133/acórdãos/jurisprudência/
+doutrina. Ver [LEGAL_KNOWLEDGE_FOUNDATION.md](./LEGAL_KNOWLEDGE_FOUNDATION.md).

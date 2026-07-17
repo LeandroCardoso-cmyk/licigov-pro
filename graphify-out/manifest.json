@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784253719.621662,
-    "ast_hash": "6ce5d648ac916646594f97fe48a62ffb",
+    "mtime": 1784254880.6216745,
+    "ast_hash": "e713e4b200fd20d7516b8954e19bcf4c",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
-    "mtime": 1784253719.6616619,
-    "ast_hash": "6dc4ce43d4cc391256401d9384ef12f0",
+    "mtime": 1784254880.6062734,
+    "ast_hash": "07494da4ed346a50702750277fa45b98",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
@@ -8640,8 +8640,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_ARCHITECTURE.md": {
-    "mtime": 1784253719.637662,
-    "ast_hash": "18e30e1c4b87bd529e05a149b39cecc7",
+    "mtime": 1784254880.6055522,
+    "ast_hash": "2e98b802a50025b4b28f2a93e6fd1665",
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_PIPELINE.md": {
@@ -8810,8 +8810,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_LEGAL_ONTOLOGY.md": {
-    "mtime": 1784252963.6001647,
-    "ast_hash": "a616e4f3f6b98a1bf1a27c2a1f411676",
+    "mtime": 1784254880.5616448,
+    "ast_hash": "9b03ad376fddcffdb7beb40eabbddad0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc441-ontology-integration.test.ts": {
@@ -8837,6 +8837,66 @@
   "docs/architecture/ONTOLOGY_INTEGRATION_LAYER.md": {
     "mtime": 1784252939.388165,
     "ast_hash": "6e486410310ebd80d0b5a5b8280db169",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc45-legal-knowledge-foundation.test.ts": {
+    "mtime": 1784254752.6136467,
+    "ast_hash": "9fe679a427d9ebefbe0245a9c503ca31",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeBase.ts": {
+    "mtime": 1784254575.8376493,
+    "ast_hash": "6710c433d4a7bdeb46f3a514842a33cd",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeConflict.ts": {
+    "mtime": 1784254517.3376503,
+    "ast_hash": "b54f304ef05ef866a656e58ba1369599",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeExplainability.ts": {
+    "mtime": 1784254645.5696483,
+    "ast_hash": "700a6d8d9c36cd8c1a4f98ff1191edb6",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeProjection.ts": {
+    "mtime": 1784254592.989649,
+    "ast_hash": "42836f19d728a6c3ea9476e5cba42bb3",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeQueries.ts": {
+    "mtime": 1784254613.0336487,
+    "ast_hash": "52a32661f0f6a65f2e480ef8a42b5436",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeReference.ts": {
+    "mtime": 1784254499.1296504,
+    "ast_hash": "2e45d3a0539d5c8eb9bf100f556fd918",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeValidation.ts": {
+    "mtime": 1784254630.8976486,
+    "ast_hash": "99aa789ad939f644c53d53aa01615e49",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/knowledgeVersion.ts": {
+    "mtime": 1784254538.1496499,
+    "ast_hash": "c225193f3da4456c74c929188877f433",
+    "semantic_hash": ""
+  },
+  "server/domain/legalKnowledge/legalKnowledgeUnit.ts": {
+    "mtime": 1784254484.6016507,
+    "ast_hash": "d58017f980e8ced511add16504edf5df",
+    "semantic_hash": ""
+  },
+  "server/services/knowledge/knowledgeObservabilityService.ts": {
+    "mtime": 1784254661.2656481,
+    "ast_hash": "6f4d5af8ec1871fec254557eeaff8c98",
+    "semantic_hash": ""
+  },
+  "docs/architecture/LEGAL_KNOWLEDGE_FOUNDATION.md": {
+    "mtime": 1784254857.1616452,
+    "ast_hash": "d384ec994a04ac06774e50b84cae7eae",
     "semantic_hash": ""
   }
 }
