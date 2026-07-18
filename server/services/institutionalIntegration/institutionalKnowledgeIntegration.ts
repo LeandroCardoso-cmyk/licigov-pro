@@ -26,6 +26,7 @@ export interface ResolveContextPackageParams {
   correlationId: string;
   userContext?: { state?: string | null; municipality?: string | null };
   maxPassagesPerDocument?: number;
+  maxPassageChars?: number;
 }
 
 /**
@@ -37,7 +38,7 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
     tenantId: params.tenantId, businessDomain: params.businessDomain, taskType: params.taskType, userContext: params.userContext,
   };
   const institutional = resolveInstitutionalContext(corpus.registry, ctxInput);
-  const retrieval = retrieveKnowledge(corpus, institutional, { query: params.query, maxPassagesPerDocument: params.maxPassagesPerDocument });
+  const retrieval = retrieveKnowledge(corpus, institutional, { query: params.query, maxPassagesPerDocument: params.maxPassagesPerDocument, maxPassageChars: params.maxPassageChars });
 
   const pkg = createContextPackage({
     correlationId: params.correlationId, tenantId: params.tenantId, municipality: institutional.municipality,

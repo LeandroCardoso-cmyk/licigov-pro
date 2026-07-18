@@ -41,6 +41,14 @@ export interface RetrieveParams {
   query: string;
   maxPassagesPerDocument?: number;
   minScore?: number;
+  /** Limite de caracteres por trecho verbatim (evita despejar chunks inteiros). Sem limite se ausente. */
+  maxPassageChars?: number;
+}
+
+/** Corta um trecho longo preservando o início (mais relevante), com marcador de continuação. */
+function clipPassage(text: string, max?: number): string {
+  if (!max || text.length <= max) return text;
+  return text.slice(0, max).replace(/\s+\S*$/, "").trimEnd() + " […]";
 }
 
 /**
@@ -78,7 +86,7 @@ export function retrieveKnowledge(corpus: OfficialCorpusBuildResult, context: In
     explainability.push({ documentId: doc.documentId, reason: `Documento aplicável (${doc.jurisdiction}); ${scored.length} trecho(s) relevante(s) para a consulta.`, authority: doc.authority, version: doc.version, bindingLevel: doc.bindingLevel, lineageId: ingested.knowledgeDocument.lineageId });
 
     for (const { b, score } of scored) {
-      passages.push({ documentId: doc.documentId, normId: doc.normId, blockId: b.id, identifier: b.title, text: b.fragments.map(f => f.text).join("\n"), score });
+      passages.push({ documentId: doc.documentId, normId: doc.normId, blockId: b.id, identifier: b.title, text: clipPassage(b.fragments.map(f => f.text).join("\n"), params.maxPassageChars), score });
       citations.push({ documentId: doc.documentId, reference: `${doc.title} — ${b.title}`, authority: doc.authority, version: doc.version, jurisdiction: doc.jurisdiction, bindingLevel: doc.bindingLevel, lineageId: ingested.knowledgeDocument.lineageId });
     }
   }

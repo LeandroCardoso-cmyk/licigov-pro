@@ -3865,7 +3865,7 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784319585.315814,
+    "mtime": 1784351486.4661012,
     "ast_hash": "e55b3d20a64de6ec24bae257f5a88244",
     "semantic_hash": ""
   },
@@ -3875,7 +3875,7 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1784349512.498422,
+    "mtime": 1784351486.6141012,
     "ast_hash": "d210ab70674fa0a4d1dda927d7fb6284",
     "semantic_hash": ""
   },
@@ -4115,7 +4115,7 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1784349438.8024175,
+    "mtime": 1784351486.6141012,
     "ast_hash": "85661b6b1c1bc38d1f7fe5dc278b15f5",
     "semantic_hash": ""
   },
@@ -4210,7 +4210,7 @@
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784349431.650417,
+    "mtime": 1784351486.6141012,
     "ast_hash": "ec2a6e0ec11b216fe074156cfa08b945",
     "semantic_hash": ""
   },
@@ -8555,7 +8555,7 @@
     "semantic_hash": ""
   },
   "server/_core/ai/executionPolicy.ts": {
-    "mtime": 1784349455.7064185,
+    "mtime": 1784351486.6141012,
     "ast_hash": "ac17c27a8d76cf8171d0a08990f6784c",
     "semantic_hash": ""
   },
@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784336074.4306636,
-    "ast_hash": "cef23ea038a5bfe24dace3d883773996",
+    "mtime": 1784352221.6860843,
+    "ast_hash": "37143da6373d7b51fe48f3cca634ae1b",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -8620,7 +8620,7 @@
     "semantic_hash": ""
   },
   "server/domain/cognitiveTask.ts": {
-    "mtime": 1784349451.5544183,
+    "mtime": 1784351486.6141012,
     "ast_hash": "4226e03f7c3239aae44fe482f64f274f",
     "semantic_hash": ""
   },
@@ -8630,8 +8630,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
-    "mtime": 1784336066.454663,
-    "ast_hash": "167c5bdcffe30fdd3add2757e2482cad",
+    "mtime": 1784352247.7020836,
+    "ast_hash": "f3b34b68ebf7dc8cd0f9ed57c0803dec",
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
@@ -9500,13 +9500,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
-    "mtime": 1784315721.341921,
-    "ast_hash": "7fbc85734ffcdff8fc10bb38e2d5ed81",
+    "mtime": 1784351535.8460999,
+    "ast_hash": "cad166979d28e9350c221020f1b61058",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784315676.36192,
-    "ast_hash": "25ce712a68a638e05897c790ea80fa07",
+    "mtime": 1784351521.1341002,
+    "ast_hash": "cbd5d861521f4bbd10b0b8b58b5f514c",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9515,8 +9515,8 @@
     "semantic_hash": ""
   },
   "client/src/components/tirar-duvidas/TirarDuvidasHome.tsx": {
-    "mtime": 1784320061.6758032,
-    "ast_hash": "dcb2134520a630e492f6092e581f44bd",
+    "mtime": 1784352290.2740827,
+    "ast_hash": "2e014d0c5b81addd0b70fce86ca75d83",
     "semantic_hash": ""
   },
   "client/src/pages/TirarDuvidas.tsx": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784343570.8602142,
-    "ast_hash": "8562594e6b7523dda41911872f354c42",
+    "mtime": 1784352239.3660839,
+    "ast_hash": "81ecccfc63eccb640e0618484ac4281c",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
-    "mtime": 1784343570.8602142,
-    "ast_hash": "eed667ad1d5e329a9bc65f22007e5924",
+    "mtime": 1784352322.178082,
+    "ast_hash": "b78d758ddbc2e2d9fd5587b8e3e61881",
     "semantic_hash": ""
   },
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {
@@ -9590,12 +9590,12 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784349479.79042,
+    "mtime": 1784351486.6141012,
     "ast_hash": "833a1056480980776ccdeca740e15ed7",
     "semantic_hash": ""
   },
   "docs/architecture/AI_PROVIDER_CONFIG.md": {
-    "mtime": 1784349534.5264232,
+    "mtime": 1784351486.2461011,
     "ast_hash": "3e738ab85f085622c1fe3d24a69da517",
     "semantic_hash": ""
   },
@@ -9625,12 +9625,12 @@
     "semantic_hash": ""
   },
   "scripts/ai-models.ts": {
-    "mtime": 1784349506.0304215,
+    "mtime": 1784351486.6141012,
     "ast_hash": "104d68e281716aba95998561aaac9951",
     "semantic_hash": ""
   },
   ".github/workflows/ai-models.yml": {
-    "mtime": 1784349522.9664226,
+    "mtime": 1784351486.2461011,
     "ast_hash": "aca0b1fb7fb398996b5a1c0864d1ba85",
     "semantic_hash": ""
   }
