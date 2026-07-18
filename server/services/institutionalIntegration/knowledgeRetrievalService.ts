@@ -29,6 +29,38 @@ function tokenize(s: string): string[] {
     .split(/\s+/).filter(t => t.length > 2 && !STOPWORDS.has(t));
 }
 
+/**
+ * Expansão de vocabulário de licitações: a busca é lexical (casamento de termos), mas as normas usam
+ * a forma POR EXTENSO (ex.: "estudo técnico preliminar") enquanto o usuário pergunta pela sigla (ETP).
+ * Expandir siglas/variantes na consulta faz os trechos oficiais casarem — sem embeddings/RAG semântico.
+ */
+const TERM_EXPANSIONS: Record<string, readonly string[]> = {
+  etp: ["estudo", "tecnico", "preliminar"],
+  tr: ["termo", "referencia"],
+  dfd: ["documento", "formalizacao", "demanda"],
+  srp: ["sistema", "registro", "precos"],
+  epp: ["empresa", "pequeno", "porte"],
+  me: ["microempresa"],
+  pca: ["plano", "contratacoes", "anual"],
+  obrigatorio: ["obrigatoria", "obrigatoriedade", "obrigatorios"],
+  dispensa: ["dispensavel"],
+  inexigibilidade: ["inexigivel"],
+  pregao: ["pregoeiro"],
+};
+
+/** Termos da consulta + expansões de siglas/variantes conhecidas (determinístico, aditivo). */
+function expandQueryTerms(query: string): string[] {
+  const base = tokenize(query);
+  const rawWords = new Set(
+    query.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean),
+  );
+  const out = new Set(base);
+  for (const [key, exps] of Object.entries(TERM_EXPANSIONS)) {
+    if (rawWords.has(key)) for (const e of exps) out.add(e);
+  }
+  return [...out];
+}
+
 /** Pontuação lexical determinística: fração de termos da consulta presentes no trecho. */
 function scorePassage(queryTerms: readonly string[], text: string): number {
   if (queryTerms.length === 0) return 0;
@@ -58,7 +90,7 @@ function clipPassage(text: string, max?: number): string {
 export function retrieveKnowledge(corpus: OfficialCorpusBuildResult, context: InstitutionalContext, params: RetrieveParams): RetrievalResult {
   const maxPer = params.maxPassagesPerDocument ?? 3;
   const minScore = params.minScore ?? 0.1;
-  const queryTerms = tokenize(params.query);
+  const queryTerms = expandQueryTerms(params.query);
   const ingestedByNorm = new Map<string, IngestedDocument>(corpus.ingested.map(d => [d.official.normId, d]));
 
   const documents: ContextDocument[] = [];

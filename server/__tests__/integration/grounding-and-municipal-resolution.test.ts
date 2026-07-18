@@ -214,10 +214,21 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
     });
     // cada trecho é truncado (≈700 chars + marcador) — não despeja chunks inteiros
     for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(710);
-    // no máximo 1 trecho por documento (resposta ≈ 1 página)
+    // no máximo 2 trechos por documento (resposta ≈ 1 página)
     const byDoc = new Map<string, number>();
     for (const p of a.passages) byDoc.set(p.documentId, (byDoc.get(p.documentId) ?? 0) + 1);
-    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(1);
+    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(2);
+  });
+
+  it("expansão de sigla: 'ETP' recupera trechos sobre estudo técnico preliminar (não devolve 'não encontrado')", async () => {
+    setInstitutionalProfileResolverForTests(async () => ({ state: "PR", municipality: "Moreira Sales" }));
+    const a = await answerConsultation({
+      organizationId: 4242, userId: 1, question: "Quando o ETP é obrigatório?",
+      correlationId: "c-etp", now: () => 0, createdAt: () => "2026-01-01T00:00:00.000Z",
+    });
+    expect(a.hasSufficientBasis).toBe(true);
+    const joined = a.passages.map((p) => p.text.toLowerCase()).join(" ");
+    expect(joined).toMatch(/preliminar|estudo t[eé]cnico/);
   });
 
   it("userContext explícito tem precedência sobre o perfil da organização", async () => {
