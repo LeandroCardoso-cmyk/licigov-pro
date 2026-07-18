@@ -7,8 +7,13 @@ de falhas em runtime causadas por divergências (migration `0284` ausente/malfor
 
 ## O que detecta
 
-- **Tabelas** declaradas no Drizzle que **não existem** no banco → causa `Table doesn't exist`.
-- **Colunas** declaradas no Drizzle que **não existem** na tabela → causa `Unknown column`.
+Classifica cada divergência em **três categorias** (para orientar a correção certa):
+
+- **Tabelas ausentes** → não existem no banco → `Table doesn't exist`. Ação: criar via migration.
+- **Colunas ausentes** → não existem nem sob outro nome → `Unknown column`. Ação: adicionar via migration.
+- **Colunas com nome divergente** → existem no banco com **outro nome/caixa** (ex.: Drizzle
+  `camelCase` × banco `snake_case`). Ação: **alinhar o SCHEMA Drizzle ao banco** (não mexer no banco —
+  a coluna e os dados já existem, só o nome no código diverge).
 
 Essas são exatamente as divergências que quebram queries em produção mesmo com os testes verdes
 (a suíte usa repositórios in-memory).
