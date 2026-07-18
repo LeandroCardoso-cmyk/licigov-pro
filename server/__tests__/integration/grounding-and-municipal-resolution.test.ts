@@ -195,6 +195,20 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
     expect(["completed", "limited"]).toContain(a.status); // não lançou; consulta concluída mesmo assim
   });
 
+  it("respostas objetivas: trechos limitados em tamanho e em quantidade por documento", async () => {
+    setInstitutionalProfileResolverForTests(async () => ({ state: "PR", municipality: "Moreira Sales" }));
+    const a = await answerConsultation({
+      organizationId: 4242, userId: 1, question: "Como funciona o tratamento favorecido da LC 123?",
+      correlationId: "c-concise", now: () => 0, createdAt: () => "2026-01-01T00:00:00.000Z",
+    });
+    // cada trecho é truncado (≈900 chars + marcador) — não despeja chunks inteiros
+    for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(910);
+    // no máximo 2 trechos por documento
+    const byDoc = new Map<string, number>();
+    for (const p of a.passages) byDoc.set(p.documentId, (byDoc.get(p.documentId) ?? 0) + 1);
+    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(2);
+  });
+
   it("userContext explícito tem precedência sobre o perfil da organização", async () => {
     let called = false;
     setInstitutionalProfileResolverForTests(async () => { called = true; return { state: null, municipality: null }; });
