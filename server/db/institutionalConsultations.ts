@@ -14,6 +14,25 @@ import type { ConsultationRecord, ConsultationSource, ConsultationRepository, Co
 type Row = typeof institutionalConsultationsTable.$inferSelect;
 type SrcRow = typeof institutionalConsultationSourcesTable.$inferSelect;
 
+/**
+ * Conversão de data na FRONTEIRA DO BANCO: as colunas são `DATETIME(3)` (sem timezone) e o MySQL
+ * NÃO aceita o separador "T" nem o sufixo "Z" do ISO 8601. O domínio/frontend usam ISO (UTC); aqui
+ * convertemos para o formato aceito pelo MySQL na escrita e de volta para ISO na leitura.
+ *   ISO  "2026-07-18T01:50:16.293Z"  ⇄  DB  "2026-07-18 01:50:16.293"
+ */
+export function toDbDatetime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = (n: number, l = 2) => String(n).padStart(l, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}.${p(d.getUTCMilliseconds(), 3)}`;
+}
+export function fromDbDatetime(v: string | null | undefined): string | null {
+  if (!v) return null;
+  if (v.includes("T")) return v.endsWith("Z") ? v : `${v}Z`;
+  return `${v.replace(" ", "T")}Z`;
+}
+
 function rowToRecord(r: Row): ConsultationRecord {
   return {
     id: r.id, tenantId: r.organizationId, userId: r.userId, question: r.question ?? "", normalizedQuestion: r.normalizedQuestion ?? "",
@@ -23,8 +42,8 @@ function rowToRecord(r: Row): ConsultationRecord {
     correlationId: r.correlationId, businessDomain: r.businessDomain, taskType: r.taskType,
     documentsCount: r.documentsCount, passagesCount: r.passagesCount, retrievalDurationMs: r.retrievalDurationMs,
     executionDurationMs: r.executionDurationMs, totalDurationMs: r.totalDurationMs, contextSnapshot: r.contextSnapshot ?? null,
-    errorCode: r.errorCode, errorMessage: r.errorMessage, createdAt: r.createdAt, startedAt: r.startedAt ?? null,
-    completedAt: r.completedAt ?? null, failedAt: r.failedAt ?? null, updatedAt: r.updatedAt,
+    errorCode: r.errorCode, errorMessage: r.errorMessage, createdAt: fromDbDatetime(r.createdAt) ?? "", startedAt: fromDbDatetime(r.startedAt),
+    completedAt: fromDbDatetime(r.completedAt), failedAt: fromDbDatetime(r.failedAt), updatedAt: fromDbDatetime(r.updatedAt) ?? "",
   };
 }
 function rowToSource(r: SrcRow): ConsultationSource {
@@ -32,7 +51,7 @@ function rowToSource(r: SrcRow): ConsultationSource {
     id: r.id, tenantId: r.organizationId, consultationId: r.consultationId, documentId: r.documentId,
     documentVersion: r.documentVersion, documentTitle: r.documentTitle, documentType: r.documentType, authority: r.authority,
     jurisdiction: r.jurisdiction, bindingLevel: r.bindingLevel, citation: r.citation, passage: r.passage ?? "",
-    lineage: r.lineage, sourceOrder: r.sourceOrder, createdAt: r.createdAt,
+    lineage: r.lineage, sourceOrder: r.sourceOrder, createdAt: fromDbDatetime(r.createdAt) ?? "",
   };
 }
 function recordValues(rec: ConsultationRecord) {
@@ -43,8 +62,8 @@ function recordValues(rec: ConsultationRecord) {
     replayOfExecutionId: rec.replayOfExecutionId, correlationId: rec.correlationId, businessDomain: rec.businessDomain, taskType: rec.taskType,
     documentsCount: rec.documentsCount, passagesCount: rec.passagesCount, retrievalDurationMs: rec.retrievalDurationMs,
     executionDurationMs: rec.executionDurationMs, totalDurationMs: rec.totalDurationMs, contextSnapshot: rec.contextSnapshot,
-    errorCode: rec.errorCode, errorMessage: rec.errorMessage, createdAt: rec.createdAt, startedAt: rec.startedAt,
-    completedAt: rec.completedAt, failedAt: rec.failedAt, updatedAt: rec.updatedAt,
+    errorCode: rec.errorCode, errorMessage: rec.errorMessage, createdAt: toDbDatetime(rec.createdAt) ?? undefined, startedAt: toDbDatetime(rec.startedAt),
+    completedAt: toDbDatetime(rec.completedAt), failedAt: toDbDatetime(rec.failedAt), updatedAt: toDbDatetime(rec.updatedAt) ?? undefined,
   };
 }
 
@@ -60,7 +79,8 @@ export const mysqlConsultationRepository: ConsultationRepository = {
   async markProcessing(tenantId, id, startedAt) {
     const db = await getDb();
     if (!db) return;
-    await db.update(institutionalConsultationsTable).set({ status: "processing", startedAt, updatedAt: startedAt })
+    const started = toDbDatetime(startedAt) ?? undefined;
+    await db.update(institutionalConsultationsTable).set({ status: "processing", startedAt: started, updatedAt: started })
       .where(and(eq(institutionalConsultationsTable.id, id), eq(institutionalConsultationsTable.organizationId, tenantId)));
   },
 
@@ -72,7 +92,7 @@ export const mysqlConsultationRepository: ConsultationRepository = {
         id: s.id, organizationId: s.tenantId, consultationId: s.consultationId, documentId: s.documentId,
         documentVersion: s.documentVersion, documentTitle: s.documentTitle, documentType: s.documentType, authority: s.authority,
         jurisdiction: s.jurisdiction, bindingLevel: s.bindingLevel, citation: s.citation, passage: s.passage,
-        lineage: s.lineage, sourceOrder: s.sourceOrder, createdAt: s.createdAt,
+        lineage: s.lineage, sourceOrder: s.sourceOrder, createdAt: toDbDatetime(s.createdAt) ?? undefined,
       }).onDuplicateKeyUpdate({ set: { citation: s.citation, sourceOrder: s.sourceOrder } });
     }
   },
@@ -87,7 +107,7 @@ export const mysqlConsultationRepository: ConsultationRepository = {
       contextReplayHash: rec.contextReplayHash, answerId: rec.answerId, replayId: rec.replayId, replayOfExecutionId: rec.replayOfExecutionId,
       documentsCount: rec.documentsCount, passagesCount: rec.passagesCount, retrievalDurationMs: rec.retrievalDurationMs,
       executionDurationMs: rec.executionDurationMs, totalDurationMs: rec.totalDurationMs, contextSnapshot: rec.contextSnapshot,
-      completedAt: rec.completedAt, updatedAt: rec.updatedAt,
+      completedAt: toDbDatetime(rec.completedAt), updatedAt: toDbDatetime(rec.updatedAt) ?? undefined,
     }).where(and(eq(institutionalConsultationsTable.id, rec.id), eq(institutionalConsultationsTable.organizationId, rec.tenantId)));
     return rec;
   },
@@ -95,7 +115,8 @@ export const mysqlConsultationRepository: ConsultationRepository = {
   async failConsultation(tenantId, id, errorCode, errorMessage, failedAt) {
     const db = await getDb();
     if (!db) return;
-    await db.update(institutionalConsultationsTable).set({ status: "failed", errorCode, errorMessage, failedAt, updatedAt: failedAt })
+    const failed = toDbDatetime(failedAt) ?? undefined;
+    await db.update(institutionalConsultationsTable).set({ status: "failed", errorCode, errorMessage, failedAt: failed, updatedAt: failed })
       .where(and(eq(institutionalConsultationsTable.id, id), eq(institutionalConsultationsTable.organizationId, tenantId)));
   },
 
