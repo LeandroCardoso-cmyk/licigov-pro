@@ -214,10 +214,10 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
     });
     // cada trecho é truncado (≈700 chars + marcador) — não despeja chunks inteiros
     for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(710);
-    // no máximo 2 trechos por documento (resposta ≈ 1 página)
+    // no máximo 3 trechos por documento (recall x concisão)
     const byDoc = new Map<string, number>();
     for (const p of a.passages) byDoc.set(p.documentId, (byDoc.get(p.documentId) ?? 0) + 1);
-    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(2);
+    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(3);
   });
 
   it("expansão de sigla: 'ETP' recupera trechos sobre estudo técnico preliminar (não devolve 'não encontrado')", async () => {
