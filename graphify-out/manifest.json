@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1782612418.0225782,
-    "ast_hash": "5b58aba6c6723e5f0dd6b6ba6e889c56",
+    "mtime": 1784341207.1194909,
+    "ast_hash": "5c2d57bdff6c97701c0edfa6eb0fa06c",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -9582,6 +9582,11 @@
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {
     "mtime": 1784340031.4218817,
     "ast_hash": "f8e433bb3b5036edc85104b1b5126dda",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/consultation-mysql-smoke.test.ts": {
+    "mtime": 1784341207.1296742,
+    "ast_hash": "11cdecb09c18152f0694e7e521950723",
     "semantic_hash": ""
   }
 }

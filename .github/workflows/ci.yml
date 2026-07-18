@@ -31,6 +31,45 @@ jobs:
         env:
           CI: true
 
+  mysql-smoke:
+    name: Smoke MySQL (Tirar Dúvidas)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: licigov
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Instalar pnpm
+        run: npm install -g pnpm
+
+      - name: Instalar dependências
+        run: pnpm install
+
+      - name: Smoke test contra MySQL real (persistência da consulta / regressão de DATETIME)
+        run: pnpm exec vitest run server/__tests__/integration/consultation-mysql-smoke.test.ts
+        env:
+          CI: true
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/licigov
+
   security:
     name: Auditoria de Segurança
     runs-on: ubuntu-latest
