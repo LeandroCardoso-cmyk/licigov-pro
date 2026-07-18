@@ -6475,8 +6475,8 @@
     "semantic_hash": ""
   },
   "MASTER_INDEX.md": {
-    "mtime": 1784318261.3490524,
-    "ast_hash": "d8e13ff846f6b09ed3d382752928c458",
+    "mtime": 1784336675.2146993,
+    "ast_hash": "8bc556bfebe0266d69d58269bde0fe1b",
     "semantic_hash": ""
   },
   "MODULOS_FUTUROS.md": {
@@ -6535,8 +6535,8 @@
     "semantic_hash": ""
   },
   "architecture/SYSTEM_ARCHITECTURE.md": {
-    "mtime": 1784318286.072342,
-    "ast_hash": "d94c88439c1f561160a15844e530d841",
+    "mtime": 1784336664.2826986,
+    "ast_hash": "13474ef686ec6ecd6eaaae965296f5bd",
     "semantic_hash": ""
   },
   "architecture/backend/README.md": {
@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784315775.3979223,
-    "ast_hash": "0f1a2a81a279c18b9985f6f8ad3cfc4c",
+    "mtime": 1784336074.4306636,
+    "ast_hash": "cef23ea038a5bfe24dace3d883773996",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -8630,8 +8630,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
-    "mtime": 1784222266.6528637,
-    "ast_hash": "863a250212956018cb01ab84c05cdc05",
+    "mtime": 1784336066.454663,
+    "ast_hash": "167c5bdcffe30fdd3add2757e2482cad",
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
@@ -9540,13 +9540,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784319798.7078092,
-    "ast_hash": "6ef03f19f260bdc2d86cef7f6bf69722",
+    "mtime": 1784336112.7546659,
+    "ast_hash": "336eeba96b1aca488136a6cc8b7eb9d6",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
-    "mtime": 1784320107.5278022,
-    "ast_hash": "3145547bd65291efe4b13e5d10bc249a",
+    "mtime": 1784336626.9186964,
+    "ast_hash": "ce7c2f43899d143f415504f7890d6119",
     "semantic_hash": ""
   },
   "drizzle/0284_institutional_consultations.sql": {
@@ -9572,6 +9572,11 @@
   "docs/architecture/DASHBOARD_SHELL_AND_ORPHAN_AUDIT.md": {
     "mtime": 1784333026.632578,
     "ast_hash": "b0edf8606d7fa3de2a89b35ae9d1ed73",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
+    "mtime": 1784336491.9066885,
+    "ast_hash": "97b186078754c90ae819f40030298940",
     "semantic_hash": ""
   }
 }

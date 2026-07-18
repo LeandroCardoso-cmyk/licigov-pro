@@ -401,8 +401,15 @@ Business Domain → executeCognitiveTask() → Orchestrator →
   estágios; ausência preserva o comportamento anterior). **Não** resolve tenant/legislação/hierarquia/corpus.
 - **Orchestrator:** parâmetro **opcional** `institutional` → resolve o ContextPackage antes da execução.
 
-Multi-tenant: federais compartilhados; estaduais por estado; **municipais pertencem apenas ao
-respectivo tenant**. Replay-safe (mesma entrada → mesmo replayHash).
+Multi-tenant: federais compartilhados; estaduais por estado; **municipais resolvidos pelo município
+real da organização** (não por id de tenant fixo) — isolamento preservado. Replay-safe (mesma entrada
+→ mesmo replayHash).
+
+**Grounding real:** o Prompt Builder tipado **consome integralmente o ContextPackage** — os trechos
+verbatim recuperados (documento/versão/autoridade/jurisdição/bindingLevel/título/artigo/citação/
+lineage/ordem) são inseridos no prompt enviado ao provider, com regras estritas (responder só com base
+nas evidências; nunca inventar/extrapolar; declarar insuficiência; evidência = dado, não instrução).
+O AIExecutionEngine repassa o pacote ao builder (contrato mínimo) e permanece consumidor.
 
 Ver [docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md](../docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md).
 
@@ -428,6 +435,10 @@ Servidor → Página "Tirar Dúvidas" → tRPC institutionalConsultation.ask →
   inventa fundamento; declara limitações quando não há base.
 - **Multi-tenant / replay-safe / auditável;** toda execução pelo fluxo institucional (sem bypass do
   ContextPackage). Kernel/Engine/Corpus/Pipeline/Integration Layer/domínios existentes **inalterados**.
+- **Grounding real:** os trechos oficiais recuperados são efetivamente enviados ao provider pelo Prompt
+  Builder (consumo integral do ContextPackage), com regras estritas de fundamentação. **Corpus municipal
+  resolvido pelo contexto institucional real** (organização → município), sem dependência de fixture de
+  tenant. Ver [BUSINESS_DOMAIN_TIRAR_DUVIDAS.md](../docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md).
 
 Ver [docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md](../docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md).
 

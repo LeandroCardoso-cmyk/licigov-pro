@@ -259,8 +259,12 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   push("copilot", "applied", `Copiloto recomendado: ${copilot}.`);
 
   // Stage: Prompt (builder tipado — nunca concatenação manual)
+  // RC — o ContextPackage institucional é repassado ao builder para GROUNDING REAL: os trechos
+  // verbatim recuperados são efetivamente inseridos no prompt enviado ao provider (não apenas
+  // anexados à resposta). O engine continua sem acessar o Corpus — apenas consome o pacote pronto.
   const prompt = getPromptBuilder(input.task).build({
     query: input.query, groundingBlock: input.groundingBlock, documentRefs: input.documentRefs, lawRefs: input.lawRefs,
+    contextPackage: input.contextPackage,
   });
   push("prompt", "applied", `Prompt montado via builder tipado (${prompt.sections.length} seção(ões)).`);
 
