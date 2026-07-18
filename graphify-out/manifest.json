@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1784345581.9111328,
-    "ast_hash": "63d659f5ed804130957fd8424e4f2380",
+    "mtime": 1784345708.4311404,
+    "ast_hash": "ac6feeaf9385bc175e70b7c6d0b14f0e",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -4115,7 +4115,7 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5955422,
     "ast_hash": "e453ac0e103d05d60b4eed717b6a898b",
     "semantic_hash": ""
   },
@@ -4210,7 +4210,7 @@
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5955422,
     "ast_hash": "430139eac26f4eb33ef4d24d75f133ab",
     "semantic_hash": ""
   },
@@ -6440,7 +6440,7 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5564086,
     "ast_hash": "5f3e4b51b0c1488aa2713d26f01da492",
     "semantic_hash": ""
   },
@@ -8555,7 +8555,7 @@
     "semantic_hash": ""
   },
   "server/_core/ai/executionPolicy.ts": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5955422,
     "ast_hash": "a738ebc265ddfe8d09f1534475241d29",
     "semantic_hash": ""
   },
@@ -8565,7 +8565,7 @@
     "semantic_hash": ""
   },
   "server/_core/ai/providerAdapter.ts": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5955422,
     "ast_hash": "f2b2f235ba4986e6c7cf8523f9bf1df6",
     "semantic_hash": ""
   },
@@ -8620,7 +8620,7 @@
     "semantic_hash": ""
   },
   "server/domain/cognitiveTask.ts": {
-    "mtime": 1784345581.9294984,
+    "mtime": 1784348079.5955422,
     "ast_hash": "d7ecfe6ba2436a8425743da7814020f2",
     "semantic_hash": ""
   },
@@ -9590,13 +9590,38 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784345581.937352,
+    "mtime": 1784348079.5955422,
     "ast_hash": "0211de97fbc300688bb1f42bfbdb207a",
     "semantic_hash": ""
   },
   "docs/architecture/AI_PROVIDER_CONFIG.md": {
-    "mtime": 1784345581.937352,
+    "mtime": 1784348079.5564086,
     "ast_hash": "a90b2a1e197723aa835a8809c6647240",
+    "semantic_hash": ""
+  },
+  "scripts/schema-audit-util.ts": {
+    "mtime": 1784348079.7595422,
+    "ast_hash": "cd1f266bba50af2fa99c4d0c63a0cd0d",
+    "semantic_hash": ""
+  },
+  "scripts/schema-audit.ts": {
+    "mtime": 1784348079.7515423,
+    "ast_hash": "4c17eac4341e6a71fd6d6bfa92a6c2e5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/schema-audit-util.test.ts": {
+    "mtime": 1784348079.7595422,
+    "ast_hash": "7d9f1c7bffdc1de2df0e17e58aeba827",
+    "semantic_hash": ""
+  },
+  ".github/workflows/schema-audit.yml": {
+    "mtime": 1784345718.715141,
+    "ast_hash": "9c7ef307316234a2972eade32afa5b41",
+    "semantic_hash": ""
+  },
+  "docs/architecture/SCHEMA_AUDIT.md": {
+    "mtime": 1784348079.7515423,
+    "ast_hash": "ed0a8052e07dd6506517b14df5d4afd8",
     "semantic_hash": ""
   }
 }

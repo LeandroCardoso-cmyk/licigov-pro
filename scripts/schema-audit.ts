@@ -1,23 +1,24 @@
 /**
  * Auditoria de schema — Drizzle × banco real (produção/staging).
  *
- * Compara o schema declarado no Drizzle (drizzle/schema.ts) com o schema REAL do banco apontado por
- * DATABASE_URL, reportando as divergências que causam falhas em runtime:
- *   - TABELAS declaradas no Drizzle que NÃO existem no banco  → "Table doesn't exist"
- *   - COLUNAS declaradas no Drizzle que NÃO existem na tabela → "Unknown column"
- * (colunas extras no banco, não declaradas no Drizzle, são apenas informativas)
+ * Compara o schema declarado no Drizzle (drizzle/schema.ts) com o real (INFORMATION_SCHEMA) e
+ * classifica as divergências:
+ *   - TABELAS ausentes             → não existem no banco (precisam ser criadas)
+ *   - COLUNAS ausentes             → não existem nem sob outro nome (precisam ser adicionadas)
+ *   - COLUNAS com nome divergente  → existem com outro nome/caixa (ex.: Drizzle camelCase × banco
+ *                                    snake_case) → alinhar o SCHEMA (Drizzle), não o banco
  *
  * Uso:
  *   DATABASE_URL="mysql://user:senha@host:3306/db" pnpm db:audit
  *
- * Sai com código 1 se houver divergências (útil como gate), 2 em erro de execução, 0 se alinhado.
- * NÃO altera nada — somente leitura (INFORMATION_SCHEMA).
+ * Somente leitura. Exit 1 se houver divergências, 2 em erro de execução, 0 se alinhado.
  */
 
 import mysql, { type RowDataPacket } from "mysql2/promise";
 import { is } from "drizzle-orm";
 import { MySqlTable, getTableConfig } from "drizzle-orm/mysql-core";
 import * as schema from "../drizzle/schema";
+import { diffSchema } from "./schema-audit-util";
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -35,7 +36,7 @@ async function main(): Promise<void> {
   );
   await conn.end();
 
-  // Schema REAL: tabela → conjunto de colunas.
+  // Real: tabela → conjunto de colunas.
   const actual = new Map<string, Set<string>>();
   for (const r of colRows) {
     const t = String(r.TABLE_NAME);
@@ -43,45 +44,51 @@ async function main(): Promise<void> {
     actual.get(t)!.add(String(r.COLUMN_NAME));
   }
 
-  const missingTables: string[] = [];
-  const missingColumns: Array<{ table: string; columns: string[] }> = [];
-  let drizzleTables = 0;
-
+  // Esperado: tabela (Drizzle) → colunas declaradas.
+  const expected = new Map<string, readonly string[]>();
   for (const value of Object.values(schema)) {
     if (!is(value, MySqlTable)) continue;
-    drizzleTables++;
     const cfg = getTableConfig(value);
-    const expectedCols = cfg.columns.map((c) => c.name);
-    const act = actual.get(cfg.name);
-    if (!act) { missingTables.push(cfg.name); continue; }
-    const missing = expectedCols.filter((c) => !act.has(c));
-    if (missing.length) missingColumns.push({ table: cfg.name, columns: missing });
+    expected.set(cfg.name, cfg.columns.map((c) => c.name));
   }
 
-  console.info(`\n=== Auditoria de schema — Drizzle × banco "${dbName}" ===`);
-  console.info(`Tabelas Drizzle inspecionadas: ${drizzleTables} | Tabelas no banco: ${actual.size}\n`);
+  const { missingTables, absentColumns, mismatchColumns } = diffSchema(expected, actual);
 
-  if (missingTables.length === 0 && missingColumns.length === 0) {
-    console.info("✅ Alinhado: todas as tabelas e colunas declaradas no Drizzle existem no banco.");
+  console.info(`\n=== Auditoria de schema — Drizzle × banco "${dbName}" ===`);
+  console.info(`Tabelas Drizzle: ${expected.size} | Tabelas no banco: ${actual.size}\n`);
+
+  if (!missingTables.length && !absentColumns.length && !mismatchColumns.length) {
+    console.info("✅ Alinhado: todas as tabelas/colunas do Drizzle existem no banco com o mesmo nome.");
     process.exit(0);
   }
 
   if (missingTables.length) {
-    console.info(`❌ TABELAS ausentes no banco (${missingTables.length}):`);
-    for (const t of missingTables.sort()) console.info(`   - ${t}`);
+    console.info(`❌ TABELAS ausentes no banco (${missingTables.length}) — criar via migration:`);
+    for (const t of missingTables) console.info(`   - ${t}`);
     console.info("");
   }
-  if (missingColumns.length) {
-    console.info(`⚠️  COLUNAS ausentes no banco (${missingColumns.length} tabela(s)):`);
-    for (const m of missingColumns.sort((a, b) => a.table.localeCompare(b.table))) {
+  if (absentColumns.length) {
+    const n = absentColumns.reduce((s, m) => s + m.columns.length, 0);
+    console.info(`❌ COLUNAS realmente AUSENTES (${n}) — não existem no banco, ADICIONAR via migration:`);
+    for (const m of [...absentColumns].sort((a, b) => a.table.localeCompare(b.table))) {
       console.info(`   - ${m.table}: ${m.columns.join(", ")}`);
     }
     console.info("");
   }
+  if (mismatchColumns.length) {
+    const n = mismatchColumns.reduce((s, m) => s + m.pairs.length, 0);
+    console.info(`⚠️  COLUNAS com NOME DIVERGENTE (${n}) — existem no banco com outro nome/caixa`);
+    console.info(`    (ex.: Drizzle camelCase × banco snake_case). Corrigir o SCHEMA Drizzle, NÃO o banco:`);
+    for (const m of [...mismatchColumns].sort((a, b) => a.table.localeCompare(b.table))) {
+      console.info(`   - ${m.table}: ${m.pairs.map((p) => `${p.drizzle} → ${p.db}`).join(", ")}`);
+    }
+    console.info("");
+  }
 
-  const totalCols = missingColumns.reduce((s, m) => s + m.columns.length, 0);
-  console.info(`Resumo: ${missingTables.length} tabela(s) ausente(s), ${totalCols} coluna(s) ausente(s).`);
-  console.info("Ação sugerida: gerar/rodar as migrations pendentes (drizzle-kit) ou alinhar o banco ao Drizzle.");
+  const absN = absentColumns.reduce((s, m) => s + m.columns.length, 0);
+  const misN = mismatchColumns.reduce((s, m) => s + m.pairs.length, 0);
+  console.info(`Resumo: ${missingTables.length} tabela(s) ausente(s) · ${absN} coluna(s) ausente(s) · ${misN} coluna(s) com nome divergente.`);
+  console.info("Ação: 'ausentes' → migration para criar/adicionar; 'nome divergente' → alinhar o Drizzle ao banco (snake_case). Revisar em staging antes de produção.");
   process.exit(1);
 }
 
