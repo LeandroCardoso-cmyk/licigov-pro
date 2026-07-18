@@ -100,19 +100,30 @@ describe("Objetivo 1 — Grounding real (Prompt Builder consome o ContextPackage
 
 describe("Objetivo 1 — Engine injeta os trechos no prompt enviado ao provider", () => {
   let captured: AIMessage[] = [];
+  let capturedMaxTokens: number | undefined;
   beforeEach(() => {
     captured = [];
+    capturedMaxTokens = undefined;
     const capturing: AIProvider = {
       name: "capturing",
       generateText: async () => "",
       generate: async (o: AIGenerateOptions): Promise<AIGenerateResult> => {
         captured = o.messages;
+        capturedMaxTokens = o.maxTokens;
         return { text: "resposta de teste fundamentada", finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } };
       },
     };
     setActiveProvider(capturing);
   });
   afterEach(() => setActiveProvider(null));
+
+  it("respeita o teto de tokens de saída (maxOutputTokens) — controle de custo por chamada", async () => {
+    await executeCognitiveTask({ task: "LEGAL_ANALYSIS", tenantId: 42, userId: "1", correlationId: "c-cap", query: "x", maxOutputTokens: 1024 });
+    expect(capturedMaxTokens).toBe(1024);
+    // sem o teto, cai no comportamento anterior (janela da política, muito maior)
+    await executeCognitiveTask({ task: "LEGAL_ANALYSIS", tenantId: 42, userId: "1", correlationId: "c-nocap", query: "x" });
+    expect(capturedMaxTokens).toBeGreaterThan(1024);
+  });
 
   it("o prompt efetivamente enviado ao provider contém os trechos verbatim + regras de fundamentação", async () => {
     await executeCognitiveTask({ task: "LEGAL_ANALYSIS", tenantId: 42, userId: "1", correlationId: "c-eng-1", query: "Quando o ETP é obrigatório?", contextPackage: pkg(true) });
@@ -201,12 +212,12 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
       organizationId: 4242, userId: 1, question: "Como funciona o tratamento favorecido da LC 123?",
       correlationId: "c-concise", now: () => 0, createdAt: () => "2026-01-01T00:00:00.000Z",
     });
-    // cada trecho é truncado (≈900 chars + marcador) — não despeja chunks inteiros
-    for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(910);
-    // no máximo 2 trechos por documento
+    // cada trecho é truncado (≈700 chars + marcador) — não despeja chunks inteiros
+    for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(710);
+    // no máximo 1 trecho por documento (resposta ≈ 1 página)
     const byDoc = new Map<string, number>();
     for (const p of a.passages) byDoc.set(p.documentId, (byDoc.get(p.documentId) ?? 0) + 1);
-    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(2);
+    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(1);
   });
 
   it("userContext explícito tem precedência sobre o perfil da organização", async () => {

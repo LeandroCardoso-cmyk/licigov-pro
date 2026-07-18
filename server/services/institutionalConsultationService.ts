@@ -52,10 +52,13 @@ export function setInstitutionalProfileResolverForTests(r: InstitutionalProfileR
 }
 
 const TASK_TYPE = "LEGAL_ANALYSIS";
-// Limites de recuperação para a consulta: mantêm a resposta OBJETIVA (evitam despejar chunks inteiros
-// de manuais/leis — o que gerava respostas de dezenas de páginas). As fontes completas seguem no corpus.
-const CONSULTATION_MAX_PASSAGES_PER_DOC = 2;
-const CONSULTATION_MAX_PASSAGE_CHARS = 900;
+// Limites da consulta: mantêm a resposta OBJETIVA (≈1 página) e CONTROLAM CUSTO por chamada — evitam
+// despejar chunks inteiros de manuais/leis e limitam a geração do modelo. As fontes completas seguem
+// no corpus.
+const CONSULTATION_MAX_PASSAGES_PER_DOC = 1;
+const CONSULTATION_MAX_PASSAGE_CHARS = 700;
+/** Teto RÍGIDO de tokens de saída (~1 página) — custo por consulta não pode explodir ao escalar. */
+const CONSULTATION_MAX_OUTPUT_TOKENS = 1024;
 
 function buildSources(tenantId: number, consultationId: string, pkg: ContextPackage, createdAt: string): ConsultationSource[] {
   const docById = new Map(pkg.documents.map(d => [d.documentId, d]));
@@ -140,7 +143,7 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
       tenantId: params.organizationId, businessDomain: CONSULTATION_DOMAIN_CODE, taskType: TASK_TYPE,
       query: question, correlationId: params.correlationId, userContext,
       maxPassagesPerDocument: CONSULTATION_MAX_PASSAGES_PER_DOC, maxPassageChars: CONSULTATION_MAX_PASSAGE_CHARS,
-      cognitive: { task: "LEGAL_ANALYSIS", userId: String(params.userId), query: question },
+      cognitive: { task: "LEGAL_ANALYSIS", userId: String(params.userId), query: question, maxOutputTokens: CONSULTATION_MAX_OUTPUT_TOKENS },
     });
     const t1 = clock();
 

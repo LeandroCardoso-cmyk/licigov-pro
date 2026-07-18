@@ -36,12 +36,13 @@ const JURIS_BADGE: Record<string, string> = {
 export default function TirarDuvidasHome() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<ConsultationAnswer | null>(null);
+  const [showPassages, setShowPassages] = useState(false);
 
   const suggestionsQuery = trpc.institutionalConsultation.suggestions.useQuery();
   const utils = trpc.useUtils();
   const historyQuery = trpc.institutionalConsultation.history.useQuery({ limit: 8 });
   const ask = trpc.institutionalConsultation.ask.useMutation({
-    onSuccess: (data) => { setAnswer(data.answer as ConsultationAnswer); void utils.institutionalConsultation.history.invalidate(); },
+    onSuccess: (data) => { setAnswer(data.answer as ConsultationAnswer); setShowPassages(false); void utils.institutionalConsultation.history.invalidate(); },
   });
 
   const submit = (q: string) => {
@@ -162,18 +163,27 @@ export default function TirarDuvidasHome() {
             </div>
           )}
 
-          {/* Trechos utilizados (texto oficial verbatim) */}
+          {/* Trechos utilizados (texto oficial verbatim) — recolhidos por padrão (resposta ≈ 1 página) */}
           {answer.passages.length > 0 && (
             <div className="rounded-lg border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-800">Trechos utilizados</h3>
-              <div className="mt-3 space-y-3">
-                {answer.passages.map((p, i) => (
-                  <blockquote key={`${p.documentId}-${p.identifier}-${i}`} className="border-l-2 border-indigo-200 pl-3">
-                    <div className="text-xs font-medium text-indigo-700">{p.identifier}</div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{p.text}</p>
-                  </blockquote>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPassages((v) => !v)}
+                className="flex w-full items-center justify-between text-sm font-semibold text-gray-800"
+              >
+                <span>Trechos utilizados ({answer.passages.length})</span>
+                <span className="text-xs font-normal text-indigo-600 hover:underline">{showPassages ? "ocultar" : "ver trechos"}</span>
+              </button>
+              {showPassages && (
+                <div className="mt-3 space-y-3">
+                  {answer.passages.map((p, i) => (
+                    <blockquote key={`${p.documentId}-${p.identifier}-${i}`} className="border-l-2 border-indigo-200 pl-3">
+                      <div className="text-xs font-medium text-indigo-700">{p.identifier}</div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{p.text}</p>
+                    </blockquote>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

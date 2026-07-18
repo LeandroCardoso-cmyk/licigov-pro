@@ -196,6 +196,12 @@ export interface CognitiveTaskInput {
    * hierarquia/corpus. Opcional: ausência preserva o comportamento anterior (zero regressões).
    */
   readonly contextPackage?: ContextPackage;
+  /**
+   * Teto RÍGIDO de tokens de saída do modelo (controle de custo/tamanho por chamada). Quando ausente,
+   * usa `policy.maxContext` (comportamento anterior). O `maxContext` é a janela de contexto, não o
+   * limite de saída — por isso a consulta define este teto explicitamente.
+   */
+  readonly maxOutputTokens?: number;
 }
 
 export interface CognitiveExecution {
@@ -279,7 +285,8 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
       { role: "system", content: prompt.system },
       { role: "user", content: prompt.user },
     ],
-    maxTokens: policy.maxContext,
+    // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
+    maxTokens: input.maxOutputTokens ?? policy.maxContext,
   });
   const latencyMs = Math.max(0, Date.now() - startedAt);
   push("llm", "applied", `Inferência concluída (${resolution.provider.name}).`);

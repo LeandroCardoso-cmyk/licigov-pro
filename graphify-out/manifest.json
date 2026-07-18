@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784336074.4306636,
-    "ast_hash": "cef23ea038a5bfe24dace3d883773996",
+    "mtime": 1784352221.6860843,
+    "ast_hash": "37143da6373d7b51fe48f3cca634ae1b",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -8630,8 +8630,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
-    "mtime": 1784351572.8260992,
-    "ast_hash": "f48533571bd0815bfa8e1e7429082aed",
+    "mtime": 1784352247.7020836,
+    "ast_hash": "f3b34b68ebf7dc8cd0f9ed57c0803dec",
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
@@ -9515,8 +9515,8 @@
     "semantic_hash": ""
   },
   "client/src/components/tirar-duvidas/TirarDuvidasHome.tsx": {
-    "mtime": 1784320061.6758032,
-    "ast_hash": "dcb2134520a630e492f6092e581f44bd",
+    "mtime": 1784352290.2740827,
+    "ast_hash": "2e014d0c5b81addd0b70fce86ca75d83",
     "semantic_hash": ""
   },
   "client/src/pages/TirarDuvidas.tsx": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784351556.5340996,
-    "ast_hash": "e95581dfa1c7f8cb65f7974fbb7fca19",
+    "mtime": 1784352239.3660839,
+    "ast_hash": "81ecccfc63eccb640e0618484ac4281c",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
-    "mtime": 1784351609.5500982,
-    "ast_hash": "9ddb85c52be323d7cf127c331eb51ada",
+    "mtime": 1784352322.178082,
+    "ast_hash": "b78d758ddbc2e2d9fd5587b8e3e61881",
     "semantic_hash": ""
   },
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {

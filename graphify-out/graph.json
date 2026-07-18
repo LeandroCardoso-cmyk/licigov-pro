@@ -1508,7 +1508,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_taskdashboard",
-      "community": 1,
+      "community": 428,
       "norm_label": "taskdashboard.tsx"
     },
     {
@@ -1518,7 +1518,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_taskdashboard_taskdashboard",
-      "community": 1,
+      "community": 428,
       "norm_label": "taskdashboard()"
     },
     {
@@ -1528,7 +1528,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskdetailmodal.tsx"
     },
     {
@@ -1538,7 +1538,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal_taskdetailmodalprops",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskdetailmodalprops"
     },
     {
@@ -1548,7 +1548,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal_taskdetailmodal",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskdetailmodal()"
     },
     {
@@ -1558,7 +1558,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_taskkanban",
-      "community": 428,
+      "community": 135,
       "norm_label": "taskkanban.tsx"
     },
     {
@@ -1568,7 +1568,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_taskkanban_columns",
-      "community": 428,
+      "community": 135,
       "norm_label": "columns"
     },
     {
@@ -1578,7 +1578,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_taskkanban_taskkanban",
-      "community": 428,
+      "community": 135,
       "norm_label": "taskkanban()"
     },
     {
@@ -6988,7 +6988,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel",
-      "community": 428,
+      "community": 29,
       "norm_label": "copilotcomparisonpanel.tsx"
     },
     {
@@ -6998,7 +6998,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_copilot_meta",
-      "community": 428,
+      "community": 29,
       "norm_label": "copilot_meta"
     },
     {
@@ -7008,7 +7008,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_metafor",
-      "community": 428,
+      "community": 29,
       "norm_label": "metafor()"
     },
     {
@@ -7018,7 +7018,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_copilotcomparisonpanel",
-      "community": 428,
+      "community": 29,
       "norm_label": "copilotcomparisonpanel()"
     },
     {
@@ -11338,7 +11338,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "client_src_components_item_tr_itemtrdetailsheet_itemtrdetailsheet",
-      "community": 672,
+      "community": 428,
       "norm_label": "itemtrdetailsheet()"
     },
     {
@@ -11438,7 +11438,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "client_src_components_item_tr_itemtrgrid_itemtrgrid",
-      "community": 672,
+      "community": 428,
       "norm_label": "itemtrgrid()"
     },
     {
@@ -14288,7 +14288,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_new_contract_contractstepper",
-      "community": 672,
+      "community": 685,
       "norm_label": "contractstepper.tsx"
     },
     {
@@ -14298,7 +14298,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "client_src_components_new_contract_contractstepper_labels",
-      "community": 672,
+      "community": 685,
       "norm_label": "labels"
     },
     {
@@ -14308,7 +14308,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "client_src_components_new_contract_contractstepper_contractstepper",
-      "community": 672,
+      "community": 685,
       "norm_label": "contractstepper()"
     },
     {
@@ -14338,7 +14338,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_new_contract_step1basicdata_step1basicdata",
-      "community": 672,
+      "community": 685,
       "norm_label": "step1basicdata()"
     },
     {
@@ -14368,7 +14368,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_new_contract_step2contractor_step2contractor",
-      "community": 672,
+      "community": 685,
       "norm_label": "step2contractor()"
     },
     {
@@ -14378,7 +14378,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_new_contract_step3validity",
-      "community": 672,
+      "community": 685,
       "norm_label": "step3validity.tsx"
     },
     {
@@ -14388,7 +14388,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "client_src_components_new_contract_step3validity_props",
-      "community": 672,
+      "community": 685,
       "norm_label": "props"
     },
     {
@@ -14398,7 +14398,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_new_contract_step3validity_step3validity",
-      "community": 672,
+      "community": 685,
       "norm_label": "step3validity()"
     },
     {
@@ -16388,7 +16388,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_cachemetricswidget",
-      "community": 7,
+      "community": 315,
       "norm_label": "cachemetricswidget.tsx"
     },
     {
@@ -16398,7 +16398,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_cachemetricswidget_cachemetricswidgetprops",
-      "community": 7,
+      "community": 315,
       "norm_label": "cachemetricswidgetprops"
     },
     {
@@ -16408,7 +16408,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_cachemetricswidget_cachemetricswidget",
-      "community": 7,
+      "community": 315,
       "norm_label": "cachemetricswidget()"
     },
     {
@@ -16418,7 +16418,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_ingestionstatuswidget",
-      "community": 7,
+      "community": 315,
       "norm_label": "ingestionstatuswidget.tsx"
     },
     {
@@ -16428,7 +16428,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_ingestionstatuswidget_ingestionstatuswidgetprops",
-      "community": 7,
+      "community": 315,
       "norm_label": "ingestionstatuswidgetprops"
     },
     {
@@ -16438,7 +16438,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_ingestionstatuswidget_statusbadge",
-      "community": 7,
+      "community": 315,
       "norm_label": "statusbadge"
     },
     {
@@ -16448,7 +16448,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_ingestionstatuswidget_ingestionstatuswidget",
-      "community": 7,
+      "community": 315,
       "norm_label": "ingestionstatuswidget()"
     },
     {
@@ -16458,7 +16458,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_productionreadinesspage",
-      "community": 7,
+      "community": 315,
       "norm_label": "productionreadinesspage.tsx"
     },
     {
@@ -16468,7 +16468,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_productionreadinesspage_productionreadinesspageprops",
-      "community": 7,
+      "community": 315,
       "norm_label": "productionreadinesspageprops"
     },
     {
@@ -16478,7 +16478,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_productionreadinesspage_productionreadinesspage",
-      "community": 7,
+      "community": 315,
       "norm_label": "productionreadinesspage()"
     },
     {
@@ -16488,7 +16488,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_systemhealthcard",
-      "community": 7,
+      "community": 315,
       "norm_label": "systemhealthcard.tsx"
     },
     {
@@ -16498,7 +16498,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_systemhealthcard_healthcheck",
-      "community": 7,
+      "community": 315,
       "norm_label": "healthcheck"
     },
     {
@@ -16508,7 +16508,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_systemhealthcard_systemhealthcardprops",
-      "community": 7,
+      "community": 315,
       "norm_label": "systemhealthcardprops"
     },
     {
@@ -16518,7 +16518,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_systemhealthcard_statuscolors",
-      "community": 7,
+      "community": 315,
       "norm_label": "statuscolors"
     },
     {
@@ -16528,7 +16528,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_production_readiness_systemhealthcard_systemhealthcard",
-      "community": 7,
+      "community": 315,
       "norm_label": "systemhealthcard()"
     },
     {
@@ -17488,7 +17488,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "client_src_components_review_workspace_reviewdetailpanel_reviewdetailpanel",
-      "community": 672,
+      "community": 428,
       "norm_label": "reviewdetailpanel()"
     },
     {
@@ -17538,7 +17538,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_review_workspace_reviewqueueitem",
-      "community": 672,
+      "community": 428,
       "norm_label": "reviewqueueitem.tsx"
     },
     {
@@ -17568,7 +17568,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "client_src_components_review_workspace_reviewqueueitem_reviewqueueitemprops",
-      "community": 672,
+      "community": 428,
       "norm_label": "reviewqueueitemprops"
     },
     {
@@ -17578,7 +17578,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "client_src_components_review_workspace_reviewqueueitem_statelabels",
-      "community": 672,
+      "community": 428,
       "norm_label": "statelabels"
     },
     {
@@ -17588,7 +17588,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "client_src_components_review_workspace_reviewqueueitem_reviewqueueitem",
-      "community": 672,
+      "community": 428,
       "norm_label": "reviewqueueitem()"
     },
     {
@@ -18728,7 +18728,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection",
-      "community": 1,
+      "community": 428,
       "norm_label": "taskchartssection.tsx"
     },
     {
@@ -18738,7 +18738,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_priority_colors",
-      "community": 1,
+      "community": 428,
       "norm_label": "priority_colors"
     },
     {
@@ -18748,7 +18748,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_status_colors",
-      "community": 1,
+      "community": 428,
       "norm_label": "status_colors"
     },
     {
@@ -18758,7 +18758,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_chartentry",
-      "community": 1,
+      "community": 428,
       "norm_label": "chartentry"
     },
     {
@@ -18768,7 +18768,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_typeentry",
-      "community": 1,
+      "community": 428,
       "norm_label": "typeentry"
     },
     {
@@ -18778,7 +18778,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_monthlyentry",
-      "community": 1,
+      "community": 428,
       "norm_label": "monthlyentry"
     },
     {
@@ -18788,7 +18788,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_props",
-      "community": 1,
+      "community": 428,
       "norm_label": "props"
     },
     {
@@ -18798,7 +18798,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskchartssection_taskchartssection",
-      "community": 1,
+      "community": 428,
       "norm_label": "taskchartssection()"
     },
     {
@@ -18828,7 +18828,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_task_dashboard_taskkpigrid_taskkpigrid",
-      "community": 1,
+      "community": 428,
       "norm_label": "taskkpigrid()"
     },
     {
@@ -18918,7 +18918,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskcomments_taskcomments",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskcomments()"
     },
     {
@@ -18928,7 +18928,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskinfopanel.tsx"
     },
     {
@@ -18938,7 +18938,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_priority_colors",
-      "community": 1,
+      "community": 135,
       "norm_label": "priority_colors"
     },
     {
@@ -18948,7 +18948,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_priority_labels",
-      "community": 1,
+      "community": 135,
       "norm_label": "priority_labels"
     },
     {
@@ -18958,7 +18958,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_status_colors",
-      "community": 1,
+      "community": 135,
       "norm_label": "status_colors"
     },
     {
@@ -18968,7 +18968,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_status_labels",
-      "community": 1,
+      "community": 135,
       "norm_label": "status_labels"
     },
     {
@@ -18978,7 +18978,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_task",
-      "community": 1,
+      "community": 135,
       "norm_label": "task"
     },
     {
@@ -18988,7 +18988,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_taskinfopanel",
-      "community": 1,
+      "community": 135,
       "norm_label": "taskinfopanel()"
     },
     {
@@ -19028,7 +19028,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "client_src_components_task_detail_tasklinkedprocess_tasklinkedprocess",
-      "community": 1,
+      "community": 135,
       "norm_label": "tasklinkedprocess()"
     },
     {
@@ -19038,7 +19038,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_kanbancolumn",
-      "community": 428,
+      "community": 135,
       "norm_label": "kanbancolumn.tsx"
     },
     {
@@ -19048,7 +19048,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_kanbancolumn_column",
-      "community": 428,
+      "community": 135,
       "norm_label": "column"
     },
     {
@@ -19058,7 +19058,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_kanbancolumn_props",
-      "community": 428,
+      "community": 135,
       "norm_label": "props"
     },
     {
@@ -19068,7 +19068,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_kanbancolumn_kanbancolumn",
-      "community": 428,
+      "community": 135,
       "norm_label": "kanbancolumn()"
     },
     {
@@ -19078,7 +19078,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_sortabletaskcard",
-      "community": 428,
+      "community": 135,
       "norm_label": "sortabletaskcard.tsx"
     },
     {
@@ -19088,7 +19088,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_sortabletaskcard_props",
-      "community": 428,
+      "community": 135,
       "norm_label": "props"
     },
     {
@@ -19098,7 +19098,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_sortabletaskcard_sortabletaskcard",
-      "community": 428,
+      "community": 135,
       "norm_label": "sortabletaskcard()"
     },
     {
@@ -19118,7 +19118,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_taskcard_taskstatus",
-      "community": 428,
+      "community": 135,
       "norm_label": "taskstatus"
     },
     {
@@ -19138,7 +19138,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_taskcard_task",
-      "community": 428,
+      "community": 135,
       "norm_label": "task"
     },
     {
@@ -19158,7 +19158,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_taskcard_getdeadlinecolor",
-      "community": 428,
+      "community": 135,
       "norm_label": "getdeadlinecolor()"
     },
     {
@@ -19178,7 +19178,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "client_src_components_task_kanban_taskcard_taskcard",
-      "community": 428,
+      "community": 135,
       "norm_label": "taskcard()"
     },
     {
@@ -19598,7 +19598,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge",
-      "community": 672,
+      "community": 428,
       "norm_label": "confidencebadge.tsx"
     },
     {
@@ -19608,7 +19608,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge_confidencelevel",
-      "community": 672,
+      "community": 428,
       "norm_label": "confidencelevel"
     },
     {
@@ -19618,7 +19618,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge_confidencebadgeprops",
-      "community": 672,
+      "community": 428,
       "norm_label": "confidencebadgeprops"
     },
     {
@@ -19628,7 +19628,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge_levelconfig",
-      "community": 672,
+      "community": 428,
       "norm_label": "levelconfig"
     },
     {
@@ -19638,7 +19638,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge_scoretolevel",
-      "community": 672,
+      "community": 428,
       "norm_label": "scoretolevel()"
     },
     {
@@ -19648,7 +19648,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "client_src_components_ui_confidencebadge_confidencebadge",
-      "community": 672,
+      "community": 428,
       "norm_label": "confidencebadge()"
     },
     {
@@ -19708,7 +19708,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_ui_emptystate",
-      "community": 334,
+      "community": 151,
       "norm_label": "emptystate.tsx"
     },
     {
@@ -19718,7 +19718,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "client_src_components_ui_emptystate_props",
-      "community": 334,
+      "community": 151,
       "norm_label": "props"
     },
     {
@@ -19728,7 +19728,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "client_src_components_ui_emptystate_emptystate",
-      "community": 334,
+      "community": 151,
       "norm_label": "emptystate()"
     },
     {
@@ -20678,7 +20678,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_ui_checkbox",
-      "community": 672,
+      "community": 685,
       "norm_label": "checkbox.tsx"
     },
     {
@@ -20688,7 +20688,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "client_src_components_ui_checkbox_checkbox",
-      "community": 672,
+      "community": 685,
       "norm_label": "checkbox()"
     },
     {
@@ -25228,7 +25228,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_lib_validatecnpj",
-      "community": 5,
+      "community": 151,
       "norm_label": "validatecnpj.ts"
     },
     {
@@ -25238,7 +25238,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_lib_validatecnpj_validatecnpj",
-      "community": 5,
+      "community": 151,
       "norm_label": "validatecnpj()"
     },
     {
@@ -25248,7 +25248,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "client_src_lib_validatecnpj_formatcnpj",
-      "community": 5,
+      "community": 151,
       "norm_label": "formatcnpj()"
     },
     {
@@ -25628,7 +25628,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_pages_dashboard",
-      "community": 334,
+      "community": 151,
       "norm_label": "dashboard.tsx"
     },
     {
@@ -25638,7 +25638,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_pages_dashboard_dashboard",
-      "community": 334,
+      "community": 151,
       "norm_label": "dashboard()"
     },
     {
@@ -25768,7 +25768,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_pages_documentsettings_documentsettings",
-      "community": 5,
+      "community": 151,
       "norm_label": "documentsettings()"
     },
     {
@@ -25988,7 +25988,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_pages_newcontract",
-      "community": 672,
+      "community": 685,
       "norm_label": "newcontract.tsx"
     },
     {
@@ -25998,7 +25998,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_pages_newcontract_step_titles",
-      "community": 672,
+      "community": 685,
       "norm_label": "step_titles"
     },
     {
@@ -26008,7 +26008,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_pages_newcontract_step_descriptions",
-      "community": 672,
+      "community": 685,
       "norm_label": "step_descriptions"
     },
     {
@@ -26018,7 +26018,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_pages_newcontract_newcontract",
-      "community": 672,
+      "community": 685,
       "norm_label": "newcontract()"
     },
     {
@@ -33288,7 +33288,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "package_dependencies_bcrypt",
-      "community": 781,
+      "community": 715,
       "norm_label": "bcrypt"
     },
     {
@@ -33298,7 +33298,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "bcrypt",
-      "community": 781,
+      "community": 715,
       "norm_label": "bcrypt"
     },
     {
@@ -33868,7 +33868,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "package_dependencies_react_hook_form",
-      "community": 715,
+      "community": 710,
       "norm_label": "react-hook-form"
     },
     {
@@ -33878,7 +33878,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "react_hook_form",
-      "community": 715,
+      "community": 710,
       "norm_label": "react-hook-form"
     },
     {
@@ -34478,7 +34478,7 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "package_devdependencies_autoprefixer",
-      "community": 148,
+      "community": 709,
       "norm_label": "autoprefixer"
     },
     {
@@ -34488,7 +34488,7 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "autoprefixer",
-      "community": 148,
+      "community": 709,
       "norm_label": "autoprefixer"
     },
     {
@@ -34598,7 +34598,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "package_devdependencies_prettier",
-      "community": 812,
+      "community": 148,
       "norm_label": "prettier"
     },
     {
@@ -34608,7 +34608,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "prettier",
-      "community": 812,
+      "community": 148,
       "norm_label": "prettier"
     },
     {
@@ -57416,7 +57416,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_institutionalintegration_institutionalcontextresolver",
-      "community": 74,
+      "community": 100,
       "norm_label": "institutionalcontextresolver.ts"
     },
     {
@@ -57426,7 +57426,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_domain_institutionalintegration_institutionalcontextresolver_usercontext",
-      "community": 74,
+      "community": 100,
       "norm_label": "usercontext"
     },
     {
@@ -59836,7 +59836,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "server_domain_knowledge_knowledgedocument_createknowledgedocument",
-      "community": 533,
+      "community": 104,
       "norm_label": "createknowledgedocument()"
     },
     {
@@ -61366,7 +61366,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine",
-      "community": 104,
+      "community": 690,
       "norm_label": "validationengine.ts"
     },
     {
@@ -61376,7 +61376,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_validationseverity",
-      "community": 104,
+      "community": 690,
       "norm_label": "validationseverity"
     },
     {
@@ -61386,7 +61386,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_knowledgevalidationresult",
-      "community": 104,
+      "community": 690,
       "norm_label": "knowledgevalidationresult"
     },
     {
@@ -61396,7 +61396,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_knowledgevalidationrule",
-      "community": 104,
+      "community": 690,
       "norm_label": "knowledgevalidationrule"
     },
     {
@@ -61406,7 +61406,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_knowledgevalidationregistry",
-      "community": 104,
+      "community": 690,
       "norm_label": "knowledgevalidationregistry"
     },
     {
@@ -61416,7 +61416,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_createvalidationregistry",
-      "community": 104,
+      "community": 690,
       "norm_label": "createvalidationregistry()"
     },
     {
@@ -61426,7 +61426,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_registerrule",
-      "community": 104,
+      "community": 690,
       "norm_label": "registerrule()"
     },
     {
@@ -61436,7 +61436,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_default_validation_rules",
-      "community": 104,
+      "community": 690,
       "norm_label": "default_validation_rules"
     },
     {
@@ -61446,7 +61446,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_knowledgevalidationengine",
-      "community": 104,
+      "community": 690,
       "norm_label": "knowledgevalidationengine"
     },
     {
@@ -61456,7 +61456,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_knowledgehealthreport",
-      "community": 104,
+      "community": 690,
       "norm_label": "knowledgehealthreport"
     },
     {
@@ -61466,7 +61466,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "server_domain_knowledge_pipeline_validationengine_buildhealthreport",
-      "community": 104,
+      "community": 690,
       "norm_label": "buildhealthreport()"
     },
     {
@@ -65696,7 +65696,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "server_domain_officialcorpus_officialcorpusingestion_ingestnormparams",
-      "community": 104,
+      "community": 74,
       "norm_label": "ingestnormparams"
     },
     {
@@ -65756,7 +65756,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "server_domain_officialcorpus_officialcorpusregistry_officialcorpusregistry",
-      "community": 74,
+      "community": 100,
       "norm_label": "officialcorpusregistry"
     },
     {
@@ -68776,7 +68776,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_requestnotification",
-      "community": 8,
+      "community": 692,
       "norm_label": "requestnotification.ts"
     },
     {
@@ -68786,7 +68786,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_domain_requestnotification_notificationchannel",
-      "community": 8,
+      "community": 692,
       "norm_label": "notificationchannel"
     },
     {
@@ -68796,7 +68796,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_domain_requestnotification_notificationstatus",
-      "community": 8,
+      "community": 692,
       "norm_label": "notificationstatus"
     },
     {
@@ -68806,7 +68806,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "server_domain_requestnotification_requestnotification",
-      "community": 8,
+      "community": 692,
       "norm_label": "requestnotification"
     },
     {
@@ -68826,7 +68826,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "server_domain_requestnotification_markdelivered",
-      "community": 8,
+      "community": 692,
       "norm_label": "markdelivered()"
     },
     {
@@ -68836,7 +68836,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "server_domain_requestnotification_markread",
-      "community": 8,
+      "community": 692,
       "norm_label": "markread()"
     },
     {
@@ -68846,7 +68846,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "server_domain_requestnotification_ischannelimplemented",
-      "community": 8,
+      "community": 692,
       "norm_label": "ischannelimplemented()"
     },
     {
@@ -74346,7 +74346,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_promptorchestrationrouter",
-      "community": 39,
+      "community": 32,
       "norm_label": "promptorchestrationrouter.ts"
     },
     {
@@ -74356,7 +74356,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_routers_promptorchestrationrouter_promptorchestrationrouter",
-      "community": 39,
+      "community": 32,
       "norm_label": "promptorchestrationrouter"
     },
     {
@@ -76281,7 +76281,7 @@
       "label": "CognitiveExecution",
       "file_type": "code",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L201",
+      "source_location": "L207",
       "_origin": "ast",
       "id": "server_services_aiexecutionengine_cognitiveexecution",
       "community": 4,
@@ -76291,7 +76291,7 @@
       "label": "deterministicConfidence()",
       "file_type": "code",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L213",
+      "source_location": "L219",
       "_origin": "ast",
       "id": "server_services_aiexecutionengine_deterministicconfidence",
       "community": 4,
@@ -76301,7 +76301,7 @@
       "label": "executeCognitiveTask()",
       "file_type": "code",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L224",
+      "source_location": "L230",
       "_origin": "ast",
       "id": "server_services_aiexecutionengine_executecognitivetask",
       "community": 4,
@@ -76884,7 +76884,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "server_services_catalogintegrationservice_ingestcatalog",
-      "community": 15,
+      "community": 50,
       "norm_label": "ingestcatalog()"
     },
     {
@@ -77024,7 +77024,7 @@
       "source_location": "L334",
       "_origin": "ast",
       "id": "server_services_catalogintegrationservice_ingestseedcatalog",
-      "community": 15,
+      "community": 50,
       "norm_label": "ingestseedcatalog()"
     },
     {
@@ -86141,7 +86141,7 @@
       "label": "buildSources()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L60",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_buildsources",
       "community": 154,
@@ -86151,7 +86151,7 @@
       "label": "buildSnapshot()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L75",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_buildsnapshot",
       "community": 154,
@@ -86161,7 +86161,7 @@
       "label": "AnswerConsultationParams",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_answerconsultationparams",
       "community": 154,
@@ -86171,7 +86171,7 @@
       "label": "answerConsultation()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L101",
+      "source_location": "L104",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_answerconsultation",
       "community": 154,
@@ -86181,7 +86181,7 @@
       "label": "getConsultationForTenant()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L173",
+      "source_location": "L176",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_getconsultationfortenant",
       "community": 154,
@@ -86191,7 +86191,7 @@
       "label": "getConsultationSources()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L176",
+      "source_location": "L179",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_getconsultationsources",
       "community": 154,
@@ -86201,7 +86201,7 @@
       "label": "listTenantHistory()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L179",
+      "source_location": "L182",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_listtenanthistory",
       "community": 154,
@@ -86211,7 +86211,7 @@
       "label": "listUserHistory()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L182",
+      "source_location": "L185",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_listuserhistory",
       "community": 154,
@@ -86221,7 +86221,7 @@
       "label": "findReplayCandidate()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L185",
+      "source_location": "L188",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_findreplaycandidate",
       "community": 154,
@@ -86231,7 +86231,7 @@
       "label": "replayConsultation()",
       "file_type": "code",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L194",
+      "source_location": "L197",
       "_origin": "ast",
       "id": "server_services_institutionalconsultationservice_replayconsultation",
       "community": 154,
@@ -89184,7 +89184,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "server_services_officialcorpus_officialtextparser_parsednorm",
-      "community": 104,
+      "community": 74,
       "norm_label": "parsednorm"
     },
     {
@@ -91564,7 +91564,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice",
-      "community": 135,
+      "community": 32,
       "norm_label": "prompttemplateservice.ts"
     },
     {
@@ -91574,7 +91574,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_prompttemplate",
-      "community": 135,
+      "community": 32,
       "norm_label": "prompttemplate"
     },
     {
@@ -91584,7 +91584,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_templaterenderresult",
-      "community": 135,
+      "community": 32,
       "norm_label": "templaterenderresult"
     },
     {
@@ -91594,7 +91594,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_templatestore",
-      "community": 135,
+      "community": 32,
       "norm_label": "_templatestore"
     },
     {
@@ -91604,7 +91604,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_sha256",
-      "community": 135,
+      "community": 32,
       "norm_label": "sha256()"
     },
     {
@@ -91614,7 +91614,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_genid",
-      "community": 135,
+      "community": 32,
       "norm_label": "genid()"
     },
     {
@@ -91624,7 +91624,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_extractvariables",
-      "community": 135,
+      "community": 32,
       "norm_label": "extractvariables()"
     },
     {
@@ -91634,7 +91634,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_parseversion",
-      "community": 135,
+      "community": 32,
       "norm_label": "parseversion()"
     },
     {
@@ -91644,7 +91644,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_sortedvariablesjson",
-      "community": 135,
+      "community": 32,
       "norm_label": "sortedvariablesjson()"
     },
     {
@@ -91654,7 +91654,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_createtemplate",
-      "community": 135,
+      "community": 32,
       "norm_label": "createtemplate()"
     },
     {
@@ -91664,7 +91664,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_rendertemplate",
-      "community": 135,
+      "community": 32,
       "norm_label": "rendertemplate()"
     },
     {
@@ -91674,7 +91674,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_versiontemplate",
-      "community": 135,
+      "community": 32,
       "norm_label": "versiontemplate()"
     },
     {
@@ -91684,7 +91684,7 @@
       "source_location": "L176",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_rollbacktemplate",
-      "community": 135,
+      "community": 32,
       "norm_label": "rollbacktemplate()"
     },
     {
@@ -91694,7 +91694,7 @@
       "source_location": "L205",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_approvetemplate",
-      "community": 39,
+      "community": 32,
       "norm_label": "approvetemplate()"
     },
     {
@@ -91704,7 +91704,7 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "server_services_prompttemplateservice_gettemplatesbykey",
-      "community": 39,
+      "community": 32,
       "norm_label": "gettemplatesbykey()"
     },
     {
@@ -114364,7 +114364,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_termos_aditivos_addenda",
-      "community": 700,
+      "community": 660,
       "norm_label": "termos aditivos (addenda)"
     },
     {
@@ -114374,7 +114374,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_tipos_de_aditivo",
-      "community": 700,
+      "community": 660,
       "norm_label": "tipos de aditivo"
     },
     {
@@ -114444,7 +114444,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_exemplo_de_transi\u00e7\u00e3o_de_estado",
-      "community": 700,
+      "community": 660,
       "norm_label": "exemplo de transicao de estado"
     },
     {
@@ -114454,7 +114454,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_princ\u00edpios",
-      "community": 700,
+      "community": 660,
       "norm_label": "principios"
     },
     {
@@ -114464,7 +114464,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_fora_de_escopo",
-      "community": 700,
+      "community": 660,
       "norm_label": "fora de escopo"
     },
     {
@@ -114474,7 +114474,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_apostilles",
-      "community": 660,
+      "community": 656,
       "norm_label": "apostilles.md"
     },
     {
@@ -114574,7 +114574,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_architecture",
-      "community": 660,
+      "community": 656,
       "norm_label": "architecture.md"
     },
     {
@@ -114804,7 +114804,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_imported_contracts",
-      "community": 660,
+      "community": 656,
       "norm_label": "imported-contracts.md"
     },
     {
@@ -115114,7 +115114,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow",
-      "community": 660,
+      "community": 656,
       "norm_label": "workflow.md"
     },
     {
@@ -115174,7 +115174,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_abas_do_workspace",
-      "community": 656,
+      "community": 699,
       "norm_label": "abas do workspace"
     },
     {
@@ -115184,7 +115184,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_1_contrato",
-      "community": 656,
+      "community": 699,
       "norm_label": "1. contrato"
     },
     {
@@ -115194,7 +115194,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_2_aditivos",
-      "community": 656,
+      "community": 699,
       "norm_label": "2. aditivos"
     },
     {
@@ -115204,7 +115204,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_3_apostilamentos",
-      "community": 656,
+      "community": 699,
       "norm_label": "3. apostilamentos"
     },
     {
@@ -115214,7 +115214,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_4_documentos",
-      "community": 656,
+      "community": 699,
       "norm_label": "4. documentos"
     },
     {
@@ -115224,7 +115224,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_5_ocorr\u00eancias",
-      "community": 656,
+      "community": 699,
       "norm_label": "5. ocorrencias"
     },
     {
@@ -131114,7 +131114,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "todo_fase_2_funcionalidades_core_do_mvp",
-      "community": 717,
+      "community": 27,
       "norm_label": "fase 2 - funcionalidades core do mvp"
     },
     {
@@ -131124,7 +131124,7 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "todo_formul\u00e1rio_novo_processo",
-      "community": 717,
+      "community": 27,
       "norm_label": "formulario \"novo processo\""
     },
     {
@@ -131134,7 +131134,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "todo_integra\u00e7\u00e3o_com_ia_google_gemini",
-      "community": 717,
+      "community": 27,
       "norm_label": "integracao com ia (google gemini)"
     },
     {
@@ -131144,7 +131144,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "todo_tela_de_detalhes_do_processo",
-      "community": 717,
+      "community": 27,
       "norm_label": "tela de detalhes do processo"
     },
     {
@@ -131404,7 +131404,7 @@
       "source_location": "L307",
       "_origin": "ast",
       "id": "todo_fase_12_hist\u00f3rico_de_vers\u00f5es",
-      "community": 27,
+      "community": 708,
       "norm_label": "fase 12 - historico de versoes"
     },
     {
@@ -131414,7 +131414,7 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "todo_visualiza\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 27,
+      "community": 708,
       "norm_label": "visualizacao de versoes"
     },
     {
@@ -131424,7 +131424,7 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "todo_restaura\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 27,
+      "community": 708,
       "norm_label": "restauracao de versoes"
     },
     {
@@ -131554,7 +131554,7 @@
       "source_location": "L403",
       "_origin": "ast",
       "id": "todo_fase_17_sistema_de_administra\u00e7\u00e3o",
-      "community": 27,
+      "community": 706,
       "norm_label": "fase 17 - sistema de administracao"
     },
     {
@@ -131564,7 +131564,7 @@
       "source_location": "L405",
       "_origin": "ast",
       "id": "todo_gerenciamento_de_usu\u00e1rios",
-      "community": 27,
+      "community": 706,
       "norm_label": "gerenciamento de usuarios"
     },
     {
@@ -131574,7 +131574,7 @@
       "source_location": "L414",
       "_origin": "ast",
       "id": "todo_auditoria_e_logs",
-      "community": 27,
+      "community": 706,
       "norm_label": "auditoria e logs"
     },
     {
@@ -131964,7 +131964,7 @@
       "source_location": "L673",
       "_origin": "ast",
       "id": "todo_funcionalidades_avan\u00e7adas",
-      "community": 27,
+      "community": 701,
       "norm_label": "funcionalidades avancadas"
     },
     {
@@ -131974,7 +131974,7 @@
       "source_location": "L675",
       "_origin": "ast",
       "id": "todo_dashboard_e_m\u00e9tricas",
-      "community": 27,
+      "community": 701,
       "norm_label": "dashboard e metricas"
     },
     {
@@ -131984,7 +131984,7 @@
       "source_location": "L681",
       "_origin": "ast",
       "id": "todo_notifica\u00e7\u00f5es_por_email",
-      "community": 27,
+      "community": 701,
       "norm_label": "notificacoes por email"
     },
     {
@@ -131994,7 +131994,7 @@
       "source_location": "L687",
       "_origin": "ast",
       "id": "todo_templates_personaliz\u00e1veis",
-      "community": 27,
+      "community": 701,
       "norm_label": "templates personalizaveis"
     },
     {
@@ -133054,7 +133054,7 @@
       "source_location": "L1457",
       "_origin": "ast",
       "id": "todo_fase_14_completar_interface_administrativa",
-      "community": 723,
+      "community": 27,
       "norm_label": "fase 14 - completar interface administrativa"
     },
     {
@@ -133064,7 +133064,7 @@
       "source_location": "L1459",
       "_origin": "ast",
       "id": "todo_tooltip_no_badge_de_plataforma",
-      "community": 723,
+      "community": 27,
       "norm_label": "tooltip no badge de plataforma"
     },
     {
@@ -133074,7 +133074,7 @@
       "source_location": "L1464",
       "_origin": "ast",
       "id": "todo_save_de_instru\u00e7\u00f5es_de_templates",
-      "community": 723,
+      "community": 27,
       "norm_label": "save de instrucoes de templates"
     },
     {
@@ -133084,7 +133084,7 @@
       "source_location": "L1472",
       "_origin": "ast",
       "id": "todo_crud_de_checklists",
-      "community": 723,
+      "community": 27,
       "norm_label": "crud de checklists"
     },
     {
@@ -133134,7 +133134,7 @@
       "source_location": "L1508",
       "_origin": "ast",
       "id": "todo_fase_16_melhorias_finais_antes_de_contrata\u00e7\u00e3o_direta",
-      "community": 27,
+      "community": 705,
       "norm_label": "fase 16 - melhorias finais antes de contratacao direta"
     },
     {
@@ -133144,7 +133144,7 @@
       "source_location": "L1510",
       "_origin": "ast",
       "id": "todo_menu_lateral_com_item_plataformas",
-      "community": 27,
+      "community": 705,
       "norm_label": "menu lateral com item plataformas"
     },
     {
@@ -133154,7 +133154,7 @@
       "source_location": "L1516",
       "_origin": "ast",
       "id": "todo_p\u00e1gina_de_logs_de_publica\u00e7\u00e3o",
-      "community": 27,
+      "community": 705,
       "norm_label": "pagina de logs de publicacao"
     },
     {
@@ -133164,7 +133164,7 @@
       "source_location": "L1525",
       "_origin": "ast",
       "id": "todo_exporta\u00e7\u00e3o_de_relat\u00f3rio_em_pdf",
-      "community": 27,
+      "community": 705,
       "norm_label": "exportacao de relatorio em pdf"
     },
     {
@@ -246639,7 +246639,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L272",
+      "source_location": "L278",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_core_ai_provideradapter_selectprovider"
@@ -274331,7 +274331,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L203",
+      "source_location": "L209",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_cognitiveexecution",
       "target": "server_domain_aiexecutioncontext_aiexecutioncontext",
@@ -274387,7 +274387,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L312",
+      "source_location": "L319",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_aiexecutioncontext_officialreplayhash"
@@ -274409,7 +274409,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L341",
+      "source_location": "L348",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_aiexecutioncontext_createexecutioncontext"
@@ -281858,7 +281858,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L202",
+      "source_location": "L208",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_cognitiveexecution",
       "target": "server_domain_cognitiveresponse_cognitiveresponse",
@@ -281892,7 +281892,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L326",
+      "source_location": "L333",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_cognitiveresponse_createcognitiveresponse"
@@ -281913,7 +281913,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L205",
+      "source_location": "L211",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_cognitiveexecution",
       "target": "server_domain_cognitiveresponse_cognitiveresponsevalidation",
@@ -281947,7 +281947,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L334",
+      "source_location": "L341",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_cognitiveresponse_validatecognitiveresponse"
@@ -282533,7 +282533,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L229",
+      "source_location": "L235",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_cognitivetask_getcognitivetask"
@@ -282577,7 +282577,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L230",
+      "source_location": "L236",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_cognitivetask_isbusinessdomainallowed"
@@ -301884,7 +301884,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L105",
+      "source_location": "L108",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_normalizequestion"
@@ -301906,7 +301906,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L109",
+      "source_location": "L112",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_computeexecutionid"
@@ -301939,7 +301939,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L111",
+      "source_location": "L114",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_computereplayid"
@@ -302115,7 +302115,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L166",
+      "source_location": "L169",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_sanitizeerrormessage"
@@ -302324,7 +302324,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L103",
+      "source_location": "L106",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_sanitizequestion"
@@ -302346,7 +302346,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L147",
+      "source_location": "L150",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_domain_institutionalconsultation_buildconsultationanswer"
@@ -304502,7 +304502,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L206",
+      "source_location": "L212",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_cognitiveexecution",
       "target": "server_domain_institutionalreasoning_institutionalreasoningplan",
@@ -304558,7 +304558,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L250",
+      "source_location": "L256",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_institutionalreasoning_buildreasoningplan"
@@ -304602,7 +304602,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L317",
+      "source_location": "L324",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_institutionalreasoning_splitalternatives"
@@ -305303,7 +305303,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L246",
+      "source_location": "L252",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_domain_institutionalrules_getrulesfortask"
@@ -345201,7 +345201,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L201",
+      "source_location": "L207",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine",
       "target": "server_services_aiexecutionengine_cognitiveexecution",
@@ -345221,7 +345221,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L213",
+      "source_location": "L219",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine",
       "target": "server_services_aiexecutionengine_deterministicconfidence",
@@ -345241,7 +345241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L224",
+      "source_location": "L230",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine",
       "target": "server_services_aiexecutionengine_executecognitivetask",
@@ -345425,7 +345425,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L204",
+      "source_location": "L210",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_cognitiveexecution",
       "target": "server_services_cognitive_cognitiveobservabilityservice_cognitiveobservability",
@@ -345447,7 +345447,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L313",
+      "source_location": "L320",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_services_aiexecutionengine_deterministicconfidence",
@@ -345459,7 +345459,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L342",
+      "source_location": "L349",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_services_cognitive_cognitiveobservabilityservice_recordcognitiveobservability"
@@ -345470,7 +345470,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L265",
+      "source_location": "L271",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_services_cognitive_promptbuilders_getpromptbuilder"
@@ -345481,7 +345481,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "server/services/aiExecutionEngine.ts",
-      "source_location": "L226",
+      "source_location": "L232",
       "weight": 1.0,
       "source": "server_services_aiexecutionengine_executecognitivetask",
       "target": "server_services_itemmatchingengine_stage"
@@ -361267,7 +361267,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L102",
+      "source_location": "L105",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361278,7 +361278,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L186",
+      "source_location": "L189",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_findreplaycandidate",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361289,7 +361289,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L174",
+      "source_location": "L177",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_getconsultationfortenant",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361300,7 +361300,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L177",
+      "source_location": "L180",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_getconsultationsources",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361311,7 +361311,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L180",
+      "source_location": "L183",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_listtenanthistory",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361322,7 +361322,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L183",
+      "source_location": "L186",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_listuserhistory",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361333,7 +361333,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L195",
+      "source_location": "L198",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_replayconsultation",
       "target": "server_services_institutionalconsultationrepository_getconsultationrepository"
@@ -361342,7 +361342,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L101",
+      "source_location": "L104",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_answerconsultation",
@@ -361352,7 +361352,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_answerconsultationparams",
@@ -361362,7 +361362,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L75",
+      "source_location": "L78",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_buildsnapshot",
@@ -361372,7 +361372,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L60",
+      "source_location": "L63",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_buildsources",
@@ -361392,7 +361392,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L185",
+      "source_location": "L188",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_findreplaycandidate",
@@ -361402,7 +361402,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L173",
+      "source_location": "L176",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_getconsultationfortenant",
@@ -361412,7 +361412,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L176",
+      "source_location": "L179",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_getconsultationsources",
@@ -361452,7 +361452,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L179",
+      "source_location": "L182",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_listtenanthistory",
@@ -361462,7 +361462,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L182",
+      "source_location": "L185",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_listuserhistory",
@@ -361472,7 +361472,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L194",
+      "source_location": "L197",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice",
       "target": "server_services_institutionalconsultationservice_replayconsultation",
@@ -361558,7 +361558,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L139",
+      "source_location": "L142",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_services_institutionalconsultationservice_getofficialcorpus",
@@ -361580,7 +361580,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L151",
+      "source_location": "L154",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_services_institutionalconsultationservice_buildsources",
@@ -361591,7 +361591,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L160",
+      "source_location": "L163",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_services_institutionalconsultationservice_buildsnapshot",
@@ -361603,7 +361603,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L139",
+      "source_location": "L142",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_answerconsultation",
       "target": "server_services_institutionalintegration_institutionalknowledgeintegration_executecognitivetaskwithinstitutionalcontext"
@@ -361613,7 +361613,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/institutionalConsultationService.ts",
-      "source_location": "L198",
+      "source_location": "L201",
       "weight": 1.0,
       "source": "server_services_institutionalconsultationservice_replayconsultation",
       "target": "server_services_institutionalconsultationservice_answerconsultation",
@@ -413669,5 +413669,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "49a574441021da85eb674aac7fcd801153152f4f"
+  "built_at_commit": "c223b4d620eccf0fafb6c45a1397914adbf61119"
 }
