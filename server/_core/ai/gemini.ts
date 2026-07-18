@@ -27,7 +27,7 @@ export class GeminiProvider implements AIProvider {
   private readonly client: GoogleGenerativeAI;
   private readonly modelId: string;
 
-  constructor(apiKey: string, modelId = "gemini-2.5-pro") {
+  constructor(apiKey: string, modelId = "gemini-2.5-flash") {
     if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
     this.client = new GoogleGenerativeAI(apiKey);
     this.modelId = modelId;

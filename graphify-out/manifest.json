@@ -3875,7 +3875,7 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1783966461.9463065,
+    "mtime": 1784345581.9111328,
     "ast_hash": "63d659f5ed804130957fd8424e4f2380",
     "semantic_hash": ""
   },
@@ -4115,8 +4115,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1782612419.2789898,
-    "ast_hash": "905b39211dfe7e5934e9d3f2bd2cc8b0",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "e453ac0e103d05d60b4eed717b6a898b",
     "semantic_hash": ""
   },
   "server/_core/ai/provider.ts": {
@@ -4210,8 +4210,8 @@
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1782612419.2824268,
-    "ast_hash": "9f160a43c646939bbc0826731943d315",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "430139eac26f4eb33ef4d24d75f133ab",
     "semantic_hash": ""
   },
   "server/config/app.ts": {
@@ -6440,8 +6440,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1784062146.3336432,
-    "ast_hash": "8f9b8905e926cafc88f03905e5fd9764",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "5f3e4b51b0c1488aa2713d26f01da492",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -8555,8 +8555,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/executionPolicy.ts": {
-    "mtime": 1784209675.3517764,
-    "ast_hash": "3e3151d14cb6e6b49d74def7e33b010c",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "a738ebc265ddfe8d09f1534475241d29",
     "semantic_hash": ""
   },
   "server/_core/ai/mockProvider.ts": {
@@ -8565,8 +8565,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/providerAdapter.ts": {
-    "mtime": 1784211033.9918363,
-    "ast_hash": "914b2719d86099c78569710300d967cb",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "f2b2f235ba4986e6c7cf8523f9bf1df6",
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
@@ -8620,8 +8620,8 @@
     "semantic_hash": ""
   },
   "server/domain/cognitiveTask.ts": {
-    "mtime": 1784222203.0088599,
-    "ast_hash": "969131650da81b129694be99708c1001",
+    "mtime": 1784345581.9294984,
+    "ast_hash": "d7ecfe6ba2436a8425743da7814020f2",
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveObservabilityService.ts": {
@@ -9587,6 +9587,16 @@
   "server/__tests__/integration/consultation-mysql-smoke.test.ts": {
     "mtime": 1784341207.1296742,
     "ast_hash": "11cdecb09c18152f0694e7e521950723",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/ai-provider-config.test.ts": {
+    "mtime": 1784345581.937352,
+    "ast_hash": "0211de97fbc300688bb1f42bfbdb207a",
+    "semantic_hash": ""
+  },
+  "docs/architecture/AI_PROVIDER_CONFIG.md": {
+    "mtime": 1784345581.937352,
+    "ast_hash": "a90b2a1e197723aa835a8809c6647240",
     "semantic_hash": ""
   }
 }
