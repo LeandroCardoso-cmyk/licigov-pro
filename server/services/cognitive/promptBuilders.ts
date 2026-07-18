@@ -123,9 +123,13 @@ function structuralBuilder(taskId: CognitiveTaskId): PromptBuilder {
       // Quando há ContextPackage, anexa as regras estritas de fundamentação (grounding real).
       const system = (input.contextPackage ? [...systemLines, "", GROUNDING_RULES] : systemLines).join("\n");
       const sections = groundingSection(task.grounding, input);
-      const outputHint = task.structuredOutput
-        ? `Responda em SAÍDA ESTRUTURADA (conteúdo, reasoning, confidence, fontes, recomendações, riscos, limitações).`
-        : `Responda de forma objetiva.`;
+      // Com ContextPackage (ex.: "Tirar Dúvidas"), a resposta ao usuário é PROSA CLARA — os campos
+      // estruturados (documentos/trechos/citações) vêm do ContextPackage, não do texto do modelo.
+      const outputHint = input.contextPackage
+        ? `Escreva uma ORIENTAÇÃO TÉCNICA clara e direta, em português simples, para um(a) servidor(a) público(a), em PROSA CORRIDA. NÃO use rótulos técnicos como "SAÍDA ESTRUTURADA", "Conteúdo", "Reasoning" ou "Confidence", nem títulos em markdown com "#". Cite os dispositivos (lei e artigo) no corpo do texto. No máximo ~200 palavras.`
+        : task.structuredOutput
+          ? `Responda em SAÍDA ESTRUTURADA (conteúdo, reasoning, confidence, fontes, recomendações, riscos, limitações).`
+          : `Responda de forma objetiva.`;
       const user = [
         `[OBJETIVO]\n${input.query}`,
         ...sections,
