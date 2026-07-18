@@ -9505,8 +9505,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784353123.8144927,
-    "ast_hash": "7a67daecd5502d02b0e95070397c8cbb",
+    "mtime": 1784353509.4824839,
+    "ast_hash": "bd96c4ad1c57f8774788cb487b6ad712",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9632,6 +9632,11 @@
   ".github/workflows/ai-models.yml": {
     "mtime": 1784351486.2461011,
     "ast_hash": "aca0b1fb7fb398996b5a1c0864d1ba85",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/query-expansion.test.ts": {
+    "mtime": 1784353550.082483,
+    "ast_hash": "11e8eb8bedfc0947d190634caba64bc0",
     "semantic_hash": ""
   }
 }
