@@ -15,7 +15,10 @@ export type AIProviderName = "gemini" | "claude" | "openai";
 
 /** Modelo padrão de cada provider (custo-benefício atual; sobrescrevível por AI_MODEL). */
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderName, string> = {
-  gemini: "gemini-2.5-flash",
+  // Alias auto-atualizável: aponta sempre para o Flash estável atual — evita descontinuações de
+  // versões específicas (ex.: gemini-2.5-flash saiu do free tier para contas novas). Se a sua conta
+  // suportar outro modelo, defina AI_MODEL (use `pnpm ai:models` para listar os disponíveis).
+  gemini: "gemini-flash-latest",
   claude: "claude-sonnet-4-5",
   openai: "gpt-4o-mini",
 };

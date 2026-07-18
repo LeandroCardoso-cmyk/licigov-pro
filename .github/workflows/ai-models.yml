@@ -1,0 +1,31 @@
+name: Listar modelos de IA (manual)
+
+# Rodar pelo GitHub: aba "Actions" → "Listar modelos de IA (manual)" → "Run workflow".
+# Requer o secret GEMINI_API_KEY (a mesma chave usada em produção). Mostra quais modelos a conta
+# suporta, para definir AI_MODEL no Railway.
+on:
+  workflow_dispatch:
+
+jobs:
+  models:
+    name: Modelos disponíveis (Gemini)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar pnpm
+        run: npm install -g pnpm
+
+      - name: Instalar dependências
+        run: pnpm install
+
+      - name: Listar modelos (o resultado aparece neste log)
+        run: pnpm ai:models || true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
