@@ -4335,8 +4335,8 @@
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "e3a08ec9e48d1b298d06551c3e73fb68",
+    "mtime": 1784343570.8602142,
+    "ast_hash": "98a0209423e75117078c3021cf46f95a",
     "semantic_hash": ""
   },
   "server/db/platforms.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784336112.7546659,
-    "ast_hash": "336eeba96b1aca488136a6cc8b7eb9d6",
+    "mtime": 1784343570.8602142,
+    "ast_hash": "8562594e6b7523dda41911872f354c42",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
-    "mtime": 1784336491.9066885,
-    "ast_hash": "97b186078754c90ae819f40030298940",
+    "mtime": 1784343570.8602142,
+    "ast_hash": "eed667ad1d5e329a9bc65f22007e5924",
     "semantic_hash": ""
   },
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {
