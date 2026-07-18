@@ -1989,16 +1989,16 @@ export type InsertImportAnalyticsSnapshotRow = typeof importAnalyticsSnapshots.$
  */
 export const candidateConsensusTable = mysqlTable("candidate_consensus", {
   id:                  varchar("id",               { length: 26 }).notNull().primaryKey(),
-  stagingItemId:       varchar("stagingItemId",    { length: 26 }).notNull(),
-  importSessionId:     int("importSessionId").notNull(),
-  organizationId:      int("organizationId").notNull(),
-  winningCandidateId:  varchar("winningCandidateId", { length: 26 }),
-  consensusScore:      decimal("consensusScore",   { precision: 5, scale: 4 }).notNull(),
-  consensusReasoning:  text("consensusReasoning").notNull(),
-  confidenceBreakdown: json("confidenceBreakdown").notNull(),
-  rankingMetadata:     json("rankingMetadata").notNull(),
-  evidenceSummary:     text("evidenceSummary").notNull(),
-  createdAt:           timestamp("createdAt").defaultNow().notNull(),
+  stagingItemId:       varchar("staging_item_id",    { length: 26 }).notNull(),
+  importSessionId:     int("import_session_id").notNull(),
+  organizationId:      int("organization_id").notNull(),
+  winningCandidateId:  varchar("winning_candidate_id", { length: 26 }),
+  consensusScore:      decimal("consensus_score",   { precision: 5, scale: 4 }).notNull(),
+  consensusReasoning:  text("consensus_reasoning").notNull(),
+  confidenceBreakdown: json("confidence_breakdown").notNull(),
+  rankingMetadata:     json("ranking_metadata").notNull(),
+  evidenceSummary:     text("evidence_summary").notNull(),
+  createdAt:           timestamp("created_at").defaultNow().notNull(),
 });
 
 export type CandidateConsensusRow       = typeof candidateConsensusTable.$inferSelect;
@@ -2010,22 +2010,22 @@ export type InsertCandidateConsensusRow = typeof candidateConsensusTable.$inferI
  */
 export const reviewDecisionsTable = mysqlTable("review_decisions", {
   id:              varchar("id",           { length: 26  }).notNull().primaryKey(),
-  stagingItemId:   varchar("stagingItemId",{ length: 26  }).notNull(),
-  importSessionId: int("importSessionId").notNull(),
-  organizationId:  int("organizationId").notNull(),
+  stagingItemId:   varchar("staging_item_id",{ length: 26  }).notNull(),
+  importSessionId: int("import_session_id").notNull(),
+  organizationId:  int("organization_id").notNull(),
   operation:       mysqlEnum("operation", [
     "compare_candidates","approve_candidate","reject_candidate","override_candidate",
     "request_manual_entry","request_new_search","attach_evidence","justify_decision","escalate_review",
   ]).notNull(),
-  actorType:       mysqlEnum("actorType", ["system","human","ai_assist"]).notNull().default("human"),
-  actorUserId:     int("actorUserId"),
-  actorOrgId:      int("actorOrgId").notNull(),
-  candidateId:     varchar("candidateId",  { length: 26  }),
-  overrideValue:   json("overrideValue"),
+  actorType:       mysqlEnum("actor_type", ["system","human","ai_assist"]).notNull().default("human"),
+  actorUserId:     int("actor_user_id"),
+  actorOrgId:      int("actor_org_id").notNull(),
+  candidateId:     varchar("candidate_id",  { length: 26  }),
+  overrideValue:   json("override_value"),
   justification:   text("justification").notNull(),
-  evidenceRefs:    json("evidenceRefs").notNull(),
-  escalateTo:      int("escalateTo"),
-  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  evidenceRefs:    json("evidence_refs").notNull(),
+  escalateTo:      int("escalate_to"),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
 });
 
 export type ReviewDecisionRow       = typeof reviewDecisionsTable.$inferSelect;
@@ -2037,11 +2037,11 @@ export type InsertReviewDecisionRow = typeof reviewDecisionsTable.$inferInsert;
  */
 export const semanticDriftSnapshotsTable = mysqlTable("semantic_drift_snapshots", {
   id:             varchar("id",           { length: 26 }).notNull().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  periodStart:    timestamp("periodStart").notNull(),
-  periodEnd:      timestamp("periodEnd").notNull(),
+  organizationId: int("organization_id").notNull(),
+  periodStart:    timestamp("period_start").notNull(),
+  periodEnd:      timestamp("period_end").notNull(),
   metrics:        json("metrics").notNull(),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 });
 
 export type SemanticDriftSnapshotRow       = typeof semanticDriftSnapshotsTable.$inferSelect;
@@ -2053,20 +2053,20 @@ export type InsertSemanticDriftSnapshotRow = typeof semanticDriftSnapshotsTable.
  */
 export const catalogSyncSnapshotsTable = mysqlTable("catalog_sync_snapshots", {
   id:               varchar("id",              { length: 26  }).notNull().primaryKey(),
-  organizationId:   int("organizationId").notNull(),
-  catalogType:      mysqlEnum("catalogType",   ["catmat","catser","custom"]).notNull(),
+  organizationId:   int("organization_id").notNull(),
+  catalogType:      mysqlEnum("catalog_type",   ["catmat","catser","custom"]).notNull(),
   version:          varchar("version",         { length: 50  }).notNull(),
-  sourceUrl:        varchar("sourceUrl",       { length: 500 }),
+  sourceUrl:        varchar("source_url",       { length: 500 }),
   checksum:         varchar("checksum",        { length: 64  }).notNull(),
-  totalEntries:     int("totalEntries").notNull().default(0),
-  indexedEntries:   int("indexedEntries").notNull().default(0),
-  syncStatus:       mysqlEnum("syncStatus",    ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
-  snapshotLineage:  varchar("snapshotLineage", { length: 26  }),
-  importLineage:    json("importLineage").notNull(),
-  integrityMetadata: json("integrityMetadata").notNull(),
-  cacheMetadata:    json("cacheMetadata").notNull(),
-  createdAt:        timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  totalEntries:     int("total_entries").notNull().default(0),
+  indexedEntries:   int("indexed_entries").notNull().default(0),
+  syncStatus:       mysqlEnum("sync_status",    ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
+  snapshotLineage:  varchar("snapshot_lineage", { length: 26  }),
+  importLineage:    json("import_lineage").notNull(),
+  integrityMetadata: json("integrity_metadata").notNull(),
+  cacheMetadata:    json("cache_metadata").notNull(),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type CatalogSyncSnapshotRow       = typeof catalogSyncSnapshotsTable.$inferSelect;
@@ -2078,14 +2078,14 @@ export type InsertCatalogSyncSnapshotRow = typeof catalogSyncSnapshotsTable.$inf
  */
 export const catalogSyncHistoryTable = mysqlTable("catalog_sync_history", {
   id:             varchar("id",            { length: 26  }).notNull().primaryKey(),
-  snapshotId:     varchar("snapshotId",    { length: 26  }).notNull(),
-  organizationId: int("organizationId").notNull(),
+  snapshotId:     varchar("snapshot_id",    { length: 26  }).notNull(),
+  organizationId: int("organization_id").notNull(),
   operation:      mysqlEnum("operation",   ["create","update","verify","invalidate","expire"]).notNull(),
-  beforeVersion:  varchar("beforeVersion", { length: 50  }),
-  afterVersion:   varchar("afterVersion",  { length: 50  }).notNull(),
+  beforeVersion:  varchar("before_version", { length: 50  }),
+  afterVersion:   varchar("after_version",  { length: 50  }).notNull(),
   actor:          varchar("actor",         { length: 128 }).notNull(),
   reason:         text("reason").notNull(),
-  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
+  occurredAt:     timestamp("occurred_at").defaultNow().notNull(),
 });
 
 export type CatalogSyncHistoryRow       = typeof catalogSyncHistoryTable.$inferSelect;
@@ -2097,21 +2097,21 @@ export type InsertCatalogSyncHistoryRow = typeof catalogSyncHistoryTable.$inferI
  */
 export const candidateExplainabilityTable = mysqlTable("candidate_explainability", {
   id:                    varchar("id",           { length: 26 }).notNull().primaryKey(),
-  candidateId:           varchar("candidateId",  { length: 26 }).notNull(),
-  stagingItemId:         varchar("stagingItemId",{ length: 26 }).notNull(),
-  organizationId:        int("organizationId").notNull(),
-  whySuggested:          text("whySuggested").notNull(),
-  whyRanked:             text("whyRanked").notNull(),
-  whyRejected:           text("whyRejected"),
-  influencingTokens:     json("influencingTokens").notNull(),
-  aliasesUsed:           json("aliasesUsed").notNull(),
-  parserInfluence:       json("parserInfluence").notNull(),
-  normalizationInfluence: json("normalizationInfluence").notNull(),
-  semanticInfluence:     json("semanticInfluence").notNull(),
-  rankingRationale:      text("rankingRationale").notNull(),
-  consensusRationale:    text("consensusRationale"),
-  confidenceRationale:   text("confidenceRationale").notNull(),
-  generatedAt:           timestamp("generatedAt").defaultNow().notNull(),
+  candidateId:           varchar("candidate_id",  { length: 26 }).notNull(),
+  stagingItemId:         varchar("staging_item_id",{ length: 26 }).notNull(),
+  organizationId:        int("organization_id").notNull(),
+  whySuggested:          text("why_suggested").notNull(),
+  whyRanked:             text("why_ranked").notNull(),
+  whyRejected:           text("why_rejected"),
+  influencingTokens:     json("influencing_tokens").notNull(),
+  aliasesUsed:           json("aliases_used").notNull(),
+  parserInfluence:       json("parser_influence").notNull(),
+  normalizationInfluence: json("normalization_influence").notNull(),
+  semanticInfluence:     json("semantic_influence").notNull(),
+  rankingRationale:      text("ranking_rationale").notNull(),
+  consensusRationale:    text("consensus_rationale"),
+  confidenceRationale:   text("confidence_rationale").notNull(),
+  generatedAt:           timestamp("generated_at").defaultNow().notNull(),
 });
 
 export type CandidateExplainabilityRow       = typeof candidateExplainabilityTable.$inferSelect;
@@ -2123,15 +2123,15 @@ export type InsertCandidateExplainabilityRow = typeof candidateExplainabilityTab
  */
 export const trCompositionRulesTable = mysqlTable("tr_composition_rules", {
   id:             varchar("id",           { length: 26  }).notNull().primaryKey(),
-  organizationId: int("organizationId").notNull(),
+  organizationId: int("organization_id").notNull(),
   name:           varchar("name",         { length: 255 }).notNull(),
-  conditionExpr:  text("conditionExpr").notNull(),
+  conditionExpr:  text("condition_expr").notNull(),
   action:         mysqlEnum("action",     ["include_section","exclude_section","replace_clause","append_clause"]).notNull(),
-  targetId:       varchar("targetId",     { length: 26  }).notNull(),
+  targetId:       varchar("target_id",     { length: 26  }).notNull(),
   priority:       int("priority").notNull().default(0),
-  isActive:       boolean("isActive").notNull().default(true),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  isActive:       boolean("is_active").notNull().default(true),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
+  updatedAt:      timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type TrCompositionRuleRow       = typeof trCompositionRulesTable.$inferSelect;
@@ -2143,34 +2143,34 @@ export type InsertTrCompositionRuleRow = typeof trCompositionRulesTable.$inferIn
  */
 export const itemTrTable = mysqlTable("item_tr", {
   id:                    varchar("id",                    { length: 64 }).notNull().primaryKey(),
-  organizationId:        int("organizationId").notNull(),
-  processId:             int("processId").notNull(),
-  sourceImportSessionId: int("sourceImportSessionId"),
-  itemNumber:            int("itemNumber").notNull(),
+  organizationId:        int("organization_id").notNull(),
+  processId:             int("process_id").notNull(),
+  sourceImportSessionId: int("source_import_session_id"),
+  itemNumber:            int("item_number").notNull(),
   description:           text("description").notNull(),
-  normalizedDescription: text("normalizedDescription").notNull(),
-  detailedSpecification: text("detailedSpecification"),
+  normalizedDescription: text("normalized_description").notNull(),
+  detailedSpecification: text("detailed_specification"),
   quantity:              decimal("quantity",            { precision: 18, scale: 4 }).notNull().default("0"),
   unit:                  varchar("unit",                  { length: 32 }).notNull(),
-  canonicalUnit:         varchar("canonicalUnit",         { length: 32 }),
-  estimatedUnitPrice:    decimal("estimatedUnitPrice",   { precision: 18, scale: 4 }),
-  estimatedTotalPrice:   decimal("estimatedTotalPrice",  { precision: 18, scale: 4 }),
-  catmatCode:            varchar("catmatCode",            { length: 32 }),
-  catmatDescription:     text("catmatDescription"),
-  catserCode:            varchar("catserCode",            { length: 32 }),
-  selectedCandidateId:   varchar("selectedCandidateId",   { length: 32 }),
-  consensusId:           varchar("consensusId",           { length: 32 }),
-  confidenceScore:       decimal("confidenceScore",      { precision: 6, scale: 4 }).notNull().default("0"),
-  reviewState:           mysqlEnum("reviewState", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull().default("pending_match"),
-  approvedBy:            int("approvedBy"),
-  approvedAt:            timestamp("approvedAt"),
-  evidenceRef:           varchar("evidenceRef",           { length: 64 }),
+  canonicalUnit:         varchar("canonical_unit",         { length: 32 }),
+  estimatedUnitPrice:    decimal("estimated_unit_price",   { precision: 18, scale: 4 }),
+  estimatedTotalPrice:   decimal("estimated_total_price",  { precision: 18, scale: 4 }),
+  catmatCode:            varchar("catmat_code",            { length: 32 }),
+  catmatDescription:     text("catmat_description"),
+  catserCode:            varchar("catser_code",            { length: 32 }),
+  selectedCandidateId:   varchar("selected_candidate_id",   { length: 32 }),
+  consensusId:           varchar("consensus_id",           { length: 32 }),
+  confidenceScore:       decimal("confidence_score",      { precision: 6, scale: 4 }).notNull().default("0"),
+  reviewState:           mysqlEnum("review_state", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull().default("pending_match"),
+  approvedBy:            int("approved_by"),
+  approvedAt:            timestamp("approved_at"),
+  evidenceRef:           varchar("evidence_ref",           { length: 64 }),
   provenance:            json("provenance").notNull(),
   warnings:              json("warnings").notNull(),
   metadata:              json("metadata").notNull(),
-  correlationId:         varchar("correlationId",         { length: 64 }),
-  createdAt:             timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:             timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  correlationId:         varchar("correlation_id",         { length: 64 }),
+  createdAt:             timestamp("created_at").defaultNow().notNull(),
+  updatedAt:             timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ItemTrRow       = typeof itemTrTable.$inferSelect;
@@ -2182,20 +2182,20 @@ export type InsertItemTrRow = typeof itemTrTable.$inferInsert;
  */
 export const itemReviewHistoryTable = mysqlTable("item_review_history", {
   id:             varchar("id",            { length: 32 }).notNull().primaryKey(),
-  itemId:         varchar("itemId",        { length: 64 }).notNull(),
-  organizationId: int("organizationId").notNull(),
-  fromState:      mysqlEnum("fromState", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
-  toState:        mysqlEnum("toState",   ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
-  actorType:      mysqlEnum("actorType", ["system","human","ai_assist"]).notNull(),
-  actorUserId:    int("actorUserId"),
-  actorEmail:     varchar("actorEmail",   { length: 255 }),
+  itemId:         varchar("item_id",        { length: 64 }).notNull(),
+  organizationId: int("organization_id").notNull(),
+  fromState:      mysqlEnum("from_state", ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
+  toState:        mysqlEnum("to_state",   ["pending_match","candidate_generated","awaiting_review","approved","rejected","overridden","manual_entry","finalized"]).notNull(),
+  actorType:      mysqlEnum("actor_type", ["system","human","ai_assist"]).notNull(),
+  actorUserId:    int("actor_user_id"),
+  actorEmail:     varchar("actor_email",   { length: 255 }),
   reason:         text("reason"),
   justification:  text("justification"),
-  evidenceRefs:   json("evidenceRefs").notNull(),
+  evidenceRefs:   json("evidence_refs").notNull(),
   metadata:       json("metadata"),
-  correlationId:  varchar("correlationId", { length: 64 }),
-  occurredAt:     timestamp("occurredAt").defaultNow().notNull(),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  correlationId:  varchar("correlation_id", { length: 64 }),
+  occurredAt:     timestamp("occurred_at").defaultNow().notNull(),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 });
 
 export type ItemReviewHistoryRow       = typeof itemReviewHistoryTable.$inferSelect;
@@ -2206,20 +2206,20 @@ export type InsertItemReviewHistoryRow = typeof itemReviewHistoryTable.$inferIns
  */
 export const catalogSnapshotsTable = mysqlTable("catalog_snapshots", {
   id:               varchar("id",               { length: 32 }).notNull().primaryKey(),
-  organizationId:   int("organizationId").notNull(),
-  catalogType:      mysqlEnum("catalogType", ["catmat","catser","custom"]).notNull(),
+  organizationId:   int("organization_id").notNull(),
+  catalogType:      mysqlEnum("catalog_type", ["catmat","catser","custom"]).notNull(),
   version:          varchar("version",          { length: 50 }).notNull(),
   checksum:         varchar("checksum",         { length: 64 }).notNull(),
-  totalEntries:     int("totalEntries").notNull().default(0),
-  indexedEntries:   int("indexedEntries").notNull().default(0),
-  syncStatus:       mysqlEnum("syncStatus", ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
-  snapshotLineage:  varchar("snapshotLineage",  { length: 32 }),
-  importLineage:    json("importLineage").notNull(),
-  integrityMetadata: json("integrityMetadata").notNull(),
-  cacheMetadata:    json("cacheMetadata").notNull(),
-  correlationId:    varchar("correlationId",    { length: 64 }),
-  createdAt:        timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  totalEntries:     int("total_entries").notNull().default(0),
+  indexedEntries:   int("indexed_entries").notNull().default(0),
+  syncStatus:       mysqlEnum("sync_status", ["pending","syncing","synced","failed","stale"]).notNull().default("pending"),
+  snapshotLineage:  varchar("snapshot_lineage",  { length: 32 }),
+  importLineage:    json("import_lineage").notNull(),
+  integrityMetadata: json("integrity_metadata").notNull(),
+  cacheMetadata:    json("cache_metadata").notNull(),
+  correlationId:    varchar("correlation_id",    { length: 64 }),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type CatalogSnapshotRow       = typeof catalogSnapshotsTable.$inferSelect;
@@ -2230,20 +2230,20 @@ export type InsertCatalogSnapshotRow = typeof catalogSnapshotsTable.$inferInsert
  */
 export const catalogEntriesTable = mysqlTable("catalog_entries", {
   id:                    varchar("id",                    { length: 32 }).notNull().primaryKey(),
-  organizationId:        int("organizationId").notNull(),
+  organizationId:        int("organization_id").notNull(),
   code:                  varchar("code",                  { length: 32 }).notNull(),
-  catalogType:           mysqlEnum("catalogType", ["catmat","catser"]).notNull(),
+  catalogType:           mysqlEnum("catalog_type", ["catmat","catser"]).notNull(),
   description:           text("description").notNull(),
-  normalizedDescription: text("normalizedDescription").notNull(),
+  normalizedDescription: text("normalized_description").notNull(),
   unit:                  varchar("unit",                  { length: 32 }),
-  canonicalUnit:         varchar("canonicalUnit",         { length: 32 }),
-  catalogGroup:          varchar("catalogGroup",          { length: 255 }),
+  canonicalUnit:         varchar("canonical_unit",         { length: 32 }),
+  catalogGroup:          varchar("catalog_group",          { length: 255 }),
   aliases:               json("aliases").notNull(),
   tokens:                json("tokens").notNull(),
   active:                boolean("active").notNull().default(true),
-  snapshotId:            varchar("snapshotId",            { length: 32 }),
-  createdAt:             timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:             timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  snapshotId:            varchar("snapshot_id",            { length: 32 }),
+  createdAt:             timestamp("created_at").defaultNow().notNull(),
+  updatedAt:             timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type CatalogEntryRow       = typeof catalogEntriesTable.$inferSelect;
@@ -2254,17 +2254,17 @@ export type InsertCatalogEntryRow = typeof catalogEntriesTable.$inferInsert;
  */
 export const clauseTemplatesTable = mysqlTable("clause_templates", {
   id:             varchar("id",            { length: 32 }).notNull().primaryKey(),
-  organizationId: int("organizationId").notNull(),
-  clauseType:     mysqlEnum("clauseType", ["header","body","item_list","legal_basis","justification","specification","price_ref","footer"]).notNull(),
+  organizationId: int("organization_id").notNull(),
+  clauseType:     mysqlEnum("clause_type", ["header","body","item_list","legal_basis","justification","specification","price_ref","footer"]).notNull(),
   title:          varchar("title",         { length: 255 }).notNull(),
   content:        text("content").notNull(),
-  legalBasis:     varchar("legalBasis",    { length: 255 }),
+  legalBasis:     varchar("legal_basis",    { length: 255 }),
   priority:       int("priority").notNull().default(0),
-  appliesTo:      json("appliesTo").notNull(),
-  baseRelevance:  decimal("baseRelevance", { precision: 6, scale: 4 }).notNull().default("0"),
-  isActive:       boolean("isActive").notNull().default(true),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:      timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  appliesTo:      json("applies_to").notNull(),
+  baseRelevance:  decimal("base_relevance", { precision: 6, scale: 4 }).notNull().default("0"),
+  isActive:       boolean("is_active").notNull().default(true),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
+  updatedAt:      timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ClauseTemplateRow       = typeof clauseTemplatesTable.$inferSelect;
@@ -2275,18 +2275,18 @@ export type InsertClauseTemplateRow = typeof clauseTemplatesTable.$inferInsert;
  */
 export const trCompositionsTable = mysqlTable("tr_compositions", {
   id:                  varchar("id",                  { length: 32 }).notNull().primaryKey(),
-  organizationId:      int("organizationId").notNull(),
-  processId:           int("processId").notNull(),
-  replayKey:           varchar("replayKey",           { length: 64 }).notNull(),
-  correlationId:       varchar("correlationId",       { length: 64 }),
-  composedSections:    json("composedSections").notNull(),
-  recommendedClauses:  json("recommendedClauses").notNull(),
-  itemGroups:          json("itemGroups").notNull(),
-  compositionRationale: text("compositionRationale").notNull(),
-  itemCount:           int("itemCount").notNull().default(0),
-  createdBy:           int("createdBy"),
-  createdAt:           timestamp("createdAt").defaultNow().notNull(),
-  updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  organizationId:      int("organization_id").notNull(),
+  processId:           int("process_id").notNull(),
+  replayKey:           varchar("replay_key",           { length: 64 }).notNull(),
+  correlationId:       varchar("correlation_id",       { length: 64 }),
+  composedSections:    json("composed_sections").notNull(),
+  recommendedClauses:  json("recommended_clauses").notNull(),
+  itemGroups:          json("item_groups").notNull(),
+  compositionRationale: text("composition_rationale").notNull(),
+  itemCount:           int("item_count").notNull().default(0),
+  createdBy:           int("created_by"),
+  createdAt:           timestamp("created_at").defaultNow().notNull(),
+  updatedAt:           timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type TrCompositionRow       = typeof trCompositionsTable.$inferSelect;
@@ -2297,20 +2297,20 @@ export type InsertTrCompositionRow = typeof trCompositionsTable.$inferInsert;
  */
 export const itemCandidateLinksTable = mysqlTable("item_candidate_links", {
   id:              varchar("id",              { length: 32 }).notNull().primaryKey(),
-  organizationId:  int("organizationId").notNull(),
-  itemId:          varchar("itemId",          { length: 64 }).notNull(),
-  candidateId:     varchar("candidateId",     { length: 32 }).notNull(),
-  stagingItemId:   varchar("stagingItemId",   { length: 26 }),
-  importSessionId: int("importSessionId"),
+  organizationId:  int("organization_id").notNull(),
+  itemId:          varchar("item_id",          { length: 64 }).notNull(),
+  candidateId:     varchar("candidate_id",     { length: 32 }).notNull(),
+  stagingItemId:   varchar("staging_item_id",   { length: 26 }),
+  importSessionId: int("import_session_id"),
   score:           decimal("score",           { precision: 6, scale: 4 }).notNull().default("0"),
-  candidateRank:   int("candidateRank").notNull().default(1),
+  candidateRank:   int("candidate_rank").notNull().default(1),
   source:          varchar("source",          { length: 32 }).notNull(),
   status:          mysqlEnum("status", ["pending","accepted","rejected","superseded","expired"]).notNull().default("pending"),
-  catmatCode:      varchar("catmatCode",      { length: 32 }),
-  isSelected:      boolean("isSelected").notNull().default(false),
-  replayKey:       varchar("replayKey",       { length: 64 }),
-  correlationId:   varchar("correlationId",   { length: 64 }),
-  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  catmatCode:      varchar("catmat_code",      { length: 32 }),
+  isSelected:      boolean("is_selected").notNull().default(false),
+  replayKey:       varchar("replay_key",       { length: 64 }),
+  correlationId:   varchar("correlation_id",   { length: 64 }),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
 });
 
 export type ItemCandidateLinkRow       = typeof itemCandidateLinksTable.$inferSelect;
@@ -2321,23 +2321,23 @@ export type InsertItemCandidateLinkRow = typeof itemCandidateLinksTable.$inferIn
  */
 export const itemExplainabilityTable = mysqlTable("item_explainability", {
   id:                    varchar("id",                    { length: 32 }).notNull().primaryKey(),
-  organizationId:        int("organizationId").notNull(),
-  itemId:                varchar("itemId",                { length: 64 }).notNull(),
-  candidateId:           varchar("candidateId",           { length: 32 }).notNull(),
-  whySuggested:          text("whySuggested").notNull(),
-  whyRanked:             text("whyRanked").notNull(),
-  whyRejected:           text("whyRejected"),
-  influencingTokens:     json("influencingTokens").notNull(),
-  parserInfluence:       json("parserInfluence").notNull(),
-  normalizationInfluence: json("normalizationInfluence").notNull(),
-  semanticInfluence:     json("semanticInfluence").notNull(),
-  rankingRationale:      text("rankingRationale").notNull(),
-  consensusRationale:    text("consensusRationale"),
-  confidenceRationale:   text("confidenceRationale").notNull(),
-  replayKey:             varchar("replayKey",             { length: 64 }),
-  correlationId:         varchar("correlationId",         { length: 64 }),
-  generatedAt:           timestamp("generatedAt").defaultNow().notNull(),
-  createdAt:             timestamp("createdAt").defaultNow().notNull(),
+  organizationId:        int("organization_id").notNull(),
+  itemId:                varchar("item_id",                { length: 64 }).notNull(),
+  candidateId:           varchar("candidate_id",           { length: 32 }).notNull(),
+  whySuggested:          text("why_suggested").notNull(),
+  whyRanked:             text("why_ranked").notNull(),
+  whyRejected:           text("why_rejected"),
+  influencingTokens:     json("influencing_tokens").notNull(),
+  parserInfluence:       json("parser_influence").notNull(),
+  normalizationInfluence: json("normalization_influence").notNull(),
+  semanticInfluence:     json("semantic_influence").notNull(),
+  rankingRationale:      text("ranking_rationale").notNull(),
+  consensusRationale:    text("consensus_rationale"),
+  confidenceRationale:   text("confidence_rationale").notNull(),
+  replayKey:             varchar("replay_key",             { length: 64 }),
+  correlationId:         varchar("correlation_id",         { length: 64 }),
+  generatedAt:           timestamp("generated_at").defaultNow().notNull(),
+  createdAt:             timestamp("created_at").defaultNow().notNull(),
 });
 
 export type ItemExplainabilityRow       = typeof itemExplainabilityTable.$inferSelect;
@@ -2991,7 +2991,7 @@ export const institutionalDeploymentsTable = mysqlTable("institutional_deploymen
   rollbackPoint:      varchar("rollback_point", { length: 64 }),
   activatedAt:        datetime("activated_at", { fsp: 3 }),
   completedAt:        datetime("completed_at", { fsp: 3 }),
-  createdAt:          timestamp("createdAt").defaultNow().notNull(),
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
 });
 
 export const deploymentValidationSnapshotsTable = mysqlTable("deployment_validation_snapshots", {
@@ -3005,7 +3005,7 @@ export const deploymentValidationSnapshotsTable = mysqlTable("deployment_validat
   overallPassed:   tinyint("overall_passed").notNull().default(0),
   replayKey:       varchar("replay_key", { length: 64 }).notNull(),
   generatedAt:     datetime("generated_at", { fsp: 3 }).notNull(),
-  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
 });
 
 export const serviceHealthSnapshotsTable = mysqlTable("service_health_snapshots", {
@@ -3015,7 +3015,7 @@ export const serviceHealthSnapshotsTable = mysqlTable("service_health_snapshots"
   breachingMetrics: json("breaching_metrics"),
   warningMetrics:   json("warning_metrics"),
   snapshotAt:       datetime("snapshot_at", { fsp: 3 }).notNull(),
-  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
 });
 
 export const operationalStabilityMetricsTable = mysqlTable("operational_stability_metrics", {
@@ -3027,7 +3027,7 @@ export const operationalStabilityMetricsTable = mysqlTable("operational_stabilit
   threshold:      double("threshold").notNull(),
   isAnomalous:    tinyint("is_anomalous").notNull().default(0),
   recordedAt:     datetime("recorded_at", { fsp: 3 }).notNull(),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 });
 
 export const recoveryCheckpointsTable = mysqlTable("recovery_checkpoints", {
@@ -3037,7 +3037,7 @@ export const recoveryCheckpointsTable = mysqlTable("recovery_checkpoints", {
   snapshotData:   json("snapshot_data").notNull(),
   integrityHash:  varchar("integrity_hash", { length: 64 }).notNull(),
   isValid:        tinyint("is_valid").notNull().default(1),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 });
 
 export const governancePoliciesTable = mysqlTable("governance_policies", {
@@ -3051,7 +3051,7 @@ export const governancePoliciesTable = mysqlTable("governance_policies", {
   effectiveFrom:  datetime("effective_from", { fsp: 3 }).notNull(),
   effectiveTo:    datetime("effective_to", { fsp: 3 }),
   createdBy:      int("created_by").notNull(),
-  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 });
 
 export const supportEscalationsTable = mysqlTable("support_escalations", {
@@ -3064,7 +3064,7 @@ export const supportEscalationsTable = mysqlTable("support_escalations", {
   status:           varchar("status", { length: 50 }).notNull().default("open"),
   escalatedAt:      datetime("escalated_at", { fsp: 3 }).notNull(),
   resolvedAt:       datetime("resolved_at", { fsp: 3 }),
-  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
 });
 
 export const continuousOperationMetricsTable = mysqlTable("continuous_operation_metrics", {
@@ -3078,7 +3078,7 @@ export const continuousOperationMetricsTable = mysqlTable("continuous_operation_
   degradedMetrics: json("degraded_metrics"),
   severity:        varchar("severity", { length: 20 }).notNull().default("none"),
   recordedAt:      datetime("recorded_at", { fsp: 3 }).notNull(),
-  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+  createdAt:       timestamp("created_at").defaultNow().notNull(),
 });
 
 export const stabilitySnapshotsTable = mysqlTable("stability_snapshots", {
@@ -3089,7 +3089,7 @@ export const stabilitySnapshotsTable = mysqlTable("stability_snapshots", {
   trend:            varchar("trend", { length: 20 }).notNull().default("stable"),
   activeAnomalies:  json("active_anomalies"),
   snapshotAt:       datetime("snapshot_at", { fsp: 3 }).notNull(),
-  createdAt:        timestamp("createdAt").defaultNow().notNull(),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
 });
 
 export type InstitutionalDeploymentRow      = typeof institutionalDeploymentsTable.$inferSelect;
@@ -4433,8 +4433,8 @@ export const knowledgeEdgesTable = mysqlTable("knowledge_edges", {
 
 export const legalReferenceNodesTable = mysqlTable("legal_reference_nodes", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
-  referenceType:  varchar("reference_type", { length: 50 }).notNull().default("lei"),
+  organizationId: int("organizationId").notNull(),
+  referenceType:  varchar("referenceType", { length: 50 }).notNull().default("lei"),
   numero:         varchar("numero", { length: 50 }).notNull().default(""),
   ano:            int("ano").notNull().default(0),
   orgao:          varchar("orgao", { length: 255 }).notNull().default(""),
@@ -4445,75 +4445,75 @@ export const legalReferenceNodesTable = mysqlTable("legal_reference_nodes", {
   vigencia:       varchar("vigencia", { length: 50 }).notNull().default("vigente"),
   ementa:         text("ementa"),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:      datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const procurementConceptsTable = mysqlTable("procurement_concepts", {
   id:              varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId:  int("organization_id").notNull(),
+  organizationId:  int("organizationId").notNull(),
   category:        varchar("category", { length: 50 }).notNull().default("conceito"),
   name:            varchar("name", { length: 255 }).notNull().default(""),
-  normalizedName:  varchar("normalized_name", { length: 255 }).notNull().default(""),
+  normalizedName:  varchar("normalizedName", { length: 255 }).notNull().default(""),
   definition:      text("definition"),
-  legalBasis:      varchar("legal_basis", { length: 500 }).notNull().default(""),
+  legalBasis:      varchar("legalBasis", { length: 500 }).notNull().default(""),
   parentConceptId: varchar("parent_concept_id", { length: 20 }),
   aliases:         text("aliases"),
   examples:        text("examples"),
   correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:       datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const clauseKnowledgeTable = mysqlTable("clause_knowledge", {
   id:                   varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId:       int("organization_id").notNull(),
+  organizationId:       int("organizationId").notNull(),
   category:             varchar("category", { length: 50 }).notNull().default("objeto"),
   title:                varchar("title", { length: 500 }).notNull().default(""),
   content:              text("content"),
   purpose:              text("purpose"),
-  riskLevel:            varchar("risk_level", { length: 20 }).notNull().default("baixo"),
-  legalBasis:           varchar("legal_basis", { length: 500 }).notNull().default(""),
+  riskLevel:            varchar("riskLevel", { length: 20 }).notNull().default("baixo"),
+  legalBasis:           varchar("legalBasis", { length: 500 }).notNull().default(""),
   relatedDocumentTypes: text("related_document_types"),
   prerequisites:        text("prerequisites"),
   active:               tinyint("active").notNull().default(1),
   correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:            datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const entityResolutionsTable = mysqlTable("entity_resolutions", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
-  sourceEntityId: varchar("source_entity_id", { length: 20 }).notNull(),
-  targetEntityId: varchar("target_entity_id", { length: 20 }).notNull(),
+  organizationId: int("organizationId").notNull(),
+  sourceEntityId: varchar("sourceEntityId", { length: 20 }).notNull(),
+  targetEntityId: varchar("targetEntityId", { length: 20 }).notNull(),
   strategy:       varchar("strategy", { length: 50 }).notNull().default("fuzzy"),
   status:         varchar("status", { length: 50 }).notNull().default("pending"),
   confidence:     decimal("confidence", { precision: 5, scale: 4 }).notNull().default("0.5"),
   reasoning:      text("reasoning"),
-  resolvedBy:     varchar("resolved_by", { length: 255 }).notNull().default("system"),
+  resolvedBy:     varchar("resolvedBy", { length: 255 }).notNull().default("system"),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:      datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const ontologyTaxonomyTable = mysqlTable("ontology_taxonomy", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
+  organizationId: int("organizationId").notNull(),
   name:           varchar("name", { length: 255 }).notNull().default(""),
   category:       varchar("category", { length: 50 }).notNull().default(""),
-  parentId:       varchar("parent_id", { length: 20 }),
+  parentId:       varchar("parentId", { length: 20 }),
   definition:     text("definition"),
   legalBasis:     varchar("legal_basis", { length: 500 }).notNull().default(""),
   aliases:        text("aliases"),
   level:          int("level").notNull().default(0),
-  sortOrder:      int("sort_order").notNull().default(0),
+  sortOrder:      int("sortOrder").notNull().default(0),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:      datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const graphMetricsTable = mysqlTable("graph_metrics", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
-  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
-  metricName:     varchar("metric_name", { length: 100 }).notNull().default(""),
-  metricValue:    decimal("metric_value", { precision: 10, scale: 4 }).notNull().default("0"),
+  organizationId: int("organizationId").notNull(),
+  correlationId:  varchar("correlationId", { length: 64 }).notNull().default(""),
+  metricName:     varchar("metricName", { length: 100 }).notNull().default(""),
+  metricValue:    decimal("metricValue", { precision: 10, scale: 4 }).notNull().default("0"),
   metricUnit:     varchar("metric_unit", { length: 50 }).notNull().default("count"),
   tags:           text("tags"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
@@ -4521,24 +4521,24 @@ export const graphMetricsTable = mysqlTable("graph_metrics", {
 
 export const graphVersionsTable = mysqlTable("graph_versions", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
-  versionNumber:  int("version_number").notNull().default(1),
-  nodeCount:      int("node_count").notNull().default(0),
-  edgeCount:      int("edge_count").notNull().default(0),
+  organizationId: int("organizationId").notNull(),
+  versionNumber:  int("versionNumber").notNull().default(1),
+  nodeCount:      int("nodeCount").notNull().default(0),
+  edgeCount:      int("edgeCount").notNull().default(0),
   changeSummary:  text("change_summary"),
-  createdBy:      varchar("created_by", { length: 255 }).notNull().default("system"),
+  createdBy:      varchar("createdBy", { length: 255 }).notNull().default("system"),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
-  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  createdAt:      datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
 export const graphChangeLogTable = mysqlTable("graph_change_log", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
-  organizationId: int("organization_id").notNull(),
-  entityType:     varchar("entity_type", { length: 50 }).notNull().default("node"),
-  entityId:       varchar("entity_id", { length: 20 }).notNull(),
+  organizationId: int("organizationId").notNull(),
+  entityType:     varchar("entityType", { length: 50 }).notNull().default("node"),
+  entityId:       varchar("entityId", { length: 20 }).notNull(),
   operation:      varchar("operation", { length: 50 }).notNull().default("create"),
-  beforeState:    text("before_state"),
-  afterState:     text("after_state"),
+  beforeState:    text("beforeState"),
+  afterState:     text("afterState"),
   changedBy:      varchar("changed_by", { length: 255 }).notNull().default("system"),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
