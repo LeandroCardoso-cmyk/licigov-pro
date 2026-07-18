@@ -16,6 +16,7 @@ import {
   type InstitutionalConsultationAnswer, type ConsultationRecord, type ConsultationSource,
 } from "../domain/institutionalConsultation";
 import { getConsultationRepository } from "./institutionalConsultationRepository";
+import { getOrganizationById } from "../db/organizations";
 
 /** Corpus oficial memoizado (build determinístico único por processo — não é RAG/cache paralelo). */
 let _corpus: OfficialCorpusBuildResult | null = null;
@@ -24,6 +25,29 @@ export function getOfficialCorpus(): OfficialCorpusBuildResult {
   return _corpus;
 }
 export function __setOfficialCorpusForTests(corpus: OfficialCorpusBuildResult | null): void { _corpus = corpus; }
+
+/**
+ * Perfil institucional do tenant (UF/município) resolvido a partir da ORGANIZAÇÃO REAL — não mais de
+ * um fixture de tenant. A resolução do corpus municipal passa a ocorrer por CONTEXTO INSTITUCIONAL:
+ * Tenant → Organization → Município → Jurisdição → Corpus Municipal. O município só é considerado
+ * quando a esfera da organização é municipal. Degrada graciosamente sem banco (nulos → resolve apenas
+ * federal/estadual). Injetável para testes (mesma disciplina do repository/corpus).
+ */
+export interface InstitutionalProfile { readonly state: string | null; readonly municipality: string | null; }
+export type InstitutionalProfileResolver = (tenantId: number) => Promise<InstitutionalProfile>;
+
+const defaultInstitutionalProfileResolver: InstitutionalProfileResolver = async (tenantId) => {
+  const org = await getOrganizationById(tenantId);
+  if (!org) return { state: null, municipality: null };
+  return {
+    state: org.uf ?? null,
+    municipality: org.esfera === "municipal" ? (org.municipio ?? null) : null,
+  };
+};
+let _profileResolver: InstitutionalProfileResolver = defaultInstitutionalProfileResolver;
+export function setInstitutionalProfileResolverForTests(r: InstitutionalProfileResolver | null): void {
+  _profileResolver = r ?? defaultInstitutionalProfileResolver;
+}
 
 const TASK_TYPE = "LEGAL_ANALYSIS";
 
@@ -96,9 +120,13 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
 
   const t0 = clock();
   try {
+    // Resolução por CONTEXTO INSTITUCIONAL REAL: quando o chamador não informa userContext, o
+    // perfil (UF/município) é carregado da organização. Isso substitui a dependência do fixture de
+    // tenant municipal — qualquer organização municipal resolve o próprio corpus pelo seu município.
+    const userContext = params.userContext ?? await _profileResolver(params.organizationId);
     const { execution, contextPackage } = await executeCognitiveTaskWithInstitutionalContext(getOfficialCorpus(), {
       tenantId: params.organizationId, businessDomain: CONSULTATION_DOMAIN_CODE, taskType: TASK_TYPE,
-      query: question, correlationId: params.correlationId, userContext: params.userContext,
+      query: question, correlationId: params.correlationId, userContext,
       cognitive: { task: "LEGAL_ANALYSIS", userId: String(params.userId), query: question },
     });
     const t1 = clock();

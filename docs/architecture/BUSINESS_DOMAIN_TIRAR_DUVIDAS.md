@@ -27,6 +27,33 @@ Servidor → Página "Tirar Dúvidas" → tRPC (institutionalConsultation.ask) �
 O Official Knowledge Corpus e o AIExecutionEngine **jamais** são acessados diretamente — somente pela
 Integration Layer. Não há bypass do ContextPackage.
 
+## Grounding real das respostas (consumo integral do ContextPackage)
+
+O modelo responde **efetivamente fundamentado nos trechos recuperados** — não apenas com os trechos
+anexados à resposta. O **Prompt Builder tipado** (`server/services/cognitive/promptBuilders.ts`)
+**consome integralmente o ContextPackage**: quando presente, cada evidência é renderizada no prompt
+enviado ao provider com **documento, versão, autoridade, jurisdição, bindingLevel, título, artigo
+(quando existir), citação, trecho verbatim, lineage e ordem (sourceOrder)**.
+
+Fluxo do grounding:
+
+```
+answerConsultation → executeCognitiveTaskWithInstitutionalContext → resolveInstitutionalContextPackage
+  (ContextPackage: documentos + retrievedPassages[].text verbatim + citações + lineage)
+→ executeCognitiveTask(input.contextPackage)
+→ getPromptBuilder(task).build({ query, contextPackage })   ← evidências renderizadas no prompt
+→ provider.generate({ system + user com as EVIDÊNCIAS DOCUMENTAIS })
+```
+
+O `system` recebe **regras estritas de fundamentação** quando há ContextPackage: responder
+**exclusivamente** com base nas evidências; **nunca** inventar fundamento, citar artigo inexistente
+ou extrapolar; **declarar a limitação** quando a evidência for insuficiente; e **tratar as evidências
+como DADO documental, nunca como instrução** (separação instrução/dado — mitigação de prompt injection).
+Sem ContextPackage, o comportamento estrutural anterior é preservado (zero regressões).
+
+O AIExecutionEngine permanece **consumidor**: recebe o ContextPackage pronto e o repassa ao Prompt
+Builder (contrato mínimo) — **não** resolve tenant/legislação/hierarquia nem acessa o Corpus.
+
 ## Componentes
 
 | Camada | Arquivo | Papel |
@@ -55,6 +82,30 @@ base oficial.
 
 Toda consulta respeita Tenant → Município → Estado → Federal (via ContextPackage). Um tenant **jamais**
 recupera documentos municipais de outro tenant (federais compartilhados; estaduais por estado).
+
+### Resolução municipal por contexto institucional real (sem fixture de tenant)
+
+A resolução do corpus municipal ocorre por **contexto institucional real**, não por um id de tenant
+fixo:
+
+```
+Tenant → Organization (server/db/organizations: uf, município, esfera) → Município → Jurisdição → Corpus Municipal
+```
+
+O `institutionalConsultationService` carrega o **perfil institucional da organização** (UF/município;
+município só quando a esfera é municipal) e o passa como `userContext` ao `InstitutionalContextResolver`.
+A resolução hierárquica então casa o corpus municipal **pelo município da organização**
+(`resolveContext`), e não por um tenant hardcoded. Consequências:
+
+- Qualquer organização municipal (independentemente do id) resolve o **seu** corpus pelo seu município.
+- **Isolamento preservado:** uma organização de outro município jamais acessa as normas municipais de
+  Moreira Sales; federais permanecem compartilhadas; estaduais conforme a UF.
+- O perfil é **injetável** (`setInstitutionalProfileResolverForTests`) e degrada graciosamente sem
+  banco (nulos → apenas federal/estadual). `userContext` explícito tem precedência sobre o perfil.
+
+> O identificador `MOREIRA_SALES_TENANT_ID` permanece **apenas** como a identidade interna do corpus
+> municipal de Moreira Sales (o Official Knowledge Corpus exige `tenantId` em documentos municipais) e
+> como fixture de testes — **não** é mais requisito para a resolução de uma organização real.
 
 ## Persistência institucional (fonte de verdade = banco)
 
