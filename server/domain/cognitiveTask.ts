@@ -91,7 +91,7 @@ const LEGAL_POLICY: CognitiveExecutionPolicy = {
   temperature: 0.1, maxContext: 32000, maxCost: 0.75, requiresExplainability: true,
 };
 const LIGHT_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "openai", model: "gemini-2.5-flash",
+  preferredProvider: "gemini", fallbackProvider: "openai", model: AI_CONFIG.model,
   temperature: 0.0, maxContext: 12000, maxCost: 0.15, requiresExplainability: true,
 };
 

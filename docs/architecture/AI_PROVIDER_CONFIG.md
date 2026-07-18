@@ -16,9 +16,14 @@ preparado (Provider Adapter) e passam a funcionar quando seus adaptadores forem 
 
 Modelos padrão por provider (em `server/config/ai.ts`):
 
-- **gemini** → `gemini-2.5-flash` (free tier; padrão atual)
+- **gemini** → `gemini-flash-latest` (alias auto-atualizável — aponta sempre para o Flash estável atual)
 - **claude** → `claude-sonnet-4-5`
 - **openai** → `gpt-4o-mini`
+
+> **Descobrir quais modelos a sua conta suporta:** `GEMINI_API_KEY="..." pnpm ai:models` (ou pelo
+> GitHub: Actions → "Listar modelos de IA (manual)"). Modelos específicos podem ser descontinuados
+> (ex.: `gemini-2.5-pro` sem free tier; `gemini-2.5-flash` saiu para contas novas) — por isso o padrão
+> é um **alias** e o modelo é sobrescrevível por `AI_MODEL`.
 
 ## Exemplos
 

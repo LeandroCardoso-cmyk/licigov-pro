@@ -8,8 +8,8 @@ import { resolveAiRuntime, DEFAULT_MODEL_BY_PROVIDER } from "../../config/ai";
 import { getCognitiveTask } from "../../domain/cognitiveTask";
 
 describe("Config de IA — resolução de provider/modelo por ENV", () => {
-  it("default: gemini + gemini-2.5-flash", () => {
-    expect(resolveAiRuntime({})).toEqual({ provider: "gemini", model: "gemini-2.5-flash" });
+  it("default: gemini + gemini-flash-latest (alias auto-atualizável)", () => {
+    expect(resolveAiRuntime({})).toEqual({ provider: "gemini", model: "gemini-flash-latest" });
   });
 
   it("AI_PROVIDER=claude → claude + modelo padrão do claude", () => {
@@ -25,7 +25,7 @@ describe("Config de IA — resolução de provider/modelo por ENV", () => {
   });
 
   it("provider desconhecido cai em gemini; AI_MODEL em branco usa o default", () => {
-    expect(resolveAiRuntime({ AI_PROVIDER: "xpto", AI_MODEL: "  " })).toEqual({ provider: "gemini", model: "gemini-2.5-flash" });
+    expect(resolveAiRuntime({ AI_PROVIDER: "xpto", AI_MODEL: "  " })).toEqual({ provider: "gemini", model: "gemini-flash-latest" });
   });
 
   it("case-insensitive e com trim", () => {
@@ -34,7 +34,7 @@ describe("Config de IA — resolução de provider/modelo por ENV", () => {
 });
 
 describe("Config de IA — políticas cognitivas usam o modelo configurado", () => {
-  it("LEGAL_ANALYSIS deixa de usar gemini-2.5-pro e usa o modelo primário (flash por padrão)", () => {
-    expect(getCognitiveTask("LEGAL_ANALYSIS").policy.model).toBe("gemini-2.5-flash");
+  it("LEGAL_ANALYSIS deixa de usar gemini-2.5-pro e usa o modelo primário (gemini-flash-latest por padrão)", () => {
+    expect(getCognitiveTask("LEGAL_ANALYSIS").policy.model).toBe("gemini-flash-latest");
   });
 });

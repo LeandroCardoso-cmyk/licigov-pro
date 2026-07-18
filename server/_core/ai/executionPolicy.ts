@@ -41,27 +41,27 @@ export const AI_EXECUTION_POLICIES: Record<AITaskId, AIExecutionPolicy> = {
   document_generation: {
     task: "document_generation", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: true, requiresKnowledgeGraph: true, requiresExplainability: true,
-    maxContext: 32000, maxCost: 0.5, temperature: 0.2, model: "gemini-2.5-flash",
+    maxContext: 32000, maxCost: 0.5, temperature: 0.2, model: "gemini-flash-latest",
   },
   legal_analysis: {
     task: "legal_analysis", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: true, requiresKnowledgeGraph: true, requiresExplainability: true,
-    maxContext: 32000, maxCost: 0.75, temperature: 0.1, model: "gemini-2.5-flash",
+    maxContext: 32000, maxCost: 0.75, temperature: 0.1, model: "gemini-flash-latest",
   },
   classification: {
     task: "classification", preferredProvider: "gemini", fallbackProvider: "openai",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 8000, maxCost: 0.1, temperature: 0.0, model: "gemini-2.5-flash",
+    maxContext: 8000, maxCost: 0.1, temperature: 0.0, model: "gemini-flash-latest",
   },
   extraction: {
     task: "extraction", preferredProvider: "gemini", fallbackProvider: "openai",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 16000, maxCost: 0.2, temperature: 0.0, model: "gemini-2.5-flash",
+    maxContext: 16000, maxCost: 0.2, temperature: 0.0, model: "gemini-flash-latest",
   },
   summarization: {
     task: "summarization", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: false,
-    maxContext: 16000, maxCost: 0.15, temperature: 0.3, model: "gemini-2.5-flash",
+    maxContext: 16000, maxCost: 0.15, temperature: 0.3, model: "gemini-flash-latest",
   },
   embedding: {
     task: "embedding", preferredProvider: "gemini", fallbackProvider: "openai",
@@ -71,7 +71,7 @@ export const AI_EXECUTION_POLICIES: Record<AITaskId, AIExecutionPolicy> = {
   generic: {
     task: "generic", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 16000, maxCost: 0.25, temperature: 0.2, model: "gemini-2.5-flash",
+    maxContext: 16000, maxCost: 0.25, temperature: 0.2, model: "gemini-flash-latest",
   },
 };
 
