@@ -89,14 +89,6 @@ export function expandQueryTerms(query: string): string[] {
   return [...out];
 }
 
-/** Pontuação lexical determinística: fração de termos da consulta presentes no trecho. */
-function scorePassage(queryTerms: readonly string[], text: string): number {
-  if (queryTerms.length === 0) return 0;
-  const hay = new Set(tokenize(text));
-  const hits = queryTerms.filter(t => hay.has(t)).length;
-  return Math.round((hits / queryTerms.length) * 1000) / 1000;
-}
-
 export interface RetrieveParams {
   query: string;
   maxPassagesPerDocument?: number;
@@ -121,33 +113,65 @@ export function retrieveKnowledge(corpus: OfficialCorpusBuildResult, context: In
   const queryTerms = expandQueryTerms(params.query);
   const ingestedByNorm = new Map<string, IngestedDocument>(corpus.ingested.map(d => [d.official.normId, d]));
 
+  type Cand = {
+    doc: (typeof context.applicableDocuments)[number];
+    ingested: IngestedDocument;
+    b: ReturnType<typeof allBlocks>[number];
+    tokens: Set<string>;
+  };
+
+  // Passo 1 — candidatos (blocos oficiais dos documentos aplicáveis) + tokens.
+  const cands: Cand[] = [];
+  const ignored = new Set<string>();
+  for (const doc of context.applicableDocuments) {
+    const ingested = ingestedByNorm.get(doc.normId);
+    if (!ingested) { ignored.add(doc.documentId); continue; }
+    const blocks = allBlocks(ingested.knowledgeDocument).filter(b => b.kind === "OfficialText");
+    if (blocks.length === 0) { ignored.add(doc.documentId); continue; }
+    for (const b of blocks) cands.push({ doc, ingested, b, tokens: new Set(tokenize(b.fragments.map(f => f.text).join(" "))) });
+  }
+
+  // IDF sobre os blocos candidatos: termos raros/específicos ("preliminar") pesam mais que genéricos
+  // ("quando"). Isso ranqueia os trechos pertinentes acima do ruído — determinístico, sem embeddings.
+  const N = Math.max(1, cands.length);
+  const df = new Map<string, number>();
+  for (const c of cands) for (const t of c.tokens) df.set(t, (df.get(t) ?? 0) + 1);
+  const idf = (t: string) => Math.log(N / (1 + (df.get(t) ?? 0))) + 1;
+  const denom = queryTerms.reduce((s, t) => s + idf(t), 0) || 1;
+  const scoreOf = (tokens: Set<string>): number => {
+    let num = 0;
+    for (const t of queryTerms) if (tokens.has(t)) num += idf(t);
+    return Math.round((num / denom) * 1000) / 1000;
+  };
+
+  // Passo 2 — pontua e agrupa por documento.
+  const byDoc = new Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number }> }>();
+  for (const c of cands) {
+    const score = scoreOf(c.tokens);
+    if (score < minScore) continue;
+    let g = byDoc.get(c.doc.documentId);
+    if (!g) { g = { doc: c.doc, ingested: c.ingested, scored: [] }; byDoc.set(c.doc.documentId, g); }
+    g.scored.push({ b: c.b, score });
+  }
+
   const documents: ContextDocument[] = [];
   const passages: RetrievedPassage[] = [];
   const citations: Citation[] = [];
   const explainability: ContextExplainabilityEntry[] = [];
   const documentsLoaded: string[] = [];
-  const documentsIgnored: string[] = [];
 
   for (const doc of context.applicableDocuments) {
-    const ingested = ingestedByNorm.get(doc.normId);
-    if (!ingested) { documentsIgnored.push(doc.documentId); continue; }
-
-    const scored = allBlocks(ingested.knowledgeDocument)
-      .filter(b => b.kind === "OfficialText")
-      .map(b => ({ b, score: scorePassage(queryTerms, b.fragments.map(f => f.text).join(" ")) }))
-      .filter(x => x.score >= minScore)
-      .sort((a, b) => b.score - a.score || a.b.id.localeCompare(b.b.id))
-      .slice(0, maxPer);
-
-    if (scored.length === 0) { documentsIgnored.push(doc.documentId); continue; }
+    const g = byDoc.get(doc.documentId);
+    if (!g || g.scored.length === 0) { ignored.add(doc.documentId); continue; }
+    const top = g.scored.sort((a, b) => b.score - a.score || a.b.id.localeCompare(b.b.id)).slice(0, maxPer);
 
     documentsLoaded.push(doc.documentId);
     documents.push({ documentId: doc.documentId, normId: doc.normId, title: doc.title, authority: doc.authority, jurisdiction: doc.jurisdiction, version: doc.version, bindingLevel: doc.bindingLevel, status: doc.status });
-    explainability.push({ documentId: doc.documentId, reason: `Documento aplicável (${doc.jurisdiction}); ${scored.length} trecho(s) relevante(s) para a consulta.`, authority: doc.authority, version: doc.version, bindingLevel: doc.bindingLevel, lineageId: ingested.knowledgeDocument.lineageId });
+    explainability.push({ documentId: doc.documentId, reason: `Documento aplicável (${doc.jurisdiction}); ${top.length} trecho(s) relevante(s) para a consulta.`, authority: doc.authority, version: doc.version, bindingLevel: doc.bindingLevel, lineageId: g.ingested.knowledgeDocument.lineageId });
 
-    for (const { b, score } of scored) {
+    for (const { b, score } of top) {
       passages.push({ documentId: doc.documentId, normId: doc.normId, blockId: b.id, identifier: b.title, text: clipPassage(b.fragments.map(f => f.text).join("\n"), params.maxPassageChars), score });
-      citations.push({ documentId: doc.documentId, reference: `${doc.title} — ${b.title}`, authority: doc.authority, version: doc.version, jurisdiction: doc.jurisdiction, bindingLevel: doc.bindingLevel, lineageId: ingested.knowledgeDocument.lineageId });
+      citations.push({ documentId: doc.documentId, reference: `${doc.title} — ${b.title}`, authority: doc.authority, version: doc.version, jurisdiction: doc.jurisdiction, bindingLevel: doc.bindingLevel, lineageId: g.ingested.knowledgeDocument.lineageId });
     }
   }
 
@@ -155,6 +179,6 @@ export function retrieveKnowledge(corpus: OfficialCorpusBuildResult, context: In
     documents: documents.sort((a, b) => a.documentId.localeCompare(b.documentId)),
     passages, citations,
     explainability: explainability.sort((a, b) => a.documentId.localeCompare(b.documentId)),
-    documentsLoaded: documentsLoaded.sort(), documentsIgnored: documentsIgnored.sort(),
+    documentsLoaded: documentsLoaded.sort(), documentsIgnored: [...ignored].sort(),
   };
 }
