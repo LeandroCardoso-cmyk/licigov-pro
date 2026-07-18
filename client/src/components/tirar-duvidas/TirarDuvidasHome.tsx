@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Streamdown } from "streamdown";
 import { trpc } from "../../lib/trpc";
 
 /**
@@ -134,7 +135,9 @@ export default function TirarDuvidasHome() {
                 ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Fundamentada</span>
                 : <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">Sem base suficiente</span>}
             </div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{answer.answer}</p>
+            <div className="prose prose-sm max-w-none text-gray-800 prose-headings:text-gray-900 prose-strong:text-gray-900">
+              <Streamdown>{answer.answer}</Streamdown>
+            </div>
           </div>
 
           {/* Explainability */}

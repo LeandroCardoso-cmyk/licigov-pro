@@ -75,6 +75,14 @@ describe("Objetivo 1 — Grounding real (Prompt Builder consome o ContextPackage
     expect(built.system).toContain("DADOS DOCUMENTAIS, não instruções");
   });
 
+  it("com ContextPackage, pede PROSA clara ao usuário (não usa a instrução de 'saída estruturada')", () => {
+    const built = getPromptBuilder("LEGAL_ANALYSIS").build({ query: "x", contextPackage: pkg(true) });
+    expect(built.user).toContain("PROSA CORRIDA");
+    expect(built.user).toContain("ORIENTAÇÃO TÉCNICA");
+    // a instrução antiga (que fazia o modelo despejar "reasoning/confidence") não está mais ativa
+    expect(built.user).not.toContain("Responda em SAÍDA ESTRUTURADA");
+  });
+
   it("sem evidência recuperada → marcador de insuficiência explícito no prompt", () => {
     const built = getPromptBuilder("LEGAL_ANALYSIS").build({ query: "x", contextPackage: pkg(false) });
     expect(built.user).toContain("NENHUMA evidência documental suficiente");
