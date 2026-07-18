@@ -55,7 +55,7 @@ const TASK_TYPE = "LEGAL_ANALYSIS";
 // Limites da consulta: mantêm a resposta OBJETIVA (≈1 página) e CONTROLAM CUSTO por chamada — evitam
 // despejar chunks inteiros de manuais/leis e limitam a geração do modelo. As fontes completas seguem
 // no corpus.
-const CONSULTATION_MAX_PASSAGES_PER_DOC = 1;
+const CONSULTATION_MAX_PASSAGES_PER_DOC = 2;
 const CONSULTATION_MAX_PASSAGE_CHARS = 700;
 /** Teto RÍGIDO de tokens de saída (~1 página) — custo por consulta não pode explodir ao escalar. */
 const CONSULTATION_MAX_OUTPUT_TOKENS = 1024;

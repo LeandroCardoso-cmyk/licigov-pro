@@ -9505,8 +9505,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784351521.1341002,
-    "ast_hash": "cbd5d861521f4bbd10b0b8b58b5f514c",
+    "mtime": 1784353509.4824839,
+    "ast_hash": "bd96c4ad1c57f8774788cb487b6ad712",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784352239.3660839,
-    "ast_hash": "81ecccfc63eccb640e0618484ac4281c",
+    "mtime": 1784353135.8864925,
+    "ast_hash": "f8b139599efaaf79297e99efacfeb4e6",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
-    "mtime": 1784352322.178082,
-    "ast_hash": "b78d758ddbc2e2d9fd5587b8e3e61881",
+    "mtime": 1784353155.774492,
+    "ast_hash": "39a1dfda9235e60fb69f25ea453d8e79",
     "semantic_hash": ""
   },
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {
@@ -9632,6 +9632,11 @@
   ".github/workflows/ai-models.yml": {
     "mtime": 1784351486.2461011,
     "ast_hash": "aca0b1fb7fb398996b5a1c0864d1ba85",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/query-expansion.test.ts": {
+    "mtime": 1784353550.082483,
+    "ast_hash": "11e8eb8bedfc0947d190634caba64bc0",
     "semantic_hash": ""
   }
 }
