@@ -4115,8 +4115,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1784351486.6141012,
-    "ast_hash": "85661b6b1c1bc38d1f7fe5dc278b15f5",
+    "mtime": 1784413897.400581,
+    "ast_hash": "a64afc25a8bc8afa40f6623000145c60",
     "semantic_hash": ""
   },
   "server/_core/ai/provider.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784411355.1601357,
-    "ast_hash": "ca682a3e347e72453e4b80fb04962317",
+    "mtime": 1784413867.0245798,
+    "ast_hash": "49c0e612bf1034cc9f3b6eae363cf9fa",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9637,6 +9637,11 @@
   "server/__tests__/integration/query-expansion.test.ts": {
     "mtime": 1784384253.6640484,
     "ast_hash": "11e8eb8bedfc0947d190634caba64bc0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/gemini-thinking.test.ts": {
+    "mtime": 1784413905.316581,
+    "ast_hash": "ba22ee6bc66a01b158b0df47f89e3bad",
     "semantic_hash": ""
   }
 }
