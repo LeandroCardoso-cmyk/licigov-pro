@@ -14,6 +14,7 @@ import { createHash } from "crypto";
 import type { BusinessDomainCode } from "./businessDomain";
 import type { CopilotType } from "./institutionalCopilot";
 import type { ProviderName } from "../_core/ai/executionPolicy";
+import { AI_CONFIG } from "../config/ai";
 
 /** Catálogo oficial de tarefas cognitivas do LiciGov Pro. */
 export type CognitiveTaskId =
@@ -82,11 +83,11 @@ export interface CognitiveTask {
 // ─── Políticas base ───────────────────────────────────────────────────────────
 
 const REASONING_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "claude", model: "gemini-2.5-pro",
+  preferredProvider: "gemini", fallbackProvider: "claude", model: AI_CONFIG.model,
   temperature: 0.2, maxContext: 32000, maxCost: 0.5, requiresExplainability: true,
 };
 const LEGAL_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "claude", model: "gemini-2.5-pro",
+  preferredProvider: "gemini", fallbackProvider: "claude", model: AI_CONFIG.model,
   temperature: 0.1, maxContext: 32000, maxCost: 0.75, requiresExplainability: true,
 };
 const LIGHT_POLICY: CognitiveExecutionPolicy = {

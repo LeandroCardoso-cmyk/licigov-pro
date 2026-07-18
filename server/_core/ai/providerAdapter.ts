@@ -14,6 +14,7 @@
  */
 
 import { ENV } from "../env";
+import { AI_CONFIG } from "../../config/ai";
 import type { ProviderName } from "./executionPolicy";
 import type { AIProvider } from "./types";
 import { GeminiProvider } from "./gemini";
@@ -45,9 +46,26 @@ function mockProvider(): MockAIProvider {
   return _mock;
 }
 
-/** Provider canônico ativo (Gemini por padrão). Pode ser trocado em testes via setActiveProvider. */
+/**
+ * Constrói o provider PRIMÁRIO conforme a configuração (AI_PROVIDER/AI_MODEL). Gemini está
+ * implementado; Claude/OpenAI têm contrato preparado (lançam ProviderNotImplemented se usados) —
+ * ativar cada um é implementar seu adaptador, sem tocar nos Business Domains.
+ */
+function buildPrimaryProvider(): AIProvider {
+  switch (AI_CONFIG.provider) {
+    case "claude":
+      return new ClaudeProvider();
+    case "openai":
+      return new OpenAIProvider();
+    case "gemini":
+    default:
+      return new GeminiProvider(ENV.geminiApiKey, AI_CONFIG.model);
+  }
+}
+
+/** Provider primário ativo (definido por AI_PROVIDER/AI_MODEL). Pode ser trocado em testes via setActiveProvider. */
 export function getActiveProvider(): AIProvider {
-  if (!_active) _active = new GeminiProvider(ENV.geminiApiKey);
+  if (!_active) _active = buildPrimaryProvider();
   return _active;
 }
 

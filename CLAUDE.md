@@ -95,6 +95,11 @@ PORT=3000
 DATABASE_URL=mysql://usuario:senha@host:3306/licigov   # Railway MySQL
 JWT_SECRET=string-longa-minimo-32-chars
 GEMINI_API_KEY=sua-chave-gemini
+# IA multi-provider (ver docs/architecture/AI_PROVIDER_CONFIG.md) — opcionais:
+AI_PROVIDER=gemini            # gemini | claude | openai (default: gemini)
+AI_MODEL=gemini-2.5-flash     # modelo do provider primário (default: padrão do provider)
+ANTHROPIC_API_KEY=            # Claude (contrato preparado)
+OPENAI_API_KEY=               # OpenAI (contrato preparado)
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_S3_BUCKET=...
