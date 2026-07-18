@@ -16,7 +16,7 @@ import {
   type InstitutionalConsultationAnswer, type ConsultationRecord, type ConsultationSource,
 } from "../domain/institutionalConsultation";
 import { getConsultationRepository } from "./institutionalConsultationRepository";
-import { getOrganizationById } from "../db/organizations";
+import { getOrganizationInstitutionalProfile } from "../db/organizations";
 
 /** Corpus oficial memoizado (build determinístico único por processo — não é RAG/cache paralelo). */
 let _corpus: OfficialCorpusBuildResult | null = null;
@@ -37,7 +37,9 @@ export interface InstitutionalProfile { readonly state: string | null; readonly 
 export type InstitutionalProfileResolver = (tenantId: number) => Promise<InstitutionalProfile>;
 
 const defaultInstitutionalProfileResolver: InstitutionalProfileResolver = async (tenantId) => {
-  const org = await getOrganizationById(tenantId);
+  // Contexto OPCIONAL: leitura estreita e tolerante a falhas — se a organização não puder ser
+  // carregada, degrada para federal/estadual (a consulta jamais falha por causa do perfil).
+  const org = await getOrganizationInstitutionalProfile(tenantId);
   if (!org) return { state: null, municipality: null };
   return {
     state: org.uf ?? null,
@@ -123,7 +125,13 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
     // Resolução por CONTEXTO INSTITUCIONAL REAL: quando o chamador não informa userContext, o
     // perfil (UF/município) é carregado da organização. Isso substitui a dependência do fixture de
     // tenant municipal — qualquer organização municipal resolve o próprio corpus pelo seu município.
-    const userContext = params.userContext ?? await _profileResolver(params.organizationId);
+    // O perfil é OPCIONAL: qualquer falha ao carregá-lo degrada para federal/estadual — nunca
+    // derruba a consulta.
+    let userContext = params.userContext ?? null;
+    if (!userContext) {
+      try { userContext = await _profileResolver(params.organizationId); }
+      catch { userContext = { state: null, municipality: null }; }
+    }
     const { execution, contextPackage } = await executeCognitiveTaskWithInstitutionalContext(getOfficialCorpus(), {
       tenantId: params.organizationId, businessDomain: CONSULTATION_DOMAIN_CODE, taskType: TASK_TYPE,
       query: question, correlationId: params.correlationId, userContext,

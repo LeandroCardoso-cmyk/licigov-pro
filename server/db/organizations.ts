@@ -16,6 +16,30 @@ export async function getOrganizationById(id: number) {
   return rows[0] ?? null;
 }
 
+/**
+ * Perfil institucional (esfera/UF/município) para resolução do corpus — SELECT ESTREITO (apenas as
+ * colunas necessárias, evitando timestamps/colunas que possam divergir em bancos legados) e TOLERANTE
+ * A FALHAS: retorna null se a organização não puder ser carregada, para que o chamador degrade em vez
+ * de quebrar. Nunca lança.
+ */
+export async function getOrganizationInstitutionalProfile(
+  id: number,
+): Promise<{ esfera: string | null; uf: string | null; municipio: string | null } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const rows = await db
+      .select({ esfera: organizations.esfera, uf: organizations.uf, municipio: organizations.municipio })
+      .from(organizations)
+      .where(eq(organizations.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  } catch (e) {
+    console.warn("[organizations] getOrganizationInstitutionalProfile falhou (schema legado?):", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
 export async function getOrganizationBySlug(slug: string) {
   const db = await getDb();
   if (!db) return null;

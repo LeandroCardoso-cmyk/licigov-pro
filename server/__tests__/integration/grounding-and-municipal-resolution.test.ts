@@ -186,6 +186,15 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
     expect(["completed", "limited"]).toContain(a.status); // fluxo íntegro
   });
 
+  it("perfil que FALHA ao carregar não derruba a consulta (degrada para federal/estadual)", async () => {
+    setInstitutionalProfileResolverForTests(async () => { throw new Error("Unknown column 'createdAt' (schema legado)"); });
+    const a = await answerConsultation({
+      organizationId: 4242, userId: 1, question: "Quando devo utilizar pregão?", correlationId: "c-svc-fail",
+      now: () => 0, createdAt: () => "2026-01-01T00:00:00.000Z",
+    });
+    expect(["completed", "limited"]).toContain(a.status); // não lançou; consulta concluída mesmo assim
+  });
+
   it("userContext explícito tem precedência sobre o perfil da organização", async () => {
     let called = false;
     setInstitutionalProfileResolverForTests(async () => { called = true; return { state: null, municipality: null }; });
