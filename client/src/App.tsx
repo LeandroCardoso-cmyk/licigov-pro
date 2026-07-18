@@ -7,7 +7,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Modules from "./pages/Modules";
 import ProcessDetails from "./pages/ProcessDetails";
 import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
@@ -61,6 +60,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { KeyboardShortcutsTooltip } from "./components/KeyboardShortcutsTooltip";
+import DashboardLayout from "./components/DashboardLayout";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -91,10 +91,23 @@ function AuthenticatedRoute({ component: Component }: { component: React.Compone
   return <Component />;
 }
 
+/**
+ * RC-6 — Shell autenticado ÚNICO da aplicação: guarda de auth + DashboardLayout (menu lateral).
+ * Aplicado SOMENTE na composição de rota — nenhuma página importa DashboardLayout diretamente,
+ * o que evita renderização duplicada do shell. A identidade do componente é estável (const de
+ * módulo) para não remontar a árvore a cada render.
+ */
+function withAuthenticatedShell(Component: React.ComponentType) {
+  const Shelled = () => (
+    <DashboardLayout>
+      <Component />
+    </DashboardLayout>
+  );
+  return () => <AuthenticatedRoute component={Shelled} />;
+}
+
 // Wrapper components para evitar re-criação em cada render
 const ModuleSelectionRoute = () => <AuthenticatedRoute component={ModuleSelectionDashboard} />;
-const ModulesRoute = () => <AuthenticatedRoute component={Modules} />;
-const ProcessesRoute = () => <AuthenticatedRoute component={Dashboard} />;
 const NewProcessRoute = () => <AuthenticatedRoute component={NewProcess} />;
 const DocumentSettingsRoute = () => <AuthenticatedRoute component={DocumentSettings} />;
 const ProcessDetailsRoute = () => <AuthenticatedRoute component={ProcessDetails} />;
@@ -124,25 +137,32 @@ const LegalOpinionsRoute = () => <AuthenticatedRoute component={LegalOpinions} /
 const LegalOpinionsAnalyticsRoute = () => <AuthenticatedRoute component={LegalOpinionsAnalytics} />;
 const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
 const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
-// RC-1 — rotas canônicas dos Business Domains (o legado permanece, mas sai da navegação)
-const DirectProcurementRoute = () => <AuthenticatedRoute component={DirectProcurement} />;
-const ParecerJuridicoRoute = () => <AuthenticatedRoute component={ParecerJuridico} />;
-const ContratosWorkspaceRoute = () => <AuthenticatedRoute component={ContratosWorkspace} />;
-const TirarDuvidasRoute = () => <AuthenticatedRoute component={TirarDuvidas} />;
-const CentroOperacoesRoute = () => <AuthenticatedRoute component={CentroOperacoes} />;
+// RC-6 — Rotas críticas de homologação renderizadas DENTRO do shell (DashboardLayout).
+// Centro de Operações é a home canônica: /dashboard e /centro-operacoes usam a MESMA
+// implementação (CentroOperacoes → DepartmentOperationHome), sem duplicar lógica/estado.
+const OperationsHomeShellRoute = withAuthenticatedShell(CentroOperacoes);
+const ProcessosShellRoute = withAuthenticatedShell(Dashboard);
+const DirectProcurementShellRoute = withAuthenticatedShell(DirectProcurement);
+const ParecerJuridicoShellRoute = withAuthenticatedShell(ParecerJuridico);
+const ContratosWorkspaceShellRoute = withAuthenticatedShell(ContratosWorkspace);
+const TirarDuvidasShellRoute = withAuthenticatedShell(TirarDuvidas);
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={LandingPage} />
-      {/* RC-1 — Business Domains (rotas canônicas do produto) */}
-      <Route path={"/contratacao-direta"} component={DirectProcurementRoute} />
-      <Route path={"/parecer"} component={ParecerJuridicoRoute} />
-      <Route path={"/contratos"} component={ContratosWorkspaceRoute} />
-      <Route path={"/tirar-duvidas"} component={TirarDuvidasRoute} />
-      <Route path={"/centro-operacoes"} component={CentroOperacoesRoute} />
-      <Route path={"/dashboard"} component={ModuleSelectionRoute} />
-      <Route path={"/processos"} component={ProcessesRoute} />
+      {/* RC-6 — Home canônica no shell: Centro de Operações.
+              /dashboard e /centro-operacoes apontam para a MESMA implementação. */}
+      <Route path={"/dashboard"} component={OperationsHomeShellRoute} />
+      <Route path={"/centro-operacoes"} component={OperationsHomeShellRoute} />
+      {/* Seletor de módulos legado — preservado em /modulos (retrocompatibilidade temporária). */}
+      <Route path={"/modulos"} component={ModuleSelectionRoute} />
+      {/* RC-6 — Business Domains no shell (rotas críticas de homologação) */}
+      <Route path={"/contratacao-direta"} component={DirectProcurementShellRoute} />
+      <Route path={"/parecer"} component={ParecerJuridicoShellRoute} />
+      <Route path={"/contratos"} component={ContratosWorkspaceShellRoute} />
+      <Route path={"/tirar-duvidas"} component={TirarDuvidasShellRoute} />
+      <Route path={"/processos"} component={ProcessosShellRoute} />
       <Route path={"/gestao-comercial"} component={CommercialManagementRoute} />
       <Route path={"/novo-processo"} component={NewProcessRoute} />
       <Route path={"/personalizacao-documentos"} component={DocumentSettingsRoute} />

@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784317916.5730603,
-    "ast_hash": "33958cbbc4704c23c63ac5801526d02d",
+    "mtime": 1784333172.8205724,
+    "ast_hash": "18bff4cb00ed7d23e64573d936bb23fd",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -2265,8 +2265,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Dashboard.tsx": {
-    "mtime": 1782612418.3784268,
-    "ast_hash": "68245c02ed9bab257454fd5148a1e116",
+    "mtime": 1784332955.3125806,
+    "ast_hash": "3a74b47b01829bbe6938891d47a05f6c",
     "semantic_hash": ""
   },
   "client/src/pages/DepartmentManagement.tsx": {
@@ -9550,8 +9550,8 @@
     "semantic_hash": ""
   },
   "drizzle/0284_institutional_consultations.sql": {
-    "mtime": 1784319604.954648,
-    "ast_hash": "c38f157227e2c13cae31e23bbea5fa26",
+    "mtime": 1784321824.805909,
+    "ast_hash": "ab44eca61cb93ad8f23219c681882f1d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc51-persistence.test.ts": {
@@ -9567,6 +9567,11 @@
   "server/services/institutionalConsultationRepository.ts": {
     "mtime": 1784319754.7358103,
     "ast_hash": "df544e7fc0ddf927512be2eac8246ea8",
+    "semantic_hash": ""
+  },
+  "docs/architecture/DASHBOARD_SHELL_AND_ORPHAN_AUDIT.md": {
+    "mtime": 1784333026.632578,
+    "ast_hash": "b0edf8606d7fa3de2a89b35ae9d1ed73",
     "semantic_hash": ""
   }
 }
