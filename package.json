@@ -16,7 +16,8 @@
     "test":           "vitest run",
     "db:push":        "drizzle-kit push --force",
     "db:generate":    "drizzle-kit generate",
-    "db:migrate":     "drizzle-kit migrate"
+    "db:migrate":     "drizzle-kit migrate",
+    "db:audit":       "tsx scripts/schema-audit.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

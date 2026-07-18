@@ -1,0 +1,31 @@
+name: Auditoria de Schema (manual)
+
+# Rodar manualmente pelo GitHub: aba "Actions" → "Auditoria de Schema (manual)" → "Run workflow".
+# Requer o secret AUDIT_DATABASE_URL (string de conexão MySQL de produção/staging).
+# Somente leitura (INFORMATION_SCHEMA); não altera o banco.
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Auditoria de Schema (Drizzle × banco)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Instalar pnpm
+        run: npm install -g pnpm
+
+      - name: Instalar dependências
+        run: pnpm install
+
+      - name: Rodar auditoria (o relatório aparece neste log)
+        run: pnpm db:audit || true
+        env:
+          DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
