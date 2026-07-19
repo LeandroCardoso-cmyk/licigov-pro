@@ -57,8 +57,9 @@ const TASK_TYPE = "LEGAL_ANALYSIS";
 // no corpus.
 const CONSULTATION_MAX_PASSAGES_PER_DOC = 3;
 const CONSULTATION_MAX_PASSAGE_CHARS = 700;
-/** Teto RÍGIDO de tokens de saída (~1 página) — custo por consulta não pode explodir ao escalar. */
-const CONSULTATION_MAX_OUTPUT_TOKENS = 1024;
+/** Teto de tokens de saída — custo por consulta não explode ao escalar. Com o "thinking" desligado nos
+ *  modelos Flash, esse orçamento é integralmente da resposta (≈1 página completa, sem corte). */
+const CONSULTATION_MAX_OUTPUT_TOKENS = 1500;
 
 function buildSources(tenantId: number, consultationId: string, pkg: ContextPackage, createdAt: string): ConsultationSource[] {
   const docById = new Map(pkg.documents.map(d => [d.documentId, d]));

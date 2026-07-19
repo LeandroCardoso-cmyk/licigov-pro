@@ -21,6 +21,15 @@ const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
+/**
+ * Modelos Gemini Flash 2.5 ativam "thinking" por padrão, que consome tokens de saída (trunca a
+ * resposta) e é cobrado. Este helper decide quando desligá-lo (`thinkingBudget: 0`), aplicável APENAS
+ * aos Flash 2.5 — em outros modelos (ex.: Pro, que exige budget ≥ 128) não é aplicado.
+ */
+export function shouldDisableThinking(modelId: string): boolean {
+  return modelId.includes("flash-latest") || modelId.includes("2.5-flash");
+}
+
 export class GeminiProvider implements AIProvider {
   readonly name = "gemini";
 
@@ -86,6 +95,13 @@ export class GeminiProvider implements AIProvider {
     if (responseSchema) {
       generationConfig.responseMimeType = "application/json";
       generationConfig.responseSchema = responseSchema.schema;
+    }
+    // Gemini 2.5 Flash ativa "thinking" por padrão, que CONSOME tokens de saída (truncando a resposta
+    // visível) e é cobrado. Este app é grounded/objetivo (o raciocínio vem do pipeline, não do modelo),
+    // então desligamos o thinking nos modelos Flash — resposta completa + custo menor. `thinkingBudget: 0`
+    // só é válido em Flash; para outros modelos (ex.: Pro) não é aplicado (evita erro da API).
+    if (shouldDisableThinking(this.modelId)) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
 
     const model = this.client.getGenerativeModel({
