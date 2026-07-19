@@ -5430,8 +5430,8 @@
     "semantic_hash": ""
   },
   "server/services/ai/suggestions.ts": {
-    "mtime": 1784472877.1866739,
-    "ast_hash": "0db186bc3868cfe6afa55360a6795bf1",
+    "mtime": 1784503729.0489082,
+    "ast_hash": "5964ae1a270c1a83e35eef303bbedf5c",
     "semantic_hash": ""
   },
   "server/services/aiAuditService.ts": {
@@ -5800,8 +5800,8 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784472877.1946738,
-    "ast_hash": "f8d9a1e7c9a5e03f06b2f0f7b4013990",
+    "mtime": 1784503648.7169101,
+    "ast_hash": "81be94e60e71ef13c9dbf509dc69d3b0",
     "semantic_hash": ""
   },
   "server/services/graphObservabilityService.ts": {
@@ -9697,6 +9697,11 @@
   "server/__tests__/integration/seed-licensed-modules.test.ts": {
     "mtime": 1784503167.5449212,
     "ast_hash": "1e389896587b5358bf461437bce085b9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/no-dead-gemini-models.test.ts": {
+    "mtime": 1784503749.0409079,
+    "ast_hash": "11154d8a0e56157ea1b8c885892bc126",
     "semantic_hash": ""
   }
 }
