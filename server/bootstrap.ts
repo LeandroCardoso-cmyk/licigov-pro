@@ -4047,6 +4047,127 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   await addColumnIfMissing("semantic_search_entries", "lastSeenAt",             "timestamp");
   await addColumnIfMissing("semantic_search_entries", "catmatGroup",            "varchar(128)");
   await addColumnIfMissing("semantic_search_entries", "catmatClass",            "varchar(128)");
+
+  // ── Convergência de bancos criados PELA CADEIA de migrations (staging/CI zerados) ──
+  // Nessas tabelas as migrations antigas criaram colunas em snake_case, mas o schema.ts
+  // (alinhado à PRODUÇÃO pela #170) declara camelCase. Renomeia banco→schema APENAS quando
+  // o nome antigo existe e o novo falta — em produção (nomes já corretos) é no-op.
+  // RENAME COLUMN (MySQL 8) preserva dados, tipo e índices. Lista gerada do relatório da
+  // auditoria (formato: nomeNoSchema → nomeNoBanco; aqui invertido: from=banco, to=schema).
+  async function renameColumnIfNeeded(table: string, from: string, to: string): Promise<void> {
+    const [fromRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [table, from]
+    );
+    if ((fromRows[0] as ColRow).cnt === 0) return;
+    const [toRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [table, to]
+    );
+    if ((toRows[0] as ColRow).cnt > 0) return;
+    await connection.execute(`ALTER TABLE \`${table}\` RENAME COLUMN \`${from}\` TO \`${to}\``);
+    log("DB", `✓ Schema corrigido: ${table}.${from} → ${to}`);
+  }
+
+  const CHAIN_RENAMES: Array<[string, string, string]> = [
+    ["department_permissions", "created_at", "createdAt"],
+    ["environments", "created_at", "createdAt"],
+    ["environments", "updated_at", "updatedAt"],
+    ["extraction_evidence", "staging_item_id", "stagingItemId"],
+    ["extraction_evidence", "import_session_id", "importSessionId"],
+    ["extraction_evidence", "organization_id", "organizationId"],
+    ["extraction_evidence", "created_at", "createdAt"],
+    ["extraction_evidence", "updated_at", "updatedAt"],
+    ["import_analytics_snapshots", "organization_id", "organizationId"],
+    ["import_analytics_snapshots", "period_start", "periodStart"],
+    ["import_analytics_snapshots", "period_end", "periodEnd"],
+    ["import_analytics_snapshots", "session_count", "sessionCount"],
+    ["import_analytics_snapshots", "item_count", "itemCount"],
+    ["import_analytics_snapshots", "created_at", "createdAt"],
+    ["import_review_transitions", "staging_item_id", "stagingItemId"],
+    ["import_review_transitions", "from_state", "fromState"],
+    ["import_review_transitions", "to_state", "toState"],
+    ["import_review_transitions", "actor_type", "actorType"],
+    ["import_review_transitions", "actor_user_id", "actorUserId"],
+    ["import_review_transitions", "actor_org_id", "actorOrgId"],
+    ["import_review_transitions", "actor_agent_id", "actorAgentId"],
+    ["import_review_transitions", "occurred_at", "occurredAt"],
+    ["operational_feedback", "created_at", "createdAt"],
+    ["operational_health_snapshots", "created_at", "createdAt"],
+    ["operational_templates", "created_at", "createdAt"],
+    ["operational_templates", "updated_at", "updatedAt"],
+    ["parser_capabilities", "parser_type", "parserType"],
+    ["parser_capabilities", "parser_version", "parserVersion"],
+    ["parser_capabilities", "supports_multi_sheet", "supportsMultiSheet"],
+    ["parser_capabilities", "supports_multi_page", "supportsMultiPage"],
+    ["parser_capabilities", "supports_formulas", "supportsFormulas"],
+    ["parser_capabilities", "supports_merged_cells", "supportsMergedCells"],
+    ["parser_capabilities", "supports_images", "supportsImages"],
+    ["parser_capabilities", "supports_headers", "supportsHeaders"],
+    ["parser_capabilities", "supports_footers", "supportsFooters"],
+    ["parser_capabilities", "description_confidence", "descriptionConfidence"],
+    ["parser_capabilities", "quantity_confidence", "quantityConfidence"],
+    ["parser_capabilities", "unit_confidence", "unitConfidence"],
+    ["parser_capabilities", "price_confidence", "priceConfidence"],
+    ["parser_capabilities", "requires_manual_unit_review", "requiresManualUnitReview"],
+    ["parser_capabilities", "requires_manual_price_review", "requiresManualPriceReview"],
+    ["parser_capabilities", "likelihood_merged_headers", "likelihoodMergedHeaders"],
+    ["parser_capabilities", "likelihood_footer_rows", "likelihoodFooterRows"],
+    ["parser_capabilities", "registered_at", "registeredAt"],
+    ["pilot_execution_snapshots", "created_at", "createdAt"],
+    ["pilot_execution_snapshots", "updated_at", "updatedAt"],
+    ["pilot_organizations", "created_at", "createdAt"],
+    ["pilot_organizations", "updated_at", "updatedAt"],
+    ["pilot_readiness_scores", "created_at", "createdAt"],
+    ["semantic_candidates", "staging_item_id", "stagingItemId"],
+    ["semantic_candidates", "import_session_id", "importSessionId"],
+    ["semantic_candidates", "organization_id", "organizationId"],
+    ["semantic_candidates", "proposed_description", "proposedDescription"],
+    ["semantic_candidates", "proposed_unit", "proposedUnit"],
+    ["semantic_candidates", "proposed_quantity", "proposedQuantity"],
+    ["semantic_candidates", "proposed_unit_price", "proposedUnitPrice"],
+    ["semantic_candidates", "explanation_reason", "explanationReason"],
+    ["semantic_candidates", "explanation_matched", "explanationMatched"],
+    ["semantic_candidates", "original_raw", "originalRaw"],
+    ["semantic_candidates", "catmat_code", "catmatCode"],
+    ["semantic_candidates", "index_entry_id", "indexEntryId"],
+    ["semantic_candidates", "generated_at", "generatedAt"],
+    ["semantic_candidates", "evaluated_at", "evaluatedAt"],
+    ["semantic_candidates", "evaluated_by", "evaluatedBy"],
+    ["semantic_search_entries", "organization_id", "organizationId"],
+    ["semantic_search_entries", "canonical_text", "canonicalText"],
+    ["semantic_search_entries", "display_text", "displayText"],
+    ["semantic_search_entries", "synonym_tokens", "synonymTokens"],
+    ["semantic_search_entries", "catmat_code", "catmatCode"],
+    ["semantic_search_entries", "is_active", "isActive"],
+    ["semantic_search_entries", "created_at", "createdAt"],
+    ["semantic_search_entries", "updated_at", "updatedAt"],
+    ["support_incidents", "created_at", "createdAt"],
+    ["support_incidents", "updated_at", "updatedAt"],
+    ["training_analytics", "created_at", "createdAt"],
+    ["ux_events", "created_at", "createdAt"],
+    ["workflow_analytics_snapshots", "created_at", "createdAt"],
+    ["workflow_permissions", "created_at", "createdAt"],
+    ["workload_metrics", "created_at", "createdAt"],
+  ];
+  for (const [table, from, to] of CHAIN_RENAMES) {
+    await renameColumnIfNeeded(table, from, to);
+  }
+
+  // semantic_chunks: a re-fundação (0183) tem menos colunas que a forma final do schema.ts
+  // (evoluída depois via db:push na produção). Completa o que faltar — idempotente.
+  await addColumnIfMissing("semantic_chunks", "document_type",     "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "content",           "text");
+  await addColumnIfMissing("semantic_chunks", "total_chunks",      "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("semantic_chunks", "strategy",          "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "section_title",     "varchar(255)");
+  await addColumnIfMissing("semantic_chunks", "legal_ref",         "varchar(255)");
+  await addColumnIfMissing("semantic_chunks", "overlap_with_prev", "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("semantic_chunks", "lineage",           "json");
+  await addColumnIfMissing("semantic_chunks", "replay_key",        "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "metadata",          "json");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

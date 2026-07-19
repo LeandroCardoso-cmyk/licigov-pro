@@ -2660,8 +2660,8 @@
     "semantic_hash": ""
   },
   "drizzle/0042_idempotency_ttl_index.sql": {
-    "mtime": 1784473640.1271808,
-    "ast_hash": "93d5621f3e5c2fffb05bc6f669ebb15f",
+    "mtime": 1784474271.2787566,
+    "ast_hash": "37163f81b7bc5505f42d187216caf7af",
     "semantic_hash": ""
   },
   "drizzle/0043_optimistic_locking_processes.sql": {
@@ -2900,8 +2900,8 @@
     "semantic_hash": ""
   },
   "drizzle/0090_structured_exports.sql": {
-    "mtime": 1782612419.2064269,
-    "ast_hash": "9455b9286e0065d58c53e7cfcd63a83d",
+    "mtime": 1784474401.7215905,
+    "ast_hash": "70f3cd08d74dcd50f26485712adbbbe1",
     "semantic_hash": ""
   },
   "drizzle/0091_communication_events.sql": {
@@ -3365,8 +3365,8 @@
     "semantic_hash": ""
   },
   "drizzle/0183_semantic_chunks.sql": {
-    "mtime": 1784472874.5506737,
-    "ast_hash": "ad3cc9242321ec6106eadf8f8880489e",
+    "mtime": 1784474457.0748591,
+    "ast_hash": "dc5f27331d0d87c51e3d973e41c64eeb",
     "semantic_hash": ""
   },
   "drizzle/0184_vector_embeddings.sql": {
@@ -3425,8 +3425,8 @@
     "semantic_hash": ""
   },
   "drizzle/0195_context_assemblies.sql": {
-    "mtime": 1784472874.5506737,
-    "ast_hash": "554aba336ff026e4417093784686e222",
+    "mtime": 1784474457.0750358,
+    "ast_hash": "83222f4d073b48a46b4320d02881d5a2",
     "semantic_hash": ""
   },
   "drizzle/0196_legal_evidences.sql": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784473147.62669,
-    "ast_hash": "8ae02a509ce99069ce72a61c2002a86e",
+    "mtime": 1784474782.5810878,
+    "ast_hash": "a5d4062f058ddad6fd73b307d1bf1535",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -9675,8 +9675,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/reconciliation-mysql-smoke.test.ts": {
-    "mtime": 1784473224.7866945,
-    "ast_hash": "6f0570289ef0863ce143e40b6e7728d8",
+    "mtime": 1784474866.278792,
+    "ast_hash": "9946a1dfdb70f1db283713876d063842",
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {

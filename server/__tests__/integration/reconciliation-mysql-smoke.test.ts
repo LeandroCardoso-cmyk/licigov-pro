@@ -17,6 +17,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { is } from "drizzle-orm";
+import { MySqlTable, getTableConfig } from "drizzle-orm/mysql-core";
+import * as schema from "../../../drizzle/schema";
+import { diffSchema } from "../../../scripts/schema-audit-util";
 import { runMigrations, ensureSchema } from "../../bootstrap";
 import {
   MISSING_TABLES,
@@ -112,4 +116,31 @@ describe.skipIf(!DB)("Reconciliação de schema — MySQL real", () => {
     await ensureSchema(conn);
     await assertAllPresent("idempotência");
   }, 120_000);
+
+  it("AUDITORIA COMPLETA (diffSchema): schema.ts × banco fecham em 0/0/0 após o boot", async () => {
+    // Mesmo motor do scripts/schema-audit.ts — o critério oficial de aceite do projeto.
+    const [dbRows] = await conn.query<mysql.RowDataPacket[]>("SELECT DATABASE() AS db");
+    const dbName = String(dbRows[0]?.db ?? "");
+    const [colRows] = await conn.query<mysql.RowDataPacket[]>(
+      "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ?",
+      [dbName]
+    );
+    const actual = new Map<string, Set<string>>();
+    for (const r of colRows) {
+      const t = String(r.TABLE_NAME);
+      if (!actual.has(t)) actual.set(t, new Set());
+      actual.get(t)!.add(String(r.COLUMN_NAME));
+    }
+    const expected = new Map<string, readonly string[]>();
+    for (const value of Object.values(schema)) {
+      if (!is(value, MySqlTable)) continue;
+      const cfg = getTableConfig(value);
+      expected.set(cfg.name, cfg.columns.map((c) => c.name));
+    }
+
+    const { missingTables, absentColumns, mismatchColumns } = diffSchema(expected, actual);
+    expect(missingTables, "tabelas ausentes após o boot").toEqual([]);
+    expect(absentColumns, "colunas ausentes após o boot").toEqual([]);
+    expect(mismatchColumns, "colunas com nome divergente após o boot").toEqual([]);
+  }, 60_000);
 });
