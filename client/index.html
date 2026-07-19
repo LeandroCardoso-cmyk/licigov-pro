@@ -9,6 +9,22 @@
     <link rel="icon" type="image/png" href="/logo-original-transparent.png" />
     <link rel="apple-touch-icon" href="/logo-original-transparent.png" />
     <title>LiciGov Pro</title>
+
+    <!-- Tema institucional: aplica claro/escuro ANTES do React montar (sem flash / FOUC).
+         Deve espelhar a lógica de client/src/contexts/ThemeContext.tsx (chave "theme"). -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var pref = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+          var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved = pref === "system" ? (systemDark ? "dark" : "light") : pref;
+          var root = document.documentElement;
+          root.classList.toggle("dark", resolved === "dark");
+          root.style.colorScheme = resolved;
+        } catch (e) { /* localStorage indisponível — usa o tema padrão do CSS */ }
+      })();
+    </script>
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="Sistema SaaS completo para automação de processos licitatórios no Brasil. Geração inteligente de documentos, gestão de contratos, contratação direta e conformidade com Lei 14.133/2021." />

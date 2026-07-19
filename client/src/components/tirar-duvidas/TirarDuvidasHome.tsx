@@ -56,9 +56,9 @@ export default function TirarDuvidasHome() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Campo principal — não parece um chat comum: é uma consulta oficial */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <label htmlFor="duvida" className="block text-sm font-semibold text-gray-800">Digite sua dúvida</label>
-        <p className="mt-1 text-xs text-gray-500">Consulta técnica fundamentada na legislação, nos Tribunais de Contas e nas normas do seu município.</p>
+      <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <label htmlFor="duvida" className="block text-sm font-semibold text-foreground">Digite sua dúvida</label>
+        <p className="mt-1 text-xs text-muted-foreground">Consulta técnica fundamentada na legislação, nos Tribunais de Contas e nas normas do seu município.</p>
         <textarea
           id="duvida"
           value={question}
@@ -66,10 +66,10 @@ export default function TirarDuvidasHome() {
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(question); }}
           rows={3}
           placeholder="Ex.: Posso realizar contratação direta neste caso?"
-          className="mt-3 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-3 w-full resize-y rounded-md border border-input px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-xs text-gray-400">Ctrl/⌘ + Enter para perguntar</span>
+          <span className="text-xs text-muted-foreground">Ctrl/⌘ + Enter para perguntar</span>
           <button
             onClick={() => submit(question)}
             disabled={ask.isPending || question.trim().length < 3}
@@ -82,11 +82,11 @@ export default function TirarDuvidasHome() {
 
       {/* Sugestões iniciais (expansíveis) */}
       {!answer && !ask.isPending && (
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-800">Sugestões de consulta</h2>
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground">Sugestões de consulta</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {(suggestionsQuery.data?.suggestions ?? []).map((s) => (
-              <button key={s} onClick={() => submit(s)} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700 hover:border-indigo-300 hover:bg-indigo-50">
+              <button key={s} onClick={() => submit(s)} className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-foreground hover:border-indigo-300 hover:bg-indigo-50">
                 {s}
               </button>
             ))}
@@ -96,15 +96,15 @@ export default function TirarDuvidasHome() {
 
       {/* Consultas recentes (histórico institucional durável) */}
       {!answer && !ask.isPending && (historyQuery.data?.entries?.length ?? 0) > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-800">Consultas recentes</h2>
-          <ul className="mt-3 divide-y divide-gray-100">
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground">Consultas recentes</h2>
+          <ul className="mt-3 divide-y divide-border">
             {historyQuery.data!.entries.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-3 py-2">
-                <button onClick={() => submit(e.question)} className="min-w-0 flex-1 truncate text-left text-sm text-gray-700 hover:text-indigo-700" title={e.question}>
+                <button onClick={() => submit(e.question)} className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:text-indigo-700" title={e.question}>
                   {e.question}
                 </button>
-                <span className="shrink-0 text-[11px] text-gray-400">{new Date(e.createdAt).toLocaleDateString("pt-BR")}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{new Date(e.createdAt).toLocaleDateString("pt-BR")}</span>
                 {e.status === "limited"
                   ? <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">limitada</span>
                   : e.status === "failed"
@@ -116,7 +116,7 @@ export default function TirarDuvidasHome() {
         </div>
       )}
 
-      {ask.isPending && <div className="h-40 animate-pulse rounded-lg bg-gray-100" />}
+      {ask.isPending && <div className="h-40 animate-pulse rounded-lg bg-muted" />}
 
       {ask.isError && (
         <div className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -128,14 +128,14 @@ export default function TirarDuvidasHome() {
       {answer && !ask.isPending && (
         <div className="space-y-4">
           {/* Resposta elaborada */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5">
+          <div className="rounded-lg border border-border bg-card p-5">
             <div className="mb-2 flex items-center gap-2">
-              <h2 className="text-base font-semibold text-gray-900">Resposta</h2>
+              <h2 className="text-base font-semibold text-foreground">Resposta</h2>
               {answer.hasSufficientBasis
                 ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Fundamentada</span>
                 : <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">Sem base suficiente</span>}
             </div>
-            <div className="prose prose-sm max-w-none text-gray-800 prose-headings:text-gray-900 prose-strong:text-gray-900">
+            <div className="prose prose-sm max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground">
               <Streamdown>{answer.answer}</Streamdown>
             </div>
           </div>
@@ -152,14 +152,14 @@ export default function TirarDuvidasHome() {
 
           {/* Fundamentação (documentos utilizados) */}
           {answer.documents.length > 0 && (
-            <div className="rounded-lg border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-800">Documentos utilizados</h3>
+            <div className="rounded-lg border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold text-foreground">Documentos utilizados</h3>
               <div className="mt-3 space-y-2">
                 {answer.documents.map((d) => (
-                  <div key={d.documentId} className="flex flex-wrap items-center gap-2 rounded-md border border-gray-100 px-3 py-2 text-sm">
-                    <span className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${JURIS_BADGE[d.jurisdiction] ?? "bg-gray-50 text-gray-600 border-gray-200"}`}>{JURIS_LABEL[d.jurisdiction] ?? d.jurisdiction}</span>
-                    <span className="font-medium text-gray-800">{d.title}</span>
-                    <span className="text-xs text-gray-500">· {d.authority} · v{d.version} · {d.bindingLevel}</span>
+                  <div key={d.documentId} className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                    <span className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${JURIS_BADGE[d.jurisdiction] ?? "bg-muted text-muted-foreground border-border"}`}>{JURIS_LABEL[d.jurisdiction] ?? d.jurisdiction}</span>
+                    <span className="font-medium text-foreground">{d.title}</span>
+                    <span className="text-xs text-muted-foreground">· {d.authority} · v{d.version} · {d.bindingLevel}</span>
                   </div>
                 ))}
               </div>
@@ -168,11 +168,11 @@ export default function TirarDuvidasHome() {
 
           {/* Trechos utilizados (texto oficial verbatim) — recolhidos por padrão (resposta ≈ 1 página) */}
           {answer.passages.length > 0 && (
-            <div className="rounded-lg border border-gray-200 bg-white p-5">
+            <div className="rounded-lg border border-border bg-card p-5">
               <button
                 type="button"
                 onClick={() => setShowPassages((v) => !v)}
-                className="flex w-full items-center justify-between text-sm font-semibold text-gray-800"
+                className="flex w-full items-center justify-between text-sm font-semibold text-foreground"
               >
                 <span>Trechos utilizados ({answer.passages.length})</span>
                 <span className="text-xs font-normal text-indigo-600 hover:underline">{showPassages ? "ocultar" : "ver trechos"}</span>
@@ -182,7 +182,7 @@ export default function TirarDuvidasHome() {
                   {answer.passages.map((p, i) => (
                     <blockquote key={`${p.documentId}-${p.identifier}-${i}`} className="border-l-2 border-indigo-200 pl-3">
                       <div className="text-xs font-medium text-indigo-700">{p.identifier}</div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{p.text}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{p.text}</p>
                     </blockquote>
                   ))}
                 </div>
@@ -192,26 +192,26 @@ export default function TirarDuvidasHome() {
 
           {/* Citações */}
           {answer.citations.length > 0 && (
-            <div className="rounded-lg border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-800">Citações</h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
-                {answer.citations.map((c, i) => <li key={`${c.reference}-${i}`}>{c.reference} <span className="text-xs text-gray-400">({c.authority}, v{c.version})</span></li>)}
+            <div className="rounded-lg border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold text-foreground">Citações</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
+                {answer.citations.map((c, i) => <li key={`${c.reference}-${i}`}>{c.reference} <span className="text-xs text-muted-foreground">({c.authority}, v{c.version})</span></li>)}
               </ul>
             </div>
           )}
 
           {/* Observações & Limitações */}
           {(answer.observations.length > 0 || answer.limitations.length > 0) && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5">
+            <div className="rounded-lg border border-border bg-muted p-5">
               {answer.limitations.length > 0 && (
                 <div className="mb-2">
                   <h3 className="text-sm font-semibold text-amber-800">Limitações</h3>
                   <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-800">{answer.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
                 </div>
               )}
-              <h3 className="text-sm font-semibold text-gray-700">Observações</h3>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-gray-600">{answer.observations.map((o) => <li key={o}>{o}</li>)}</ul>
-              <p className="mt-3 text-[11px] text-gray-400">Auditoria · correlationId {answer.correlationId} · replayId {answer.replayId}</p>
+              <h3 className="text-sm font-semibold text-foreground">Observações</h3>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{answer.observations.map((o) => <li key={o}>{o}</li>)}</ul>
+              <p className="mt-3 text-[11px] text-muted-foreground">Auditoria · correlationId {answer.correlationId} · replayId {answer.replayId}</p>
             </div>
           )}
 

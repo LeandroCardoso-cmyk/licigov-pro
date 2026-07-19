@@ -76,7 +76,7 @@ const BASE_MODULES = [
 export default function ModuleSelectionDashboard() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
-  const { theme, toggleTheme, switchable } = useTheme();
+  const { resolvedTheme, toggleTheme, switchable } = useTheme();
   const navigationHistory = useNavigationHistory();
 
   const { data: contractsOverview } = trpc.contracts.analytics.getOverview.useQuery(undefined, { enabled: !!user });
@@ -135,7 +135,7 @@ export default function ModuleSelectionDashboard() {
             )}
             {switchable && toggleTheme && (
               <Button variant="outline" size="sm" onClick={toggleTheme} className="border-border hover:bg-muted">
-                {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                {resolvedTheme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </Button>
             )}
             {navigationHistory.length > 0 && (

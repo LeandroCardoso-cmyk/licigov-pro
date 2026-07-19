@@ -4,6 +4,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -20,8 +22,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE } from "@/const";
+import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle } from "lucide-react";
+import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -40,6 +43,13 @@ const menuItems = [
   { icon: LibraryBig, label: "Templates", path: "/templates" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
+];
+
+// Controle de tema institucional (footer da sidebar) — claro / escuro / sistema.
+const THEME_OPTIONS: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
+  { value: "light", label: "Claro", icon: Sun },
+  { value: "dark", label: "Escuro", icon: Moon },
+  { value: "system", label: "Sistema", icon: Monitor },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -83,7 +93,7 @@ export default function DashboardLayout({
             <div className="text-center space-y-2">
               <h1 className="text-2xl font-bold tracking-tight">{APP_TITLE}</h1>
               <p className="text-sm text-muted-foreground">
-                Please sign in to continue
+                Entre na sua conta para continuar
               </p>
             </div>
           </div>
@@ -94,7 +104,7 @@ export default function DashboardLayout({
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            Entrar
           </Button>
         </div>
       </div>
@@ -126,6 +136,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -266,13 +277,34 @@ function DashboardLayoutContent({
                   </div>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  Tema
+                </DropdownMenuLabel>
+                {THEME_OPTIONS.map((option) => {
+                  const active = theme === option.value;
+                  return (
+                    <DropdownMenuItem
+                      key={option.value}
+                      onClick={() => setTheme(option.value)}
+                      aria-label={`Tema ${option.label}`}
+                      aria-current={active ? "true" : undefined}
+                      className="cursor-pointer"
+                    >
+                      <option.icon className="mr-2 h-4 w-4" />
+                      <span>{option.label}</span>
+                      {active && <Check className="ml-auto h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={logout}
+                  aria-label="Sair da conta"
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>Sair</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

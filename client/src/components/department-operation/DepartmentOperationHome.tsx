@@ -21,7 +21,7 @@ import LegacyImportWizard from "./LegacyImportWizard";
 type Tab = "centro" | "painel" | "calendario" | "timeline" | "caixa" | "registros";
 
 const TABS: Array<{ key: Tab; label: string }> = [
-  { key: "centro", label: "Centro de Operações" },
+  { key: "centro", label: "Visão Geral" },
   { key: "painel", label: "Painel" },
   { key: "calendario", label: "Calendário" },
   { key: "caixa", label: "Minha Caixa" },
@@ -29,28 +29,44 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: "registros", label: "Registros" },
 ];
 
-export default function DepartmentOperationHome() {
+interface DepartmentOperationHomeProps {
+  /**
+   * Renderiza o cabeçalho interno (título + subtítulo + botão de relatório).
+   * Quando o componente é embutido numa página que já provê o cabeçalho
+   * institucional (ex.: Centro de Operações), passar `false` evita título
+   * duplicado. Default `true` — preserva o comportamento standalone.
+   */
+  showPageHeader?: boolean;
+}
+
+export default function DepartmentOperationHome({ showPageHeader = true }: DepartmentOperationHomeProps) {
   const [tab, setTab] = React.useState<Tab>("centro");
   const generateReport = trpc.departmentOperation.generateReport.useMutation();
 
+  const reportButton = (
+    <button type="button" onClick={() => generateReport.mutate({ kind: "operacional" })} disabled={generateReport.isPending}
+      className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50">
+      {generateReport.isPending ? "Gerando…" : "Relatório Operacional (DOCX/PDF)"}
+    </button>
+  );
+
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Centro de Operações</h1>
-          <p className="text-xs text-gray-500">Como está o departamento agora? O que precisa da minha atenção?</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => generateReport.mutate({ kind: "operacional" })} disabled={generateReport.isPending}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-            {generateReport.isPending ? "Gerando…" : "Relatório Operacional (DOCX/PDF)"}
-          </button>
-        </div>
-      </header>
+      {showPageHeader ? (
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-foreground">Centro de Operações</h1>
+            <p className="text-xs text-muted-foreground">Como está o departamento agora? O que precisa da minha atenção?</p>
+          </div>
+          <div className="flex items-center gap-2">{reportButton}</div>
+        </header>
+      ) : (
+        <div className="flex justify-end">{reportButton}</div>
+      )}
 
-      <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
+      <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-0.5 text-xs font-medium">
         {TABS.map((t) => (
-          <button key={t.key} type="button" onClick={() => setTab(t.key)} className={`rounded-md px-3 py-1 transition ${tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>{t.label}</button>
+          <button key={t.key} type="button" onClick={() => setTab(t.key)} className={`rounded-md px-3 py-1 transition ${tab === t.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>{t.label}</button>
         ))}
       </div>
 

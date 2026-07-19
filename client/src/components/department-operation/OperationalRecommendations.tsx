@@ -22,26 +22,26 @@ export default function OperationalRecommendations() {
   const recs = data?.recommendations ?? [];
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="mb-3 text-sm font-semibold text-gray-900">Recomendações</h3>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Recomendações</h3>
       {isLoading ? (
-        <div className="h-20 animate-pulse rounded-md bg-gray-100" />
+        <div className="h-20 animate-pulse rounded-md bg-muted" />
       ) : recs.length === 0 ? (
-        <p className="text-xs text-gray-400">Nenhuma recomendação no momento. O departamento está em dia.</p>
+        <p className="text-xs text-muted-foreground">Nenhuma recomendação no momento. O departamento está em dia.</p>
       ) : (
         <ul className="space-y-3">
           {recs.map((r, i) => (
             <li key={i} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${KIND_CLASSES[r.kind] ?? "bg-gray-100 text-gray-700"}`}>{KIND_LABELS[r.kind] ?? r.kind}</span>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-indigo-700 ring-1 ring-inset ring-indigo-200">confiança {Math.round(r.confidence * 100)}% · impacto {r.impact}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${KIND_CLASSES[r.kind] ?? "bg-muted text-foreground"}`}>{KIND_LABELS[r.kind] ?? r.kind}</span>
+                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-indigo-700 ring-1 ring-inset ring-indigo-200">confiança {Math.round(r.confidence * 100)}% · impacto {r.impact}</span>
               </div>
-              <p className="text-sm font-medium text-gray-900">{r.title}</p>
-              <p className="text-xs text-gray-600">{r.reasoning}</p>
-              {r.legalBasis.length > 0 && <p className="mt-1 text-[11px] text-gray-500">Base legal: {r.legalBasis.join("; ")}</p>}
+              <p className="text-sm font-medium text-foreground">{r.title}</p>
+              <p className="text-xs text-muted-foreground">{r.reasoning}</p>
+              {r.legalBasis.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Base legal: {r.legalBasis.join("; ")}</p>}
               {r.alternatives.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {r.alternatives.map((a, j) => <span key={j} className="rounded-md bg-white px-2 py-0.5 text-[11px] text-gray-600 ring-1 ring-inset ring-gray-200">{a}</span>)}
+                  {r.alternatives.map((a, j) => <span key={j} className="rounded-md bg-card px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-border">{a}</span>)}
                 </div>
               )}
               <p className="mt-1 text-[11px] italic text-indigo-700">Recomendação — o servidor sempre decide.</p>

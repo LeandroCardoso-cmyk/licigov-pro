@@ -19,24 +19,24 @@ export default function OperationalTimeline() {
   const timeline = data?.timeline ?? [];
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="mb-1 text-sm font-semibold text-gray-900">Timeline Operacional</h3>
-      <p className="mb-4 text-xs text-gray-400">Histórico institucional — append-only, imutável.</p>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h3 className="mb-1 text-sm font-semibold text-foreground">Timeline Operacional</h3>
+      <p className="mb-4 text-xs text-muted-foreground">Histórico institucional — append-only, imutável.</p>
       {isLoading ? (
-        <div className="h-24 animate-pulse rounded-md bg-gray-100" />
+        <div className="h-24 animate-pulse rounded-md bg-muted" />
       ) : timeline.length === 0 ? (
-        <p className="text-xs text-gray-400">Sem eventos registrados.</p>
+        <p className="text-xs text-muted-foreground">Sem eventos registrados.</p>
       ) : (
-        <ol className="relative space-y-5 border-l border-gray-200 pl-5">
+        <ol className="relative space-y-5 border-l border-border pl-5">
           {timeline.map((e) => (
             <li key={e.id} className="relative">
               <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-indigo-500" />
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-indigo-700">{e.action}</span>
-                <span className="text-[11px] text-gray-400">{fmt(e.createdAt)}</span>
+                <span className="text-[11px] text-muted-foreground">{fmt(e.createdAt)}</span>
               </div>
-              <p className="text-sm text-gray-800">{e.summary}</p>
-              <p className="text-xs text-gray-500">por {e.actor}</p>
+              <p className="text-sm text-foreground">{e.summary}</p>
+              <p className="text-xs text-muted-foreground">por {e.actor}</p>
             </li>
           ))}
         </ol>

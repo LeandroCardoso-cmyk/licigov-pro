@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { APP_LOGO, APP_TITLE } from "@/const";
+import { APP_DESCRIPTION, APP_LOGO, APP_TITLE } from "@/const";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -47,7 +47,7 @@ export default function Login() {
             {APP_TITLE}
           </CardTitle>
           <CardDescription className="text-base">
-            Plataforma de automação de processos licitatórios
+            {APP_DESCRIPTION}
           </CardDescription>
         </CardHeader>
 
