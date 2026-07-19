@@ -220,7 +220,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light" switchable>
+      <ThemeProvider defaultTheme="system">
         <TooltipProvider>
           <Toaster />
           <KeyboardShortcutsTooltip />

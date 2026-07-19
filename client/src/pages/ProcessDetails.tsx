@@ -42,7 +42,7 @@ export default function ProcessDetails() {
   const { user, logout } = useAuth();
   const [publicationModalOpen, setPublicationModalOpen] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
-  const { theme, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const [, navigate] = useLocation();
   const exportReportMutation = trpc.downloads.processReport.useMutation();
   const params = useParams();
@@ -151,7 +151,7 @@ export default function ProcessDetails() {
             <div className="flex items-center gap-6">
               <img src={APP_LOGO} alt="LiciGov Pro" className="h-20 w-auto" />
               <Button variant="ghost" size="icon" onClick={toggleTheme}>
-                {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                {resolvedTheme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </Button>
             </div>
             <div className="flex items-center gap-3">

@@ -7,7 +7,7 @@ export const SITUATION_CLASSES: Record<string, string> = {
   amarelo: "bg-amber-100 text-amber-800 ring-amber-500/20",
   azul: "bg-blue-100 text-blue-800 ring-blue-500/20",
   vermelho: "bg-red-100 text-red-700 ring-red-500/20",
-  cinza: "bg-gray-100 text-gray-500 ring-gray-500/20",
+  cinza: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
 export const SITUATION_LABELS: Record<string, string> = {
@@ -36,7 +36,7 @@ export const EVENT_TYPE_CLASSES: Record<string, string> = {
   reuniao: "bg-blue-100 text-blue-800", audiencia: "bg-blue-100 text-blue-800", visita_tecnica: "bg-blue-100 text-blue-800",
   assinatura: "bg-purple-100 text-purple-800",
   vencimento_contrato: "bg-red-100 text-red-700", vencimento_aditivo: "bg-red-100 text-red-700", vencimento_ata: "bg-red-100 text-red-700",
-  tarefa: "bg-amber-100 text-amber-800", manual: "bg-gray-100 text-gray-700",
+  tarefa: "bg-amber-100 text-amber-800", manual: "bg-muted text-foreground",
 };
 
 export const CHANNEL_LABELS: Record<string, string> = {

@@ -21,7 +21,7 @@ interface ModuleCard {
 
 export default function Modules() {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const [, navigate] = useLocation();
 
   const modules: ModuleCard[] = [
@@ -143,7 +143,7 @@ export default function Modules() {
                   onClick={toggleTheme}
                   className="rounded-full hover:bg-primary/10"
                 >
-                  {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                  {resolvedTheme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                 </Button>
 
                 <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-full bg-muted/50">

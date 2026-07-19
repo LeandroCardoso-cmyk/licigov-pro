@@ -27,9 +27,9 @@ export default function OperationalIndicators({ compact = false }: OperationalIn
   return (
     <div className={`grid gap-3 ${compact ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-4"}`}>
       {CARDS.map((c) => (
-        <div key={c.key} className="rounded-lg border border-gray-200 bg-white p-4 text-center">
+        <div key={c.key} className="rounded-lg border border-border bg-card p-4 text-center">
           <p className={`text-2xl font-bold ${c.className}`}>{isLoading ? "…" : (ind[c.key] ?? 0)}</p>
-          <p className="text-xs text-gray-500">{c.label}</p>
+          <p className="text-xs text-muted-foreground">{c.label}</p>
         </div>
       ))}
     </div>

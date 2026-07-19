@@ -15,7 +15,7 @@ import { toast } from "sonner";
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { user, loading } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   // Form state
   const [organizationName, setOrganizationName] = useState("");
@@ -97,9 +97,9 @@ export default function Settings() {
             variant="outline"
             size="icon"
             onClick={toggleTheme}
-            title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+            title={resolvedTheme === "dark" ? "Modo Claro" : "Modo Escuro"}
           >
-            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            {resolvedTheme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
         </div>
 
