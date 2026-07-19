@@ -11,6 +11,19 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 import { getPlatformInstructions } from "./platformTemplates";
 import { AI_CONFIG } from "../config/ai";
+import { shouldDisableThinking } from "../_core/ai/gemini";
+
+// Config de geração compartilhada dos documentos (ETP/TR/DFD/Edital).
+// Usa o modelo VIVO configurado (AI_CONFIG.model = gemini-flash-latest por padrão) — o antigo
+// "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos
+// Flash 2.5 (senão consome os 8192 tokens de saída e trunca o documento — ver #175).
+const DOC_GENERATION_CONFIG = {
+  temperature: 0.3, // Baixo para respostas determinísticas
+  topP: 0.8,
+  topK: 40,
+  maxOutputTokens: 8192,
+  ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+} as const;
 
 const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
 
@@ -33,13 +46,8 @@ export async function generateETP(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-exp",
-    generationConfig: {
-      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
-      topP: 0.8,
-      topK: 40,
-      maxOutputTokens: 8192,
-    },
+    model: AI_CONFIG.model,
+    generationConfig: DOC_GENERATION_CONFIG,
   });
 
   // Converter valor de centavos para reais
@@ -215,13 +223,8 @@ export async function generateTR(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-exp",
-    generationConfig: {
-      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
-      topP: 0.8,
-      topK: 40,
-      maxOutputTokens: 8192,
-    },
+    model: AI_CONFIG.model,
+    generationConfig: DOC_GENERATION_CONFIG,
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -333,13 +336,8 @@ export async function generateDFD(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-exp",
-    generationConfig: {
-      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
-      topP: 0.8,
-      topK: 40,
-      maxOutputTokens: 8192,
-    },
+    model: AI_CONFIG.model,
+    generationConfig: DOC_GENERATION_CONFIG,
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -441,13 +439,8 @@ export async function generateEdital(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-exp",
-    generationConfig: {
-      temperature: 0.3, // Baixo para respostas mais determinísticas e menos criativas
-      topP: 0.8,
-      topK: 40,
-      maxOutputTokens: 8192,
-    },
+    model: AI_CONFIG.model,
+    generationConfig: DOC_GENERATION_CONFIG,
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -565,8 +558,8 @@ export async function generateContrato(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash-exp",
-    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 8192 },
+    model: AI_CONFIG.model,
+    generationConfig: DOC_GENERATION_CONFIG,
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -661,7 +654,7 @@ export async function generateAta(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash-exp",
+    model: AI_CONFIG.model,
     generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 4096 },
   });
 
@@ -754,7 +747,7 @@ export async function generateParecer(params: {
   website?: string;
 }): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash-exp",
+    model: AI_CONFIG.model,
     generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 6144 },
   });
 
