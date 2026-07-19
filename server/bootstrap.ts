@@ -30,7 +30,9 @@ function log(module: string, msg: string): void {
 
 // ─── Step 1: run pending migrations ──────────────────────────────────────────
 
-async function runMigrations(connection: mysql.Connection): Promise<void> {
+// Exportadas para o smoke test de reconciliação (reconciliation-mysql-smoke.test.ts),
+// que exercita exatamente o que o boot roda: migrate() + ensureSchema() num MySQL real.
+export async function runMigrations(connection: mysql.Connection): Promise<void> {
   log("DB", `Executando migrações de: ${MIGRATIONS_FOLDER}`);
   const db = drizzle(connection);
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -41,7 +43,7 @@ async function runMigrations(connection: mysql.Connection): Promise<void> {
 // Guards against schema.ts changes that were never accompanied by a migration
 // file. Each check is idempotent and safe to run on every startup.
 
-async function ensureSchema(connection: mysql.Connection): Promise<void> {
+export async function ensureSchema(connection: mysql.Connection): Promise<void> {
   type ColRow = { cnt: number };
 
   async function addColumnIfMissing(
@@ -3970,6 +3972,81 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     PRIMARY KEY (\`id\`), INDEX \`idx_icsrc_org\` (\`organization_id\`),
     INDEX \`idx_icsrc_org_consultation\` (\`organization_id\`, \`consultation_id\`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+  // ── Reconciliação de schema (auditoria × produção criada por db:push antigo) ──
+  // A auditoria (scripts/schema-audit.ts) apontou 54 colunas declaradas no Drizzle e AUSENTES
+  // em tabelas que JÁ EXISTEM no banco (criadas por db:push antigo, antes dessas colunas).
+  // O journal marca as migrations como aplicadas, então o migrate() nunca as adiciona.
+  // Definições extraídas do schema.ts atual via drizzle-kit (tipos exatos). Idempotente:
+  // addColumnIfMissing só age se a tabela existir e a coluna faltar. As TABELAS ausentes
+  // são criadas pela migration 0285_schema_reconciliation.
+
+  await addColumnIfMissing("clause_knowledge",        "purpose",                "text");
+  await addColumnIfMissing("clause_knowledge",        "related_document_types", "text");
+  await addColumnIfMissing("clause_knowledge",        "prerequisites",          "text");
+  await addColumnIfMissing("clause_knowledge",        "active",                 "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("clause_knowledge",        "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("context_assemblies",      "query_id",               "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("context_assemblies",      "retrieved_chunks",       "json");
+  await addColumnIfMissing("context_assemblies",      "legal_references",       "json");
+  await addColumnIfMissing("context_assemblies",      "municipality_history",   "json");
+  await addColumnIfMissing("context_assemblies",      "similar_trs",            "json");
+  await addColumnIfMissing("context_assemblies",      "semantic_evidence",      "json");
+  await addColumnIfMissing("context_assemblies",      "prompt_context",         "text");
+  await addColumnIfMissing("context_assemblies",      "total_tokens",           "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("context_assemblies",      "assembly_strategy",      "varchar(50) NOT NULL DEFAULT 'selective'");
+  await addColumnIfMissing("context_assemblies",      "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("entity_resolutions",      "confidence",             "decimal(5,4) NOT NULL DEFAULT '0.5'");
+  await addColumnIfMissing("entity_resolutions",      "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("extraction_evidence",     "provenanceSheet",        "varchar(128)");
+  await addColumnIfMissing("extraction_evidence",     "provenancePage",         "int");
+  await addColumnIfMissing("extraction_evidence",     "provenanceRow",          "int");
+  await addColumnIfMissing("extraction_evidence",     "provenanceCol",          "varchar(32)");
+
+  await addColumnIfMissing("graph_change_log",        "changed_by",             "varchar(255) NOT NULL DEFAULT 'system'");
+  await addColumnIfMissing("graph_change_log",        "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("graph_change_log",        "created_at",             "datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
+
+  await addColumnIfMissing("graph_metrics",           "metric_unit",            "varchar(50) NOT NULL DEFAULT 'count'");
+  await addColumnIfMissing("graph_metrics",           "created_at",             "datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
+
+  await addColumnIfMissing("graph_versions",          "change_summary",         "text");
+  await addColumnIfMissing("graph_versions",          "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("legal_reference_nodes",   "numero",                 "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("legal_reference_nodes",   "ano",                    "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("legal_reference_nodes",   "orgao",                  "varchar(255) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("legal_reference_nodes",   "artigo",                 "varchar(100)");
+  await addColumnIfMissing("legal_reference_nodes",   "alinea",                 "varchar(100)");
+  await addColumnIfMissing("legal_reference_nodes",   "texto",                  "text");
+  await addColumnIfMissing("legal_reference_nodes",   "vigencia",               "varchar(50) NOT NULL DEFAULT 'vigente'");
+  await addColumnIfMissing("legal_reference_nodes",   "ementa",                 "text");
+  await addColumnIfMissing("legal_reference_nodes",   "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("ontology_taxonomy",       "category",               "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("ontology_taxonomy",       "definition",             "text");
+  await addColumnIfMissing("ontology_taxonomy",       "legal_basis",            "varchar(500) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("ontology_taxonomy",       "aliases",                "text");
+  await addColumnIfMissing("ontology_taxonomy",       "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("process_members",         "functionalRole",         "enum('solicitante','compras','juridico','controle_interno','gestor','fiscal','administrador')");
+
+  await addColumnIfMissing("procurement_concepts",    "parent_concept_id",      "varchar(20)");
+  await addColumnIfMissing("procurement_concepts",    "examples",               "text");
+  await addColumnIfMissing("procurement_concepts",    "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("semantic_candidates",     "explanationPenalty",     "decimal(4,3) DEFAULT '0'");
+  await addColumnIfMissing("semantic_candidates",     "explanationBonus",       "decimal(4,3) DEFAULT '0'");
+  await addColumnIfMissing("semantic_candidates",     "catmatDesc",             "text");
+  await addColumnIfMissing("semantic_candidates",     "catmatGroup",            "varchar(128)");
+
+  await addColumnIfMissing("semantic_search_entries", "subcategory",            "varchar(128)");
+  await addColumnIfMissing("semantic_search_entries", "lastSeenAt",             "timestamp");
+  await addColumnIfMissing("semantic_search_entries", "catmatGroup",            "varchar(128)");
+  await addColumnIfMissing("semantic_search_entries", "catmatClass",            "varchar(128)");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
