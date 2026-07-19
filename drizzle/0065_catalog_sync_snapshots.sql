@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS catalog_sync_snapshots (
   INDEX idx_css_status (sync_status),
   INDEX idx_css_version (organization_id, version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS catalog_sync_history (
   id VARCHAR(26) NOT NULL,
   snapshot_id VARCHAR(26) NOT NULL,

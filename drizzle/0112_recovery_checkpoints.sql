@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `recovery_checkpoints` (
   INDEX `idx_rc_org`  (`organization_id`),
   INDEX `idx_rc_type` (`organization_id`, `checkpoint_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `recovery_plans` (
   `id`                    VARCHAR(64)   NOT NULL,
   `organization_id`       INT           NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `recovery_plans` (
   INDEX `idx_rp_org`  (`organization_id`),
   INDEX `idx_rp_cp`   (`checkpoint_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `recovery_logs` (
   `id`               VARCHAR(64)   NOT NULL,
   `organization_id`  INT           NOT NULL,

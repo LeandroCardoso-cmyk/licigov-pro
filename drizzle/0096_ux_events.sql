@@ -15,7 +15,7 @@ CREATE TABLE `ux_events` (
   INDEX `idx_ux_events_session` (`session_id`),
   INDEX `idx_ux_events_feature` (`feature`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `ux_sessions` (
   `session_id` varchar(128) NOT NULL,
   `organization_id` int NOT NULL,

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `support_escalations` (
   INDEX `idx_se_org`      (`organization_id`),
   INDEX `idx_se_incident` (`incident_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `incident_correlations` (
   `id`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `organization_id`  INT          NOT NULL,

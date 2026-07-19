@@ -2610,13 +2610,13 @@
     "semantic_hash": ""
   },
   "drizzle/0032_documents_approval_fields.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "9a9c1361a5a8c706fbdcdadb81d9f93f",
+    "mtime": 1784473640.1261764,
+    "ast_hash": "9bee633f6e7f481fc1456f55066ef452",
     "semantic_hash": ""
   },
   "drizzle/0033_organizations.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "aac2b0f0b9e96c9e59dc8387688cd673",
+    "mtime": 1784473640.1263833,
+    "ast_hash": "36582d9afb81581211c5481db1e7d8eb",
     "semantic_hash": ""
   },
   "drizzle/0034_organization_members.sql": {
@@ -2625,43 +2625,43 @@
     "semantic_hash": ""
   },
   "drizzle/0035_multi_tenant_columns.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "58a7e40f537c57e4023f80fd1dea7371",
+    "mtime": 1784473640.1265233,
+    "ast_hash": "7e92b6dcf88b665bd2dfc739960a9654",
     "semantic_hash": ""
   },
   "drizzle/0036_outbox.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "c0c80a462e5cc40525a66089422c61ec",
+    "mtime": 1784473640.126651,
+    "ast_hash": "4688eb8a05531ab8ba39f788a9ff2809",
     "semantic_hash": ""
   },
   "drizzle/0037_feature_flags.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "b7e280d159763eb88846a3dee88f69d8",
+    "mtime": 1784473640.1267498,
+    "ast_hash": "4b5a41ea93070c5c91affec0225424d8",
     "semantic_hash": ""
   },
   "drizzle/0038_activity_logs_v2.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "8a297bc719fc8180bc3844d746fc7589",
+    "mtime": 1784473640.1268282,
+    "ast_hash": "ccc77aadd34f47c033655c4163568dbc",
     "semantic_hash": ""
   },
   "drizzle/0039_backfill_org_ids.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "50cce9ba6d6313702e62d5d3942b1baa",
+    "mtime": 1784473640.1269152,
+    "ast_hash": "9af98883fd5066fa1473138c24193b9f",
     "semantic_hash": ""
   },
   "drizzle/0040_outbox_envelope_v2.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "4725bd49d4ccf59c7f1474c695ff23a4",
+    "mtime": 1784473640.1270068,
+    "ast_hash": "1aa9f65af332606a1de955c10978bab0",
     "semantic_hash": ""
   },
   "drizzle/0041_activity_logs_hardening.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "649cf3e8ab1cb86c796c21ff657c6718",
+    "mtime": 1784473640.1270993,
+    "ast_hash": "c484d451b5ec88a2ed23e1a26675d569",
     "semantic_hash": ""
   },
   "drizzle/0042_idempotency_ttl_index.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "3714835783067cf384c0528cfd7f4131",
+    "mtime": 1784473640.1271808,
+    "ast_hash": "93d5621f3e5c2fffb05bc6f669ebb15f",
     "semantic_hash": ""
   },
   "drizzle/0043_optimistic_locking_processes.sql": {
@@ -2670,8 +2670,8 @@
     "semantic_hash": ""
   },
   "drizzle/0044_document_core_extend.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "761009586a5deb76bcd41a80c7e07225",
+    "mtime": 1784473640.1273258,
+    "ast_hash": "e3957d7034819e478028b925342301fc",
     "semantic_hash": ""
   },
   "drizzle/0045_document_versions.sql": {
@@ -2690,33 +2690,33 @@
     "semantic_hash": ""
   },
   "drizzle/0048_comments_extend.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "1bf2c9d1e43ee44405c509c8198b21de",
+    "mtime": 1784473640.127546,
+    "ast_hash": "71751b60546a1bed6cabe2b74db30329",
     "semantic_hash": ""
   },
   "drizzle/0049_document_templates_extend.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "3a6b75e4f6540794c25f6c3fad4fa67f",
+    "mtime": 1784473640.1276214,
+    "ast_hash": "f3d2c2761dcfb0cde977cf9e6530fe7c",
     "semantic_hash": ""
   },
   "drizzle/0050_document_attachments.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "20e4cc0e6ad8b5e5ce322287a47edafe",
+    "mtime": 1784473640.1277173,
+    "ast_hash": "20c30b577d3f7fe6faf73a731bdafd5b",
     "semantic_hash": ""
   },
   "drizzle/0051_document_integrity.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "d6481bc6647df18badb611cabfce08ce",
+    "mtime": 1784473640.1278129,
+    "ast_hash": "8f534bbd9daebbf626f510021789cff0",
     "semantic_hash": ""
   },
   "drizzle/0052_document_retention.sql": {
-    "mtime": 1782612419.198427,
-    "ast_hash": "8ab9d6a0931c7ab1575f86bdfd821838",
+    "mtime": 1784473640.127887,
+    "ast_hash": "2156bff073717a9490512ac724dc708d",
     "semantic_hash": ""
   },
   "drizzle/0053_document_render_cache.sql": {
-    "mtime": 1782612419.202427,
-    "ast_hash": "02edbc413c53a1ff1c1169d5f02dddf9",
+    "mtime": 1784473640.1280148,
+    "ast_hash": "acee966461a6ae7b2d45a80dfdc37038",
     "semantic_hash": ""
   },
   "drizzle/0054_import_sessions.sql": {
@@ -2775,8 +2775,8 @@
     "semantic_hash": ""
   },
   "drizzle/0065_catalog_sync_snapshots.sql": {
-    "mtime": 1782612419.202427,
-    "ast_hash": "444ff4d042f9623e039ee848b65dd078",
+    "mtime": 1784473640.1283734,
+    "ast_hash": "fc797124e08a42c829c7a95917c934df",
     "semantic_hash": ""
   },
   "drizzle/0066_candidate_explainability.sql": {
@@ -2920,23 +2920,23 @@
     "semantic_hash": ""
   },
   "drizzle/0094_department_permissions.sql": {
-    "mtime": 1782612419.2064269,
-    "ast_hash": "c9c5a51303fd59c7f0051fabd204a448",
+    "mtime": 1784473640.129304,
+    "ast_hash": "66d0c40ee06494407e7d00074cc73fae",
     "semantic_hash": ""
   },
   "drizzle/0095_environments.sql": {
-    "mtime": 1782612419.2064269,
-    "ast_hash": "014e460f0cff797d82326a86d9963101",
+    "mtime": 1784473640.1294336,
+    "ast_hash": "b8071561b6c9d9cf9fa04a929f484bac",
     "semantic_hash": ""
   },
   "drizzle/0096_ux_events.sql": {
-    "mtime": 1782612419.2064269,
-    "ast_hash": "3dd0fbefeff67575e7e0ba798016610f",
+    "mtime": 1784473640.129524,
+    "ast_hash": "0f0e397bf2d1a603b9f4333a2cf87ab2",
     "semantic_hash": ""
   },
   "drizzle/0097_readiness_reports.sql": {
-    "mtime": 1782612419.2064269,
-    "ast_hash": "3cb637b49c986d7b2525ea016d2968b2",
+    "mtime": 1784473640.1296084,
+    "ast_hash": "11d30faf67c5cd5a3b3876873c4066d6",
     "semantic_hash": ""
   },
   "drizzle/0098_permission_audit_log.sql": {
@@ -2990,43 +2990,43 @@
     "semantic_hash": ""
   },
   "drizzle/0108_institutional_deployments.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "e57bfd1f96520625e033f7d84e30d4c2",
+    "mtime": 1784473640.1299593,
+    "ast_hash": "e5b5dc45b41765c9553d14ebc00f4175",
     "semantic_hash": ""
   },
   "drizzle/0109_deployment_validation_snapshots.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "e51e794724f3016bc85d0a9e928dfad4",
+    "mtime": 1784473640.130088,
+    "ast_hash": "ce8e095230a42c1cd48e9e73ebe38071",
     "semantic_hash": ""
   },
   "drizzle/0110_service_health_snapshots.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "4613e335a86d67e83b259231ad7b04ba",
+    "mtime": 1784473640.1301746,
+    "ast_hash": "317ca2e552041dfaa2a1421273c5be83",
     "semantic_hash": ""
   },
   "drizzle/0111_operational_stability_metrics.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "3b09f9991b51467a1fd199f70bcb5bf6",
+    "mtime": 1784473640.1303015,
+    "ast_hash": "5c0259de41a98650b7b93f817f23e44a",
     "semantic_hash": ""
   },
   "drizzle/0112_recovery_checkpoints.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "05009ad66c9e8b38fc2841caf01c10f3",
+    "mtime": 1784473640.1304157,
+    "ast_hash": "c5e0295fa7e279de1e2023f535aa0f4d",
     "semantic_hash": ""
   },
   "drizzle/0113_operational_governance_events.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "510b7562bedca21430e8ce9ba0b28f7e",
+    "mtime": 1784473640.1305428,
+    "ast_hash": "04f50a7e4853d28d1c0085cf6f344a07",
     "semantic_hash": ""
   },
   "drizzle/0114_support_escalations.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "dba6cef71e4559f92443d450a2590348",
+    "mtime": 1784473640.1306465,
+    "ast_hash": "d76c3837f02cb737fb31d0740bdfed84",
     "semantic_hash": ""
   },
   "drizzle/0115_continuous_operation_metrics.sql": {
-    "mtime": 1782612419.2104268,
-    "ast_hash": "88713f4bdb1c1b0ee1fd36d5d9d397b4",
+    "mtime": 1784473640.1307335,
+    "ast_hash": "c6c9fbe15515859dd6e371baf130127a",
     "semantic_hash": ""
   },
   "drizzle/0116_ai_orchestrations.sql": {
@@ -9682,6 +9682,11 @@
   "server/__tests__/integration/schema-reconciliation.test.ts": {
     "mtime": 1784473287.750698,
     "ast_hash": "d9cf7694eac66412055b8483a2a07f39",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/migrations-chain.test.ts": {
+    "mtime": 1784473665.7307208,
+    "ast_hash": "1997400abb090026d5b1540736e65528",
     "semantic_hash": ""
   }
 }

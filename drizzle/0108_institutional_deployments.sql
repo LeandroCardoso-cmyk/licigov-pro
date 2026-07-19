@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `institutional_deployments` (
   INDEX `idx_id_status`  (`organization_id`, `status`),
   INDEX `idx_id_phase`   (`organization_id`, `phase`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `deployment_governance` (
   `id`                     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `deployment_id`          VARCHAR(64)  NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `deployment_governance` (
   INDEX `idx_dg_org`       (`organization_id`),
   INDEX `idx_dg_dep`       (`deployment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `deployment_events` (
   `id`              VARCHAR(64)  NOT NULL,
   `deployment_id`   VARCHAR(64)  NOT NULL,

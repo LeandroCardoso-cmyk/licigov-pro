@@ -16,7 +16,7 @@ CREATE TABLE `department_permissions` (
   INDEX `idx_dept_perms_dept` (`department`),
   INDEX `idx_dept_perms_active` (`active`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `workflow_permissions` (
   `id` varchar(128) NOT NULL,
   `organization_id` int NOT NULL,
