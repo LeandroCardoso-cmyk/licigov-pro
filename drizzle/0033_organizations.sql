@@ -12,7 +12,7 @@ CREATE TABLE `organizations` (
   UNIQUE KEY `organizations_cnpj_unique` (`cnpj`),
   UNIQUE KEY `organizations_slug_unique` (`slug`)
 );
-
+--> statement-breakpoint
 -- Organização padrão para dados existentes (id=1 garantido pelo AUTO_INCREMENT)
 INSERT INTO `organizations` (`id`, `nome`, `slug`, `esfera`, `ativo`)
 VALUES (1, 'Organização Padrão', 'default', 'municipal', true);

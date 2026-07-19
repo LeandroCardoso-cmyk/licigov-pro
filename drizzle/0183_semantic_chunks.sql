@@ -1,3 +1,8 @@
+-- Re-fundação da tabela (fase RC posterior): em cadeia zerada a versão anterior
+-- (vazia) é substituída pela forma canônica do schema.ts. Bancos existentes nunca
+-- re-executam migrations antigas (decisão por timestamp do journal).
+DROP TABLE IF EXISTS `semantic_chunks`;
+--> statement-breakpoint
 CREATE TABLE `semantic_chunks` (
   `id` VARCHAR(20) NOT NULL,
   `organization_id` INT NOT NULL,

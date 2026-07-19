@@ -17,6 +17,7 @@ CREATE TABLE `document_attachments` (
   `deletedAt`        timestamp NULL,
   `createdAt`        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
+--> statement-breakpoint
 CREATE INDEX `idx_attachments_doc` ON `document_attachments` (`documentId`, `organizationId`);
+--> statement-breakpoint
 CREATE INDEX `idx_attachments_org` ON `document_attachments` (`organizationId`);

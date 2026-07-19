@@ -30,7 +30,9 @@ function log(module: string, msg: string): void {
 
 // ─── Step 1: run pending migrations ──────────────────────────────────────────
 
-async function runMigrations(connection: mysql.Connection): Promise<void> {
+// Exportadas para o smoke test de reconciliação (reconciliation-mysql-smoke.test.ts),
+// que exercita exatamente o que o boot roda: migrate() + ensureSchema() num MySQL real.
+export async function runMigrations(connection: mysql.Connection): Promise<void> {
   log("DB", `Executando migrações de: ${MIGRATIONS_FOLDER}`);
   const db = drizzle(connection);
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -41,7 +43,7 @@ async function runMigrations(connection: mysql.Connection): Promise<void> {
 // Guards against schema.ts changes that were never accompanied by a migration
 // file. Each check is idempotent and safe to run on every startup.
 
-async function ensureSchema(connection: mysql.Connection): Promise<void> {
+export async function ensureSchema(connection: mysql.Connection): Promise<void> {
   type ColRow = { cnt: number };
 
   async function addColumnIfMissing(
@@ -3970,6 +3972,229 @@ async function ensureSchema(connection: mysql.Connection): Promise<void> {
     PRIMARY KEY (\`id\`), INDEX \`idx_icsrc_org\` (\`organization_id\`),
     INDEX \`idx_icsrc_org_consultation\` (\`organization_id\`, \`consultation_id\`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+  // ── Reconciliação de schema (auditoria × produção criada por db:push antigo) ──
+  // A auditoria (scripts/schema-audit.ts) apontou 54 colunas declaradas no Drizzle e AUSENTES
+  // em tabelas que JÁ EXISTEM no banco (criadas por db:push antigo, antes dessas colunas).
+  // O journal marca as migrations como aplicadas, então o migrate() nunca as adiciona.
+  // Definições extraídas do schema.ts atual via drizzle-kit (tipos exatos). Idempotente:
+  // addColumnIfMissing só age se a tabela existir e a coluna faltar. As TABELAS ausentes
+  // são criadas pela migration 0285_schema_reconciliation.
+
+  await addColumnIfMissing("clause_knowledge",        "purpose",                "text");
+  await addColumnIfMissing("clause_knowledge",        "related_document_types", "text");
+  await addColumnIfMissing("clause_knowledge",        "prerequisites",          "text");
+  await addColumnIfMissing("clause_knowledge",        "active",                 "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("clause_knowledge",        "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("context_assemblies",      "query_id",               "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("context_assemblies",      "retrieved_chunks",       "json");
+  await addColumnIfMissing("context_assemblies",      "legal_references",       "json");
+  await addColumnIfMissing("context_assemblies",      "municipality_history",   "json");
+  await addColumnIfMissing("context_assemblies",      "similar_trs",            "json");
+  await addColumnIfMissing("context_assemblies",      "semantic_evidence",      "json");
+  await addColumnIfMissing("context_assemblies",      "prompt_context",         "text");
+  await addColumnIfMissing("context_assemblies",      "total_tokens",           "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("context_assemblies",      "assembly_strategy",      "varchar(50) NOT NULL DEFAULT 'selective'");
+  await addColumnIfMissing("context_assemblies",      "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("entity_resolutions",      "confidence",             "decimal(5,4) NOT NULL DEFAULT '0.5'");
+  await addColumnIfMissing("entity_resolutions",      "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("extraction_evidence",     "provenanceSheet",        "varchar(128)");
+  await addColumnIfMissing("extraction_evidence",     "provenancePage",         "int");
+  await addColumnIfMissing("extraction_evidence",     "provenanceRow",          "int");
+  await addColumnIfMissing("extraction_evidence",     "provenanceCol",          "varchar(32)");
+
+  await addColumnIfMissing("graph_change_log",        "changed_by",             "varchar(255) NOT NULL DEFAULT 'system'");
+  await addColumnIfMissing("graph_change_log",        "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("graph_change_log",        "created_at",             "datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
+
+  await addColumnIfMissing("graph_metrics",           "metric_unit",            "varchar(50) NOT NULL DEFAULT 'count'");
+  await addColumnIfMissing("graph_metrics",           "created_at",             "datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
+
+  await addColumnIfMissing("graph_versions",          "change_summary",         "text");
+  await addColumnIfMissing("graph_versions",          "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("legal_reference_nodes",   "numero",                 "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("legal_reference_nodes",   "ano",                    "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("legal_reference_nodes",   "orgao",                  "varchar(255) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("legal_reference_nodes",   "artigo",                 "varchar(100)");
+  await addColumnIfMissing("legal_reference_nodes",   "alinea",                 "varchar(100)");
+  await addColumnIfMissing("legal_reference_nodes",   "texto",                  "text");
+  await addColumnIfMissing("legal_reference_nodes",   "vigencia",               "varchar(50) NOT NULL DEFAULT 'vigente'");
+  await addColumnIfMissing("legal_reference_nodes",   "ementa",                 "text");
+  await addColumnIfMissing("legal_reference_nodes",   "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("ontology_taxonomy",       "category",               "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("ontology_taxonomy",       "definition",             "text");
+  await addColumnIfMissing("ontology_taxonomy",       "legal_basis",            "varchar(500) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("ontology_taxonomy",       "aliases",                "text");
+  await addColumnIfMissing("ontology_taxonomy",       "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("process_members",         "functionalRole",         "enum('solicitante','compras','juridico','controle_interno','gestor','fiscal','administrador')");
+
+  await addColumnIfMissing("procurement_concepts",    "parent_concept_id",      "varchar(20)");
+  await addColumnIfMissing("procurement_concepts",    "examples",               "text");
+  await addColumnIfMissing("procurement_concepts",    "correlation_id",         "varchar(64) NOT NULL DEFAULT ''");
+
+  await addColumnIfMissing("semantic_candidates",     "explanationPenalty",     "decimal(4,3) DEFAULT '0'");
+  await addColumnIfMissing("semantic_candidates",     "explanationBonus",       "decimal(4,3) DEFAULT '0'");
+  await addColumnIfMissing("semantic_candidates",     "catmatDesc",             "text");
+  await addColumnIfMissing("semantic_candidates",     "catmatGroup",            "varchar(128)");
+
+  await addColumnIfMissing("semantic_search_entries", "subcategory",            "varchar(128)");
+  await addColumnIfMissing("semantic_search_entries", "lastSeenAt",             "timestamp");
+  await addColumnIfMissing("semantic_search_entries", "catmatGroup",            "varchar(128)");
+  await addColumnIfMissing("semantic_search_entries", "catmatClass",            "varchar(128)");
+
+  // ── Convergência de bancos criados PELA CADEIA de migrations (staging/CI zerados) ──
+  // Nessas tabelas as migrations antigas criaram colunas em snake_case, mas o schema.ts
+  // (alinhado à PRODUÇÃO pela #170) declara camelCase. Renomeia banco→schema APENAS quando
+  // o nome antigo existe e o novo falta — em produção (nomes já corretos) é no-op.
+  // RENAME COLUMN (MySQL 8) preserva dados, tipo e índices. Lista gerada do relatório da
+  // auditoria (formato: nomeNoSchema → nomeNoBanco; aqui invertido: from=banco, to=schema).
+  async function renameColumnIfNeeded(table: string, from: string, to: string): Promise<void> {
+    const [fromRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [table, from]
+    );
+    if ((fromRows[0] as ColRow).cnt === 0) return;
+    const [toRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [table, to]
+    );
+    if ((toRows[0] as ColRow).cnt > 0) return;
+    await connection.execute(`ALTER TABLE \`${table}\` RENAME COLUMN \`${from}\` TO \`${to}\``);
+    log("DB", `✓ Schema corrigido: ${table}.${from} → ${to}`);
+  }
+
+  const CHAIN_RENAMES: Array<[string, string, string]> = [
+    ["department_permissions", "created_at", "createdAt"],
+    ["environments", "created_at", "createdAt"],
+    ["environments", "updated_at", "updatedAt"],
+    ["extraction_evidence", "staging_item_id", "stagingItemId"],
+    ["extraction_evidence", "import_session_id", "importSessionId"],
+    ["extraction_evidence", "organization_id", "organizationId"],
+    ["extraction_evidence", "created_at", "createdAt"],
+    ["extraction_evidence", "updated_at", "updatedAt"],
+    ["import_analytics_snapshots", "organization_id", "organizationId"],
+    ["import_analytics_snapshots", "period_start", "periodStart"],
+    ["import_analytics_snapshots", "period_end", "periodEnd"],
+    ["import_analytics_snapshots", "session_count", "sessionCount"],
+    ["import_analytics_snapshots", "item_count", "itemCount"],
+    ["import_analytics_snapshots", "created_at", "createdAt"],
+    ["import_review_transitions", "staging_item_id", "stagingItemId"],
+    ["import_review_transitions", "from_state", "fromState"],
+    ["import_review_transitions", "to_state", "toState"],
+    ["import_review_transitions", "actor_type", "actorType"],
+    ["import_review_transitions", "actor_user_id", "actorUserId"],
+    ["import_review_transitions", "actor_org_id", "actorOrgId"],
+    ["import_review_transitions", "actor_agent_id", "actorAgentId"],
+    ["import_review_transitions", "occurred_at", "occurredAt"],
+    ["operational_feedback", "created_at", "createdAt"],
+    ["operational_health_snapshots", "created_at", "createdAt"],
+    ["operational_templates", "created_at", "createdAt"],
+    ["operational_templates", "updated_at", "updatedAt"],
+    ["parser_capabilities", "parser_type", "parserType"],
+    ["parser_capabilities", "parser_version", "parserVersion"],
+    ["parser_capabilities", "supports_multi_sheet", "supportsMultiSheet"],
+    ["parser_capabilities", "supports_multi_page", "supportsMultiPage"],
+    ["parser_capabilities", "supports_formulas", "supportsFormulas"],
+    ["parser_capabilities", "supports_merged_cells", "supportsMergedCells"],
+    ["parser_capabilities", "supports_images", "supportsImages"],
+    ["parser_capabilities", "supports_headers", "supportsHeaders"],
+    ["parser_capabilities", "supports_footers", "supportsFooters"],
+    ["parser_capabilities", "description_confidence", "descriptionConfidence"],
+    ["parser_capabilities", "quantity_confidence", "quantityConfidence"],
+    ["parser_capabilities", "unit_confidence", "unitConfidence"],
+    ["parser_capabilities", "price_confidence", "priceConfidence"],
+    ["parser_capabilities", "requires_manual_unit_review", "requiresManualUnitReview"],
+    ["parser_capabilities", "requires_manual_price_review", "requiresManualPriceReview"],
+    ["parser_capabilities", "likelihood_merged_headers", "likelihoodMergedHeaders"],
+    ["parser_capabilities", "likelihood_footer_rows", "likelihoodFooterRows"],
+    ["parser_capabilities", "registered_at", "registeredAt"],
+    ["pilot_execution_snapshots", "created_at", "createdAt"],
+    ["pilot_execution_snapshots", "updated_at", "updatedAt"],
+    ["pilot_organizations", "created_at", "createdAt"],
+    ["pilot_organizations", "updated_at", "updatedAt"],
+    ["pilot_readiness_scores", "created_at", "createdAt"],
+    ["semantic_candidates", "staging_item_id", "stagingItemId"],
+    ["semantic_candidates", "import_session_id", "importSessionId"],
+    ["semantic_candidates", "organization_id", "organizationId"],
+    ["semantic_candidates", "proposed_description", "proposedDescription"],
+    ["semantic_candidates", "proposed_unit", "proposedUnit"],
+    ["semantic_candidates", "proposed_quantity", "proposedQuantity"],
+    ["semantic_candidates", "proposed_unit_price", "proposedUnitPrice"],
+    ["semantic_candidates", "explanation_reason", "explanationReason"],
+    ["semantic_candidates", "explanation_matched", "explanationMatched"],
+    ["semantic_candidates", "original_raw", "originalRaw"],
+    ["semantic_candidates", "catmat_code", "catmatCode"],
+    ["semantic_candidates", "index_entry_id", "indexEntryId"],
+    ["semantic_candidates", "generated_at", "generatedAt"],
+    ["semantic_candidates", "evaluated_at", "evaluatedAt"],
+    ["semantic_candidates", "evaluated_by", "evaluatedBy"],
+    ["semantic_search_entries", "organization_id", "organizationId"],
+    ["semantic_search_entries", "canonical_text", "canonicalText"],
+    ["semantic_search_entries", "display_text", "displayText"],
+    ["semantic_search_entries", "synonym_tokens", "synonymTokens"],
+    ["semantic_search_entries", "catmat_code", "catmatCode"],
+    ["semantic_search_entries", "is_active", "isActive"],
+    ["semantic_search_entries", "created_at", "createdAt"],
+    ["semantic_search_entries", "updated_at", "updatedAt"],
+    ["support_incidents", "created_at", "createdAt"],
+    ["support_incidents", "updated_at", "updatedAt"],
+    ["training_analytics", "created_at", "createdAt"],
+    ["ux_events", "created_at", "createdAt"],
+    ["workflow_analytics_snapshots", "created_at", "createdAt"],
+    ["workflow_permissions", "created_at", "createdAt"],
+    ["workload_metrics", "created_at", "createdAt"],
+  ];
+  for (const [table, from, to] of CHAIN_RENAMES) {
+    await renameColumnIfNeeded(table, from, to);
+  }
+
+  // semantic_chunks: a re-fundação (0183) tem menos colunas que a forma final do schema.ts
+  // (evoluída depois via db:push na produção). Completa o que faltar — idempotente.
+  await addColumnIfMissing("semantic_chunks", "document_type",     "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "content",           "text");
+  await addColumnIfMissing("semantic_chunks", "total_chunks",      "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("semantic_chunks", "strategy",          "varchar(50) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "section_title",     "varchar(255)");
+  await addColumnIfMissing("semantic_chunks", "legal_ref",         "varchar(255)");
+  await addColumnIfMissing("semantic_chunks", "overlap_with_prev", "int NOT NULL DEFAULT 0");
+  await addColumnIfMissing("semantic_chunks", "lineage",           "json");
+  await addColumnIfMissing("semantic_chunks", "replay_key",        "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("semantic_chunks", "metadata",          "json");
+
+  // ── knowledge_nodes / knowledge_edges: forma camelCase antiga (db:push de outra era) ──
+  // Encontrado no STAGING: essas duas tabelas existem lá na forma camelCase antiga, mas o
+  // schema.ts (alinhado à PRODUÇÃO pela #170) usa snake_case neste grupo — o "grupo inverso"
+  // já documentado na #168 (graph/ontologia/clause/entity). Na produção e em bancos criados
+  // pela cadeia os nomes já estão corretos → tudo aqui é no-op nesses ambientes.
+  await renameColumnIfNeeded("knowledge_edges", "organizationId",   "organization_id");
+  await renameColumnIfNeeded("knowledge_edges", "relationshipType", "relationship_type");
+  await renameColumnIfNeeded("knowledge_edges", "createdAt",        "created_at");
+  await renameColumnIfNeeded("knowledge_nodes", "organizationId",   "organization_id");
+  await renameColumnIfNeeded("knowledge_nodes", "nodeType",         "node_type");
+  await renameColumnIfNeeded("knowledge_nodes", "normalizedTitle",  "normalized_title");
+  await renameColumnIfNeeded("knowledge_nodes", "createdAt",        "created_at");
+
+  await addColumnIfMissing("knowledge_edges", "source_node_id", "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_edges", "target_node_id", "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_edges", "weight",         "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_edges", "confidence",     "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_edges", "justification",  "text");
+  await addColumnIfMissing("knowledge_edges", "provenance",     "varchar(100) NOT NULL DEFAULT 'manual'");
+  await addColumnIfMissing("knowledge_edges", "active",         "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("knowledge_edges", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_nodes", "external_id",    "varchar(255)");
+  await addColumnIfMissing("knowledge_nodes", "confidence",     "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_nodes", "source",         "varchar(100) NOT NULL DEFAULT 'manual'");
+  await addColumnIfMissing("knowledge_nodes", "active",         "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("knowledge_nodes", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

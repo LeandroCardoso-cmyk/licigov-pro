@@ -15,7 +15,7 @@ CREATE TABLE `environments` (
   INDEX `idx_environments_type` (`type`),
   INDEX `idx_environments_status` (`status`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `environment_promotions` (
   `id` varchar(128) NOT NULL,
   `organization_id` int NOT NULL,

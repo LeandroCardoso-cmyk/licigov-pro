@@ -13,7 +13,7 @@ CREATE TABLE `readiness_reports` (
   INDEX `idx_readiness_org` (`organization_id`),
   INDEX `idx_readiness_phase` (`pilot_phase`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `phase_transition_approvals` (
   `id` varchar(128) NOT NULL,
   `organization_id` int NOT NULL,

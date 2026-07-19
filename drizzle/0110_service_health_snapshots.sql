@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `service_health_snapshots` (
   INDEX `idx_shs_org`  (`organization_id`),
   INDEX `idx_shs_time` (`organization_id`, `snapshot_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `sla_metrics` (
   `id`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `snapshot_id`      VARCHAR(64)   NOT NULL,

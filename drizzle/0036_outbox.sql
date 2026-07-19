@@ -19,7 +19,7 @@ CREATE TABLE `outbox_events` (
   INDEX `idx_outbox_org` (`organizationId`),
   INDEX `idx_outbox_aggregate` (`aggregateType`, `aggregateId`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `outbox_dead_letters` (
   `id` varchar(36) NOT NULL PRIMARY KEY,
   `organizationId` int,
@@ -38,7 +38,7 @@ CREATE TABLE `outbox_dead_letters` (
   INDEX `idx_dlq_org` (`organizationId`),
   INDEX `idx_dlq_resolution` (`resolution`)
 );
-
+--> statement-breakpoint
 CREATE TABLE `idempotency_keys` (
   `id` varchar(36) NOT NULL PRIMARY KEY,
   `organizationId` int NOT NULL,

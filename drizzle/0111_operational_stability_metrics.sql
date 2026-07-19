@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `operational_stability_metrics` (
   INDEX `idx_osm_org`  (`organization_id`),
   INDEX `idx_osm_type` (`organization_id`, `metric_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `stability_snapshots` (
   `id`                VARCHAR(64)   NOT NULL,
   `organization_id`   INT           NOT NULL,

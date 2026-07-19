@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `deployment_validation_snapshots` (
   INDEX `idx_dvs_org`            (`organization_id`),
   INDEX `idx_dvs_dep`            (`deployment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `validation_checks` (
   `id`               VARCHAR(64)   NOT NULL,
   `snapshot_id`      VARCHAR(64)   NOT NULL,

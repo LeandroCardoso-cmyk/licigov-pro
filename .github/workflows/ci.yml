@@ -64,6 +64,14 @@ jobs:
       - name: Instalar dependências
         run: pnpm install
 
+      # A ordem importa: a reconciliação roda PRIMEIRO (aplica a cadeia completa de migrations
+      # num banco zerado — cenário staging — e depois reproduz o drift da produção e o corrige).
+      - name: Smoke test contra MySQL real (reconciliação de schema — migrations + ensureSchema)
+        run: pnpm exec vitest run server/__tests__/integration/reconciliation-mysql-smoke.test.ts
+        env:
+          CI: true
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/licigov
+
       - name: Smoke test contra MySQL real (persistência da consulta / regressão de DATETIME)
         run: pnpm exec vitest run server/__tests__/integration/consultation-mysql-smoke.test.ts
         env:

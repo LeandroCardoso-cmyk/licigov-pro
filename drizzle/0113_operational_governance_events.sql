@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `governance_policies` (
   INDEX `idx_gp_type`   (`organization_id`, `policy_type`),
   INDEX `idx_gp_active` (`organization_id`, `is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `governance_events` (
   `id`               VARCHAR(64)   NOT NULL,
   `policy_id`        VARCHAR(64)   NOT NULL,

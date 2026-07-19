@@ -17,7 +17,9 @@ CREATE TABLE `document_render_cache` (
   `errorMessage`    text,
   `createdAt`       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
+--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_render_cache_key` ON `document_render_cache` (`documentId`, `format`, `renderHash`);
+--> statement-breakpoint
 CREATE INDEX `idx_render_cache_doc`  ON `document_render_cache` (`documentId`, `organizationId`);
+--> statement-breakpoint
 CREATE INDEX `idx_render_cache_exp`  ON `document_render_cache` (`expiresAt`);

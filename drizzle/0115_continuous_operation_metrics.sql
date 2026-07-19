@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `continuous_operation_metrics` (
   INDEX `idx_com_org`  (`organization_id`),
   INDEX `idx_com_time` (`organization_id`, `recorded_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `degradation_records` (
   `id`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `organization_id`  INT          NOT NULL,

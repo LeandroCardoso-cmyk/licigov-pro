@@ -5,7 +5,7 @@ CREATE TABLE `feature_flags` (
   `updatedBy` int,
   `updatedAt` timestamp NOT NULL DEFAULT now() ON UPDATE now()
 );
-
+--> statement-breakpoint
 CREATE TABLE `tenant_feature_flags` (
   `organizationId` int NOT NULL,
   `flagName` varchar(100) NOT NULL,
@@ -17,7 +17,7 @@ CREATE TABLE `tenant_feature_flags` (
   PRIMARY KEY (`organizationId`, `flagName`),
   INDEX `idx_tenant_flags_name` (`flagName`)
 );
-
+--> statement-breakpoint
 -- Feature flags operacionais padrão (todos desabilitados por padrão)
 INSERT INTO `feature_flags` (`name`, `enabled`, `reason`) VALUES
   ('FF_IA_GLOBAL_DISABLE',        false, 'Desabilitar globalmente todas as operações de IA'),
