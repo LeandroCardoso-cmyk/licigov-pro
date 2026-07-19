@@ -1,4 +1,5 @@
 import path from "path";
+import { createHash } from "node:crypto";
 import bcrypt from "bcrypt";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
@@ -4281,6 +4282,52 @@ async function seedDefaultOrgMembership(connection: mysql.Connection): Promise<v
  * Runs all startup tasks before Express begins accepting requests.
  * Every step is idempotent — safe to call on every deploy.
  */
+// ─── Step 5: seed licenciamento dos módulos (org padrão) ─────────────────────
+// Fase atual (single-tenant): licencia e ATIVA os 5 Business Domains para a org
+// padrão (id=1), para que o departamento possa usar/testar todos os módulos sem
+// ativação manual. Idempotente: id determinístico (sha256 "lm:org:code", igual ao
+// createLicensedModule do domínio) + INSERT ... ON DUPLICATE KEY UPDATE.
+// Quando o produto virar multi-tenant com venda de licenças por módulo, este seed
+// deve ser removido ou colocado atrás de uma flag por organização.
+const DEFAULT_LICENSED_DOMAINS = [
+  "processo_licitatorio", // base — os demais dependem dele
+  "parecer_juridico",
+  "gestao_departamento",
+  "contratacao_direta",   // depende de processo_licitatorio
+  "contratos",            // depende de processo_licitatorio
+] as const;
+
+export async function seedLicensedModules(connection: mysql.Connection): Promise<void> {
+  log("SEED", "Verificando licenciamento dos módulos (org padrão)...");
+
+  const [tableRows] = await connection.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'licensed_modules'`
+  );
+  if ((tableRows[0] as { cnt: number }).cnt === 0) {
+    log("SEED", "Tabela licensed_modules não existe ainda — pulando seed de licenciamento");
+    return;
+  }
+
+  const ORG_ID = 1;
+  const now = new Date().toISOString();
+  let seeded = 0;
+  for (const code of DEFAULT_LICENSED_DOMAINS) {
+    // Mesmo id determinístico do domínio (createLicensedModule) → upsert idempotente.
+    const id = createHash("sha256").update(`lm:${ORG_ID}:${code}`).digest("hex").slice(0, 20);
+    await connection.execute(
+      `INSERT INTO \`licensed_modules\`
+         (\`id\`, \`organization_id\`, \`business_domain_code\`, \`plan\`, \`active\`,
+          \`activation_date\`, \`expiration_date\`, \`licensed_features\`, \`correlation_id\`)
+       VALUES (?, ?, ?, 'trial', 1, ?, NULL, '[]', '')
+       ON DUPLICATE KEY UPDATE \`active\` = 1`,
+      [id, ORG_ID, code, now]
+    );
+    seeded++;
+  }
+  log("SEED", `✓ ${seeded} módulos licenciados/ativos para a org padrão (id=${ORG_ID})`);
+}
+
 export async function bootstrap(): Promise<void> {
   // Step 0 — validar variáveis obrigatórias antes de qualquer conexão
   validateRequiredEnv();
@@ -4301,6 +4348,7 @@ export async function bootstrap(): Promise<void> {
     await ensureSchema(connection);
     await seedAdmin(connection);
     await seedDefaultOrgMembership(connection);
+    await seedLicensedModules(connection);
   } finally {
     await connection.end();
   }

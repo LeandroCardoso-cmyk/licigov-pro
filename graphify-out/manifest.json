@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784484564.732226,
-    "ast_hash": "068bfb43bf7cbaa9e14247b7bb982e67",
+    "mtime": 1784503149.8169215,
+    "ast_hash": "49c7592f883bc7c3c5cb81257a3e2a9d",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -9692,6 +9692,11 @@
   ".github/workflows/db-backup.yml": {
     "mtime": 1784481785.5708954,
     "ast_hash": "a46473b9fd0ecf2cc6a056d747162e6f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/seed-licensed-modules.test.ts": {
+    "mtime": 1784503167.5449212,
+    "ast_hash": "1e389896587b5358bf461437bce085b9",
     "semantic_hash": ""
   }
 }
