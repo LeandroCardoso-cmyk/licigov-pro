@@ -1,0 +1,59 @@
+name: Backup do Banco (manual)
+
+# Rodar manualmente: aba "Actions" → "Backup do Banco (manual)" → "Run workflow".
+# Requer o secret BACKUP_DATABASE_URL (string de conexão MySQL PÚBLICA — ex.: o
+# MYSQL_PUBLIC_URL do Railway de produção). Somente leitura no banco:
+# mysqldump --single-transaction (snapshot consistente, sem travar tabelas).
+# O dump comprimido fica disponível como ARTIFACT do run (Actions → run → Artifacts),
+# com retenção de 7 dias — baixe e guarde localmente após o download.
+on:
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Dump completo (mysqldump)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump do banco
+        env:
+          DB_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then
+            echo "❌ Secret BACKUP_DATABASE_URL não definido (use o MYSQL_PUBLIC_URL do Railway)."
+            exit 1
+          fi
+          # Parse de mysql://user:senha@host:porta/banco (senha pode conter caracteres especiais)
+          proto_stripped="${DB_URL#mysql://}"
+          creds="${proto_stripped%%@*}"
+          rest="${proto_stripped#*@}"
+          DB_USER="${creds%%:*}"
+          DB_PASS="${creds#*:}"
+          hostport="${rest%%/*}"
+          DB_NAME="${rest#*/}"; DB_NAME="${DB_NAME%%\?*}"
+          DB_HOST="${hostport%%:*}"
+          DB_PORT="${hostport#*:}"
+
+          echo "Host: $DB_HOST:$DB_PORT | Banco: $DB_NAME | Usuário: $DB_USER"
+          STAMP="$(date -u +%Y%m%d-%H%M%S)"
+          FILE="backup-${DB_NAME}-${STAMP}.sql.gz"
+
+          MYSQL_PWD="$DB_PASS" mysqldump \
+            --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
+            --single-transaction --routines --triggers --events \
+            --set-gtid-purged=OFF --no-tablespaces \
+            "$DB_NAME" | gzip > "$FILE"
+
+          ls -lh "$FILE"
+          TABLES=$(MYSQL_PWD="$DB_PASS" mysql --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
+            -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'")
+          echo "✅ Backup concluído: $TABLES tabelas em $FILE"
+          echo "BACKUP_FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Publicar artifact (retenção 7 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 7
+          if-no-files-found: error
