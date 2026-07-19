@@ -2610,12 +2610,12 @@
     "semantic_hash": ""
   },
   "drizzle/0032_documents_approval_fields.sql": {
-    "mtime": 1784473640.1261764,
+    "mtime": 1784481786.6837332,
     "ast_hash": "9bee633f6e7f481fc1456f55066ef452",
     "semantic_hash": ""
   },
   "drizzle/0033_organizations.sql": {
-    "mtime": 1784473640.1263833,
+    "mtime": 1784481786.6837332,
     "ast_hash": "36582d9afb81581211c5481db1e7d8eb",
     "semantic_hash": ""
   },
@@ -2625,42 +2625,42 @@
     "semantic_hash": ""
   },
   "drizzle/0035_multi_tenant_columns.sql": {
-    "mtime": 1784473640.1265233,
+    "mtime": 1784481786.6837332,
     "ast_hash": "7e92b6dcf88b665bd2dfc739960a9654",
     "semantic_hash": ""
   },
   "drizzle/0036_outbox.sql": {
-    "mtime": 1784473640.126651,
+    "mtime": 1784481786.6837332,
     "ast_hash": "4688eb8a05531ab8ba39f788a9ff2809",
     "semantic_hash": ""
   },
   "drizzle/0037_feature_flags.sql": {
-    "mtime": 1784473640.1267498,
+    "mtime": 1784481786.6837332,
     "ast_hash": "4b5a41ea93070c5c91affec0225424d8",
     "semantic_hash": ""
   },
   "drizzle/0038_activity_logs_v2.sql": {
-    "mtime": 1784473640.1268282,
+    "mtime": 1784481786.6837332,
     "ast_hash": "ccc77aadd34f47c033655c4163568dbc",
     "semantic_hash": ""
   },
   "drizzle/0039_backfill_org_ids.sql": {
-    "mtime": 1784473640.1269152,
+    "mtime": 1784481786.6837332,
     "ast_hash": "9af98883fd5066fa1473138c24193b9f",
     "semantic_hash": ""
   },
   "drizzle/0040_outbox_envelope_v2.sql": {
-    "mtime": 1784473640.1270068,
+    "mtime": 1784481786.6837332,
     "ast_hash": "1aa9f65af332606a1de955c10978bab0",
     "semantic_hash": ""
   },
   "drizzle/0041_activity_logs_hardening.sql": {
-    "mtime": 1784473640.1270993,
+    "mtime": 1784481786.6837332,
     "ast_hash": "c484d451b5ec88a2ed23e1a26675d569",
     "semantic_hash": ""
   },
   "drizzle/0042_idempotency_ttl_index.sql": {
-    "mtime": 1784474271.2787566,
+    "mtime": 1784481786.6837332,
     "ast_hash": "37163f81b7bc5505f42d187216caf7af",
     "semantic_hash": ""
   },
@@ -2670,7 +2670,7 @@
     "semantic_hash": ""
   },
   "drizzle/0044_document_core_extend.sql": {
-    "mtime": 1784473640.1273258,
+    "mtime": 1784481786.6837332,
     "ast_hash": "e3957d7034819e478028b925342301fc",
     "semantic_hash": ""
   },
@@ -2690,32 +2690,32 @@
     "semantic_hash": ""
   },
   "drizzle/0048_comments_extend.sql": {
-    "mtime": 1784473640.127546,
+    "mtime": 1784481786.6837332,
     "ast_hash": "71751b60546a1bed6cabe2b74db30329",
     "semantic_hash": ""
   },
   "drizzle/0049_document_templates_extend.sql": {
-    "mtime": 1784473640.1276214,
+    "mtime": 1784481786.6837332,
     "ast_hash": "f3d2c2761dcfb0cde977cf9e6530fe7c",
     "semantic_hash": ""
   },
   "drizzle/0050_document_attachments.sql": {
-    "mtime": 1784473640.1277173,
+    "mtime": 1784481786.6837332,
     "ast_hash": "20c30b577d3f7fe6faf73a731bdafd5b",
     "semantic_hash": ""
   },
   "drizzle/0051_document_integrity.sql": {
-    "mtime": 1784473640.1278129,
+    "mtime": 1784481786.6837332,
     "ast_hash": "8f534bbd9daebbf626f510021789cff0",
     "semantic_hash": ""
   },
   "drizzle/0052_document_retention.sql": {
-    "mtime": 1784473640.127887,
+    "mtime": 1784481786.6837332,
     "ast_hash": "2156bff073717a9490512ac724dc708d",
     "semantic_hash": ""
   },
   "drizzle/0053_document_render_cache.sql": {
-    "mtime": 1784473640.1280148,
+    "mtime": 1784481786.6837332,
     "ast_hash": "acee966461a6ae7b2d45a80dfdc37038",
     "semantic_hash": ""
   },
@@ -2775,7 +2775,7 @@
     "semantic_hash": ""
   },
   "drizzle/0065_catalog_sync_snapshots.sql": {
-    "mtime": 1784473640.1283734,
+    "mtime": 1784481786.6837332,
     "ast_hash": "fc797124e08a42c829c7a95917c934df",
     "semantic_hash": ""
   },
@@ -2900,7 +2900,7 @@
     "semantic_hash": ""
   },
   "drizzle/0090_structured_exports.sql": {
-    "mtime": 1784474401.7215905,
+    "mtime": 1784481786.6837332,
     "ast_hash": "70f3cd08d74dcd50f26485712adbbbe1",
     "semantic_hash": ""
   },
@@ -2920,22 +2920,22 @@
     "semantic_hash": ""
   },
   "drizzle/0094_department_permissions.sql": {
-    "mtime": 1784473640.129304,
+    "mtime": 1784481786.6837332,
     "ast_hash": "66d0c40ee06494407e7d00074cc73fae",
     "semantic_hash": ""
   },
   "drizzle/0095_environments.sql": {
-    "mtime": 1784473640.1294336,
+    "mtime": 1784481786.6837332,
     "ast_hash": "b8071561b6c9d9cf9fa04a929f484bac",
     "semantic_hash": ""
   },
   "drizzle/0096_ux_events.sql": {
-    "mtime": 1784473640.129524,
+    "mtime": 1784481786.6837332,
     "ast_hash": "0f0e397bf2d1a603b9f4333a2cf87ab2",
     "semantic_hash": ""
   },
   "drizzle/0097_readiness_reports.sql": {
-    "mtime": 1784473640.1296084,
+    "mtime": 1784481786.6877334,
     "ast_hash": "11d30faf67c5cd5a3b3876873c4066d6",
     "semantic_hash": ""
   },
@@ -2990,42 +2990,42 @@
     "semantic_hash": ""
   },
   "drizzle/0108_institutional_deployments.sql": {
-    "mtime": 1784473640.1299593,
+    "mtime": 1784481786.6877334,
     "ast_hash": "e5b5dc45b41765c9553d14ebc00f4175",
     "semantic_hash": ""
   },
   "drizzle/0109_deployment_validation_snapshots.sql": {
-    "mtime": 1784473640.130088,
+    "mtime": 1784481786.6877334,
     "ast_hash": "ce8e095230a42c1cd48e9e73ebe38071",
     "semantic_hash": ""
   },
   "drizzle/0110_service_health_snapshots.sql": {
-    "mtime": 1784473640.1301746,
+    "mtime": 1784481786.6877334,
     "ast_hash": "317ca2e552041dfaa2a1421273c5be83",
     "semantic_hash": ""
   },
   "drizzle/0111_operational_stability_metrics.sql": {
-    "mtime": 1784473640.1303015,
+    "mtime": 1784481786.6877334,
     "ast_hash": "5c0259de41a98650b7b93f817f23e44a",
     "semantic_hash": ""
   },
   "drizzle/0112_recovery_checkpoints.sql": {
-    "mtime": 1784473640.1304157,
+    "mtime": 1784481786.6877334,
     "ast_hash": "c5e0295fa7e279de1e2023f535aa0f4d",
     "semantic_hash": ""
   },
   "drizzle/0113_operational_governance_events.sql": {
-    "mtime": 1784473640.1305428,
+    "mtime": 1784481786.6877334,
     "ast_hash": "04f50a7e4853d28d1c0085cf6f344a07",
     "semantic_hash": ""
   },
   "drizzle/0114_support_escalations.sql": {
-    "mtime": 1784473640.1306465,
+    "mtime": 1784481786.6877334,
     "ast_hash": "d76c3837f02cb737fb31d0740bdfed84",
     "semantic_hash": ""
   },
   "drizzle/0115_continuous_operation_metrics.sql": {
-    "mtime": 1784473640.1307335,
+    "mtime": 1784481786.6877334,
     "ast_hash": "c6c9fbe15515859dd6e371baf130127a",
     "semantic_hash": ""
   },
@@ -3365,7 +3365,7 @@
     "semantic_hash": ""
   },
   "drizzle/0183_semantic_chunks.sql": {
-    "mtime": 1784474457.0748591,
+    "mtime": 1784481786.7797334,
     "ast_hash": "dc5f27331d0d87c51e3d973e41c64eeb",
     "semantic_hash": ""
   },
@@ -3425,7 +3425,7 @@
     "semantic_hash": ""
   },
   "drizzle/0195_context_assemblies.sql": {
-    "mtime": 1784474457.0750358,
+    "mtime": 1784481786.7797334,
     "ast_hash": "83222f4d073b48a46b4320d02881d5a2",
     "semantic_hash": ""
   },
@@ -3855,7 +3855,7 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784472916.36121,
+    "mtime": 1784481786.7837334,
     "ast_hash": "5f0ded61da4059192bc46ee22bf44e14",
     "semantic_hash": ""
   },
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784474782.5810878,
-    "ast_hash": "a5d4062f058ddad6fd73b307d1bf1535",
+    "mtime": 1784484564.732226,
+    "ast_hash": "068bfb43bf7cbaa9e14247b7bb982e67",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -6410,7 +6410,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1784473236.706695,
+    "mtime": 1784481786.6797333,
     "ast_hash": "e05b12c5a6634d9fc0751d755a3a41dd",
     "semantic_hash": ""
   },
@@ -9665,28 +9665,33 @@
     "semantic_hash": ""
   },
   "drizzle/0285_schema_reconciliation.sql": {
-    "mtime": 1784472916.353103,
+    "mtime": 1784481786.7797334,
     "ast_hash": "9fd436fc6e12df142e0d3cf44f3d7002",
     "semantic_hash": ""
   },
   "scripts/schema-reconciliation-manifest.ts": {
-    "mtime": 1784473170.6666913,
+    "mtime": 1784481787.1077332,
     "ast_hash": "9622f5c457f27e2e59e96abb4cd999a9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/reconciliation-mysql-smoke.test.ts": {
-    "mtime": 1784474866.278792,
+    "mtime": 1784481787.1077332,
     "ast_hash": "9946a1dfdb70f1db283713876d063842",
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {
-    "mtime": 1784473287.750698,
+    "mtime": 1784481787.1117334,
     "ast_hash": "d9cf7694eac66412055b8483a2a07f39",
     "semantic_hash": ""
   },
   "server/__tests__/integration/migrations-chain.test.ts": {
-    "mtime": 1784473665.7307208,
+    "mtime": 1784481787.1077332,
     "ast_hash": "1997400abb090026d5b1540736e65528",
+    "semantic_hash": ""
+  },
+  ".github/workflows/db-backup.yml": {
+    "mtime": 1784481785.5708954,
+    "ast_hash": "a46473b9fd0ecf2cc6a056d747162e6f",
     "semantic_hash": ""
   }
 }

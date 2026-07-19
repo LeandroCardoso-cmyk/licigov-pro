@@ -4168,6 +4168,33 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   await addColumnIfMissing("semantic_chunks", "lineage",           "json");
   await addColumnIfMissing("semantic_chunks", "replay_key",        "varchar(64) NOT NULL DEFAULT ''");
   await addColumnIfMissing("semantic_chunks", "metadata",          "json");
+
+  // ── knowledge_nodes / knowledge_edges: forma camelCase antiga (db:push de outra era) ──
+  // Encontrado no STAGING: essas duas tabelas existem lá na forma camelCase antiga, mas o
+  // schema.ts (alinhado à PRODUÇÃO pela #170) usa snake_case neste grupo — o "grupo inverso"
+  // já documentado na #168 (graph/ontologia/clause/entity). Na produção e em bancos criados
+  // pela cadeia os nomes já estão corretos → tudo aqui é no-op nesses ambientes.
+  await renameColumnIfNeeded("knowledge_edges", "organizationId",   "organization_id");
+  await renameColumnIfNeeded("knowledge_edges", "relationshipType", "relationship_type");
+  await renameColumnIfNeeded("knowledge_edges", "createdAt",        "created_at");
+  await renameColumnIfNeeded("knowledge_nodes", "organizationId",   "organization_id");
+  await renameColumnIfNeeded("knowledge_nodes", "nodeType",         "node_type");
+  await renameColumnIfNeeded("knowledge_nodes", "normalizedTitle",  "normalized_title");
+  await renameColumnIfNeeded("knowledge_nodes", "createdAt",        "created_at");
+
+  await addColumnIfMissing("knowledge_edges", "source_node_id", "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_edges", "target_node_id", "varchar(20) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_edges", "weight",         "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_edges", "confidence",     "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_edges", "justification",  "text");
+  await addColumnIfMissing("knowledge_edges", "provenance",     "varchar(100) NOT NULL DEFAULT 'manual'");
+  await addColumnIfMissing("knowledge_edges", "active",         "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("knowledge_edges", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
+  await addColumnIfMissing("knowledge_nodes", "external_id",    "varchar(255)");
+  await addColumnIfMissing("knowledge_nodes", "confidence",     "decimal(5,4) NOT NULL DEFAULT '1.0'");
+  await addColumnIfMissing("knowledge_nodes", "source",         "varchar(100) NOT NULL DEFAULT 'manual'");
+  await addColumnIfMissing("knowledge_nodes", "active",         "tinyint NOT NULL DEFAULT 1");
+  await addColumnIfMissing("knowledge_nodes", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
