@@ -13,6 +13,11 @@ import { useLocation } from "wouter";
  * Processos Licitatórios — renderizado DENTRO do shell (DashboardLayout).
  * O header de aplicação (logo/usuário/logout/tema) é fornecido pelo shell; esta página usa
  * apenas a faixa de título leve, evitando chrome duplicado.
+ *
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — rota /processos, ATIVA no menu
+ * principal hoje. Não adicione novos consumidores/telas aqui. Destino canônico:
+ * `components/procurement/ProcessoLicitatorioHome` (ainda órfão do frontend). Referência:
+ * docs/architecture/LEGACY_INVENTORY.md. Migração em sprint dedicada futura (C1+).
  */
 export default function Dashboard() {
   const [, navigate] = useLocation();

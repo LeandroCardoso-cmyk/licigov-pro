@@ -112,23 +112,32 @@ export async function getContractAuditLogsByAction(contractId: number, action: s
     .orderBy(desc(contractAuditLogs.createdAt));
 }
 
-export async function getContractsOverview() {
+/**
+ * RC-C0.1A — MAINTENANCE_ONLY (correção de segurança). Escopo tenant-scoped:
+ * organizationId é obrigatório e sempre resolvido no servidor (nunca aceito do
+ * cliente) — ver contractsRouter.ts:analytics.getOverview. Contratos legados com
+ * organizationId=NULL (pré-multi-tenant) não são atribuíveis a nenhuma org e por
+ * isso não aparecem em nenhum agregado — comportamento correto de isolamento,
+ * não um bug.
+ */
+export async function getContractsOverview(organizationId: number) {
   const db = await getDb();
   if (!db) return null;
-  const totalResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts);
+  const orgFilter = eq(contracts.organizationId, organizationId);
+  const totalResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts).where(orgFilter);
   const total = totalResult[0]?.count || 0;
-  const byTypeResult = await db.select({ type: contracts.type, count: sql<number>`COUNT(*)` }).from(contracts).groupBy(contracts.type);
-  const byStatusResult = await db.select({ status: contracts.status, count: sql<number>`COUNT(*)` }).from(contracts).groupBy(contracts.status);
-  const valueResult = await db.select({ total: sql<number>`SUM(currentValue)` }).from(contracts);
+  const byTypeResult = await db.select({ type: contracts.type, count: sql<number>`COUNT(*)` }).from(contracts).where(orgFilter).groupBy(contracts.type);
+  const byStatusResult = await db.select({ status: contracts.status, count: sql<number>`COUNT(*)` }).from(contracts).where(orgFilter).groupBy(contracts.status);
+  const valueResult = await db.select({ total: sql<number>`SUM(currentValue)` }).from(contracts).where(orgFilter);
   const totalValue = valueResult[0]?.total || 0;
-  const activeResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts).where(eq(contracts.status, "active"));
+  const activeResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts).where(and(orgFilter, eq(contracts.status, "active")));
   const activeCount = activeResult[0]?.count || 0;
-  const expiredResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts).where(eq(contracts.status, "expired"));
+  const expiredResult = await db.select({ count: sql<number>`COUNT(*)` }).from(contracts).where(and(orgFilter, eq(contracts.status, "expired")));
   const expiredCount = expiredResult[0]?.count || 0;
   const expiringSoonResult = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(contracts)
-    .where(and(eq(contracts.status, "active"), sql`DATEDIFF(endDate, NOW()) <= 30 AND DATEDIFF(endDate, NOW()) > 0`));
+    .where(and(orgFilter, eq(contracts.status, "active"), sql`DATEDIFF(endDate, NOW()) <= 30 AND DATEDIFF(endDate, NOW()) > 0`));
   const expiringSoonCount = expiringSoonResult[0]?.count || 0;
   return { total, byType: byTypeResult, byStatus: byStatusResult, totalValue, active: activeCount, expired: expiredCount, expiringSoon: expiringSoonCount };
 }

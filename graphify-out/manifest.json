@@ -2265,8 +2265,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Dashboard.tsx": {
-    "mtime": 1784472873.1746736,
-    "ast_hash": "3a74b47b01829bbe6938891d47a05f6c",
+    "mtime": 1784567421.6021688,
+    "ast_hash": "4de7b7971561d86aebbe62805277db44",
     "semantic_hash": ""
   },
   "client/src/pages/DepartmentManagement.tsx": {
@@ -2350,8 +2350,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/NewProcess.tsx": {
-    "mtime": 1782612418.382427,
-    "ast_hash": "af89f533c4cf4080fd5b3e81bb9c8ff4",
+    "mtime": 1784567443.9501703,
+    "ast_hash": "40bf9bfdcf29a2ab86f390d73a261eb2",
     "semantic_hash": ""
   },
   "client/src/pages/NotFound.tsx": {
@@ -2370,8 +2370,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessDetails.tsx": {
-    "mtime": 1784472873.3106735,
-    "ast_hash": "b968e6525a78cdb2392cb06e94bccc68",
+    "mtime": 1784567435.6381698,
+    "ast_hash": "45e8ac8060d379e08cad91c0ba62b894",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -3855,7 +3855,7 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784551960.0256765,
+    "mtime": 1784553888.145665,
     "ast_hash": "628fd00f5d69c30bcbc911e58e80c96f",
     "semantic_hash": ""
   },
@@ -3865,7 +3865,7 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784551960.0336764,
+    "mtime": 1784553888.1536648,
     "ast_hash": "a5dba7273057670b3172b8648beb0177",
     "semantic_hash": ""
   },
@@ -4205,12 +4205,12 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784552277.3296745,
+    "mtime": 1784553943.5776646,
     "ast_hash": "d86714602c599fd8a37e5323bd30b879",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784552277.3296745,
+    "mtime": 1784553888.217665,
     "ast_hash": "3810f15f94210e771e3b2f3a17c5f84a",
     "semantic_hash": ""
   },
@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "25d429d74cd37817c9c28abbc1b75f6a",
+    "mtime": 1784566631.0861218,
+    "ast_hash": "cbb850f65e9c2dd4a5c2ebfbb76bb043",
     "semantic_hash": ""
   },
   "server/db/copilots.ts": {
@@ -5090,8 +5090,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "364f432fc73461c7a6b6328a425fb3a7",
+    "mtime": 1784566660.0541236,
+    "ast_hash": "6938cccef359b51854fd9f52ce27da08",
     "semantic_hash": ""
   },
   "server/routers/copilotGovernanceRouter.ts": {
@@ -5125,8 +5125,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentsRouter.ts": {
-    "mtime": 1784472877.1826737,
-    "ast_hash": "c12769fadef4e3dc95e775b07ce60f99",
+    "mtime": 1784567384.9661667,
+    "ast_hash": "d2e80ddc4df486320e4a5dc3886730d7",
     "semantic_hash": ""
   },
   "server/routers/downloadRouter.ts": {
@@ -5230,8 +5230,8 @@
     "semantic_hash": ""
   },
   "server/routers/processesRouter.ts": {
-    "mtime": 1782612419.314427,
-    "ast_hash": "b3b31140179dfadec5884c503f24fadb",
+    "mtime": 1784567396.7901673,
+    "ast_hash": "cfdf12d4a215a0dfc15f8b6efedc4e56",
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
@@ -5800,8 +5800,8 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784552277.3336747,
-    "ast_hash": "2e709c51a5fd7357bb6c91f671fbf41a",
+    "mtime": 1784567409.178168,
+    "ast_hash": "40efb81b0ae078c79cb5bcdf8eebdb1a",
     "semantic_hash": ""
   },
   "server/services/graphObservabilityService.ts": {
@@ -5845,7 +5845,7 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1784551960.0896764,
+    "mtime": 1784553888.217665,
     "ast_hash": "7ac9ef059319ef7eb6140130c3de9f3b",
     "semantic_hash": ""
   },
@@ -8085,7 +8085,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784551960.0216765,
+    "mtime": 1784553894.533665,
     "ast_hash": "f44636176a822a95435af439ea155db1",
     "semantic_hash": ""
   },
@@ -8140,12 +8140,12 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784551960.0776765,
+    "mtime": 1784553894.573665,
     "ast_hash": "c34dfc51fa3316a8bb1dc4c3be6d6fe0",
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1784551960.0856764,
+    "mtime": 1784553888.217665,
     "ast_hash": "2edc1e9cad3c9f9b7ca4209ad8d443ca",
     "semantic_hash": ""
   },
@@ -8155,12 +8155,12 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784551960.0856764,
+    "mtime": 1784553888.217665,
     "ast_hash": "14186701318590cdda4a9835d8a556ff",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784551960.0856764,
+    "mtime": 1784553894.573665,
     "ast_hash": "140f57e92ddafebe987d1e64675cdf30",
     "semantic_hash": ""
   },
@@ -8170,7 +8170,7 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784551960.0896764,
+    "mtime": 1784553894.573665,
     "ast_hash": "f08d8e17bfdb8affdc2168182073a7a8",
     "semantic_hash": ""
   },
@@ -8495,8 +8495,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGACY_INVENTORY.md": {
-    "mtime": 1784472873.8986735,
-    "ast_hash": "2585bffd7f1edde6e6973eaacf580c70",
+    "mtime": 1784567179.8301544,
+    "ast_hash": "dacbf63c243ae58ad7ee3086dfcc6b96",
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
@@ -8595,13 +8595,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "6907b75c84dbd7e551ae0d83f273638d",
+    "mtime": 1784567150.6381528,
+    "ast_hash": "58914c39cc0f7327e4711061200c2e08",
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1784472877.0951726,
-    "ast_hash": "0d80ec19d53349e52041cc4bc7478a04",
+    "mtime": 1784567133.9581518,
+    "ast_hash": "1e6d15bd626218814d0850b1e2bfa8c4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -9590,7 +9590,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784552277.3216746,
+    "mtime": 1784553888.2136648,
     "ast_hash": "a05db00e8cdc6b436ba2f0ce54cc88a6",
     "semantic_hash": ""
   },
@@ -9680,7 +9680,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {
-    "mtime": 1784551960.0776765,
+    "mtime": 1784553888.2136648,
     "ast_hash": "9bc6e3fcde9e6109ab78585a5a9dd15d",
     "semantic_hash": ""
   },
@@ -9695,12 +9695,12 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
-    "mtime": 1784552277.3216746,
+    "mtime": 1784553888.2136648,
     "ast_hash": "f5c3492bcb6a5685bf7857b220c6981b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-response-validation.test.ts": {
-    "mtime": 1784552277.3256745,
+    "mtime": 1784553888.2136648,
     "ast_hash": "387360968c3c07bd1afc85778c38660a",
     "semantic_hash": ""
   },
@@ -9710,13 +9710,23 @@
     "semantic_hash": ""
   },
   "drizzle/0286_contract_workspaces_created_by.sql": {
-    "mtime": 1784551960.0216765,
+    "mtime": 1784553888.145665,
     "ast_hash": "6e598b35653d95f1789cc87890d842e9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
-    "mtime": 1784551960.0736763,
+    "mtime": 1784553888.2136648,
     "ast_hash": "dceac990b7e022e2624789790116a16d",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts": {
+    "mtime": 1784566967.1781418,
+    "ast_hash": "c63aea030998460a15f490dfcd731bb4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc-c01a-legacy-freeze.test.ts": {
+    "mtime": 1784567580.3061783,
+    "ast_hash": "d54e02a38492ef81fe5d48cf697767dd",
     "semantic_hash": ""
   }
 }

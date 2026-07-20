@@ -116,9 +116,41 @@ export const DOCUMENT_RENDERERS: readonly string[] = [
   "server/services/documentRenderService.ts",   // LEGACY (órfão)
 ];
 
+// ─── Pipeline de Licitação / Geração Documental (RC-C0.1A) ────────────────────
+// Descoberto na auditoria arquitetural da Sprint C0 (2026-07-20): caso especial em
+// que o LEGADO é o sistema ativo em produção/staging e o CANÔNICO ainda não está
+// ligado ao frontend. Ver docs/architecture/LEGACY_INVENTORY.md, seção "Licitação
+// / Processo Licitatório / Geração Documental". Congelado em MAINTENANCE_ONLY na
+// Sprint C0.1A — sem migração, sem remoção.
+export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
+  "server/routers/documentsRouter.ts",
+  "server/routers/processesRouter.ts",
+  "server/services/gemini.ts",
+  "client/src/pages/Dashboard.tsx",
+  "client/src/pages/ProcessDetails.tsx",
+  "client/src/pages/NewProcess.tsx",
+];
+
+export const CANONICAL_NOT_YET_WIRED: readonly string[] = [
+  "server/routers/procurementProcessRouter.ts",
+  "server/services/procurementProcessService.ts",
+  "server/services/workspaceOrchestratorService.ts",
+  "server/services/documentEngineService.ts",
+  "server/services/officialDocumentLifecycleService.ts",
+  "client/src/components/procurement/ProcessoLicitatorioHome.tsx",
+  "client/src/components/procurement/DFDWorkspace.tsx",
+  "client/src/components/procurement/ETPWorkspace.tsx",
+  "client/src/components/procurement/TRWorkspace.tsx",
+  "client/src/components/procurement/EditalWorkspace.tsx",
+];
+
 // ─── Classificação oficial das fronteiras (RC-4.2.1) ──────────────────────────
 // Cada item recebe uma disposição institucional. NENHUMA remoção nesta RC.
-export type BoundaryDisposition = "mantem" | "migracao_futura" | "remocao_futura";
+export type BoundaryDisposition =
+  | "mantem" | "migracao_futura" | "remocao_futura"
+  // RC-C0.1A:
+  | "manutencao_apenas"     // legado ativo, congelado — sem novas features/consumidores
+  | "canonico_nao_ligado";  // arquitetura correta, mas ainda não alcançada pelo frontend
 
 export interface BoundaryClassificationEntry {
   readonly path: string;
@@ -151,6 +183,25 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Router legado de documentos." },
   // executeAITask — aposentado
   { path: "server/services/aiExecutionEngine.ts", allowlist: "EXECUTE_AI_TASK_ALLOWLIST", disposition: "mantem", note: "Definição; executeAITask aposentado (0 callers)." },
+  // ─── RC-C0.1A — Licitação / Geração Documental ────────────────────────────
+  // Legado ATIVO em produção/staging (não órfão) — congelado em MAINTENANCE_ONLY.
+  { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Único caminho hoje para gerar DFD/ETP/TR/Edital/Ata/Parecer. Sem novos tipos documentais, sem novos consumidores." },
+  { path: "server/routers/processesRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Criação/leitura de processo licitatório legado. Alimenta documentsRouter." },
+  { path: "server/services/gemini.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Já classificado migracao_futura em AI_SDK_ALLOWLIST; aqui registrado também como parte do pipeline documental ativo — ver LEGACY_INVENTORY.md." },
+  { path: "client/src/pages/Dashboard.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /processos, no menu principal como \"Processo Licitatório\" — não é tela de compatibilidade, é a tela ativa." },
+  { path: "client/src/pages/ProcessDetails.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /processo/:id — botão \"Gerar com IA\" chama documentsRouter.generateDocument." },
+  { path: "client/src/pages/NewProcess.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /novo-processo — cria processo via processesRouter.create." },
+  // Canônico correto arquiteturalmente, mas órfão do frontend — não é legado.
+  { path: "server/routers/procurementProcessRouter.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "tenantProcedure, sem consumidor de frontend registrado em App.tsx." },
+  { path: "server/services/procurementProcessService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Também em BUSINESS_DOMAIN_SERVICES (não cruza fronteiras do Kernel) — aqui registrado quanto a NÃO estar alcançado pelo frontend." },
+  { path: "server/services/workspaceOrchestratorService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "orchestrateMultiCopilot — grounding/copilots do pipeline canônico." },
+  { path: "server/services/documentEngineService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "generateOfficialDocument — porta oficial de geração, sem consumidor via /processos." },
+  { path: "server/services/officialDocumentLifecycleService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Versionamento append-only (official_documents) — não recebe tráfego do fluxo de Licitação hoje." },
+  { path: "client/src/components/procurement/ProcessoLicitatorioHome.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Nenhuma rota em App.tsx monta este componente." },
+  { path: "client/src/components/procurement/DFDWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Só importa (importDFD) — não gera DFD por IA. Órfão do frontend." },
+  { path: "client/src/components/procurement/ETPWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de ETP\" (procurementProcess.generateETP) — órfão do frontend." },
+  { path: "client/src/components/procurement/TRWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de TR\" (procurementProcess.generateTR) — órfão do frontend." },
+  { path: "client/src/components/procurement/EditalWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar edital\" (procurementProcess.generateNotice) — órfão do frontend." },
 ];
 
 /** Normaliza um caminho para comparação (remove ./ inicial e barras duplicadas). */

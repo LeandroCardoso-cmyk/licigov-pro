@@ -1,3 +1,10 @@
+/**
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — rota /processo/:id, botão
+ * "Gerar com IA" chama documentsRouter.generateDocument. Não adicione novos tipos
+ * documentais/consumidores aqui. Destino canônico: `components/procurement/{DFD,ETP,TR,
+ * Edital}Workspace` (ainda órfãos do frontend). Referência:
+ * docs/architecture/LEGACY_INVENTORY.md. Migração em sprint dedicada futura (C1+).
+ */
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
