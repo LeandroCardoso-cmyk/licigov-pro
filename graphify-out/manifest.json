@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784481786.7837334,
-    "ast_hash": "5f0ded61da4059192bc46ee22bf44e14",
+    "mtime": 1784510499.1672926,
+    "ast_hash": "628fd00f5d69c30bcbc911e58e80c96f",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784472875.0746737,
-    "ast_hash": "4ece52e7cb32d0d95ea75a61cdd71b53",
+    "mtime": 1784510516.0432935,
+    "ast_hash": "a5dba7273057670b3172b8648beb0177",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,12 +4205,12 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784484564.732226,
-    "ast_hash": "068bfb43bf7cbaa9e14247b7bb982e67",
+    "mtime": 1784510531.0272944,
+    "ast_hash": "eb1932532967fea06bb7973580140c65",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784472875.6826737,
+    "mtime": 1784510446.2592895,
     "ast_hash": "ec2a6e0ec11b216fe074156cfa08b945",
     "semantic_hash": ""
   },
@@ -5430,7 +5430,7 @@
     "semantic_hash": ""
   },
   "server/services/ai/suggestions.ts": {
-    "mtime": 1784472877.1866739,
+    "mtime": 1784510446.2592895,
     "ast_hash": "0db186bc3868cfe6afa55360a6795bf1",
     "semantic_hash": ""
   },
@@ -5800,7 +5800,7 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784472877.1946738,
+    "mtime": 1784510446.2592895,
     "ast_hash": "f8d9a1e7c9a5e03f06b2f0f7b4013990",
     "semantic_hash": ""
   },
@@ -5845,8 +5845,8 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1784472877.2026737,
-    "ast_hash": "cb332221efeb367d277210ac6670161c",
+    "mtime": 1784510613.1432993,
+    "ast_hash": "7ac9ef059319ef7eb6140130c3de9f3b",
     "semantic_hash": ""
   },
   "server/services/importAnalyticsService.ts": {
@@ -8085,8 +8085,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784505371.082721,
-    "ast_hash": "589e7a096513791907f9146d85a0b707",
+    "mtime": 1784510827.023312,
+    "ast_hash": "f44636176a822a95435af439ea155db1",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -8140,13 +8140,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784505850.5788653,
-    "ast_hash": "0dd610d00ad6ab655b4a3eecf2203c46",
+    "mtime": 1784510946.611319,
+    "ast_hash": "c34dfc51fa3316a8bb1dc4c3be6d6fe0",
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1784472875.8626738,
-    "ast_hash": "53c40a6861ee754f8ef486a9a2ba5f6a",
+    "mtime": 1784511199.8193343,
+    "ast_hash": "2edc1e9cad3c9f9b7ca4209ad8d443ca",
     "semantic_hash": ""
   },
   "server/domain/contractInstruments.ts": {
@@ -8155,13 +8155,13 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784505261.0467234,
-    "ast_hash": "cbdd66961d31dd01b465b76a4a057fc5",
+    "mtime": 1784510651.8553016,
+    "ast_hash": "14186701318590cdda4a9835d8a556ff",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784505286.9827228,
-    "ast_hash": "3c960753bb7a006a2c71165d53a3d7a2",
+    "mtime": 1784510751.5393076,
+    "ast_hash": "140f57e92ddafebe987d1e64675cdf30",
     "semantic_hash": ""
   },
   "server/services/contractObservabilityService.ts": {
@@ -8170,8 +8170,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784505273.802723,
-    "ast_hash": "a29856bd8ad36de845b2bb7db33343d0",
+    "mtime": 1784510700.5953045,
+    "ast_hash": "f08d8e17bfdb8affdc2168182073a7a8",
     "semantic_hash": ""
   },
   "docs/business-domains/contracts/addenda.md": {
@@ -9590,7 +9590,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784472875.3626738,
+    "mtime": 1784510446.2592895,
     "ast_hash": "833a1056480980776ccdeca740e15ed7",
     "semantic_hash": ""
   },
@@ -9680,8 +9680,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {
-    "mtime": 1784481787.1117334,
-    "ast_hash": "d9cf7694eac66412055b8483a2a07f39",
+    "mtime": 1784511361.3273437,
+    "ast_hash": "9bc6e3fcde9e6109ab78585a5a9dd15d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/migrations-chain.test.ts": {
@@ -9692,6 +9692,16 @@
   ".github/workflows/db-backup.yml": {
     "mtime": 1784481785.5708954,
     "ast_hash": "a46473b9fd0ecf2cc6a056d747162e6f",
+    "semantic_hash": ""
+  },
+  "drizzle/0286_contract_workspaces_created_by.sql": {
+    "mtime": 1784510493.8632922,
+    "ast_hash": "6e598b35653d95f1789cc87890d842e9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
+    "mtime": 1784511210.3593347,
+    "ast_hash": "dceac990b7e022e2624789790116a16d",
     "semantic_hash": ""
   }
 }

@@ -11,7 +11,7 @@ const TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 export type IdempotencyResult =
   | { status: "new" }
   | { status: "processing" }
-  | { status: "completed"; response: unknown }
+  | { status: "completed"; response: unknown; payloadMismatch: boolean }
   | { status: "failed" };
 
 /**
@@ -73,11 +73,13 @@ export async function checkIdempotency(
   }
 
   if (record.status === "completed") {
-    // Payload mudou: recusar replay
-    if (payloadHash && record.requestPayloadHash && record.requestPayloadHash !== payloadHash) {
+    // Payload mudou: o CALLER deve rejeitar como conflito (nunca sobrescrever/repetir
+    // o efeito com dados diferentes sob a mesma chave) — não é replay seguro.
+    const payloadMismatch = !!(payloadHash && record.requestPayloadHash && record.requestPayloadHash !== payloadHash);
+    if (payloadMismatch) {
       log.warn("idempotency_payload_mismatch", { key, userId, organizationId });
     }
-    return { status: "completed", response: record.responsePayload };
+    return { status: "completed", response: record.responsePayload, payloadMismatch };
   }
 
   if (record.status === "failed") {

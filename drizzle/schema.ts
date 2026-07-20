@@ -5315,6 +5315,8 @@ export const contractWorkspacesTable = mysqlTable("contract_workspaces", {
   manager:        varchar("manager", { length: 255 }).notNull().default(""),
   inspector:      varchar("inspector", { length: 255 }).notNull().default(""),
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  /** Usuário responsável pela criação (0286). NULL em workspaces anteriores à coluna. */
+  createdBy:      int("created_by"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });

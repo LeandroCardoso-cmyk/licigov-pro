@@ -24,6 +24,12 @@ const ORIGINS: ReadonlyArray<readonly [Origin, string]> = [
   ["externo", "Externo (reconstrução)"],
 ];
 
+/** Extrai "(id: ...)" da mensagem de conflito — ver contractWorkspaceRouter.createManual. */
+function parseConflictExistingId(message: string): string | null {
+  const m = message.match(/\(id: ([a-f0-9]+)\)/);
+  return m ? m[1] : null;
+}
+
 export default function NewContractWizard({ onCreated }: NewContractWizardProps) {
   const utils = trpc.useUtils();
   const [origin, setOrigin] = React.useState<Origin>("avulso");
@@ -35,8 +41,15 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   const [object, setObject] = React.useState("");
   const [valueReais, setValueReais] = React.useState("");
   const [term, setTerm] = React.useState("");
+  // Uma chave por tentativa de submissão — reenviada em retries (evita duplicidade em
+  // reenvio de rede/duplo clique); reset após sucesso ou ao trocar de origem/forma.
+  const [idempotencyKey, setIdempotencyKey] = React.useState(() => crypto.randomUUID());
 
-  const onOk = (contractId: string) => { void utils.contractWorkspace.listContracts.invalidate(); onCreated?.(contractId); };
+  const onOk = (contractId: string) => {
+    void utils.contractWorkspace.listContracts.invalidate();
+    setIdempotencyKey(crypto.randomUUID()); // próxima criação usa uma chave nova
+    onCreated?.(contractId);
+  };
   const fromProc = trpc.contractWorkspace.createFromProcurement.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
   const fromDirect = trpc.contractWorkspace.createFromDirectProcurement.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
   const createManual = trpc.contractWorkspace.createManual.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
@@ -44,6 +57,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
 
   const busy = fromProc.isPending || fromDirect.isPending || createManual.isPending || importExt.isPending;
   const err = fromProc.error?.message ?? fromDirect.error?.message ?? createManual.error?.message ?? importExt.error?.message;
+  const conflictExistingId = createManual.error?.data?.code === "CONFLICT" ? parseConflictExistingId(createManual.error.message) : null;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +70,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       const parsed = parseFloat(valueReais.replace(/\./g, "").replace(",", "."));
       const valueCents = valueReais.trim() && !Number.isNaN(parsed) ? Math.round(parsed * 100) : undefined;
       createManual.mutate({
+        idempotencyKey,
         contractNumber,
         contractor: contractor.trim() || undefined,
         object: object.trim() || undefined,
@@ -118,7 +133,17 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         </label>
       )}
 
-      {err && <p className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{err}</p>}
+      {err && !conflictExistingId && (
+        <p className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{err}</p>
+      )}
+      {conflictExistingId && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <span>Já existe um contrato avulso com este número.</span>
+          <button type="button" onClick={() => onCreated?.(conflictExistingId)} className="shrink-0 rounded-md border border-amber-300 px-2 py-1 font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900">
+            Abrir contrato existente
+          </button>
+        </div>
+      )}
       {importExt.data && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <p className="font-medium">Reconstrução assistida — confiança {Math.round(importExt.data.confidence * 100)}%.</p>
