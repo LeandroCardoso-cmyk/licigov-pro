@@ -68,15 +68,16 @@ describe("Reconciliação · migration 0285 (tabelas)", () => {
     }
   });
 
-  it("está registrada no journal como idx 285 (última entry, tag correta)", () => {
+  it("está registrada no journal como idx 285, corretamente sequenciada após a 284", () => {
+    // Busca por idx (não por "última entry") — migrations legítimas continuam sendo
+    // adicionadas depois da 0285 (ex.: 0286), então "última" não é mais um invariante válido.
     const journal = JSON.parse(readFileSync(JOURNAL_PATH, "utf8"));
-    const last = journal.entries[journal.entries.length - 1];
-    expect(last.idx).toBe(285);
-    expect(last.tag).toBe("0285_schema_reconciliation");
-    expect(last.breakpoints).toBe(true);
-    // idx únicos e sequenciais no fim (sanidade do journal)
-    const prev = journal.entries[journal.entries.length - 2];
-    expect(prev.idx).toBe(284);
+    const idx285 = journal.entries.find((e: { idx: number }) => e.idx === 285);
+    expect(idx285).toBeTruthy();
+    expect(idx285.tag).toBe("0285_schema_reconciliation");
+    expect(idx285.breakpoints).toBe(true);
+    const idx284 = journal.entries.find((e: { idx: number }) => e.idx === 284);
+    expect(idx284).toBeTruthy();
   });
 });
 

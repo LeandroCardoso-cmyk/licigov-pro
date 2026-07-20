@@ -7,12 +7,13 @@
  * em documentação — nunca ERP/financeiro.
  */
 import { z } from "zod";
+import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc";
 import { updateContractFields, transitionContractStatus, type ContractStatus } from "../domain/contractWorkspace";
 import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
-  createManualContract,
+  createManualContract, ManualContractConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../services/contractService";
@@ -21,6 +22,7 @@ import {
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
@@ -54,6 +56,10 @@ export const contractWorkspaceRouter = router({
 
   createManual: tenantProcedure
     .input(z.object({
+      // Gerada uma vez pelo cliente (ex.: crypto.randomUUID()) e reenviada em retries da
+      // MESMA tentativa de submissão — nunca o número do contrato (ver revisão arquitetural:
+      // idempotência do comando é separada da unicidade institucional do contrato).
+      idempotencyKey: z.string().min(1),
       contractNumber: z.string().min(1),
       contractor: z.string().optional(),
       object: z.string().optional(),
@@ -64,8 +70,33 @@ export const contractWorkspaceRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createManualContract({ organizationId: orgId, ...input, correlationId: ctx.correlationId });
-      return { workspace };
+      const userId = ctx.user.id;
+      const { idempotencyKey, ...fields } = input;
+      const payloadHash = createHash("sha256").update(JSON.stringify(fields)).digest("hex");
+
+      const idem = await checkIdempotency(idempotencyKey, userId, orgId, "contractWorkspace.createManual", payloadHash);
+      if (idem.status === "completed") {
+        if (idem.payloadMismatch) {
+          throw new TRPCError({ code: "CONFLICT", message: "Esta idempotencyKey já foi usada com dados diferentes." });
+        }
+        return idem.response as { workspace: Awaited<ReturnType<typeof createManualContract>> }; // replay seguro — mesmo resultado, sem repetir o efeito
+      }
+
+      try {
+        const workspace = await createManualContract({ organizationId: orgId, ...fields, createdBy: userId, correlationId: ctx.correlationId });
+        const result = { workspace };
+        await saveIdempotencyResult(idempotencyKey, userId, orgId, result);
+        return result;
+      } catch (error) {
+        await failIdempotencyKey(idempotencyKey, userId, orgId); // permite retry — não fica "processing" preso
+        if (error instanceof ManualContractConflictError) {
+          // O projeto não tem errorFormatter customizado (cause não chega ao cliente) —
+          // o id do contrato existente vai embutido na mensagem, em formato parseável
+          // pelo frontend, para oferecer "abrir o contrato existente".
+          throw new TRPCError({ code: "CONFLICT", message: `${error.message} (id: ${error.existingId})` });
+        }
+        throw error;
+      }
     }),
 
   importExternalContract: tenantProcedure

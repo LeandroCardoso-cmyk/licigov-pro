@@ -240,23 +240,28 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(res.reconstructed.contractNumber).toContain("9/2026");
     });
 
-    it("FLUXO 4 — createManualContract cria contrato AVULSO (sem processo de origem)", async () => {
+    it("FLUXO 4 — createManualContract cria contrato AVULSO (sem processo de origem), com createdBy real", async () => {
       const ws = await createManualContract({
         organizationId: ORG_ID, contractNumber: "CT-2026/AVULSO-1", contractor: "Fornecedor XYZ",
-        object: "Manutenção predial", value: 500000, term: "12 meses", correlationId: CORR,
+        object: "Manutenção predial", value: 500000, term: "12 meses", correlationId: CORR, createdBy: 42,
       });
       expect(ws.originType).toBe("avulso");
       expect(ws.originProcess).toBe("");
       expect(ws.status).toBe("minuta");
       expect(ws.contractor).toBe("Fornecedor XYZ");
       expect(ws.value).toBe(500000);
+      expect(ws.createdBy).toBe(42); // nunca "sistema" quando há usuário autenticado real
     });
 
     it("createManualContract funciona só com número do contrato (demais campos opcionais)", async () => {
-      const ws = await createManualContract({ organizationId: ORG_ID, contractNumber: "CT-2026/AVULSO-2", correlationId: CORR });
+      const ws = await createManualContract({ organizationId: ORG_ID, contractNumber: "CT-2026/AVULSO-2", correlationId: CORR, createdBy: 42 });
       expect(ws.originType).toBe("avulso");
       expect(ws.contractNumber).toBe("CT-2026/AVULSO-2");
     });
+
+    // A checagem de colisão (findManualContractByNumber) exige DB real para ter efeito —
+    // este arquivo degrada sem DB (insertContractWorkspace vira no-op), então o teste de
+    // colisão fica no smoke MySQL real: contrato-avulso-mysql-smoke.test.ts.
 
     it("operações que exigem contrato existente lançam sem DB", async () => {
       await expect(generateContractDocument({ organizationId: ORG_ID, contractId: "x", kind: "contrato", correlationId: CORR })).rejects.toThrow("não encontrado");

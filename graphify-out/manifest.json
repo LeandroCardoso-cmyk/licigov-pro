@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784481786.7837334,
-    "ast_hash": "5f0ded61da4059192bc46ee22bf44e14",
+    "mtime": 1784551960.0256765,
+    "ast_hash": "628fd00f5d69c30bcbc911e58e80c96f",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784472875.0746737,
-    "ast_hash": "4ece52e7cb32d0d95ea75a61cdd71b53",
+    "mtime": 1784551960.0336764,
+    "ast_hash": "a5dba7273057670b3172b8648beb0177",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4205,13 +4205,13 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784503149.8169215,
-    "ast_hash": "49c7592f883bc7c3c5cb81257a3e2a9d",
+    "mtime": 1784552277.3296745,
+    "ast_hash": "d86714602c599fd8a37e5323bd30b879",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784472875.6826737,
-    "ast_hash": "ec2a6e0ec11b216fe074156cfa08b945",
+    "mtime": 1784552277.3296745,
+    "ast_hash": "3810f15f94210e771e3b2f3a17c5f84a",
     "semantic_hash": ""
   },
   "server/config/app.ts": {
@@ -5430,7 +5430,7 @@
     "semantic_hash": ""
   },
   "server/services/ai/suggestions.ts": {
-    "mtime": 1784503729.0489082,
+    "mtime": 1784552277.3336747,
     "ast_hash": "5964ae1a270c1a83e35eef303bbedf5c",
     "semantic_hash": ""
   },
@@ -5800,8 +5800,8 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784503648.7169101,
-    "ast_hash": "81be94e60e71ef13c9dbf509dc69d3b0",
+    "mtime": 1784552277.3336747,
+    "ast_hash": "2e709c51a5fd7357bb6c91f671fbf41a",
     "semantic_hash": ""
   },
   "server/services/graphObservabilityService.ts": {
@@ -5845,8 +5845,8 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1784472877.2026737,
-    "ast_hash": "cb332221efeb367d277210ac6670161c",
+    "mtime": 1784551960.0896764,
+    "ast_hash": "7ac9ef059319ef7eb6140130c3de9f3b",
     "semantic_hash": ""
   },
   "server/services/importAnalyticsService.ts": {
@@ -8085,8 +8085,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784505371.082721,
-    "ast_hash": "589e7a096513791907f9146d85a0b707",
+    "mtime": 1784551960.0216765,
+    "ast_hash": "f44636176a822a95435af439ea155db1",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -8140,13 +8140,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784505850.5788653,
-    "ast_hash": "0dd610d00ad6ab655b4a3eecf2203c46",
+    "mtime": 1784551960.0776765,
+    "ast_hash": "c34dfc51fa3316a8bb1dc4c3be6d6fe0",
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1784472875.8626738,
-    "ast_hash": "53c40a6861ee754f8ef486a9a2ba5f6a",
+    "mtime": 1784551960.0856764,
+    "ast_hash": "2edc1e9cad3c9f9b7ca4209ad8d443ca",
     "semantic_hash": ""
   },
   "server/domain/contractInstruments.ts": {
@@ -8155,13 +8155,13 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784505261.0467234,
-    "ast_hash": "cbdd66961d31dd01b465b76a4a057fc5",
+    "mtime": 1784551960.0856764,
+    "ast_hash": "14186701318590cdda4a9835d8a556ff",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784505286.9827228,
-    "ast_hash": "3c960753bb7a006a2c71165d53a3d7a2",
+    "mtime": 1784551960.0856764,
+    "ast_hash": "140f57e92ddafebe987d1e64675cdf30",
     "semantic_hash": ""
   },
   "server/services/contractObservabilityService.ts": {
@@ -8170,8 +8170,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784505273.802723,
-    "ast_hash": "a29856bd8ad36de845b2bb7db33343d0",
+    "mtime": 1784551960.0896764,
+    "ast_hash": "f08d8e17bfdb8affdc2168182073a7a8",
     "semantic_hash": ""
   },
   "docs/business-domains/contracts/addenda.md": {
@@ -9590,8 +9590,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "833a1056480980776ccdeca740e15ed7",
+    "mtime": 1784552277.3216746,
+    "ast_hash": "a05db00e8cdc6b436ba2f0ce54cc88a6",
     "semantic_hash": ""
   },
   "docs/architecture/AI_PROVIDER_CONFIG.md": {
@@ -9680,8 +9680,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {
-    "mtime": 1784481787.1117334,
-    "ast_hash": "d9cf7694eac66412055b8483a2a07f39",
+    "mtime": 1784551960.0776765,
+    "ast_hash": "9bc6e3fcde9e6109ab78585a5a9dd15d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/migrations-chain.test.ts": {
@@ -9694,14 +9694,29 @@
     "ast_hash": "a46473b9fd0ecf2cc6a056d747162e6f",
     "semantic_hash": ""
   },
-  "server/__tests__/integration/seed-licensed-modules.test.ts": {
-    "mtime": 1784503167.5449212,
-    "ast_hash": "1e389896587b5358bf461437bce085b9",
+  "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
+    "mtime": 1784552277.3216746,
+    "ast_hash": "f5c3492bcb6a5685bf7857b220c6981b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/gemini-response-validation.test.ts": {
+    "mtime": 1784552277.3256745,
+    "ast_hash": "387360968c3c07bd1afc85778c38660a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/no-dead-gemini-models.test.ts": {
-    "mtime": 1784503749.0409079,
+    "mtime": 1784552277.3256745,
     "ast_hash": "11154d8a0e56157ea1b8c885892bc126",
+    "semantic_hash": ""
+  },
+  "drizzle/0286_contract_workspaces_created_by.sql": {
+    "mtime": 1784551960.0216765,
+    "ast_hash": "6e598b35653d95f1789cc87890d842e9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
+    "mtime": 1784551960.0736763,
+    "ast_hash": "dceac990b7e022e2624789790116a16d",
     "semantic_hash": ""
   }
 }

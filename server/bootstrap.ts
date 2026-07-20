@@ -1,5 +1,4 @@
 import path from "path";
-import { createHash } from "node:crypto";
 import bcrypt from "bcrypt";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
@@ -11,7 +10,7 @@ import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
-import { AI_CONFIG } from "./config/ai";
+import { AI_CONFIG, validateAiRuntime } from "./config/ai";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -4196,6 +4195,9 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   await addColumnIfMissing("knowledge_nodes", "source",         "varchar(100) NOT NULL DEFAULT 'manual'");
   await addColumnIfMissing("knowledge_nodes", "active",         "tinyint NOT NULL DEFAULT 1");
   await addColumnIfMissing("knowledge_nodes", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
+
+  // Contrato avulso (0286) — usuário responsável pela criação do workspace.
+  await addColumnIfMissing("contract_workspaces", "created_by", "int");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────
@@ -4282,55 +4284,12 @@ async function seedDefaultOrgMembership(connection: mysql.Connection): Promise<v
  * Runs all startup tasks before Express begins accepting requests.
  * Every step is idempotent — safe to call on every deploy.
  */
-// ─── Step 5: seed licenciamento dos módulos (org padrão) ─────────────────────
-// Fase atual (single-tenant): licencia e ATIVA os 5 Business Domains para a org
-// padrão (id=1), para que o departamento possa usar/testar todos os módulos sem
-// ativação manual. Idempotente: id determinístico (sha256 "lm:org:code", igual ao
-// createLicensedModule do domínio) + INSERT ... ON DUPLICATE KEY UPDATE.
-// Quando o produto virar multi-tenant com venda de licenças por módulo, este seed
-// deve ser removido ou colocado atrás de uma flag por organização.
-const DEFAULT_LICENSED_DOMAINS = [
-  "processo_licitatorio", // base — os demais dependem dele
-  "parecer_juridico",
-  "gestao_departamento",
-  "contratacao_direta",   // depende de processo_licitatorio
-  "contratos",            // depende de processo_licitatorio
-] as const;
-
-export async function seedLicensedModules(connection: mysql.Connection): Promise<void> {
-  log("SEED", "Verificando licenciamento dos módulos (org padrão)...");
-
-  const [tableRows] = await connection.execute<RowDataPacket[]>(
-    `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'licensed_modules'`
-  );
-  if ((tableRows[0] as { cnt: number }).cnt === 0) {
-    log("SEED", "Tabela licensed_modules não existe ainda — pulando seed de licenciamento");
-    return;
-  }
-
-  const ORG_ID = 1;
-  const now = new Date().toISOString();
-  let seeded = 0;
-  for (const code of DEFAULT_LICENSED_DOMAINS) {
-    // Mesmo id determinístico do domínio (createLicensedModule) → upsert idempotente.
-    const id = createHash("sha256").update(`lm:${ORG_ID}:${code}`).digest("hex").slice(0, 20);
-    await connection.execute(
-      `INSERT INTO \`licensed_modules\`
-         (\`id\`, \`organization_id\`, \`business_domain_code\`, \`plan\`, \`active\`,
-          \`activation_date\`, \`expiration_date\`, \`licensed_features\`, \`correlation_id\`)
-       VALUES (?, ?, ?, 'trial', 1, ?, NULL, '[]', '')
-       ON DUPLICATE KEY UPDATE \`active\` = 1`,
-      [id, ORG_ID, code, now]
-    );
-    seeded++;
-  }
-  log("SEED", `✓ ${seeded} módulos licenciados/ativos para a org padrão (id=${ORG_ID})`);
-}
-
 export async function bootstrap(): Promise<void> {
   // Step 0 — validar variáveis obrigatórias antes de qualquer conexão
   validateRequiredEnv();
+  // Modelo de IA: sem allowlist rígida, mas bloqueia formato inválido/vazio e IDs
+  // confirmadamente descontinuados — falha explícita no boot em vez de só na 1ª geração.
+  validateAiRuntime({ provider: AI_CONFIG.provider, model: AI_CONFIG.model });
 
   console.info(
     `[BOOT]${ENV_TAG} Iniciando ${APP_CONFIG.name} v${APP_CONFIG.version}` +
@@ -4338,7 +4297,7 @@ export async function bootstrap(): Promise<void> {
     (APP_CONFIG.isDevelopment ? " — DEV"         : "")
   );
 
-  log("CONFIG", `APP_ENV=${APP_ENV} | S3=${AWS_CONFIG.isConfigured ? "✓" : "✗"} | AI=${AI_CONFIG.isConfigured ? "✓" : "✗"}`);
+  log("CONFIG", `APP_ENV=${APP_ENV} | S3=${AWS_CONFIG.isConfigured ? "✓" : "✗"} | AI=${AI_CONFIG.isConfigured ? "✓" : "✗"} (${AI_CONFIG.provider}/${AI_CONFIG.model})`);
 
   const databaseUrl = process.env.DATABASE_URL!;
   const connection = await mysql.createConnection(databaseUrl);
@@ -4348,7 +4307,6 @@ export async function bootstrap(): Promise<void> {
     await ensureSchema(connection);
     await seedAdmin(connection);
     await seedDefaultOrgMembership(connection);
-    await seedLicensedModules(connection);
   } finally {
     await connection.end();
   }
