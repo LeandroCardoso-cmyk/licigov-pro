@@ -6,6 +6,13 @@
  * (documentsRouter, processesRouter) — NÃO pelos Business Domains oficiais. Mantido
  * por compatibilidade (não removido). Novos fluxos DEVEM usar AIExecutionEngine →
  * Provider Adapter. Consta na allowlist de exceções legadas dos testes de fronteira.
+ *
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — não adicione novos tipos
+ * documentais nem novos consumidores. Hotfix crítico e correção de segurança são
+ * permitidos. Destino canônico: `AIExecutionEngine` → Provider Adapter, através de
+ * `documentEngineService` (ainda órfão do frontend). Referência:
+ * `docs/architecture/LEGACY_INVENTORY.md`. Migração prevista para sprint dedicada
+ * futura (C1+).
  */
 import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";

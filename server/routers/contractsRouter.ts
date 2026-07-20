@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
 import { checkContractExpirations, getExpirationSummary } from "../services/contractNotifications";
 import { generateAlertsExcelReport, generateAuditExcelReport } from "../services/contractReports";
+import { serviceLogger } from "../services/observabilityService";
+
+const log = serviceLogger("contractsRouter");
 
 /**
  * Router de Contratos
@@ -430,10 +433,33 @@ export const contractsRouter = router({
 
   analytics: router({
     /**
-     * Buscar estatísticas gerais
+     * Buscar estatísticas gerais da organização autenticada.
+     *
+     * RC-C0.1A — MAINTENANCE_ONLY: correção de isolamento multi-tenant aplicada
+     * ao endpoint legado existente (antes agregava globalmente, sem filtro de
+     * organização — corrigido). Nenhuma funcionalidade nova foi adicionada.
+     * organizationId é sempre resolvido no servidor via tenantProcedure — nunca
+     * aceito do cliente. Admin de plataforma (ctx.user.role === 'admin') enxerga
+     * a organização resolvida pelo header X-Organization-Id (mesmo mecanismo de
+     * qualquer outro tenantProcedure), não uma agregação global — não há demanda
+     * funcional confirmada por analytics verdadeiramente global de plataforma;
+     * se surgir, deve ser um endpoint novo e nomeado, não este.
+     * Substituição futura: analytics canônico do domínio de Contratos (ainda não
+     * implementado — ver docs/architecture/LEGACY_INVENTORY.md).
      */
-    getOverview: protectedProcedure.query(async () => {
-      return await db.getContractsOverview();
+    getOverview: tenantProcedure.query(async ({ ctx }) => {
+      const result = await log.span(
+        "getOverview",
+        () => db.getContractsOverview(ctx.organizationId!),
+        { correlationId: ctx.correlationId, organizationId: ctx.organizationId, userId: ctx.user.id },
+      );
+      log.info("getOverview", {
+        correlationId: ctx.correlationId,
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+        totalContracts: result.result?.total ?? 0,
+      });
+      return result.result;
     }),
 
     /**

@@ -1,3 +1,10 @@
+/**
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — rota /novo-processo, cria
+ * processo via processesRouter.create. Não adicione novos consumidores aqui. Destino
+ * canônico: `components/procurement/ProcessoLicitatorioHome` (ainda órfão do
+ * frontend). Referência: docs/architecture/LEGACY_INVENTORY.md. Migração em sprint
+ * dedicada futura (C1+).
+ */
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

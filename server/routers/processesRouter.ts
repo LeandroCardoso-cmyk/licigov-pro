@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — CRUD de processo licitatório
+ * legado, ATIVO em produção hoje (alimenta o fluxo real de `/processos` no menu). Não
+ * adicione novos tipos documentais, novos consumidores ou novas rotas aqui. Hotfix
+ * crítico e correção de segurança são permitidos. Destino canônico:
+ * `procurementProcessRouter` (ainda órfão do frontend — ver
+ * `server/kernel/architecture/legacyBoundaries.ts` → `CANONICAL_NOT_YET_WIRED`).
+ * Referência: `docs/architecture/LEGACY_INVENTORY.md`, seção "Licitação / Processo
+ * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
+ */
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";

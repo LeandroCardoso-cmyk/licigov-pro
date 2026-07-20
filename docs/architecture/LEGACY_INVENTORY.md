@@ -20,6 +20,74 @@ direta**, mas **saíram da navegação principal**. Nenhum código legado foi re
 
 ---
 
+## Licitação / Processo Licitatório / Geração Documental (RC-C0.1A)
+
+> **Caso especial — não se encaixa na Classe 1/2/3 abaixo.** Nos demais módulos
+> legados deste inventário, o Business Domain canônico já está ligado à navegação
+> oficial e o legado sobrevive só por compatibilidade de URL. Aqui é o oposto: o
+> **legado é o sistema ativo em produção/staging** e o canônico é código que ainda
+> não foi ligado ao frontend. Descoberto na auditoria arquitetural da Sprint C0
+> (2026-07-20) e endereçado parcialmente na Sprint C0.1A (congelamento formal,
+> sem migração).
+
+### Legado ativo (uso real hoje)
+- **Frontend:** `client/src/pages/Dashboard.tsx` (rota `/processos`, **no menu principal**
+  como "Processo Licitatório"), `client/src/pages/ProcessDetails.tsx` (rota `/processo/:id`),
+  `client/src/pages/NewProcess.tsx` (rota `/novo-processo`).
+- **Backend:** `server/routers/documentsRouter.ts`, `server/routers/processesRouter.ts`.
+- **Geração de IA:** `server/services/gemini.ts` (chamada direta a `@google/generative-ai`,
+  já classificado como LEGACY (AI) em `legacyBoundaries.ts`).
+- **Tabela:** `documents` (linhas gravadas com `organizationId = NULL` — sem isolamento
+  multi-tenant completo).
+- **Autorização:** `protectedProcedure` — baseada em usuário/dono (`ownerId`/membership),
+  não em organização.
+- **Lacunas confirmadas:** ausência de `correlationId`, ausência de replay/idempotência,
+  ausência de lifecycle de versionamento canônico (append-only), observabilidade fraca
+  (erro de geração de DFD é engolido silenciosamente em `processesRouter.ts`).
+
+### Canônico arquitetural — ainda não ativo no frontend
+- **Backend:** `server/routers/procurementProcessRouter.ts`, `server/services/procurementProcessService.ts`,
+  `server/services/workspaceOrchestratorService.ts` (`orchestrateMultiCopilot`),
+  `server/services/documentEngineService.ts`, `server/services/officialDocumentLifecycleService.ts`.
+- **Tabelas:** `procurement_processes`, `generated_documents`, `official_documents`
+  (versionamento append-only, `replayHash`, `lineageId`).
+- **Autorização:** `tenantProcedure` — `organizationId` sempre resolvido no servidor.
+- **Frontend correspondente existe mas está órfão:** `client/src/components/procurement/*`
+  (`ProcessoLicitatorioHome`, `DFDWorkspace`, `ETPWorkspace`, `TRWorkspace`, `EditalWorkspace`)
+  — nenhuma rota em `App.tsx` monta esses componentes.
+
+### Estado atual (registrado explicitamente)
+- O legado documental **está ativo em produção/staging** — é o único caminho pelo qual o
+  usuário hoje gera DFD, ETP, TR, Edital, Ata e Parecer a partir de um processo licitatório.
+- O canônico **está órfão do frontend** — existe, compila, tem testes, mas nenhuma tela o alcança.
+- **O legado NÃO pode ser removido ainda** (não há substituto funcional ligado à UI).
+- **O legado NÃO pode receber novas features** — a partir da Sprint C0.1A, este módulo
+  entra em estado `MAINTENANCE_ONLY` (ver `legacyBoundaries.ts`): hotfix crítico, correção
+  de segurança e correção de indisponibilidade são permitidos; novos tipos documentais,
+  novos consumidores, novas rotas e novas chamadas diretas ao provider são proibidos.
+- **DFD** e **Ata** possuem lacunas de paridade: o canônico só *importa* DFD (`importDFD`),
+  não gera por IA; **Ata não existe** no enum canônico `OfficialDocumentType`
+  (`server/domain/officialDocument.ts`) — só existe no legado.
+- O **provider de runtime** do fluxo canônico (`procurementProcessService` → `orchestrateMultiCopilot`)
+  ainda precisa de decisão: pode produzir rascunho consolidado de copilotos (mock/grounding-only)
+  em vez de texto Gemini real, dependendo da policy/`AI_CONFIG.provider` em runtime — não
+  validado nesta sprint.
+- A migração (ligar o frontend ao canônico, cobrir DFD/Ata, decidir o provider) ocorrerá
+  em **sprint dedicada futura (C1 em diante)** — fora do escopo de C0.1A.
+
+### Critério de saída (quando o legado poderá ser bloqueado)
+O legado documental só poderá ser bloqueado quando, cumulativamente:
+1. o frontend oficial estiver ligado ao pipeline canônico (`components/procurement/*` montado em rota);
+2. DFD possuir geração canônica (não só importação);
+3. Ata estiver definida no canônico ou formalmente aposentada por decisão de produto;
+4. o provider real (Gemini, não mock) estiver validado no caminho canônico;
+5. o versionamento for compatível com o histórico existente em `documents`;
+6. o histórico legado estiver preservado (read-only, não deletado);
+7. os testes MySQL e o smoke funcional do caminho canônico estiverem verdes;
+8. um plano de rollback estiver definido.
+
+---
+
 ## Módulos legados
 
 ### Contracts  → substituído por **Contract Workspace** (`/contratos`)
@@ -137,6 +205,19 @@ Classificação oficial (dados em `server/kernel/architecture/legacyBoundaries.t
 | `server/_core/ai/placeholderProviders.ts` (Claude/OpenAI) | FUTURE EVOLUTION | mantém (preparado) |
 | `server/services/aiExecutionEngine.ts` → `executeAITask` | DEPRECATED (aposentado, 0 callers) | mantém (definição/testes) |
 | `server/routers/proposalRouter.ts.backup`, `server/routers.ts.backup` | BACKUP | remoção futura (pós-RC-5) |
+| `server/routers/{documentsRouter,processesRouter}.ts`, `server/services/gemini.ts`, `client/src/pages/{Dashboard,ProcessDetails,NewProcess}.tsx` | **LEGACY_ACTIVE_MAINTENANCE_ONLY** | congelado (RC-C0.1A) — ver seção "Licitação / Processo Licitatório / Geração Documental" acima |
+| `server/routers/procurementProcessRouter.ts`, `server/services/{procurementProcessService,workspaceOrchestratorService,documentEngineService,officialDocumentLifecycleService}.ts`, `client/src/components/procurement/*` | **CANONICAL_NOT_YET_WIRED** | correto arquiteturalmente, sem consumidor de frontend (RC-C0.1A) |
 
 > A classificação é aplicada por dados (não por comentários espalhados) e é a fonte única de
 > exceções arquiteturais, validada pelos testes de fronteira.
+
+---
+
+## Correções de segurança aplicadas a módulos legados (RC-C0.1A)
+
+| Data | Componente | Problema | Correção |
+|---|---|---|---|
+| 2026-07-20 | `contractsRouter.ts` (analytics.getOverview) | Vazamento multi-tenant: agregava `COUNT`/`SUM` de **todas** as organizações, sem filtro de `organizationId`. Consumido por `Admin.tsx` e `ModuleSelectionDashboard.tsx`. | Migrado de `protectedProcedure` para `tenantProcedure`; `organizationId` resolvido no servidor e aplicado em todas as 6 sub-queries de `server/db/contracts.ts::getContractsOverview`. Contrato de resposta preservado. Testes MySQL reais em `server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts`. |
+
+> Correções de segurança em módulos legados são permitidas mesmo sob `MAINTENANCE_ONLY`
+> (ver critérios de congelamento acima) — não constituem nova funcionalidade.

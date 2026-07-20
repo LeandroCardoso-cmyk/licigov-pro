@@ -13,6 +13,7 @@ import {
   PROVIDER_INSTANTIATION_ALLOWLIST, AI_SDK_ALLOWLIST, EXECUTION_POLICY_ALLOWLIST,
   DOCUMENT_CONVERTER_ALLOWLIST, OFFICIAL_EXPORT_ENGINE_ALLOWLIST, AWS_SDK_ALLOWLIST,
   LEGACY_EXPORTERS, KNOWLEDGE_GRAPH_EMBEDDINGS, BUSINESS_DOMAIN_SERVICES, isAllowed,
+  LEGACY_ACTIVE_MAINTENANCE_ONLY, CANONICAL_NOT_YET_WIRED,
 } from "../../kernel/architecture/legacyBoundaries";
 
 // ─── Varredura de fonte ───────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ describe("RC-3.5.2 — Kernel Boundary Enforcement", () => {
         ...PROVIDER_INSTANTIATION_ALLOWLIST, ...AI_SDK_ALLOWLIST, ...EXECUTION_POLICY_ALLOWLIST,
         ...DOCUMENT_CONVERTER_ALLOWLIST, ...OFFICIAL_EXPORT_ENGINE_ALLOWLIST, ...AWS_SDK_ALLOWLIST,
         ...LEGACY_EXPORTERS, ...KNOWLEDGE_GRAPH_EMBEDDINGS, ...BUSINESS_DOMAIN_SERVICES,
+        ...LEGACY_ACTIVE_MAINTENANCE_ONLY, ...CANONICAL_NOT_YET_WIRED,
       ];
       const missing = all.filter(p => !fs.existsSync(p));
       expect(missing, `entradas obsoletas na allowlist: ${missing.join(", ")}`).toEqual([]);
