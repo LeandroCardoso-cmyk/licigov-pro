@@ -3855,7 +3855,7 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784481786.7837334,
+    "mtime": 1784511529.5873537,
     "ast_hash": "5f0ded61da4059192bc46ee22bf44e14",
     "semantic_hash": ""
   },
@@ -3865,7 +3865,7 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784472875.0746737,
+    "mtime": 1784511529.589812,
     "ast_hash": "4ece52e7cb32d0d95ea75a61cdd71b53",
     "semantic_hash": ""
   },
@@ -4205,12 +4205,12 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784509987.739262,
+    "mtime": 1784511529.6313539,
     "ast_hash": "5d86bf2a6fb84dd2c63ff26545ed88c8",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784509961.0352604,
+    "mtime": 1784511529.6313539,
     "ast_hash": "3810f15f94210e771e3b2f3a17c5f84a",
     "semantic_hash": ""
   },
@@ -5430,7 +5430,7 @@
     "semantic_hash": ""
   },
   "server/services/ai/suggestions.ts": {
-    "mtime": 1784509775.9672496,
+    "mtime": 1784511529.6313539,
     "ast_hash": "5964ae1a270c1a83e35eef303bbedf5c",
     "semantic_hash": ""
   },
@@ -5800,7 +5800,7 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784510076.7152674,
+    "mtime": 1784511529.6313539,
     "ast_hash": "2e709c51a5fd7357bb6c91f671fbf41a",
     "semantic_hash": ""
   },
@@ -5845,7 +5845,7 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1784472877.2026737,
+    "mtime": 1784511529.6313539,
     "ast_hash": "cb332221efeb367d277210ac6670161c",
     "semantic_hash": ""
   },
@@ -8085,7 +8085,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784509773.8832495,
+    "mtime": 1784511529.5873537,
     "ast_hash": "9edc8db0e1620fb360cbb2757f83444c",
     "semantic_hash": ""
   },
@@ -8140,12 +8140,12 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784509774.2832494,
+    "mtime": 1784511529.6273537,
     "ast_hash": "af0b92d18bf1a34de31390a289c6385e",
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1784472875.8626738,
+    "mtime": 1784511529.6313539,
     "ast_hash": "53c40a6861ee754f8ef486a9a2ba5f6a",
     "semantic_hash": ""
   },
@@ -8155,12 +8155,12 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784509774.2832494,
+    "mtime": 1784511529.6313539,
     "ast_hash": "2b28f3db48093c91a759f89247a5d7bf",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784509774.2832494,
+    "mtime": 1784511529.6313539,
     "ast_hash": "e8974797b28c662461c8e91f5ff8213b",
     "semantic_hash": ""
   },
@@ -8170,7 +8170,7 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784509774.2872493,
+    "mtime": 1784511529.6313539,
     "ast_hash": "572859ab32935aa92aceecf567a2bdf6",
     "semantic_hash": ""
   },
@@ -9590,7 +9590,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784510058.8912663,
+    "mtime": 1784511529.6273537,
     "ast_hash": "a05db00e8cdc6b436ba2f0ce54cc88a6",
     "semantic_hash": ""
   },
@@ -9680,7 +9680,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/schema-reconciliation.test.ts": {
-    "mtime": 1784481787.1117334,
+    "mtime": 1784511529.6273537,
     "ast_hash": "d9cf7694eac66412055b8483a2a07f39",
     "semantic_hash": ""
   },
@@ -9695,17 +9695,17 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
-    "mtime": 1784510247.4872775,
+    "mtime": 1784511529.6273537,
     "ast_hash": "f5c3492bcb6a5685bf7857b220c6981b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-response-validation.test.ts": {
-    "mtime": 1784510088.8912683,
+    "mtime": 1784511529.6273537,
     "ast_hash": "387360968c3c07bd1afc85778c38660a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/no-dead-gemini-models.test.ts": {
-    "mtime": 1784509775.9672496,
+    "mtime": 1784511529.6273537,
     "ast_hash": "11154d8a0e56157ea1b8c885892bc126",
     "semantic_hash": ""
   }
