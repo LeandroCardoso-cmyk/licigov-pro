@@ -10,7 +10,7 @@ import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
-import { AI_CONFIG } from "./config/ai";
+import { AI_CONFIG, validateAiRuntime } from "./config/ai";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -4287,6 +4287,9 @@ async function seedDefaultOrgMembership(connection: mysql.Connection): Promise<v
 export async function bootstrap(): Promise<void> {
   // Step 0 — validar variáveis obrigatórias antes de qualquer conexão
   validateRequiredEnv();
+  // Modelo de IA: sem allowlist rígida, mas bloqueia formato inválido/vazio e IDs
+  // confirmadamente descontinuados — falha explícita no boot em vez de só na 1ª geração.
+  validateAiRuntime({ provider: AI_CONFIG.provider, model: AI_CONFIG.model });
 
   console.info(
     `[BOOT]${ENV_TAG} Iniciando ${APP_CONFIG.name} v${APP_CONFIG.version}` +
@@ -4294,7 +4297,7 @@ export async function bootstrap(): Promise<void> {
     (APP_CONFIG.isDevelopment ? " — DEV"         : "")
   );
 
-  log("CONFIG", `APP_ENV=${APP_ENV} | S3=${AWS_CONFIG.isConfigured ? "✓" : "✗"} | AI=${AI_CONFIG.isConfigured ? "✓" : "✗"}`);
+  log("CONFIG", `APP_ENV=${APP_ENV} | S3=${AWS_CONFIG.isConfigured ? "✓" : "✗"} | AI=${AI_CONFIG.isConfigured ? "✓" : "✗"} (${AI_CONFIG.provider}/${AI_CONFIG.model})`);
 
   const databaseUrl = process.env.DATABASE_URL!;
   const connection = await mysql.createConnection(databaseUrl);

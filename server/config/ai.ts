@@ -34,6 +34,51 @@ export function resolveAiRuntime(env: { AI_PROVIDER?: string; AI_MODEL?: string 
   return { provider, model };
 }
 
+/**
+ * IDs de modelo CONFIRMADAMENTE descontinuados — cresce só com entradas confirmadas,
+ * nunca precisa ser atualizada quando um modelo NOVO é lançado (não é allowlist).
+ * O incidente que originou este arquivo: "gemini-2.0-flash-exp" (experimental,
+ * descontinuado) ficou hardcoded em 2 serviços e todas as gerações falhavam.
+ */
+export const KNOWN_DEAD_MODEL_IDS: ReadonlySet<string> = new Set(["gemini-2.0-flash-exp"]);
+
+/** Prefixo minimamente esperado do id do modelo, por provider (checagem leve de formato). */
+const MODEL_ID_PREFIX_BY_PROVIDER: Record<AIProviderName, RegExp> = {
+  gemini: /^gemini-/,
+  claude: /^claude-/,
+  openai: /^(gpt-|o1-|o3-|o4-)/,
+};
+
+/**
+ * Valida o runtime de IA resolvido — chamada no boot (server/bootstrap.ts), NÃO em
+ * cada request. Pura e testável. NÃO é allowlist rígida (não valida contra uma lista
+ * de modelos "permitidos", que ficaria obsoleta a cada lançamento) — apenas: (1) modelo
+ * não vazio, (2) formato minimamente plausível para o provider, (3) não está na
+ * denylist de modelos confirmadamente mortos. Lança erro descritivo no boot em vez de
+ * deixar a primeira geração de documento falhar silenciosamente em produção.
+ */
+export function validateAiRuntime(runtime: { provider: AIProviderName; model: string }): void {
+  const model = runtime.model.trim();
+  if (!model) {
+    throw new Error(
+      `[BOOT] AI_MODEL resolvido para o provider "${runtime.provider}" está vazio. Defina AI_MODEL ou verifique DEFAULT_MODEL_BY_PROVIDER.`
+    );
+  }
+  if (KNOWN_DEAD_MODEL_IDS.has(model)) {
+    throw new Error(
+      `[BOOT] AI_MODEL="${model}" é um modelo CONHECIDAMENTE DESCONTINUADO. Defina AI_MODEL com um modelo ativo ` +
+      `(ex.: "${DEFAULT_MODEL_BY_PROVIDER[runtime.provider]}") — use \`pnpm ai:models\` para listar os disponíveis.`
+    );
+  }
+  const expectedPrefix = MODEL_ID_PREFIX_BY_PROVIDER[runtime.provider];
+  if (!expectedPrefix.test(model)) {
+    throw new Error(
+      `[BOOT] AI_MODEL="${model}" não tem o formato esperado para o provider "${runtime.provider}" ` +
+      `(esperado prefixo ${expectedPrefix}). Verifique a variável AI_MODEL.`
+    );
+  }
+}
+
 const runtime = resolveAiRuntime({ AI_PROVIDER: process.env.AI_PROVIDER, AI_MODEL: process.env.AI_MODEL });
 
 export const AI_CONFIG = {

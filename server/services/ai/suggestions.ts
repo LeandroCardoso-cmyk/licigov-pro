@@ -15,6 +15,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "../rag";
 import { AI_CONFIG } from "../../config/ai";
+import { shouldDisableThinking } from "../../_core/ai/gemini";
 import {
   ProcessContext, processBlock, documentsBlock, outputInstruction, fmtBrl, truncate,
 } from "./promptBuilder";
@@ -22,9 +23,16 @@ import {
 const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
 
 function getModel(maxTokens = 2048) {
+  // Modelo VIVO configurado (o antigo "gemini-2.0-flash-exp" foi descontinuado → falhava).
+  // Desliga o "thinking" nos Flash 2.5 (evita consumir os tokens de saída — ver #175).
   return genAI.getGenerativeModel({
-    model: "gemini-2.0-flash-exp",
-    generationConfig: { temperature: 0.4, topP: 0.85, maxOutputTokens: maxTokens },
+    model: AI_CONFIG.model,
+    generationConfig: {
+      temperature: 0.4,
+      topP: 0.85,
+      maxOutputTokens: maxTokens,
+      ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    },
   });
 }
 
