@@ -13,7 +13,7 @@ import { createHash } from "crypto";
 import type { CopilotType } from "./institutionalCopilot";
 
 /** Como o contrato nasceu (três origens possíveis). */
-export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo";
+export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo" | "avulso";
 
 export type ContractStatus =
   | "minuta"

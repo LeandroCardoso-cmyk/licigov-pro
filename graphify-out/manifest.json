@@ -8085,8 +8085,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784472871.9226735,
-    "ast_hash": "9edc8db0e1620fb360cbb2757f83444c",
+    "mtime": 1784505371.082721,
+    "ast_hash": "589e7a096513791907f9146d85a0b707",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -8140,8 +8140,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784472875.5786736,
-    "ast_hash": "af0b92d18bf1a34de31390a289c6385e",
+    "mtime": 1784505850.5788653,
+    "ast_hash": "0dd610d00ad6ab655b4a3eecf2203c46",
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
@@ -8155,13 +8155,13 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784472876.0426736,
-    "ast_hash": "2b28f3db48093c91a759f89247a5d7bf",
+    "mtime": 1784505261.0467234,
+    "ast_hash": "cbdd66961d31dd01b465b76a4a057fc5",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784472877.1826737,
-    "ast_hash": "e8974797b28c662461c8e91f5ff8213b",
+    "mtime": 1784505286.9827228,
+    "ast_hash": "3c960753bb7a006a2c71165d53a3d7a2",
     "semantic_hash": ""
   },
   "server/services/contractObservabilityService.ts": {
@@ -8170,8 +8170,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784472877.191241,
-    "ast_hash": "572859ab32935aa92aceecf567a2bdf6",
+    "mtime": 1784505273.802723,
+    "ast_hash": "a29856bd8ad36de845b2bb7db33343d0",
     "semantic_hash": ""
   },
   "docs/business-domains/contracts/addenda.md": {

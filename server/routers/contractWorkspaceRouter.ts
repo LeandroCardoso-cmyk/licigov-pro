@@ -12,6 +12,7 @@ import { router, tenantProcedure } from "../_core/trpc";
 import { updateContractFields, transitionContractStatus, type ContractStatus } from "../domain/contractWorkspace";
 import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
+  createManualContract,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../services/contractService";
@@ -48,6 +49,22 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, correlationId: ctx.correlationId });
+      return { workspace };
+    }),
+
+  createManual: tenantProcedure
+    .input(z.object({
+      contractNumber: z.string().min(1),
+      contractor: z.string().optional(),
+      object: z.string().optional(),
+      value: z.number().nonnegative().optional(),
+      term: z.string().optional(),
+      manager: z.string().optional(),
+      inspector: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const workspace = await createManualContract({ organizationId: orgId, ...input, correlationId: ctx.correlationId });
       return { workspace };
     }),
 
