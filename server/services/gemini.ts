@@ -7,25 +7,59 @@
  * por compatibilidade (não removido). Novos fluxos DEVEM usar AIExecutionEngine →
  * Provider Adapter. Consta na allowlist de exceções legadas dos testes de fronteira.
  */
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 import { getPlatformInstructions } from "./platformTemplates";
 import { AI_CONFIG } from "../config/ai";
 import { shouldDisableThinking } from "../_core/ai/gemini";
 
-// Config de geração compartilhada dos documentos (ETP/TR/DFD/Edital).
-// Usa o modelo VIVO configurado (AI_CONFIG.model = gemini-flash-latest por padrão) — o antigo
-// "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos
-// Flash 2.5 (senão consome os 8192 tokens de saída e trunca o documento — ver #175).
-const DOC_GENERATION_CONFIG = {
-  temperature: 0.3, // Baixo para respostas determinísticas
-  topP: 0.8,
-  topK: 40,
-  maxOutputTokens: 8192,
-  ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-} as const;
+// Config de geração COMUM a todos os documentos institucionais (DFD/ETP/TR/Edital/
+// Contrato/Ata/Parecer) — fonte única, sem duplicação. Usa o modelo VIVO configurado
+// (AI_CONFIG.model = gemini-flash-latest por padrão) — o antigo "gemini-2.0-flash-exp"
+// foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos Flash 2.5
+// (senão consome o orçamento de saída e trunca o documento — ver #175). Cada tipo
+// documental mantém seu próprio teto de saída (maxOutputTokens), o resto é idêntico.
+function buildDocGenerationConfig(maxOutputTokens: number) {
+  return {
+    temperature: 0.3, // Baixo para respostas determinísticas
+    topP: 0.8,
+    topK: 40,
+    maxOutputTokens,
+    ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+  } as const;
+}
+
+const DOC_GENERATION_CONFIG = buildDocGenerationConfig(8192);
 
 const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
+
+/**
+ * Fronteira única de validação da resposta do provider — nenhuma das 7 funções de
+ * geração documental pode considerar sucesso um texto vazio, só-espaços, ou ausência
+ * de candidato. Bloqueio de segurança já é capturado pelo SDK (lança
+ * GoogleGenerativeAIResponseError, cai no catch de cada função); aqui cobrimos o caso
+ * de resposta "bem-sucedida" porém sem conteúdo real.
+ */
+export function extractValidatedText(result: GenerateContentResult, docLabel: string): string {
+  const candidate = result.response.candidates?.[0];
+  if (!candidate) {
+    throw new Error(`Falha ao gerar ${docLabel}: o provedor de IA não retornou conteúdo. Tente novamente.`);
+  }
+  const text = result.response.text();
+  if (!text || text.trim().length === 0) {
+    throw new Error(`Falha ao gerar ${docLabel}: o provedor de IA retornou conteúdo vazio. Tente novamente.`);
+  }
+  return text;
+}
+
+/** Log sanitizado — nunca o objeto de erro cru (evita vazar detalhes não previstos do SDK). */
+function logGenerationError(docLabel: string, error: unknown): void {
+  const info =
+    error instanceof Error
+      ? { message: error.message, status: (error as { status?: number }).status, statusText: (error as { statusText?: string }).statusText }
+      : { message: String(error) };
+  console.error(`Erro ao gerar ${docLabel} com Gemini:`, info);
+}
 
 /**
  * Gera o ETP (Estudo Técnico Preliminar) usando Google Gemini
@@ -184,13 +218,12 @@ ${platformInstructions ? `**INSTRUÇÕES ESPECÍFICAS DA PLATAFORMA:**\n${platfo
 
   try {
     const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
+    const text = extractValidatedText(result, "ETP");
 
     // Adicionar cabeçalho e rodapé ao documento
     return `${header}${text}${footer}`;
   } catch (error) {
-    console.error("Erro ao gerar ETP com Gemini:", error);
+    logGenerationError("ETP", error);
     throw new Error("Falha ao gerar ETP. Por favor, tente novamente.");
   }
 }
@@ -308,10 +341,10 @@ Gere um documento profissional em markdown.`;
 
   try {
     const result = await model.generateContent(prompt);
-    const textTR = result.response.text();
+    const textTR = extractValidatedText(result, "TR");
     return `${headerTR}${textTR}${footerTR}`;
   } catch (error) {
-    console.error("Erro ao gerar TR com Gemini:", error);
+    logGenerationError("TR", error);
     throw new Error("Falha ao gerar TR. Por favor, tente novamente.");
   }
 }
@@ -410,10 +443,10 @@ Gere um documento profissional em markdown.`;
 
   try {
     const result = await model.generateContent(prompt);
-    const textDFD = result.response.text();
+    const textDFD = extractValidatedText(result, "DFD");
     return `${headerDFD}${textDFD}${footerDFD}`;
   } catch (error) {
-    console.error("Erro ao gerar DFD com Gemini:", error);
+    logGenerationError("DFD", error);
     throw new Error("Falha ao gerar DFD. Por favor, tente novamente.");
   }
 }
@@ -530,10 +563,10 @@ Gere um documento profissional e completo em markdown.`;
 
   try {
     const result = await model.generateContent(prompt);
-    const textEdital = result.response.text();
+    const textEdital = extractValidatedText(result, "Edital");
     return `${headerEdital}${textEdital}${footerEdital}`;
   } catch (error) {
-    console.error("Erro ao gerar Edital com Gemini:", error);
+    logGenerationError("Edital", error);
     throw new Error("Falha ao gerar Edital. Por favor, tente novamente.");
   }
 }
@@ -629,9 +662,9 @@ Retorne apenas o conteúdo do documento, sem explicações adicionais.`;
 
   try {
     const result = await model.generateContent(prompt);
-    return `${header}${result.response.text()}${footer}`;
+    return `${header}${extractValidatedText(result, "Contrato")}${footer}`;
   } catch (error) {
-    console.error("Erro ao gerar Contrato com Gemini:", error);
+    logGenerationError("Contrato", error);
     throw new Error("Falha ao gerar Minuta de Contrato. Por favor, tente novamente.");
   }
 }
@@ -655,7 +688,7 @@ export async function generateAta(params: {
 }): Promise<string> {
   const model = genAI.getGenerativeModel({
     model: AI_CONFIG.model,
-    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 4096 },
+    generationConfig: buildDocGenerationConfig(4096),
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -719,9 +752,9 @@ Retorne apenas o conteúdo do documento, sem explicações adicionais.`;
 
   try {
     const result = await model.generateContent(prompt);
-    return `${header}${result.response.text()}${footer}`;
+    return `${header}${extractValidatedText(result, "Ata")}${footer}`;
   } catch (error) {
-    console.error("Erro ao gerar Ata com Gemini:", error);
+    logGenerationError("Ata", error);
     throw new Error("Falha ao gerar Ata de Resultado. Por favor, tente novamente.");
   }
 }
@@ -748,7 +781,7 @@ export async function generateParecer(params: {
 }): Promise<string> {
   const model = genAI.getGenerativeModel({
     model: AI_CONFIG.model,
-    generationConfig: { temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 6144 },
+    generationConfig: buildDocGenerationConfig(6144),
   });
 
   const valueInReais = (params.estimatedValue / 100).toLocaleString("pt-BR", {
@@ -824,9 +857,9 @@ Retorne apenas o conteúdo do parecer, sem explicações adicionais.`;
 
   try {
     const result = await model.generateContent(prompt);
-    return `${header}${result.response.text()}${footer}`;
+    return `${header}${extractValidatedText(result, "Parecer")}${footer}`;
   } catch (error) {
-    console.error("Erro ao gerar Parecer com Gemini:", error);
+    logGenerationError("Parecer", error);
     throw new Error("Falha ao gerar Parecer Jurídico. Por favor, tente novamente.");
   }
 }

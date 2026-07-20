@@ -4205,13 +4205,13 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784484564.732226,
-    "ast_hash": "068bfb43bf7cbaa9e14247b7bb982e67",
+    "mtime": 1784509987.739262,
+    "ast_hash": "5d86bf2a6fb84dd2c63ff26545ed88c8",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784472875.6826737,
-    "ast_hash": "ec2a6e0ec11b216fe074156cfa08b945",
+    "mtime": 1784509961.0352604,
+    "ast_hash": "3810f15f94210e771e3b2f3a17c5f84a",
     "semantic_hash": ""
   },
   "server/config/app.ts": {
@@ -5430,8 +5430,8 @@
     "semantic_hash": ""
   },
   "server/services/ai/suggestions.ts": {
-    "mtime": 1784472877.1866739,
-    "ast_hash": "0db186bc3868cfe6afa55360a6795bf1",
+    "mtime": 1784509775.9672496,
+    "ast_hash": "5964ae1a270c1a83e35eef303bbedf5c",
     "semantic_hash": ""
   },
   "server/services/aiAuditService.ts": {
@@ -5800,8 +5800,8 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1784472877.1946738,
-    "ast_hash": "f8d9a1e7c9a5e03f06b2f0f7b4013990",
+    "mtime": 1784510076.7152674,
+    "ast_hash": "2e709c51a5fd7357bb6c91f671fbf41a",
     "semantic_hash": ""
   },
   "server/services/graphObservabilityService.ts": {
@@ -8085,7 +8085,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1784472871.9226735,
+    "mtime": 1784509773.8832495,
     "ast_hash": "9edc8db0e1620fb360cbb2757f83444c",
     "semantic_hash": ""
   },
@@ -8140,7 +8140,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1784472875.5786736,
+    "mtime": 1784509774.2832494,
     "ast_hash": "af0b92d18bf1a34de31390a289c6385e",
     "semantic_hash": ""
   },
@@ -8155,12 +8155,12 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1784472876.0426736,
+    "mtime": 1784509774.2832494,
     "ast_hash": "2b28f3db48093c91a759f89247a5d7bf",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1784472877.1826737,
+    "mtime": 1784509774.2832494,
     "ast_hash": "e8974797b28c662461c8e91f5ff8213b",
     "semantic_hash": ""
   },
@@ -8170,7 +8170,7 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1784472877.191241,
+    "mtime": 1784509774.2872493,
     "ast_hash": "572859ab32935aa92aceecf567a2bdf6",
     "semantic_hash": ""
   },
@@ -9590,8 +9590,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-provider-config.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "833a1056480980776ccdeca740e15ed7",
+    "mtime": 1784510058.8912663,
+    "ast_hash": "a05db00e8cdc6b436ba2f0ce54cc88a6",
     "semantic_hash": ""
   },
   "docs/architecture/AI_PROVIDER_CONFIG.md": {
@@ -9692,6 +9692,21 @@
   ".github/workflows/db-backup.yml": {
     "mtime": 1784481785.5708954,
     "ast_hash": "a46473b9fd0ecf2cc6a056d747162e6f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
+    "mtime": 1784510247.4872775,
+    "ast_hash": "f5c3492bcb6a5685bf7857b220c6981b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/gemini-response-validation.test.ts": {
+    "mtime": 1784510088.8912683,
+    "ast_hash": "387360968c3c07bd1afc85778c38660a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/no-dead-gemini-models.test.ts": {
+    "mtime": 1784509775.9672496,
+    "ast_hash": "11154d8a0e56157ea1b8c885892bc126",
     "semantic_hash": ""
   }
 }
