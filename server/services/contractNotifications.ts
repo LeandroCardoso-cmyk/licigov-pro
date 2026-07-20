@@ -1,14 +1,17 @@
 import { differenceInDays } from "date-fns";
 import { getDb } from "../db";
 import { contracts } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { notifyOwner } from "../_core/notification";
 
 /**
- * Verifica contratos próximos ao vencimento e envia notificações
- * Alertas: 90, 60, 30 dias antes e no dia do vencimento
+ * Verifica contratos próximos ao vencimento (da organização) e envia notificações.
+ * Alertas: 90, 60, 30 dias antes e no dia do vencimento.
+ *
+ * RC-C0.1A.1 — organizationId obrigatório: antes verificava vencimentos de TODAS as
+ * organizações indiscriminadamente.
  */
-export async function checkContractExpirations() {
+export async function checkContractExpirationsForOrganization(organizationId: number) {
   const db = await getDb();
   if (!db) {
     console.warn("[Contract Notifications] Database not available");
@@ -19,11 +22,11 @@ export async function checkContractExpirations() {
   }
 
   try {
-    // Buscar todos os contratos ativos
+    // Buscar contratos ativos da organização
     const activeContracts = await db
       .select()
       .from(contracts)
-      .where(eq(contracts.status, "active"));
+      .where(and(eq(contracts.status, "active"), eq(contracts.organizationId, organizationId)));
 
     if (!activeContracts || activeContracts.length === 0) {
       return {
@@ -116,9 +119,10 @@ ${daysUntilExpiry >= 0 ? "⏰ Providencie a renovação ou rescisão do contrato
 }
 
 /**
- * Gera resumo de contratos próximos ao vencimento
+ * Gera resumo de contratos próximos ao vencimento da organização.
+ * RC-C0.1A.1 — organizationId obrigatório: antes agregava de todas as organizações.
  */
-export async function getExpirationSummary() {
+export async function getExpirationSummaryForOrganization(organizationId: number) {
   const db = await getDb();
   if (!db) {
     return null;
@@ -128,7 +132,7 @@ export async function getExpirationSummary() {
     const activeContracts = await db
       .select()
       .from(contracts)
-      .where(eq(contracts.status, "active"));
+      .where(and(eq(contracts.status, "active"), eq(contracts.organizationId, organizationId)));
 
     const today = new Date();
     const summary = {
