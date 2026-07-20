@@ -83,6 +83,27 @@ export async function createFromDirectProcurement(params: {
 }
 
 /**
+ * FLUXO 4 — contrato AVULSO (novo do zero): não deriva de processo licitatório,
+ * contratação direta nem de reconstrução de texto. Cobre situações em que é preciso
+ * lavrar um contrato que não está vinculado a nenhum processo do sistema. Nasce como
+ * MINUTA (revisável), com os dados informados diretamente pelo servidor.
+ */
+export async function createManualContract(params: {
+  organizationId: number; contractNumber: string; contractor?: string; object?: string;
+  value?: number; term?: string; manager?: string; inspector?: string; correlationId: string;
+}): Promise<ContractWorkspace> {
+  const ws = createContractWorkspace({
+    organizationId: params.organizationId, originType: "avulso", originProcess: "",
+    contractNumber: params.contractNumber, contractor: params.contractor, object: params.object,
+    value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
+    status: "minuta", correlationId: params.correlationId,
+  });
+  await insertContractWorkspace(ws);
+  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato avulso ${ws.contractNumber} criado do zero (sem processo de origem).`, refId: ws.id, correlationId: params.correlationId });
+  return ws;
+}
+
+/**
  * FLUXO 3 (obrigatório) — RECONSTRUÇÃO ASSISTIDA de contrato externo (PDF/DOCX →
  * texto). Identifica fornecedor/objeto/prazo/valor/cláusulas e APRESENTA ao servidor
  * para revisão. A reconstrução é assistida (nunca perfeita) e depende da validação

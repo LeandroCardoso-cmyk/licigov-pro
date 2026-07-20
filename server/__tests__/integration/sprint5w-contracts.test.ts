@@ -19,6 +19,7 @@ import {
 // Services
 import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
+  createManualContract,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../../services/contractService";
@@ -45,7 +46,7 @@ describe("FASE 5 — Business Domain: Contratos", () => {
   // ─── Workspace ──────────────────────────────────────────────────────────────
 
   describe("contractWorkspace", () => {
-    const mk = (origin: "processo_licitatorio" | "contratacao_direta" | "externo" = "externo") =>
+    const mk = (origin: "processo_licitatorio" | "contratacao_direta" | "externo" | "avulso" = "externo") =>
       createContractWorkspace({ organizationId: ORG_ID, originType: origin, contractNumber: "CT-2026/001", contractor: "ACME", object: "Serviços", value: 100000, correlationId: CORR });
 
     it("cria contrato com id determinístico e copilotos do domínio", () => {
@@ -192,7 +193,7 @@ describe("FASE 5 — Business Domain: Contratos", () => {
 
     it("router expõe todos os endpoints operacionais", () => {
       const procedures = Object.keys(contractWorkspaceRouter._def.procedures);
-      for (const ep of ["createFromProcurement", "createFromDirectProcurement", "importExternalContract", "loadContract", "updateContract", "createAddendum", "createApostille", "registerOccurrence", "requestLegalOpinion", "generateDocuments"]) {
+      for (const ep of ["createFromProcurement", "createFromDirectProcurement", "createManual", "importExternalContract", "loadContract", "updateContract", "createAddendum", "createApostille", "registerOccurrence", "requestLegalOpinion", "generateDocuments"]) {
         expect(procedures).toContain(ep);
       }
     });
@@ -237,6 +238,24 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(res.assisted).toBe(true);
       expect(res.confidence).toBeGreaterThan(0);
       expect(res.reconstructed.contractNumber).toContain("9/2026");
+    });
+
+    it("FLUXO 4 — createManualContract cria contrato AVULSO (sem processo de origem)", async () => {
+      const ws = await createManualContract({
+        organizationId: ORG_ID, contractNumber: "CT-2026/AVULSO-1", contractor: "Fornecedor XYZ",
+        object: "Manutenção predial", value: 500000, term: "12 meses", correlationId: CORR,
+      });
+      expect(ws.originType).toBe("avulso");
+      expect(ws.originProcess).toBe("");
+      expect(ws.status).toBe("minuta");
+      expect(ws.contractor).toBe("Fornecedor XYZ");
+      expect(ws.value).toBe(500000);
+    });
+
+    it("createManualContract funciona só com número do contrato (demais campos opcionais)", async () => {
+      const ws = await createManualContract({ organizationId: ORG_ID, contractNumber: "CT-2026/AVULSO-2", correlationId: CORR });
+      expect(ws.originType).toBe("avulso");
+      expect(ws.contractNumber).toBe("CT-2026/AVULSO-2");
     });
 
     it("operações que exigem contrato existente lançam sem DB", async () => {
