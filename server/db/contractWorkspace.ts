@@ -25,6 +25,27 @@ function parseArr(raw: string | null): string[] {
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p as string[] : []; } catch { return []; }
 }
 
+/**
+ * Fronteira de data ISO ⇄ MySQL (mesmo bug/fix do #163: colunas DATETIME(3) rejeitam
+ * o separador "T" e o sufixo "Z" do ISO 8601 — o INSERT falha em produção; nunca
+ * apareceu antes porque este arquivo nunca tinha sido exercitado contra MySQL real,
+ * só "degrada sem DB" nos testes existentes). Aplicado aqui em insertContractWorkspace/
+ * getContractWorkspace (usadas pelos 4 fluxos de nascimento do contrato, incluindo o
+ * avulso). NOTA: o mesmo padrão quebrado existe em insertContractWsDocument,
+ * insertContractAddendum, insertContractApostille, insertContractOccurrence e
+ * insertImportedContract deste mesmo arquivo — fora do escopo desta correção (PR B),
+ * registrado no relatório da revisão arquitetural como bug pré-existente a corrigir.
+ */
+function toDbDatetime(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number, l = 2) => String(n).padStart(l, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}.${p(d.getUTCMilliseconds(), 3)}`;
+}
+function fromDbDatetime(v: string): string {
+  if (v.includes("T")) return v.endsWith("Z") ? v : `${v}Z`;
+  return `${v.replace(" ", "T")}Z`;
+}
+
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
 export async function insertContractWorkspace(ws: ContractWorkspace): Promise<ContractWorkspace | null> {
@@ -34,10 +55,11 @@ export async function insertContractWorkspace(ws: ContractWorkspace): Promise<Co
     id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
     contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
     term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
-    correlationId: ws.correlationId, createdAt: ws.createdAt, updatedAt: ws.updatedAt,
+    correlationId: ws.correlationId, createdBy: ws.createdBy,
+    createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
   }).onDuplicateKeyUpdate({ set: {
     contractor: ws.contractor, object: ws.object, value: String(ws.value), term: ws.term, status: ws.status,
-    manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: ws.updatedAt,
+    manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: toDbDatetime(ws.updatedAt),
   } });
   return ws;
 }
@@ -54,8 +76,26 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
     contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), term: r.term,
     status: r.status as ContractStatus, manager: r.manager, inspector: r.inspector,
     activeCopilots: ["juridico", "contratos", "agente_contratacao"], correlationId: r.correlationId,
-    createdAt: r.createdAt, updatedAt: r.updatedAt,
+    createdBy: r.createdBy ?? null, createdAt: fromDbDatetime(r.createdAt), updatedAt: fromDbDatetime(r.updatedAt),
   };
+}
+
+/**
+ * Busca um contrato AVULSO existente pelo número, na mesma organização — usada para
+ * detectar colisão ANTES de criar (unicidade institucional do contrato avulso; ver
+ * revisão arquitetural). Não cobre os outros 3 fluxos (processo/direta/externo),
+ * que já são naturalmente escopados pelo id determinístico incluindo originType.
+ */
+export async function findManualContractByNumber(orgId: number, contractNumber: string): Promise<{ id: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ id: contractWorkspacesTable.id }).from(contractWorkspacesTable)
+    .where(and(
+      eq(contractWorkspacesTable.organizationId, orgId),
+      eq(contractWorkspacesTable.originType, "avulso"),
+      eq(contractWorkspacesTable.contractNumber, contractNumber),
+    )).limit(1);
+  return rows.length > 0 ? { id: rows[0].id } : null;
 }
 
 export async function listContractWorkspaces(orgId: number, limit = 50): Promise<Array<{ id: string; originType: string; contractNumber: string; contractor: string; object: string; value: number; status: string; updatedAt: string }>> {
@@ -78,7 +118,7 @@ export async function listImportedContractWorkspaces(orgId: number, limit = 50):
 export async function updateContractWorkspaceStatus(id: string, orgId: number, status: string, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(contractWorkspacesTable).set({ status, updatedAt })
+  await db.update(contractWorkspacesTable).set({ status, updatedAt: toDbDatetime(updatedAt) })
     .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId)));
   return true;
 }
@@ -198,7 +238,8 @@ export async function insertImportedContract(ic: ImportedContract, contractId: s
   // A coluna `extracted` (nome físico legado) guarda a reconstrução assistida.
   await db.insert(importedContractsTable).values({
     id: ic.id, organizationId: ic.organizationId, contractId, source: ic.source, rawTextHash: ic.rawTextHash,
-    extracted: JSON.stringify(ic.reconstructed), confidence: String(ic.confidence), correlationId: ic.correlationId, createdAt: ic.createdAt,
+    extracted: JSON.stringify(ic.reconstructed), confidence: String(ic.confidence), correlationId: ic.correlationId,
+    createdAt: toDbDatetime(ic.createdAt),
   }).onDuplicateKeyUpdate({ set: { contractId, extracted: JSON.stringify(ic.reconstructed), confidence: String(ic.confidence) } });
   return ic;
 }

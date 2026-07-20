@@ -32,9 +32,18 @@ import {
   insertContractWorkspace, getContractWorkspace, updateContractWorkspaceStatus,
   insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda,
   insertContractApostille, countContractApostilles, insertContractOccurrence, insertImportedContract,
+  findManualContractByNumber,
 } from "../db/contractWorkspace";
 
 const DOMAIN = "contratos" as const;
+
+/** Colisão de número de contrato AVULSO na mesma organização — nunca sobrescreve silenciosamente. */
+export class ManualContractConflictError extends Error {
+  constructor(public readonly existingId: string, contractNumber: string) {
+    super(`Já existe um contrato avulso com o número "${contractNumber}" nesta organização.`);
+    this.name = "ManualContractConflictError";
+  }
+}
 
 export interface Recommendation {
   readonly reasoning: string;
@@ -79,6 +88,34 @@ export async function createFromDirectProcurement(params: {
   });
   await insertContractWorkspace(ws);
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato ${ws.contractNumber} gerado a partir da Contratação Direta ${params.directWorkspaceId}.`, refId: ws.id, correlationId: params.correlationId });
+  return ws;
+}
+
+/**
+ * FLUXO 4 — contrato AVULSO (novo do zero): não deriva de processo licitatório,
+ * contratação direta nem de reconstrução de texto. Cobre situações em que é preciso
+ * lavrar um contrato que não está vinculado a nenhum processo do sistema. Nasce como
+ * MINUTA (revisável), com os dados informados diretamente pelo servidor.
+ */
+export async function createManualContract(params: {
+  organizationId: number; contractNumber: string; contractor?: string; object?: string;
+  value?: number; term?: string; manager?: string; inspector?: string; correlationId: string;
+  /** Usuário autenticado responsável — nunca "sistema" quando há um ator real (revisão arquitetural). */
+  createdBy: number;
+}): Promise<ContractWorkspace> {
+  // Unicidade institucional do avulso: nunca sobrescreve silenciosamente (ver revisão
+  // arquitetural — a idempotência do COMANDO é tratada à parte, no router, via idempotencyKey).
+  const existing = await findManualContractByNumber(params.organizationId, params.contractNumber);
+  if (existing) throw new ManualContractConflictError(existing.id, params.contractNumber);
+
+  const ws = createContractWorkspace({
+    organizationId: params.organizationId, originType: "avulso", originProcess: "",
+    contractNumber: params.contractNumber, contractor: params.contractor, object: params.object,
+    value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
+    status: "minuta", correlationId: params.correlationId, createdBy: params.createdBy,
+  });
+  await insertContractWorkspace(ws);
+  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`, summary: `Contrato avulso ${ws.contractNumber} criado do zero (sem processo de origem).`, refId: ws.id, correlationId: params.correlationId });
   return ws;
 }
 

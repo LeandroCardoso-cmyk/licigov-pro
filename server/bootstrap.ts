@@ -4195,6 +4195,9 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   await addColumnIfMissing("knowledge_nodes", "source",         "varchar(100) NOT NULL DEFAULT 'manual'");
   await addColumnIfMissing("knowledge_nodes", "active",         "tinyint NOT NULL DEFAULT 1");
   await addColumnIfMissing("knowledge_nodes", "correlation_id", "varchar(64) NOT NULL DEFAULT ''");
+
+  // Contrato avulso (0286) — usuário responsável pela criação do workspace.
+  await addColumnIfMissing("contract_workspaces", "created_by", "int");
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

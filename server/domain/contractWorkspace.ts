@@ -13,7 +13,7 @@ import { createHash } from "crypto";
 import type { CopilotType } from "./institutionalCopilot";
 
 /** Como o contrato nasceu (três origens possíveis). */
-export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo";
+export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo" | "avulso";
 
 export type ContractStatus =
   | "minuta"
@@ -44,6 +44,10 @@ export interface ContractWorkspace {
   readonly inspector: string;
   readonly activeCopilots: readonly CopilotType[];
   readonly correlationId: string;
+  /** Usuário responsável pela criação (0286). NULL em workspaces anteriores à coluna
+   *  (os 3 fluxos pré-existentes — processo, contratação direta, externo — não passam
+   *  esse dado hoje; fora do escopo desta correção, ver plano de descontinuação legado). */
+  readonly createdBy: number | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -71,6 +75,7 @@ export function createContractWorkspace(params: {
   inspector?: string;
   status?: ContractStatus;
   correlationId: string;
+  createdBy?: number | null;
   createdAt?: string;
 }): ContractWorkspace {
   const id = createHash("sha256")
@@ -92,6 +97,7 @@ export function createContractWorkspace(params: {
     inspector: params.inspector ?? "",
     activeCopilots: CONTRACT_DOMAIN_COPILOTS,
     correlationId: params.correlationId,
+    createdBy: params.createdBy ?? null,
     createdAt: ts,
     updatedAt: ts,
   };
