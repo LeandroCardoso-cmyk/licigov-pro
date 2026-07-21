@@ -98,6 +98,39 @@ O legado documental só poderá ser bloqueado quando, cumulativamente:
   `server/services/{contractDocuments,contractNotifications,contractReports,contractValidation}.ts`
 - **Tabelas:** `contracts`, `contract_documents`, `contract_apostilles` (preservar).
 
+#### Auditoria e isolamento multi-tenant completo (RC-C0.1A.1)
+
+Todas as **23 procedures** do `contractsRouter` foram auditadas e migradas de
+`protectedProcedure` para `tenantProcedure` — `organizationId` sempre resolvido no
+servidor, nunca aceito do cliente. Nenhum endpoint foi bloqueado (todos corrigíveis
+sem grande refatoração); nenhum permanece ativo com a vulnerabilidade original.
+
+| Endpoint | Antes | Depois | Consumer |
+|---|---|---|---|
+| `create` | sem `organizationId` gravado | grava `ctx.organizationId` | NewContract.tsx |
+| `getById` | sem filtro | `getContractByIdForOrganization` | ContractDetails.tsx |
+| `list` | filtrava por `createdBy` (dono), não org | `listContractsByOrganization` | Contracts.tsx, ContractAlerts.tsx, NewLegalOpinion.tsx |
+| `update` | sem filtro | `updateContractForOrganization` | sem consumer |
+| `amendments.*`, `apostilles.*`, `documents.*`, `audit.*` | sem filtro; tabelas filhas sem coluna `organizationId` | valida o contrato-pai dentro da organização antes de ler/gravar (camada de repositório) | ContractDetails.tsx, NewAmendmentModal.tsx, NewApostilleModal.tsx |
+| `analytics.getOverview` | agregação global (Sprint C0.1A) | `tenantProcedure` (já corrigido) | Contracts.tsx, Admin.tsx, ModuleSelectionDashboard.tsx |
+| `analytics.getRecent` | sem filtro | `getRecentContractsForOrganization` | sem consumer |
+| `generation.*` | sem filtro | valida contrato-pai antes de gerar/persistir | ContractDetails.tsx (Minuta/Rescisão) |
+| `notifications.*`, `reports.*` | consultavam/exportavam TODAS as organizações | escopados à organização do chamador | ContractAlerts.tsx, ContractDetails.tsx |
+
+**Exceção documentada:** `getContractById` (sem filtro) permanece por ser consumida
+por `legalOpinionsRouter.ts` (também `protectedProcedure`, fora do escopo desta
+sprint) — nenhum código novo deve usá-la; todo o `contractsRouter` usa
+`getContractByIdForOrganization`.
+
+**Router ainda `LEGACY_ACTIVE_MAINTENANCE_ONLY`** — nenhuma funcionalidade nova foi
+adicionada; apenas correções de segurança/isolamento e observabilidade mínima
+(`correlationId`/`organizationId`/ator/duração via log estruturado, sem persistência
+em `contract_audit_logs`, que não tem essas colunas — mudança de schema fora de
+escopo). Testes: `contracts-tenant-isolation-mysql-smoke.test.ts` (Sprint C0.1A, 8
+testes de `analytics.getOverview`) + `contracts-legacy-full-isolation-mysql-smoke.test.ts`
+(18 testes das 22 procedures restantes) + `rc-c01a1-contracts-legacy-freeze.test.ts`
+(8 testes arquiteturais, allowlist congelada de consumers/endpoints/tabelas).
+
 ### DirectContracts  → substituído por **Direct Procurement** (`/contratacao-direta`)
 - **Classe:** 3 (remover após RC-5)
 - **Frontend:** `client/src/pages/{DirectContracts,NewDirectContract,DirectContractDetails,DirectContractsAnalytics}.tsx`

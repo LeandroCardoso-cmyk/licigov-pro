@@ -129,6 +129,11 @@ export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
   "client/src/pages/Dashboard.tsx",
   "client/src/pages/ProcessDetails.tsx",
   "client/src/pages/NewProcess.tsx",
+  // RC-C0.1A.1 — isolamento multi-tenant completo já aplicado (23/23 procedures
+  // tenantProcedure); permanece MAINTENANCE_ONLY por ser o legado ainda ativo em
+  // /contracts/* (compat, fora do menu) — ver LEGACY_INVENTORY.md § Contracts.
+  "server/routers/contractsRouter.ts",
+  "server/db/contracts.ts",
 ];
 
 export const CANONICAL_NOT_YET_WIRED: readonly string[] = [
@@ -202,6 +207,9 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "client/src/components/procurement/ETPWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de ETP\" (procurementProcess.generateETP) — órfão do frontend." },
   { path: "client/src/components/procurement/TRWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de TR\" (procurementProcess.generateTR) — órfão do frontend." },
   { path: "client/src/components/procurement/EditalWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar edital\" (procurementProcess.generateNotice) — órfão do frontend." },
+  // ─── RC-C0.1A.1 — Contratos legado: isolamento completo, ainda MAINTENANCE_ONLY ──
+  { path: "server/routers/contractsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "23/23 procedures em tenantProcedure (auditoria completa RC-C0.1A.1) — ainda ativo em /contracts/* (compat). Ver LEGACY_INVENTORY.md § Contracts." },
+  { path: "server/db/contracts.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Repository org-scoped (RC-C0.1A.1); getContractById segue sem filtro só para legalOpinionsRouter.ts (documentado no próprio arquivo)." },
 ];
 
 /** Normaliza um caminho para comparação (remove ./ inicial e barras duplicadas). */

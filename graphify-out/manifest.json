@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
-    "mtime": 1784566631.0861218,
-    "ast_hash": "cbb850f65e9c2dd4a5c2ebfbb76bb043",
+    "mtime": 1784577578.4601257,
+    "ast_hash": "ab40ecb5e4af8e8829666c1f956e45c8",
     "semantic_hash": ""
   },
   "server/db/copilots.ts": {
@@ -5090,8 +5090,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
-    "mtime": 1784566660.0541236,
-    "ast_hash": "6938cccef359b51854fd9f52ce27da08",
+    "mtime": 1784577805.860118,
+    "ast_hash": "b22d4eaddf54aa44938f62139ab2ab78",
     "semantic_hash": ""
   },
   "server/routers/copilotGovernanceRouter.ts": {
@@ -5535,13 +5535,13 @@
     "semantic_hash": ""
   },
   "server/services/contractNotifications.ts": {
-    "mtime": 1782612419.3264267,
-    "ast_hash": "018121c41318cc132ea90d2c6452934e",
+    "mtime": 1784577610.7081246,
+    "ast_hash": "fe3debd9cd7ba34bcef0eee32bb8527e",
     "semantic_hash": ""
   },
   "server/services/contractReports.ts": {
-    "mtime": 1782612419.3264267,
-    "ast_hash": "062da00ec1e99c089b8dfbe60365c5bf",
+    "mtime": 1784577626.344124,
+    "ast_hash": "7fefe19d17162d1b0b80d2ce4f0c4a44",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -8495,8 +8495,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGACY_INVENTORY.md": {
-    "mtime": 1784567179.8301544,
-    "ast_hash": "dacbf63c243ae58ad7ee3086dfcc6b96",
+    "mtime": 1784578346.1440995,
+    "ast_hash": "30f30bc37a21dc6c5dc8a52168117014",
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
@@ -8600,8 +8600,8 @@
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1784567133.9581518,
-    "ast_hash": "1e6d15bd626218814d0850b1e2bfa8c4",
+    "mtime": 1784578391.056098,
+    "ast_hash": "70b945df88148cd7e4c2c92e758649ea",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -9727,6 +9727,16 @@
   "server/__tests__/integration/rc-c01a-legacy-freeze.test.ts": {
     "mtime": 1784567580.3061783,
     "ast_hash": "d54e02a38492ef81fe5d48cf697767dd",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts": {
+    "mtime": 1784578135.4881067,
+    "ast_hash": "5eef5fc09aa631c2185db5c7b50d0985",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc-c01a1-contracts-legacy-freeze.test.ts": {
+    "mtime": 1784578289.6441014,
+    "ast_hash": "098d617910934f17f061b46c31f06146",
     "semantic_hash": ""
   }
 }

@@ -12,9 +12,16 @@ export async function createContract(data: InsertContract) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.insert(contracts).values(data);
-  return await getContractById(result[0].insertId);
+  return await getContractByIdForOrganization(result[0].insertId, data.organizationId ?? -1);
 }
 
+/**
+ * RC-C0.1A.1 — INSEGURA (sem filtro de organização). Mantida apenas para o único
+ * consumidor externo pré-existente (`legalOpinionsRouter.ts::generateOpinion`, ele
+ * mesmo `protectedProcedure` sem contexto de tenant — fora do escopo desta sprint,
+ * que corrige exclusivamente `contractsRouter`). NÃO usar em nenhum código novo.
+ * Todo o `contractsRouter` usa `getContractByIdForOrganization` abaixo.
+ */
 export async function getContractById(id: number) {
   const db = await getDb();
   if (!db) return null;
@@ -22,68 +29,100 @@ export async function getContractById(id: number) {
   return result.length > 0 ? result[0] : null;
 }
 
-export async function listContracts(userId: number, filters?: { type?: string; status?: string; year?: number }) {
+/** RC-C0.1A.1 — organizationId sempre exigido; nunca aceitar do cliente sem resolução no servidor. */
+export async function getContractByIdForOrganization(id: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(contracts)
+    .where(and(eq(contracts.id, id), eq(contracts.organizationId, organizationId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function listContractsByOrganization(organizationId: number, filters?: { type?: string; status?: string; year?: number }) {
   const db = await getDb();
   if (!db) return [];
-  const conditions: any[] = [eq(contracts.createdBy, userId)];
+  const conditions: any[] = [eq(contracts.organizationId, organizationId)];
   if (filters?.type) conditions.push(eq(contracts.type, filters.type as any));
   if (filters?.status) conditions.push(eq(contracts.status, filters.status as any));
   if (filters?.year) conditions.push(eq(contracts.year, filters.year));
   return await db.select().from(contracts).where(and(...conditions)).orderBy(desc(contracts.createdAt));
 }
 
-export async function updateContract(id: number, data: Partial<InsertContract>) {
+/** Retorna null se o contrato não existir OU não pertencer à organização (nunca revela a diferença). */
+export async function updateContractForOrganization(id: number, organizationId: number, data: Partial<InsertContract>) {
   const db = await getDb();
   if (!db) return null;
+  const existing = await getContractByIdForOrganization(id, organizationId);
+  if (!existing) return null;
   await db.update(contracts).set({ ...data, updatedAt: new Date() }).where(eq(contracts.id, id));
-  return await getContractById(id);
+  return await getContractByIdForOrganization(id, organizationId);
 }
 
-export async function createAmendment(data: InsertContractAmendment) {
+/** Retorna null se o contrato-pai não existir OU não pertencer à organização. */
+export async function createAmendmentForOrganization(data: InsertContractAmendment, organizationId: number) {
   const db = await getDb();
   if (!db) return null;
+  const parent = await getContractByIdForOrganization(data.contractId, organizationId);
+  if (!parent) return null;
   const result = await db.insert(contractAmendments).values(data);
   const amendment = await db.select().from(contractAmendments).where(eq(contractAmendments.id, result[0].insertId)).limit(1);
   return amendment.length > 0 ? amendment[0] : null;
 }
 
-export async function listAmendments(contractId: number) {
+/** Retorna [] se o contrato-pai não existir OU não pertencer à organização (contract_amendments não tem coluna organizationId própria). */
+export async function listAmendmentsForOrganization(contractId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getContractByIdForOrganization(contractId, organizationId);
+  if (!parent) return [];
   return await db.select().from(contractAmendments).where(eq(contractAmendments.contractId, contractId)).orderBy(asc(contractAmendments.number));
 }
 
-export async function createApostille(data: InsertContractApostille) {
+export async function createApostilleForOrganization(data: InsertContractApostille, organizationId: number) {
   const db = await getDb();
   if (!db) return null;
+  const parent = await getContractByIdForOrganization(data.contractId, organizationId);
+  if (!parent) return null;
   const result = await db.insert(contractApostilles).values(data);
   const apostille = await db.select().from(contractApostilles).where(eq(contractApostilles.id, result[0].insertId)).limit(1);
   return apostille.length > 0 ? apostille[0] : null;
 }
 
-export async function listApostilles(contractId: number) {
+export async function listApostillesForOrganization(contractId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getContractByIdForOrganization(contractId, organizationId);
+  if (!parent) return [];
   return await db.select().from(contractApostilles).where(eq(contractApostilles.contractId, contractId)).orderBy(asc(contractApostilles.number));
 }
 
-export async function createContractDocument(data: InsertContractDocument) {
+export async function createContractDocumentForOrganization(data: InsertContractDocument, organizationId: number) {
   const db = await getDb();
   if (!db) return null;
+  const parent = await getContractByIdForOrganization(data.contractId, organizationId);
+  if (!parent) return null;
   const result = await db.insert(contractDocuments).values(data);
   const doc = await db.select().from(contractDocuments).where(eq(contractDocuments.id, result[0].insertId)).limit(1);
   return doc.length > 0 ? doc[0] : null;
 }
 
-export async function listContractDocuments(contractId: number) {
+export async function listContractDocumentsForOrganization(contractId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getContractByIdForOrganization(contractId, organizationId);
+  if (!parent) return [];
   return await db.select().from(contractDocuments).where(eq(contractDocuments.contractId, contractId)).orderBy(desc(contractDocuments.createdAt));
 }
 
-export async function updateContractDocument(id: number, data: Partial<InsertContractDocument>) {
+/** Documento não referencia organizationId diretamente — resolve o contrato-pai a partir do próprio documento antes de autorizar. */
+export async function updateContractDocumentForOrganization(id: number, organizationId: number, data: Partial<InsertContractDocument>) {
   const db = await getDb();
   if (!db) return null;
+  const existing = await db.select().from(contractDocuments).where(eq(contractDocuments.id, id)).limit(1);
+  if (existing.length === 0) return null;
+  const parent = await getContractByIdForOrganization(existing[0].contractId, organizationId);
+  if (!parent) return null;
   await db.update(contractDocuments).set({ ...data, updatedAt: new Date() }).where(eq(contractDocuments.id, id));
   const doc = await db.select().from(contractDocuments).where(eq(contractDocuments.id, id)).limit(1);
   return doc.length > 0 ? doc[0] : null;
@@ -96,15 +135,19 @@ export async function createContractAuditLog(log: InsertContractAuditLog) {
   return (result as any)[0]?.insertId ?? result;
 }
 
-export async function getContractAuditLogs(contractId: number) {
+export async function getContractAuditLogsForOrganization(contractId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getContractByIdForOrganization(contractId, organizationId);
+  if (!parent) return [];
   return await db.select().from(contractAuditLogs).where(eq(contractAuditLogs.contractId, contractId)).orderBy(desc(contractAuditLogs.createdAt));
 }
 
-export async function getContractAuditLogsByAction(contractId: number, action: string) {
+export async function getContractAuditLogsByActionForOrganization(contractId: number, organizationId: number, action: string) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getContractByIdForOrganization(contractId, organizationId);
+  if (!parent) return [];
   return await db
     .select()
     .from(contractAuditLogs)
@@ -142,8 +185,11 @@ export async function getContractsOverview(organizationId: number) {
   return { total, byType: byTypeResult, byStatus: byStatusResult, totalValue, active: activeCount, expired: expiredCount, expiringSoon: expiringSoonCount };
 }
 
-export async function getRecentContracts(limit: number = 10) {
+export async function getRecentContractsForOrganization(organizationId: number, limit: number = 10) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(contracts).orderBy(desc(contracts.createdAt)).limit(limit);
+  return await db.select().from(contracts)
+    .where(eq(contracts.organizationId, organizationId))
+    .orderBy(desc(contracts.createdAt))
+    .limit(limit);
 }

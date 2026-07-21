@@ -1,13 +1,44 @@
+/**
+ * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — mantém apenas por
+ * compatibilidade (`/contracts/*`, fora do menu). Não adicione novas
+ * funcionalidades, novos tipos de documento ou novos consumidores aqui. Destino
+ * canônico: `contractWorkspaceRouter` (`/contratos`). Referência:
+ * docs/architecture/LEGACY_INVENTORY.md.
+ *
+ * RC-C0.1A.1 — Isolamento multi-tenant completo. Toda procedure usa
+ * `tenantProcedure`; `organizationId` é sempre resolvido no servidor (nunca aceito
+ * do cliente) e aplicado antes de qualquer leitura/escrita. Para os registros
+ * auxiliares sem coluna `organizationId` própria (aditivos, apostilamentos,
+ * documentos, auditoria), o isolamento é garantido validando o contrato-pai dentro
+ * da organização primeiro (na camada de repositório, não só no router) — ver
+ * `server/db/contracts.ts`. `getById` e mutations cross-tenant retornam
+ * `NOT_FOUND`/`null`, nunca revelando se o registro existe em outra organização.
+ */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
-import { checkContractExpirations, getExpirationSummary } from "../services/contractNotifications";
-import { generateAlertsExcelReport, generateAuditExcelReport } from "../services/contractReports";
+import { checkContractExpirationsForOrganization, getExpirationSummaryForOrganization } from "../services/contractNotifications";
+import { generateAlertsExcelReportForOrganization, generateAuditExcelReportForOrganization } from "../services/contractReports";
 import { serviceLogger } from "../services/observabilityService";
 
 const log = serviceLogger("contractsRouter");
+
+type OpCtx = { correlationId: string; organizationId: number; user: { id: number } };
+
+/** RC-C0.1A.1 — envelope mínimo de observabilidade (org/actor/correlationId/duração/operação), sem dados sensíveis. */
+async function audited<T>(operation: string, ctx: OpCtx, fn: () => Promise<T>, extra?: Record<string, unknown>): Promise<T> {
+  const spanResult = await log.span(operation, fn, { correlationId: ctx.correlationId, organizationId: ctx.organizationId, userId: ctx.user.id });
+  log.info(operation, { correlationId: ctx.correlationId, organizationId: ctx.organizationId, userId: ctx.user.id, ...extra });
+  return spanResult.result;
+}
+
+async function requireContractForOrg(contractId: number, organizationId: number) {
+  const contract = await db.getContractByIdForOrganization(contractId, organizationId);
+  if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+  return contract;
+}
 
 /**
  * Router de Contratos
@@ -21,7 +52,7 @@ export const contractsRouter = router({
   /**
    * Criar novo contrato
    */
-  create: protectedProcedure
+  create: tenantProcedure
     .input(
       z.object({
         number: z.string(),
@@ -47,38 +78,40 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const contract = await db.createContract({
-        ...input,
-        createdBy: ctx.user.id,
-      });
-
-      // Registrar auditoria
-      if (contract) {
-        await db.createContractAuditLog({
-          contractId: contract.id,
-          action: "created",
-          userId: ctx.user.id,
-          userName: ctx.user.name || undefined,
-          details: { number: contract.number, object: contract.object },
+      return audited("create", ctx, async () => {
+        const contract = await db.createContract({
+          ...input,
+          organizationId: ctx.organizationId,
+          createdBy: ctx.user.id,
         });
-      }
 
-      return contract;
+        if (contract) {
+          await db.createContractAuditLog({
+            contractId: contract.id,
+            action: "created",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: { number: contract.number, object: contract.object },
+          });
+        }
+
+        return contract;
+      }, { contractNumber: input.number });
     }),
 
   /**
    * Buscar contrato por ID
    */
-  getById: protectedProcedure
+  getById: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getContractById(input.id);
+    .query(async ({ input, ctx }) => {
+      return audited("getById", ctx, () => db.getContractByIdForOrganization(input.id, ctx.organizationId));
     }),
 
   /**
-   * Listar contratos do usuário
+   * Listar contratos da organização
    */
-  list: protectedProcedure
+  list: tenantProcedure
     .input(
       z.object({
         type: z.string().optional(),
@@ -87,13 +120,13 @@ export const contractsRouter = router({
       }).optional()
     )
     .query(async ({ ctx, input }) => {
-      return await db.listContracts(ctx.user.id, input);
+      return audited("list", ctx, () => db.listContractsByOrganization(ctx.organizationId, input));
     }),
 
   /**
    * Atualizar contrato
    */
-  update: protectedProcedure
+  update: tenantProcedure
     .input(
       z.object({
         id: z.number(),
@@ -117,11 +150,11 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { id, ...data } = input;
-      const contract = await db.updateContract(id, data);
+      return audited("update", ctx, async () => {
+        const { id, ...data } = input;
+        const contract = await db.updateContractForOrganization(id, ctx.organizationId, data);
+        if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
 
-      // Registrar auditoria
-      if (contract) {
         await db.createContractAuditLog({
           contractId: contract.id,
           action: "updated",
@@ -129,9 +162,9 @@ export const contractsRouter = router({
           userName: ctx.user.name || undefined,
           details: { changes: Object.keys(data) },
         });
-      }
 
-      return contract;
+        return contract;
+      }, { contractId: input.id });
     }),
 
   // ============================================================================
@@ -142,7 +175,7 @@ export const contractsRouter = router({
     /**
      * Criar aditivo
      */
-    create: protectedProcedure
+    create: tenantProcedure
       .input(
         z.object({
           contractId: z.number(),
@@ -159,98 +192,86 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        // VALIDAÇÃO DE CONFORMIDADE LEGAL (Auditoria Técnica - Item 1.4, 1.5)
-        const { validateAmendmentValue, validateContractDuration, validateAmendmentJustification } = await import("../services/contractValidation");
-        
-        // 1. Validar justificativa (sempre obrigatória)
-        const justificationValidation = validateAmendmentJustification(input.justification);
-        if (!justificationValidation.isValid) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Justificativa inválida:\n${justificationValidation.errors.join('\n')}`,
-          });
-        }
-        
-        // 2. Buscar contrato para validações
-        const contract = await db.getContractById(input.contractId);
-        if (!contract) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Contrato não encontrado' });
-        }
-        
-        // 3. Validar limite de valor (se aplicável)
-        if (input.type === 'valor' || input.type === 'misto') {
-          if (!input.valueChange) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: 'Valor do aditivo é obrigatório para aditivos de valor',
-            });
-          }
-          
-          // Buscar total de aditivos existentes
-          const existingAmendments = await db.listAmendments(input.contractId);
-          const totalExistingValue = existingAmendments
-            .filter((a: any) => a.valueChange)
-            .reduce((sum: any, a: any) => sum + (a.valueChange || 0), 0);
-          
-          const valueValidation = validateAmendmentValue(
-            contract.value,
-            totalExistingValue,
-            input.valueChange
-          );
-          
-          if (!valueValidation.isValid) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: valueValidation.error!,
-            });
-          }
-          
-        }
-        
-        // 4. Validar prazo contratual (se aplicável)
-        if (input.type === 'prazo' || input.type === 'misto') {
-          if (!input.newEndDate) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: 'Nova data fim é obrigatória para aditivos de prazo',
-            });
-          }
-          
-          const durationValidation = validateContractDuration(
-            contract.startDate,
-            input.newEndDate
-          );
-          
-          if (!durationValidation.isValid) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: durationValidation.error!,
-            });
-          }
-          
-        }
-        
-        // 5. Criar aditivo (validações aprovadas)
-        const amendment = await db.createAmendment({
-          ...input,
-          createdBy: ctx.user.id,
-        });
+        return audited("amendments.create", ctx, async () => {
+          // VALIDAÇÃO DE CONFORMIDADE LEGAL (Auditoria Técnica - Item 1.4, 1.5)
+          const { validateAmendmentValue, validateContractDuration, validateAmendmentJustification } = await import("../services/contractValidation");
 
-        // Atualizar contrato se houver mudanças de prazo ou valor
-        if (amendment) {
+          // 1. Validar justificativa (sempre obrigatória)
+          const justificationValidation = validateAmendmentJustification(input.justification);
+          if (!justificationValidation.isValid) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Justificativa inválida:\n${justificationValidation.errors.join('\n')}`,
+            });
+          }
+
+          // 2. Buscar contrato-pai dentro da organização (NOT_FOUND se cross-tenant)
+          const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
+
+          // 3. Validar limite de valor (se aplicável)
+          if (input.type === 'valor' || input.type === 'misto') {
+            if (!input.valueChange) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'Valor do aditivo é obrigatório para aditivos de valor',
+              });
+            }
+
+            const existingAmendments = await db.listAmendmentsForOrganization(input.contractId, ctx.organizationId);
+            const totalExistingValue = existingAmendments
+              .filter((a: any) => a.valueChange)
+              .reduce((sum: any, a: any) => sum + (a.valueChange || 0), 0);
+
+            const valueValidation = validateAmendmentValue(
+              contract.value,
+              totalExistingValue,
+              input.valueChange
+            );
+
+            if (!valueValidation.isValid) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: valueValidation.error!,
+              });
+            }
+          }
+
+          // 4. Validar prazo contratual (se aplicável)
+          if (input.type === 'prazo' || input.type === 'misto') {
+            if (!input.newEndDate) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'Nova data fim é obrigatória para aditivos de prazo',
+              });
+            }
+
+            const durationValidation = validateContractDuration(
+              contract.startDate,
+              input.newEndDate
+            );
+
+            if (!durationValidation.isValid) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: durationValidation.error!,
+              });
+            }
+          }
+
+          // 5. Criar aditivo (validações aprovadas; revalida o contrato-pai internamente)
+          const amendment = await db.createAmendmentForOrganization({
+            ...input,
+            createdBy: ctx.user.id,
+          }, ctx.organizationId);
+          if (!amendment) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+
           const updates: any = {};
-          if (input.newEndDate) {
-            updates.endDate = input.newEndDate;
-          }
-          if (input.newTotalValue) {
-            updates.currentValue = input.newTotalValue;
-          }
-
+          if (input.newEndDate) updates.endDate = input.newEndDate;
+          if (input.newTotalValue) updates.currentValue = input.newTotalValue;
           if (Object.keys(updates).length > 0) {
-            await db.updateContract(input.contractId, updates);
+            await db.updateContractForOrganization(input.contractId, ctx.organizationId, updates);
           }
 
-          // Registrar auditoria
           await db.createContractAuditLog({
             contractId: input.contractId,
             action: "amendment_added",
@@ -258,18 +279,18 @@ export const contractsRouter = router({
             userName: ctx.user.name || undefined,
             details: { amendmentId: amendment.id, type: amendment.type, number: amendment.number },
           });
-        }
 
-        return amendment;
+          return amendment;
+        }, { contractId: input.contractId });
       }),
 
     /**
      * Listar aditivos de um contrato
      */
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({ contractId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.listAmendments(input.contractId);
+      .query(async ({ input, ctx }) => {
+        return audited("amendments.list", ctx, () => db.listAmendmentsForOrganization(input.contractId, ctx.organizationId), { contractId: input.contractId });
       }),
   }),
 
@@ -281,7 +302,7 @@ export const contractsRouter = router({
     /**
      * Criar apostilamento
      */
-    create: protectedProcedure
+    create: tenantProcedure
       .input(
         z.object({
           contractId: z.number(),
@@ -297,20 +318,19 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        const apostille = await db.createApostille({
-          ...input,
-          createdBy: ctx.user.id,
-        });
+        return audited("apostilles.create", ctx, async () => {
+          const apostille = await db.createApostilleForOrganization({
+            ...input,
+            createdBy: ctx.user.id,
+          }, ctx.organizationId);
+          if (!apostille) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
 
-        // Atualizar valor do contrato se houver reajuste
-        if (apostille && input.newTotalValue) {
-          await db.updateContract(input.contractId, {
-            currentValue: input.newTotalValue,
-          });
-        }
+          if (input.newTotalValue) {
+            await db.updateContractForOrganization(input.contractId, ctx.organizationId, {
+              currentValue: input.newTotalValue,
+            });
+          }
 
-        // Registrar auditoria
-        if (apostille) {
           await db.createContractAuditLog({
             contractId: input.contractId,
             action: "apostille_added",
@@ -318,18 +338,18 @@ export const contractsRouter = router({
             userName: ctx.user.name || undefined,
             details: { apostilleId: apostille.id, type: apostille.type, number: apostille.number },
           });
-        }
 
-        return apostille;
+          return apostille;
+        }, { contractId: input.contractId });
       }),
 
     /**
      * Listar apostilamentos de um contrato
      */
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({ contractId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.listApostilles(input.contractId);
+      .query(async ({ input, ctx }) => {
+        return audited("apostilles.list", ctx, () => db.listApostillesForOrganization(input.contractId, ctx.organizationId), { contractId: input.contractId });
       }),
   }),
 
@@ -341,7 +361,7 @@ export const contractsRouter = router({
     /**
      * Criar documento
      */
-    create: protectedProcedure
+    create: tenantProcedure
       .input(
         z.object({
           contractId: z.number(),
@@ -354,10 +374,10 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        const document = await db.createContractDocument(input);
+        return audited("documents.create", ctx, async () => {
+          const document = await db.createContractDocumentForOrganization(input, ctx.organizationId);
+          if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
 
-        // Registrar auditoria
-        if (document) {
           await db.createContractAuditLog({
             contractId: input.contractId,
             action: "document_generated",
@@ -365,24 +385,24 @@ export const contractsRouter = router({
             userName: ctx.user.name || undefined,
             details: { documentId: document.id, type: document.type, title: document.title },
           });
-        }
 
-        return document;
+          return document;
+        }, { contractId: input.contractId });
       }),
 
     /**
      * Listar documentos de um contrato
      */
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({ contractId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.listContractDocuments(input.contractId);
+      .query(async ({ input, ctx }) => {
+        return audited("documents.list", ctx, () => db.listContractDocumentsForOrganization(input.contractId, ctx.organizationId), { contractId: input.contractId });
       }),
 
     /**
      * Atualizar documento
      */
-    update: protectedProcedure
+    update: tenantProcedure
       .input(
         z.object({
           id: z.number(),
@@ -392,9 +412,13 @@ export const contractsRouter = router({
           status: z.enum(["draft", "final", "archived"]).optional(),
         })
       )
-      .mutation(async ({ input }) => {
-        const { id, ...data } = input;
-        return await db.updateContractDocument(id, data);
+      .mutation(async ({ input, ctx }) => {
+        return audited("documents.update", ctx, async () => {
+          const { id, ...data } = input;
+          const document = await db.updateContractDocumentForOrganization(id, ctx.organizationId, data);
+          if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
+          return document;
+        }, { documentId: input.id });
       }),
   }),
 
@@ -406,24 +430,24 @@ export const contractsRouter = router({
     /**
      * Buscar logs de auditoria
      */
-    getLogs: protectedProcedure
+    getLogs: tenantProcedure
       .input(z.object({ contractId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getContractAuditLogs(input.contractId);
+      .query(async ({ input, ctx }) => {
+        return audited("audit.getLogs", ctx, () => db.getContractAuditLogsForOrganization(input.contractId, ctx.organizationId), { contractId: input.contractId });
       }),
 
     /**
      * Buscar logs por ação
      */
-    getLogsByAction: protectedProcedure
+    getLogsByAction: tenantProcedure
       .input(
         z.object({
           contractId: z.number(),
           action: z.string(),
         })
       )
-      .query(async ({ input }) => {
-        return await db.getContractAuditLogsByAction(input.contractId, input.action);
+      .query(async ({ input, ctx }) => {
+        return audited("audit.getLogsByAction", ctx, () => db.getContractAuditLogsByActionForOrganization(input.contractId, ctx.organizationId, input.action), { contractId: input.contractId });
       }),
   }),
 
@@ -463,12 +487,12 @@ export const contractsRouter = router({
     }),
 
     /**
-     * Buscar contratos recentes
+     * Buscar contratos recentes da organização
      */
-    getRecent: protectedProcedure
+    getRecent: tenantProcedure
       .input(z.object({ limit: z.number().default(10) }))
-      .query(async ({ input }) => {
-        return await db.getRecentContracts(input.limit);
+      .query(async ({ input, ctx }) => {
+        return audited("analytics.getRecent", ctx, () => db.getRecentContractsForOrganization(ctx.organizationId, input.limit));
       }),
   }),
 
@@ -480,181 +504,178 @@ export const contractsRouter = router({
     /**
      * Gerar Minuta de Contrato
      */
-    generateMinuta: protectedProcedure
+    generateMinuta: tenantProcedure
       .input(z.object({ contractId: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const contract = await db.getContractById(input.contractId);
-        if (!contract) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        }
+        return audited("generation.generateMinuta", ctx, async () => {
+          const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
 
-        const content = generateContractMinuta({
-          number: contract.number,
-          year: contract.year,
-          object: contract.object,
-          type: contract.type as any,
-          contractorName: contract.contractorName,
-          contractorCNPJ: contract.contractorCNPJ || undefined,
-          contractorAddress: contract.contractorAddress || undefined,
-          contractorContact: contract.contractorContact || undefined,
-          value: contract.value,
-          currentValue: contract.currentValue,
-          startDate: contract.startDate,
-          endDate: contract.endDate,
-          fiscalUserName: contract.fiscalUserName || undefined,
-          notes: contract.notes || undefined,
-          originType: contract.originType as any || undefined,
-        });
-
-        const document = await db.createContractDocument({
-          contractId: input.contractId,
-          type: "minuta",
-          title: `Minuta de Contrato nº ${contract.number}/${contract.year}`,
-          content,
-          status: "draft",
-        });
-
-        await db.createContractAuditLog({
-          contractId: input.contractId,
-          action: "document_generated",
-          userId: ctx.user.id,
-          userName: ctx.user.name || undefined,
-          details: { documentType: "minuta", documentId: document?.id },
-        });
-
-        return { documentId: document?.id, content };
-      }),
-
-    /**
-     * Gerar Termo de Aditivo
-     */
-    generateAmendment: protectedProcedure
-      .input(z.object({ contractId: z.number(), amendmentId: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const contract = await db.getContractById(input.contractId);
-        if (!contract) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        }
-
-        const amendments = await db.listAmendments(input.contractId);
-        const amendment = amendments.find(a => a.id === input.amendmentId);
-        if (!amendment) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Aditivo não encontrado" });
-        }
-
-        const content = generateAmendmentTerm(
-          {
+          const content = generateContractMinuta({
             number: contract.number,
             year: contract.year,
             object: contract.object,
             type: contract.type as any,
             contractorName: contract.contractorName,
             contractorCNPJ: contract.contractorCNPJ || undefined,
-            value: contract.value,
-            currentValue: contract.currentValue,
-            startDate: contract.startDate,
-            endDate: contract.endDate,
-          },
-          {
-            number: amendment.number,
-            type: amendment.type as any,
-            justification: amendment.justification,
-            newEndDate: amendment.newEndDate || undefined,
-            daysAdded: amendment.daysAdded || undefined,
-            valueChange: amendment.valueChange ?? undefined,
-            newTotalValue: amendment.newTotalValue ?? undefined,
-            scopeChanges: amendment.scopeChanges || undefined,
-            signedAt: amendment.signedAt || undefined,
-          }
-        );
-
-        const document = await db.createContractDocument({
-          contractId: input.contractId,
-          type: "aditivo",
-          referenceId: input.amendmentId,
-          title: `Termo Aditivo nº ${amendment.number}`,
-          content,
-          status: "draft",
-        });
-
-        await db.createContractAuditLog({
-          contractId: input.contractId,
-          action: "document_generated",
-          userId: ctx.user.id,
-          userName: ctx.user.name || undefined,
-          details: { documentType: "aditivo", documentId: document?.id, amendmentId: input.amendmentId },
-        });
-
-        return { documentId: document?.id, content };
-      }),
-
-    /**
-     * Gerar Termo de Apostilamento
-     */
-    generateApostille: protectedProcedure
-      .input(z.object({ contractId: z.number(), apostilleId: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const contract = await db.getContractById(input.contractId);
-        if (!contract) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        }
-
-        const apostilles = await db.listApostilles(input.contractId);
-        const apostille = apostilles.find(a => a.id === input.apostilleId);
-        if (!apostille) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Apostilamento não encontrado" });
-        }
-
-        const content = generateApostilleTerm(
-          {
-            number: contract.number,
-            year: contract.year,
-            object: contract.object,
-            type: contract.type as any,
-            contractorName: contract.contractorName,
-            contractorCNPJ: contract.contractorCNPJ || undefined,
+            contractorAddress: contract.contractorAddress || undefined,
+            contractorContact: contract.contractorContact || undefined,
             value: contract.value,
             currentValue: contract.currentValue,
             startDate: contract.startDate,
             endDate: contract.endDate,
             fiscalUserName: contract.fiscalUserName || undefined,
-          },
-          {
-            number: apostille.number,
-            type: apostille.type as any,
-            description: apostille.description,
-            valueChange: apostille.valueChange ?? undefined,
-            newTotalValue: apostille.newTotalValue ?? undefined,
-            indexType: apostille.indexType || undefined,
-            indexValue: apostille.indexValue || undefined,
-            signedAt: apostille.signedAt || undefined,
+            notes: contract.notes || undefined,
+            originType: contract.originType as any || undefined,
+          });
+
+          const document = await db.createContractDocumentForOrganization({
+            contractId: input.contractId,
+            type: "minuta",
+            title: `Minuta de Contrato nº ${contract.number}/${contract.year}`,
+            content,
+            status: "draft",
+          }, ctx.organizationId);
+
+          await db.createContractAuditLog({
+            contractId: input.contractId,
+            action: "document_generated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: { documentType: "minuta", documentId: document?.id },
+          });
+
+          return { documentId: document?.id, content };
+        }, { contractId: input.contractId });
+      }),
+
+    /**
+     * Gerar Termo de Aditivo
+     */
+    generateAmendment: tenantProcedure
+      .input(z.object({ contractId: z.number(), amendmentId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        return audited("generation.generateAmendment", ctx, async () => {
+          const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
+
+          const amendments = await db.listAmendmentsForOrganization(input.contractId, ctx.organizationId);
+          const amendment = amendments.find(a => a.id === input.amendmentId);
+          if (!amendment) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Aditivo não encontrado" });
           }
-        );
 
-        const document = await db.createContractDocument({
-          contractId: input.contractId,
-          type: "apostilamento",
-          referenceId: input.apostilleId,
-          title: `Termo de Apostilamento nº ${apostille.number}`,
-          content,
-          status: "draft",
-        });
+          const content = generateAmendmentTerm(
+            {
+              number: contract.number,
+              year: contract.year,
+              object: contract.object,
+              type: contract.type as any,
+              contractorName: contract.contractorName,
+              contractorCNPJ: contract.contractorCNPJ || undefined,
+              value: contract.value,
+              currentValue: contract.currentValue,
+              startDate: contract.startDate,
+              endDate: contract.endDate,
+            },
+            {
+              number: amendment.number,
+              type: amendment.type as any,
+              justification: amendment.justification,
+              newEndDate: amendment.newEndDate || undefined,
+              daysAdded: amendment.daysAdded || undefined,
+              valueChange: amendment.valueChange ?? undefined,
+              newTotalValue: amendment.newTotalValue ?? undefined,
+              scopeChanges: amendment.scopeChanges || undefined,
+              signedAt: amendment.signedAt || undefined,
+            }
+          );
 
-        await db.createContractAuditLog({
-          contractId: input.contractId,
-          action: "document_generated",
-          userId: ctx.user.id,
-          userName: ctx.user.name || undefined,
-          details: { documentType: "apostilamento", documentId: document?.id, apostilleId: input.apostilleId },
-        });
+          const document = await db.createContractDocumentForOrganization({
+            contractId: input.contractId,
+            type: "aditivo",
+            referenceId: input.amendmentId,
+            title: `Termo Aditivo nº ${amendment.number}`,
+            content,
+            status: "draft",
+          }, ctx.organizationId);
 
-        return { documentId: document?.id, content };
+          await db.createContractAuditLog({
+            contractId: input.contractId,
+            action: "document_generated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: { documentType: "aditivo", documentId: document?.id, amendmentId: input.amendmentId },
+          });
+
+          return { documentId: document?.id, content };
+        }, { contractId: input.contractId });
+      }),
+
+    /**
+     * Gerar Termo de Apostilamento
+     */
+    generateApostille: tenantProcedure
+      .input(z.object({ contractId: z.number(), apostilleId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        return audited("generation.generateApostille", ctx, async () => {
+          const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
+
+          const apostilles = await db.listApostillesForOrganization(input.contractId, ctx.organizationId);
+          const apostille = apostilles.find(a => a.id === input.apostilleId);
+          if (!apostille) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Apostilamento não encontrado" });
+          }
+
+          const content = generateApostilleTerm(
+            {
+              number: contract.number,
+              year: contract.year,
+              object: contract.object,
+              type: contract.type as any,
+              contractorName: contract.contractorName,
+              contractorCNPJ: contract.contractorCNPJ || undefined,
+              value: contract.value,
+              currentValue: contract.currentValue,
+              startDate: contract.startDate,
+              endDate: contract.endDate,
+              fiscalUserName: contract.fiscalUserName || undefined,
+            },
+            {
+              number: apostille.number,
+              type: apostille.type as any,
+              description: apostille.description,
+              valueChange: apostille.valueChange ?? undefined,
+              newTotalValue: apostille.newTotalValue ?? undefined,
+              indexType: apostille.indexType || undefined,
+              indexValue: apostille.indexValue || undefined,
+              signedAt: apostille.signedAt || undefined,
+            }
+          );
+
+          const document = await db.createContractDocumentForOrganization({
+            contractId: input.contractId,
+            type: "apostilamento",
+            referenceId: input.apostilleId,
+            title: `Termo de Apostilamento nº ${apostille.number}`,
+            content,
+            status: "draft",
+          }, ctx.organizationId);
+
+          await db.createContractAuditLog({
+            contractId: input.contractId,
+            action: "document_generated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: { documentType: "apostilamento", documentId: document?.id, apostilleId: input.apostilleId },
+          });
+
+          return { documentId: document?.id, content };
+        }, { contractId: input.contractId });
       }),
 
     /**
      * Gerar Termo de Rescisão
      */
-    generateRescission: protectedProcedure
+    generateRescission: tenantProcedure
       .input(
         z.object({
           contractId: z.number(),
@@ -666,55 +687,53 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        const contract = await db.getContractById(input.contractId);
-        if (!contract) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        }
+        return audited("generation.generateRescission", ctx, async () => {
+          const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
 
-        const content = generateRescissionTerm(
-          {
-            number: contract.number,
-            year: contract.year,
-            object: contract.object,
-            type: contract.type as any,
-            contractorName: contract.contractorName,
-            contractorCNPJ: contract.contractorCNPJ || undefined,
-            value: contract.value,
-            currentValue: contract.currentValue,
-            startDate: contract.startDate,
-            endDate: contract.endDate,
-          },
-          {
-            type: input.type,
-            reason: input.reason,
-            effectiveDate: input.effectiveDate,
-            penaltyAmount: input.penaltyAmount,
-            notes: input.notes,
-          }
-        );
+          const content = generateRescissionTerm(
+            {
+              number: contract.number,
+              year: contract.year,
+              object: contract.object,
+              type: contract.type as any,
+              contractorName: contract.contractorName,
+              contractorCNPJ: contract.contractorCNPJ || undefined,
+              value: contract.value,
+              currentValue: contract.currentValue,
+              startDate: contract.startDate,
+              endDate: contract.endDate,
+            },
+            {
+              type: input.type,
+              reason: input.reason,
+              effectiveDate: input.effectiveDate,
+              penaltyAmount: input.penaltyAmount,
+              notes: input.notes,
+            }
+          );
 
-        const document = await db.createContractDocument({
-          contractId: input.contractId,
-          type: "rescisao",
-          title: `Termo de Rescisão ${input.type === "unilateral" ? "Unilateral" : input.type === "bilateral" ? "Bilateral" : "Judicial"}`,
-          content,
-          status: "draft",
-        });
+          const document = await db.createContractDocumentForOrganization({
+            contractId: input.contractId,
+            type: "rescisao",
+            title: `Termo de Rescisão ${input.type === "unilateral" ? "Unilateral" : input.type === "bilateral" ? "Bilateral" : "Judicial"}`,
+            content,
+            status: "draft",
+          }, ctx.organizationId);
 
-        // Atualizar status do contrato
-        await db.updateContract(input.contractId, {
-          status: "terminated",
-        });
+          await db.updateContractForOrganization(input.contractId, ctx.organizationId, {
+            status: "terminated",
+          });
 
-        await db.createContractAuditLog({
-          contractId: input.contractId,
-          action: "terminated",
-          userId: ctx.user.id,
-          userName: ctx.user.name || undefined,
-          details: { documentType: "rescisao", documentId: document?.id, rescissionType: input.type },
-        });
+          await db.createContractAuditLog({
+            contractId: input.contractId,
+            action: "terminated",
+            userId: ctx.user.id,
+            userName: ctx.user.name || undefined,
+            details: { documentType: "rescisao", documentId: document?.id, rescissionType: input.type },
+          });
 
-        return { documentId: document?.id, content };
+          return { documentId: document?.id, content };
+        }, { contractId: input.contractId });
       }),
   }),
 
@@ -724,19 +743,17 @@ export const contractsRouter = router({
 
   notifications: router({
     /**
-     * Verificar vencimentos e enviar notificações
+     * Verificar vencimentos e enviar notificações (da organização)
      */
-    checkExpirations: protectedProcedure.mutation(async ({ ctx }) => {
-      const result = await checkContractExpirations();
-      return result;
+    checkExpirations: tenantProcedure.mutation(async ({ ctx }) => {
+      return audited("notifications.checkExpirations", ctx, () => checkContractExpirationsForOrganization(ctx.organizationId));
     }),
 
     /**
-     * Obter resumo de vencimentos
+     * Obter resumo de vencimentos (da organização)
      */
-    getSummary: protectedProcedure.query(async ({ ctx }) => {
-      const summary = await getExpirationSummary();
-      return summary;
+    getSummary: tenantProcedure.query(async ({ ctx }) => {
+      return audited("notifications.getSummary", ctx, () => getExpirationSummaryForOrganization(ctx.organizationId));
     }),
   }),
 
@@ -746,29 +763,38 @@ export const contractsRouter = router({
 
   reports: router({
     /**
-     * Exportar relatório de alertas em Excel
+     * Exportar relatório de alertas em Excel (da organização)
      */
-    exportAlertsExcel: protectedProcedure.mutation(async ({ ctx }) => {
-      const buffer = await generateAlertsExcelReport();
-      const base64 = Buffer.from(buffer as any).toString("base64");
-      return {
-        data: base64,
-        filename: `alertas-contratos-${new Date().toISOString().split('T')[0]}.xlsx`,
-      };
+    exportAlertsExcel: tenantProcedure.mutation(async ({ ctx }) => {
+      return audited("reports.exportAlertsExcel", ctx, async () => {
+        const buffer = await generateAlertsExcelReportForOrganization(ctx.organizationId);
+        const base64 = Buffer.from(buffer as any).toString("base64");
+        return {
+          data: base64,
+          filename: `alertas-contratos-${new Date().toISOString().split('T')[0]}.xlsx`,
+        };
+      });
     }),
 
     /**
      * Exportar histórico de auditoria em Excel
      */
-    exportAuditExcel: protectedProcedure
+    exportAuditExcel: tenantProcedure
       .input(z.object({ contractId: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const buffer = await generateAuditExcelReport(input.contractId);
-        const base64 = Buffer.from(buffer as any).toString("base64");
-        return {
-          data: base64,
-          filename: `auditoria-contrato-${input.contractId}-${new Date().toISOString().split('T')[0]}.xlsx`,
-        };
+        return audited("reports.exportAuditExcel", ctx, async () => {
+          let buffer: Awaited<ReturnType<typeof generateAuditExcelReportForOrganization>>;
+          try {
+            buffer = await generateAuditExcelReportForOrganization(input.contractId, ctx.organizationId);
+          } catch {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+          }
+          const base64 = Buffer.from(buffer as any).toString("base64");
+          return {
+            data: base64,
+            filename: `auditoria-contrato-${input.contractId}-${new Date().toISOString().split('T')[0]}.xlsx`,
+          };
+        }, { contractId: input.contractId });
       }),
   }),
 });

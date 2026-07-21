@@ -2,23 +2,25 @@ import { differenceInDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getDb } from "../db";
 import { contracts, contractAuditLogs } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import ExcelJS from "exceljs";
 
 /**
- * Gera relatório de alertas de vencimento em Excel
+ * Gera relatório de alertas de vencimento em Excel, escopado à organização.
+ * RC-C0.1A.1 — organizationId obrigatório: antes exportava contratos de todas as
+ * organizações no mesmo arquivo.
  */
-export async function generateAlertsExcelReport() {
+export async function generateAlertsExcelReportForOrganization(organizationId: number) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Buscar contratos ativos
+  // Buscar contratos ativos da organização
   const activeContracts = await db
     .select()
     .from(contracts)
-    .where(eq(contracts.status, "active"));
+    .where(and(eq(contracts.status, "active"), eq(contracts.organizationId, organizationId)));
 
   // Criar workbook
   const workbook = new ExcelJS.Workbook();
@@ -123,16 +125,21 @@ export async function generateAlertsExcelReport() {
 }
 
 /**
- * Gera relatório de histórico de auditoria em Excel
+ * Gera relatório de histórico de auditoria em Excel, escopado à organização.
+ * RC-C0.1A.1 — organizationId obrigatório: antes exportava auditoria de contrato de
+ * QUALQUER organização (bastava saber o ID). "Contract not found" é retornado tanto
+ * para ID inexistente quanto para ID de outra organização — nunca revela a diferença.
  */
-export async function generateAuditExcelReport(contractId: number) {
+export async function generateAuditExcelReportForOrganization(contractId: number, organizationId: number) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Buscar contrato
-  const contract = await db.select().from(contracts).where(eq(contracts.id, contractId)).limit(1);
+  // Buscar contrato dentro da organização
+  const contract = await db.select().from(contracts)
+    .where(and(eq(contracts.id, contractId), eq(contracts.organizationId, organizationId)))
+    .limit(1);
   if (!contract || contract.length === 0) {
     throw new Error("Contract not found");
   }
