@@ -106,6 +106,30 @@ describe("RC-LEGAL-SEC-001 — Congelamento do legalOpinionsRouter legado (pós-
     expect(src).not.toMatch(/\bgetLegalOpinionsBySource\(/);
   });
 
+  // ── 4b. RC-LEGAL-SEC-001 complementação: nenhuma origem institucional usa função global ──
+  it("o router não usa getProcessById nem getDirectContractById globais (só as variantes *ForOrganization)", () => {
+    const src = read("server/routers/legalOpinionsRouter.ts");
+    expect(src).not.toMatch(/\bgetProcessById\(/);
+    expect(src).not.toMatch(/\bgetDirectContractById\(/);
+    expect(src).toContain("getProcessByIdForOrganization");
+    expect(src).toContain("getDirectContractByIdForOrganization");
+    expect(src).toContain("getContractByIdForOrganization");
+  });
+
+  // ── 4c. todas as origens do enum sourceType têm tratamento tenant-safe ──────
+  it("create e generateOpinion tratam as 4 origens do enum sourceType (contract/process/direct_contract/other) com função tenant-safe ou sem acesso a tabela", () => {
+    const src = read("server/routers/legalOpinionsRouter.ts");
+    // 'other' não acessa nenhuma tabela — não precisa de função tenant-safe, mas
+    // o enum precisa continuar com exatamente essas 4 origens (se crescer, este
+    // teste força a atualização da matriz de origens).
+    const enumMatches = [...src.matchAll(/sourceType:\s*z\.enum\(\[([^\]]+)\]\)/g)];
+    expect(enumMatches.length).toBeGreaterThan(0);
+    for (const m of enumMatches) {
+      const values = m[1].split(",").map(s => s.trim().replace(/["']/g, "")).filter(Boolean);
+      expect(values.sort()).toEqual(["contract", "direct_contract", "other", "process"]);
+    }
+  });
+
   // ── 5. código canônico importar router/service legado ──────────────────────
   it("legalOpinionWorkspaceRouter (canônico) não importa legalOpinionsRouter nem db/legalOpinions.ts", () => {
     const src = read("server/routers/legalOpinionWorkspaceRouter.ts");

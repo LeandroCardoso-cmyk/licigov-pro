@@ -4300,8 +4300,8 @@
     "semantic_hash": ""
   },
   "server/db/directContracts.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "f50bcad5760bff1e2ab1fb014c2a2411",
+    "mtime": 1784674911.6805556,
+    "ast_hash": "9a641cc4820657dc7b528fa7d73bcbc9",
     "semantic_hash": ""
   },
   "server/db/documentRepository.ts": {
@@ -4350,8 +4350,8 @@
     "semantic_hash": ""
   },
   "server/db/processes.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "43e7ab475429e89d85382621893266f7",
+    "mtime": 1784674897.500556,
+    "ast_hash": "2bbb603cc48a8a2c764f71212fbca053",
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
@@ -5180,8 +5180,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionsRouter.ts": {
-    "mtime": 1784646586.3724551,
-    "ast_hash": "eced301a42c99ff6291b2624bcbbc08b",
+    "mtime": 1784674963.7205534,
+    "ast_hash": "eec694097ce3d8f5fd982d8a94ab1cc7",
     "semantic_hash": ""
   },
   "server/routers/legalReasoningRouter.ts": {
@@ -8495,8 +8495,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGACY_INVENTORY.md": {
-    "mtime": 1784665826.2084484,
-    "ast_hash": "449578071d9a70691a2390bc093fd2e5",
+    "mtime": 1784675487.3445323,
+    "ast_hash": "8665d1782c4721589ae731edc829562e",
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
@@ -8600,8 +8600,8 @@
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1784665875.4204514,
-    "ast_hash": "485ddc0eef82890ad6fecbad35080a6d",
+    "mtime": 1784675500.1685317,
+    "ast_hash": "ef259b420b26b85cc192cc35c9997757",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -9740,13 +9740,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts": {
-    "mtime": 1784646665.3044534,
-    "ast_hash": "93bffb5aca15dea49a01258e7fd02ea6",
+    "mtime": 1784675328.0685387,
+    "ast_hash": "6cebcaa317b5da0b2a9a06788556f1da",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
-    "mtime": 1784666016.4284596,
-    "ast_hash": "35f4491167e44f5fc9bffad5928e5a3d",
+    "mtime": 1784675446.6685338,
+    "ast_hash": "ebc5e34a77765e7bcd3ea388fcf2890c",
     "semantic_hash": ""
   }
 }

@@ -31,6 +31,14 @@ export async function createDirectContract(data: InsertDirectContract) {
   return await getDirectContractById(result[0].insertId);
 }
 
+/**
+ * RC-LEGAL-SEC-001 — INSEGURA (sem filtro de organização). Mantida para os
+ * consumidores externos pré-existentes (`directContractsRouter.ts` e todo o
+ * domínio de contratação direta — geração de termos, auditoria, documentos —,
+ * fora do escopo desta sprint). NÃO usar em código novo fora desse domínio —
+ * para leituras institucionais cross-router, usar
+ * `getDirectContractByIdForOrganization` abaixo.
+ */
 export async function getDirectContractById(id: number) {
   const db = await getDb();
   if (!db) return null;
@@ -40,6 +48,21 @@ export async function getDirectContractById(id: number) {
     .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
     .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
     .where(eq(directContracts.id, id))
+    .limit(1);
+  if (!result[0]) return null;
+  return { ...result[0].directContract, legalArticle: result[0].legalArticle, platform: result[0].platform };
+}
+
+/** RC-LEGAL-SEC-001 — organizationId obrigatório; nunca aceitar do cliente sem resolução no servidor. */
+export async function getDirectContractByIdForOrganization(id: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select({ directContract: directContracts, legalArticle: directContractLegalArticles, platform: platforms })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .where(and(eq(directContracts.id, id), eq(directContracts.organizationId, organizationId)))
     .limit(1);
   if (!result[0]) return null;
   return { ...result[0].directContract, legalArticle: result[0].legalArticle, platform: result[0].platform };

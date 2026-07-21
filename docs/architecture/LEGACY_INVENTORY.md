@@ -170,18 +170,31 @@ só é chamado a partir de `opinion.signatureId`, campo **inexistente** no schem
 não têm nenhum consumidor no repositório inteiro. Nenhuma leitura cross-tenant é
 alcançável por esse caminho; documentado em `server/db/legalOpinions.ts`.
 
-**Risco remanescente registrado (fora do escopo desta correção):** `generateOpinion`
-ainda chama `getProcessById`/`getDirectContractById` (routers `processesRouter`/
-`directContractsRouter`) sem filtro de organização quando `sourceType` é `process`
-ou `direct_contract` — mesma classe de vulnerabilidade do `getContractById` original,
-em routers diferentes. `processesRouter` já está classificado como
-`LEGACY_ACTIVE_MAINTENANCE_ONLY` (RC-C0.1A); `directContractsRouter` ainda não foi
-auditado. Candidato a sprint dedicada futura.
+**Complementação (mesma sprint):** `create` e `generateOpinion` agora validam as
+**4 origens institucionais** do enum `sourceType` (`contract`, `process`,
+`direct_contract`, `other`) dentro da organização — não apenas `contract` do
+achado original. Novas funções `getProcessByIdForOrganization`
+(`server/db/processes.ts`) e `getDirectContractByIdForOrganization`
+(`server/db/directContracts.ts`) — mesmo padrão de `getContractByIdForOrganization`:
+as funções globais antigas (`getProcessById`, `getDirectContractById`) permanecem
+apenas para seus consumidores externos pré-existentes (`processesRouter`,
+`directContractsRouter` e domínios relacionados), fora do escopo desta correção.
+`generateOpinion` revalida a fonte em profundidade mesmo após a validação de
+`create`, para nunca gerar conteúdo a partir de registro cross-tenant pré-existente.
+
+**Risco remanescente registrado (genuinamente fora do escopo — pertence a outros
+routers, não a `legalOpinionsRouter`):** `getProcessById` e `getDirectContractById`
+continuam sem filtro de organização para os consumidores do próprio domínio
+(`processesRouter`, `platforms.ts`, `directContractsRouter` e todo o domínio de
+contratação direta — geração de termos, auditoria, documentos). `processesRouter`
+já está classificado como `LEGACY_ACTIVE_MAINTENANCE_ONLY` (RC-C0.1A);
+`directContractsRouter` ainda não foi auditado. Candidatos a sprints dedicadas
+futuras (fora do escopo de `legalOpinionsRouter`).
 
 **Router ainda `LEGACY_ACTIVE_MAINTENANCE_ONLY`** — nenhuma funcionalidade nova
 adicionada; apenas correções de segurança/isolamento. Testes:
-`legal-opinions-tenant-isolation-mysql-smoke.test.ts` (15 testes MySQL reais) +
-`rc-legal-sec-001-legal-opinions-freeze.test.ts` (8 testes arquiteturais).
+`legal-opinions-tenant-isolation-mysql-smoke.test.ts` (26 testes MySQL reais) +
+`rc-legal-sec-001-legal-opinions-freeze.test.ts` (10 testes arquiteturais).
 
 ### DepartmentManagement  → substituído por **Centro de Operações** (`/centro-operacoes`)
 - **Classe:** 3 (remover após RC-5)

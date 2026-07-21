@@ -27,8 +27,8 @@ import {
   updateLegalOpinionForOrganization,
   deleteLegalOpinionForOrganization,
   getLegalOpinionsBySourceForOrganization,
-  getProcessById,
-  getDirectContractById,
+  getProcessByIdForOrganization,
+  getDirectContractByIdForOrganization,
 } from "../db";
 import { generateLegalOpinion } from "../services/legalOpinionService";
 
@@ -94,11 +94,19 @@ export const legalOpinionsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // RC-LEGAL-SEC-001: contrato-fonte precisa pertencer à organização — nunca
-      // vincular parecer a contrato de outro tenant.
-      if (input.sourceType === "contract" && input.sourceId) {
-        const contract = await getContractByIdForOrganization(input.sourceId, ctx.organizationId);
-        if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+      // RC-LEGAL-SEC-001: a fonte institucional precisa pertencer à organização —
+      // nunca vincular parecer a processo/contratação direta/contrato de outro tenant.
+      if (input.sourceId) {
+        if (input.sourceType === "contract") {
+          const contract = await getContractByIdForOrganization(input.sourceId, ctx.organizationId);
+          if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+        } else if (input.sourceType === "process") {
+          const process = await getProcessByIdForOrganization(input.sourceId, ctx.organizationId);
+          if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        } else if (input.sourceType === "direct_contract") {
+          const directContract = await getDirectContractByIdForOrganization(input.sourceId, ctx.organizationId);
+          if (!directContract) throw new TRPCError({ code: "NOT_FOUND", message: "Contratação direta não encontrada" });
+        }
       }
 
       const opinionId = await createLegalOpinion({
@@ -240,18 +248,22 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
 
-      // Buscar dados da fonte (processo, contratação, contrato)
-      // RC-LEGAL-SEC-001: contrato resolvido dentro da organização (getContractByIdForOrganization).
-      // process/direct_contract permanecem via getProcessById/getDirectContractById — risco
-      // registrado separadamente (fora do escopo desta sprint, routers diferentes).
+      // Buscar dados da fonte (processo, contratação direta, contrato) — RC-LEGAL-SEC-001:
+      // as três origens são resolvidas dentro da organização (defesa em profundidade —
+      // o vínculo já é validado em `create`, mas revalidado aqui para nunca gerar
+      // conteúdo a partir de fonte cross-tenant, mesmo que o dado já existisse antes
+      // desta correção).
       let sourceData = null;
       if (opinion.sourceId) {
         if (opinion.sourceType === "process") {
-          sourceData = await getProcessById(opinion.sourceId);
+          sourceData = await getProcessByIdForOrganization(opinion.sourceId, ctx.organizationId);
+          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
         } else if (opinion.sourceType === "direct_contract") {
-          sourceData = await getDirectContractById(opinion.sourceId);
+          sourceData = await getDirectContractByIdForOrganization(opinion.sourceId, ctx.organizationId);
+          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Contratação direta não encontrada" });
         } else if (opinion.sourceType === "contract") {
           sourceData = await getContractByIdForOrganization(opinion.sourceId, ctx.organizationId);
+          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
         }
       }
 

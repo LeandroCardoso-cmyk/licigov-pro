@@ -50,6 +50,13 @@ export async function searchProcesses(userId: number, query: string) {
     .limit(10);
 }
 
+/**
+ * RC-LEGAL-SEC-001 — INSEGURA (sem filtro de organização). Mantida para os
+ * consumidores externos pré-existentes (`platforms.ts::updateProcessPlatform`
+ * e demais chamadas no domínio de `processesRouter`, fora do escopo desta
+ * sprint). NÃO usar em código novo fora desse domínio — para leituras
+ * institucionais cross-router, usar `getProcessByIdForOrganization` abaixo.
+ */
 export async function getProcessById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -65,6 +72,26 @@ export async function getProcessById(id: number) {
     .from(processes)
     .leftJoin(platforms, eq(processes.platformId, platforms.id))
     .where(eq(processes.id, id))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/** RC-LEGAL-SEC-001 — organizationId obrigatório; nunca aceitar do cliente sem resolução no servidor. */
+export async function getProcessByIdForOrganization(id: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({
+      id: processes.id, name: processes.name, description: processes.description,
+      object: processes.object, estimatedValue: processes.estimatedValue,
+      modality: processes.modality, category: processes.category,
+      platformId: processes.platformId, status: processes.status,
+      ownerId: processes.ownerId, createdAt: processes.createdAt,
+      updatedAt: processes.updatedAt, platform: platforms,
+    })
+    .from(processes)
+    .leftJoin(platforms, eq(processes.platformId, platforms.id))
+    .where(and(eq(processes.id, id), eq(processes.organizationId, organizationId)))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
