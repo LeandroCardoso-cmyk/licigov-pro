@@ -147,6 +147,42 @@ testes de `analytics.getOverview`) + `contracts-legacy-full-isolation-mysql-smok
   `server/services/{legalOpinionService,legalOpinionExportService}.ts`
 - **Tabelas:** `legal_opinions` (preservar).
 
+#### Auditoria e isolamento multi-tenant completo (RC-LEGAL-SEC-001)
+
+Todas as **15 procedures** do `legalOpinionsRouter` foram auditadas. **13 migradas**
+de `protectedProcedure` para `tenantProcedure`; `organizationId` sempre resolvido no
+servidor. `setSignaturePassword`/`hasSignaturePassword` permanecem em
+`protectedProcedure` deliberadamente — escopo é `ctx.user.id` (credencial pessoal),
+sem dado organizacional, sem vazamento cross-tenant possível.
+
+| Endpoint | Antes | Depois | Consumer |
+|---|---|---|---|
+| `list`, `getBySource`, `getAnalytics` | agregação/listagem global (todas as organizações) | `getLegalOpinionsByOrganization`/`getLegalOpinionsBySourceForOrganization`/4 funções `*ForOrganization` | LegalOpinions.tsx, LegalOpinionsAnalytics.tsx |
+| `getById`, `update`, `delete`, `exportPDF`, `exportDOCX`, `verifySignature`, `getSignatureHistory` | sem filtro por ID | `getLegalOpinionByIdForOrganization`/`updateLegalOpinionForOrganization`/`deleteLegalOpinionForOrganization`/`getSignatureHistoryForOrganization` | LegalOpinionDetails.tsx |
+| `create` | não validava contrato-fonte nem gravava `organizationId` | grava `ctx.organizationId`; valida que `sourceType="contract"` pertence à organização antes de vincular | NewLegalOpinion.tsx |
+| `generateOpinion` | usava `getContractById` sem filtro (achado original do LEGAL-SEC-001) | usa `getContractByIdForOrganization`; parecer-pai validado por `requireOpinionForOrg` | NewLegalOpinion.tsx, LegalOpinionDetails.tsx |
+| `sign` | `signature_history` (sem coluna `organizationId` própria) sem validação de parecer-pai | valida parecer-pai dentro da organização antes de gravar assinatura (`addSignatureToHistoryForOrganization`) | LegalOpinionDetails.tsx |
+
+**Achado adicional (auditado, não corrigido — fora de escopo real):** `getDigitalSignatureById`
+só é chamado a partir de `opinion.signatureId`, campo **inexistente** no schema de
+`legal_opinions` — o branch que o invoca nunca executa em produção.
+`getDigitalSignatureByDocument`/`invalidateDigitalSignature`/`createDigitalSignature`
+não têm nenhum consumidor no repositório inteiro. Nenhuma leitura cross-tenant é
+alcançável por esse caminho; documentado em `server/db/legalOpinions.ts`.
+
+**Risco remanescente registrado (fora do escopo desta correção):** `generateOpinion`
+ainda chama `getProcessById`/`getDirectContractById` (routers `processesRouter`/
+`directContractsRouter`) sem filtro de organização quando `sourceType` é `process`
+ou `direct_contract` — mesma classe de vulnerabilidade do `getContractById` original,
+em routers diferentes. `processesRouter` já está classificado como
+`LEGACY_ACTIVE_MAINTENANCE_ONLY` (RC-C0.1A); `directContractsRouter` ainda não foi
+auditado. Candidato a sprint dedicada futura.
+
+**Router ainda `LEGACY_ACTIVE_MAINTENANCE_ONLY`** — nenhuma funcionalidade nova
+adicionada; apenas correções de segurança/isolamento. Testes:
+`legal-opinions-tenant-isolation-mysql-smoke.test.ts` (15 testes MySQL reais) +
+`rc-legal-sec-001-legal-opinions-freeze.test.ts` (8 testes arquiteturais).
+
 ### DepartmentManagement  → substituído por **Centro de Operações** (`/centro-operacoes`)
 - **Classe:** 3 (remover após RC-5)
 - **Frontend:** `client/src/pages/DepartmentManagement.tsx`

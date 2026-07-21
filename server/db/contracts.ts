@@ -16,11 +16,13 @@ export async function createContract(data: InsertContract) {
 }
 
 /**
- * RC-C0.1A.1 — INSEGURA (sem filtro de organização). Mantida apenas para o único
- * consumidor externo pré-existente (`legalOpinionsRouter.ts::generateOpinion`, ele
- * mesmo `protectedProcedure` sem contexto de tenant — fora do escopo desta sprint,
- * que corrige exclusivamente `contractsRouter`). NÃO usar em nenhum código novo.
- * Todo o `contractsRouter` usa `getContractByIdForOrganization` abaixo.
+ * RC-C0.1A.1 — INSEGURA (sem filtro de organização). Existia apenas para o único
+ * consumidor externo pré-existente (`legalOpinionsRouter.ts::generateOpinion`).
+ * RC-LEGAL-SEC-001 corrigiu esse consumidor para usar `getContractByIdForOrganization`
+ * — esta função ficou ÓRFÃ (0 consumidores reais), mas não foi removida nesta
+ * sprint (fora de escopo remover código sem autorização explícita). NÃO usar em
+ * nenhum código novo. Todo o `contractsRouter` e o `legalOpinionsRouter` usam
+ * `getContractByIdForOrganization` abaixo.
  */
 export async function getContractById(id: number) {
   const db = await getDb();

@@ -134,6 +134,13 @@ export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
   // /contracts/* (compat, fora do menu) — ver LEGACY_INVENTORY.md § Contracts.
   "server/routers/contractsRouter.ts",
   "server/db/contracts.ts",
+  // RC-LEGAL-SEC-001 — isolamento multi-tenant completo já aplicado (13/15
+  // procedures tenantProcedure; 2 deliberadamente protectedProcedure — escopo
+  // por usuário, não organizacional); permanece MAINTENANCE_ONLY por ser o
+  // legado ainda ativo em /parecer-juridico/* (compat, fora do menu) — ver
+  // LEGACY_INVENTORY.md § LegalOpinions.
+  "server/routers/legalOpinionsRouter.ts",
+  "server/db/legalOpinions.ts",
 ];
 
 export const CANONICAL_NOT_YET_WIRED: readonly string[] = [
@@ -209,7 +216,10 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "client/src/components/procurement/EditalWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar edital\" (procurementProcess.generateNotice) — órfão do frontend." },
   // ─── RC-C0.1A.1 — Contratos legado: isolamento completo, ainda MAINTENANCE_ONLY ──
   { path: "server/routers/contractsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "23/23 procedures em tenantProcedure (auditoria completa RC-C0.1A.1) — ainda ativo em /contracts/* (compat). Ver LEGACY_INVENTORY.md § Contracts." },
-  { path: "server/db/contracts.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Repository org-scoped (RC-C0.1A.1); getContractById segue sem filtro só para legalOpinionsRouter.ts (documentado no próprio arquivo)." },
+  { path: "server/db/contracts.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Repository org-scoped (RC-C0.1A.1); getContractById (sem filtro) ficou órfã após RC-LEGAL-SEC-001 remover seu último consumidor (legalOpinionsRouter.ts) — mantida por cautela, não removida nesta sprint." },
+  // ─── RC-LEGAL-SEC-001 — Parecer Jurídico legado: isolamento completo, ainda MAINTENANCE_ONLY ──
+  { path: "server/routers/legalOpinionsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "13/15 procedures em tenantProcedure (2 deliberadamente protectedProcedure — escopo por usuário). Ver LEGACY_INVENTORY.md § LegalOpinions." },
+  { path: "server/db/legalOpinions.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Repository org-scoped (RC-LEGAL-SEC-001); digital_signatures (getDigitalSignatureById/ByDocument/invalidate/createDigitalSignature) auditada e não corrigida — órfã/inalcançável (opinion.signatureId não existe no schema)." },
 ];
 
 /** Normaliza um caminho para comparação (remove ./ inicial e barras duplicadas). */
