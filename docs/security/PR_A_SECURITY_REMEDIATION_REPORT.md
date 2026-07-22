@@ -39,9 +39,11 @@ AUTH-003, RBAC-004, CONFIG-005, SEC-017/018/022/034/035/037, TENANT-030/031/038.
 | TENANT-030 (tabelas-filhas sem org) | `MITIGATED_BY_PARENT_GUARD` | validação pela entidade-pai (coluna org própria seria `MIGRATION_REQUIRED`, fora de escopo) |
 | TENANT-031 (assertTenantOwnership sem uso) | `DEFERRED_BY_SCOPE` | padrão *ForOrganization adotado; helper legado não removido |
 
-## 4. Routers auditados (13) e procedures migradas — contagem EXATA (AST-anchored)
+## 4. Routers auditados (13) e procedures migradas — contagem EXATA
 
-Contagem por padrão ancorado `^\s+<nome>:\s*<procedure>` (exclui helpers internos):
+Contagem estrutural ancorada nas declarações de procedures (regex sobre o padrão
+`^\s+<nome>:\s*<procedure>` em cada router; exclui helpers internos). Não houve
+parser AST — é uma contagem estrutural reproduzível linha a linha:
 
 | Router | Total | tenant | admin | orgRole | protected | public |
 |---|---:|---:|---:|---:|---:|---:|
@@ -170,10 +172,14 @@ DEFERRED_BY_SCOPE / MITIGATED_BY_PARENT_GUARD).
 
 - **Typecheck** (`tsc --noEmit`): 0 erros. **Build**: sucesso.
 - **Suíte completa** (sem DATABASE_URL): **3822 passed / 92 skipped / 0 falhas**
-  (baseline 3805/74; +17 freeze, +10 core smoke, +8 RBAC smoke skipados sem DB; zero regressões).
+  (baseline 3805/74). O aumento de 84 → 92 skipped: os 8 novos skips correspondem ao
+  smoke MySQL de onboarding/RBAC quando a suíte completa roda **sem** `DATABASE_URL`
+  (todos os smokes MySQL usam `describe.skipIf(!DB)`). No comando MySQL consolidado
+  esses testes são executados e passam. Passados +17 (freeze) em relação ao baseline;
+  zero regressões.
 - **Smoke consolidado de segurança** (`pnpm run test:smoke:security`, MySQL real,
   `--no-file-parallelism`): **70/70**, reproduzido em **duas execuções consecutivas**
-  (core 10, RBAC 9, legal-opinions 26, contracts-legacy 18, contracts-tenant 7 — nº por suíte).
+  (core 10, onboarding/RBAC 8, legal-opinions 26, contracts-legacy 18, contracts-tenant 8 — nº por suíte).
 - **Teste arquitetural de congelamento** (rc-sec-pr-a-tenant-freeze): **17/17**.
 - **Lint:** 358 erros no total (baseline 360; nenhum novo nos arquivos alterados).
 - **Segredos:** nenhum valor no diff; `git diff --check` limpo.
@@ -199,10 +205,11 @@ DEFERRED_BY_SCOPE / MITIGATED_BY_PARENT_GUARD).
 - **RBAC de onboarding:** complementado — além de `orgRoleProcedure('admin')`,
   `grantDepartmentPermission` bloqueia **auto-concessão** e valida que o **alvo é
   membro da mesma organização** (cross-tenant/inexistente → NOT_FOUND). Escopo global
-  segue exclusivo de admin de plataforma. Matriz MySQL (9 testes) cobre anônimo,
-  operador, viewer, auto-concessão, escopo global por admin de órgão, alvo de outro
-  tenant, alvo inexistente (negativos) e concessão válida por admin de órgão / admin
-  de plataforma (positivos). **G3 mantido PASS.**
+  segue exclusivo de admin de plataforma. Matriz MySQL — **8 testes cobrindo 9
+  cenários de autorização, todos passando** (o teste "2-3" cobre operador e viewer):
+  anônimo, operador, viewer, auto-concessão, escopo global por admin de órgão, alvo
+  de outro tenant, alvo inexistente (negativos) e concessão válida por admin de órgão
+  / admin de plataforma (positivos). **G3 mantido PASS.**
 - **Testes adaptados:** expect()/it() idênticos antes/depois nos 5 arquivos
   (30/30, 33/33, 23/23, 22/22, 30/30); zero skip; sem perda de rigor. Mock de
   `createProcess` atualizado ao contrato corrigido (retorna id numérico).
