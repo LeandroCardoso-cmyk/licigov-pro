@@ -7,7 +7,7 @@ import { and, lte, gte, eq, sql } from "drizzle-orm";
  * Verifica tarefas próximas do prazo e envia notificações
  * Alertas: 3 dias antes do prazo
  */
-export async function checkTaskDeadlines() {
+export async function checkTaskDeadlines(organizationId: number) {
   const db = await getDb();
   if (!db) {
     console.warn("[TaskNotifications] Database not available");
@@ -30,6 +30,7 @@ export async function checkTaskDeadlines() {
       .from(tasks)
       .where(
         and(
+          eq(tasks.organizationId, organizationId),
           gte(tasks.deadline, tomorrow),
           lte(tasks.deadline, threeDaysFromNow),
           sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
@@ -81,6 +82,7 @@ export async function checkTaskDeadlines() {
       .from(tasks)
       .where(
         and(
+          eq(tasks.organizationId, organizationId),
           lte(tasks.deadline, now),
           sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
         )
@@ -115,7 +117,7 @@ export async function checkTaskDeadlines() {
 /**
  * Retorna resumo de tarefas por prazo
  */
-export async function getTaskDeadlineSummary() {
+export async function getTaskDeadlineSummary(organizationId: number) {
   const db = await getDb();
   if (!db) {
     return {
@@ -139,6 +141,7 @@ export async function getTaskDeadlineSummary() {
       .from(tasks)
       .where(
         and(
+          eq(tasks.organizationId, organizationId),
           gte(tasks.deadline, tomorrow),
           lte(tasks.deadline, threeDaysFromNow),
           sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
@@ -150,6 +153,7 @@ export async function getTaskDeadlineSummary() {
       .from(tasks)
       .where(
         and(
+          eq(tasks.organizationId, organizationId),
           lte(tasks.deadline, now),
           sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
         )

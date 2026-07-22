@@ -15,13 +15,37 @@
  * Referência: `docs/architecture/LEGACY_INVENTORY.md`, seção "Licitação / Processo
  * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
  */
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 import { generateETP, generateTR, generateDFD, generateEdital, generateContrato, generateAta, generateParecer } from "../services/gemini";
 import { convertToPDF, convertToDOCX } from "../services/documentConverter";
 import { storagePut, storageGet } from "../storage";
+import { serviceLogger } from "../services/observabilityService";
+
+const log = serviceLogger("documentsRouter");
+
+/**
+ * RC-SEC-PR-A — Negação de autorização multi-tenant. Cross-tenant e inexistente
+ * produzem o MESMO erro NOT_FOUND. Log estruturado leve, sem conteúdo sensível.
+ */
+function denyNotFound(
+  procedure: string,
+  ctx: { organizationId: number; user: { id: number } },
+  resourceId: number,
+  reason: string,
+  message = "Recurso não encontrado",
+): never {
+  log.warn("tenant_authorization_denied", {
+    procedure,
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    resourceId,
+    reason,
+  });
+  throw new TRPCError({ code: "NOT_FOUND", message });
+}
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -30,46 +54,50 @@ const ALLOWED_MIME_TYPES = [
   "text/plain",
 ] as const;
 
-/** Verifica se o usuário é dono do processo ou membro com acesso. */
-async function assertProcessAccess(processId: number, userId: number): Promise<void> {
-  const process = await db.getProcessById(processId);
+/**
+ * Verifica se o processo pertence à organização (1ª camada, isolamento tenant),
+ * e então se o usuário é dono do processo ou membro com acesso (2ª camada intra-org).
+ * Cross-tenant e inexistente retornam o MESMO NOT_FOUND.
+ */
+async function assertProcessAccess(processId: number, organizationId: number, userId: number): Promise<void> {
+  const process = await db.getProcessByIdForOrganization(processId, organizationId);
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
   if (process.ownerId === userId) return;
   const member = await db.getProcessMember(processId, userId);
   if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 }
 
-/** Verifica se o usuário é dono do processo (operações destrutivas). */
-async function assertProcessOwner(processId: number, userId: number): Promise<void> {
-  const process = await db.getProcessById(processId);
+/** Verifica organização (1ª camada) e propriedade do processo (2ª camada, operações destrutivas). */
+async function assertProcessOwner(processId: number, organizationId: number, userId: number): Promise<void> {
+  const process = await db.getProcessByIdForOrganization(processId, organizationId);
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
   if (process.ownerId !== userId) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o responsável pode executar esta ação" });
 }
 
 export const documentsRouter = router({
-  listByProcess: protectedProcedure
+  listByProcess: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.user.id);
-      return await db.getDocumentsByProcess(input.processId);
+      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
+      return await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
     }),
 
-  list: protectedProcedure
+  list: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.user.id);
-      return await db.getDocumentsByProcess(input.processId);
+      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
+      return await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
     }),
 
-  save: protectedProcedure
+  save: tenantProcedure
     .input(z.object({
       processId: z.number(),
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
       content: z.string().max(500_000),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.user.id);
-      const existing = await db.getDocumentByProcessAndType(input.processId, input.type);
+      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
+      const existing = await db.getDocumentByProcessAndTypeForOrganization(input.processId, input.type, ctx.organizationId);
       const version = existing ? existing.version + 1 : 1;
 
       await db.createDocument({
@@ -78,6 +106,7 @@ export const documentsRouter = router({
         content: input.content,
         version,
         createdBy: ctx.user.id,
+        organizationId: ctx.organizationId,
       });
 
       await db.createActivityLog({
@@ -90,27 +119,29 @@ export const documentsRouter = router({
       return { success: true, version };
     }),
 
-  getByType: protectedProcedure
+  getByType: tenantProcedure
     .input(z.object({
       processId: z.number(),
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
     }))
     .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.user.id);
-      return await db.getDocumentByProcessAndType(input.processId, input.type);
+      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
+      return await db.getDocumentByProcessAndTypeForOrganization(input.processId, input.type, ctx.organizationId);
     }),
 
-  generateNext: protectedProcedure
+  generateNext: tenantProcedure
     .input(z.object({
       processId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.processId);
-      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
+      if (!process) {
+        denyNotFound("generateNext", ctx, input.processId, "process_cross_tenant_or_missing", "Processo não encontrado");
+      }
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
       const settings = await db.getDocumentSettingsByUser(ctx.user.id);
-      const docs = await db.getDocumentsByProcess(input.processId);
+      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
       const trDoc = docs.find(d => d.type === "tr");
@@ -148,7 +179,7 @@ export const documentsRouter = router({
       } else if (process.status === "em_etp" && etpDoc && dfdDoc) {
         nextDocType = "tr";
         nextStatus = "em_tr";
-        const processItems = await db.getProcessItems(input.processId);
+        const processItems = await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
         const catmatItems = processItems.map(item => ({
           itemType: item.itemType,
           catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
@@ -226,7 +257,7 @@ export const documentsRouter = router({
           ...commonOrgParams,
         });
       } else if (process.status === "em_parecer") {
-        await db.updateProcessStatus(input.processId, "concluido");
+        await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, "concluido");
         await db.createActivityLog({
           processId: input.processId,
           userId: ctx.user.id,
@@ -247,9 +278,10 @@ export const documentsRouter = router({
         content: generatedContent,
         version: nextVersion,
         createdBy: ctx.user.id,
+        organizationId: ctx.organizationId,
       });
 
-      await db.updateProcessStatus(input.processId, nextStatus);
+      await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, nextStatus);
 
       await db.createActivityLog({
         processId: input.processId,
@@ -261,16 +293,19 @@ export const documentsRouter = router({
       return { success: true, documentType: nextDocType, status: nextStatus };
     }),
 
-  updateDocument: protectedProcedure
+  updateDocument: tenantProcedure
     .input(z.object({ documentId: z.number(), content: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Documento não encontrado' });
+        denyNotFound("updateDocument", ctx, input.documentId, "document_cross_tenant_or_missing", "Documento não encontrado");
       }
 
-      const process = await db.getProcessById(document.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
+      if (!process) {
+        denyNotFound("updateDocument", ctx, document.processId, "process_cross_tenant_or_missing", "Documento não encontrado");
+      }
+      if (process.ownerId !== ctx.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para editar este documento' });
       }
 
@@ -281,6 +316,7 @@ export const documentsRouter = router({
         content: input.content,
         version: newVersion,
         createdBy: ctx.user.id,
+        organizationId: ctx.organizationId,
       });
 
       await db.createActivityLog({
@@ -292,18 +328,18 @@ export const documentsRouter = router({
       return { success: true, version: newVersion };
     }),
 
-  generateDocument: protectedProcedure
+  generateDocument: tenantProcedure
     .input(z.object({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.processId);
+      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
       if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
       const settings = await db.getDocumentSettingsByUser(ctx.user.id);
-      const docs = await db.getDocumentsByProcess(input.processId);
+      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
       const trDoc = docs.find(d => d.type === "tr");
@@ -344,7 +380,7 @@ export const documentsRouter = router({
         });
       } else if (input.docType === "tr") {
         if (!etpDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP é necessário para gerar o TR" });
-        const processItems = await db.getProcessItems(input.processId);
+        const processItems = await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
         const catmatItems = processItems.map(item => ({
           itemType: item.itemType,
           catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
@@ -444,7 +480,7 @@ export const documentsRouter = router({
       const currentIdx = statusOrder.indexOf(process.status);
       const targetIdx = statusOrder.indexOf(statusMap[input.docType]);
       if (targetIdx > currentIdx) {
-        await db.updateProcessStatus(input.processId, statusMap[input.docType] as any);
+        await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, statusMap[input.docType] as any);
       }
 
       await db.createActivityLog({
@@ -457,7 +493,7 @@ export const documentsRouter = router({
       return { success: true, docType: input.docType, version: nextVersion };
     }),
 
-  uploadDocument: protectedProcedure
+  uploadDocument: tenantProcedure
     .input(z.object({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
@@ -466,14 +502,14 @@ export const documentsRouter = router({
       mimeType: z.enum(ALLOWED_MIME_TYPES),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertProcessOwner(input.processId, ctx.user.id);
+      await assertProcessOwner(input.processId, ctx.organizationId, ctx.user.id);
 
       const buffer = Buffer.from(input.fileBase64, "base64");
       const safeFileName = input.fileName.replace(/[^a-zA-Z0-9_\-. ]/g, "_");
       const s3Key = `processes/${input.processId}/${input.docType}/${Date.now()}_${safeFileName}`;
       const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
 
-      const docs = await db.getDocumentsByProcess(input.processId);
+      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const existingDoc = docs.find(d => d.type === input.docType);
       const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
 
@@ -498,13 +534,13 @@ export const documentsRouter = router({
       return { success: true, docType: input.docType, version: nextVersion };
     }),
 
-  getDownloadUrl: protectedProcedure
+  getDownloadUrl: tenantProcedure
     .input(z.object({ documentId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
 
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process || process.ownerId !== ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
@@ -517,28 +553,28 @@ export const documentsRouter = router({
       return { url, expiresIn: 3600 };
     }),
 
-  getVersionHistory: protectedProcedure
+  getVersionHistory: tenantProcedure
     .input(z.object({ documentId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.user.id);
-      return await db.getDocumentVersions(document.processId, document.type);
+      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
+      return await db.getDocumentVersionsForOrganization(document.processId, document.type, ctx.organizationId);
     }),
 
-  restoreVersion: protectedProcedure
+  restoreVersion: tenantProcedure
     .input(z.object({
       documentId: z.number(),
       versionId: z.number(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const currentDocument = await db.getDocumentById(input.documentId);
+      const currentDocument = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!currentDocument) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
 
-      const versionToRestore = await db.getDocumentById(input.versionId);
+      const versionToRestore = await db.getDocumentByIdForOrganization(input.versionId, ctx.organizationId);
       if (!versionToRestore) throw new TRPCError({ code: "NOT_FOUND", message: "Versão não encontrada" });
 
-      await assertProcessOwner(currentDocument.processId, ctx.user.id);
+      await assertProcessOwner(currentDocument.processId, ctx.organizationId, ctx.user.id);
 
       const newVersion = currentDocument.version + 1;
       await db.createDocument({
@@ -562,16 +598,16 @@ export const documentsRouter = router({
       return { success: true, version: newVersion };
     }),
 
-  downloadDocx: protectedProcedure
+  downloadDocx: tenantProcedure
     .input(z.object({
       documentId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.user.id);
+      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
 
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
       const documentLabels: Record<string, string> = {
@@ -604,16 +640,16 @@ export const documentsRouter = router({
       };
     }),
 
-  downloadPdf: protectedProcedure
+  downloadPdf: tenantProcedure
     .input(z.object({
       documentId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.user.id);
+      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
 
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
       const documentLabels: Record<string, string> = {
@@ -646,14 +682,14 @@ export const documentsRouter = router({
       };
     }),
 
-  submitForReview: protectedProcedure
+  submitForReview: tenantProcedure
     .input(z.object({ documentId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatus(input.documentId, "in_review");
+      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "in_review");
       await db.createActivityLog({
         processId: document.processId,
         userId: ctx.user.id,
@@ -663,14 +699,14 @@ export const documentsRouter = router({
       return { success: true };
     }),
 
-  approveDocument: protectedProcedure
+  approveDocument: tenantProcedure
     .input(z.object({ documentId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatus(input.documentId, "approved");
+      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "approved");
       await db.createActivityLog({
         processId: document.processId,
         userId: ctx.user.id,
@@ -680,14 +716,14 @@ export const documentsRouter = router({
       return { success: true };
     }),
 
-  rejectDocument: protectedProcedure
+  rejectDocument: tenantProcedure
     .input(z.object({ documentId: z.number(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentById(input.documentId);
+      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessById(document.processId);
+      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
       if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatus(input.documentId, "rejected");
+      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "rejected");
       await db.createActivityLog({
         processId: document.processId,
         userId: ctx.user.id,

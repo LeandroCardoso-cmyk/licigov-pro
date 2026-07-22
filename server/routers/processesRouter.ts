@@ -8,25 +8,50 @@
  * Referência: `docs/architecture/LEGACY_INVENTORY.md`, seção "Licitação / Processo
  * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
  */
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 import { generateDFD } from "../services/gemini";
+import { serviceLogger } from "../services/observabilityService";
+
+const log = serviceLogger("processesRouter");
+
+/**
+ * RC-SEC-PR-A — Negação de autorização multi-tenant. Cross-tenant e inexistente
+ * produzem o MESMO erro NOT_FOUND (nunca revela existência em outra organização).
+ * Log estruturado leve, sem conteúdo sensível (apenas identificadores).
+ */
+function denyNotFound(
+  procedure: string,
+  ctx: { organizationId: number; user: { id: number } },
+  resourceId: number,
+  reason: string,
+  message = "Recurso não encontrado",
+): never {
+  log.warn("tenant_authorization_denied", {
+    procedure,
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    resourceId,
+    reason,
+  });
+  throw new TRPCError({ code: "NOT_FOUND", message });
+}
 
 export const processesRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return await db.getProcessesByUser(ctx.user.id);
+  list: tenantProcedure.query(async ({ ctx }) => {
+    return await db.listProcessesForOrganization(ctx.organizationId);
   }),
 
-  search: protectedProcedure
+  search: tenantProcedure
     .input(z.object({ query: z.string() }))
     .query(async ({ ctx, input }) => {
-      return await db.searchProcesses(ctx.user.id, input.query);
+      return await db.searchProcessesForOrganization(ctx.organizationId, input.query);
     }),
 
-  getActivityLogs: protectedProcedure.query(async ({ ctx }) => {
-    const userProcesses = await db.getProcessesByUser(ctx.user.id);
+  getActivityLogs: tenantProcedure.query(async ({ ctx }) => {
+    const userProcesses = await db.listProcessesForOrganization(ctx.organizationId);
     const allActivities = [];
 
     for (const process of userProcesses) {
@@ -39,7 +64,7 @@ export const processesRouter = router({
     );
   }),
 
-  create: protectedProcedure
+  create: tenantProcedure
     .input(z.object({
       name: z.string().min(1),
       description: z.string().optional(),
@@ -61,6 +86,7 @@ export const processesRouter = router({
         category: input.category,
         platformId: input.platformId || null,
         ownerId: ctx.user.id,
+        organizationId: ctx.organizationId,
         status: "em_dfd",
       });
 
@@ -95,6 +121,7 @@ export const processesRouter = router({
             type: "dfd",
             content: dfdContent,
             version: 1,
+            organizationId: ctx.organizationId,
           });
           await db.createActivityLog({
             processId,
@@ -110,13 +137,17 @@ export const processesRouter = router({
       return { success: true, processId };
     }),
 
-  getById: protectedProcedure
+  getById: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getProcessById(input.id);
+    .query(async ({ ctx, input }) => {
+      const process = await db.getProcessByIdForOrganization(input.id, ctx.organizationId);
+      if (!process) {
+        denyNotFound("getById", ctx, input.id, "process_cross_tenant_or_missing", "Processo não encontrado");
+      }
+      return process;
     }),
 
-  addItemsToTR: protectedProcedure
+  addItemsToTR: tenantProcedure
     .input(z.object({
       processId: z.number(),
       items: z.array(z.object({
@@ -132,7 +163,10 @@ export const processesRouter = router({
       })),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.saveProcessItems(input.processId, input.items);
+      const saved = await db.saveProcessItemsForOrganization(input.processId, ctx.organizationId, input.items);
+      if (!saved) {
+        denyNotFound("addItemsToTR", ctx, input.processId, "process_cross_tenant_or_missing", "Processo não encontrado");
+      }
 
       await db.createActivityLog({
         processId: input.processId,
@@ -143,13 +177,13 @@ export const processesRouter = router({
       return { success: true };
     }),
 
-  getProcessItems: protectedProcedure
+  getProcessItems: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getProcessItems(input.processId);
+    .query(async ({ ctx, input }) => {
+      return await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
     }),
 
-  parseItemsFile: protectedProcedure
+  parseItemsFile: tenantProcedure
     .input(z.object({
       fileContent: z.string(),
       fileName: z.string(),
@@ -222,7 +256,7 @@ export const processesRouter = router({
       };
     }),
 
-  generateCatmatSuggestions: protectedProcedure
+  generateCatmatSuggestions: tenantProcedure
     .input(z.object({
       processItemId: z.number(),
       description: z.string(),
@@ -241,58 +275,74 @@ export const processesRouter = router({
       });
 
       for (const match of matches) {
-        await db.createCatmatSuggestion({
+        const created = await db.createCatmatSuggestionForOrganization({
           processItemId: input.processItemId,
           catmatCode: match.code,
           description: match.description,
           confidenceScore: match.confidence,
           reasoning: match.reasoning,
-        });
+        }, ctx.organizationId);
+        if (created === null) {
+          denyNotFound("generateCatmatSuggestions", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
+        }
       }
 
       return { success: true, suggestions: matches };
     }),
 
-  getCatmatSuggestions: protectedProcedure
+  getCatmatSuggestions: tenantProcedure
     .input(z.object({ processItemId: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getCatmatSuggestionsByItem(input.processItemId);
+    .query(async ({ ctx, input }) => {
+      return await db.getCatmatSuggestionsByItemForOrganization(input.processItemId, ctx.organizationId);
     }),
 
-  approveCatmatSuggestion: protectedProcedure
+  approveCatmatSuggestion: tenantProcedure
     .input(z.object({
       suggestionId: z.number(),
       processItemId: z.number(),
     }))
-    .mutation(async ({ input }) => {
-      const suggestion = await db.getCatmatSuggestionById(input.suggestionId);
+    .mutation(async ({ ctx, input }) => {
+      const suggestion = await db.getCatmatSuggestionByIdForOrganization(input.suggestionId, ctx.organizationId);
       if (!suggestion) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sugestão não encontrada' });
+        denyNotFound("approveCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
       }
 
       const itemType = suggestion.catmatCode.startsWith('CAT') ? 'material' : 'service';
       const parsedCode = parseInt(suggestion.catmatCode.replace(/\D/g, '')) || null;
-      await db.updateProcessItem(input.processItemId, {
+      const updatedItem = await db.updateProcessItemForOrganization(input.processItemId, ctx.organizationId, {
         itemType,
         catmatCode: itemType === 'material' ? parsedCode : undefined,
         catserCode: itemType === 'service' ? parsedCode : undefined,
         description: suggestion.description,
       });
+      if (!updatedItem) {
+        denyNotFound("approveCatmatSuggestion", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
+      }
 
-      await db.updateCatmatSuggestion(input.suggestionId, { status: 'approved' });
-      await db.rejectOtherSuggestions(input.processItemId, input.suggestionId);
+      const updatedSuggestion = await db.updateCatmatSuggestionForOrganization(input.suggestionId, ctx.organizationId, { status: 'approved' });
+      if (!updatedSuggestion) {
+        denyNotFound("approveCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
+      }
+
+      const rejected = await db.rejectOtherSuggestionsForOrganization(input.processItemId, input.suggestionId, ctx.organizationId);
+      if (!rejected) {
+        denyNotFound("approveCatmatSuggestion", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
+      }
 
       return { success: true };
     }),
 
-  rejectCatmatSuggestion: protectedProcedure
+  rejectCatmatSuggestion: tenantProcedure
     .input(z.object({ suggestionId: z.number() }))
-    .mutation(async ({ input }) => {
-      await db.updateCatmatSuggestion(input.suggestionId, { status: 'rejected' });
+    .mutation(async ({ ctx, input }) => {
+      const rejected = await db.updateCatmatSuggestionForOrganization(input.suggestionId, ctx.organizationId, { status: 'rejected' });
+      if (!rejected) {
+        denyNotFound("rejectCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
+      }
       return { success: true };
     }),
 
-  updateProcessItem: protectedProcedure
+  updateProcessItem: tenantProcedure
     .input(z.object({
       itemId: z.number(),
       description: z.string().optional(),
@@ -302,33 +352,42 @@ export const processesRouter = router({
       catmatCode: z.string().optional(),
       catserCode: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { itemId, catmatCode, catserCode, ...rest } = input;
-      await db.updateProcessItem(itemId, {
+      const updated = await db.updateProcessItemForOrganization(itemId, ctx.organizationId, {
         ...rest,
         catmatCode: catmatCode ? parseInt(catmatCode) : undefined,
         catserCode: catserCode ? parseInt(catserCode) : undefined,
       });
+      if (!updated) {
+        denyNotFound("updateProcessItem", ctx, itemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
+      }
       return { success: true };
     }),
 
-  deleteProcessItem: protectedProcedure
+  deleteProcessItem: tenantProcedure
     .input(z.object({ itemId: z.number() }))
-    .mutation(async ({ input }) => {
-      await db.deleteProcessItem(input.itemId);
+    .mutation(async ({ ctx, input }) => {
+      const deleted = await db.deleteProcessItemForOrganization(input.itemId, ctx.organizationId);
+      if (!deleted) {
+        denyNotFound("deleteProcessItem", ctx, input.itemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
+      }
       return { success: true };
     }),
 
-  updateStatus: protectedProcedure
+  updateStatus: tenantProcedure
     .input(z.object({
       id: z.number(),
       status: z.enum(["em_dfd", "em_etp", "em_tr", "em_edital", "concluido"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.id);
-      const oldStatus = process?.status;
+      const process = await db.getProcessByIdForOrganization(input.id, ctx.organizationId);
+      if (!process) {
+        denyNotFound("updateStatus", ctx, input.id, "process_cross_tenant_or_missing", "Processo não encontrado");
+      }
+      const oldStatus = process.status;
 
-      await db.updateProcessStatus(input.id, input.status);
+      await db.updateProcessStatusForOrganization(input.id, ctx.organizationId, input.status);
 
       await db.createActivityLog({
         processId: input.id,

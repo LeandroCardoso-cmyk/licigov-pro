@@ -4135,8 +4135,8 @@
     "semantic_hash": ""
   },
   "server/_core/cookies.ts": {
-    "mtime": 1782612419.2795498,
-    "ast_hash": "9475ebe6548b583aac68da5960fd14fb",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "6d915dac96ad4412321538a8d4877009",
     "semantic_hash": ""
   },
   "server/_core/dataApi.ts": {
@@ -4175,8 +4175,8 @@
     "semantic_hash": ""
   },
   "server/_core/sdk.ts": {
-    "mtime": 1782612419.2795498,
-    "ast_hash": "1e42e5ea95117f5a967847ff81d2b2e5",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "e92b90816b925097fb38aa36bd7f29f9",
     "semantic_hash": ""
   },
   "server/_core/systemRouter.ts": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784553943.5776646,
-    "ast_hash": "d86714602c599fd8a37e5323bd30b879",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "614e21b520f7c0fcc89aa1bdbe59698c",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4220,8 +4220,8 @@
     "semantic_hash": ""
   },
   "server/config/auth.ts": {
-    "mtime": 1784472875.8626738,
-    "ast_hash": "4baeb139ee4f078813205521d510584d",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "803f85e49cd24eb264f9def358812b59",
     "semantic_hash": ""
   },
   "server/config/aws.ts": {
@@ -4270,13 +4270,13 @@
     "semantic_hash": ""
   },
   "server/db/collaboration.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "aa69c9912db9a564bfb3df05a8e30ff0",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "0ea6ede07618fd3f3c69079580255660",
     "semantic_hash": ""
   },
   "server/db/comments.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "1de7db34b68894b39913734b237a21e2",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "68c9a68c9040d96d4c0a17af3f58a174",
     "semantic_hash": ""
   },
   "server/db/commercial.ts": {
@@ -4345,13 +4345,13 @@
     "semantic_hash": ""
   },
   "server/db/processItems.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "2a89e95738fe6a1d7c36d366379dd5fd",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "cb0aa531d3d14247d729a0020fda708d",
     "semantic_hash": ""
   },
   "server/db/processes.ts": {
-    "mtime": 1784674897.500556,
-    "ast_hash": "2bbb603cc48a8a2c764f71212fbca053",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "a978360b8dcd1ecdb34f18239276d84b",
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
@@ -4365,8 +4365,8 @@
     "semantic_hash": ""
   },
   "server/db/tasks.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "6e8607a2c858ae325cda6cdad893d1d4",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "b64afae5e70839390b8663f9d77ca028",
     "semantic_hash": ""
   },
   "server/db/templates.ts": {
@@ -4995,8 +4995,8 @@
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
-    "mtime": 1782612419.3097808,
-    "ast_hash": "ff60c5be9b9dfc616f6f3e35e77bdd6b",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "d169a0eaefb923df5d16801aec996488",
     "semantic_hash": ""
   },
   "server/routers/adminRouter.ts": {
@@ -5010,8 +5010,8 @@
     "semantic_hash": ""
   },
   "server/routers/aiAssistantRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "2bfabeb1efd7282982ad5ec27c7f4ed1",
+    "mtime": 1784734651.4799242,
+    "ast_hash": "9bbb813ecdd5c80f0b875c5e59280e37",
     "semantic_hash": ""
   },
   "server/routers/aiUsageRouter.ts": {
@@ -5030,8 +5030,8 @@
     "semantic_hash": ""
   },
   "server/routers/authRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "8a26c1f288381d7dd4a36157bff94ae7",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "e8b6926d8e4204f27411694a21dc8394",
     "semantic_hash": ""
   },
   "server/routers/billingRouter.ts": {
@@ -5065,8 +5065,8 @@
     "semantic_hash": ""
   },
   "server/routers/commentsRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "393ff8c92346e58734ade639ed8b0894",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "22d0efa20b8fa6d71b49ea51bd6f5b97",
     "semantic_hash": ""
   },
   "server/routers/commercialRouter.ts": {
@@ -5105,8 +5105,8 @@
     "semantic_hash": ""
   },
   "server/routers/departmentTasksRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "37d13fbc83b89b98058fe1ac831eaf78",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "3d93dff8c5a772c771f7a80ec3319ff8",
     "semantic_hash": ""
   },
   "server/routers/deploymentRouter.ts": {
@@ -5125,8 +5125,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentsRouter.ts": {
-    "mtime": 1784567384.9661667,
-    "ast_hash": "d2e80ddc4df486320e4a5dc3886730d7",
+    "mtime": 1784733734.5117621,
+    "ast_hash": "7afd48c1ce7dd04749405437cb7416ac",
     "semantic_hash": ""
   },
   "server/routers/downloadRouter.ts": {
@@ -5230,8 +5230,8 @@
     "semantic_hash": ""
   },
   "server/routers/processesRouter.ts": {
-    "mtime": 1784567396.7901673,
-    "ast_hash": "cfdf12d4a215a0dfc15f8b6efedc4e56",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "97cf258115e508236eba005f92916ee0",
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
@@ -5290,8 +5290,8 @@
     "semantic_hash": ""
   },
   "server/routers/taskRouter.ts": {
-    "mtime": 1782612419.314427,
-    "ast_hash": "b457a395110e348bfc2877159b275bb3",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "9b5b6372d83a9dfb09d332da58761c1e",
     "semantic_hash": ""
   },
   "server/routers/templatesRouter.ts": {
@@ -6115,8 +6115,8 @@
     "semantic_hash": ""
   },
   "server/services/rateLimiter.ts": {
-    "mtime": 1782612419.3424268,
-    "ast_hash": "8b96b4261e8523515144a305945878f5",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "03036285900111ae686a3523709b9e41",
     "semantic_hash": ""
   },
   "server/services/realCatalogIngestionService.ts": {
@@ -6240,13 +6240,13 @@
     "semantic_hash": ""
   },
   "server/services/taskNotifications.ts": {
-    "mtime": 1782612419.346427,
-    "ast_hash": "4f023fda47d915ec9fb4772226308030",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "941dc86d5cb855ac1ae1d8f213e64982",
     "semantic_hash": ""
   },
   "server/services/taskReports.ts": {
-    "mtime": 1782612419.346427,
-    "ast_hash": "57fab3291e829360d8f56b0fe4a8236f",
+    "mtime": 1784733567.6717956,
+    "ast_hash": "a6daab05dfeae2eee2d4699eecad0f99",
     "semantic_hash": ""
   },
   "server/services/taskSimulationService.ts": {
@@ -6260,8 +6260,8 @@
     "semantic_hash": ""
   },
   "server/services/tenantService.ts": {
-    "mtime": 1782612419.346427,
-    "ast_hash": "182ae9df17af2bc266eadd1049cbb849",
+    "mtime": 1784734795.6606612,
+    "ast_hash": "5392a9e5e523c63142614ab6e879d38a",
     "semantic_hash": ""
   },
   "server/services/tokenBudgetService.ts": {
@@ -9747,6 +9747,51 @@
   "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
     "mtime": 1784675446.6685338,
     "ast_hash": "ebc5e34a77765e7bcd3ea388fcf2890c",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/DASHBOARD_AND_NAVIGATION_AUDIT.md": {
+    "mtime": 1784727694.8878877,
+    "ast_hash": "34cdb05124feca049e6668726e564149",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/INSTITUTIONAL_USER_JOURNEY.md": {
+    "mtime": 1784727728.483887,
+    "ast_hash": "90ce621fed16c76a2a0100f82978ae2a",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
+    "mtime": 1784730743.0165884,
+    "ast_hash": "7bec8db2319740422bff7cbe4dbe59dc",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
+    "mtime": 1784727761.7678862,
+    "ast_hash": "d27d0b06a97df0f8450d44cdd26e88f8",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PRODUCTION_READINESS_EXECUTIVE_SUMMARY.md": {
+    "mtime": 1784730629.1765816,
+    "ast_hash": "e223c11c6fdf3bc928e6a223e3a66cd7",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PRODUCTION_READINESS_FINDINGS.md": {
+    "mtime": 1784730636.176582,
+    "ast_hash": "3a4da734d62c227da267c75ec34c93a8",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PRODUCTION_REMEDIATION_PLAN.md": {
+    "mtime": 1784730666.424584,
+    "ast_hash": "d629444c0da0f25f9ee6814293df550c",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/ROUTES_AND_ROUTERS_INVENTORY.md": {
+    "mtime": 1784727801.7038853,
+    "ast_hash": "eb01e6313aa2f525da5793d4dbd3d81d",
+    "semantic_hash": ""
+  },
+  "docs/security/PR_A_SECRET_ROTATION_RUNBOOK.md": {
+    "mtime": 1784733420.399589,
+    "ast_hash": "d52902f54ffb44ab82db60baf3cee987",
     "semantic_hash": ""
   }
 }
