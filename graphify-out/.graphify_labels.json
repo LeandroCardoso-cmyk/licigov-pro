@@ -1148,5 +1148,13 @@
   "1146": "typescript",
   "1147": "vite",
   "1148": "@vitejs/plugin-react",
-  "1149": "vitest"
+  "1149": "vitest",
+  "1150": "html2canvas",
+  "1151": "jose",
+  "1152": "lucide-react",
+  "1153": "@radix-ui/react-alert-dialog",
+  "1154": "@radix-ui/react-collapsible",
+  "1155": "@radix-ui/react-popover",
+  "1156": "@radix-ui/react-slider",
+  "1157": "zod"
 }

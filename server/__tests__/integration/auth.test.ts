@@ -11,6 +11,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db");
 
+// RC-SEC-PR-A (SEC-017): registro público é fail-closed (default desabilitado).
+// A suíte de register exercita o caminho habilitado, então habilitamos o flag
+// preservando o restante da config real (JWT secret dev, SESSION_TTL_MS etc.).
+vi.mock("../../config/auth", async (orig) => ({
+  ...(await orig<typeof import("../../config/auth")>()),
+  ALLOW_PUBLIC_REGISTRATION: true,
+  SESSION_TTL_MS: 86400000,
+}));
+
 vi.mock("../../_core/sdk", () => ({
   sdk: {
     signSession: vi.fn().mockResolvedValue("fake-jwt-token"),

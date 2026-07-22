@@ -3925,18 +3925,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai.test.ts": {
-    "mtime": 1782612419.2662337,
-    "ast_hash": "c950d509e7edf017bfde863bfc40d7e9",
+    "mtime": 1784736382.450277,
+    "ast_hash": "1532b6680cbbdf54b8a9a540ef26ee3f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/auth.test.ts": {
-    "mtime": 1782612419.2674422,
-    "ast_hash": "4c5b06d7d135456a978d3e9e63d9bf57",
+    "mtime": 1784736428.9395123,
+    "ast_hash": "9dabedfb2bbd99c6a56b64baedf0ef5f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/documents.test.ts": {
-    "mtime": 1782612419.2674422,
-    "ast_hash": "2dfb7d88270eecabe794a9fc05887687",
+    "mtime": 1784736357.818305,
+    "ast_hash": "308db26cf43316aedc40b1749da5e1a1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/organizations.test.ts": {
@@ -3945,8 +3945,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/processes.test.ts": {
-    "mtime": 1782612419.2674422,
-    "ast_hash": "8f69907cfe1beaa0b2b227393babbf4b",
+    "mtime": 1784736322.999515,
+    "ast_hash": "3b463a5ab902a4a633facb835bf737f0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rbac.test.ts": {
@@ -3960,8 +3960,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/security.test.ts": {
-    "mtime": 1782612419.2674422,
-    "ast_hash": "d05c4113fcc0dd2789d104b18a2e1e40",
+    "mtime": 1784736400.9871626,
+    "ast_hash": "a2bbf0cb50c7f08c175a3a7de7794d3c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint15-hardening.test.ts": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "614e21b520f7c0fcc89aa1bdbe59698c",
+    "mtime": 1784736222.7435174,
+    "ast_hash": "6337343a7026c9e3ee44e419b1a7a8fa",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -4220,8 +4220,8 @@
     "semantic_hash": ""
   },
   "server/config/auth.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "803f85e49cd24eb264f9def358812b59",
+    "mtime": 1784736219.0635176,
+    "ast_hash": "adabf5dfbac5dcfc9822ac8a716f3bf7",
     "semantic_hash": ""
   },
   "server/config/aws.ts": {
@@ -9730,8 +9730,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts": {
-    "mtime": 1784578135.4881067,
-    "ast_hash": "5eef5fc09aa631c2185db5c7b50d0985",
+    "mtime": 1784736958.4594991,
+    "ast_hash": "bba778462c12eb0e40ec13b5cd597bb9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-c01a1-contracts-legacy-freeze.test.ts": {
@@ -9740,8 +9740,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts": {
-    "mtime": 1784675328.0685387,
-    "ast_hash": "6cebcaa317b5da0b2a9a06788556f1da",
+    "mtime": 1784736935.2554996,
+    "ast_hash": "c0917155886f88dcebb9888d82ecfc43",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
@@ -9760,8 +9760,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1784730743.0165884,
-    "ast_hash": "7bec8db2319740422bff7cbe4dbe59dc",
+    "mtime": 1784736750.9835043,
+    "ast_hash": "8043571f96be3a8b9fe41ceee8c69735",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -9792,6 +9792,21 @@
   "docs/security/PR_A_SECRET_ROTATION_RUNBOOK.md": {
     "mtime": 1784733420.399589,
     "ast_hash": "d52902f54ffb44ab82db60baf3cee987",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts": {
+    "mtime": 1784736664.4955065,
+    "ast_hash": "147b94e825b64e8b5c43b90babe8fc7d",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts": {
+    "mtime": 1784735996.899523,
+    "ast_hash": "a27f3684e3c6d84b57b41543a37e05df",
+    "semantic_hash": ""
+  },
+  "docs/security/PR_A_SECURITY_REMEDIATION_REPORT.md": {
+    "mtime": 1784737230.4594924,
+    "ast_hash": "cd7dc457d91b4c57ee95e79e127d3650",
     "semantic_hash": ""
   }
 }

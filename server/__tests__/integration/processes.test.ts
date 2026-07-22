@@ -11,6 +11,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db");
 
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn().mockResolvedValue({
+    organizationId: 1,
+    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
+}));
+
 vi.mock("../../services/rateLimiter", async () => {
   const trpc = await import("../../_core/trpc");
   return {
@@ -71,12 +80,12 @@ const validCreateInput = {
 describe("Processes Router — Integração", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getProcessesByUser).mockResolvedValue([] as any);
+    vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.createProcess).mockResolvedValue({ insertId: 10 } as any);
-    vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
+    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
     vi.mocked(db.getDocumentSettingsByUser).mockResolvedValue(null as any);
-    vi.mocked(db.searchProcesses).mockResolvedValue([] as any);
+    vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.getActivityLogsByProcess).mockResolvedValue([] as any);
     vi.mocked(db.createDocument).mockResolvedValue(undefined as any);
     vi.mocked(gemini.generateDFD).mockResolvedValue("# DFD gerado");
@@ -85,7 +94,7 @@ describe("Processes Router — Integração", () => {
   // ── processes.list ──────────────────────────────────────────────────────
   describe("list", () => {
     it("retorna processos do usuário autenticado", async () => {
-      vi.mocked(db.getProcessesByUser).mockResolvedValue([mockProcess] as any);
+      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([mockProcess] as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.list();
@@ -94,18 +103,18 @@ describe("Processes Router — Integração", () => {
       expect(result[0].id).toBe(10);
     });
 
-    it("filtra processos pelo ID do usuário autenticado", async () => {
-      vi.mocked(db.getProcessesByUser).mockResolvedValue([mockProcess] as any);
+    it("filtra processos pela organização do usuário autenticado", async () => {
+      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([mockProcess] as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       await caller.list();
 
-      expect(db.getProcessesByUser).toHaveBeenCalledWith(mockUser.id);
-      expect(db.getProcessesByUser).not.toHaveBeenCalledWith(999);
+      expect(db.listProcessesForOrganization).toHaveBeenCalledWith(1);
+      expect(db.listProcessesForOrganization).not.toHaveBeenCalledWith(999);
     });
 
     it("retorna lista vazia quando usuário não tem processos", async () => {
-      vi.mocked(db.getProcessesByUser).mockResolvedValue([] as any);
+      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.list();
@@ -224,7 +233,7 @@ describe("Processes Router — Integração", () => {
   // ── processes.getById ───────────────────────────────────────────────────
   describe("getById", () => {
     it("retorna processo pelo ID", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.getById({ id: 10 });
@@ -232,13 +241,11 @@ describe("Processes Router — Integração", () => {
       expect(result).toMatchObject({ id: 10, name: "Pregão Eletrônico 001/2025" });
     });
 
-    it("retorna null para processo inexistente", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue(null as any);
+    it("retorna NOT_FOUND para processo inexistente (tenant-safe)", async () => {
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
-      const result = await caller.getById({ id: 9999 });
-
-      expect(result).toBeNull();
+      await expect(caller.getById({ id: 9999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
     it("rejeita acesso sem autenticação", async () => {
@@ -250,18 +257,18 @@ describe("Processes Router — Integração", () => {
 
   // ── processes.search ────────────────────────────────────────────────────
   describe("search", () => {
-    it("busca processos por termo e isola por usuário", async () => {
-      vi.mocked(db.searchProcesses).mockResolvedValue([mockProcess] as any);
+    it("busca processos por termo e isola por organização", async () => {
+      vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([mockProcess] as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.search({ query: "Pregão" });
 
       expect(result).toHaveLength(1);
-      expect(db.searchProcesses).toHaveBeenCalledWith(mockUser.id, "Pregão");
+      expect(db.searchProcessesForOrganization).toHaveBeenCalledWith(1, "Pregão");
     });
 
     it("retorna lista vazia para busca sem resultados", async () => {
-      vi.mocked(db.searchProcesses).mockResolvedValue([] as any);
+      vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
       const caller = processesRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.search({ query: "xyzinexistente" });
@@ -280,7 +287,7 @@ describe("Processes Router — Integração", () => {
   describe("getActivityLogs", () => {
     it("retorna logs de atividade dos processos do usuário", async () => {
       const mockLog = { id: 1, processId: 10, userId: 1, action: "criou o processo", createdAt: new Date() };
-      vi.mocked(db.getProcessesByUser).mockResolvedValue([mockProcess] as any);
+      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([mockProcess] as any);
       vi.mocked(db.getActivityLogsByProcess).mockResolvedValue([mockLog] as any);
 
       const result = await processesRouter.createCaller(makeContext(mockUser)).getActivityLogs();
@@ -290,7 +297,7 @@ describe("Processes Router — Integração", () => {
     });
 
     it("retorna lista vazia quando não há atividade", async () => {
-      vi.mocked(db.getProcessesByUser).mockResolvedValue([] as any);
+      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
       const result = await processesRouter.createCaller(makeContext(mockUser)).getActivityLogs();
 
       expect(result).toHaveLength(0);

@@ -17,7 +17,7 @@ import { ADMIN_PASSWORD as CONFIGURED_ADMIN_PASSWORD } from "./config/auth";
 
 const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    ?? "cardosomsales@gmail.com";
 // RC-SEC-PR-A (CONFIG-005): sem default de produção. A resolução (obrigatória em
-// produção/staging, fixture em dev) vem de config/auth.ts — jamais "Admin@123".
+// produção/staging, fixture em dev) vem de config/auth.ts — sem default inseguro.
 const ADMIN_PASSWORD = CONFIGURED_ADMIN_PASSWORD;
 const ADMIN_NAME     = process.env.ADMIN_NAME     ?? "Administrador";
 

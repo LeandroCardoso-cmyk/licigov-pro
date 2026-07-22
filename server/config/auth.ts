@@ -51,7 +51,7 @@ export const SESSION_TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
 
 // ─── RC-SEC-PR-A (CONFIG-005) — Senha administrativa sem default em produção ──
 // Em produção/staging, ADMIN_PASSWORD é OBRIGATÓRIA: o boot falha se ausente.
-// Nenhum valor default (ex.: "Admin@123") é utilizável em produção. Em
+// Nenhum valor default inseguro é utilizável em produção. Em
 // desenvolvimento/testes usa-se um valor explícito de fixture (nunca produção).
 const DEV_ONLY_ADMIN_PASSWORD = "dev-only-admin-change-me";
 
