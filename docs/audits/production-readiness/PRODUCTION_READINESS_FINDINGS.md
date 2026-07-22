@@ -107,4 +107,9 @@ Legenda de decisão: **BLOQ** = bloqueia produção interna · **MÓD** = bloque
 
 ---
 
-**Total: 59 achados** — 5 P0, 18 P1, 21 P2, 15 P3 (contagem inclui os P2/P3 tabelados acima).
+**Total: 68 achados** — 5 P0, 19 P1, 29 P2, 15 P3 (contagem inclui os P2/P3 tabelados acima).
+
+> **Severidade ≠ decisão de go-live.** A severidade (P0/P1/P2/P3) classifica a natureza e o
+> impacto técnico do achado. A coluna "Bloqueia?" e o **Gate de Produção Interna**
+> (`INTERNAL_PRODUCTION_GATE.md`) determinam se o item impede o piloto — um P1 ou mesmo um P2
+> pode bloquear o go-live conforme exposição e contexto. A severidade não substitui o gate.

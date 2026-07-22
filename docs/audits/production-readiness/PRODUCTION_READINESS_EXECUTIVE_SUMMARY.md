@@ -46,10 +46,16 @@ interações centrais da home estão mortas (botão de relatório, cliques em ev
 | Severidade | Qtd | Definição |
 |---|---:|---|
 | **P0 — Bloqueador absoluto** | 5 | Vazamento cross-tenant, acesso não autorizado, credencial default, ops sem auth |
-| **P1 — Bloqueador do piloto** | 18 | Impede uso institucional confiável (core no legado, sem transações, IA sem timeout, CI fake) |
-| **P2 — Curto prazo** | 21 | Risco moderado, débito com exposição limitada, observabilidade incompleta |
+| **P1 — Bloqueador do piloto** | 19 | Impede uso institucional confiável (core no legado, sem transações, IA sem timeout, CI fake) |
+| **P2 — Curto prazo** | 29 | Risco moderado, débito com exposição limitada, observabilidade incompleta |
 | **P3 — Melhoria futura** | 15 | Legado inacessível, limpeza, refinamento, dead code |
-| **Total** | **59** | |
+| **Total** | **68** | |
+
+> **Severidade ≠ decisão de go-live.** A severidade P0/P1/P2/P3 classifica a natureza e o
+> impacto técnico de cada achado. Quem determina se um item bloqueia o piloto é a coluna de
+> decisão e o **Gate de Produção Interna** (`INTERNAL_PRODUCTION_GATE.md`) — um achado P1 ou
+> mesmo P2 pode bloquear a produção interna conforme exposição e contexto. A severidade não
+> substitui o gate.
 
 - **Bloqueadores reais para o piloto single-tenant:** 5 P0 + os P1 de core/CI/IA.
 - **Módulos prontos (canônicos, tenant-safe, com UI):** 4 — Contratação Direta, Parecer Jurídico, Contratos/Aditivos, Central de Operações.
@@ -112,8 +118,10 @@ reduzidos)** antes do go-live, ocultando os módulos incompletos por trás de na
    endpoint `/health`, transações nas operações críticas, timeout/fallback visível de IA.
 4. **Bloco C — Governança cognitiva** (pós-piloto): rastreabilidade de IA legada, idempotência ampla, aprovações persistidas.
 
-**Estimativa:** ~4 PRs (A, B, D em pré-piloto; C durante o piloto). Esforço relativo:
-Bloco A = média; Bloco B = média; Bloco D = pequena-média; Bloco C = média (postergável).
+**Estimativa:** **3 PRs obrigatórias antes do piloto** (A — Segurança, B — Fluxo, D — Produção)
++ **1 a 2 PRs durante o piloto** (C — Governança Cognitiva, dividida em duas apenas se o escopo
+exigir) = **total de 4 a 5 PRs**. Esforço relativo: Bloco A = média; Bloco B = média;
+Bloco D = pequena-média; Bloco C = média (durante o piloto).
 
 **Critério objetivo de encerramento do gate:** ver `INTERNAL_PRODUCTION_GATE.md`.
 
@@ -124,7 +132,7 @@ Bloco A = média; Bloco B = média; Bloco D = pequena-média; Bloco C = média (
 | Arquivo | Conteúdo |
 |---|---|
 | `PRODUCTION_READINESS_EXECUTIVE_SUMMARY.md` | Este documento |
-| `PRODUCTION_READINESS_FINDINGS.md` | Inventário consolidado dos 59 achados com IDs estáveis |
+| `PRODUCTION_READINESS_FINDINGS.md` | Inventário consolidado dos 68 achados com IDs estáveis |
 | `DASHBOARD_AND_NAVIGATION_AUDIT.md` | Auditoria de dashboard, home, navegação, UX |
 | `INSTITUTIONAL_USER_JOURNEY.md` | Jornada ponta a ponta do servidor, etapa por etapa |
 | `MODULE_READINESS_MATRIX.md` | Matriz de prontidão por módulo |

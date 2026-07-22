@@ -5,12 +5,23 @@
 > O LiciGov Pro pode ser utilizado internamente pela Prefeitura de Moreira Sales com risco
 > institucional aceitável?
 
-**Resposta atual: NÃO — bloqueado por 5 itens P0 do Gate Obrigatório.**
+**Resposta atual: NÃO — 10 dos 12 itens do Gate Obrigatório ainda não estão em `PASS`**
+(6 FAIL + 3 PARTIAL + 1 NOT_VERIFIED). Todos bloqueiam o go-live pela regra abaixo.
 Status por item: **PASS** · **FAIL** · **PARTIAL** · **NOT_VERIFIED** · **N/A**.
+
+> **Severidade ≠ decisão de go-live.** A severidade (P0/P1/P2/P3) dos achados classifica impacto
+> técnico; é **este gate** que decide o go-live. Um achado P1/P2 pode bloquear a produção interna
+> se estiver por trás de um item de gate não-`PASS`. A severidade não substitui o gate.
 
 ---
 
-## Gate Obrigatório (tudo precisa estar PASS antes do go-live)
+## Gate Obrigatório
+
+> **Regra de bloqueio.** Para autorizar a produção interna, **todo item aplicável do Gate
+> Obrigatório deve estar em `PASS`**. Os estados `FAIL`, `PARTIAL` e `NOT_VERIFIED` continuam
+> bloqueando o go-live — não basta eliminar apenas os itens em `FAIL`. Um item só deixa de
+> bloquear se for formalmente classificado como `N/A`, com justificativa documentada. Assim,
+> G4 (`NOT_VERIFIED`), G6, G8 e G11 (`PARTIAL`) permanecem bloqueantes enquanto não forem `PASS`.
 
 | # | Item | Status | Evidência / condição de PASS |
 |---|---|:---:|---|
@@ -24,11 +35,13 @@ Status por item: **PASS** · **FAIL** · **PARTIAL** · **NOT_VERIFIED** · **N/
 | G8 | Fluxo principal navegável e sem telas de debug/duplicadas | **PARTIAL** | UI-054, LEGACY-013; PASS = rotas de teste e legadas fora da navegação |
 | G9 | Login/sessão/logout funcionais | **PASS** | JWT httpOnly ok (ressalva SEC-022: expiração 1 ano) |
 | G10 | Suíte de testes verde no snapshot | **PASS** | 3805 passed / 74 skipped / 0 falhas; typecheck 0 erros; build ok |
-| G11 | Backup e restauração disponíveis | **PARTIAL** | DEPLOY-051; backup manual + DR documentado; restore nunca testado |
+| G11 | Backup e restauração disponíveis | **PARTIAL** | DEPLOY-051; backup manual + DR documentado; **restore nunca testado**. PASS = backup agendado/automatizado + retenção definida + ≥1 teste de restauração bem-sucedido registrado |
 | G12 | IA nunca serve conteúdo mock como oficial sem sinalizar | **FAIL** | AI-015; PASS = fallback visível + `GEMINI_API_KEY` garantida |
 
-**Resultado do Gate Obrigatório: 2 PASS · 5 FAIL · 3 PARTIAL · 1 NOT_VERIFIED · (G4).**
-Enquanto houver qualquer FAIL/NOT_VERIFIED em G1-G7 e G12, o go-live não é autorizado.
+**Resultado do Gate Obrigatório: 2 PASS · 6 FAIL · 3 PARTIAL · 1 NOT_VERIFIED · 0 N/A (total 12).**
+FAIL: G1, G2, G3, G5, G7, G12 · PARTIAL: G6, G8, G11 · NOT_VERIFIED: G4 · PASS: G9, G10.
+Pela regra de bloqueio acima, enquanto qualquer item aplicável não estiver em `PASS` — incluindo
+os `PARTIAL` (G6/G8/G11) e o `NOT_VERIFIED` (G4) — o go-live **não** é autorizado.
 
 ---
 
@@ -96,7 +109,11 @@ Enquanto houver qualquer FAIL/NOT_VERIFIED em G1-G7 e G12, o go-live não é aut
 
 ## Veredito do gate
 
-**`NÃO PRONTO` no estado atual.** Torna-se **`PRONTO COM RESTRIÇÕES`** após concluir:
-**Bloco A (segurança — obrigatório)** + **Bloco B (fluxo/UI)** + **Bloco D (gate de CI + /health
-+ timeout de IA)**, com os módulos fora de escopo ocultos. O Bloco C (governança cognitiva) é
-aceitável como correção durante o piloto.
+**`NÃO PRONTO` no estado atual.** Torna-se **`PRONTO COM RESTRIÇÕES`** somente quando **todos os
+itens aplicáveis do Gate Obrigatório estiverem em `PASS`** — o que exige concluir
+**Bloco A (segurança — obrigatório)**, **Bloco B (fluxo/UI)** e **Bloco D (gate de CI + /health +
+timeout de IA + backup agendado com teste de restauração)**, resolvendo também os itens `PARTIAL`
+(G6/G8/G11) e o `NOT_VERIFIED` (G4), com os módulos fora de escopo ocultos. Em particular, **G11
+(backup/restore) permanece bloqueante** até haver backup agendado e ao menos um teste de
+restauração bem-sucedido; e **G4** exige `ADMIN_PASSWORD` obrigatória confirmada no ambiente. O
+Bloco C (governança cognitiva) é aceitável como correção durante o piloto.
