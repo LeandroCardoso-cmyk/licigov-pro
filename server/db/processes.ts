@@ -5,10 +5,17 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
 
-export async function createProcess(process: InsertProcess) {
+/**
+ * RC-SEC-PR-A — Retorna o insertId numérico do processo criado.
+ * O retorno de `db.insert().values()` é um array `[ResultSetHeader, ...]`;
+ * o `insertId` correto vem de `result[0].insertId` (antes lia-se
+ * `(result as any).insertId`, produzindo NaN e quebrando auditoria/geração).
+ */
+export async function createProcess(process: InsertProcess): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(processes).values(process);
+  const result = await db.insert(processes).values(process);
+  return result[0].insertId;
 }
 
 export async function getProcessesByUser(userId: number) {

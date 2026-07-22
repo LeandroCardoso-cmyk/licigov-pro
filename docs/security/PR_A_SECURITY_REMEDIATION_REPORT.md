@@ -39,17 +39,32 @@ AUTH-003, RBAC-004, CONFIG-005, SEC-017/018/022/034/035/037, TENANT-030/031/038.
 | TENANT-030 (tabelas-filhas sem org) | `MITIGATED_BY_PARENT_GUARD` | validação pela entidade-pai (coluna org própria seria `MIGRATION_REQUIRED`, fora de escopo) |
 | TENANT-031 (assertTenantOwnership sem uso) | `DEFERRED_BY_SCOPE` | padrão *ForOrganization adotado; helper legado não removido |
 
-## 4. Routers auditados (13) e procedures migradas
+## 4. Routers auditados (13) e procedures migradas — contagem EXATA (AST-anchored)
 
-- **Núcleo:** processesRouter (12 proc), taskRouter (12), departmentTasksRouter (13),
-  activitiesRouter (1), commentsRouter (4), documentsRouter (16), aiAssistantRouter (6)
-  → todas de `protectedProcedure` para `tenantProcedure`.
-- **Contratação direta:** directContractsRouter (37) → todas `tenantProcedure`.
-- **Ops:** deploymentRouter (11) e stabilityRouter (12) → `adminProcedure`.
-- **Onboarding:** onboardingRouter (7) → `tenantProcedure`/`orgRoleProcedure('admin')`.
-- **Catálogo:** catmatRouter (4) → `tenantProcedure` + rate limit.
-- **Total:** ~148 procedures auditadas; ~135 migradas a tenant, 23 a admin, 2
-  deliberadamente mantidas fora de tenant (nenhuma institucional).
+Contagem por padrão ancorado `^\s+<nome>:\s*<procedure>` (exclui helpers internos):
+
+| Router | Total | tenant | admin | orgRole | protected | public |
+|---|---:|---:|---:|---:|---:|---:|
+| processesRouter | 15 | 15 | 0 | 0 | 0 | 0 |
+| taskRouter | 12 | 12 | 0 | 0 | 0 | 0 |
+| departmentTasksRouter | 13 | 13 | 0 | 0 | 0 | 0 |
+| activitiesRouter | 1 | 1 | 0 | 0 | 0 | 0 |
+| commentsRouter | 4 | 4 | 0 | 0 | 0 | 0 |
+| documentsRouter | 16 | 16 | 0 | 0 | 0 | 0 |
+| aiAssistantRouter | 6 | 6 | 0 | 0 | 0 | 0 |
+| directContractsRouter | 37 | 37 | 0 | 0 | 0 | 0 |
+| deploymentRouter | 10 | 0 | 10 | 0 | 0 | 0 |
+| stabilityRouter | 11 | 0 | 11 | 0 | 0 | 0 |
+| onboardingRouter | 7 | 5 | 0 | 2 | 0 | 0 |
+| catmatRouter | 4 | 4 | 0 | 0 | 0 | 0 |
+| authRouter | 5 | 0 | 0 | 0 | 1 | 4 |
+| **TOTAL** | **141** | **113** | **21** | **2** | **1** | **4** |
+
+Soma das categorias = total (141), consistente. **Procedures mantidas fora de
+tenant/admin (5), todas em `authRouter`, não institucionais:** `updateTheme`
+(protectedProcedure — user-scoped, altera o tema do próprio usuário, sem dado de
+órgão); `me`/`register`/`login`/`logout` (publicProcedure — endpoints de
+autenticação; `register` agora fail-closed via `ALLOW_PUBLIC_REGISTRATION`).
 
 ## 5. Repositories criados / reutilizados (funções *ForOrganization)
 
@@ -151,19 +166,52 @@ migrations, limpeza de dados.
 Ver tabela da seção 3 (CODE_RESOLVED / PARTIALLY_RESOLVED / OPERATOR_ACTION_REQUIRED /
 DEFERRED_BY_SCOPE / MITIGATED_BY_PARENT_GUARD).
 
-## 19. Resultado das validações
+## 19. Resultado das validações (pós-revisão SEC-PR-A-REVIEW-001)
 
-- **Typecheck** (`tsc --noEmit`): 0 erros.
-- **Build** (`vite build` + esbuild): sucesso.
-- **Suíte completa** (sem DATABASE_URL): **3822 passed / 84 skipped / 0 falhas**
-  (baseline 3805/74; +17 freeze arquitetural, +10 smoke MySQL skipado sem DB; zero regressões).
-- **Smokes MySQL reais (isolados, DB real):** rc-sec-pr-a-core-isolation **10/10**;
-  legal-opinions-tenant-isolation **26/26**; contracts-legacy-full-isolation **18/18**.
+- **Typecheck** (`tsc --noEmit`): 0 erros. **Build**: sucesso.
+- **Suíte completa** (sem DATABASE_URL): **3822 passed / 92 skipped / 0 falhas**
+  (baseline 3805/74; +17 freeze, +10 core smoke, +8 RBAC smoke skipados sem DB; zero regressões).
+- **Smoke consolidado de segurança** (`pnpm run test:smoke:security`, MySQL real,
+  `--no-file-parallelism`): **70/70**, reproduzido em **duas execuções consecutivas**
+  (core 10, RBAC 9, legal-opinions 26, contracts-legacy 18, contracts-tenant 7 — nº por suíte).
 - **Teste arquitetural de congelamento** (rc-sec-pr-a-tenant-freeze): **17/17**.
 - **Lint:** 358 erros no total (baseline 360; nenhum novo nos arquivos alterados).
 - **Segredos:** nenhum valor no diff; `git diff --check` limpo.
-- Nenhum teste removido; nenhum novo skip injustificado (os skips do smoke são
-  `describe.skipIf(!DB)`, executam com DATABASE_URL).
+- Nenhum teste removido; nenhum novo skip injustificado (skips = `describe.skipIf(!DB)`).
+
+## 21. Revisão final (SEC-PR-A-REVIEW-001) — lacunas fechadas
+
+- **Bug de `insertId` (create de processo):** `createProcess` retornava o array
+  `[ResultSetHeader,...]` e o router lia `(result as any).insertId` → `NaN`,
+  quebrando o `activity_log` e a geração de DFD após o insert. Corrigido:
+  `createProcess` retorna o `insertId` numérico tipado (sem `as any`); o router usa
+  o mesmo id no retorno, no log e na geração. Teste MySQL de regressão exige sucesso,
+  id inteiro positivo, org do contexto e `activity_log` com o mesmo id.
+- **Atomicidade:** `createProcess` e `createActivityLog` usam conexões separadas;
+  transação completa exigiria refatorar os repositories (handle de tx) — permanece
+  em **DATA-012 / Bloco D**. O fix do `insertId` garante que o fluxo normal não falha
+  após o insert; o teste não tolera efeito parcial por bug de id.
+- **Determinismo dos smokes:** causa confirmada por evidência — o vitest roda arquivos
+  em paralelo por default; múltiplos smokes MySQL sobre o mesmo banco + o pool singleton
+  `getDb()` se interleavam (ECONNREFUSED/erros de estado). A CI já isola (um `vitest run`
+  por arquivo). Solução: script `test:smoke:security` com `--no-file-parallelism`
+  (execução serial), verde e reproduzível em duas execuções.
+- **RBAC de onboarding:** complementado — além de `orgRoleProcedure('admin')`,
+  `grantDepartmentPermission` bloqueia **auto-concessão** e valida que o **alvo é
+  membro da mesma organização** (cross-tenant/inexistente → NOT_FOUND). Escopo global
+  segue exclusivo de admin de plataforma. Matriz MySQL (9 testes) cobre anônimo,
+  operador, viewer, auto-concessão, escopo global por admin de órgão, alvo de outro
+  tenant, alvo inexistente (negativos) e concessão válida por admin de órgão / admin
+  de plataforma (positivos). **G3 mantido PASS.**
+- **Testes adaptados:** expect()/it() idênticos antes/depois nos 5 arquivos
+  (30/30, 33/33, 23/23, 22/22, 30/30); zero skip; sem perda de rigor. Mock de
+  `createProcess` atualizado ao contrato corrigido (retorna id numérico).
+- **Graphify:** 14198→14365 nós (+167), 27096→27343 arestas (+247) — crescimento
+  real e proporcional das novas funções `*ForOrganization`, não ruído. O churn por
+  commit é artefato do hook de pre-commit (reroda a cada commit); os 5 commits não
+  podem ser alterados; o snapshot final é o do 6º commit.
+- **Git/stash:** `git stash list` vazio (sem stash residual); cadeia linear dos 5
+  commits; working tree limpa; conteúdo do HEAD corresponde à implementação validada.
 
 ## 20. Parecer
 

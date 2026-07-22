@@ -143,21 +143,34 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
     expect(rows[0].status).toBe("em_dfd"); // inalterado
   });
 
-  it("processes.create grava organizationId do contexto (não do input)", async () => {
+  it("processes.create: sucesso, ID inteiro, org do contexto, activity_log com o MESMO ID (regressão insertId)", async () => {
     const callerA = await makeCaller(userA);
     const uniqueName = `Novo processo A ${Date.now()}`;
-    // O create legado insere o processo antes de um activity_log com bug pré-existente
-    // (processId NaN, sem transação — DATA-012). O que importa para o isolamento é
-    // que a linha do processo é gravada com organizationId resolvido pelo contexto.
-    await callerA.processes.create({
+    // RC-SEC-PR-A: create executa uma vez sem exceção após o insert; retorna um
+    // processId inteiro positivo (bug de insertId=NaN corrigido); grava
+    // organizationId resolvido pelo contexto; o activity_log referencia o MESMO id.
+    const res: any = await callerA.processes.create({
       name: uniqueName, object: "Objeto novo suficiente para validação",
       estimatedValue: 1000, modality: "pregao_eletronico", category: "compras",
-    } as any).catch(() => { /* activity_log legado pode falhar; irrelevante ao isolamento */ });
-    const [rows] = await conn.execute<any[]>(`SELECT id, organizationId FROM processes WHERE name = ?`, [uniqueName]);
+    } as any);
+    expect(res.success).toBe(true);
+    const processId = res.processId;
+    expect(Number.isInteger(processId)).toBe(true);
+    expect(processId).toBeGreaterThan(0);
+
+    const [rows] = await conn.execute<any[]>(`SELECT id, organizationId FROM processes WHERE id = ?`, [processId]);
     expect(rows.length).toBe(1);
     expect(rows[0].organizationId).toBe(ORG_A);
-    await conn.execute(`DELETE FROM documents WHERE processId = ?`, [rows[0].id]).catch(() => {});
-    await conn.execute(`DELETE FROM processes WHERE id = ?`, [rows[0].id]).catch(() => {});
+
+    // O activity_log de criação referencia exatamente o mesmo processId (nunca NaN).
+    const [logs] = await conn.execute<any[]>(
+      `SELECT processId FROM activity_logs WHERE processId = ? AND action = 'criou o processo'`, [processId],
+    );
+    expect(logs.length).toBeGreaterThanOrEqual(1);
+
+    await conn.execute(`DELETE FROM activity_logs WHERE processId = ?`, [processId]).catch(() => {});
+    await conn.execute(`DELETE FROM documents WHERE processId = ?`, [processId]).catch(() => {});
+    await conn.execute(`DELETE FROM processes WHERE id = ?`, [processId]).catch(() => {});
   }, 30000);
 
   // ── Documentos ─────────────────────────────────────────────────────────────

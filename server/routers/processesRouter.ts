@@ -77,7 +77,7 @@ export const processesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const valueInCents = Math.round(input.estimatedValue * 100);
 
-      const result = await db.createProcess({
+      const processId = await db.createProcess({
         name: input.name,
         description: input.description,
         object: input.object,
@@ -89,8 +89,6 @@ export const processesRouter = router({
         organizationId: ctx.organizationId,
         status: "em_dfd",
       });
-
-      const processId = Number((result as any).insertId);
 
       await db.createActivityLog({
         processId,

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { getGlobalTemplates, getTemplateByCategory, validateTemplate } from "../domain/operationalTemplates";
 import { grantDepartmentPermission, grantWorkflowPermission, getDepartmentPermissions, getWorkflowPermissions } from "../services/advancedPermissionService";
 import { createEnvironment, getEnvironments, checkEnvironmentHealth } from "../services/environmentManagementService";
+import { getMembership } from "../services/tenantService";
 
 /**
  * RC-SEC-PR-A (RBAC-004) — Onboarding endurecido.
@@ -69,12 +70,29 @@ export const onboardingRouter = router({
       scope:          z.enum(["own", "department", "organization", "global"]),
       expiresAt:      z.string().optional(),
     }))
-    .mutation(({ input, ctx }) => {
+    .mutation(async ({ input, ctx }) => {
       // Escopo global é exclusivo de admin de plataforma (nunca admin de órgão).
       if (input.scope === "global" && ctx.user!.role !== "admin") {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Apenas administradores de plataforma podem conceder escopo global.",
+        });
+      }
+      // Ninguém concede permissão a si mesmo (evita autoelevação horizontal).
+      if (input.userId === ctx.user!.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Não é permitido conceder permissão a si próprio.",
+        });
+      }
+      // O alvo deve ser membro ativo da MESMA organização do contexto — impede
+      // conceder permissão para usuário de outro tenant ou inexistente. Cross-tenant
+      // e alvo inexistente produzem o MESMO NOT_FOUND (não revela existência).
+      const targetMembership = await getMembership(input.userId, ctx.organizationId!);
+      if (!targetMembership) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Usuário-alvo não encontrado na organização.",
         });
       }
       return grantDepartmentPermission({

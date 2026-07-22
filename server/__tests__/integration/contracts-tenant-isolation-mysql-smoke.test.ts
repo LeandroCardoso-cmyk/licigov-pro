@@ -137,16 +137,11 @@ describe.skipIf(!DB)("contracts.analytics.getOverview — isolamento multi-tenan
     expect(result!.total).toBe(3);
   }, 30_000);
 
-  it("10. usuário sem nenhuma organização NÃO recebe agregação global — resolve via fallback determinístico para uma única org (1), nunca para o total de todas", async () => {
-    const resultNoOrg = await callGetOverview(userNoOrg);
-    const org1Direct = await getContractsOverview(1);
-    const orgADirect = await getContractsOverview(ORG_A);
-    const orgBDirect = await getContractsOverview(ORG_B);
-    // Prova de que NÃO é uma agregação global: o resultado do usuário sem
-    // organização é idêntico ao de uma organização específica (fallback=1),
-    // e não à soma de ORG_A+ORG_B (comportamento pré-correção).
-    expect(resultNoOrg!.total).toBe(org1Direct!.total);
-    expect(resultNoOrg!.total).not.toBe(orgADirect!.total + orgBDirect!.total);
+  it("10. usuário sem nenhuma organização é bloqueado (fail-closed) — nunca agregação global nem fallback org 1", async () => {
+    // RC-SEC-PR-A (SEC-017): o fallback determinístico para org=1 foi REMOVIDO.
+    // Usuário sem membership recebe FORBIDDEN/NO_ORGANIZATION_MEMBERSHIP e nunca
+    // vê agregação de nenhuma organização.
+    await expect(callGetOverview(userNoOrg)).rejects.toThrow(/NO_ORGANIZATION_MEMBERSHIP|acesso|organiza/i);
   }, 30_000);
 
   it("11. admin de plataforma só enxerga a org selecionada via header (mesmo mecanismo de qualquer tenantProcedure) — não existe rota que devolva visão global neste endpoint", async () => {

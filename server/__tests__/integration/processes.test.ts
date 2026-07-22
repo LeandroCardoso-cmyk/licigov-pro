@@ -81,7 +81,9 @@ describe("Processes Router — Integração", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
-    vi.mocked(db.createProcess).mockResolvedValue({ insertId: 10 } as any);
+    // RC-SEC-PR-A: createProcess agora retorna o insertId numérico diretamente
+    // (contrato corrigido — antes o router lia (result as any).insertId = NaN).
+    vi.mocked(db.createProcess).mockResolvedValue(10 as any);
     vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
     vi.mocked(db.getDocumentSettingsByUser).mockResolvedValue(null as any);
