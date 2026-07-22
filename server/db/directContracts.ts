@@ -308,3 +308,158 @@ export async function getRecentDirectContracts(limit: number = 10) {
   if (!db) return [];
   return await db.select().from(directContracts).orderBy(desc(directContracts.createdAt)).limit(limit);
 }
+
+// ─── RC-SEC-PR-A — Variantes tenant-scoped (TENANT-006) ─────────────────────
+// `direct_contracts` tem organizationId próprio → filtro direto. As tabelas-
+// filhas (documents/quotations/auditLogs/checklist) não têm coluna org: são
+// protegidas validando o contrato-pai via getDirectContractByIdForOrganization
+// no router (parent-guard), não por variante própria.
+
+export async function listDirectContractsForOrganization(
+  organizationId: number,
+  filters?: { type?: "dispensa" | "inexigibilidade"; status?: string; year?: number },
+) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [eq(directContracts.organizationId, organizationId)];
+  if (filters?.type) conditions.push(eq(directContracts.type, filters.type));
+  if (filters?.status) conditions.push(eq(directContracts.status, filters.status as any));
+  if (filters?.year) conditions.push(eq(directContracts.year, filters.year));
+  const results = await db
+    .select({ directContract: directContracts, legalArticle: directContractLegalArticles, platform: platforms })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .where(and(...conditions))
+    .orderBy(desc(directContracts.createdAt));
+  return results.map((row) => ({ ...row.directContract, legalArticle: row.legalArticle, platform: row.platform }));
+}
+
+export async function updateDirectContractForOrganization(
+  id: number,
+  organizationId: number,
+  data: Partial<InsertDirectContract>,
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .update(directContracts)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(directContracts.id, id), eq(directContracts.organizationId, organizationId)));
+  if ((result[0]?.affectedRows ?? 0) === 0) return null;
+  return await getDirectContractByIdForOrganization(id, organizationId);
+}
+
+export async function getDirectContractsOverviewForOrganization(organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const orgCond = eq(directContracts.organizationId, organizationId);
+  const totalResult = await db.select({ count: sql<number>`COUNT(*)` }).from(directContracts).where(orgCond);
+  const total = totalResult[0]?.count || 0;
+  const byTypeResult = await db.select({ type: directContracts.type, count: sql<number>`COUNT(*)` }).from(directContracts).where(orgCond).groupBy(directContracts.type);
+  const byStatusResult = await db.select({ status: directContracts.status, count: sql<number>`COUNT(*)` }).from(directContracts).where(orgCond).groupBy(directContracts.status);
+  const valueResult = await db.select({ total: sql<number>`SUM(${directContracts.value})` }).from(directContracts).where(orgCond);
+  const totalValue = valueResult[0]?.total || 0;
+  const avgTimeResult = await db.select({ avgDays: sql<number>`AVG(DATEDIFF(updatedAt, createdAt))` }).from(directContracts).where(and(orgCond, eq(directContracts.status, "completed")));
+  const avgCompletionTime = avgTimeResult[0]?.avgDays || 0;
+  const approvedResult = await db.select({ count: sql<number>`COUNT(*)` }).from(directContracts).where(and(orgCond, eq(directContracts.status, "approved")));
+  const approvedCount = approvedResult[0]?.count || 0;
+  const approvalRate = total > 0 ? (approvedCount / total) * 100 : 0;
+  return { total, byType: byTypeResult, byStatus: byStatusResult, totalValue, avgCompletionTime: Math.round(avgCompletionTime), approvalRate: Math.round(approvalRate * 10) / 10 };
+}
+
+export async function getDirectContractsChartDataForOrganization(organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const orgCond = eq(directContracts.organizationId, organizationId);
+  const monthlyResult = await db
+    .select({ month: sql<string>`DATE_FORMAT(createdAt, '%Y-%m')`, type: directContracts.type, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(${directContracts.value})` })
+    .from(directContracts)
+    .where(and(orgCond, sql`createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`))
+    .groupBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`, directContracts.type)
+    .orderBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`);
+  const byPlatformResult = await db
+    .select({ platformId: directContracts.platformId, platformName: platforms.name, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(${directContracts.value})` })
+    .from(directContracts)
+    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
+    .where(orgCond)
+    .groupBy(directContracts.platformId, platforms.name);
+  const byStatusResult = await db
+    .select({ status: directContracts.status, count: sql<number>`COUNT(*)` })
+    .from(directContracts)
+    .where(orgCond)
+    .groupBy(directContracts.status);
+  return { monthly: monthlyResult, byPlatform: byPlatformResult, byStatus: byStatusResult };
+}
+
+export async function getTopSuppliersForOrganization(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ supplierName: directContracts.supplierName, supplierCNPJ: directContracts.supplierCNPJ, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(${directContracts.value})` })
+    .from(directContracts)
+    .where(and(eq(directContracts.organizationId, organizationId), sql`${directContracts.supplierName} IS NOT NULL AND ${directContracts.supplierName} != ''`))
+    .groupBy(directContracts.supplierName, directContracts.supplierCNPJ)
+    .orderBy(sql`COUNT(*) DESC`)
+    .limit(5);
+}
+
+export async function getTopLegalArticlesForOrganization(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ articleId: directContracts.legalArticleId, articleNumber: directContractLegalArticles.article, articleDescription: directContractLegalArticles.description, count: sql<number>`COUNT(*)` })
+    .from(directContracts)
+    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
+    .where(and(eq(directContracts.organizationId, organizationId), sql`${directContracts.legalArticleId} IS NOT NULL`))
+    .groupBy(directContracts.legalArticleId, directContractLegalArticles.article, directContractLegalArticles.description)
+    .orderBy(sql`COUNT(*) DESC`)
+    .limit(5);
+}
+
+export async function getRecentDirectContractsForOrganization(organizationId: number, limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(directContracts)
+    .where(eq(directContracts.organizationId, organizationId))
+    .orderBy(desc(directContracts.createdAt))
+    .limit(limit);
+}
+
+/** Atualiza documento-filho apenas se o contrato-pai pertence à organização. */
+export async function updateDirectContractDocumentForOrganization(
+  id: number,
+  organizationId: number,
+  data: Partial<InsertDirectContractDocument>,
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ pid: directContractDocuments.directContractId })
+    .from(directContractDocuments)
+    .innerJoin(directContracts, eq(directContractDocuments.directContractId, directContracts.id))
+    .where(and(eq(directContractDocuments.id, id), eq(directContracts.organizationId, organizationId)))
+    .limit(1);
+  if (!rows.length) return null;
+  return updateDirectContractDocument(id, data);
+}
+
+/** Atualiza cotação-filha apenas se o contrato-pai pertence à organização. */
+export async function updateQuotationForOrganization(
+  id: number,
+  organizationId: number,
+  data: Partial<InsertDirectContractQuotation>,
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ pid: directContractQuotations.directContractId })
+    .from(directContractQuotations)
+    .innerJoin(directContracts, eq(directContractQuotations.directContractId, directContracts.id))
+    .where(and(eq(directContractQuotations.id, id), eq(directContracts.organizationId, organizationId)))
+    .limit(1);
+  if (!rows.length) return null;
+  return updateQuotation(id, data);
+}

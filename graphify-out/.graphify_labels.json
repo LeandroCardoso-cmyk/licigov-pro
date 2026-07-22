@@ -1080,7 +1080,19 @@
   "1078": "📚 Expansão do Sistema RAG",
   "1079": "@tiptap/extension-placeholder",
   "1080": "bindingObservabilityService.ts",
+  "1081": "reviewWorkspaceRouter.ts",
+  "1082": "copilotMemoryService.ts",
+  "1083": "TaskInfoPanel.tsx",
+  "1084": "DocumentRetriever",
+  "1085": "limitsMiddleware.ts",
   "1086": "Fase 17 - Sistema de Administração",
   "1087": "Fase 14 - Sistema de Comentários",
-  "1112": "Funcionalidades Avançadas"
+  "1088": "knowledgeProjection.ts",
+  "1089": "📊 Estimativa de Custos (IA)",
+  "1090": "🎨 Melhorias de UI e Dashboard (Nova Implementação)",
+  "1091": "Fase 2 - Funcionalidades Core do MVP",
+  "1092": "📚 Expansão do Sistema RAG",
+  "1093": "Fase 15 - Dashboard de Analytics",
+  "1094": "Fase 6 - Aplicar Personalização e Downloads",
+  "1095": "helmet"
 }
