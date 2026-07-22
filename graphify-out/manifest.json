@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
-    "mtime": 1784577578.4601257,
-    "ast_hash": "ab40ecb5e4af8e8829666c1f956e45c8",
+    "mtime": 1784665887.828452,
+    "ast_hash": "321a65235ba001a17c101d84b16aa0b6",
     "semantic_hash": ""
   },
   "server/db/copilots.ts": {
@@ -4300,8 +4300,8 @@
     "semantic_hash": ""
   },
   "server/db/directContracts.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "f50bcad5760bff1e2ab1fb014c2a2411",
+    "mtime": 1784674911.6805556,
+    "ast_hash": "9a641cc4820657dc7b528fa7d73bcbc9",
     "semantic_hash": ""
   },
   "server/db/documentRepository.ts": {
@@ -4325,8 +4325,8 @@
     "semantic_hash": ""
   },
   "server/db/legalOpinions.ts": {
-    "mtime": 1782612419.285623,
-    "ast_hash": "1190f793d4e16bcdea3390d31f42b529",
+    "mtime": 1784646400.5204594,
+    "ast_hash": "e64ccc86e941d06497d5b027b3b29286",
     "semantic_hash": ""
   },
   "server/db/lgpd.ts": {
@@ -4350,8 +4350,8 @@
     "semantic_hash": ""
   },
   "server/db/processes.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "43e7ab475429e89d85382621893266f7",
+    "mtime": 1784674897.500556,
+    "ast_hash": "2bbb603cc48a8a2c764f71212fbca053",
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
@@ -5180,8 +5180,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionsRouter.ts": {
-    "mtime": 1782612419.314427,
-    "ast_hash": "7df1f61f49790b5c000e82a6b69d5eab",
+    "mtime": 1784674963.7205534,
+    "ast_hash": "eec694097ce3d8f5fd982d8a94ab1cc7",
     "semantic_hash": ""
   },
   "server/routers/legalReasoningRouter.ts": {
@@ -8495,8 +8495,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGACY_INVENTORY.md": {
-    "mtime": 1784578346.1440995,
-    "ast_hash": "30f30bc37a21dc6c5dc8a52168117014",
+    "mtime": 1784675487.3445323,
+    "ast_hash": "8665d1782c4721589ae731edc829562e",
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
@@ -8600,8 +8600,8 @@
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1784578391.056098,
-    "ast_hash": "70b945df88148cd7e4c2c92e758649ea",
+    "mtime": 1784675500.1685317,
+    "ast_hash": "ef259b420b26b85cc192cc35c9997757",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -9737,6 +9737,16 @@
   "server/__tests__/integration/rc-c01a1-contracts-legacy-freeze.test.ts": {
     "mtime": 1784578289.6441014,
     "ast_hash": "098d617910934f17f061b46c31f06146",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts": {
+    "mtime": 1784675328.0685387,
+    "ast_hash": "6cebcaa317b5da0b2a9a06788556f1da",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
+    "mtime": 1784675446.6685338,
+    "ast_hash": "ebc5e34a77765e7bcd3ea388fcf2890c",
     "semantic_hash": ""
   }
 }

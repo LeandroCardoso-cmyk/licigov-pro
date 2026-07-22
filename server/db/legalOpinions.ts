@@ -14,7 +14,7 @@ export async function createLegalOpinion(data: InsertLegalOpinion) {
   return result[0].insertId;
 }
 
-export async function getLegalOpinions(filters?: {
+export async function getLegalOpinionsByOrganization(organizationId: number, filters?: {
   status?: string;
   sourceType?: string;
   requestedBy?: number;
@@ -22,45 +22,66 @@ export async function getLegalOpinions(filters?: {
 }) {
   const db = await getDb();
   if (!db) return [];
-  let query = db.select().from(legalOpinions);
-  const conditions = [];
+  const conditions = [eq(legalOpinions.organizationId, organizationId)];
   if (filters?.status) conditions.push(eq(legalOpinions.status, filters.status as any));
   if (filters?.sourceType) conditions.push(eq(legalOpinions.sourceType, filters.sourceType as any));
   if (filters?.requestedBy) conditions.push(eq(legalOpinions.requestedBy, filters.requestedBy));
   if (filters?.isTemplate !== undefined) conditions.push(eq(legalOpinions.isTemplate, filters.isTemplate));
-  if (conditions.length > 0) query = query.where(and(...conditions)) as any;
-  return await query.orderBy(desc(legalOpinions.createdAt));
+  return await db.select().from(legalOpinions).where(and(...conditions)).orderBy(desc(legalOpinions.createdAt));
 }
 
-export async function getLegalOpinionById(id: number) {
+/** RC-LEGAL-SEC-001 — organizationId obrigatório; nunca aceitar do cliente sem resolução no servidor. */
+export async function getLegalOpinionByIdForOrganization(id: number, organizationId: number) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(legalOpinions).where(eq(legalOpinions.id, id)).limit(1);
+  const result = await db.select().from(legalOpinions)
+    .where(and(eq(legalOpinions.id, id), eq(legalOpinions.organizationId, organizationId)))
+    .limit(1);
   return result[0] || null;
 }
 
-export async function updateLegalOpinion(id: number, data: Partial<InsertLegalOpinion>) {
+/** Retorna null se o parecer não existir OU não pertencer à organização (nunca revela a diferença). */
+export async function updateLegalOpinionForOrganization(id: number, organizationId: number, data: Partial<InsertLegalOpinion>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const existing = await getLegalOpinionByIdForOrganization(id, organizationId);
+  if (!existing) return null;
   await db.update(legalOpinions).set({ ...data, updatedAt: new Date() }).where(eq(legalOpinions.id, id));
+  return await getLegalOpinionByIdForOrganization(id, organizationId);
 }
 
-export async function deleteLegalOpinion(id: number) {
+/** Retorna false se o parecer não existir OU não pertencer à organização. */
+export async function deleteLegalOpinionForOrganization(id: number, organizationId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const existing = await getLegalOpinionByIdForOrganization(id, organizationId);
+  if (!existing) return false;
   await db.delete(legalOpinions).where(eq(legalOpinions.id, id));
+  return true;
 }
 
-export async function getLegalOpinionsBySource(sourceType: string, sourceId: number) {
+export async function getLegalOpinionsBySourceForOrganization(sourceType: string, sourceId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
   return await db
     .select()
     .from(legalOpinions)
-    .where(and(eq(legalOpinions.sourceType, sourceType as any), eq(legalOpinions.sourceId, sourceId)))
+    .where(and(
+      eq(legalOpinions.sourceType, sourceType as any),
+      eq(legalOpinions.sourceId, sourceId),
+      eq(legalOpinions.organizationId, organizationId),
+    ))
     .orderBy(desc(legalOpinions.createdAt));
 }
 
+// ─── Assinatura digital (digital_signatures) ───────────────────────────────────
+// RC-LEGAL-SEC-001 — auditado, não alterado: getDigitalSignatureById/ByDocument e
+// invalidateDigitalSignature/createDigitalSignature não têm coluna organizationId
+// própria. getDigitalSignatureById só é chamado a partir de `opinion.signatureId`,
+// campo INEXISTENTE no schema de legalOpinions — o branch que o invoca nunca
+// executa em produção (sempre undefined). As outras 3 funções não têm nenhum
+// consumidor no repositório. Nenhuma correção aplicada aqui: fora do escopo real
+// (nenhuma leitura cross-tenant alcançável por este caminho).
 export async function createDigitalSignature(data: InsertDigitalSignature) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -112,11 +133,12 @@ function filterByPeriod<T extends { createdAt: Date | string }>(
   });
 }
 
-export async function getLegalOpinionsOverview(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
+/** RC-LEGAL-SEC-001 — organizationId obrigatório: antes agregava de todas as organizações. */
+export async function getLegalOpinionsOverviewForOrganization(organizationId: number, period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return null;
-  const allOpinions = await db.select().from(legalOpinions);
-  const filtered = filterByPeriod(allOpinions, period);
+  const orgOpinions = await db.select().from(legalOpinions).where(eq(legalOpinions.organizationId, organizationId));
+  const filtered = filterByPeriod(orgOpinions, period);
   return {
     total: filtered.length,
     favorable: filtered.filter((op) => op.conclusion === "favorable").length,
@@ -126,11 +148,11 @@ export async function getLegalOpinionsOverview(period: "all" | "7days" | "30days
   };
 }
 
-export async function getLegalOpinionsByMonth(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
+export async function getLegalOpinionsByMonthForOrganization(organizationId: number, period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
-  const allOpinions = await db.select().from(legalOpinions);
-  const filtered = filterByPeriod(allOpinions, period);
+  const orgOpinions = await db.select().from(legalOpinions).where(eq(legalOpinions.organizationId, organizationId));
+  const filtered = filterByPeriod(orgOpinions, period);
   const monthlyData: Record<string, number> = {};
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
@@ -144,11 +166,11 @@ export async function getLegalOpinionsByMonth(period: "all" | "7days" | "30days"
   return Object.entries(monthlyData).map(([month, count]) => ({ month, count }));
 }
 
-export async function getTopCitedArticles(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
+export async function getTopCitedArticlesForOrganization(organizationId: number, period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
-  const allOpinions = await db.select().from(legalOpinions);
-  const filtered = filterByPeriod(allOpinions, period);
+  const orgOpinions = await db.select().from(legalOpinions).where(eq(legalOpinions.organizationId, organizationId));
+  const filtered = filterByPeriod(orgOpinions, period);
   const articleCounts: Record<string, number> = {};
   filtered.forEach((opinion) => {
     if (opinion.citedArticles && Array.isArray(opinion.citedArticles)) {
@@ -163,11 +185,11 @@ export async function getTopCitedArticles(period: "all" | "7days" | "30days" | "
     .slice(0, 10);
 }
 
-export async function getConclusionDistribution(period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
+export async function getConclusionDistributionForOrganization(organizationId: number, period: "all" | "7days" | "30days" | "90days" | "year" = "30days") {
   const db = await getDb();
   if (!db) return [];
-  const allOpinions = await db.select().from(legalOpinions);
-  const filtered = filterByPeriod(allOpinions, period);
+  const orgOpinions = await db.select().from(legalOpinions).where(eq(legalOpinions.organizationId, organizationId));
+  const filtered = filterByPeriod(orgOpinions, period);
   return [
     { conclusion: "Favorável", count: filtered.filter((op) => op.conclusion === "favorable").length },
     { conclusion: "Desfavorável", count: filtered.filter((op) => op.conclusion === "unfavorable").length },
@@ -197,7 +219,8 @@ export async function hasSignaturePassword(userId: number): Promise<boolean> {
   return user.length > 0 && !!user[0].signaturePassword;
 }
 
-export async function addSignatureToHistory(data: {
+/** Retorna null se o parecer-pai não existir OU não pertencer à organização. */
+export async function addSignatureToHistoryForOrganization(data: {
   opinionId: number;
   userId: number;
   userName: string;
@@ -206,9 +229,11 @@ export async function addSignatureToHistory(data: {
   documentHash: string;
   signature: string;
   certificateInfo: any;
-}): Promise<number> {
+}, organizationId: number): Promise<number | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const parent = await getLegalOpinionByIdForOrganization(data.opinionId, organizationId);
+  if (!parent) return null;
   const result = await db.insert(signatureHistory).values({
     opinionId: data.opinionId,
     userId: data.userId,
@@ -223,22 +248,29 @@ export async function addSignatureToHistory(data: {
   return Number((result as any)[0]?.insertId ?? 0);
 }
 
-export async function getSignatureHistory(opinionId: number) {
+/** Retorna [] se o parecer-pai não existir OU não pertencer à organização (signature_history não tem coluna organizationId própria). */
+export async function getSignatureHistoryForOrganization(opinionId: number, organizationId: number) {
   const db = await getDb();
   if (!db) return [];
+  const parent = await getLegalOpinionByIdForOrganization(opinionId, organizationId);
+  if (!parent) return [];
   return await db.select().from(signatureHistory).where(eq(signatureHistory.opinionId, opinionId)).orderBy(signatureHistory.signedAt);
 }
 
-export async function getSignatureCount(opinionId: number): Promise<number> {
+export async function getSignatureCountForOrganization(opinionId: number, organizationId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
+  const parent = await getLegalOpinionByIdForOrganization(opinionId, organizationId);
+  if (!parent) return 0;
   const signatures = await db.select().from(signatureHistory).where(eq(signatureHistory.opinionId, opinionId));
   return signatures.length;
 }
 
-export async function hasUserSignedOpinion(opinionId: number, userId: number): Promise<boolean> {
+export async function hasUserSignedOpinionForOrganization(opinionId: number, userId: number, organizationId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
+  const parent = await getLegalOpinionByIdForOrganization(opinionId, organizationId);
+  if (!parent) return false;
   const signatures = await db
     .select()
     .from(signatureHistory)
