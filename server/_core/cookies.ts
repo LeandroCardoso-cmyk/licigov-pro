@@ -39,10 +39,13 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // RC-SEC-PR-A (SEC-035): aplicação same-origin → sameSite "lax" (era "none",
+  // resíduo da era iframe/cross-site). Reduz superfície CSRF sem quebrar o fluxo
+  // same-origin. httpOnly sempre; secure quando a requisição é https (produção).
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

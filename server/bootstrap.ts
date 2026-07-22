@@ -11,11 +11,14 @@ import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
 import { AI_CONFIG, validateAiRuntime } from "./config/ai";
+import { ADMIN_PASSWORD as CONFIGURED_ADMIN_PASSWORD } from "./config/auth";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    ?? "cardosomsales@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Admin@123";
+// RC-SEC-PR-A (CONFIG-005): sem default de produção. A resolução (obrigatória em
+// produção/staging, fixture em dev) vem de config/auth.ts — jamais "Admin@123".
+const ADMIN_PASSWORD = CONFIGURED_ADMIN_PASSWORD;
 const ADMIN_NAME     = process.env.ADMIN_NAME     ?? "Administrador";
 
 // process.cwd() is always the project root in both Railway and local dev,

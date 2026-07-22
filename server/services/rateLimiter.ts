@@ -10,8 +10,13 @@ import { TRPCError } from '@trpc/server';
 import { middleware } from '../_core/trpc';
 
 /**
- * Armazenamento em memória para rate limiting
- * Em produção, usar Redis para persistência entre instâncias
+ * Armazenamento em memória para rate limiting.
+ *
+ * RC-SEC-PR-A (SEC-034): este store é um FALLBACK explicitamente in-memory —
+ * NÃO é distribuído. Reinicia a cada deploy e não coordena entre instâncias.
+ * Para rate limit distribuído/produção multi-instância, integrar Redis (fora do
+ * escopo desta PR). A resolução de identificador foi endurecida abaixo para não
+ * confiar cegamente em `x-forwarded-for` arbitrário (spoofável).
  */
 interface RateLimitEntry {
   count: number;
@@ -19,6 +24,20 @@ interface RateLimitEntry {
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
+
+/**
+ * Resolve o identificador de rate limit de forma resistente a spoofing.
+ * Preferência: usuário autenticado (não forjável) → IP resolvido pelo Express
+ * (`req.ip`, que respeita a configuração `trust proxy` do app) → 'anonymous'.
+ * NUNCA usa o header `x-forwarded-for` cru como fonte primária.
+ */
+function resolveRateLimitIdentifier(ctx: any): string {
+  const userId = ctx?.user?.id;
+  if (userId != null) return `user:${userId}`;
+  const ip = ctx?.req?.ip;
+  if (typeof ip === "string" && ip.length > 0) return `ip:${ip}`;
+  return "anonymous";
+}
 
 /**
  * Configuração de limites por tipo de operação
@@ -57,6 +76,13 @@ export const RATE_LIMITS = {
     windowMs: 60 * 60 * 1000,
     max: 30,
     message: 'Limite de exportações atingido. Tente novamente em 1 hora.',
+  },
+
+  // Consultas ao catálogo CATMAT/CATSER (proxy à API pública): 30 por minuto.
+  catmat: {
+    windowMs: 60 * 1000,
+    max: 30,
+    message: 'Muitas consultas ao catálogo. Tente novamente em 1 minuto.',
   },
 };
 
@@ -104,10 +130,7 @@ export function rateLimitMiddleware(limitType: keyof typeof RATE_LIMITS) {
   return middleware(async ({ ctx, next }) => {
     const limitConfig = RATE_LIMITS[limitType];
 
-    const identifier = ctx.user?.id?.toString() ||
-      (ctx.req as any)?.ip ||
-      (ctx.req?.headers as any)?.['x-forwarded-for'] ||
-      'anonymous';
+    const identifier = resolveRateLimitIdentifier(ctx);
 
     const result = checkRateLimit(identifier, limitType);
 
