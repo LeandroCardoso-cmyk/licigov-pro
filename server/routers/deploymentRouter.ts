@@ -1,5 +1,5 @@
 import { z }        from "zod";
-import { router, publicProcedure } from "../_core/trpc";
+import { router, adminProcedure } from "../_core/trpc";
 import {
   createDeployment,
   advancePhase,
@@ -16,7 +16,7 @@ import {
 } from "../services/deploymentValidationService";
 
 export const deploymentRouter = router({
-  createDeployment: publicProcedure
+  createDeployment: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       municipio:      z.string(),
@@ -27,7 +27,7 @@ export const deploymentRouter = router({
       createDeployment(input.organizationId, input.municipio, input.targetVersion, input.currentVersion)
     ),
 
-  advancePhase: publicProcedure
+  advancePhase: adminProcedure
     .input(z.object({
       deployment: z.object({
         id: z.string(), organizationId: z.number(), municipio: z.string(),
@@ -46,7 +46,7 @@ export const deploymentRouter = router({
       advancePhase(input.deployment as Parameters<typeof advancePhase>[0], input.actor, input.notes)
     ),
 
-  pauseDeployment: publicProcedure
+  pauseDeployment: adminProcedure
     .input(z.object({
       deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor:  z.string(),
@@ -56,7 +56,7 @@ export const deploymentRouter = router({
       pauseDeployment(input.deployment as Parameters<typeof pauseDeployment>[0], input.actor, input.reason)
     ),
 
-  resumeDeployment: publicProcedure
+  resumeDeployment: adminProcedure
     .input(z.object({
       deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor: z.string(),
@@ -65,7 +65,7 @@ export const deploymentRouter = router({
       resumeDeployment(input.deployment as Parameters<typeof resumeDeployment>[0], input.actor)
     ),
 
-  initiateRollback: publicProcedure
+  initiateRollback: adminProcedure
     .input(z.object({
       deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
       actor:  z.string(),
@@ -75,11 +75,11 @@ export const deploymentRouter = router({
       initiateRollback(input.deployment as Parameters<typeof initiateRollback>[0], input.actor, input.reason)
     ),
 
-  getActiveDeployments: publicProcedure
+  getActiveDeployments: adminProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }) => getActiveDeployments(input.organizationId)),
 
-  computeHealth: publicProcedure
+  computeHealth: adminProcedure
     .input(z.object({
       deployment: z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
     }))
@@ -87,7 +87,7 @@ export const deploymentRouter = router({
       computeDeploymentHealth(input.deployment as Parameters<typeof computeDeploymentHealth>[0])
     ),
 
-  runValidation: publicProcedure
+  runValidation: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       deploymentId:   z.string(),
@@ -99,22 +99,22 @@ export const deploymentRouter = router({
       runFullValidation(input.organizationId, input.deploymentId, input.targetVersion, input.currentVersion, input.envId)
     ),
 
-  getValidationHistory: publicProcedure
+  getValidationHistory: adminProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }) => getValidationHistory(input.organizationId)),
 
-  applyGovernance: publicProcedure
+  applyGovernance: adminProcedure
     .input(z.object({
       deployment:            z.object({ id: z.string(), organizationId: z.number(), municipio: z.string(), phase: z.string(), status: z.string(), targetVersion: z.string(), currentVersion: z.string(), rolloutPercentage: z.number(), healthScore: z.number(), events: z.array(z.any()), validationResults: z.record(z.string(), z.boolean()), rollbackPoint: z.string().nullable(), activatedAt: z.string().nullable(), completedAt: z.string().nullable(), createdAt: z.string() }),
-      approvedBy:            z.number(),
       approvalJustification: z.string(),
       constraints:           z.array(z.string()),
       checks:                z.array(z.object({ name: z.string(), passed: z.boolean(), notes: z.string() })),
     }))
-    .mutation(({ input }) =>
+    .mutation(({ input, ctx }) =>
+      // RC-SEC-PR-A: aprovador derivado do contexto autenticado, nunca do input.
       applyGovernance(
         input.deployment as Parameters<typeof applyGovernance>[0],
-        input.approvedBy,
+        ctx.user.id,
         input.approvalJustification,
         input.constraints,
         input.checks,

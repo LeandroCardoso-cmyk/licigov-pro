@@ -4,22 +4,27 @@
  * tRPC procedures para onboarding institucional de novas organizacoes piloto.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, orgRoleProcedure, router } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getGlobalTemplates, getTemplateByCategory, validateTemplate } from "../domain/operationalTemplates";
 import { grantDepartmentPermission, grantWorkflowPermission, getDepartmentPermissions, getWorkflowPermissions } from "../services/advancedPermissionService";
 import { createEnvironment, getEnvironments, checkEnvironmentHealth } from "../services/environmentManagementService";
 
+/**
+ * RC-SEC-PR-A (RBAC-004) — Onboarding endurecido.
+ * organizationId e grantedBy vêm SEMPRE do contexto autenticado (nunca do input).
+ * Concessão de permissão exige papel admin na organização (orgRoleProcedure).
+ * Escopo "global" é exclusivo de admin de plataforma. Sem autoelevação.
+ */
 export const onboardingRouter = router({
-  getTemplates: protectedProcedure
-    .input(z.object({ organizationId: z.number() }))
+  getTemplates: tenantProcedure
     .query(() => {
       return getGlobalTemplates();
     }),
 
-  getTemplateByCategory: protectedProcedure
+  getTemplateByCategory: tenantProcedure
     .input(z.object({
-      organizationId: z.number(),
       category:       z.enum([
         "aquisicao_comum", "medicamentos", "combustivel",
         "material_expediente", "servicos_terceirizados",
@@ -30,50 +35,66 @@ export const onboardingRouter = router({
       return getTemplateByCategory(input.category);
     }),
 
-  setupEnvironment: protectedProcedure
+  setupEnvironment: orgRoleProcedure("admin")
     .input(z.object({
-      organizationId: z.number(),
       name:           z.string().min(1),
       type:           z.enum(["development", "staging", "production"]),
-      createdBy:      z.number(),
     }))
-    .mutation(({ input }) => {
-      return createEnvironment(input);
+    .mutation(({ input, ctx }) => {
+      return createEnvironment({
+        organizationId: ctx.organizationId!,
+        name: input.name,
+        type: input.type,
+        createdBy: ctx.user!.id,
+      });
     }),
 
-  getEnvironments: protectedProcedure
-    .input(z.object({ organizationId: z.number() }))
-    .query(({ input }) => {
-      return getEnvironments(input.organizationId);
+  getEnvironments: tenantProcedure
+    .query(({ ctx }) => {
+      return getEnvironments(ctx.organizationId!);
     }),
 
-  checkEnvironmentHealth: protectedProcedure
-    .input(z.object({ organizationId: z.number(), envId: z.string() }))
-    .query(({ input }) => {
-      return checkEnvironmentHealth(input.envId, input.organizationId);
+  checkEnvironmentHealth: tenantProcedure
+    .input(z.object({ envId: z.string() }))
+    .query(({ input, ctx }) => {
+      return checkEnvironmentHealth(input.envId, ctx.organizationId!);
     }),
 
-  grantDepartmentPermission: protectedProcedure
+  grantDepartmentPermission: orgRoleProcedure("admin")
     .input(z.object({
-      organizationId: z.number(),
       userId:         z.number(),
       department:     z.string().min(1),
       resource:       z.enum(["processo", "item_tr", "template", "relatorio", "configuracao", "usuario", "auditoria"]),
       actions:        z.array(z.enum(["create", "read", "update", "delete", "approve", "reject", "export", "assign", "escalate"])),
       scope:          z.enum(["own", "department", "organization", "global"]),
-      grantedBy:      z.number(),
       expiresAt:      z.string().optional(),
     }))
-    .mutation(({ input }) => {
-      return grantDepartmentPermission(input);
+    .mutation(({ input, ctx }) => {
+      // Escopo global é exclusivo de admin de plataforma (nunca admin de órgão).
+      if (input.scope === "global" && ctx.user!.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Apenas administradores de plataforma podem conceder escopo global.",
+        });
+      }
+      return grantDepartmentPermission({
+        organizationId: ctx.organizationId!,
+        userId:         input.userId,
+        department:     input.department,
+        resource:       input.resource,
+        actions:        input.actions,
+        scope:          input.scope,
+        grantedBy:      ctx.user!.id,
+        expiresAt:      input.expiresAt,
+      });
     }),
 
-  getUserPermissions: protectedProcedure
-    .input(z.object({ organizationId: z.number(), userId: z.number() }))
-    .query(({ input }) => {
+  getUserPermissions: tenantProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(({ input, ctx }) => {
       return {
-        department: getDepartmentPermissions(input.organizationId, input.userId),
-        workflow:   getWorkflowPermissions(input.organizationId, input.userId),
+        department: getDepartmentPermissions(ctx.organizationId!, input.userId),
+        workflow:   getWorkflowPermissions(ctx.organizationId!, input.userId),
       };
     }),
 });
