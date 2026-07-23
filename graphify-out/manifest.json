@@ -4210,8 +4210,8 @@
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784553888.217665,
-    "ast_hash": "3810f15f94210e771e3b2f3a17c5f84a",
+    "mtime": 1784842117.852582,
+    "ast_hash": "baccf4faba47859e7f49948fc6cd148b",
     "semantic_hash": ""
   },
   "server/config/app.ts": {
@@ -8630,8 +8630,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
-    "mtime": 1784472877.191241,
-    "ast_hash": "20ba8e7672c0ddf557249c1118a5181d",
+    "mtime": 1784842245.824579,
+    "ast_hash": "417795befd00261128997014102c6470",
     "semantic_hash": ""
   },
   "docs/architecture/AI_EXECUTION_ENGINE.md": {
@@ -9505,8 +9505,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784839453.7555864,
-    "ast_hash": "f176762fca4189d7c122200841dc7e2e",
+    "mtime": 1784842016.2405844,
+    "ast_hash": "dd3e1dfae180140ee0886ea343d9a6c8",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784828721.0493016,
-    "ast_hash": "c13b35f0f5d3db74c7107cc440d64876",
+    "mtime": 1784842202.20858,
+    "ast_hash": "3e9c0dd0b6d56ac2d97f54b6c9849b83",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9837,6 +9837,16 @@
   "docs/ai/RAG_QUALITY_002_REPORT.md": {
     "mtime": 1784839812.623578,
     "ast_hash": "e5f04ed1bf08b0409cb97531ffaabff5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rag-quality-003-truncation-retry.test.ts": {
+    "mtime": 1784842414.7965753,
+    "ast_hash": "ea69c56d6574376453ac1a9d0d13a095",
+    "semantic_hash": ""
+  },
+  "docs/ai/RAG_QUALITY_003_REPORT.md": {
+    "mtime": 1784842548.3325722,
+    "ast_hash": "5de67b894b9c0f5126105acda09f5c2e",
     "semantic_hash": ""
   }
 }

@@ -176,9 +176,21 @@ function headingTextOf(b: Cand["b"]): string {
   return Array.isArray(heading) ? heading.filter((h): h is string => typeof h === "string").join(" ") : "";
 }
 
+/**
+ * RAG-QUALITY-003 — Chave de agrupamento para vizinhança estrutural: até o nível de CAPÍTULO
+ * (Título + Capítulo), não a Seção/Subseção mais profunda. Medido: "Da Contratação Direta"
+ * (Capítulo VIII) contém 3 Seções (Processo/Inexigibilidade/Dispensa — arts. 72-75); agrupar só por
+ * Seção deixava cada artigo reforçar apenas seus vizinhos DENTRO da própria Seção (ex.: Art. 75
+ * sozinho em "Da Dispensa de Licitação"), sem reforço cruzado entre 72/74/75 — para uma pergunta
+ * ampla sobre "contratação direta" (que casa no nível de Capítulo), isso deixava artigos incidentais
+ * de OUTROS capítulos (Art. 89, Art. 14) ocuparem vagas que deveriam ir para o núcleo temático do
+ * próprio Capítulo. Um Capítulo é a unidade que a Lei usa para agrupar um único instituto jurídico —
+ * agrupar a vizinhança nesse nível é o nível certo de "artigos do mesmo capítulo/seção".
+ */
 function pathOf(b: Cand["b"]): string {
   const path = (b.metadata as { path?: unknown }).path;
-  return Array.isArray(path) ? path.filter((p): p is string => typeof p === "string").join(">") : "";
+  if (!Array.isArray(path)) return "";
+  return path.filter((p): p is string => typeof p === "string").slice(0, 2).join(">");
 }
 
 // RAG-QUALITY-002 — Títulos/capítulos BOILERPLATE, presentes em praticamente toda lei brasileira,
@@ -197,7 +209,7 @@ const GENERIC_CONTAINER_PENALTY = 0.4;
 
 /** Uma rodada de recuperação (BM25-lite + boost de título + vizinhança). Determinística. */
 function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: InstitutionalContext, query: string, maxPer: number, minScore: number): {
-  byDoc: Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean }> }>;
+  byDoc: Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean; groupKey: string; isClusterMember: boolean }> }>;
   ignored: Set<string>;
   reachableTermsCount: number;
 } {
@@ -303,7 +315,7 @@ function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: Institutio
   const groupMax = new Map<string, number>();
   for (const { c, base } of withBaseScore) groupMax.set(c.groupKey, Math.max(groupMax.get(c.groupKey) ?? 0, base));
 
-  const byDoc = new Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean }> }>();
+  const byDoc = new Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean; groupKey: string; isClusterMember: boolean }> }>();
   for (const { c, base, isGeneric } of withBaseScore) {
     // Vizinhança estrutural: artigos do MESMO container de um artigo bem pontuado recebem reforço
     // proporcional ao pico do grupo — aproxima a recuperação do "dispositivo + vizinhos normativos".
@@ -312,7 +324,7 @@ function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: Institutio
     if (score < minScore) continue;
     let g = byDoc.get(c.doc.documentId);
     if (!g) { g = { doc: c.doc, ingested: c.ingested, scored: [] }; byDoc.set(c.doc.documentId, g); }
-    g.scored.push({ b: c.b, score, isGenericPenalized: isGeneric });
+    g.scored.push({ b: c.b, score, isGenericPenalized: isGeneric, groupKey: c.groupKey, isClusterMember: hasSpecificHeadingMatch(c) });
   }
 
   for (const doc of context.applicableDocuments) {
@@ -340,7 +352,21 @@ function buildResult(context: InstitutionalContext, byDoc: ReturnType<typeof run
   for (const doc of context.applicableDocuments) {
     const g = byDoc.get(doc.documentId);
     if (!g || g.scored.length === 0) { ignored.add(doc.documentId); continue; }
-    const top = g.scored.sort((a, b) => b.score - a.score || a.b.id.localeCompare(b.b.id)).slice(0, maxPer);
+    const sorted = g.scored.sort((a, b) => b.score - a.score || a.b.id.localeCompare(b.b.id));
+    // RAG-QUALITY-003 — quando a passagem de maior score pertence a um cluster temático específico
+    // (capítulo cujo título casa com a consulta — ex.: "Da Contratação Direta"), os DEMAIS artigos
+    // desse MESMO cluster têm prioridade sobre concorrentes incidentais de outros capítulos, mesmo
+    // que estes pontuem um pouco mais alto isoladamente. Medido: para "qual artigo trata da
+    // contratação direta?", sem isso só o Art. 75 entrava no top-3 (Art. 89/14 — sem relação com o
+    // tema — ocupavam as outras vagas); os arts. 72/74 (mesmo capítulo) ficavam de fora mesmo com
+    // folga generosa de vagas.
+    const leader = sorted[0];
+    const top = leader?.isClusterMember
+      ? [
+          ...sorted.filter(s => s.isClusterMember && s.groupKey === leader.groupKey),
+          ...sorted.filter(s => !(s.isClusterMember && s.groupKey === leader.groupKey)),
+        ].slice(0, maxPer)
+      : sorted.slice(0, maxPer);
 
     documentsLoaded.push(doc.documentId);
     documents.push({ documentId: doc.documentId, normId: doc.normId, title: doc.title, authority: doc.authority, jurisdiction: doc.jurisdiction, version: doc.version, bindingLevel: doc.bindingLevel, status: doc.status });
