@@ -71,6 +71,45 @@ export function classifyEvidenceSufficiency(pkg: ContextPackage, opts?: Evidence
   return "parcial";
 }
 
+interface SourceApplicabilityInfoShape {
+  readonly category: string;
+  readonly srpSpecific: boolean;
+  readonly federalOnly: boolean;
+  readonly conditional: boolean;
+}
+interface SourceScopeAuditShape {
+  readonly includedNormIds?: readonly string[];
+  readonly applicability?: Record<string, SourceApplicabilityInfoShape>;
+}
+
+/**
+ * SOURCE-SCOPE-ROUTER-001 (ponto 6) — monta a ressalva de aplicabilidade quando o contexto de um
+ * tenant MUNICIPAL inclui normas que NÃO constituem obrigação municipal automática (exclusivas do
+ * SRP, restritas ao Executivo federal, ou condicionadas). Retorna null quando não há o que ressalvar.
+ * Determinístico; lê exclusivamente a auditoria de escopo persistida no ContextPackage.
+ */
+function buildApplicabilityCaveat(pkg: ContextPackage): string | null {
+  if (pkg.municipality == null) return null; // ressalva só faz sentido para consulta situada no município
+  const scope = (pkg.metadata as { sourceScope?: SourceScopeAuditShape }).sourceScope;
+  if (!scope || !scope.applicability || !scope.includedNormIds) return null;
+  const includedTitleByNorm = new Map(pkg.documents.map(d => [d.normId, d.title]));
+  const flagged: string[] = [];
+  for (const normId of scope.includedNormIds) {
+    const info = scope.applicability[normId];
+    if (!info) continue;
+    if (info.srpSpecific || info.federalOnly || info.conditional) {
+      const reason = info.srpSpecific
+        ? "regra específica do Sistema de Registro de Preços"
+        : info.federalOnly
+          ? "norma do Executivo federal"
+          : "norma de aplicação condicionada";
+      flagged.push(`${includedTitleByNorm.get(normId) ?? normId} (${reason})`);
+    }
+  }
+  if (flagged.length === 0) return null;
+  return `Atenção à aplicabilidade: ${flagged.join("; ")} — não constitui(em), por si só(s), obrigação geral do município; confirme a adoção/regulamentação municipal antes de utilizar como fundamento local.`;
+}
+
 /** Pergunta normalizada (para comparação/auditoria/contextReplayHash). Determinística. */
 export function normalizeQuestion(raw: string): string {
   return sanitizeQuestion(raw).toLowerCase();
@@ -290,6 +329,11 @@ export function buildConsultationAnswer(params: {
     "Esta é uma orientação técnica fundamentada em normas oficiais — não substitui parecer jurídico nem decisão da autoridade competente.",
     "Toda resposta é supervisionada, explicável e auditável.",
   ];
+  // SOURCE-SCOPE-ROUTER-001 (ponto 6) — não apresentar como obrigação municipal geral uma regra
+  // exclusiva do SRP / restrita ao Executivo federal / condicionada. Quando tais fontes integram o
+  // contexto de um tenant municipal, adiciona-se uma ressalva explícita de aplicabilidade.
+  const applicabilityCaveat = buildApplicabilityCaveat(pkg);
+  if (applicabilityCaveat) observations.push(applicabilityCaveat);
   const limitations: string[] = [];
   let answer: string;
   if (hasSufficientBasis) {

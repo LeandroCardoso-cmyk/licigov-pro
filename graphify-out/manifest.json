@@ -9495,13 +9495,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalIntegrationObservabilityService.ts": {
-    "mtime": 1784472877.3626738,
-    "ast_hash": "3fa743ef9d5bdfd8362676fbef5ba0f5",
+    "mtime": 1784843547.3463554,
+    "ast_hash": "bf75d9f9ae5e666950b59c37d1eb4e24",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
-    "mtime": 1784828514.53731,
-    "ast_hash": "26e234201341765518d0a97357d69c36",
+    "mtime": 1784843605.906359,
+    "ast_hash": "38a82eaea0e3f4b88735399b1dcb5373",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
@@ -9530,8 +9530,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalConsultation.ts": {
-    "mtime": 1784828560.9133081,
-    "ast_hash": "9aeb0c56743133da30504048fd474586",
+    "mtime": 1784843796.4463704,
+    "ast_hash": "a28e342d893a01b104338a3d0dfb619a",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784842202.20858,
-    "ast_hash": "3e9c0dd0b6d56ac2d97f54b6c9849b83",
+    "mtime": 1784843625.4783602,
+    "ast_hash": "29cbf246734aac9cce9da74a2b8e39c5",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "7d2d280dabf103d29e636b2f649c5585",
+    "mtime": 1784843988.5623817,
+    "ast_hash": "6865a37de062567a51d9e05d5af1ad95",
     "semantic_hash": ""
   },
   "server/__tests__/integration/consultation-datetime-boundary.test.ts": {
@@ -9847,6 +9847,21 @@
   "docs/ai/RAG_QUALITY_003_REPORT.md": {
     "mtime": 1784842548.3325722,
     "ast_hash": "5de67b894b9c0f5126105acda09f5c2e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/source-scope-router-001.test.ts": {
+    "mtime": 1784843890.554376,
+    "ast_hash": "ffc7b04bf17cb980baebb382ea06a0c3",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalIntegration/sourceScopeRouter.ts": {
+    "mtime": 1784843540.066355,
+    "ast_hash": "ab72178c097795f9387a196f46aaf66c",
+    "semantic_hash": ""
+  },
+  "docs/ai/SOURCE_SCOPE_ROUTER_001_REPORT.md": {
+    "mtime": 1784844110.378389,
+    "ast_hash": "fa7265982f9fd466f822ffa00a1e8b81",
     "semantic_hash": ""
   }
 }

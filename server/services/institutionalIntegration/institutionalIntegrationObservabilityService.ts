@@ -7,7 +7,9 @@
  */
 
 export type IntegrationEventType =
-  | "contextResolution" | "knowledgeRetrieval" | "documentsLoaded" | "documentsIgnored" | "contextPackageBuilt";
+  | "contextResolution" | "knowledgeRetrieval" | "documentsLoaded" | "documentsIgnored" | "contextPackageBuilt"
+  // SOURCE-SCOPE-ROUTER-001 — decisão de escopo documental e eventual ampliação (auditável por correlationId).
+  | "sourceScope" | "sourceScopeExpansion";
 
 export interface IntegrationEvent {
   readonly correlationId: string;

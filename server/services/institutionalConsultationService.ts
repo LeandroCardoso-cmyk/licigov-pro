@@ -89,6 +89,8 @@ function buildSnapshot(pkg: ContextPackage): string {
     documents: pkg.documents.map(d => ({ documentId: d.documentId, version: d.version, authority: d.authority, jurisdiction: d.jurisdiction, bindingLevel: d.bindingLevel })),
     citations: pkg.citations.map(c => ({ reference: c.reference, lineageId: c.lineageId })),
     passages: pkg.retrievedPassages.map(p => ({ blockId: p.blockId, identifier: p.identifier, score: p.score })),
+    // SOURCE-SCOPE-ROUTER-001 — auditoria durável da decisão de escopo (intenção, diploma, incluídas/descartadas, ampliação).
+    sourceScope: (pkg.metadata as { sourceScope?: unknown }).sourceScope ?? null,
   });
 }
 
@@ -154,6 +156,8 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
       tenantId: params.organizationId, businessDomain: CONSULTATION_DOMAIN_CODE, taskType: TASK_TYPE,
       query: question, correlationId: params.correlationId, userContext,
       maxPassagesPerDocument: CONSULTATION_MAX_PASSAGES_PER_DOC, maxPassageChars: CONSULTATION_MAX_PASSAGE_CHARS,
+      // SOURCE-SCOPE-ROUTER-001 — roteamento determinístico de escopo ativo apenas no "Tirar Dúvidas".
+      enableSourceScopeRouting: true,
     });
 
     // RAG-QUALITY-003 — no máximo 1 retry quando a 1ª tentativa cortar por MAX_TOKENS. O
