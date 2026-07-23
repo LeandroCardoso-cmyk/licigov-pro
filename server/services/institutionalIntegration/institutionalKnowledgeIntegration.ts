@@ -46,7 +46,11 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
     hierarchy: [...institutional.hierarchy], documents: [...retrieval.documents],
     retrievedPassages: [...retrieval.passages], citations: [...retrieval.citations],
     explainability: [...retrieval.explainability],
-    metadata: { documentsLoaded: retrieval.documentsLoaded, documentsIgnored: retrieval.documentsIgnored, applicable: institutional.applicableDocuments.length },
+    metadata: {
+      documentsLoaded: retrieval.documentsLoaded, documentsIgnored: retrieval.documentsIgnored, applicable: institutional.applicableDocuments.length,
+      // RAG-QUALITY-001 — sinais de qualidade da recuperação (para a classificação de suficiência de evidência).
+      coverageRatio: retrieval.coverageRatio, maxPassageScore: retrieval.maxPassageScore, searchRounds: retrieval.searchRounds,
+    },
   });
 
   // Observabilidade (Context Resolution + Knowledge Retrieval).

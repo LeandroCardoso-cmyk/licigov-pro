@@ -23,6 +23,33 @@ export const CONSULTATION_DOMAIN_NAME = "Tirar Dúvidas";
  */
 export type ConsultationStatus = "pending" | "processing" | "completed" | "limited" | "failed";
 
+/**
+ * RAG-QUALITY-001 — Selo de suficiência de evidência (3 estados), exibido ao usuário:
+ * - "fundamentada": passagens cobrem boa parte dos termos da consulta E há ao menos uma passagem
+ *   com score forte — a resposta se apoia em dispositivo(s) diretamente aplicável(is).
+ * - "parcial": há base documental (ao menos 1 passagem), mas cobertura/score insuficientes para
+ *   afirmar que o dispositivo correto foi localizado com confiança — a resposta deve ser tratada
+ *   como orientação preliminar, a confirmar.
+ * - "insuficiente": nenhuma passagem foi recuperada — sem fundamento algum.
+ * Substitui o corte binário anterior (que classificava "Fundamentada" sempre que qualquer passagem,
+ * ainda que irrelevante, existisse — a causa do RAG-QUALITY-001).
+ */
+export type EvidenceSufficiency = "fundamentada" | "parcial" | "insuficiente";
+
+const EVIDENCE_COVERAGE_FUNDAMENTADA = 0.5;
+const EVIDENCE_SCORE_FUNDAMENTADA = 0.25;
+
+/** Classifica a suficiência de evidência a partir dos sinais de recuperação do ContextPackage. Determinístico. */
+export function classifyEvidenceSufficiency(pkg: ContextPackage): EvidenceSufficiency {
+  if (pkg.documents.length === 0 || pkg.retrievedPassages.length === 0) return "insuficiente";
+  const coverageRatio = typeof pkg.metadata.coverageRatio === "number" ? pkg.metadata.coverageRatio : 0;
+  const maxPassageScore = typeof pkg.metadata.maxPassageScore === "number"
+    ? pkg.metadata.maxPassageScore
+    : pkg.retrievedPassages.reduce((m, p) => Math.max(m, p.score), 0);
+  if (coverageRatio >= EVIDENCE_COVERAGE_FUNDAMENTADA && maxPassageScore >= EVIDENCE_SCORE_FUNDAMENTADA) return "fundamentada";
+  return "parcial";
+}
+
 /** Pergunta normalizada (para comparação/auditoria/contextReplayHash). Determinística. */
 export function normalizeQuestion(raw: string): string {
   return sanitizeQuestion(raw).toLowerCase();
@@ -177,6 +204,8 @@ export interface InstitutionalConsultationAnswer {
   readonly explainabilityLines: readonly string[];
   readonly limitations: readonly string[];
   readonly hasSufficientBasis: boolean;
+  /** RAG-QUALITY-001 — selo de 3 estados (ver `EvidenceSufficiency`). */
+  readonly evidenceSufficiency: EvidenceSufficiency;
   readonly createdAt: string;
 }
 
@@ -217,7 +246,8 @@ export function buildConsultationAnswer(params: {
   createdAt: string;
 }): InstitutionalConsultationAnswer {
   const { contextPackage: pkg } = params;
-  const hasSufficientBasis = pkg.documents.length > 0 && pkg.retrievedPassages.length > 0;
+  const evidenceSufficiency = classifyEvidenceSufficiency(pkg);
+  const hasSufficientBasis = evidenceSufficiency !== "insuficiente";
 
   const documents: ConsultationDocumentRef[] = pkg.documents.map(d => ({
     documentId: d.documentId, title: d.title, authority: d.authority, jurisdiction: d.jurisdiction, version: d.version, bindingLevel: d.bindingLevel,
@@ -244,6 +274,9 @@ export function buildConsultationAnswer(params: {
     answer = params.engineContent && params.engineContent.trim().length > 0
       ? params.engineContent.trim()
       : `Consulta fundamentada nas normas aplicáveis (${esferas.join(" → ")}). Foram localizados ${pkg.retrievedPassages.length} trecho(s) oficial(is) pertinente(s) nos documentos abaixo; consulte a fundamentação e as citações para o texto oficial verbatim.`;
+    if (evidenceSufficiency === "parcial") {
+      limitations.push("Cobertura documental parcial: os trechos recuperados podem não ser o dispositivo mais diretamente aplicável — confirme com a autoridade competente antes de utilizar esta orientação.");
+    }
   } else {
     answer = "Não foi possível localizar base documental oficial suficiente no acervo institucional para fundamentar esta consulta. Recomenda-se refinar a pergunta ou consultar a autoridade competente. Nenhum fundamento é apresentado sem base oficial.";
     limitations.push("Base documental insuficiente no Official Knowledge Corpus para esta consulta.");
@@ -256,7 +289,7 @@ export function buildConsultationAnswer(params: {
     contextReplayHash: pkg.replayHash,
     tenantId: params.tenantId, userId: params.userId, question: params.question,
     answer, foundation, documents, passages, citations, observations, explainabilityLines, limitations,
-    hasSufficientBasis, createdAt: params.createdAt,
+    hasSufficientBasis, evidenceSufficiency, createdAt: params.createdAt,
   };
 }
 

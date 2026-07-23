@@ -13,14 +13,22 @@ export interface ParsedSegment {
   readonly type: SegmentType;
   readonly identifier: string;
   readonly text: string;
+  /** Texto descritivo da matéria (só para títulos/capítulos/seções/subseções — ex.: "Da Contratação
+   *  Direta"). O identificador ("Capítulo VIII") vem de regex; o rótulo vem da linha seguinte no
+   *  texto oficial e é o que carrega o CONTEÚDO temático do container estrutural. */
+  readonly label?: string;
 }
 
 export interface ParsedParagraph { readonly identifier: string; readonly text: string; }
 export interface ParsedArticle {
   readonly identifier: string;
   readonly number: string;
-  /** Caminho estrutural (títulos/capítulos que contêm o artigo). */
+  /** Caminho estrutural (títulos/capítulos que contêm o artigo) — identificadores (ex.: "Capítulo VIII"). */
   readonly path: readonly string[];
+  /** Rótulos temáticos dos containers estruturais (ex.: ["Do Processo Licitatório", "Da Contratação
+   *  Direta", "Do Processo de Contratação Direta"]) — o nome da matéria de cada nível do `path`,
+   *  na mesma ordem. Paralelo a `path` (mesmo índice = mesmo nível). */
+  readonly headingText: readonly string[];
   /** Texto VERBATIM completo do artigo (caput + parágrafos + incisos + alíneas). */
   readonly fullText: string;
   readonly paragraphs: readonly ParsedParagraph[];
@@ -82,8 +90,21 @@ export function parseOfficialText(raw: string): ParsedNorm {
   const lines = raw.split(/\r?\n/);
   const segments: ParsedSegment[] = [];
 
+  const isStructural = (t: SegmentType) => t === "titulo" || t === "capitulo" || t === "secao" || t === "subsecao";
   let current: { type: SegmentType; identifier: string; buffer: string[] } | null = null;
-  const flush = () => { if (current) { segments.push({ type: current.type, identifier: current.identifier, text: current.buffer.join(" ").replace(/\s+/g, " ").trim() }); current = null; } };
+  const flush = () => {
+    if (current) {
+      // A 1ª linha do buffer é a própria linha do marcador (ex.: "CAPÍTULO VIII"); linhas seguintes,
+      // antes do próximo marcador, são o rótulo temático (ex.: "DA CONTRATAÇÃO DIRETA").
+      const label = isStructural(current.type) ? current.buffer.slice(1).join(" ").replace(/\s+/g, " ").trim() : "";
+      segments.push({
+        type: current.type, identifier: current.identifier,
+        text: current.buffer.join(" ").replace(/\s+/g, " ").trim(),
+        ...(label ? { label } : {}),
+      });
+      current = null;
+    }
+  };
 
   let started = false;
   for (const rawLine of lines) {
@@ -103,18 +124,21 @@ export function parseOfficialText(raw: string): ParsedNorm {
 
   // Monta artigos com caminho estrutural + parágrafos, texto verbatim completo.
   const articles: ParsedArticle[] = [];
-  const path: string[] = []; // pilha de contêineres estruturais
-  const setPath = (type: SegmentType, identifier: string) => {
+  const path: string[] = []; // pilha de contêineres estruturais (identificadores)
+  const headingPath: string[] = []; // pilha paralela — rótulo temático de cada nível (ex.: "Da Contratação Direta")
+  const setPath = (type: SegmentType, identifier: string, label: string | undefined) => {
     const depthOf: Partial<Record<SegmentType, number>> = { titulo: 0, capitulo: 1, secao: 2, subsecao: 3 };
     const d = depthOf[type];
     if (d === undefined) return;
     path.length = d;
     path[d] = identifier;
+    headingPath.length = d;
+    headingPath[d] = label || identifier;
   };
 
   for (let i = 0; i < segments.length; i++) {
     const s = segments[i];
-    if (s.type === "titulo" || s.type === "capitulo" || s.type === "secao" || s.type === "subsecao") { setPath(s.type, s.identifier); continue; }
+    if (s.type === "titulo" || s.type === "capitulo" || s.type === "secao" || s.type === "subsecao") { setPath(s.type, s.identifier, s.label); continue; }
     if (s.type !== "artigo") continue;
     // acumula tudo até o próximo artigo ou contêiner estrutural (texto verbatim).
     const parts: string[] = [s.text];
@@ -129,6 +153,7 @@ export function parseOfficialText(raw: string): ParsedNorm {
       identifier: s.identifier,
       number: s.identifier.replace(/^Art\.\s*/, "").replace(/[º.]/g, "").trim(),
       path: [...path].filter(Boolean),
+      headingText: [...headingPath].filter(Boolean),
       fullText: parts.join("\n").trim(),
       paragraphs,
     });

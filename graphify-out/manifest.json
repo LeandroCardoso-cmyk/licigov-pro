@@ -9430,8 +9430,8 @@
     "semantic_hash": ""
   },
   "server/domain/officialCorpus/officialCorpusIngestion.ts": {
-    "mtime": 1784472876.8306737,
-    "ast_hash": "6b364e027b2bfab06cabe703e5f8bf61",
+    "mtime": 1784819003.712599,
+    "ast_hash": "c319d974f28ccbf5ad8575bfa330d80c",
     "semantic_hash": ""
   },
   "server/domain/officialCorpus/officialCorpusRegistry.ts": {
@@ -9455,8 +9455,8 @@
     "semantic_hash": ""
   },
   "server/services/officialCorpus/officialTextParser.ts": {
-    "mtime": 1784472877.8191228,
-    "ast_hash": "7254ee6acc939aaf7c9ec7a5678511d0",
+    "mtime": 1784818998.4085991,
+    "ast_hash": "a91a871ead1e57025c025063452eec41",
     "semantic_hash": ""
   },
   "docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md": {
@@ -9500,13 +9500,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
-    "mtime": 1784472877.518674,
-    "ast_hash": "cad166979d28e9350c221020f1b61058",
+    "mtime": 1784819195.7205946,
+    "ast_hash": "548181c6bfae64c4c55e1378a573018f",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784472877.518674,
-    "ast_hash": "c03149e1c06d082c4b201b753826dc0f",
+    "mtime": 1784819104.2885966,
+    "ast_hash": "e87c9db05e3014a2287c57915269fd10",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9515,8 +9515,8 @@
     "semantic_hash": ""
   },
   "client/src/components/tirar-duvidas/TirarDuvidasHome.tsx": {
-    "mtime": 1784472872.7959778,
-    "ast_hash": "517ed0381b4c69e65b8e0fb73ddccdb1",
+    "mtime": 1784819253.5365932,
+    "ast_hash": "28a920985ac455b8d7a0a72e31d4c36e",
     "semantic_hash": ""
   },
   "client/src/pages/TirarDuvidas.tsx": {
@@ -9530,8 +9530,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalConsultation.ts": {
-    "mtime": 1784472876.6146739,
-    "ast_hash": "c29867df7a06b5582cabf92ba4a7528f",
+    "mtime": 1784819242.8365934,
+    "ast_hash": "c5361c16ce9d256681ad947cdb3f355f",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9635,8 +9635,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/query-expansion.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "11e8eb8bedfc0947d190634caba64bc0",
+    "mtime": 1784819469.9645882,
+    "ast_hash": "a0cba1af0f13d514573fc893b60a5393",
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-thinking.test.ts": {
@@ -9817,6 +9817,16 @@
   "server/__tests__/integration/app-env-resolution.test.ts": {
     "mtime": 1784817183.340548,
     "ast_hash": "c326d6c9d65ef6cc75b218cb9a7b73b5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rag-quality-001-legal-retrieval.test.ts": {
+    "mtime": 1784819390.89659,
+    "ast_hash": "e2c6fdbb330dc3ace00b066660b431fa",
+    "semantic_hash": ""
+  },
+  "docs/ai/RAG_QUALITY_001_REPORT.md": {
+    "mtime": 1784819620.3125849,
+    "ast_hash": "458bcf02a29dd7d8b4e9e433f1ab6c9a",
     "semantic_hash": ""
   }
 }

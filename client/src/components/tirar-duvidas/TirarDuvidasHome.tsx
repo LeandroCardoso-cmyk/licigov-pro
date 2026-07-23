@@ -16,6 +16,7 @@ type ConsultationAnswer = {
   status: string;
   answer: string;
   hasSufficientBasis: boolean;
+  evidenceSufficiency: "fundamentada" | "parcial" | "insuficiente";
   foundation: readonly { reference: string; authority: string; jurisdiction: string; bindingLevel: string; version: string }[];
   documents: readonly { documentId: string; title: string; authority: string; jurisdiction: string; version: string; bindingLevel: string }[];
   passages: readonly { documentId: string; identifier: string; text: string; score: number }[];
@@ -131,9 +132,11 @@ export default function TirarDuvidasHome() {
           <div className="rounded-lg border border-border bg-card p-5">
             <div className="mb-2 flex items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Resposta</h2>
-              {answer.hasSufficientBasis
+              {answer.evidenceSufficiency === "fundamentada"
                 ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Fundamentada</span>
-                : <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">Sem base suficiente</span>}
+                : answer.evidenceSufficiency === "parcial"
+                  ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">Resposta parcial</span>
+                  : <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">Evidência insuficiente</span>}
             </div>
             <div className="prose prose-sm max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground">
               <Streamdown>{answer.answer}</Streamdown>
