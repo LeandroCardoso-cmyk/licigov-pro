@@ -301,6 +301,9 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const documentsUsed = [...new Set([...(input.documentRefs ?? []), ...(pkg?.documents.map(d => d.documentId) ?? [])])];
   const lawsUsed = [...new Set([...(input.lawRefs ?? []), ...(pkg?.citations.map(c => c.reference) ?? [])])];
   const tokens = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  // RAG-QUALITY-002 — antes descartado: se o provider cortar a geração por limite de tokens
+  // ("max_tokens"), a resposta pode estar incompleta e isso precisa ser auditável/tratável a jusante.
+  const finishReason = generated.finishReason ?? "stop";
 
   // Recursos cognitivos efetivamente usados (para hash lógico + contexto + observabilidade).
   const groundingUsage: CognitiveGroundingUsage = {
@@ -345,7 +348,7 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   if (!validation.valid) throw new InvalidCognitiveResponse(validation.errors);
 
   // Stage: Result (contexto + observabilidade)
-  const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning } });
+  const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning, finishReason } });
   const observability = recordCognitiveObservability({ context, response, validation, reasoningPlan });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 

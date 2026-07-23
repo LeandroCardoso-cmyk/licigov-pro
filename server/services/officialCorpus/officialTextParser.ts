@@ -159,7 +159,22 @@ export function parseOfficialText(raw: string): ParsedNorm {
     });
   }
 
-  return { title, url, segments, articles };
+  // RAG-QUALITY-002 — alguns artigos aparecem MAIS DE UMA VEZ no texto-fonte (histórico de redações
+  // por Medida Provisória mantido inline — ex.: Art. 191 com o texto anterior à MP, o texto da MP e
+  // o texto vigente após a MP perder eficácia, todos em sequência). Sem dedup, o retrieval tratava
+  // cada ocorrência como um bloco independente, deixando o mesmo artigo ocupar múltiplas posições do
+  // top-N de passagens e expulsar artigos legítimos. Mantém a ÚLTIMA ocorrência (texto vigente mais
+  // recente na leitura linear do documento oficial), na posição da PRIMEIRA aparição — preserva a
+  // ordem natural do documento.
+  const order: string[] = [];
+  const latestByIdentifier = new Map<string, ParsedArticle>();
+  for (const a of articles) {
+    if (!latestByIdentifier.has(a.identifier)) order.push(a.identifier);
+    latestByIdentifier.set(a.identifier, a);
+  }
+  const dedupedArticles = order.map(id => latestByIdentifier.get(id)!);
+
+  return { title, url, segments, articles: dedupedArticles };
 }
 
 /** Divide um texto longo (manuais) em blocos de tamanho fixo — determinístico, verbatim. */

@@ -41,6 +41,11 @@ export interface RetrievalResult {
   readonly coverageRatio: number;
   /** RAG-QUALITY-001 — maior score entre as passagens retornadas (0 se nenhuma). */
   readonly maxPassageScore: number;
+  /** RAG-QUALITY-002 — a passagem de MAIOR score veio de um container genérico (Disposições
+   *  Gerais/Transitórias/Finais) enquanto um capítulo temático concorrente existia no mesmo
+   *  documento. Sinal de "sustenta a frase, mas pode não responder à intenção jurídica" — usado
+   *  para NÃO classificar a resposta como "Fundamentada" às cegas (ver `classifyEvidenceSufficiency`). */
+  readonly topPassageGenericContainer: boolean;
 }
 
 const STOPWORDS = new Set([
@@ -142,6 +147,9 @@ function clipPassage(text: string, max?: number): string {
 // ── RAG-QUALITY-001 — parâmetros do BM25-lite e dos boosts estruturais (constantes, determinísticos) ──
 const BM25_K1 = 1.4;
 const BM25_B = 0.75;
+/** RAG-QUALITY-002 — normalização de comprimento relaxada quando o título/seção do PRÓPRIO artigo
+ *  casa especificamente com a consulta (o comprimento é profundidade temática, não diluição). */
+const BM25_B_THEMATIC = 0.25;
 /** Peso do boost de título/seção quando os termos da consulta casam com o RÓTULO do container. */
 const HEADING_BOOST_WEIGHT = 0.6;
 /** Peso do reforço de vizinhança estrutural (artigos do mesmo container de um artigo bem pontuado). */
@@ -173,9 +181,23 @@ function pathOf(b: Cand["b"]): string {
   return Array.isArray(path) ? path.filter((p): p is string => typeof p === "string").join(">") : "";
 }
 
+// RAG-QUALITY-002 — Títulos/capítulos BOILERPLATE, presentes em praticamente toda lei brasileira,
+// não carregam matéria própria: "Disposições Gerais/Transitórias/Finais/Preliminares". Quando a
+// consulta casa tematicamente com um capítulo ESPECÍFICO de outro trecho do mesmo documento (ex.:
+// "Da Contratação Direta"), um artigo genérico que só mencione os mesmos termos incidentalmente
+// (ex.: uma regra de transição que cita "contratação direta" de passagem) não deve superar o
+// capítulo temático — generaliza para qualquer lei, não é específico da Lei 14.133.
+const GENERIC_HEADING_PATTERN = /disposi[çc][õo]es?\s+(gerais|transit[óo]rias|finais|preliminares)/i;
+function isGenericHeading(headingText: string): boolean {
+  return GENERIC_HEADING_PATTERN.test(headingText);
+}
+/** Multiplicador aplicado ao score de CORPO de um artigo em container genérico, quando existe
+ *  concorrente temático no mesmo documento (não penaliza quando é a ÚNICA base disponível). */
+const GENERIC_CONTAINER_PENALTY = 0.4;
+
 /** Uma rodada de recuperação (BM25-lite + boost de título + vizinhança). Determinística. */
 function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: InstitutionalContext, query: string, maxPer: number, minScore: number): {
-  byDoc: Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number }> }>;
+  byDoc: Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean }> }>;
   ignored: Set<string>;
   reachableTermsCount: number;
 } {
@@ -218,29 +240,53 @@ function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: Institutio
 
   const avgLen = cands.length > 0 ? cands.reduce((s, c) => s + c.length, 0) / cands.length : 1;
 
-  const bodyScoreOf = (c: Cand): number => {
-    let num = 0;
-    for (const t of scoringTerms) {
-      const tf = c.freq.get(t);
-      if (!tf) continue;
-      const denomBm25 = tf + BM25_K1 * (1 - BM25_B + BM25_B * (c.length / (avgLen || 1)));
-      num += idf(t) * (tf * (BM25_K1 + 1)) / (denomBm25 || 1);
-    }
-    return num / denom;
-  };
   const headingScoreOf = (c: Cand): number => {
     let num = 0;
     for (const t of scoringTerms) if (c.headingTokens.has(t)) num += idf(t);
     return num / denom;
   };
+  const hasSpecificHeadingMatch = (c: Cand): boolean => !isGenericHeading(headingTextOf(c.b)) && headingScoreOf(c) > 0;
 
-  // Passo 2 — pontua (corpo + boost de título), agrupa por container estrutural p/ vizinhança.
-  const withBaseScore = cands.map(c => ({ c, base: bodyScoreOf(c) + HEADING_BOOST_WEIGHT * headingScoreOf(c) }));
+  // RAG-QUALITY-002 — a normalização de comprimento do BM25 penaliza blocos grandes por padrão
+  // (evita que um GLOSSÁRIO genérico, ex.: Art. 6º, vença por amplitude de vocabulário). Mas um
+  // artigo extenso porque é o tratamento EXAUSTIVO do próprio tema perguntado (ex.: Art. 75 — dezenas
+  // de hipóteses de dispensa, sob a seção "Da Dispensa de Licitação") não deve ser punido do mesmo
+  // jeito: seu comprimento é PROFUNDIDADE temática, não diluição. Quando o próprio título/seção do
+  // artigo casa especificamente com a consulta, relaxa a normalização de comprimento (b menor).
+  const bodyScoreOf = (c: Cand): number => {
+    const b = hasSpecificHeadingMatch(c) ? BM25_B_THEMATIC : BM25_B;
+    let num = 0;
+    for (const t of scoringTerms) {
+      const tf = c.freq.get(t);
+      if (!tf) continue;
+      const denomBm25 = tf + BM25_K1 * (1 - b + b * (c.length / (avgLen || 1)));
+      num += idf(t) * (tf * (BM25_K1 + 1)) / (denomBm25 || 1);
+    }
+    return num / denom;
+  };
+
+  // RAG-QUALITY-002 — existe capítulo temático específico concorrente (não genérico) no MESMO
+  // documento cujo RÓTULO já casa com a consulta? Se sim, artigos em container genérico
+  // (Disposições Gerais/Transitórias/Finais) são penalizados — evita que uma disposição de
+  // transição que só cita os termos de passagem supere o capítulo que trata da matéria.
+  const thematicMatchByDoc = new Map<string, boolean>();
+  for (const c of cands) {
+    if (hasSpecificHeadingMatch(c)) thematicMatchByDoc.set(c.doc.documentId, true);
+  }
+
+  // Passo 2 — pontua (corpo + boost de título, com penalidade de container genérico), agrupa por
+  // container estrutural p/ vizinhança.
+  const withBaseScore = cands.map(c => {
+    const isGeneric = isGenericHeading(headingTextOf(c.b));
+    const penalize = isGeneric && (thematicMatchByDoc.get(c.doc.documentId) ?? false);
+    const body = bodyScoreOf(c) * (penalize ? GENERIC_CONTAINER_PENALTY : 1);
+    return { c, base: body + HEADING_BOOST_WEIGHT * headingScoreOf(c), isGeneric: penalize };
+  });
   const groupMax = new Map<string, number>();
   for (const { c, base } of withBaseScore) groupMax.set(c.groupKey, Math.max(groupMax.get(c.groupKey) ?? 0, base));
 
-  const byDoc = new Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number }> }>();
-  for (const { c, base } of withBaseScore) {
+  const byDoc = new Map<string, { doc: Cand["doc"]; ingested: IngestedDocument; scored: Array<{ b: Cand["b"]; score: number; isGenericPenalized: boolean }> }>();
+  for (const { c, base, isGeneric } of withBaseScore) {
     // Vizinhança estrutural: artigos do MESMO container de um artigo bem pontuado recebem reforço
     // proporcional ao pico do grupo — aproxima a recuperação do "dispositivo + vizinhos normativos".
     const peak = groupMax.get(c.groupKey) ?? 0;
@@ -248,7 +294,7 @@ function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: Institutio
     if (score < minScore) continue;
     let g = byDoc.get(c.doc.documentId);
     if (!g) { g = { doc: c.doc, ingested: c.ingested, scored: [] }; byDoc.set(c.doc.documentId, g); }
-    g.scored.push({ b: c.b, score });
+    g.scored.push({ b: c.b, score, isGenericPenalized: isGeneric });
   }
 
   for (const doc of context.applicableDocuments) {
@@ -270,6 +316,8 @@ function buildResult(context: InstitutionalContext, byDoc: ReturnType<typeof run
   const documentsLoaded: string[] = [];
   const coveredTerms = new Set<string>();
   const queryTerms = expandQueryTerms(params.query);
+  let topScore = -Infinity;
+  let topIsGenericPenalized = false;
 
   for (const doc of context.applicableDocuments) {
     const g = byDoc.get(doc.documentId);
@@ -280,11 +328,12 @@ function buildResult(context: InstitutionalContext, byDoc: ReturnType<typeof run
     documents.push({ documentId: doc.documentId, normId: doc.normId, title: doc.title, authority: doc.authority, jurisdiction: doc.jurisdiction, version: doc.version, bindingLevel: doc.bindingLevel, status: doc.status });
     explainability.push({ documentId: doc.documentId, reason: `Documento aplicável (${doc.jurisdiction}); ${top.length} trecho(s) relevante(s) para a consulta.`, authority: doc.authority, version: doc.version, bindingLevel: doc.bindingLevel, lineageId: g.ingested.knowledgeDocument.lineageId });
 
-    for (const { b, score } of top) {
+    for (const { b, score, isGenericPenalized } of top) {
       passages.push({ documentId: doc.documentId, normId: doc.normId, blockId: b.id, identifier: b.title, text: clipPassage(b.fragments.map(f => f.text).join("\n"), params.maxPassageChars), score });
       citations.push({ documentId: doc.documentId, reference: `${doc.title} — ${b.title}`, authority: doc.authority, version: doc.version, jurisdiction: doc.jurisdiction, bindingLevel: doc.bindingLevel, lineageId: g.ingested.knowledgeDocument.lineageId });
       const blockTokens = new Set(tokenize(b.fragments.map(f => f.text).join(" ")));
       for (const t of queryTerms) if (blockTokens.has(t)) coveredTerms.add(t);
+      if (score > topScore) { topScore = score; topIsGenericPenalized = isGenericPenalized; }
     }
   }
 
@@ -297,6 +346,7 @@ function buildResult(context: InstitutionalContext, byDoc: ReturnType<typeof run
     explainability: explainability.sort((a, b) => a.documentId.localeCompare(b.documentId)),
     documentsLoaded: documentsLoaded.sort(), documentsIgnored: [...ignored].sort(),
     searchRounds: 1, coverageRatio, maxPassageScore,
+    topPassageGenericContainer: passages.length > 0 && topIsGenericPenalized,
   };
 }
 

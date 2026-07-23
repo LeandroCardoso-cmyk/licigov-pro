@@ -48,8 +48,9 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
     explainability: [...retrieval.explainability],
     metadata: {
       documentsLoaded: retrieval.documentsLoaded, documentsIgnored: retrieval.documentsIgnored, applicable: institutional.applicableDocuments.length,
-      // RAG-QUALITY-001 — sinais de qualidade da recuperação (para a classificação de suficiência de evidência).
+      // RAG-QUALITY-001/002 — sinais de qualidade da recuperação (para a classificação de suficiência de evidência).
       coverageRatio: retrieval.coverageRatio, maxPassageScore: retrieval.maxPassageScore, searchRounds: retrieval.searchRounds,
+      topPassageGenericContainer: retrieval.topPassageGenericContainer,
     },
   });
 

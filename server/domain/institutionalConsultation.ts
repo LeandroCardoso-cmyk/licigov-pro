@@ -39,14 +39,35 @@ export type EvidenceSufficiency = "fundamentada" | "parcial" | "insuficiente";
 const EVIDENCE_COVERAGE_FUNDAMENTADA = 0.5;
 const EVIDENCE_SCORE_FUNDAMENTADA = 0.25;
 
-/** Classifica a suficiência de evidência a partir dos sinais de recuperação do ContextPackage. Determinístico. */
-export function classifyEvidenceSufficiency(pkg: ContextPackage): EvidenceSufficiency {
+export interface EvidenceSufficiencyOptions {
+  /** RAG-QUALITY-002 — a geração do modelo foi cortada (finishReason="max_tokens"): a resposta pode
+   *  estar incompleta — nunca classificar como "fundamentada" às cegas quando isso ocorre. */
+  readonly generationTruncated?: boolean;
+}
+
+/**
+ * Classifica a suficiência de evidência — SEPARANDO duas dimensões (RAG-QUALITY-002):
+ * 1. SUFICIÊNCIA: as passagens recuperadas, isoladamente, sustentam alguma afirmação (cobertura de
+ *    termos + força do score)?
+ * 2. RELEVÂNCIA À INTENÇÃO: a passagem de maior score responde à MATÉRIA da pergunta, ou apenas
+ *    sustenta a frase incidentalmente — ex.: uma disposição transitória/geral que só cita os termos
+ *    de passagem, quando um capítulo temático específico competia e deveria prevalecer
+ *    (`topPassageGenericContainer`, calculado no retrieval)?
+ * Uma resposta só é "fundamentada" quando AMBAS as dimensões são satisfeitas E a geração do modelo
+ * não foi cortada — evidência que sustenta a frase mas não responde à intenção jurídica, ou uma
+ * resposta incompleta, nunca recebem o selo de maior confiança. Determinístico.
+ */
+export function classifyEvidenceSufficiency(pkg: ContextPackage, opts?: EvidenceSufficiencyOptions): EvidenceSufficiency {
   if (pkg.documents.length === 0 || pkg.retrievedPassages.length === 0) return "insuficiente";
   const coverageRatio = typeof pkg.metadata.coverageRatio === "number" ? pkg.metadata.coverageRatio : 0;
   const maxPassageScore = typeof pkg.metadata.maxPassageScore === "number"
     ? pkg.metadata.maxPassageScore
     : pkg.retrievedPassages.reduce((m, p) => Math.max(m, p.score), 0);
-  if (coverageRatio >= EVIDENCE_COVERAGE_FUNDAMENTADA && maxPassageScore >= EVIDENCE_SCORE_FUNDAMENTADA) return "fundamentada";
+  const evidenceIsSufficient = coverageRatio >= EVIDENCE_COVERAGE_FUNDAMENTADA && maxPassageScore >= EVIDENCE_SCORE_FUNDAMENTADA;
+  const topPassageGenericContainer = pkg.metadata.topPassageGenericContainer === true;
+  const evidenceIsRelevantToIntent = !topPassageGenericContainer;
+  const generationComplete = opts?.generationTruncated !== true;
+  if (evidenceIsSufficient && evidenceIsRelevantToIntent && generationComplete) return "fundamentada";
   return "parcial";
 }
 
@@ -244,9 +265,11 @@ export function buildConsultationAnswer(params: {
   replayId?: string | null;
   replayOfExecutionId?: string | null;
   createdAt: string;
+  /** RAG-QUALITY-002 — a geração do modelo terminou por limite de tokens (resposta possivelmente incompleta). */
+  generationTruncated?: boolean;
 }): InstitutionalConsultationAnswer {
   const { contextPackage: pkg } = params;
-  const evidenceSufficiency = classifyEvidenceSufficiency(pkg);
+  const evidenceSufficiency = classifyEvidenceSufficiency(pkg, { generationTruncated: params.generationTruncated });
   const hasSufficientBasis = evidenceSufficiency !== "insuficiente";
 
   const documents: ConsultationDocumentRef[] = pkg.documents.map(d => ({
@@ -275,7 +298,15 @@ export function buildConsultationAnswer(params: {
       ? params.engineContent.trim()
       : `Consulta fundamentada nas normas aplicáveis (${esferas.join(" → ")}). Foram localizados ${pkg.retrievedPassages.length} trecho(s) oficial(is) pertinente(s) nos documentos abaixo; consulte a fundamentação e as citações para o texto oficial verbatim.`;
     if (evidenceSufficiency === "parcial") {
-      limitations.push("Cobertura documental parcial: os trechos recuperados podem não ser o dispositivo mais diretamente aplicável — confirme com a autoridade competente antes de utilizar esta orientação.");
+      if (params.generationTruncated) {
+        limitations.push("A resposta pode estar incompleta: a geração atingiu o limite de tamanho antes de concluir. Considere reformular a pergunta de forma mais objetiva ou solicitar novamente.");
+      }
+      if (pkg.metadata.topPassageGenericContainer === true) {
+        limitations.push("O trecho de maior pontuação veio de uma disposição geral/transitória — pode não ser o dispositivo que trata diretamente da matéria perguntada. Verifique também os demais trechos listados abaixo.");
+      }
+      if (!params.generationTruncated && pkg.metadata.topPassageGenericContainer !== true) {
+        limitations.push("Cobertura documental parcial: os trechos recuperados podem não ser o dispositivo mais diretamente aplicável — confirme com a autoridade competente antes de utilizar esta orientação.");
+      }
     }
   } else {
     answer = "Não foi possível localizar base documental oficial suficiente no acervo institucional para fundamentar esta consulta. Recomenda-se refinar a pergunta ou consultar a autoridade competente. Nenhum fundamento é apresentado sem base oficial.";

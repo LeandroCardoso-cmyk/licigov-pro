@@ -148,9 +148,12 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
     });
     const t1 = clock();
 
+    // RAG-QUALITY-002 — antes descartado: se o provider cortar a geração por limite de tokens, a
+    // resposta pode estar incompleta — não pode ser classificada como "fundamentada" às cegas.
+    const generationTruncated = execution.context.outcome.finishReason === "max_tokens";
     const answer = buildConsultationAnswer({
       tenantId: params.organizationId, userId: params.userId, question, engineContent: execution.response.content,
-      contextPackage, executionId, replayId, replayOfExecutionId, createdAt,
+      contextPackage, executionId, replayId, replayOfExecutionId, createdAt, generationTruncated,
     });
     const sources = buildSources(params.organizationId, executionId, contextPackage, createdAt);
     const t2 = clock();

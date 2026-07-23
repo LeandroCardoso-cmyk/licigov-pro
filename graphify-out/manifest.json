@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1784472877.1866739,
-    "ast_hash": "37143da6373d7b51fe48f3cca634ae1b",
+    "mtime": 1784828619.3293056,
+    "ast_hash": "25ecb68b145f90c1b0b74d35fbc08cff",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -8610,8 +8610,8 @@
     "semantic_hash": ""
   },
   "server/domain/aiExecutionContext.ts": {
-    "mtime": 1784472875.9666736,
-    "ast_hash": "341c6eb9f965028c8e538b0dc207fd62",
+    "mtime": 1784828602.5013065,
+    "ast_hash": "7e982235725b7e234aac3552eea66dcb",
     "semantic_hash": ""
   },
   "server/domain/cognitiveResponse.ts": {
@@ -8625,8 +8625,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveObservabilityService.ts": {
-    "mtime": 1784472877.1866739,
-    "ast_hash": "6320b2c6a1cf9a8d818b7ed7264353c6",
+    "mtime": 1784828681.0653033,
+    "ast_hash": "5563e2a298053f11ef038e1276d26f34",
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
@@ -9455,8 +9455,8 @@
     "semantic_hash": ""
   },
   "server/services/officialCorpus/officialTextParser.ts": {
-    "mtime": 1784818998.4085991,
-    "ast_hash": "a91a871ead1e57025c025063452eec41",
+    "mtime": 1784828353.2213166,
+    "ast_hash": "13882a769b5b0d0175c0ca043a145437",
     "semantic_hash": ""
   },
   "docs/architecture/OFFICIAL_KNOWLEDGE_CORPUS.md": {
@@ -9500,13 +9500,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
-    "mtime": 1784819195.7205946,
-    "ast_hash": "548181c6bfae64c4c55e1378a573018f",
+    "mtime": 1784828514.53731,
+    "ast_hash": "26e234201341765518d0a97357d69c36",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784819104.2885966,
-    "ast_hash": "e87c9db05e3014a2287c57915269fd10",
+    "mtime": 1784828882.3092952,
+    "ast_hash": "9922f34dc79f585bfafff3ac0be9760d",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9530,8 +9530,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalConsultation.ts": {
-    "mtime": 1784819242.8365934,
-    "ast_hash": "c5361c16ce9d256681ad947cdb3f355f",
+    "mtime": 1784828560.9133081,
+    "ast_hash": "9aeb0c56743133da30504048fd474586",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784472877.3626738,
-    "ast_hash": "49c0e612bf1034cc9f3b6eae363cf9fa",
+    "mtime": 1784828721.0493016,
+    "ast_hash": "c13b35f0f5d3db74c7107cc440d64876",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9827,6 +9827,16 @@
   "docs/ai/RAG_QUALITY_001_REPORT.md": {
     "mtime": 1784819620.3125849,
     "ast_hash": "458bcf02a29dd7d8b4e9e433f1ab6c9a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/rag-quality-002-staging-regression.test.ts": {
+    "mtime": 1784828987.0692909,
+    "ast_hash": "34480ab4889f9d5d52bbb988b55a92ea",
+    "semantic_hash": ""
+  },
+  "docs/ai/RAG_QUALITY_002_REPORT.md": {
+    "mtime": 1784832725.3298333,
+    "ast_hash": "926b363e029f626cfcfdc7548605d578",
     "semantic_hash": ""
   }
 }
