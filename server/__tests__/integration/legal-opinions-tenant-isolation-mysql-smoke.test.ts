@@ -248,12 +248,13 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     await expect(callerA.legalOpinions.exportDOCX({ id: opinionB })).rejects.toThrow(/não encontrado/i);
   }, 30_000);
 
-  // ── 12. usuário sem organização não recebe fallback global ─────────────────
-  it("12. usuário sem organização cai no fallback determinístico (org=1), nunca agregação global", async () => {
+  // ── 12. usuário sem organização é bloqueado (fail-closed) ───────────────────
+  // RC-SEC-PR-A (SEC-017): o fallback determinístico para org=1 foi REMOVIDO.
+  // Usuário sem membership não ingressa em organização alguma — recebe erro
+  // estável FORBIDDEN/NO_ORGANIZATION_MEMBERSHIP e nunca vê agregação global.
+  it("12. usuário sem organização é bloqueado (fail-closed), nunca cai na org 1", async () => {
     const callerNoOrg = await makeCaller(userNoOrg);
-    const list = await callerNoOrg.legalOpinions.list();
-    expect(list.map((o: any) => o.id)).not.toContain(opinionA);
-    expect(list.map((o: any) => o.id)).not.toContain(opinionB);
+    await expect(callerNoOrg.legalOpinions.list()).rejects.toThrow(/NO_ORGANIZATION_MEMBERSHIP|acesso|organiza/i);
   }, 30_000);
 
   // ── 13. header malicioso sem membership é rejeitado ─────────────────────────

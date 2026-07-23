@@ -1,6 +1,127 @@
 import { eq, and, desc, ne } from "drizzle-orm";
-import { processItems, catmatSuggestions } from "../../drizzle/schema";
+import { processItems, catmatSuggestions, processes } from "../../drizzle/schema";
 import { getDb } from "./connection";
+
+// ─── RC-SEC-PR-A — Variantes tenant-scoped ──────────────────────────────────
+// process_items, catmat_suggestions NÃO possuem organizationId próprio: o
+// isolamento é feito validando a entidade-pai (processo) pela organização.
+// Cross-tenant e inexistente produzem o MESMO resultado externo (vazio/no-op),
+// nunca revelando existência em outra organização.
+
+/** Retorna o processId se, e somente se, o processo pertence à organização. */
+async function assertProcessInOrganization(
+  processId: number,
+  organizationId: number,
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db
+    .select({ id: processes.id })
+    .from(processes)
+    .where(and(eq(processes.id, processId), eq(processes.organizationId, organizationId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Retorna o processId dono do item, apenas se pertencer à organização. */
+async function resolveItemProcessForOrganization(
+  itemId: number,
+  organizationId: number,
+): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ processId: processItems.processId })
+    .from(processItems)
+    .innerJoin(processes, eq(processItems.processId, processes.id))
+    .where(and(eq(processItems.id, itemId), eq(processes.organizationId, organizationId)))
+    .limit(1);
+  return rows.length > 0 ? rows[0].processId : null;
+}
+
+export async function getProcessItemsForOrganization(processId: number, organizationId: number) {
+  if (!(await assertProcessInOrganization(processId, organizationId))) return [];
+  return getProcessItems(processId);
+}
+
+export async function saveProcessItemsForOrganization(
+  processId: number,
+  organizationId: number,
+  items: Parameters<typeof saveProcessItems>[1],
+): Promise<boolean> {
+  if (!(await assertProcessInOrganization(processId, organizationId))) return false;
+  await saveProcessItems(processId, items);
+  return true;
+}
+
+export async function updateProcessItemForOrganization(
+  itemId: number,
+  organizationId: number,
+  data: Partial<typeof processItems.$inferInsert>,
+): Promise<boolean> {
+  if ((await resolveItemProcessForOrganization(itemId, organizationId)) === null) return false;
+  await updateProcessItem(itemId, data);
+  return true;
+}
+
+export async function deleteProcessItemForOrganization(
+  itemId: number,
+  organizationId: number,
+): Promise<boolean> {
+  if ((await resolveItemProcessForOrganization(itemId, organizationId)) === null) return false;
+  await deleteProcessItem(itemId);
+  return true;
+}
+
+export async function createCatmatSuggestionForOrganization(
+  data: Parameters<typeof createCatmatSuggestion>[0],
+  organizationId: number,
+): Promise<number | null> {
+  if ((await resolveItemProcessForOrganization(data.processItemId, organizationId)) === null) return null;
+  return createCatmatSuggestion(data);
+}
+
+export async function getCatmatSuggestionsByItemForOrganization(
+  processItemId: number,
+  organizationId: number,
+) {
+  if ((await resolveItemProcessForOrganization(processItemId, organizationId)) === null) return [];
+  return getCatmatSuggestionsByItem(processItemId);
+}
+
+/** Resolve a sugestão apenas se a cadeia sugestão→item→processo→org for válida. */
+export async function getCatmatSuggestionByIdForOrganization(id: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ suggestion: catmatSuggestions })
+    .from(catmatSuggestions)
+    .innerJoin(processItems, eq(catmatSuggestions.processItemId, processItems.id))
+    .innerJoin(processes, eq(processItems.processId, processes.id))
+    .where(and(eq(catmatSuggestions.id, id), eq(processes.organizationId, organizationId)))
+    .limit(1);
+  return rows.length > 0 ? rows[0].suggestion : null;
+}
+
+export async function updateCatmatSuggestionForOrganization(
+  id: number,
+  organizationId: number,
+  data: { status: string },
+): Promise<boolean> {
+  if (!(await getCatmatSuggestionByIdForOrganization(id, organizationId))) return false;
+  await updateCatmatSuggestion(id, data);
+  return true;
+}
+
+export async function rejectOtherSuggestionsForOrganization(
+  processItemId: number,
+  approvedId: number,
+  organizationId: number,
+): Promise<boolean> {
+  if ((await resolveItemProcessForOrganization(processItemId, organizationId)) === null) return false;
+  await rejectOtherSuggestions(processItemId, approvedId);
+  return true;
+}
 
 export async function saveProcessItems(
   processId: number,

@@ -1,13 +1,17 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../_core/trpc";
+import { router, tenantProcedure } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
 import * as db from "../db";
+import { serviceLogger } from "../services/observabilityService";
+
+const authzLog = serviceLogger("departmentTasksRouter");
 
 export const departmentTasksRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return await db.getAllTasks();
+  list: tenantProcedure.query(async ({ ctx }) => {
+    return await db.listTasksForOrganization(ctx.organizationId);
   }),
 
-  create: protectedProcedure
+  create: tenantProcedure
     .input(
       z.object({
         title: z.string(),
@@ -22,11 +26,12 @@ export const departmentTasksRouter = router({
     .mutation(async ({ input, ctx }) => {
       return await db.createTask({
         ...input,
+        organizationId: ctx.organizationId,
         createdBy: ctx.user.id,
       } as any);
     }),
 
-  update: protectedProcedure
+  update: tenantProcedure
     .input(
       z.object({
         id: z.number(),
@@ -40,31 +45,64 @@ export const departmentTasksRouter = router({
         processId: z.number().nullable().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, ...updateData } = input;
-      return await db.updateTask(id, updateData as any);
+      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData as any);
+      if (!ok) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.update",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: id,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+      return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
-      return await db.deleteTask(input.id);
+    .mutation(async ({ input, ctx }) => {
+      const ok = await db.deleteTaskForOrganization(input.id, ctx.organizationId);
+      if (!ok) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.delete",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.id,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+      return { success: true };
     }),
 
-  getById: protectedProcedure
+  getById: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getTaskById(input.id);
+    .query(async ({ input, ctx }) => {
+      const task = await db.getTaskByIdForOrganization(input.id, ctx.organizationId);
+      if (!task) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.getById",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.id,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+      return task;
     }),
 
   // Comentários
-  listComments: protectedProcedure
+  listComments: tenantProcedure
     .input(z.object({ taskId: z.number() }))
-    .query(async ({ input }) => {
-      return await db.listTaskComments(input.taskId);
+    .query(async ({ input, ctx }) => {
+      return await db.listTaskCommentsForOrganization(input.taskId, ctx.organizationId);
     }),
 
-  addComment: protectedProcedure
+  addComment: tenantProcedure
     .input(
       z.object({
         taskId: z.number(),
@@ -72,21 +110,35 @@ export const departmentTasksRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      return await db.createTaskComment({
-        taskId: input.taskId,
-        userId: ctx.user.id,
-        content: input.content,
-      });
+      const commentId = await db.createTaskCommentForOrganization(
+        {
+          taskId: input.taskId,
+          userId: ctx.user.id,
+          content: input.content,
+        },
+        ctx.organizationId,
+      );
+      if (commentId === null) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.addComment",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.taskId,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+      return commentId;
     }),
 
   // Anexos
-  listAttachments: protectedProcedure
+  listAttachments: tenantProcedure
     .input(z.object({ taskId: z.number() }))
-    .query(async ({ input }) => {
-      return await db.listTaskAttachments(input.taskId);
+    .query(async ({ input, ctx }) => {
+      return await db.listTaskAttachmentsForOrganization(input.taskId, ctx.organizationId);
     }),
 
-  addAttachment: protectedProcedure
+  addAttachment: tenantProcedure
     .input(
       z.object({
         taskId: z.number(),
@@ -96,42 +148,92 @@ export const departmentTasksRouter = router({
         mimeType: z.string(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      return await db.createTaskAttachment({
-        taskId: input.taskId,
-        fileName: input.fileName,
-        fileUrl: input.fileUrl,
-        fileSize: input.fileSize,
-        mimeType: input.mimeType,
-        uploadedBy: ctx.user.id,
+    .mutation(async () => {
+      // SEC-037 / SAFE_DISABLED_PENDING_STORAGE_INTEGRATION:
+      // O input aceitava fileUrl arbitrário (SSRF/URL injection). O pipeline de
+      // upload seguro (S3) é escopo da PR B. Até lá, a mutation fica desabilitada.
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Upload de anexos de tarefa temporariamente desabilitado por segurança (SAFE_DISABLED_PENDING_STORAGE_INTEGRATION).",
       });
     }),
 
-  deleteAttachment: protectedProcedure
+  deleteAttachment: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
-      return await db.deleteTaskAttachment(input.id);
+    .mutation(async ({ input, ctx }) => {
+      const ok = await db.deleteTaskAttachmentForOrganization(input.id, ctx.organizationId);
+      if (!ok) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.deleteAttachment",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.id,
+          reason: "attachment_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Anexo não encontrado" });
+      }
+      return { success: true };
     }),
 
   // Processos (para vincular tarefas)
-  listProcesses: protectedProcedure.query(async ({ ctx }) => {
-    return await db.getProcessesByUser(ctx.user.id);
+  listProcesses: tenantProcedure.query(async ({ ctx }) => {
+    return await db.listProcessesForOrganization(ctx.organizationId);
   }),
 
-  getProcess: protectedProcedure
+  getProcess: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return await db.getProcessById(input.id);
+    .query(async ({ input, ctx }) => {
+      const process = await db.getProcessByIdForOrganization(input.id, ctx.organizationId);
+      if (!process) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.getProcess",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.id,
+          reason: "process_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+      }
+      return process;
     }),
 
-  linkProcess: protectedProcedure
+  linkProcess: tenantProcedure
     .input(
       z.object({
         taskId: z.number(),
         processId: z.number().nullable(),
       })
     )
-    .mutation(async ({ input }) => {
-      return await db.updateTask(input.taskId, { processId: input.processId });
+    .mutation(async ({ input, ctx }) => {
+      // Se vinculando a um processo, ele precisa pertencer à organização.
+      if (input.processId !== null) {
+        const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
+        if (!process) {
+          authzLog.warn("cross_tenant_denied", {
+            procedure: "departmentTasks.linkProcess",
+            organizationId: ctx.organizationId,
+            userId: ctx.user.id,
+            resourceId: input.processId,
+            reason: "process_not_found_or_cross_tenant",
+          });
+          throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        }
+      }
+
+      const ok = await db.updateTaskForOrganization(input.taskId, ctx.organizationId, {
+        processId: input.processId,
+      });
+      if (!ok) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.linkProcess",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.taskId,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+      return { success: true };
     }),
 });

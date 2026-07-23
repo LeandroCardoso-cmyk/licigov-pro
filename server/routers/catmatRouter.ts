@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
+import { rateLimitMiddleware } from "../services/rateLimiter";
 
 /**
  * Router para integração com CATMAT/CATSER (Catálogo de Materiais e Serviços do Governo Federal)
@@ -29,7 +30,7 @@ export const catmatRouter = router({
   /**
    * Busca materiais no CATMAT por termo de busca
    */
-  searchMaterials: publicProcedure
+  searchMaterials: tenantProcedure.use(rateLimitMiddleware("catmat"))
     .input(
       z.object({
         searchTerm: z.string().min(2, "Digite pelo menos 2 caracteres"),
@@ -78,7 +79,7 @@ export const catmatRouter = router({
   /**
    * Busca serviços no CATSER por termo de busca
    */
-  searchServices: publicProcedure
+  searchServices: tenantProcedure.use(rateLimitMiddleware("catmat"))
     .input(
       z.object({
         searchTerm: z.string().min(2, "Digite pelo menos 2 caracteres"),
@@ -127,7 +128,7 @@ export const catmatRouter = router({
   /**
    * Busca item específico do CATMAT por código
    */
-  getMaterialByCode: publicProcedure
+  getMaterialByCode: tenantProcedure.use(rateLimitMiddleware("catmat"))
     .input(
       z.object({
         code: z.number().int().positive(),
@@ -171,7 +172,7 @@ export const catmatRouter = router({
   /**
    * Busca item específico do CATSER por código
    */
-  getServiceByCode: publicProcedure
+  getServiceByCode: tenantProcedure.use(rateLimitMiddleware("catmat"))
     .input(
       z.object({
         code: z.number().int().positive(),

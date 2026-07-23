@@ -12,6 +12,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db");
 
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn().mockResolvedValue({
+    organizationId: 1,
+    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
+}));
+
 vi.mock("../../services/rateLimiter", async () => {
   const trpc = await import("../../_core/trpc");
   return {
@@ -73,8 +82,8 @@ import { makeContext, mockUser, mockProcess, mockDocument } from "../helpers/fix
 describe("AI Assistant Router — Integração", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
-    vi.mocked(db.getDocumentsByProcess).mockResolvedValue([mockDocument] as any);
+    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
+    vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
     vi.mocked(suggestions.suggestModality).mockResolvedValue("## Modalidade Recomendada\n\n**Pregão Eletrônico**");
     vi.mocked(suggestions.suggestRisks).mockResolvedValue("### Riscos\n- Risco A");
@@ -120,7 +129,7 @@ describe("AI Assistant Router — Integração", () => {
     });
 
     it("lança NOT_FOUND para processo inexistente", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue(null as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
 
       await expect(
         aiAssistantRouter.createCaller(makeContext(mockUser)).suggestModality({ processId: 9999 }),
@@ -153,7 +162,7 @@ describe("AI Assistant Router — Integração", () => {
     });
 
     it("inclui conteúdo dos documentos no contexto para análise de riscos", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([
         { ...mockDocument, type: "etp", content: "Conteúdo do ETP" },
         { ...mockDocument, type: "tr", content: "Conteúdo do TR", id: 200 },
       ] as any);
@@ -261,7 +270,7 @@ describe("AI Assistant Router — Integração", () => {
   // ── Contexto de documentos ────────────────────────────────────────────────
   describe("buildContext — construção de contexto a partir dos documentos", () => {
     it("contexto sem documentos tem campos null", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([] as any);
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
       const caller = aiAssistantRouter.createCaller(makeContext(mockUser));
 
       await caller.suggestModality({ processId: 10 });
@@ -276,7 +285,7 @@ describe("AI Assistant Router — Integração", () => {
     });
 
     it("contexto preenche campos dos documentos existentes", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([
         { ...mockDocument, type: "dfd", content: "# DFD aqui" },
       ] as any);
 

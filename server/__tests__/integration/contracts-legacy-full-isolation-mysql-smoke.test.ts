@@ -265,12 +265,11 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
     await expect(caller.contracts.list()).rejects.toThrow(/acesso/i);
   }, 30_000);
 
-  it("router: usuário sem organização cai no fallback determinístico (org=1), nunca em agregação global de todas as orgs", async () => {
+  it("router: usuário sem organização é bloqueado (fail-closed), nunca cai na org 1 nem em agregação global", async () => {
+    // RC-SEC-PR-A (SEC-017): fallback org=1 removido; usuário sem membership é
+    // rejeitado com FORBIDDEN/NO_ORGANIZATION_MEMBERSHIP.
     const caller = await makeCaller(userNoOrg);
-    const list = await caller.contracts.list();
-    // org=1 não tem os contratos de teste — não deve conter contractA nem contractB.
-    expect(list.map((c: any) => c.id)).not.toContain(contractA);
-    expect(list.map((c: any) => c.id)).not.toContain(contractB);
+    await expect(caller.contracts.list()).rejects.toThrow(/NO_ORGANIZATION_MEMBERSHIP|acesso|organiza/i);
   }, 30_000);
 
   it("router: admin de plataforma opera escopado à organização selecionada via header, não globalmente", async () => {

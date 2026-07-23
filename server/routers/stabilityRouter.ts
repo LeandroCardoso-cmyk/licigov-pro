@@ -1,5 +1,5 @@
 import { z }        from "zod";
-import { router, publicProcedure } from "../_core/trpc";
+import { router, adminProcedure } from "../_core/trpc";
 import {
   recordMetric,
   buildStabilitySnapshot,
@@ -27,7 +27,7 @@ import {
 } from "../services/operationalCommunicationService";
 
 export const stabilityRouter = router({
-  getStabilitySnapshot: publicProcedure
+  getStabilitySnapshot: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       metrics: z.array(z.object({
@@ -45,7 +45,7 @@ export const stabilityRouter = router({
       buildStabilitySnapshot(input.organizationId, input.metrics as Parameters<typeof buildStabilitySnapshot>[1], [])
     ),
 
-  recordMetric: publicProcedure
+  recordMetric: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       metricType:     z.enum(["workflow_throughput","queue_depth","review_latency","approval_rate","error_rate","deployment_health","tenant_load"]),
@@ -56,7 +56,7 @@ export const stabilityRouter = router({
       recordMetric(input.organizationId, input.metricType, input.value, input.unit)
     ),
 
-  isStable: publicProcedure
+  isStable: adminProcedure
     .input(z.object({
       snapshot: z.object({
         id: z.string(), organizationId: z.number(),
@@ -69,7 +69,7 @@ export const stabilityRouter = router({
       isStable(input.snapshot as Parameters<typeof isStable>[0])
     ),
 
-  getServiceHealth: publicProcedure
+  getServiceHealth: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       metrics: z.record(z.string(), z.number()),
@@ -78,11 +78,11 @@ export const stabilityRouter = router({
       buildHealthSnapshot(input.organizationId, input.metrics)
     ),
 
-  getHealthHistory: publicProcedure
+  getHealthHistory: adminProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }) => getHealthHistory(input.organizationId)),
 
-  createCheckpoint: publicProcedure
+  createCheckpoint: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       checkpointType: z.enum(["pre_deployment","post_migration","manual","scheduled","pre_rollback"]),
@@ -97,7 +97,7 @@ export const stabilityRouter = router({
       createCheckpoint(input.organizationId, input.checkpointType, input.snapshotData)
     ),
 
-  getRecoveryCheckpoints: publicProcedure
+  getRecoveryCheckpoints: adminProcedure
     .input(z.object({
       organizationId:  z.number(),
       checkpointType:  z.enum(["pre_deployment","post_migration","manual","scheduled","pre_rollback"]),
@@ -106,11 +106,11 @@ export const stabilityRouter = router({
       getLatestCheckpoint(input.organizationId, input.checkpointType)
     ),
 
-  getGovernancePolicies: publicProcedure
+  getGovernancePolicies: adminProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }) => getActivePolicies(input.organizationId)),
 
-  createGovernancePolicy: publicProcedure
+  createGovernancePolicy: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       policyType:     z.enum(["deployment","workflow","escalation","approval","data_access","support","incident","sla"]),
@@ -121,24 +121,24 @@ export const stabilityRouter = router({
         actions:     z.array(z.string()),
         thresholds:  z.record(z.string(), z.number()),
       }),
-      createdBy:      z.number(),
       effectiveTo:    z.string().nullable().optional(),
     }))
-    .mutation(({ input }) =>
+    .mutation(({ input, ctx }) =>
+      // RC-SEC-PR-A: autor derivado do contexto autenticado, nunca do input.
       createPolicy(
         input.organizationId, input.policyType, input.name,
-        input.description, input.rules, input.createdBy,
+        input.description, input.rules, ctx.user.id,
         input.effectiveTo ?? null,
       )
     ),
 
-  getCommunications: publicProcedure
+  getCommunications: adminProcedure
     .input(z.object({ organizationId: z.number(), limit: z.number().optional() }))
     .query(({ input }) =>
       getRecentCommunications(input.organizationId, input.limit)
     ),
 
-  sendAlert: publicProcedure
+  sendAlert: adminProcedure
     .input(z.object({
       organizationId: z.number(),
       type:           z.enum(["deployment_alert","workflow_alert","degradation_notice","escalation_alert","onboarding_reminder","support_notification","sla_breach","recovery_notice","governance_notice"]),

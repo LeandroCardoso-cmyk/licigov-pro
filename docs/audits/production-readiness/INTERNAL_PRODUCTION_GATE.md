@@ -5,8 +5,9 @@
 > O LiciGov Pro pode ser utilizado internamente pela Prefeitura de Moreira Sales com risco
 > institucional aceitável?
 
-**Resposta atual: NÃO — 10 dos 12 itens do Gate Obrigatório ainda não estão em `PASS`**
-(6 FAIL + 3 PARTIAL + 1 NOT_VERIFIED). Todos bloqueiam o go-live pela regra abaixo.
+**Resposta atual (pós-PR A): NÃO — 6 dos 12 itens do Gate Obrigatório ainda não estão em `PASS`**
+(2 FAIL + 4 PARTIAL). A PR A (Bloco A) fechou G1/G2/G3/G6 (isolamento, ops, escalação, registro)
+e reduziu G4/G5 a PARTIAL (dependem de ação operacional no Railway). Restam Blocos B/D e backup.
 Status por item: **PASS** · **FAIL** · **PARTIAL** · **NOT_VERIFIED** · **N/A**.
 
 > **Severidade ≠ decisão de go-live.** A severidade (P0/P1/P2/P3) dos achados classifica impacto
@@ -20,17 +21,17 @@ Status por item: **PASS** · **FAIL** · **PARTIAL** · **NOT_VERIFIED** · **N/
 > **Regra de bloqueio.** Para autorizar a produção interna, **todo item aplicável do Gate
 > Obrigatório deve estar em `PASS`**. Os estados `FAIL`, `PARTIAL` e `NOT_VERIFIED` continuam
 > bloqueando o go-live — não basta eliminar apenas os itens em `FAIL`. Um item só deixa de
-> bloquear se for formalmente classificado como `N/A`, com justificativa documentada. Assim,
-> G4 (`NOT_VERIFIED`), G6, G8 e G11 (`PARTIAL`) permanecem bloqueantes enquanto não forem `PASS`.
+> bloquear se for formalmente classificado como `N/A`, com justificativa documentada. Após a PR A,
+> os itens `PARTIAL` remanescentes (G4/G5/G8/G11) permanecem bloqueantes enquanto não forem `PASS`.
 
 | # | Item | Status | Evidência / condição de PASS |
 |---|---|:---:|---|
-| G1 | Nenhum IDOR no core (processos/tarefas/documentos/comentários) | **FAIL** | TENANT-001/002/008 abertos; PASS = todo acesso valida org do recurso |
-| G2 | Nenhum endpoint institucional público sem auth | **FAIL** | AUTH-003 (deployment/stability); PASS = protegidos por adminProcedure |
-| G3 | Nenhuma escalação de privilégio | **FAIL** | RBAC-004 (onboarding self-grant); PASS = concessão restrita |
-| G4 | Sem credencial default em produção | **NOT_VERIFIED** | CONFIG-005; PASS = boot falha sem `ADMIN_PASSWORD` E var setada no Railway |
-| G5 | Segredos fora do repositório e rotacionados | **FAIL** | SEC-018 (`.env` no git); PASS = `git rm --cached` + JWT_SECRET novo |
-| G6 | Registro não permite entrada indevida no tenant do órgão | **PARTIAL** | SEC-017; PASS = registro por convite OU fallback org 1 removido |
+| G1 | Nenhum IDOR no core (processos/tarefas/documentos/comentários) | **PASS** | RC-SEC-PR-A: TENANT-001/002/008 corrigidos (tenantProcedure + *ForOrganization); freeze + MySQL-real |
+| G2 | Nenhum endpoint institucional público sem auth | **PASS** | RC-SEC-PR-A: AUTH-003 corrigido (deployment/stability → adminProcedure); freeze |
+| G3 | Nenhuma escalação de privilégio | **PASS** | RC-SEC-PR-A: RBAC-004 corrigido (onboarding orgRoleProcedure, escopo global só admin plataforma) |
+| G4 | Sem credencial default em produção | **PARTIAL** | CONFIG-005: código exige `ADMIN_PASSWORD` em produção (sem default); PASS = var confirmada no Railway (OPERATOR_ACTION_REQUIRED) |
+| G5 | Segredos fora do repositório e rotacionados | **PARTIAL** | SEC-018: `.env` removido do índice; PASS = rotação dos segredos (runbook, OPERATOR_ACTION_REQUIRED) |
+| G6 | Registro não permite entrada indevida no tenant do órgão | **PASS** | RC-SEC-PR-A: SEC-017 corrigido (fallback org 1 removido; registro fail-closed) |
 | G7 | CI comprova que o projeto compila e o isolamento não regrediu | **FAIL** | DEPLOY-019/049; PASS = build+typecheck+smokes de isolamento no gate |
 | G8 | Fluxo principal navegável e sem telas de debug/duplicadas | **PARTIAL** | UI-054, LEGACY-013; PASS = rotas de teste e legadas fora da navegação |
 | G9 | Login/sessão/logout funcionais | **PASS** | JWT httpOnly ok (ressalva SEC-022: expiração 1 ano) |
@@ -38,10 +39,12 @@ Status por item: **PASS** · **FAIL** · **PARTIAL** · **NOT_VERIFIED** · **N/
 | G11 | Backup e restauração disponíveis | **PARTIAL** | DEPLOY-051; backup manual + DR documentado; **restore nunca testado**. PASS = backup agendado/automatizado + retenção definida + ≥1 teste de restauração bem-sucedido registrado |
 | G12 | IA nunca serve conteúdo mock como oficial sem sinalizar | **FAIL** | AI-015; PASS = fallback visível + `GEMINI_API_KEY` garantida |
 
-**Resultado do Gate Obrigatório: 2 PASS · 6 FAIL · 3 PARTIAL · 1 NOT_VERIFIED · 0 N/A (total 12).**
-FAIL: G1, G2, G3, G5, G7, G12 · PARTIAL: G6, G8, G11 · NOT_VERIFIED: G4 · PASS: G9, G10.
+**Resultado do Gate Obrigatório (pós-PR A): 6 PASS · 2 FAIL · 4 PARTIAL · 0 NOT_VERIFIED · 0 N/A (total 12).**
+PASS: G1, G2, G3, G6, G9, G10 · FAIL: G7, G12 · PARTIAL: G4, G5, G8, G11.
 Pela regra de bloqueio acima, enquanto qualquer item aplicável não estiver em `PASS` — incluindo
-os `PARTIAL` (G6/G8/G11) e o `NOT_VERIFIED` (G4) — o go-live **não** é autorizado.
+os `PARTIAL` (G4/G5/G8/G11) — o go-live **não** é autorizado. A PR A moveu G1/G2/G3/G6 para PASS
+e G4/G5 de FAIL/NOT_VERIFIED para PARTIAL (falta ação operacional: `ADMIN_PASSWORD` no Railway e
+rotação de segredos). G7/G12 seguem para o Bloco D; G8 para o Bloco B; G11 para backup/restore.
 
 ---
 

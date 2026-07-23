@@ -12,6 +12,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db");
 
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn().mockResolvedValue({
+    organizationId: 1,
+    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
+}));
+
 vi.mock("../../services/rateLimiter", async () => {
   const trpc = await import("../../_core/trpc");
   return {
@@ -90,13 +99,13 @@ import { makeContext, mockUser, mockAdmin, mockOtherUser, mockProcess } from "..
 describe("Segurança — Integração", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
+    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.getProcessMember).mockResolvedValue(null as any);
-    vi.mocked(db.getDocumentsByProcess).mockResolvedValue([] as any);
+    vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
     vi.mocked(db.getDocumentSettingsByUser).mockResolvedValue(null as any);
     vi.mocked(db.createDocument).mockResolvedValue(undefined as any);
-    vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue(null as any);
+    vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
   });
 
   // ── Procedures protegidas ─────────────────────────────────────────────────
@@ -184,7 +193,7 @@ describe("Segurança — Integração", () => {
   // ── Controle de acesso por ownership de processo ──────────────────────────
   describe("assertProcessAccess — isolamento de dados por usuário", () => {
     it("usuário não-dono sem membro → FORBIDDEN em listByProcess", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }),
@@ -192,7 +201,7 @@ describe("Segurança — Integração", () => {
     });
 
     it("usuário não-dono → FORBIDDEN em save", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "x" }),
@@ -200,7 +209,7 @@ describe("Segurança — Integração", () => {
     });
 
     it("assertProcessOwner — usuário não-dono → FORBIDDEN em uploadDocument", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).uploadDocument({
@@ -211,7 +220,7 @@ describe("Segurança — Integração", () => {
     });
 
     it("processo inexistente → NOT_FOUND (não FORBIDDEN)", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue(null as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }),

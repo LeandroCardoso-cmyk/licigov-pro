@@ -11,6 +11,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db");
 
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn().mockResolvedValue({
+    organizationId: 1,
+    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
+}));
+
 vi.mock("../../services/rateLimiter", async () => {
   const trpc = await import("../../_core/trpc");
   return {
@@ -71,20 +80,20 @@ import { makeContext, mockUser, mockOtherUser, mockProcess, mockDocument, mockUp
 describe("Documents Router — Integração", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
+    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.getProcessMember).mockResolvedValue(null as any);
-    vi.mocked(db.getDocumentsByProcess).mockResolvedValue([mockDocument] as any);
-    vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue(null as any);
+    vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
+    vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
     vi.mocked(db.createDocument).mockResolvedValue(undefined as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
-    vi.mocked(db.getDocumentById).mockResolvedValue(null as any);
-    vi.mocked(db.getDocumentVersions).mockResolvedValue([] as any);
+    vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
+    vi.mocked(db.getDocumentVersionsForOrganization).mockResolvedValue([] as any);
   });
 
   // ── documents.listByProcess ──────────────────────────────────────────────
   describe("listByProcess", () => {
     it("retorna documentos para o dono do processo", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([mockDocument] as any);
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.listByProcess({ processId: 10 });
@@ -95,7 +104,7 @@ describe("Documents Router — Integração", () => {
 
     it("permite acesso a membro autorizado do processo", async () => {
       const memberUser = { ...mockOtherUser };
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
       vi.mocked(db.getProcessMember).mockResolvedValue({ id: 1, processId: 10, userId: memberUser.id } as any);
 
       const result = await documentsRouter.createCaller(makeContext(memberUser)).listByProcess({ processId: 10 });
@@ -104,7 +113,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("bloqueia usuário sem vínculo com o processo com FORBIDDEN", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
       vi.mocked(db.getProcessMember).mockResolvedValue(null as any);
 
       await expect(
@@ -113,7 +122,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna NOT_FOUND para processo inexistente", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue(null as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }),
@@ -130,7 +139,7 @@ describe("Documents Router — Integração", () => {
   // ── documents.save ───────────────────────────────────────────────────────
   describe("save (criar/atualizar documento)", () => {
     it("cria documento com versão 1 quando não existe versão anterior", async () => {
-      vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue(null as any);
+      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.save({ processId: 10, type: "etp", content: "# ETP" });
@@ -143,7 +152,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("incrementa versão quando já existe documento do mesmo tipo", async () => {
-      vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue({ ...mockDocument, version: 2 } as any);
+      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue({ ...mockDocument, version: 2 } as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.save({ processId: 10, type: "dfd", content: "# DFD v3" });
@@ -186,7 +195,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("bloqueia usuário sem permissão no processo", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "# TR" }),
@@ -197,7 +206,7 @@ describe("Documents Router — Integração", () => {
   // ── documents.getByType ──────────────────────────────────────────────────
   describe("getByType", () => {
     it("retorna documento pelo tipo", async () => {
-      vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue(mockDocument as any);
+      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(mockDocument as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.getByType({ processId: 10, type: "dfd" });
@@ -206,7 +215,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna null para tipo inexistente", async () => {
-      vi.mocked(db.getDocumentByProcessAndType).mockResolvedValue(null as any);
+      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.getByType({ processId: 10, type: "ata" });
@@ -230,7 +239,7 @@ describe("Documents Router — Integração", () => {
         key: "processes/10/tr/1234_termo.pdf",
         url: "https://s3.example.com/processes/10/tr/1234_termo.pdf",
       } as any);
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([] as any);
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.uploadDocument(validUpload);
@@ -246,7 +255,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("define versão 1 para primeiro upload do tipo", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([] as any);
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.uploadDocument(validUpload);
@@ -255,7 +264,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("incrementa versão em uploads subsequentes do mesmo tipo", async () => {
-      vi.mocked(db.getDocumentsByProcess).mockResolvedValue([{ ...mockUploadedDocument, type: "tr", version: 2 }] as any);
+      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([{ ...mockUploadedDocument, type: "tr", version: 2 }] as any);
       const caller = documentsRouter.createCaller(makeContext(mockUser));
 
       const result = await caller.uploadDocument(validUpload);
@@ -282,7 +291,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("exige que o usuário seja dono do processo (assertProcessOwner)", async () => {
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).uploadDocument(validUpload),
@@ -293,8 +302,8 @@ describe("Documents Router — Integração", () => {
   // ── documents.getDownloadUrl ─────────────────────────────────────────────
   describe("getDownloadUrl (presigned URL)", () => {
     it("retorna URL presignada para documento S3 válido", async () => {
-      vi.mocked(db.getDocumentById).mockResolvedValue(mockUploadedDocument as any);
-      vi.mocked(db.getProcessById).mockResolvedValue(mockProcess as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
       vi.mocked(storageModule.storageGet).mockResolvedValue({ url: "https://s3.example.com/presigned" } as any);
 
       const result = await documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 101 });
@@ -304,7 +313,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna NOT_FOUND para documento inexistente", async () => {
-      vi.mocked(db.getDocumentById).mockResolvedValue(null as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 9999 }),
@@ -312,8 +321,8 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna FORBIDDEN para usuário que não é dono do processo", async () => {
-      vi.mocked(db.getDocumentById).mockResolvedValue(mockUploadedDocument as any);
-      vi.mocked(db.getProcessById).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as any);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 101 }),
@@ -321,7 +330,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna BAD_REQUEST para documento sem s3Key (documento textual)", async () => {
-      vi.mocked(db.getDocumentById).mockResolvedValue({ ...mockDocument, s3Key: null } as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue({ ...mockDocument, s3Key: null } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 100 }),
@@ -333,8 +342,8 @@ describe("Documents Router — Integração", () => {
   describe("getVersionHistory", () => {
     it("retorna histórico de versões do documento", async () => {
       const versions = [{ ...mockDocument, version: 1 }, { ...mockDocument, version: 2, id: 200 }];
-      vi.mocked(db.getDocumentById).mockResolvedValue(mockDocument as any);
-      vi.mocked(db.getDocumentVersions).mockResolvedValue(versions as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockDocument as any);
+      vi.mocked(db.getDocumentVersionsForOrganization).mockResolvedValue(versions as any);
 
       const result = await documentsRouter.createCaller(makeContext(mockUser)).getVersionHistory({ documentId: 100 });
 
@@ -342,7 +351,7 @@ describe("Documents Router — Integração", () => {
     });
 
     it("retorna NOT_FOUND para documento inexistente", async () => {
-      vi.mocked(db.getDocumentById).mockResolvedValue(null as any);
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).getVersionHistory({ documentId: 9999 }),

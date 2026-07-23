@@ -14,12 +14,22 @@ export type TenantResolution = {
 };
 
 /**
+ * Código de erro estável para usuário autenticado sem vínculo organizacional.
+ * O cliente pode mapeá-lo para orientar sobre convite/vinculação administrativa.
+ */
+export const NO_ORGANIZATION_MEMBERSHIP = "NO_ORGANIZATION_MEMBERSHIP";
+
+/**
  * Resolve o organizationId para um usuário dado um request HTTP.
  *
  * Prioridade:
  * 1. Header X-Organization-Id (usuário com múltiplos memberships)
  * 2. Único membership ativo → auto-selecionar
- * 3. Sem membership → fallback org=1 (zero-gap compat)
+ *
+ * RC-SEC-PR-A (SEC-017): removido o fallback inseguro para a organização 1.
+ * Um usuário sem membership NÃO ingressa automaticamente em nenhuma organização —
+ * recebe erro estável FORBIDDEN/NO_ORGANIZATION_MEMBERSHIP (fail-closed). Isso
+ * impede que contas recém-registradas ou sem vínculo operem como membro da org 1.
  */
 export async function resolveTenantForUser(
   userId: number,
@@ -36,11 +46,11 @@ export async function resolveTenantForUser(
     .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.ativo, true)));
 
   if (allMemberships.length === 0) {
-    log.info("tenant_fallback_no_membership", { userId });
-    return {
-      organizationId: 1,
-      membership: buildDefaultMembership(userId, 1),
-    };
+    log.warn("tenant_denied_no_membership", { userId });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: NO_ORGANIZATION_MEMBERSHIP,
+    });
   }
 
   const orgIdHeader = req.headers["x-organization-id"];
@@ -94,20 +104,4 @@ export async function getMembership(
     .limit(1);
 
   return rows[0] ?? null;
-}
-
-/**
- * Membership virtual para usuários sem registro formal (zero-gap compatibility).
- */
-function buildDefaultMembership(userId: number, organizationId: number): OrganizationMember {
-  return {
-    id: 0,
-    organizationId,
-    userId,
-    role: "operator",
-    invitedBy: null,
-    ativo: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
 }

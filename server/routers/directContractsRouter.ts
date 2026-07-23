@@ -14,20 +14,22 @@ import {
 } from "../services/directContractPackage";
 import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
 import { generateAuditReport } from "../services/directContractAuditReport";
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
   getLegalArticleById,
   createDirectContract,
-  getDirectContractById,
-  listDirectContracts,
-  updateDirectContract,
+  getDirectContractByIdForOrganization,
+  listDirectContractsForOrganization,
+  updateDirectContractForOrganization,
   createDirectContractDocument,
   getDirectContractDocuments,
   updateDirectContractDocument,
+  updateDirectContractDocumentForOrganization,
   createQuotation,
   listQuotations,
   updateQuotation,
+  updateQuotationForOrganization,
   listPlatforms,
   getPlatformById,
   getPlatformChecklists,
@@ -36,11 +38,11 @@ import {
   getDirectContractAuditLogsByAction,
   saveChecklistProgress,
   getChecklistProgress,
-  getDirectContractsOverview,
-  getDirectContractsChartData,
-  getTopSuppliers,
-  getTopLegalArticles,
-  getRecentDirectContracts,
+  getDirectContractsOverviewForOrganization,
+  getDirectContractsChartDataForOrganization,
+  getTopSuppliersForOrganization,
+  getTopLegalArticlesForOrganization,
+  getRecentDirectContractsForOrganization,
 } from "../db";
 
 /**
@@ -53,7 +55,7 @@ export const directContractsRouter = router({
   
   assistant: router({
     // Sugerir artigo legal baseado na situação
-    suggestArticle: protectedProcedure
+    suggestArticle: tenantProcedure
       .input(
         z.object({
           situation: z.string().min(20),
@@ -68,7 +70,7 @@ export const directContractsRouter = router({
       }),
 
     // Gerar justificativa inicial
-    generateJustification: protectedProcedure
+    generateJustification: tenantProcedure
       .input(
         z.object({
           articleId: z.number(),
@@ -82,7 +84,7 @@ export const directContractsRouter = router({
       }),
 
     // Validar valor
-    validateValue: protectedProcedure
+    validateValue: tenantProcedure
       .input(
         z.object({
           articleId: z.number(),
@@ -101,7 +103,7 @@ export const directContractsRouter = router({
   // ========================================
   
   legalArticles: router({
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({
         type: z.enum(["dispensa", "inexigibilidade"]).optional(),
       }).optional())
@@ -109,7 +111,7 @@ export const directContractsRouter = router({
         return await getLegalArticles(input?.type);
       }),
     
-    getById: protectedProcedure
+    getById: tenantProcedure
       .input(z.object({
         id: z.number(),
       }))
@@ -131,7 +133,7 @@ export const directContractsRouter = router({
   // CONTRATAÇÕES DIRETAS
   // ========================================
   
-  create: protectedProcedure
+  create: tenantProcedure
     .input(z.object({
       number: z.string(),
       year: z.number(),
@@ -179,6 +181,7 @@ export const directContractsRouter = router({
       const directContract = await createDirectContract({
         ...input,
         createdBy: ctx.user.id,
+        organizationId: ctx.organizationId,
         status: "draft",
       });
       
@@ -205,22 +208,22 @@ export const directContractsRouter = router({
       return directContract;
     }),
   
-  list: protectedProcedure
+  list: tenantProcedure
     .input(z.object({
       type: z.enum(["dispensa", "inexigibilidade"]).optional(),
       status: z.string().optional(),
       year: z.number().optional(),
     }).optional())
     .query(async ({ input, ctx }) => {
-      return await listDirectContracts(ctx.user.id, input);
+      return await listDirectContractsForOrganization(ctx.organizationId, input);
     }),
   
-  getById: protectedProcedure
+  getById: tenantProcedure
     .input(z.object({
       id: z.number(),
     }))
     .query(async ({ input, ctx }) => {
-      const directContract = await getDirectContractById(input.id);
+      const directContract = await getDirectContractByIdForOrganization(input.id, ctx.organizationId);
       
       if (!directContract) {
         throw new TRPCError({
@@ -240,7 +243,7 @@ export const directContractsRouter = router({
       return directContract;
     }),
   
-  update: protectedProcedure
+  update: tenantProcedure
     .input(z.object({
       id: z.number(),
       data: z.object({
@@ -261,7 +264,7 @@ export const directContractsRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       // Verificar permissão
-      const directContract = await getDirectContractById(input.id);
+      const directContract = await getDirectContractByIdForOrganization(input.id, ctx.organizationId);
       
       if (!directContract) {
         throw new TRPCError({
@@ -277,8 +280,8 @@ export const directContractsRouter = router({
         });
       }
       
-      const result = await updateDirectContract(input.id, input.data);
-      
+      const result = await updateDirectContractForOrganization(input.id, ctx.organizationId, input.data);
+
       // Registrar auditoria
       if (result) {
         await createDirectContractAuditLog({
@@ -300,7 +303,7 @@ export const directContractsRouter = router({
   // ========================================
   
   documents: router({
-    create: protectedProcedure
+    create: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
         type: z.enum([
@@ -321,7 +324,7 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -356,13 +359,13 @@ export const directContractsRouter = router({
         return document;
       }),
     
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -381,7 +384,7 @@ export const directContractsRouter = router({
         return await getDirectContractDocuments(input.directContractId);
       }),
     
-    update: protectedProcedure
+    update: tenantProcedure
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -389,8 +392,8 @@ export const directContractsRouter = router({
           status: z.enum(["draft", "final", "archived"]).optional(),
         }),
       }))
-      .mutation(async ({ input }) => {
-        return await updateDirectContractDocument(input.id, input.data);
+      .mutation(async ({ input, ctx }) => {
+        return await updateDirectContractDocumentForOrganization(input.id, ctx.organizationId, input.data);
       }),
   }),
 
@@ -399,7 +402,7 @@ export const directContractsRouter = router({
   // ========================================
   
   quotations: router({
-    create: protectedProcedure
+    create: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
         supplierName: z.string(),
@@ -413,7 +416,7 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -461,13 +464,13 @@ export const directContractsRouter = router({
         return quotation;
       }),
     
-    list: protectedProcedure
+    list: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -486,7 +489,7 @@ export const directContractsRouter = router({
         return await listQuotations(input.directContractId);
       }),
     
-    update: protectedProcedure
+    update: tenantProcedure
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -498,8 +501,8 @@ export const directContractsRouter = router({
           isSelected: z.boolean().optional(),
         }),
       }))
-      .mutation(async ({ input }) => {
-        return await updateQuotation(input.id, input.data);
+      .mutation(async ({ input, ctx }) => {
+        return await updateQuotationForOrganization(input.id, ctx.organizationId, input.data);
       }),
   }),
 
@@ -509,13 +512,13 @@ export const directContractsRouter = router({
   
   generate: router({
     // Gerar Termo de Dispensa
-    termoDispensa: protectedProcedure
+    termoDispensa: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -550,13 +553,13 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Termo de Inexigibilidade
-    termoInexigibilidade: protectedProcedure
+    termoInexigibilidade: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -591,13 +594,13 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Minuta de Contrato
-    minutaContrato: protectedProcedure
+    minutaContrato: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -632,13 +635,13 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Planilha de Cotação
-    planilhaCotacao: protectedProcedure
+    planilhaCotacao: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -689,13 +692,13 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Mapa Comparativo
-    mapaComparativo: protectedProcedure
+    mapaComparativo: tenantProcedure
       .input(z.object({
         directContractId: z.number(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.directContractId);
+        const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -753,7 +756,7 @@ export const directContractsRouter = router({
   
   presential: router({
     // Gerar pacote completo (ZIP)
-    generatePackage: protectedProcedure
+    generatePackage: tenantProcedure
       .input(z.object({
         contractId: z.number(),
         includeDocuments: z.boolean().optional(),
@@ -762,7 +765,7 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.contractId);
+        const directContract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -801,13 +804,13 @@ export const directContractsRouter = router({
       }),
     
     // Gerar template de email
-    getEmailTemplate: protectedProcedure
+    getEmailTemplate: tenantProcedure
       .input(z.object({
         contractId: z.number(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const directContract = await getDirectContractById(input.contractId);
+        const directContract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!directContract) {
           throw new TRPCError({
@@ -833,13 +836,13 @@ export const directContractsRouter = router({
   
   platforms: router({
     // Listar todas as plataformas ativas
-    list: protectedProcedure
+    list: tenantProcedure
       .query(async () => {
         return await listPlatforms();
       }),
     
     // Buscar plataforma por ID
-    getById: protectedProcedure
+    getById: tenantProcedure
       .input(z.object({
         id: z.number(),
       }))
@@ -857,7 +860,7 @@ export const directContractsRouter = router({
       }),
     
     // Buscar checklists de uma plataforma
-    getChecklists: protectedProcedure
+    getChecklists: tenantProcedure
       .input(z.object({
         platformId: z.number(),
       }))
@@ -872,7 +875,7 @@ export const directContractsRouter = router({
   
   validation: router({
     // Validar CNPJ (formato e dígitos verificadores)
-    validateCNPJ: protectedProcedure
+    validateCNPJ: tenantProcedure
       .input(z.object({
         cnpj: z.string(),
       }))
@@ -881,7 +884,7 @@ export const directContractsRouter = router({
       }),
     
     // Consultar CNPJ na Receita Federal
-    consultCNPJ: protectedProcedure
+    consultCNPJ: tenantProcedure
       .input(z.object({
         cnpj: z.string(),
       }))
@@ -896,13 +899,13 @@ export const directContractsRouter = router({
   
   audit: router({
     // Buscar logs de auditoria de uma contratação
-    getLogs: protectedProcedure
+    getLogs: tenantProcedure
       .input(z.object({
         contractId: z.number(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const contract = await getDirectContractById(input.contractId);
+        const contract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!contract) {
           throw new TRPCError({
@@ -922,14 +925,14 @@ export const directContractsRouter = router({
       }),
     
     // Buscar logs por tipo de ação
-    getLogsByAction: protectedProcedure
+    getLogsByAction: tenantProcedure
       .input(z.object({
         contractId: z.number(),
         action: z.string(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const contract = await getDirectContractById(input.contractId);
+        const contract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!contract) {
           throw new TRPCError({
@@ -949,14 +952,14 @@ export const directContractsRouter = router({
       }),
     
     // Exportar relatório de auditoria em PDF
-    exportReport: protectedProcedure
+    exportReport: tenantProcedure
       .input(z.object({
         contractId: z.number(),
         filterAction: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const contract = await getDirectContractById(input.contractId);
+        const contract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!contract) {
           throw new TRPCError({
@@ -1002,7 +1005,7 @@ export const directContractsRouter = router({
   
   checklist: router({
     // Salvar progresso de um passo
-    saveProgress: protectedProcedure
+    saveProgress: tenantProcedure
       .input(z.object({
         contractId: z.number(),
         stepNumber: z.number(),
@@ -1011,7 +1014,7 @@ export const directContractsRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         // Verificar permissão
-        const contract = await getDirectContractById(input.contractId);
+        const contract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!contract) {
           throw new TRPCError({
@@ -1053,13 +1056,13 @@ export const directContractsRouter = router({
       }),
     
     // Buscar progresso de uma contratação
-    getProgress: protectedProcedure
+    getProgress: tenantProcedure
       .input(z.object({
         contractId: z.number(),
       }))
       .query(async ({ input, ctx }) => {
         // Verificar permissão
-        const contract = await getDirectContractById(input.contractId);
+        const contract = await getDirectContractByIdForOrganization(input.contractId, ctx.organizationId);
         
         if (!contract) {
           throw new TRPCError({
@@ -1084,38 +1087,33 @@ export const directContractsRouter = router({
   // ========================================
   
   analytics: router({
-    // Buscar estatísticas gerais
-    getOverview: protectedProcedure.query(async () => {
-      const overview = await getDirectContractsOverview();
-      return overview;
+    // Buscar estatísticas gerais (RC-SEC-PR-A: agregação isolada por organização)
+    getOverview: tenantProcedure.query(async ({ ctx }) => {
+      return await getDirectContractsOverviewForOrganization(ctx.organizationId);
     }),
-    
+
     // Buscar dados para gráficos
-    getCharts: protectedProcedure.query(async () => {
-      const charts = await getDirectContractsChartData();
-      return charts;
+    getCharts: tenantProcedure.query(async ({ ctx }) => {
+      return await getDirectContractsChartDataForOrganization(ctx.organizationId);
     }),
-    
+
     // Buscar top fornecedores
-    getTopSuppliers: protectedProcedure.query(async () => {
-      const suppliers = await getTopSuppliers();
-      return suppliers;
+    getTopSuppliers: tenantProcedure.query(async ({ ctx }) => {
+      return await getTopSuppliersForOrganization(ctx.organizationId);
     }),
-    
+
     // Buscar top artigos legais
-    getTopArticles: protectedProcedure.query(async () => {
-      const articles = await getTopLegalArticles();
-      return articles;
+    getTopArticles: tenantProcedure.query(async ({ ctx }) => {
+      return await getTopLegalArticlesForOrganization(ctx.organizationId);
     }),
-    
+
     // Buscar contratações recentes
-    getRecent: protectedProcedure
+    getRecent: tenantProcedure
       .input(z.object({
         limit: z.number().optional().default(10),
       }))
-      .query(async ({ input }) => {
-        const recent = await getRecentDirectContracts(input.limit);
-        return recent;
+      .query(async ({ ctx, input }) => {
+        return await getRecentDirectContractsForOrganization(ctx.organizationId, input.limit);
       }),
   }),
 });

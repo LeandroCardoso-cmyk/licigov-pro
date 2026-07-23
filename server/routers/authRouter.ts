@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { sdk } from "../_core/sdk";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
@@ -8,6 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 import { rateLimitMiddleware } from "../services/rateLimiter";
+import { SESSION_TTL_MS, ALLOW_PUBLIC_REGISTRATION } from "../config/auth";
 
 export const authRouter = router({
   me: publicProcedure.query(opts => opts.ctx.user),
@@ -22,6 +23,19 @@ export const authRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // RC-SEC-PR-A (SEC-017): registro público fail-closed. Desabilitado por
+      // padrão; só permitido com ALLOW_PUBLIC_REGISTRATION=true. Mesmo permitido,
+      // o novo usuário NÃO recebe membership automático em organização alguma
+      // (o fallback org=1 foi removido do tenantService) — precisa de convite/
+      // vinculação administrativa para acessar recursos institucionais.
+      if (!ALLOW_PUBLIC_REGISTRATION) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Cadastro público desabilitado. O acesso depende de convite ou vinculação administrativa.",
+        });
+      }
+
       const existing = await db.getUserByEmail(input.email);
       if (existing) {
         throw new TRPCError({
@@ -47,7 +61,7 @@ export const authRouter = router({
       });
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SESSION_TTL_MS });
 
       return { success: true, user: { id: user.id, name: user.name, email: user.email } };
     }),
@@ -85,7 +99,7 @@ export const authRouter = router({
       });
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SESSION_TTL_MS });
 
       return { success: true, user: { id: user.id, name: user.name, email: user.email } };
     }),

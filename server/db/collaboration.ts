@@ -6,6 +6,7 @@ import {
   InsertStageAssignment,
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
+import { getProcessByIdForOrganization } from "./processes";
 
 export async function createActivityLog(log: InsertActivityLog) {
   const db = await getDb();
@@ -21,6 +22,29 @@ export async function getActivityLogsByProcess(processId: number) {
     .from(activityLogs)
     .where(eq(activityLogs.processId, processId))
     .orderBy(desc(activityLogs.createdAt));
+}
+
+// ─── RC-SEC-PR-A — Variantes tenant-scoped de activity logs ─────────────────
+// `activity_logs.processId` é nullable. Para logs vinculados a processo, o
+// isolamento é feito validando o processo-pai pela organização. Cross-tenant
+// e inexistente retornam o MESMO resultado externo ([]/no-op via injeção).
+
+export async function getActivityLogsByProcessForOrganization(
+  processId: number,
+  organizationId: number,
+) {
+  const process = await getProcessByIdForOrganization(processId, organizationId);
+  if (!process) return [];
+  return getActivityLogsByProcess(processId);
+}
+
+export async function createActivityLogForOrganization(
+  log: Omit<InsertActivityLog, "organizationId">,
+  organizationId: number,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(activityLogs).values({ ...log, organizationId });
 }
 
 export async function upsertDocumentSettings(settings: InsertDocumentSettings) {

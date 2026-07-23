@@ -1,13 +1,12 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { getDb } from "../db";
-import { tasks } from "../../drizzle/schema";
+import { listTasksForOrganization } from "../db";
 import ExcelJS from "exceljs";
 
 /**
  * Gera relatório completo de tarefas em Excel
  */
-export async function generateTasksExcelReport(filters?: {
+export async function generateTasksExcelReport(organizationId: number, filters?: {
   status?: string[];
   priority?: string[];
   assignedTo?: number;
@@ -15,14 +14,9 @@ export async function generateTasksExcelReport(filters?: {
   endDate?: Date;
   tags?: string[];
 }) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  // Buscar tarefas da organização e aplicar filtros
+  let allTasks = await listTasksForOrganization(organizationId);
 
-  // Buscar tarefas e aplicar filtros
-  let allTasks = await db.select().from(tasks);
-  
   // Aplicar filtros
   if (filters) {
     allTasks = allTasks.filter((task) => {
@@ -149,7 +143,7 @@ export async function generateTasksExcelReport(filters?: {
 /**
  * Gera relatório resumido de tarefas em formato Markdown (para PDF)
  */
-export async function generateTasksPDFContent(filters?: {
+export async function generateTasksPDFContent(organizationId: number, filters?: {
   status?: string[];
   priority?: string[];
   assignedTo?: number;
@@ -157,14 +151,9 @@ export async function generateTasksPDFContent(filters?: {
   endDate?: Date;
   tags?: string[];
 }) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  // Buscar tarefas da organização e aplicar filtros
+  let allTasks = await listTasksForOrganization(organizationId);
 
-  // Buscar tarefas e aplicar filtros
-  let allTasks = await db.select().from(tasks);
-  
   // Aplicar filtros (mesma lógica do Excel)
   if (filters) {
     allTasks = allTasks.filter((task) => {

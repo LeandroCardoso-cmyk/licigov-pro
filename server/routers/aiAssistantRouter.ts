@@ -1,4 +1,4 @@
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
@@ -12,11 +12,16 @@ import {
 } from "../services/ai/suggestions";
 import type { ProcessContext } from "../services/ai/promptBuilder";
 
-async function buildContext(processId: number, userId: number): Promise<ProcessContext> {
-  const process = await db.getProcessById(processId);
+/**
+ * RC-SEC-PR-A — O contexto de IA é resolvido SEMPRE pela organização do tenant.
+ * A IA nunca recebe contexto (DFD/ETP/TR) de outro tenant, mesmo que a resposta
+ * não seja persistida. Cross-tenant e inexistente → mesmo NOT_FOUND.
+ */
+async function buildContext(processId: number, organizationId: number): Promise<ProcessContext> {
+  const process = await db.getProcessByIdForOrganization(processId, organizationId);
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
-  const docs = await db.getDocumentsByProcess(processId);
+  const docs = await db.getDocumentsByProcessForOrganization(processId, organizationId);
   const get = (type: string) => docs.find((d) => d.type === type)?.content ?? null;
 
   return {
@@ -34,10 +39,10 @@ async function buildContext(processId: number, userId: number): Promise<ProcessC
 }
 
 export const aiAssistantRouter = router({
-  suggestModality: protectedProcedure
+  suggestModality: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestModality(context);
       await db.createActivityLog({
         processId: input.processId,
@@ -47,10 +52,10 @@ export const aiAssistantRouter = router({
       return { suggestion };
     }),
 
-  suggestRisks: protectedProcedure
+  suggestRisks: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestRisks(context);
       await db.createActivityLog({
         processId: input.processId,
@@ -60,10 +65,10 @@ export const aiAssistantRouter = router({
       return { suggestion };
     }),
 
-  suggestClauses: protectedProcedure
+  suggestClauses: tenantProcedure
     .input(z.object({ processId: z.number(), clauseType: z.string().min(3).max(100) }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestClauses(context, input.clauseType);
       await db.createActivityLog({
         processId: input.processId,
@@ -73,10 +78,10 @@ export const aiAssistantRouter = router({
       return { suggestion };
     }),
 
-  suggestTechnicalRequirements: protectedProcedure
+  suggestTechnicalRequirements: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestTechnicalRequirements(context);
       await db.createActivityLog({
         processId: input.processId,
@@ -86,10 +91,10 @@ export const aiAssistantRouter = router({
       return { suggestion };
     }),
 
-  suggestLegalBasis: protectedProcedure
+  suggestLegalBasis: tenantProcedure
     .input(z.object({ processId: z.number(), question: z.string().min(10).max(500) }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestLegalBasis(context, input.question);
       await db.createActivityLog({
         processId: input.processId,
@@ -99,14 +104,14 @@ export const aiAssistantRouter = router({
       return { suggestion };
     }),
 
-  improveText: protectedProcedure
+  improveText: tenantProcedure
     .input(z.object({
       processId: z.number(),
       docType: z.string(),
       textSnippet: z.string().min(20).max(3000),
     }))
     .mutation(async ({ ctx, input }) => {
-      const context = await buildContext(input.processId, ctx.user.id);
+      const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await improveText(context, input.docType, input.textSnippet);
       await db.createActivityLog({
         processId: input.processId,
