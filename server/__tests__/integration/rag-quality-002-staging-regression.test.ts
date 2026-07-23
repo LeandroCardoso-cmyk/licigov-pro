@@ -52,10 +52,10 @@ function retrieveForLei14133(query: string, maxPassagesPerDocument = 3) {
 }
 
 describe("RAG-QUALITY-002 — Dedup de artigos duplicados no texto-fonte (Art. 191)", () => {
-  it("o texto-fonte real contém 'Art. 191' 3 vezes (histórico de redação por MP) — confirma a causa, sem presumir", () => {
+  it("o texto-fonte real contém 'Art. 191' EXATAMENTE 3 vezes (histórico de redação por MP) — confirma a causa, sem presumir", () => {
     const raw = readFileSync(join(process.cwd(), "data", "lei_14133_2021.txt"), "utf8");
     const occurrences = raw.split(/\n/).filter(l => /^Art\.\s*191\./.test(l.trim()));
-    expect(occurrences.length).toBeGreaterThanOrEqual(3);
+    expect(occurrences.length).toBe(3);
   });
 
   it("parseOfficialText deduplica identificadores repetidos, mantendo a ÚLTIMA ocorrência (texto vigente)", () => {
@@ -65,6 +65,27 @@ describe("RAG-QUALITY-002 — Dedup de artigos duplicados no texto-fonte (Art. 1
     expect(art191.length).toBe(1);
     // a última ocorrência no texto-fonte não traz marcador de "Vigência encerrada"/MP — é a consolidada.
     expect(art191[0].fullText).not.toMatch(/Medida Provisória|Vigência encerrada/i);
+  });
+
+  it("PROVA por eliminação: as 2 ocorrências descartadas trazem marcador de MP/vigência encerrada; a mantida, não", () => {
+    const raw = readFileSync(join(process.cwd(), "data", "lei_14133_2021.txt"), "utf8");
+    // Isola cada ocorrência bruta de "Art. 191" até a próxima ocorrência de "Art. 191" ou "Art. 192".
+    const lines = raw.split(/\r?\n/);
+    const startIdx = lines.map((l, i) => (/^Art\.\s*191\./.test(l.trim()) ? i : -1)).filter(i => i >= 0);
+    expect(startIdx.length).toBe(3);
+    const endIdx = lines.findIndex(l => /^Art\.\s*192\./.test(l.trim()));
+    const boundaries = [...startIdx, endIdx];
+    const segments = startIdx.map((s, i) => lines.slice(s, boundaries[i + 1]).join("\n"));
+
+    expect(segments[0]).toMatch(/Medida Provisória|Vigência encerrada/i); // 1ª — parágrafo revogado pela MP
+    expect(segments[1]).toMatch(/Medida Provisória|Vigência encerrada/i); // 2ª — redação da própria MP, já encerrada
+    expect(segments[2]).not.toMatch(/Medida Provisória|Vigência encerrada/i); // 3ª — texto consolidado vigente
+
+    const parsed = parseOfficialText(raw);
+    const kept = parsed.articles.find(a => a.identifier === "Art. 191º")!;
+    // O texto mantido pelo dedup corresponde à 3ª ocorrência (verbatim, sem os marcadores das anteriores).
+    expect(kept.fullText).toContain("Até o decurso do prazo de que trata o inciso II do caput do art. 193");
+    expect(segments[2]).toContain(kept.fullText.split("\n")[0].slice(0, 40));
   });
 
   it("dedup preserva a ORDEM natural do documento (não desloca o artigo para o fim)", () => {
@@ -84,6 +105,77 @@ describe("RAG-QUALITY-002 — Dedup de artigos duplicados no texto-fonte (Art. 1
     const lei = corpus.ingested.find(d => d.official.normId === "lei-14133-2021")!;
     const blocks = allBlocks(lei.knowledgeDocument).filter(b => b.kind === "OfficialText" && b.title === "Art. 191º");
     expect(blocks.length).toBe(1);
+  });
+});
+
+describe("RAG-QUALITY-002 — Inventário do corpus após dedup (207 identificadores únicos)", () => {
+  it("209 linhas brutas 'Art. N' no texto-fonte → 207 artigos após dedup — a diferença é EXCLUSIVAMENTE o Art. 191", () => {
+    const raw = readFileSync(join(process.cwd(), "data", "lei_14133_2021.txt"), "utf8");
+    const rawLines = raw.split(/\r?\n/).filter(l => /^Art\.\s*(\d+)(?:º|o|\.)?(-[A-Z])?/.test(l.trim()));
+    const counts = new Map<string, number>();
+    for (const l of rawLines) {
+      const m = l.trim().match(/^Art\.\s*(\d+)(?:º|o|\.)?(-[A-Z])?/)!;
+      const id = `Art. ${m[1]}º${m[2] ?? ""}`;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const duplicated = [...counts.entries()].filter(([, c]) => c > 1);
+    expect(duplicated).toEqual([["Art. 191º", 3]]);
+
+    const parsed = parseOfficialText(raw);
+    expect(rawLines.length).toBe(209);
+    expect(parsed.articles.length).toBe(207);
+    expect(rawLines.length - duplicated.reduce((s, [, c]) => s + (c - 1), 0)).toBe(parsed.articles.length);
+  });
+
+  it("os 207 identificadores do corpus ingerido são todos únicos (sem duplicata residual)", () => {
+    const lei = corpus.ingested.find(d => d.official.normId === "lei-14133-2021")!;
+    const blocks = allBlocks(lei.knowledgeDocument).filter(b => b.kind === "OfficialText");
+    const ids = blocks.map(b => b.title);
+    expect(ids.length).toBe(207);
+    expect(new Set(ids).size).toBe(207);
+  });
+
+  it("nenhum artigo real foi perdido pelo dedup — todo identificador presente no texto-fonte também está no corpus ingerido", () => {
+    const raw = readFileSync(join(process.cwd(), "data", "lei_14133_2021.txt"), "utf8");
+    const parsed = parseOfficialText(raw);
+    const lei = corpus.ingested.find(d => d.official.normId === "lei-14133-2021")!;
+    const blocks = allBlocks(lei.knowledgeDocument).filter(b => b.kind === "OfficialText");
+    expect(new Set(blocks.map(b => b.title))).toEqual(new Set(parsed.articles.map(a => a.identifier)));
+  });
+});
+
+describe("RAG-QUALITY-002 — Consultas explícitas sobre Art. 191/disposições transitórias NÃO sofrem a penalização temática", () => {
+  it("'até quando a administração pode optar pela lei 8666 em vez da 14133?' → Art. 191 é a passagem de maior score (era suprimido antes do ajuste de limiar)", () => {
+    const { leiPassages, result } = retrieveForLei14133("até quando a administração pode optar por licitar de acordo com a lei 8666 em vez da lei 14133?", 5);
+    const top = [...leiPassages].sort((a, b) => b.score - a.score)[0];
+    expect(top.identifier).toBe("Art. 191º");
+    expect(result.topPassageGenericContainer).toBe(false);
+  });
+
+  it("'o que diz o artigo 191 da lei 14133?' → Art. 191 é a passagem de maior score", () => {
+    const { leiPassages, result } = retrieveForLei14133("o que diz o artigo 191 da lei 14133?", 5);
+    const top = [...leiPassages].sort((a, b) => b.score - a.score)[0];
+    expect(top.identifier).toBe("Art. 191º");
+    expect(result.topPassageGenericContainer).toBe(false);
+  });
+
+  it("uma palavra estrutural genérica isolada ('lei', 'administração') em um título distante NÃO aciona a penalização de container genérico", () => {
+    // Medido: o Capítulo I ('Do Âmbito de Aplicação desta Lei') casa com 'lei' em QUALQUER pergunta
+    // sobre a lei; 'Das Prerrogativas da Administração' casa com 'administração' — isoladamente, sem
+    // um segundo termo específico, isso NÃO deve mais contar como concorrente temático (RAG-QUALITY-002).
+    const { result } = retrieveForLei14133("até quando a administração pode optar por licitar de acordo com a lei 8666 em vez da lei 14133?", 5);
+    expect(result.topPassageGenericContainer).toBe(false);
+  });
+
+  it("'o que são as disposições transitórias da lei 14133?' — Art. 191 NÃO é penalizado (thematicMatchByDoc não dispara para termos genéricos isolados)", () => {
+    // Esta pergunta é lexicalmente rasa ('disposições' só existe em títulos, nunca no corpo dos
+    // artigos; 'lei' é extremamente genérico) — o Art. 191 pode não vencer o ranking por fraqueza de
+    // sinal lexical (limitação geral de busca puramente lexical, fora do escopo desta correção), mas
+    // o ponto testado aqui é que ele não fica ARTIFICIALMENTE pior por causa da penalização temática:
+    // o sinal topPassageGenericContainer deve refletir apenas containers genéricos que REALMENTE
+    // competem com um capítulo temático específico — não com uma reincidência de palavra genérica.
+    const { result } = retrieveForLei14133("o que são as disposições transitórias da lei 14133?", 5);
+    expect(result.topPassageGenericContainer).toBe(false);
   });
 });
 

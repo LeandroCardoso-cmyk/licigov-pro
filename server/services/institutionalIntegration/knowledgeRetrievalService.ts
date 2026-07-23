@@ -245,7 +245,25 @@ function runRetrievalPass(corpus: OfficialCorpusBuildResult, context: Institutio
     for (const t of scoringTerms) if (c.headingTokens.has(t)) num += idf(t);
     return num / denom;
   };
-  const hasSpecificHeadingMatch = (c: Cand): boolean => !isGenericHeading(headingTextOf(c.b)) && headingScoreOf(c) > 0;
+  // RAG-QUALITY-002 — medido em staging: palavras estruturais/organizacionais comuns ("lei",
+  // "administração", "disposições") aparecem incidentalmente em títulos de seções SEM relação com a
+  // consulta (ex.: "Do Âmbito de Aplicação desta Lei" casa com "lei" em QUALQUER pergunta sobre a
+  // lei; "Disposições Setoriais — Das Compras" casa com "disposições" em QUALQUER pergunta sobre
+  // "disposições transitórias"). Um único termo genérico bastava para acionar o "concorrente
+  // temático" e penalizar indevidamente o próprio artigo que a pergunta pedia (ex.: Art. 191 numa
+  // pergunta sobre disposições transitórias). Títulos temáticos reais em normas brasileiras quase
+  // sempre são expressões de 2+ palavras ("Da Contratação Direta", "Da Dispensa de Licitação") — por
+  // isso exige 2+ termos casados, ou 1 termo isolado MUITO específico (score alto o bastante para não
+  // ser uma palavra genérica de baixo IDF).
+  const SPECIFIC_HEADING_MIN_MATCHED_TERMS = 2;
+  const SPECIFIC_HEADING_MIN_SCORE_SINGLE_TERM = 0.5;
+  const hasSpecificHeadingMatch = (c: Cand): boolean => {
+    if (isGenericHeading(headingTextOf(c.b))) return false;
+    const matchedCount = scoringTerms.filter(t => c.headingTokens.has(t)).length;
+    if (matchedCount >= SPECIFIC_HEADING_MIN_MATCHED_TERMS) return true;
+    if (matchedCount === 1) return headingScoreOf(c) >= SPECIFIC_HEADING_MIN_SCORE_SINGLE_TERM;
+    return false;
+  };
 
   // RAG-QUALITY-002 — a normalização de comprimento do BM25 penaliza blocos grandes por padrão
   // (evita que um GLOSSÁRIO genérico, ex.: Art. 6º, vença por amplitude de vocabulário). Mas um

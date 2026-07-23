@@ -9505,8 +9505,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
-    "mtime": 1784828882.3092952,
-    "ast_hash": "9922f34dc79f585bfafff3ac0be9760d",
+    "mtime": 1784839453.7555864,
+    "ast_hash": "f176762fca4189d7c122200841dc7e2e",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_KNOWLEDGE_INTEGRATION.md": {
@@ -9830,13 +9830,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rag-quality-002-staging-regression.test.ts": {
-    "mtime": 1784828987.0692909,
-    "ast_hash": "34480ab4889f9d5d52bbb988b55a92ea",
+    "mtime": 1784839622.7235825,
+    "ast_hash": "c1d2067421f375e0ec20ddceeb2e9665",
     "semantic_hash": ""
   },
   "docs/ai/RAG_QUALITY_002_REPORT.md": {
-    "mtime": 1784832725.3298333,
-    "ast_hash": "926b363e029f626cfcfdc7548605d578",
+    "mtime": 1784839812.623578,
+    "ast_hash": "e5f04ed1bf08b0409cb97531ffaabff5",
     "semantic_hash": ""
   }
 }
