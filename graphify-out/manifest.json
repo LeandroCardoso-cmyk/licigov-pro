@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1784742695.7913818,
-    "ast_hash": "aa66c8ff3c8d1dc5173acb354e1f143c",
+    "mtime": 1784817031.372539,
+    "ast_hash": "224d69f120bb8977d0cd09897a622f1d",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -4115,8 +4115,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1784472875.6826737,
-    "ast_hash": "a64afc25a8bc8afa40f6623000145c60",
+    "mtime": 1784817023.0565386,
+    "ast_hash": "ba52fae5e21b738b92e48a03f6d50795",
     "semantic_hash": ""
   },
   "server/_core/ai/provider.ts": {
@@ -9640,8 +9640,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-thinking.test.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "ba22ee6bc66a01b158b0df47f89e3bad",
+    "mtime": 1784817089.9685426,
+    "ast_hash": "19fa3e552907f83540f9f383f94ea803",
     "semantic_hash": ""
   },
   "client/src/const.test.ts": {
@@ -9805,13 +9805,18 @@
     "semantic_hash": ""
   },
   "docs/security/PR_A_SECURITY_REMEDIATION_REPORT.md": {
-    "mtime": 1784743184.2514014,
-    "ast_hash": "60862f8a5b952be402b20fd3b81919e5",
+    "mtime": 1784745498.8289294,
+    "ast_hash": "ce8b3ef127ea2d09bf919747e9d89dfa",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts": {
     "mtime": 1784742649.310564,
     "ast_hash": "3e894f73531f103dc9cf037d85332f88",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/app-env-resolution.test.ts": {
+    "mtime": 1784817183.340548,
+    "ast_hash": "c326d6c9d65ef6cc75b218cb9a7b73b5",
     "semantic_hash": ""
   }
 }
