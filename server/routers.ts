@@ -74,6 +74,8 @@ import { documentEngineRouter } from "./routers/documentEngineRouter";
 import { adaptiveRecommendationRouter } from "./routers/adaptiveRecommendationRouter";
 import { institutionalConsultationRouter } from "./routers/institutionalConsultationRouter";
 import { passwordResetRouter } from "./routers/passwordResetRouter";
+import { invitationsRouter } from "./routers/invitationsRouter";
+import { tenantOnboardingRouter } from "./routers/tenantOnboardingRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -81,6 +83,8 @@ export const appRouter = router({
   contact: contactRouter,
   auth: authRouter,
   passwordReset: passwordResetRouter,
+  invitations: invitationsRouter,
+  tenantOnboarding: tenantOnboardingRouter,
   processes: processesRouter,
   documents: documentsRouter,
   editalParameters: editalParametersRouter,
