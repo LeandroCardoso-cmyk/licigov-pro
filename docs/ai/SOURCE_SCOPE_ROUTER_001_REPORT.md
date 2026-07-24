@@ -190,3 +190,11 @@ preenchido como "Moreira Sales" (e `id` ≠ 700001). Sem acesso ao banco de stag
 pede ao operador: (2A recomendado) `UPDATE organizations SET esfera='municipal', uf='PR',
 municipio='Moreira Sales' WHERE id=<org_real>` — resolve por município sem reingestão; ou (2B) reingerir
 a Lei 769 sob o `tenantId` da organização real.
+
+
+---
+
+> **Validação de staging — CONCLUÍDA (2026-07-24).** O teste manual no staging foi
+> concluído com sucesso, incluindo a Lei Municipal nº 769/2021 de Moreira Sales. Esta correção
+> integra a PR consolidada `fix(ai): harden Gemini runtime and legal source retrieval`
+> (commits `15ccc9e`..`d688680`). Gate: G12 → PASS (ver `docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md`).

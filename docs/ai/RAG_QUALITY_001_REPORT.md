@@ -168,3 +168,11 @@ Esta sprint **não abre PR e não altera production**, por instrução explícit
 2. Validação manual no staging: login + as 4 perguntas de teste (a que motivou o bug + as 3
    variações de checagem) — sem acesso a URL/credenciais de staging neste ambiente, esta etapa
    depende da execução do usuário, como nas sprints anteriores desta sessão.
+
+
+---
+
+> **Validação de staging — CONCLUÍDA (2026-07-24).** O teste manual no staging foi
+> concluído com sucesso, incluindo a Lei Municipal nº 769/2021 de Moreira Sales. Esta correção
+> integra a PR consolidada `fix(ai): harden Gemini runtime and legal source retrieval`
+> (commits `15ccc9e`..`d688680`). Gate: G12 → PASS (ver `docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md`).

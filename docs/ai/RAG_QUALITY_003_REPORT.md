@@ -114,3 +114,11 @@ Novo arquivo `server/__tests__/integration/rag-quality-003-truncation-retry.test
 possível confirmar `finishReason=MAX_TOKENS` diretamente nos logs reais de staging (sem acesso) — a
 correção é condicional em runtime (lê `finishReason` real a cada chamada) e funciona corretamente
 independentemente da causa exata; validação final depende do teste manual do usuário.
+
+
+---
+
+> **Validação de staging — CONCLUÍDA (2026-07-24).** O teste manual no staging foi
+> concluído com sucesso, incluindo a Lei Municipal nº 769/2021 de Moreira Sales. Esta correção
+> integra a PR consolidada `fix(ai): harden Gemini runtime and legal source retrieval`
+> (commits `15ccc9e`..`d688680`). Gate: G12 → PASS (ver `docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md`).

@@ -233,3 +233,11 @@ uma única palavra genérica ("lei", "administração", "disposições") não ba
 Testes: 8 novos casos (`rag-quality-002-staging-regression.test.ts` passa de 17 para 25),
 cobrindo os 3 pontos acima. Suíte completa após o ajuste: **3869 passed / 92 skipped / 0 falhas**
 (+8 sobre a validação anterior desta mesma revisão). `tsc --noEmit` e `build` sem erros.
+
+
+---
+
+> **Validação de staging — CONCLUÍDA (2026-07-24).** O teste manual no staging foi
+> concluído com sucesso, incluindo a Lei Municipal nº 769/2021 de Moreira Sales. Esta correção
+> integra a PR consolidada `fix(ai): harden Gemini runtime and legal source retrieval`
+> (commits `15ccc9e`..`d688680`). Gate: G12 → PASS (ver `docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md`).
