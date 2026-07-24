@@ -11,6 +11,8 @@ import { bootstrap } from "../bootstrap";
 import { APP_CONFIG } from "../config/app";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
+import { EMAIL_CONFIG } from "../config/email";
+import { start as startEmailDispatcher } from "../services/email/emailDispatcher";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -73,6 +75,13 @@ async function startServer() {
   server.listen(port, () => {
     console.info(`[BOOT][${APP_CONFIG.env}] ${APP_CONFIG.name} rodando em http://localhost:${port}/`);
   });
+
+  // PR A.1 — o dispatcher NUNCA roda automaticamente ao importar o módulo (ver comentário em
+  // emailDispatcher.ts); precisa deste start() explícito, e só quando há algo para enviar
+  // (EMAIL_ENABLED) e fora da suíte de testes (VITEST nunca inicia timers de produção).
+  if (EMAIL_CONFIG.enabled && process.env.VITEST !== "true") {
+    startEmailDispatcher();
+  }
 }
 
 async function main() {

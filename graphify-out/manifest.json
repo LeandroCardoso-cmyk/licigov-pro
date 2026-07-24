@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "server/_core/index.ts": {
-    "mtime": 1784923613.1280715,
-    "ast_hash": "facc55a8566c34fead8c0863804f1920",
+    "mtime": 1784924891.0800424,
+    "ast_hash": "727adb3166c80d68c0ebac4fff8d3763",
     "semantic_hash": ""
   },
   "server/_core/llm.ts": {
@@ -9967,6 +9967,26 @@
   "server/services/email/templates.ts": {
     "mtime": 1784924386.6200538,
     "ast_hash": "2b13d1bfca329604f37394bab20d1fe8",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-dispatcher.test.ts": {
+    "mtime": 1784925085.7000377,
+    "ast_hash": "370e09507bd50bc2120c33b8e05bcb01",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-outbox-service.test.ts": {
+    "mtime": 1784925121.736037,
+    "ast_hash": "e9ce698c09232e9527b31266a6a2760f",
+    "semantic_hash": ""
+  },
+  "server/services/email/emailDispatcher.ts": {
+    "mtime": 1784924872.2280426,
+    "ast_hash": "405ecd56aedac59d9d33e036653325a1",
+    "semantic_hash": ""
+  },
+  "server/services/email/emailOutboxService.ts": {
+    "mtime": 1784924833.1480436,
+    "ast_hash": "13e708b8e29e177d515ebd4bded2d3b9",
     "semantic_hash": ""
   }
 }
