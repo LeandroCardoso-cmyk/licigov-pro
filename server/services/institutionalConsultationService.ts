@@ -160,29 +160,38 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
       enableSourceScopeRouting: true,
     });
 
-    // RAG-QUALITY-003 — no máximo 1 retry quando a 1ª tentativa cortar por MAX_TOKENS. O
-    // correlationId é o MESMO nas duas tentativas (rastreável no log [cognitive-observability]); não
-    // é um replay (replayId/replayOfExecutionId são reservados a replay EXPLÍCITO pelo usuário) e não
-    // cria/duplica nenhum registro de histórico — só a chamada ao provider é repetida.
-    let execution: CognitiveExecution = await executeCognitiveTask({
-      task: "LEGAL_ANALYSIS", tenantId: params.organizationId, userId: String(params.userId), query: question,
-      correlationId: params.correlationId, contextPackage, maxOutputTokens: CONSULTATION_MAX_OUTPUT_TOKENS,
-    });
-    if (execution.context.outcome.finishReason === "max_tokens") {
-      const retryBudget = Math.min(Math.round(CONSULTATION_MAX_OUTPUT_TOKENS * MAX_TOKENS_RETRY_BUDGET_MULTIPLIER), MAX_TOKENS_RETRY_BUDGET_CEILING);
-      execution = await executeCognitiveTask({
+    // SOURCE-SCOPE-ROUTER-001 (lacuna 3) — pergunta ambígua: NÃO gerar resposta (sem retrieval
+    // conclusivo, sem chamada ao provider). A resposta é a solicitação de esclarecimento montada por
+    // buildConsultationAnswer a partir do escopo. Evita custo e qualquer alucinação sobre evidência vazia.
+    const isAmbiguous = (contextPackage.metadata as { sourceScope?: { ambiguous?: boolean } }).sourceScope?.ambiguous === true;
+
+    let generationTruncated = false;
+    let engineContent = "";
+    if (!isAmbiguous) {
+      // RAG-QUALITY-003 — no máximo 1 retry quando a 1ª tentativa cortar por MAX_TOKENS. O
+      // correlationId é o MESMO nas duas tentativas (rastreável no log [cognitive-observability]); não
+      // é um replay (replayId/replayOfExecutionId são reservados a replay EXPLÍCITO pelo usuário) e não
+      // cria/duplica nenhum registro de histórico — só a chamada ao provider é repetida.
+      let execution: CognitiveExecution = await executeCognitiveTask({
         task: "LEGAL_ANALYSIS", tenantId: params.organizationId, userId: String(params.userId), query: question,
-        correlationId: params.correlationId, contextPackage, maxOutputTokens: retryBudget,
+        correlationId: params.correlationId, contextPackage, maxOutputTokens: CONSULTATION_MAX_OUTPUT_TOKENS,
       });
+      if (execution.context.outcome.finishReason === "max_tokens") {
+        const retryBudget = Math.min(Math.round(CONSULTATION_MAX_OUTPUT_TOKENS * MAX_TOKENS_RETRY_BUDGET_MULTIPLIER), MAX_TOKENS_RETRY_BUDGET_CEILING);
+        execution = await executeCognitiveTask({
+          task: "LEGAL_ANALYSIS", tenantId: params.organizationId, userId: String(params.userId), query: question,
+          correlationId: params.correlationId, contextPackage, maxOutputTokens: retryBudget,
+        });
+      }
+      // RAG-QUALITY-002 — se o provider cortar a geração por limite de tokens, a resposta pode estar
+      // incompleta — não pode ser classificada como "fundamentada" às cegas. (Tentativa FINAL.)
+      generationTruncated = execution.context.outcome.finishReason === "max_tokens";
+      engineContent = execution.response.content;
     }
     const t1 = clock();
 
-    // RAG-QUALITY-002 — antes descartado: se o provider cortar a geração por limite de tokens, a
-    // resposta pode estar incompleta — não pode ser classificada como "fundamentada" às cegas.
-    // (Reflete a tentativa FINAL — depois do retry, se houve um.)
-    const generationTruncated = execution.context.outcome.finishReason === "max_tokens";
     const answer = buildConsultationAnswer({
-      tenantId: params.organizationId, userId: params.userId, question, engineContent: execution.response.content,
+      tenantId: params.organizationId, userId: params.userId, question, engineContent,
       contextPackage, executionId, replayId, replayOfExecutionId, createdAt, generationTruncated,
     });
     const sources = buildSources(params.organizationId, executionId, contextPackage, createdAt);

@@ -49,6 +49,23 @@ function scopeApplyDocuments(ctx: InstitutionalContext, allowedNormIds: readonly
 }
 
 /**
+ * SOURCE-SCOPE-ROUTER-001 (lacuna 1) — remove do universo de retrieval as fontes SRP-específicas
+ * (ex.: Decreto 11.462/2023) quando a pergunta NÃO tem relação direta com o SRP e o diploma não foi
+ * citado explicitamente. Evita apresentar regra de Registro de Preços em pergunta geral sem relação.
+ */
+function applySrpRelevanceFilter(ctx: InstitutionalContext, scope: SourceScopeDecision, applicability: Record<string, SourceApplicabilityInfo>): InstitutionalContext {
+  if (scope.srpRelated) return ctx;
+  const requested = new Set(scope.requestedDiplomas);
+  return {
+    ...ctx,
+    applicableDocuments: ctx.applicableDocuments.filter(d => {
+      const info = applicability[d.normId];
+      return !(info?.srpSpecific && !requested.has(d.normId));
+    }),
+  };
+}
+
+/**
  * Resolve o ContextPackage institucional (Componentes 1+2+3) — o passo executado pelo Orchestrator
  * ANTES do AIExecutionEngine. Determinístico, replay-safe. `nowMs` (opcional) só para latência.
  */
@@ -64,7 +81,48 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
     ? decideSourceScope({ question: params.query, availableNormIds: applicableNormIds })
     : null;
 
-  const firstCtx = scope ? scopeApplyDocuments(institutional, scope.initialScopeNormIds) : institutional;
+  // Aplicabilidade institucional de todas as fontes aplicáveis (auditoria + ressalvas).
+  const applicability: Record<string, SourceApplicabilityInfo> = {};
+  for (const d of institutional.applicableDocuments) applicability[d.normId] = classifyApplicability(d);
+
+  // LACUNA 4 — o acervo contém alguma norma municipal (fixture oficial)? E ela foi vinculada a este
+  // tenant? Usado para NÃO afirmar ausência de normas municipais quando o fixture existe mas o
+  // cadastro do órgão (município) não o vinculou. Booleano — não expõe conteúdo de outro tenant.
+  const corpusHasMunicipalFixture = corpus.registry.documents.some(d => d.jurisdiction === "municipal");
+  const municipalResolvedForTenant = institutional.applicableDocuments.some(d => d.jurisdiction === "municipal");
+
+  // ── LACUNA 3 — pergunta ambígua: SOLICITAR ESCLARECIMENTO, sem retrieval conclusivo ──────────────
+  if (scope && scope.ambiguous) {
+    const emptyPkg = createContextPackage({
+      correlationId: params.correlationId, tenantId: params.tenantId, municipality: institutional.municipality,
+      state: institutional.state, businessDomain: params.businessDomain ?? null, taskType: params.taskType,
+      hierarchy: [...institutional.hierarchy], documents: [], retrievedPassages: [], citations: [], explainability: [],
+      metadata: {
+        documentsLoaded: [], documentsIgnored: applicableNormIds, applicable: institutional.applicableDocuments.length,
+        coverageRatio: 0, maxPassageScore: 0, searchRounds: 0, topPassageGenericContainer: false,
+        sourceScope: {
+          intent: scope.intent, requestedDiplomas: scope.requestedDiplomas, initialScopeNormIds: scope.initialScopeNormIds ?? applicableNormIds,
+          expanded: false, expansionReason: null, includedNormIds: [], discardedNormIds: applicableNormIds.slice().sort(),
+          applicability, reasoning: scope.reasoning,
+          ambiguous: true, clarificationPrompt: scope.clarificationPrompt,
+          corpusHasMunicipalFixture, municipalResolvedForTenant, municipalCorpusUnmatched: false,
+        },
+      },
+    });
+    recordIntegrationEvent({ correlationId: params.correlationId, replayId: emptyPkg.replayId, tenantId: params.tenantId, businessDomain: params.businessDomain ?? null, taskType: params.taskType, type: "contextResolution", detail: `${institutional.applicableDocuments.length} documento(s) aplicável(is)`, count: institutional.applicableDocuments.length, retrievalTimeMs: 0 });
+    recordIntegrationEvent({ correlationId: params.correlationId, replayId: emptyPkg.replayId, tenantId: params.tenantId, businessDomain: params.businessDomain ?? null, taskType: params.taskType, type: "sourceScope", detail: `AMBÍGUA — esclarecimento solicitado; retrieval não executado; intent=${scope.intent}`, count: 0, retrievalTimeMs: 0 });
+    recordIntegrationEvent({ correlationId: params.correlationId, replayId: emptyPkg.replayId, tenantId: params.tenantId, businessDomain: params.businessDomain ?? null, taskType: params.taskType, type: "contextPackageBuilt", detail: emptyPkg.contextId, count: 0, retrievalTimeMs: 0 });
+    return emptyPkg;
+  }
+
+  // LACUNA 1 — fontes SRP-específicas (ex.: Decreto 11.462) só entram quando a pergunta tem relação
+  // DIRETA com o SRP, ou quando o diploma foi citado explicitamente. Filtro aplicado ao universo de
+  // retrieval (1ª busca e ampliação) — evita apresentar regra de SRP em pergunta geral sem relação.
+  const retrievalUniverse: InstitutionalContext = scope
+    ? applySrpRelevanceFilter(institutional, scope, applicability)
+    : institutional;
+
+  const firstCtx = scope ? scopeApplyDocuments(retrievalUniverse, scope.initialScopeNormIds) : retrievalUniverse;
   // Restrito a um único diploma → cabe o cluster temático inteiro (ex.: arts. 72-75 da Contratação Direta).
   const firstMaxPer = scope && scope.initialScopeNormIds && firstCtx.applicableDocuments.length === 1
     ? Math.max(params.maxPassagesPerDocument ?? 3, SINGLE_DIPLOMA_MAX_PASSAGES)
@@ -76,14 +134,14 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
   // E (o usuário pediu fontes complementares OU a 1ª busca foi insuficiente). Determinístico.
   let expanded = false;
   let expansionReason: string | null = null;
-  if (scope && scope.initialScopeNormIds && firstCtx.applicableDocuments.length < institutional.applicableDocuments.length) {
+  if (scope && scope.initialScopeNormIds && firstCtx.applicableDocuments.length < retrievalUniverse.applicableDocuments.length) {
     const insufficient = retrieval.passages.length === 0
       || retrieval.coverageRatio < SCOPE_EXPAND_COVERAGE_THRESHOLD
       || retrieval.maxPassageScore < SCOPE_EXPAND_SCORE_THRESHOLD;
     if (scope.expansionRequestedByUser || insufficient) {
       expanded = true;
       expansionReason = scope.expansionRequestedByUser ? "usuario_solicitou_fontes_complementares" : "primeira_busca_insuficiente";
-      retrieval = retrieveKnowledge(corpus, institutional, { query: params.query, maxPassagesPerDocument: params.maxPassagesPerDocument, maxPassageChars: params.maxPassageChars });
+      retrieval = retrieveKnowledge(corpus, retrievalUniverse, { query: params.query, maxPassagesPerDocument: params.maxPassagesPerDocument, maxPassageChars: params.maxPassageChars });
     }
   }
 
@@ -91,8 +149,8 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
   const includedNormIds = [...new Set(retrieval.documents.map(d => d.normId))].sort();
   const includedSet = new Set(includedNormIds);
   const discardedNormIds = applicableNormIds.filter(n => !includedSet.has(n)).sort();
-  const applicability: Record<string, SourceApplicabilityInfo> = {};
-  for (const d of institutional.applicableDocuments) applicability[d.normId] = classifyApplicability(d);
+  // LACUNA 4 — pergunta municipal cujo tenant não vinculou norma municipal, mas o acervo tem fixture.
+  const municipalCorpusUnmatched = !!scope && scope.intent === "municipal" && !municipalResolvedForTenant && corpusHasMunicipalFixture;
   const sourceScopeAudit = scope
     ? {
         intent: scope.intent,
@@ -104,6 +162,11 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
         discardedNormIds,
         applicability,
         reasoning: scope.reasoning,
+        ambiguous: false,
+        clarificationPrompt: null,
+        corpusHasMunicipalFixture,
+        municipalResolvedForTenant,
+        municipalCorpusUnmatched,
       }
     : undefined;
 

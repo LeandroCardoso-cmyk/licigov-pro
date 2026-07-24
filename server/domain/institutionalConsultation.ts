@@ -59,6 +59,11 @@ export interface EvidenceSufficiencyOptions {
  */
 export function classifyEvidenceSufficiency(pkg: ContextPackage, opts?: EvidenceSufficiencyOptions): EvidenceSufficiency {
   if (pkg.documents.length === 0 || pkg.retrievedPassages.length === 0) return "insuficiente";
+  // SOURCE-SCOPE-ROUTER-001 (lacuna 2/3) — a evidência recuperada precisa responder à INTENÇÃO da
+  // pergunta, não apenas existir. Uma consulta ao TCE sem NENHUM trecho de jurisprudência, ou a um
+  // diploma citado sem NENHUM trecho desse diploma, é "evidência insuficiente ao mérito" — nunca
+  // "fundamentada". Pergunta ambígua (sem antecedente) também não tem mérito fundamentável.
+  if (!intentEvidenceSatisfied(pkg)) return "insuficiente";
   const coverageRatio = typeof pkg.metadata.coverageRatio === "number" ? pkg.metadata.coverageRatio : 0;
   const maxPassageScore = typeof pkg.metadata.maxPassageScore === "number"
     ? pkg.metadata.maxPassageScore
@@ -69,6 +74,35 @@ export function classifyEvidenceSufficiency(pkg: ContextPackage, opts?: Evidence
   const generationComplete = opts?.generationTruncated !== true;
   if (evidenceIsSufficient && evidenceIsRelevantToIntent && generationComplete) return "fundamentada";
   return "parcial";
+}
+
+interface ScopeForSeal {
+  readonly intent?: string;
+  readonly ambiguous?: boolean;
+  readonly requestedDiplomas?: readonly string[];
+  readonly applicability?: Record<string, { category?: string }>;
+}
+/**
+ * A evidência recuperada satisfaz a INTENÇÃO da pergunta? (SOURCE-SCOPE-ROUTER-001, lacuna 2).
+ * - ambígua → não há mérito a fundamentar.
+ * - jurisprudencial → exige ao menos um trecho de fonte de jurisprudência (TCU/TCE/manual/prejulgado).
+ * - diploma citado → exige ao menos um trecho desse diploma.
+ * Sem `sourceScope` (chamadas fora do "Tirar Dúvidas") → não aplica (compatível com o comportamento anterior).
+ */
+function intentEvidenceSatisfied(pkg: ContextPackage): boolean {
+  const scope = (pkg.metadata as { sourceScope?: ScopeForSeal }).sourceScope;
+  if (!scope) return true;
+  if (scope.ambiguous) return false;
+  const passageNorms = new Set(pkg.retrievedPassages.map(p => p.normId));
+  if (scope.intent === "jurisprudencial" && scope.applicability) {
+    const hasJurisprudence = [...passageNorms].some(n => scope.applicability?.[n]?.category === "jurisprudencia");
+    if (!hasJurisprudence) return false;
+  }
+  if (scope.requestedDiplomas && scope.requestedDiplomas.length > 0) {
+    const hasRequested = scope.requestedDiplomas.some(n => passageNorms.has(n));
+    if (!hasRequested) return false;
+  }
+  return true;
 }
 
 interface SourceApplicabilityInfoShape {
@@ -334,9 +368,16 @@ export function buildConsultationAnswer(params: {
   // contexto de um tenant municipal, adiciona-se uma ressalva explícita de aplicabilidade.
   const applicabilityCaveat = buildApplicabilityCaveat(pkg);
   if (applicabilityCaveat) observations.push(applicabilityCaveat);
+  const scopeMeta = (pkg.metadata as { sourceScope?: { ambiguous?: boolean; clarificationPrompt?: string | null; municipalCorpusUnmatched?: boolean } }).sourceScope;
   const limitations: string[] = [];
   let answer: string;
-  if (hasSufficientBasis) {
+  if (scopeMeta?.ambiguous) {
+    // LACUNA 3 — pergunta ambígua: solicitar esclarecimento; NÃO executa retrieval conclusivo nem
+    // apresenta fundamento. Não é "fundamentada" nem afirma ausência de base — pede a matéria.
+    answer = scopeMeta.clarificationPrompt
+      ?? "Sua pergunta não indicou o assunto específico. Poderia especificar a matéria (ex.: dispensa, inexigibilidade, pregão, registro de preços) e, se for o caso, o diploma? Assim a consulta é respondida com a fonte correta.";
+    limitations.push("Pergunta ambígua: falta o assunto/antecedente específico para uma resposta conclusiva.");
+  } else if (hasSufficientBasis) {
     const esferas = [...new Set(pkg.documents.map(d => d.jurisdiction))];
     answer = params.engineContent && params.engineContent.trim().length > 0
       ? params.engineContent.trim()
@@ -355,6 +396,11 @@ export function buildConsultationAnswer(params: {
   } else {
     answer = "Não foi possível localizar base documental oficial suficiente no acervo institucional para fundamentar esta consulta. Recomenda-se refinar a pergunta ou consultar a autoridade competente. Nenhum fundamento é apresentado sem base oficial.";
     limitations.push("Base documental insuficiente no Official Knowledge Corpus para esta consulta.");
+  }
+  // LACUNA 4 — pergunta municipal cujo tenant não vinculou norma municipal, mas o acervo TEM fixture:
+  // nunca afirmar ausência de normas municipais; sinalizar a falta de vínculo (cadastro do município).
+  if (scopeMeta?.municipalCorpusUnmatched && !scopeMeta.ambiguous) {
+    limitations.push("Há normas municipais no acervo institucional que não puderam ser vinculadas a esta organização (município não confirmado no cadastro). Confirme o município do órgão para recuperá-las — não se afirma, aqui, a inexistência de normas municipais.");
   }
 
   const answerId = computeAnswerId(params.executionId);

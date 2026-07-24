@@ -106,3 +106,54 @@ existente).
 
 `@google/genai`, production, PR B, revogação da chave antiga — não tocados. Validação funcional final
 depende do teste manual do usuário no staging.
+
+---
+
+## Adendo — 4 lacunas finais (pós-validação de staging)
+
+### Lacuna 1 — aplicabilidade (SRP e Executivo federal)
+- **Filtro de relevância SRP** (`applySrpRelevanceFilter`): fontes SRP-específicas (Decreto
+  11.462/2023, marcado `srpSpecific`) só entram no universo de retrieval quando a pergunta tem
+  **relação direta com o SRP** (`questionRelatesToSrp`: registro de preços / SRP / ARP / IRP / ata de
+  registro) OU o diploma foi citado explicitamente. Em pergunta geral (ex.: ME/EPP municipal), o
+  Decreto 11.462 deixa de ser incluído. Controle preservado: pergunta sobre SRP continua incluindo-o.
+- **Ressalva reforçada**: quando norma do Executivo federal (IN SEGES 65) ou SRP integra o contexto
+  de um tenant municipal, a resposta ganha a ressalva explícita de aplicabilidade + condição ("não
+  constitui obrigação geral do município; confirme a adoção/regulamentação municipal").
+
+### Lacuna 2 — selos (evidência × mérito)
+`classifyEvidenceSufficiency` passa a exigir que a evidência **satisfaça a intenção** antes de poder
+ser "fundamentada" (`intentEvidenceSatisfied`): consulta **jurisprudencial** sem NENHUM trecho de
+fonte de jurisprudência (TCU/TCE/manual/prejulgado) → **"Evidência insuficiente"**; diploma **citado**
+sem NENHUM trecho desse diploma → **"Evidência insuficiente"**. Ausência de fonte específica nunca é
+classificada como resposta fundamentada ao mérito. Sem `sourceScope` (fluxos fora do Tirar Dúvidas), a
+regra não se aplica — comportamento anterior preservado.
+
+### Lacuna 3 — ambiguidade
+`isAmbiguousConsultation`: referência anafórica sem antecedente concreto ("o que diz a legislação
+municipal sobre **o tema**?") e sem termo de matéria identificável → a consulta **solicita
+esclarecimento** e **não executa retrieval conclusivo**. Na camada de integração, o ContextPackage é
+montado vazio (zero passagens) com `sourceScope.ambiguous=true`; em `answerConsultation` o provider
+**não é chamado** (sem custo, sem alucinação); `buildConsultationAnswer` retorna a solicitação de
+esclarecimento (status `limited`, selo `insuficiente`). Perguntas concretas não são afetadas.
+
+### Lacuna 4 — corpus municipal (investigação + correção)
+**Investigação:** o fixture da Lei Municipal nº 769 está corretamente ingerido — `tenantId=700001`,
+`municipality="Moreira Sales"`, `jurisdiction="municipal"`, `status="vigente"`. A resolução o localiza
+**apenas** quando (a) o tenant é 700001 **ou** (b) o perfil institucional da organização tem
+`municipio="Moreira Sales"`. Em staging, uma organização real tem outro id e, se o cadastro não trouxer
+o município "Moreira Sales", a norma municipal não é vinculada. **Causa raiz: dado/cadastro (município
+do órgão não confirmado), não ingestão/metadata** — o fixture, o tenant e a classificação estão
+corretos.
+**Correção de código:** quando a pergunta é municipal, o tenant não vincula norma municipal, mas o
+acervo **contém** fixture municipal (`corpusHasMunicipalFixture`), a resposta **não afirma ausência**
+de normas municipais — registra que há normas municipais no acervo não vinculadas à organização e pede
+a confirmação do município no cadastro (`municipalCorpusUnmatched`). Booleano de existência do fixture
+— não expõe conteúdo de outro tenant (isolamento preservado).
+
+### Testes e validação do adendo
+`source-scope-router-001.test.ts` passa de 17 para 33 testes (novos blocos para as 4 lacunas +
+roteamento mono-diploma preservado). Ajuste do 1 assert de lacuna 4 (verificava afirmação de ausência
+com regex frágil que capturava o próprio disclaimer). Suíte completa: **3914 passed / 92 skipped / 0
+falhas** (+16 sobre o SOURCE-SCOPE-ROUTER-001 base). `tsc`/`build` sem erros. Todos os testes verdes
+anteriores preservados; roteamento mono-diploma mantido.

@@ -56,6 +56,13 @@ export interface SourceScopeDecision {
   readonly expansionRequestedByUser: boolean;
   /** Ampliação é PERMITIDA (por pedido do usuário ou, na camada de integração, por insuficiência). */
   readonly allowExpansion: boolean;
+  /** SOURCE-SCOPE-ROUTER-001 (lacuna 1) — a pergunta tem relação DIRETA com o Sistema de Registro de
+   *  Preços (SRP). Fontes SRP-específicas (ex.: Decreto 11.462) só entram quando isto é verdadeiro. */
+  readonly srpRelated: boolean;
+  /** SOURCE-SCOPE-ROUTER-001 (lacuna 3) — pergunta ambígua (referência a "o tema/assunto/isso" sem
+   *  antecedente concreto). Deve SOLICITAR ESCLARECIMENTO, sem executar retrieval conclusivo. */
+  readonly ambiguous: boolean;
+  readonly clarificationPrompt: string | null;
   readonly reasoning: string;
 }
 
@@ -136,6 +143,27 @@ export function classifyApplicability(doc: OfficialDocument): SourceApplicabilit
   return { category: "norma_federal_geral", srpSpecific: false, federalOnly: false, conditional: false };
 }
 
+// ── SOURCE-SCOPE-ROUTER-001 (lacuna 1) — relação direta com o SRP ─────────────────────────────────
+const RE_SRP_RELATED = /registro de prec|sistema de registro|\bsrp\b|\barp\b|\birp\b|ata de registro|intenc[ãa]o de registro/;
+/** A pergunta trata diretamente do Sistema de Registro de Preços? (gate para fontes SRP-específicas). */
+export function questionRelatesToSrp(question: string): boolean {
+  return RE_SRP_RELATED.test(norm(question));
+}
+
+// ── SOURCE-SCOPE-ROUTER-001 (lacuna 3) — ambiguidade sem antecedente ──────────────────────────────
+// Referência anafórica a um objeto sem antecedente ("o tema", "o assunto", "sobre isso", "o mesmo").
+const RE_ANAPHORIC = /\b(o|a|esse|este|essa|esta|aquele|aquela)\s+(tema|assunto|caso|mat[ée]ria|ponto|t[óo]pico|situac[ãa]o)\b|\bsobre\s+(isso|isto|ele|ela|o mesmo|a mesma|aquilo)\b|\bdisso\b|\bnesse sentido\b/;
+// Termo de conteúdo concreto (matéria jurídica identificável): se presente, a pergunta NÃO é ambígua.
+const RE_CONCRETE_TOPIC = /licitac|dispensa|inexig|contrat|preg[aã]o|edital|registro de prec|\bsrp\b|microempres|pequeno porte|\bme\b|\bepp\b|aditivo|habilitac|proposta|julgamento|sanc[ãa]o|penalidad|credenciamento|conv[êe]nio|\bobra\b|\bservic|\bcompra|\bata\b|prazo|recurso|impugnac|orcament|garantia|fiscalizac|pesquisa de prec|termo de referencia|estudo tecnico|\bdfd\b|\betp\b|\btr\b/;
+/**
+ * A pergunta é ambígua por falta de antecedente concreto? (ex.: "o que diz a legislação municipal
+ * sobre o tema?"). Verdadeiro quando há referência anafórica E nenhum termo de matéria concreta.
+ */
+export function isAmbiguousConsultation(question: string): boolean {
+  const q = norm(question);
+  return RE_ANAPHORIC.test(q) && !RE_CONCRETE_TOPIC.test(q);
+}
+
 export interface DecideSourceScopeInput {
   readonly question: string;
   readonly availableNormIds: readonly string[];
@@ -161,11 +189,18 @@ export function decideSourceScope(input: DecideSourceScopeInput): SourceScopeDec
 
   const restricted = initialScopeNormIds !== null;
   const allowExpansion = restricted; // sem restrição, não há o que "ampliar" — já é escopo cheio
+  const srpRelated = questionRelatesToSrp(input.question);
+  const ambiguous = isAmbiguousConsultation(input.question);
+  const clarificationPrompt = ambiguous
+    ? "Sua pergunta não indicou o assunto específico (ex.: dispensa, inexigibilidade, pregão, registro de preços, ME/EPP). Poderia especificar a matéria e, se for o caso, o diploma (ex.: Lei 14.133, norma municipal)? Assim a consulta é respondida com a fonte correta."
+    : null;
 
-  const reasoning = restricted
-    ? `Diploma(s) citado(s) explicitamente: ${requestedDiplomas.join(", ")}. 1ª busca restrita; intenção=${intent}` +
-      `${expansionRequestedByUser ? "; ampliação solicitada pelo usuário" : "; ampliação apenas se insuficiente"}.`
-    : `Nenhum diploma citado explicitamente. Escopo inicial completo; intenção classificada=${intent}.`;
+  const reasoning = ambiguous
+    ? `Pergunta ambígua (referência sem antecedente concreto); solicitar esclarecimento antes de recuperar fontes. intenção=${intent}.`
+    : restricted
+      ? `Diploma(s) citado(s) explicitamente: ${requestedDiplomas.join(", ")}. 1ª busca restrita; intenção=${intent}` +
+        `${expansionRequestedByUser ? "; ampliação solicitada pelo usuário" : "; ampliação apenas se insuficiente"}${srpRelated ? "; relação direta com SRP" : ""}.`
+      : `Nenhum diploma citado explicitamente. Escopo inicial completo; intenção classificada=${intent}${srpRelated ? "; relação direta com SRP" : "; sem relação direta com SRP"}.`;
 
-  return { intent, requestedDiplomas, initialScopeNormIds, expansionRequestedByUser, allowExpansion, reasoning };
+  return { intent, requestedDiplomas, initialScopeNormIds, expansionRequestedByUser, allowExpansion, srpRelated, ambiguous, clarificationPrompt, reasoning };
 }

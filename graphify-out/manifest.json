@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/institutionalKnowledgeIntegration.ts": {
-    "mtime": 1784843605.906359,
-    "ast_hash": "38a82eaea0e3f4b88735399b1dcb5373",
+    "mtime": 1784896135.5691273,
+    "ast_hash": "5206af6197f36e50ebc48ba21529c4ba",
     "semantic_hash": ""
   },
   "server/services/institutionalIntegration/knowledgeRetrievalService.ts": {
@@ -9530,8 +9530,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalConsultation.ts": {
-    "mtime": 1784843796.4463704,
-    "ast_hash": "a28e342d893a01b104338a3d0dfb619a",
+    "mtime": 1784896193.0451307,
+    "ast_hash": "fd86cd0ebb8d4cabb54f24b0211a4447",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784843625.4783602,
-    "ast_hash": "29cbf246734aac9cce9da74a2b8e39c5",
+    "mtime": 1784896334.7411392,
+    "ast_hash": "03fe1f5f2e6904be96edace63367e737",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9850,18 +9850,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/source-scope-router-001.test.ts": {
-    "mtime": 1784843890.554376,
-    "ast_hash": "ffc7b04bf17cb980baebb382ea06a0c3",
+    "mtime": 1784896492.2131486,
+    "ast_hash": "c1d49ad018e9967fe21ba275c1563229",
     "semantic_hash": ""
   },
   "server/domain/institutionalIntegration/sourceScopeRouter.ts": {
-    "mtime": 1784843540.066355,
-    "ast_hash": "ab72178c097795f9387a196f46aaf66c",
+    "mtime": 1784896052.5411224,
+    "ast_hash": "ac95678c6ff15b220ba5fbe70c634873",
     "semantic_hash": ""
   },
   "docs/ai/SOURCE_SCOPE_ROUTER_001_REPORT.md": {
-    "mtime": 1784844110.378389,
-    "ast_hash": "fa7265982f9fd466f822ffa00a1e8b81",
+    "mtime": 1784896609.6051557,
+    "ast_hash": "0b4c2b0ba4aaa6bb2d008aa6b160796f",
     "semantic_hash": ""
   }
 }
