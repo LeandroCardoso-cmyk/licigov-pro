@@ -167,6 +167,7 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
 
     let generationTruncated = false;
     let engineContent = "";
+    let providerIsMock = false;
     if (!isAmbiguous) {
       // RAG-QUALITY-003 — no máximo 1 retry quando a 1ª tentativa cortar por MAX_TOKENS. O
       // correlationId é o MESMO nas duas tentativas (rastreável no log [cognitive-observability]); não
@@ -187,12 +188,14 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
       // incompleta — não pode ser classificada como "fundamentada" às cegas. (Tentativa FINAL.)
       generationTruncated = execution.context.outcome.finishReason === "max_tokens";
       engineContent = execution.response.content;
+      // AI-015 — se a execução caiu no mock (só possível em dev/test com flag), a resposta não é oficial.
+      providerIsMock = execution.context.outcome.provider === "mock";
     }
     const t1 = clock();
 
     const answer = buildConsultationAnswer({
       tenantId: params.organizationId, userId: params.userId, question, engineContent,
-      contextPackage, executionId, replayId, replayOfExecutionId, createdAt, generationTruncated,
+      contextPackage, executionId, replayId, replayOfExecutionId, createdAt, generationTruncated, providerIsMock,
     });
     const sources = buildSources(params.organizationId, executionId, contextPackage, createdAt);
     const t2 = clock();

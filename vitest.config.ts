@@ -19,6 +19,9 @@ export default defineConfig({
     ],
     env: {
       APP_ENV: "development",
+      // AI-015 — a suíte roda como development e usa o MockAIProvider como stand-in do provider real.
+      // O fallback para mock é fail-closed por padrão; aqui é autorizado EXPLICITAMENTE para os testes.
+      AI_ALLOW_MOCK_FALLBACK: "true",
     },
   },
 });

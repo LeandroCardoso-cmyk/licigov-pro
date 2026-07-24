@@ -4210,8 +4210,8 @@
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
-    "mtime": 1784842117.852582,
-    "ast_hash": "baccf4faba47859e7f49948fc6cd148b",
+    "mtime": 1784904137.8988173,
+    "ast_hash": "41047e0a343464d182c37d9bcc5837d6",
     "semantic_hash": ""
   },
   "server/config/app.ts": {
@@ -6375,8 +6375,8 @@
     "semantic_hash": ""
   },
   "vitest.config.ts": {
-    "mtime": 1784472878.0506737,
-    "ast_hash": "0e8dd5cf106e918b3cbd411a0139fca0",
+    "mtime": 1784904238.0628233,
+    "ast_hash": "5decceaeef0946520ae0d039567d4478",
     "semantic_hash": ""
   },
   ".claude/skills/brainstorming/SKILL.md": {
@@ -8565,8 +8565,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/providerAdapter.ts": {
-    "mtime": 1784472875.6826737,
-    "ast_hash": "f2b2f235ba4986e6c7cf8523f9bf1df6",
+    "mtime": 1784904171.5628195,
+    "ast_hash": "5e2d4f170a55d60d9faf69345724fe32",
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
@@ -8700,8 +8700,8 @@
     "semantic_hash": ""
   },
   "server/services/operationalHealthService.ts": {
-    "mtime": 1784472877.8191228,
-    "ast_hash": "8d041ad26b70ab26fdb8781d294580fc",
+    "mtime": 1784904184.0668201,
+    "ast_hash": "bc00acb3c95fd56fbf81789132c1c754",
     "semantic_hash": ""
   },
   "docs/architecture/PRODUCTION_READINESS.md": {
@@ -9530,8 +9530,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalConsultation.ts": {
-    "mtime": 1784900416.9327788,
-    "ast_hash": "dda51d9788aad3bf44eb9e4e0d7e0a39",
+    "mtime": 1784904213.298822,
+    "ast_hash": "c384faadf80d7330ba7840815199bbc8",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9540,8 +9540,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalConsultationService.ts": {
-    "mtime": 1784896334.7411392,
-    "ast_hash": "03fe1f5f2e6904be96edace63367e737",
+    "mtime": 1784904232.690823,
+    "ast_hash": "d2d89bd487a1acaab0ee95fd5e526a0c",
     "semantic_hash": ""
   },
   "docs/architecture/BUSINESS_DOMAIN_TIRAR_DUVIDAS.md": {
@@ -9760,8 +9760,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1784736750.9835043,
-    "ast_hash": "8043571f96be3a8b9fe41ceee8c69735",
+    "mtime": 1784904649.1068478,
+    "ast_hash": "5577a67b32d4b6751979aa2e8d5051db",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -9825,8 +9825,8 @@
     "semantic_hash": ""
   },
   "docs/ai/RAG_QUALITY_001_REPORT.md": {
-    "mtime": 1784819620.3125849,
-    "ast_hash": "458bcf02a29dd7d8b4e9e433f1ab6c9a",
+    "mtime": 1784903333.9950545,
+    "ast_hash": "b44968802ca49a425e1bacefb25b47ee",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rag-quality-002-staging-regression.test.ts": {
@@ -9835,8 +9835,8 @@
     "semantic_hash": ""
   },
   "docs/ai/RAG_QUALITY_002_REPORT.md": {
-    "mtime": 1784839812.623578,
-    "ast_hash": "e5f04ed1bf08b0409cb97531ffaabff5",
+    "mtime": 1784903333.9950545,
+    "ast_hash": "aef8d8716aa57185488b1f0fe9cafc04",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rag-quality-003-truncation-retry.test.ts": {
@@ -9845,8 +9845,8 @@
     "semantic_hash": ""
   },
   "docs/ai/RAG_QUALITY_003_REPORT.md": {
-    "mtime": 1784842548.3325722,
-    "ast_hash": "5de67b894b9c0f5126105acda09f5c2e",
+    "mtime": 1784903333.9950545,
+    "ast_hash": "daa1336a4fad0a4c40206a5a1d862004",
     "semantic_hash": ""
   },
   "server/__tests__/integration/source-scope-router-001.test.ts": {
@@ -9860,13 +9860,18 @@
     "semantic_hash": ""
   },
   "docs/ai/SOURCE_SCOPE_ROUTER_001_REPORT.md": {
-    "mtime": 1784900575.6567883,
-    "ast_hash": "ba1ffe36841f71fabfaad16051d17f0c",
+    "mtime": 1784903333.9950545,
+    "ast_hash": "432c1462ad6669b929e44ec893120585",
     "semantic_hash": ""
   },
   "docs/ops/MUNICIPAL_CORPUS_STAGING_ACTION.md": {
     "mtime": 1784900550.7287867,
     "ast_hash": "a8a2b96d9445e0f311b4e0600dd5ae94",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/ai-015-mock-fallback-policy.test.ts": {
+    "mtime": 1784904432.3348348,
+    "ast_hash": "ed58b4e2b76657e38664292cbe835f6d",
     "semantic_hash": ""
   }
 }

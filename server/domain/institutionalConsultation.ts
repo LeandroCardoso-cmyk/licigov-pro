@@ -340,9 +340,15 @@ export function buildConsultationAnswer(params: {
   createdAt: string;
   /** RAG-QUALITY-002 — a geração do modelo terminou por limite de tokens (resposta possivelmente incompleta). */
   generationTruncated?: boolean;
+  /** AI-015 — a resposta foi produzida pelo provider MOCK (fallback autorizado só em dev/test). Nunca
+   *  pode ser apresentada como oficial/"Fundamentada". */
+  providerIsMock?: boolean;
 }): InstitutionalConsultationAnswer {
   const { contextPackage: pkg } = params;
-  const evidenceSufficiency = classifyEvidenceSufficiency(pkg, { generationTruncated: params.generationTruncated });
+  const evidenceBase = classifyEvidenceSufficiency(pkg, { generationTruncated: params.generationTruncated });
+  // AI-015 — resposta de mock NUNCA é "fundamentada" (oficial); rebaixa para "parcial" no máximo.
+  const evidenceSufficiency: EvidenceSufficiency =
+    params.providerIsMock && evidenceBase === "fundamentada" ? "parcial" : evidenceBase;
   const hasSufficientBasis = evidenceSufficiency !== "insuficiente";
 
   const documents: ConsultationDocumentRef[] = pkg.documents.map(d => ({
@@ -370,6 +376,11 @@ export function buildConsultationAnswer(params: {
   if (applicabilityCaveat) observations.push(applicabilityCaveat);
   const scopeMeta = (pkg.metadata as { sourceScope?: { ambiguous?: boolean; clarificationPrompt?: string | null; municipalNormUnavailableForTenant?: boolean } }).sourceScope;
   const limitations: string[] = [];
+  // AI-015 — resposta de MOCK (provedor de desenvolvimento) é sinalizada e nunca oficial.
+  if (params.providerIsMock) {
+    observations.push("⚠ Resposta gerada por provedor de desenvolvimento (mock) — NÃO é resposta oficial e não deve ser utilizada como fundamento.");
+    limitations.push("Provedor de IA real indisponível: resposta produzida por mock (apenas em ambiente de desenvolvimento/teste). Não classificada como oficial.");
+  }
   let answer: string;
   if (scopeMeta?.ambiguous) {
     // LACUNA 3 — pergunta ambígua: solicitar esclarecimento; NÃO executa retrieval conclusivo nem

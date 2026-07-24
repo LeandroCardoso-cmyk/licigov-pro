@@ -97,6 +97,26 @@ export function resolveLegalAnalysisMaxOutputTokens(env: { LEGAL_ANALYSIS_MAX_OU
 }
 export const LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS = resolveLegalAnalysisMaxOutputTokens({ LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS: process.env.LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS });
 
+/**
+ * AI-015 — Política de fallback para o MockAIProvider. O mock JAMAIS pode ser servido como resposta
+ * oficial em staging/production (era o defeito AI-015: quando a chave Gemini falhava, `selectProvider`
+ * caía silenciosamente no mock e a resposta mock era apresentada como oficial/"Fundamentada").
+ *
+ * Regra: o fallback automático para mock é permitido SOMENTE em desenvolvimento/teste E mediante a
+ * flag explícita `AI_ALLOW_MOCK_FALLBACK=true` (default FALSE). Em staging/production não há flag que
+ * o autorize — a ausência de provider real é uma falha controlada (fail-closed). Neste projeto os
+ * testes rodam com `APP_ENV=development` (vitest), portanto "development/test" ⇒ `isDevelopment`.
+ */
+export function resolveAllowMockFallback(env: { AI_ALLOW_MOCK_FALLBACK?: string }): boolean {
+  return (env.AI_ALLOW_MOCK_FALLBACK ?? "").trim().toLowerCase() === "true";
+}
+export const AI_ALLOW_MOCK_FALLBACK = resolveAllowMockFallback({ AI_ALLOW_MOCK_FALLBACK: process.env.AI_ALLOW_MOCK_FALLBACK });
+
+/** Decide se o fallback automático para mock é permitido. Puro/testável. Default fail-closed. */
+export function mockFallbackAllowed(opts: { isDevelopment: boolean; allowMockFlag: boolean }): boolean {
+  return opts.isDevelopment === true && opts.allowMockFlag === true;
+}
+
 const runtime = resolveAiRuntime({ AI_PROVIDER: process.env.AI_PROVIDER, AI_MODEL: process.env.AI_MODEL });
 
 export const AI_CONFIG = {
