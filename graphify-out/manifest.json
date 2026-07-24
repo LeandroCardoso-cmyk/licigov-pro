@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784472871.7506735,
-    "ast_hash": "5d1bd5e916837652bd8acc9145e2b8bf",
+    "mtime": 1784927545.4319816,
+    "ast_hash": "d2c9c868c894239aa767879322fc3848",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -2200,8 +2200,8 @@
     "semantic_hash": ""
   },
   "client/src/main.tsx": {
-    "mtime": 1782612418.376022,
-    "ast_hash": "d4c29f78446fc336df951068d1444b3a",
+    "mtime": 1784927438.811984,
+    "ast_hash": "2fbaf208e552a8d98eb56ed223469d91",
     "semantic_hash": ""
   },
   "client/src/pages/AIUsageDashboard.tsx": {
@@ -2320,8 +2320,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Login.tsx": {
-    "mtime": 1784472873.1746736,
-    "ast_hash": "4929e401a50286247cf47f05506d9b35",
+    "mtime": 1784927463.1679835,
+    "ast_hash": "48ac8b9cb3c40b2ede7cb6a122ba52b4",
     "semantic_hash": ""
   },
   "client/src/pages/ModuleSelectionDashboard.tsx": {
@@ -9660,8 +9660,8 @@
     "semantic_hash": ""
   },
   "client/src/darkmode-tokens.test.ts": {
-    "mtime": 1784472873.1746736,
-    "ast_hash": "ad7c911f7e303402d23162745fc4ad5a",
+    "mtime": 1784927608.5039802,
+    "ast_hash": "2ad66b989030ef0da68c53e1985ba819",
     "semantic_hash": ""
   },
   "drizzle/0285_schema_reconciliation.sql": {
@@ -10072,6 +10072,51 @@
   "server/services/tenantOnboardingService.ts": {
     "mtime": 1784926614.5800028,
     "ast_hash": "3f3e7405cf70eca733308291dac1bce1",
+    "semantic_hash": ""
+  },
+  "client/src/pages/AceitarConvite.tsx": {
+    "mtime": 1784927527.171982,
+    "ast_hash": "815f6c2934abe83b0887210fbb8e050f",
+    "semantic_hash": ""
+  },
+  "client/src/pages/EsqueciSenha.tsx": {
+    "mtime": 1784927475.9319832,
+    "ast_hash": "f232d7c9aab0916c5cf3c9769a9661c4",
+    "semantic_hash": ""
+  },
+  "client/src/pages/RedefinirSenha.tsx": {
+    "mtime": 1784927493.3759828,
+    "ast_hash": "f72bf9466cd4e9d21d0160ee482a6b59",
+    "semantic_hash": ""
+  },
+  "client/src/utils/authErrorMessages.test.ts": {
+    "mtime": 1784927589.9599805,
+    "ast_hash": "da092c32387be67a7071293556b9d674",
+    "semantic_hash": ""
+  },
+  "client/src/utils/authErrorMessages.ts": {
+    "mtime": 1784927423.2719843,
+    "ast_hash": "a6d80f9069f03c3c04a05d8bd7753f83",
+    "semantic_hash": ""
+  },
+  "client/src/utils/inviteState.test.ts": {
+    "mtime": 1784927576.7919807,
+    "ast_hash": "02a6db52d214832b1b475cc8fb1678a3",
+    "semantic_hash": ""
+  },
+  "client/src/utils/inviteState.ts": {
+    "mtime": 1784927432.2039843,
+    "ast_hash": "729c749e68e3d98800f6bd4da889f8e2",
+    "semantic_hash": ""
+  },
+  "client/src/utils/safeReturnTo.test.ts": {
+    "mtime": 1784927596.5479803,
+    "ast_hash": "ab0d689e363598853116f1f4ad451e23",
+    "semantic_hash": ""
+  },
+  "client/src/utils/safeReturnTo.ts": {
+    "mtime": 1784927448.5799837,
+    "ast_hash": "a8dfdc792b44749c9220c6a507e64b2a",
     "semantic_hash": ""
   }
 }

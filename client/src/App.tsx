@@ -6,6 +6,9 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
+import EsqueciSenha from "./pages/EsqueciSenha";
+import RedefinirSenha from "./pages/RedefinirSenha";
+import AceitarConvite from "./pages/AceitarConvite";
 import Dashboard from "./pages/Dashboard";
 import ProcessDetails from "./pages/ProcessDetails";
 import Settings from "./pages/Settings";
@@ -208,6 +211,9 @@ function Router() {
       <Route path={"/test4"} component={TestPage4Route} />
       <Route path={"/login"} component={Login} />
       <Route path={"/register"} component={Register} />
+      <Route path={"/esqueci-senha"} component={EsqueciSenha} />
+      <Route path={"/redefinir-senha"} component={RedefinirSenha} />
+      <Route path={"/convite"} component={AceitarConvite} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

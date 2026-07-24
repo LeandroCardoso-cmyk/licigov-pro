@@ -17,7 +17,12 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  window.location.href = "/login";
+  // PR A.1 — preserva a página atual (ex.: /convite?token=... com a sessão expirada no meio do
+  // aceite) como returnTo, para Login.tsx voltar o usuário para lá após reautenticar. Sem isto, a
+  // navegação forçada para /login apagaria o token do convite da URL.
+  const current = window.location.pathname + window.location.search;
+  const returnTo = current === "/login" ? "" : `?returnTo=${encodeURIComponent(current)}`;
+  window.location.href = `/login${returnTo}`;
 };
 
 queryClient.getQueryCache().subscribe(event => {
