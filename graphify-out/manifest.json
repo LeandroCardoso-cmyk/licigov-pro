@@ -4175,8 +4175,8 @@
     "semantic_hash": ""
   },
   "server/_core/sdk.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "e92b90816b925097fb38aa36bd7f29f9",
+    "mtime": 1784925407.7480304,
+    "ast_hash": "648bc4fd9deb68f6fb3c6cc2b828ad96",
     "semantic_hash": ""
   },
   "server/_core/systemRouter.ts": {
@@ -4380,8 +4380,8 @@
     "semantic_hash": ""
   },
   "server/db/users.ts": {
-    "mtime": 1782612419.2864268,
-    "ast_hash": "ba07a3078c07c1c347c70daa0b8c23cf",
+    "mtime": 1784925453.0040295,
+    "ast_hash": "76d7f743e78dd814670cdcaffdfb7f08",
     "semantic_hash": ""
   },
   "server/db/workspace.ts": {
@@ -5000,8 +5000,8 @@
     "semantic_hash": ""
   },
   "server/routers/adminRouter.ts": {
-    "mtime": 1782612419.311007,
-    "ast_hash": "8d1f086cc042fae01f4d37e98ec8b983",
+    "mtime": 1784925469.768029,
+    "ast_hash": "0d312c8a40d8667ad0ddbb13671aa20e",
     "semantic_hash": ""
   },
   "server/routers/agentExecutionRouter.ts": {
@@ -5030,8 +5030,8 @@
     "semantic_hash": ""
   },
   "server/routers/authRouter.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "e8b6926d8e4204f27411694a21dc8394",
+    "mtime": 1784925464.0880291,
+    "ast_hash": "a604c79ec0dcbf6d410b9bb67035e486",
     "semantic_hash": ""
   },
   "server/routers/billingRouter.ts": {
@@ -9987,6 +9987,26 @@
   "server/services/email/emailOutboxService.ts": {
     "mtime": 1784924833.1480436,
     "ast_hash": "13e708b8e29e177d515ebd4bded2d3b9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/db-users-hardening.test.ts": {
+    "mtime": 1784925592.8520262,
+    "ast_hash": "d7e5a215f5118fa800446057d0326ce2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/session-revocation.test.ts": {
+    "mtime": 1784925551.636027,
+    "ast_hash": "e4ff75c796e30f44a98e294351d4e3aa",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/user-projection.test.ts": {
+    "mtime": 1784925565.6920269,
+    "ast_hash": "d9d3fdd10c16d409fb9fc9444e24fa60",
+    "semantic_hash": ""
+  },
+  "server/services/userProjection.ts": {
+    "mtime": 1784925372.0560312,
+    "ast_hash": "5fc64e06a2dc772661a2ef20dd6fb08e",
     "semantic_hash": ""
   }
 }
