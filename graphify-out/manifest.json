@@ -9888,5 +9888,45 @@
     "mtime": 1784923597.824072,
     "ast_hash": "93f511df8cc41165440ec4cf510b8de4",
     "semantic_hash": ""
+  },
+  "server/__tests__/integration/domain-auth-errors.test.ts": {
+    "mtime": 1784924062.2360613,
+    "ast_hash": "0d45a01b266ddd09e105c53898efd9f1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/domain-invitations.test.ts": {
+    "mtime": 1784924039.8640618,
+    "ast_hash": "1d3ab44207703a14bd3d86700659ac2c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/domain-password-policy.test.ts": {
+    "mtime": 1784924050.7400615,
+    "ast_hash": "071b566d72f11e27d4f482af1c62c1b7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/opaque-tokens.test.ts": {
+    "mtime": 1784924075.8120608,
+    "ast_hash": "6370e3e0a64118bdfc216bf6b9fc03b0",
+    "semantic_hash": ""
+  },
+  "server/domain/authErrors.ts": {
+    "mtime": 1784923950.3680637,
+    "ast_hash": "7dbb32328d03aeee2929530d9de47d7d",
+    "semantic_hash": ""
+  },
+  "server/domain/invitations.ts": {
+    "mtime": 1784924005.8280625,
+    "ast_hash": "38684755df2ea654b51edee139faab3e",
+    "semantic_hash": ""
+  },
+  "server/domain/passwordPolicy.ts": {
+    "mtime": 1784923962.6520636,
+    "ast_hash": "1a103c5aaa70498669681ff6717f308a",
+    "semantic_hash": ""
+  },
+  "server/services/security/opaqueTokens.ts": {
+    "mtime": 1784923975.5000632,
+    "ast_hash": "6944aa1137f215676d0c40077fcad3ee",
+    "semantic_hash": ""
   }
 }
