@@ -153,7 +153,40 @@ a confirmação do município no cadastro (`municipalCorpusUnmatched`). Booleano
 
 ### Testes e validação do adendo
 `source-scope-router-001.test.ts` passa de 17 para 33 testes (novos blocos para as 4 lacunas +
-roteamento mono-diploma preservado). Ajuste do 1 assert de lacuna 4 (verificava afirmação de ausência
-com regex frágil que capturava o próprio disclaimer). Suíte completa: **3914 passed / 92 skipped / 0
-falhas** (+16 sobre o SOURCE-SCOPE-ROUTER-001 base). `tsc`/`build` sem erros. Todos os testes verdes
-anteriores preservados; roteamento mono-diploma mantido.
+roteamento mono-diploma preservado). Suíte completa: **3914 passed / 92 skipped / 0 falhas**. `tsc`/
+`build` sem erros. Todos os testes verdes anteriores preservados; roteamento mono-diploma mantido.
+
+---
+
+## Adendo 2 — Isolamento estrito da lacuna 4 (correção de inferência cross-tenant)
+
+A 1ª versão da lacuna 4 usava `corpusHasMunicipalFixture = corpus.registry.documents.some(municipal)`,
+uma varredura **global** do corpus (todos os tenants). Ainda que retornasse só um booleano, isso é
+**inferência cross-tenant** — a resposta a um tenant passava a depender da existência de fixture de
+outro tenant. **Removido por completo.**
+
+Correção (isolamento estrito):
+- A verificação municipal usa **exclusivamente o tenant atual** — `municipalResolvedForTenant`, derivado
+  de `institutional.applicableDocuments` (já resolvido com escopo do tenant). Nenhuma leitura do corpus
+  de outro tenant, nem da existência de fixture alheio.
+- Campo renomeado para `municipalNormUnavailableForTenant` (= intenção municipal **e** nenhuma norma
+  municipal vinculada a **este** tenant). Removidos `corpusHasMunicipalFixture` e `municipalCorpusUnmatched`.
+- Mensagem reescrita para falar **apenas do acervo do próprio tenant**: "O acervo institucional desta
+  organização não possui norma municipal vinculada para esta consulta. Confira o cadastro do município
+  do órgão ou solicite a inclusão da norma municipal no acervo institucional." — sem afirmar ausência
+  global nem alegar existência em outro tenant.
+
+Testes atualizados: um teste passa a **exigir a AUSÊNCIA** dos campos cross-tenant na auditoria de
+escopo (`expect(audit).not.toHaveProperty("corpusHasMunicipalFixture" / "municipalCorpusUnmatched")`) e
+a verificar que nenhuma mensagem alega existência em outro tenant nem ausência global. Suíte completa
+após o Adendo 2: **3914 passed / 92 skipped / 0 falhas** (mesma contagem — refactor sem novos testes
+líquidos além do de isolamento).
+
+### Ação operacional (staging)
+Investigação registrada em **`docs/ops/MUNICIPAL_CORPUS_STAGING_ACTION.md`**: a não localização da Lei
+Municipal 769 em staging é de **cadastro** — a organização real tem `organizations.municipio` não
+preenchido como "Moreira Sales" (e `id` ≠ 700001). Sem acesso ao banco de staging deste ambiente, não
+é possível identificar o `id` da organização nem aplicar a configuração; a ação operacional documentada
+pede ao operador: (2A recomendado) `UPDATE organizations SET esfera='municipal', uf='PR',
+municipio='Moreira Sales' WHERE id=<org_real>` — resolve por município sem reingestão; ou (2B) reingerir
+a Lei 769 sob o `tenantId` da organização real.

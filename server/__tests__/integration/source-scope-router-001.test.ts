@@ -34,7 +34,7 @@ function scoped(question: string, tenantId = MS, maxPer = 3) {
     query: question, correlationId: `c-${question}`, maxPassagesPerDocument: maxPer, maxPassageChars: 700,
     enableSourceScopeRouting: true,
   });
-  const audit = (pkg.metadata as { sourceScope: { intent: string; requestedDiplomas: string[]; includedNormIds: string[]; discardedNormIds: string[]; expanded: boolean; expansionReason: string | null } }).sourceScope;
+  const audit = (pkg.metadata as { sourceScope: { intent: string; requestedDiplomas: string[]; includedNormIds: string[]; discardedNormIds: string[]; expanded: boolean; expansionReason: string | null; ambiguous?: boolean; municipalResolvedForTenant?: boolean; municipalNormUnavailableForTenant?: boolean } }).sourceScope;
   const leiArts = pkg.retrievedPassages.filter(p => p.normId === "lei-14133-2021").map(p => p.identifier);
   const topArt = [...pkg.retrievedPassages].sort((a, b) => b.score - a.score)[0]?.identifier;
   return { pkg, audit, leiArts, topArt };
@@ -343,26 +343,38 @@ describe("SOURCE-SCOPE-ROUTER-001 · LACUNA 4 — não afirmar ausência de norm
     expect(mun.official.status).toBe("vigente");
   });
 
-  it("org sem vínculo municipal (município não confirmado) → sinaliza fixture existente, NÃO afirma ausência", () => {
+  it("ISOLAMENTO — a auditoria de escopo NUNCA expõe existência de fixture de outro tenant (sem campo cross-tenant)", () => {
+    const { audit } = scoped("o que diz a legislação municipal de Moreira Sales sobre dispensa de licitação?", 5);
+    // Nenhum campo derivado de varredura global do corpus (isolamento estrito por tenant).
+    expect(audit).not.toHaveProperty("corpusHasMunicipalFixture");
+    expect(audit).not.toHaveProperty("municipalCorpusUnmatched");
+  });
+
+  it("org sem norma municipal vinculada → mensagem fala SÓ do acervo do próprio tenant, sem inferência cross-tenant", () => {
     const { pkg, audit } = scoped("o que diz a legislação municipal de Moreira Sales sobre dispensa de licitação?", 5);
-    expect(audit.corpusHasMunicipalFixture).toBe(true);
     expect(audit.municipalResolvedForTenant).toBe(false);
-    expect(audit.municipalCorpusUnmatched).toBe(true);
+    expect(audit.municipalNormUnavailableForTenant).toBe(true);
     const answer = buildConsultationAnswer({
       tenantId: 5, userId: 1, question: "o que diz a legislação municipal de Moreira Sales sobre dispensa de licitação?",
       engineContent: "resposta", contextPackage: pkg, executionId: "e-mun", createdAt: "2026-01-01T00:00:00.000Z",
     });
-    expect(answer.limitations.some(l => /normas municipais no acervo/i.test(l) && /município não confirmado/i.test(l))).toBe(true);
-    // Nunca AFIRMA a ausência de normas municipais (o disclaimer nega a inexistência, não a afirma).
-    const affirmaAusencia = /(n[ãa]o h[áa]|n[ãa]o existem|inexistem|nenhuma)\s+normas?\s+municip/i;
-    expect(answer.limitations.some(l => affirmaAusencia.test(l))).toBe(false);
-    expect([...answer.observations, answer.answer].some(t => affirmaAusencia.test(t))).toBe(false);
+    // Fala do acervo DESTE tenant + orienta cadastro do município / inclusão da norma.
+    expect(answer.limitations.some(l =>
+      /acervo institucional desta organiza[çc][ãa]o n[ãa]o possui/i.test(l)
+      && /(cadastro do munic[íi]pio|inclus[ãa]o da norma)/i.test(l))).toBe(true);
+    // Nunca afirma ausência GLOBAL de normas municipais, nem alega existência em outro tenant.
+    const affirmaAusenciaGlobal = /(n[ãa]o h[áa]|n[ãa]o existem|inexistem|nenhuma)\s+normas?\s+municip/i;
+    const alegaOutroTenant = /(h[áa]|existem|no acervo).*normas?\s+municipais.*(outr[ao]|outro tenant|outro munic)/i;
+    for (const t of [...answer.limitations, ...answer.observations, answer.answer]) {
+      expect(affirmaAusenciaGlobal.test(t)).toBe(false);
+      expect(alegaOutroTenant.test(t)).toBe(false);
+    }
   });
 
   it("tenant de Moreira Sales (vínculo correto) recupera a norma municipal — sem flag de não-vínculo", () => {
     const { audit } = scoped("tratamento diferenciado para ME/EPP no meu município", MS);
     expect(audit.municipalResolvedForTenant).toBe(true);
-    expect(audit.municipalCorpusUnmatched).toBe(false);
+    expect(audit.municipalNormUnavailableForTenant).toBe(false);
     expect(audit.includedNormIds).toContain("lei-municipal-769-2021-moreira-sales");
   });
 });

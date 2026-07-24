@@ -368,7 +368,7 @@ export function buildConsultationAnswer(params: {
   // contexto de um tenant municipal, adiciona-se uma ressalva explícita de aplicabilidade.
   const applicabilityCaveat = buildApplicabilityCaveat(pkg);
   if (applicabilityCaveat) observations.push(applicabilityCaveat);
-  const scopeMeta = (pkg.metadata as { sourceScope?: { ambiguous?: boolean; clarificationPrompt?: string | null; municipalCorpusUnmatched?: boolean } }).sourceScope;
+  const scopeMeta = (pkg.metadata as { sourceScope?: { ambiguous?: boolean; clarificationPrompt?: string | null; municipalNormUnavailableForTenant?: boolean } }).sourceScope;
   const limitations: string[] = [];
   let answer: string;
   if (scopeMeta?.ambiguous) {
@@ -397,10 +397,12 @@ export function buildConsultationAnswer(params: {
     answer = "Não foi possível localizar base documental oficial suficiente no acervo institucional para fundamentar esta consulta. Recomenda-se refinar a pergunta ou consultar a autoridade competente. Nenhum fundamento é apresentado sem base oficial.";
     limitations.push("Base documental insuficiente no Official Knowledge Corpus para esta consulta.");
   }
-  // LACUNA 4 — pergunta municipal cujo tenant não vinculou norma municipal, mas o acervo TEM fixture:
-  // nunca afirmar ausência de normas municipais; sinalizar a falta de vínculo (cadastro do município).
-  if (scopeMeta?.municipalCorpusUnmatched && !scopeMeta.ambiguous) {
-    limitations.push("Há normas municipais no acervo institucional que não puderam ser vinculadas a esta organização (município não confirmado no cadastro). Confirme o município do órgão para recuperá-las — não se afirma, aqui, a inexistência de normas municipais.");
+  // LACUNA 4 (isolamento estrito) — pergunta municipal cujo ACERVO DESTE TENANT não possui a norma
+  // municipal. A mensagem fala EXCLUSIVAMENTE do acervo do próprio tenant — nunca afirma (nem nega)
+  // a existência de normas em outro tenant. Orienta a conferir o cadastro do município ou solicitar
+  // a inclusão da norma.
+  if (scopeMeta?.municipalNormUnavailableForTenant && !scopeMeta.ambiguous) {
+    limitations.push("O acervo institucional desta organização não possui norma municipal vinculada para esta consulta. Confira o cadastro do município do órgão ou solicite a inclusão da norma municipal no acervo institucional.");
   }
 
   const answerId = computeAnswerId(params.executionId);

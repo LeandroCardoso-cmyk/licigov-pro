@@ -85,10 +85,10 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
   const applicability: Record<string, SourceApplicabilityInfo> = {};
   for (const d of institutional.applicableDocuments) applicability[d.normId] = classifyApplicability(d);
 
-  // LACUNA 4 — o acervo contém alguma norma municipal (fixture oficial)? E ela foi vinculada a este
-  // tenant? Usado para NÃO afirmar ausência de normas municipais quando o fixture existe mas o
-  // cadastro do órgão (município) não o vinculou. Booleano — não expõe conteúdo de outro tenant.
-  const corpusHasMunicipalFixture = corpus.registry.documents.some(d => d.jurisdiction === "municipal");
+  // LACUNA 4 — ISOLAMENTO ESTRITO: verifica APENAS o tenant atual. Uma norma municipal foi vinculada
+  // a ESTE tenant? `institutional.applicableDocuments` já é resolvido com escopo do tenant (municipal
+  // só entra por tenantId próprio OU município do cadastro). NUNCA se consulta o corpus de outro
+  // tenant — nem mesmo a EXISTÊNCIA (booleano) de fixture alheio (isso seria inferência cross-tenant).
   const municipalResolvedForTenant = institutional.applicableDocuments.some(d => d.jurisdiction === "municipal");
 
   // ── LACUNA 3 — pergunta ambígua: SOLICITAR ESCLARECIMENTO, sem retrieval conclusivo ──────────────
@@ -105,7 +105,7 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
           expanded: false, expansionReason: null, includedNormIds: [], discardedNormIds: applicableNormIds.slice().sort(),
           applicability, reasoning: scope.reasoning,
           ambiguous: true, clarificationPrompt: scope.clarificationPrompt,
-          corpusHasMunicipalFixture, municipalResolvedForTenant, municipalCorpusUnmatched: false,
+          municipalResolvedForTenant, municipalNormUnavailableForTenant: false,
         },
       },
     });
@@ -149,8 +149,9 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
   const includedNormIds = [...new Set(retrieval.documents.map(d => d.normId))].sort();
   const includedSet = new Set(includedNormIds);
   const discardedNormIds = applicableNormIds.filter(n => !includedSet.has(n)).sort();
-  // LACUNA 4 — pergunta municipal cujo tenant não vinculou norma municipal, mas o acervo tem fixture.
-  const municipalCorpusUnmatched = !!scope && scope.intent === "municipal" && !municipalResolvedForTenant && corpusHasMunicipalFixture;
+  // LACUNA 4 (isolamento estrito) — pergunta municipal cujo TENANT ATUAL não possui norma municipal
+  // vinculada. Depende SOMENTE do tenant atual (nunca da existência de fixture de outro tenant).
+  const municipalNormUnavailableForTenant = !!scope && scope.intent === "municipal" && !municipalResolvedForTenant;
   const sourceScopeAudit = scope
     ? {
         intent: scope.intent,
@@ -164,9 +165,8 @@ export function resolveInstitutionalContextPackage(corpus: OfficialCorpusBuildRe
         reasoning: scope.reasoning,
         ambiguous: false,
         clarificationPrompt: null,
-        corpusHasMunicipalFixture,
         municipalResolvedForTenant,
-        municipalCorpusUnmatched,
+        municipalNormUnavailableForTenant,
       }
     : undefined;
 
