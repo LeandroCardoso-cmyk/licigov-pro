@@ -73,12 +73,14 @@ import { operationRecordRouter } from "./routers/operationRecordRouter";
 import { documentEngineRouter } from "./routers/documentEngineRouter";
 import { adaptiveRecommendationRouter } from "./routers/adaptiveRecommendationRouter";
 import { institutionalConsultationRouter } from "./routers/institutionalConsultationRouter";
+import { passwordResetRouter } from "./routers/passwordResetRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
   system: systemRouter,
   contact: contactRouter,
   auth: authRouter,
+  passwordReset: passwordResetRouter,
   processes: processesRouter,
   documents: documentsRouter,
   editalParameters: editalParametersRouter,

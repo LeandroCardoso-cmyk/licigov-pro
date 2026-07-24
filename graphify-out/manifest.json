@@ -4380,8 +4380,8 @@
     "semantic_hash": ""
   },
   "server/db/users.ts": {
-    "mtime": 1784925453.0040295,
-    "ast_hash": "76d7f743e78dd814670cdcaffdfb7f08",
+    "mtime": 1784925915.0360188,
+    "ast_hash": "bc675a445d9877abf00b00f5264b577f",
     "semantic_hash": ""
   },
   "server/db/workspace.ts": {
@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1784472877.1786737,
-    "ast_hash": "0c39e062e246e3a205163998db2f6b2e",
+    "mtime": 1784925975.4000175,
+    "ast_hash": "47de2858fd6cb1c2b1ca43d51d8d827b",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -6115,8 +6115,8 @@
     "semantic_hash": ""
   },
   "server/services/rateLimiter.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "03036285900111ae686a3523709b9e41",
+    "mtime": 1784925903.592019,
+    "ast_hash": "19c70e6737a0c5056d9284b85087e197",
     "semantic_hash": ""
   },
   "server/services/realCatalogIngestionService.ts": {
@@ -10007,6 +10007,26 @@
   "server/services/userProjection.ts": {
     "mtime": 1784925372.0560312,
     "ast_hash": "5fc64e06a2dc772661a2ef20dd6fb08e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/password-reset-router.test.ts": {
+    "mtime": 1784926177.1000128,
+    "ast_hash": "83100f08f7e1c58939aea01e38af1097",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/password-reset-service.test.ts": {
+    "mtime": 1784926089.2600148,
+    "ast_hash": "75c7dae5d4a57924155fad9c875545b9",
+    "semantic_hash": ""
+  },
+  "server/routers/passwordResetRouter.ts": {
+    "mtime": 1784925968.3240175,
+    "ast_hash": "e467c2bff709ed41125895d98ff2c725",
+    "semantic_hash": ""
+  },
+  "server/services/passwordResetService.ts": {
+    "mtime": 1784925956.3520179,
+    "ast_hash": "228a8df05f03ca069e46a6f73f583135",
     "semantic_hash": ""
   }
 }

@@ -154,3 +154,11 @@ export async function bumpTokenVersion(userId: number, txDb?: unknown): Promise<
   if (!dbInstance) return;
   await dbInstance.update(users).set({ tokenVersion: sql`${users.tokenVersion} + 1` }).where(eq(users.id, userId));
 }
+
+/** PR A.1 — grava o novo hash de senha (bcrypt já calculado pelo chamador). Aceita txDb. */
+export async function updateUserPassword(userId: number, passwordHash: string, txDb?: unknown): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dbInstance = (txDb as any) ?? (await getDb());
+  if (!dbInstance) return;
+  await dbInstance.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
