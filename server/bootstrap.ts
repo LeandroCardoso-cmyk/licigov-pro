@@ -78,8 +78,55 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     }
   }
 
+  /**
+   * PR A.1 — Índice UNIQUE em coluna de tabela preexistente.
+   *
+   * Diferente de uma coluna nova, um UNIQUE pode FALHAR por causa dos dados (duplicatas
+   * legadas). Como isto roda em todo boot, uma falha aqui derrubaria a aplicação — então
+   * verificamos as duplicatas antes e, havendo, apenas avisamos: a unicidade é aplicada
+   * depois do saneamento (procedimento em docs/ops/EMAIL_BREVO_RUNBOOK.md). O sistema
+   * continua correto sem o índice; ele é defesa em profundidade contra corrida no cadastro.
+   */
+  async function addUniqueIndexIfMissing(
+    table: string,
+    indexName: string,
+    column: string
+  ): Promise<void> {
+    const [tableRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table]
+    );
+    if ((tableRows[0] as ColRow).cnt === 0) return;
+
+    const [idxRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+      [table, indexName]
+    );
+    if ((idxRows[0] as ColRow).cnt > 0) return;
+
+    const [dupRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM (
+         SELECT \`${column}\` FROM \`${table}\`
+         WHERE \`${column}\` IS NOT NULL
+         GROUP BY \`${column}\` HAVING COUNT(*) > 1
+       ) AS dups`
+    );
+    if ((dupRows[0] as ColRow).cnt > 0) {
+      log("DB", `⚠ ${table}.${column}: ${(dupRows[0] as ColRow).cnt} valor(es) duplicado(s) — índice ${indexName} NÃO criado. Ver docs/ops/EMAIL_BREVO_RUNBOOK.md`);
+      return;
+    }
+
+    await connection.execute(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${indexName}\` UNIQUE (\`${column}\`)`);
+    log("DB", `✓ Schema corrigido: índice único ${indexName} criado em ${table}.${column}`);
+  }
+
   // Colunas pré-Sprint 1 (legacy)
   await addColumnIfMissing("users",     "passwordHash",    "varchar(255)");
+  // PR A.1 — revogação de sessão (claim `tv` do JWT) e unicidade do e-mail institucional.
+  await addColumnIfMissing("users",     "tokenVersion",    "int NOT NULL DEFAULT 0");
+  await addUniqueIndexIfMissing("users", "users_email_unique", "email");
   await addColumnIfMissing("documents", "sourceType",     "enum('ai','upload') NOT NULL DEFAULT 'ai'");
   await addColumnIfMissing("documents", "s3Key",          "varchar(500)");
   await addColumnIfMissing("documents", "fileUrl",        "varchar(1000)");
@@ -4201,6 +4248,67 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
 
   // Contrato avulso (0286) — usuário responsável pela criação do workspace.
   await addColumnIfMissing("contract_workspaces", "created_by", "int");
+
+  // PR A.1 (0287) — Acesso institucional: convites, recuperação de senha e outbox de e-mail.
+  // Rede de segurança para ambientes cujo journal já marca migrations como aplicadas.
+  await connection.execute(`CREATE TABLE IF NOT EXISTS \`institutional_invitations\` (
+    \`id\` INT AUTO_INCREMENT NOT NULL,
+    \`organizationId\` INT NOT NULL,
+    \`emailNormalized\` VARCHAR(320) NOT NULL,
+    \`role\` ENUM('owner','admin','manager','operator','viewer') NOT NULL DEFAULT 'operator',
+    \`status\` ENUM('pending','accepted','expired','cancelled','superseded') NOT NULL DEFAULT 'pending',
+    \`tokenHash\` VARCHAR(64) NOT NULL,
+    \`activeKey\` VARCHAR(350) NULL,
+    \`invitedName\` VARCHAR(255) NULL,
+    \`expiresAt\` TIMESTAMP NOT NULL,
+    \`acceptedAt\` TIMESTAMP NULL, \`cancelledAt\` TIMESTAMP NULL,
+    \`createdByUserId\` INT NULL, \`acceptedByUserId\` INT NULL,
+    \`resendCount\` INT NOT NULL DEFAULT 0, \`lastSentAt\` TIMESTAMP NULL,
+    \`correlationId\` VARCHAR(36) NULL,
+    \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updatedAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (\`id\`),
+    UNIQUE KEY \`institutional_invitations_active_key\` (\`activeKey\`),
+    UNIQUE KEY \`institutional_invitations_token_hash\` (\`tokenHash\`),
+    INDEX \`idx_invitations_org_status\` (\`organizationId\`, \`status\`),
+    INDEX \`idx_invitations_expires\` (\`status\`, \`expiresAt\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+  await connection.execute(`CREATE TABLE IF NOT EXISTS \`password_reset_tokens\` (
+    \`id\` INT AUTO_INCREMENT NOT NULL,
+    \`userId\` INT NOT NULL,
+    \`tokenHash\` VARCHAR(64) NOT NULL,
+    \`expiresAt\` TIMESTAMP NOT NULL,
+    \`consumedAt\` TIMESTAMP NULL, \`revokedAt\` TIMESTAMP NULL,
+    \`requestedAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`ipAddress\` VARCHAR(45) NULL, \`correlationId\` VARCHAR(36) NULL,
+    \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updatedAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (\`id\`),
+    UNIQUE KEY \`password_reset_tokens_token_hash\` (\`tokenHash\`),
+    INDEX \`idx_password_reset_user\` (\`userId\`, \`expiresAt\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+  await connection.execute(`CREATE TABLE IF NOT EXISTS \`email_outbox\` (
+    \`id\` INT AUTO_INCREMENT NOT NULL,
+    \`organizationId\` INT NULL,
+    \`messageType\` VARCHAR(60) NOT NULL,
+    \`recipient\` VARCHAR(320) NOT NULL,
+    \`templateKey\` VARCHAR(60) NOT NULL,
+    \`payload\` JSON NOT NULL,
+    \`idempotencyKey\` VARCHAR(190) NOT NULL,
+    \`status\` ENUM('pending','processing','sent','retryable_failure','permanent_failure','cancelled') NOT NULL DEFAULT 'pending',
+    \`provider\` VARCHAR(40) NULL, \`providerMessageId\` VARCHAR(255) NULL,
+    \`attempts\` INT NOT NULL DEFAULT 0, \`maxAttempts\` INT NOT NULL DEFAULT 5,
+    \`nextAttemptAt\` TIMESTAMP NULL, \`sentAt\` TIMESTAMP NULL, \`failedAt\` TIMESTAMP NULL,
+    \`lastErrorCode\` VARCHAR(60) NULL, \`lastErrorMessage\` VARCHAR(500) NULL,
+    \`correlationId\` VARCHAR(36) NULL,
+    \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updatedAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (\`id\`),
+    UNIQUE KEY \`email_outbox_idempotency_key\` (\`idempotencyKey\`),
+    INDEX \`idx_email_outbox_dispatch\` (\`status\`, \`nextAttemptAt\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
 // ─── Step 3: seed admin user ──────────────────────────────────────────────────

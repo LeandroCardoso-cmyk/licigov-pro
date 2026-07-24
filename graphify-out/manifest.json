@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1784553888.145665,
-    "ast_hash": "628fd00f5d69c30bcbc911e58e80c96f",
+    "mtime": 1784923095.0248108,
+    "ast_hash": "7994ae95b2e1e950d5a0bc9fc15edffc",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1784553888.1536648,
-    "ast_hash": "a5dba7273057670b3172b8648beb0177",
+    "mtime": 1784923009.3280854,
+    "ast_hash": "4ffe12844caa22abe025f63311883d95",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -3920,8 +3920,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/fixtures.ts": {
-    "mtime": 1784472875.3626738,
-    "ast_hash": "83d466aabe56ae0951cee7fda3054fb8",
+    "mtime": 1784923356.3640773,
+    "ast_hash": "c6d0e52ec28c0bfc20ea285c6a63deb9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai.test.ts": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1784736222.7435174,
-    "ast_hash": "6337343a7026c9e3ee44e419b1a7a8fa",
+    "mtime": 1784923170.5840816,
+    "ast_hash": "0d5f649347c52739233733d7e6112594",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -9760,8 +9760,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1784904649.1068478,
-    "ast_hash": "5577a67b32d4b6751979aa2e8d5051db",
+    "mtime": 1784905323.608866,
+    "ast_hash": "c0446f998a296910df17d62e3f8e97b6",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -9872,6 +9872,11 @@
   "server/__tests__/integration/ai-015-mock-fallback-policy.test.ts": {
     "mtime": 1784904432.3348348,
     "ast_hash": "ed58b4e2b76657e38664292cbe835f6d",
+    "semantic_hash": ""
+  },
+  "drizzle/0287_invitations_email_outbox.sql": {
+    "mtime": 1784923087.2680836,
+    "ast_hash": "6e850363d12fa08ab0406c19ac8b1b6e",
     "semantic_hash": ""
   }
 }

@@ -1921,6 +1921,13 @@
       "when": 1784419200001,
       "tag": "0286_contract_workspaces_created_by",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "5",
+      "when": 1784419200002,
+      "tag": "0287_invitations_email_outbox",
+      "breakpoints": true
     }
   ]
 }

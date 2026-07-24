@@ -8,12 +8,18 @@ export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
+  // PR A.1 — UNIQUE: o e-mail é a identidade institucional (convite/recuperação de senha).
+  // A coluna é nullable (contas sem e-mail) e o MySQL admite múltiplos NULL sob UNIQUE.
+  // A collation utf8mb4_*_ci torna a unicidade case-insensitive (desejado).
+  email: varchar("email", { length: 320 }).unique(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   theme: mysqlEnum("theme", ["light", "dark", "system"]).default("system").notNull(),
   passwordHash: varchar("passwordHash", { length: 255 }),           // Hash bcrypt do login (auth próprio)
   signaturePassword: varchar("signaturePassword", { length: 255 }), // Hash bcrypt da senha de assinatura
+  // PR A.1 — Revogação de sessão: o JWT carrega o claim `tv`; quando este contador é
+  // incrementado (ex.: redefinição de senha), todas as sessões emitidas antes deixam de valer.
+  tokenVersion: int("tokenVersion").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -1592,6 +1598,111 @@ export const idempotencyKeys = mysqlTable("idempotency_keys", {
 
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 export type InsertIdempotencyKey = typeof idempotencyKeys.$inferInsert;
+
+// ============================================================================
+// PR A.1 — ACESSO INSTITUCIONAL: CONVITES, RECUPERAÇÃO DE SENHA E OUTBOX DE E-MAIL
+// ============================================================================
+
+/**
+ * Convite institucional: único caminho de entrada de um servidor no sistema
+ * (não há cadastro público). O token vive apenas no e-mail; aqui guardamos o
+ * hash SHA-256 — o token em claro nunca é persistido nem registrado em log.
+ *
+ * `activeKey` implementa, no nível do banco, a regra "no máximo um convite
+ * pendente por (organização, e-mail)": vale `"{orgId}:{email}"` enquanto o
+ * convite está `pending` e NULL em qualquer outro estado (o MySQL admite
+ * múltiplos NULL sob UNIQUE). Substituir um convite é, portanto, atômico.
+ */
+export const institutionalInvitations = mysqlTable("institutional_invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+  role: mysqlEnum("role", ["owner", "admin", "manager", "operator", "viewer"]).default("operator").notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "expired", "cancelled", "superseded"]).default("pending").notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  /** `"{organizationId}:{emailNormalized}"` enquanto pendente; NULL nos demais estados. */
+  activeKey: varchar("activeKey", { length: 350 }),
+  invitedName: varchar("invitedName", { length: 255 }),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  createdByUserId: int("createdByUserId"),
+  acceptedByUserId: int("acceptedByUserId"),
+  resendCount: int("resendCount").default(0).notNull(),
+  lastSentAt: timestamp("lastSentAt"),
+  correlationId: varchar("correlationId", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("institutional_invitations_active_key").on(table.activeKey),
+  unique("institutional_invitations_token_hash").on(table.tokenHash),
+]);
+
+export type InstitutionalInvitation = typeof institutionalInvitations.$inferSelect;
+export type InsertInstitutionalInvitation = typeof institutionalInvitations.$inferInsert;
+
+/**
+ * Token de redefinição de senha — uso único, com expiração curta. Somente o
+ * hash SHA-256 é persistido. `consumedAt`/`revokedAt` são o que impede o
+ * replay: um token consumido nunca volta a valer, e emitir um novo revoga os
+ * anteriores do mesmo usuário.
+ */
+export const passwordResetTokens = mysqlTable("password_reset_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  consumedAt: timestamp("consumedAt"),
+  revokedAt: timestamp("revokedAt"),
+  requestedAt: timestamp("requestedAt").defaultNow().notNull(),
+  /** IP da solicitação — mesmo formato de `activity_logs.ipAddress` (em claro, IPv4/IPv6). */
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  correlationId: varchar("correlationId", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("password_reset_tokens_token_hash").on(table.tokenHash),
+]);
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+/**
+ * Outbox transacional de e-mail. O comando (criar convite, pedir redefinição)
+ * grava a mensagem na MESMA transação do seu efeito: ou os dois acontecem, ou
+ * nenhum. O envio em si é assíncrono, com retentativa e backoff.
+ *
+ * `idempotencyKey` é UNIQUE: reenviar o mesmo comando não gera segundo e-mail.
+ * O payload guarda apenas o necessário para renderizar o template — nunca
+ * senha, e o token só enquanto a mensagem aguarda envio.
+ */
+export const emailOutbox = mysqlTable("email_outbox", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"),
+  messageType: varchar("messageType", { length: 60 }).notNull(),
+  recipient: varchar("recipient", { length: 320 }).notNull(),
+  templateKey: varchar("templateKey", { length: 60 }).notNull(),
+  payload: json("payload").notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 190 }).notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "sent", "retryable_failure", "permanent_failure", "cancelled"]).default("pending").notNull(),
+  provider: varchar("provider", { length: 40 }),
+  providerMessageId: varchar("providerMessageId", { length: 255 }),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("maxAttempts").default(5).notNull(),
+  nextAttemptAt: timestamp("nextAttemptAt"),
+  sentAt: timestamp("sentAt"),
+  failedAt: timestamp("failedAt"),
+  lastErrorCode: varchar("lastErrorCode", { length: 60 }),
+  lastErrorMessage: varchar("lastErrorMessage", { length: 500 }),
+  correlationId: varchar("correlationId", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("email_outbox_idempotency_key").on(table.idempotencyKey),
+]);
+
+export type EmailOutboxMessage = typeof emailOutbox.$inferSelect;
+export type InsertEmailOutboxMessage = typeof emailOutbox.$inferInsert;
 
 // ============================================================================
 // SPRINT 1 — FEATURE FLAGS FOUNDATION
