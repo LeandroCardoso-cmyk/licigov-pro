@@ -1146,10 +1146,5 @@
   "1144": "vitest",
   "1145": "cmdk",
   "1146": "mysql2",
-  "1147": "@radix-ui/react-accordion",
-  "1148": "@radix-ui/react-toggle",
-  "1149": "recharts",
-  "1150": "sonner",
-  "1151": "superjson",
-  "1152": "@tanstack/react-query"
+  "1147": "@radix-ui/react-accordion"
 }

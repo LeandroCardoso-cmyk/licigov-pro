@@ -9928,5 +9928,45 @@
     "mtime": 1784923975.5000632,
     "ast_hash": "6944aa1137f215676d0c40077fcad3ee",
     "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-brevo-provider.test.ts": {
+    "mtime": 1784924424.372053,
+    "ast_hash": "c7747cb5327b0ccb6d7987daa6d20e86",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-console-fake-providers.test.ts": {
+    "mtime": 1784924468.692052,
+    "ast_hash": "4f267c6912660eef7f1adb5dbc522e68",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-templates.test.ts": {
+    "mtime": 1784924450.5160522,
+    "ast_hash": "84b80e31c35982221ef4ee9f0f15197a",
+    "semantic_hash": ""
+  },
+  "server/services/email/brevoProvider.ts": {
+    "mtime": 1784924488.0280516,
+    "ast_hash": "b31429fe50cc5d98f5c6da410ed79643",
+    "semantic_hash": ""
+  },
+  "server/services/email/consoleProvider.ts": {
+    "mtime": 1784924333.596055,
+    "ast_hash": "26a31d06323c8dde5d98ab3efeaed718",
+    "semantic_hash": ""
+  },
+  "server/services/email/fakeProvider.ts": {
+    "mtime": 1784924342.900055,
+    "ast_hash": "c61390a5ce6d372d17235a828b5f7e07",
+    "semantic_hash": ""
+  },
+  "server/services/email/provider.ts": {
+    "mtime": 1784924312.3280556,
+    "ast_hash": "e34b581d594f789ad792a02e7a5571cc",
+    "semantic_hash": ""
+  },
+  "server/services/email/templates.ts": {
+    "mtime": 1784924386.6200538,
+    "ast_hash": "2b13d1bfca329604f37394bab20d1fe8",
+    "semantic_hash": ""
   }
 }
