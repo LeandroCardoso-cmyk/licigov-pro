@@ -47,6 +47,9 @@ export interface CognitiveOutcome {
   readonly tokens: { inputTokens: number; outputTokens: number; totalTokens: number };
   readonly confidence: number;
   readonly reasoning: string;
+  /** RAG-QUALITY-002 — motivo de término do provider ("max_tokens" = geração cortada pelo teto de
+   *  saída, possivelmente incompleta). Assim como tokens/latência, NÃO entra no replayHash. */
+  readonly finishReason: "stop" | "tool_calls" | "max_tokens" | "other";
 }
 
 export interface AIExecutionContext {

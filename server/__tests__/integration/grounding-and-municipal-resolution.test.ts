@@ -222,10 +222,14 @@ describe("Objetivo 2 — Wiring do service (perfil institucional carregado da or
     });
     // cada trecho é truncado (≈700 chars + marcador) — não despeja chunks inteiros
     for (const p of a.passages) expect(p.text.length).toBeLessThanOrEqual(710);
-    // no máximo 3 trechos por documento (recall x concisão)
+    // Concisão por documento: no caso multi-fonte, ≤3 trechos/doc. SOURCE-SCOPE-ROUTER-001 — quando o
+    // escopo é RESTRITO a um único diploma (a pergunta cita a LC 123), há menos documentos e a busca
+    // pode trazer o cluster temático completo (até 6/doc) sem perder concisão — cada trecho segue
+    // truncado. O teto por-doc, portanto, depende de o contexto ser mono- ou multi-fonte.
     const byDoc = new Map<string, number>();
     for (const p of a.passages) byDoc.set(p.documentId, (byDoc.get(p.documentId) ?? 0) + 1);
-    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(3);
+    const perDocCap = byDoc.size === 1 ? 6 : 3;
+    for (const n of byDoc.values()) expect(n).toBeLessThanOrEqual(perDocCap);
   });
 
   it("expansão de sigla: 'ETP' recupera trechos sobre estudo técnico preliminar (não devolve 'não encontrado')", async () => {

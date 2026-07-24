@@ -14,11 +14,23 @@
  */
 
 import { ENV } from "../env";
-import { AI_CONFIG } from "../../config/ai";
+import { AI_CONFIG, AI_ALLOW_MOCK_FALLBACK, mockFallbackAllowed } from "../../config/ai";
+import { IS_DEVELOPMENT, ENV_TAG } from "../../config/env";
 import type { ProviderName } from "./executionPolicy";
 import type { AIProvider } from "./types";
 import { GeminiProvider } from "./gemini";
 import { MockAIProvider } from "./mockProvider";
+
+/**
+ * AI-015 — Falha controlada quando nenhum provider de IA REAL está disponível e o fallback para mock
+ * NÃO é permitido (staging/production, ou dev/test sem a flag). Interrompe a execução em vez de
+ * servir uma resposta mock como oficial. Capturada pelos Business Domains (ex.: answerConsultation),
+ * que registram a consulta como `failed` e NÃO persistem resposta oficial.
+ */
+export class NoRealAIProviderError extends Error {
+  readonly code = "NO_REAL_AI_PROVIDER";
+  constructor(message: string) { super(message); this.name = "NoRealAIProviderError"; }
+}
 import { ClaudeProvider, OpenAIProvider } from "./placeholderProviders";
 
 export interface ProviderAdapterInfo {
@@ -108,27 +120,40 @@ export interface ProviderResolution {
 }
 
 /**
- * Seleciona o provider seguindo a AI Execution Policy: tenta o preferido, cai no
- * fallback e, por fim, no mock determinístico. A decisão de provider vive AQUI —
- * jamais nos Business Domains. Providers não implementados (claude/openai) são
- * pulados na seleção automática (mas continuam resolvíveis como contrato).
+ * Seleciona o provider seguindo a AI Execution Policy: tenta o preferido, depois o fallback REAL.
+ * A decisão de provider vive AQUI — jamais nos Business Domains. Providers não implementados
+ * (claude/openai) são pulados na seleção automática (mas continuam resolvíveis como contrato).
+ *
+ * AI-015 — FAIL-CLOSED: se nenhum provider real puder ser construído, o fallback para o mock só é
+ * usado quando `mockFallbackAllowed` (dev/test + `AI_ALLOW_MOCK_FALLBACK=true`). Caso contrário
+ * (staging/production, ou sem a flag), lança `NoRealAIProviderError` em vez de servir mock como
+ * oficial. Um erro de RUNTIME do provider real (ex.: `generate()` falhando) NÃO é tratado aqui —
+ * propaga para o chamador, jamais caindo para o mock.
  */
 export function selectProvider(preferred: ProviderName, fallback: ProviderName): ProviderResolution {
   if (isProviderImplemented(preferred)) {
     try {
       return { provider: resolveProviderByName(preferred), selected: preferred, requested: preferred, usedFallback: false };
     } catch {
-      /* cai para o fallback */
+      /* provider preferido não pôde ser CONSTRUÍDO (ex.: chave ausente) — tenta o fallback real */
     }
   }
   if (isProviderImplemented(fallback)) {
     try {
       return { provider: resolveProviderByName(fallback), selected: fallback, requested: preferred, usedFallback: true };
     } catch {
-      /* cai para o mock */
+      /* fallback real também indisponível */
     }
   }
-  return { provider: mockProvider(), selected: "mock", requested: preferred, usedFallback: true };
+  if (mockFallbackAllowed({ isDevelopment: IS_DEVELOPMENT, allowMockFlag: AI_ALLOW_MOCK_FALLBACK })) {
+    return { provider: mockProvider(), selected: "mock", requested: preferred, usedFallback: true };
+  }
+  throw new NoRealAIProviderError(
+    `Nenhum provider de IA real disponível (preferido=${preferred}, fallback=${fallback}) e o fallback ` +
+    `para mock é proibido em ${ENV_TAG}. Configure a credencial do provider ` +
+    `(${preferred === "gemini" ? "GEMINI_API_KEY" : preferred.toUpperCase() + "_API_KEY"}). ` +
+    `O mock só é permitido em desenvolvimento/teste com AI_ALLOW_MOCK_FALLBACK=true.`
+  );
 }
 
 export const ALL_PROVIDER_NAMES: ProviderName[] = Object.keys(PROVIDER_ADAPTERS) as ProviderName[];

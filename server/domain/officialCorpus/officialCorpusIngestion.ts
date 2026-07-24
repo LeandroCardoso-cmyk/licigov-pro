@@ -41,8 +41,8 @@ function buildKnowledgeDocument(parsed: ParsedNorm, normId: string, tenantId: nu
   const docKey = normId;
   const officialBlocks: KnowledgeBlock[] = parsed.articles.map((a, i) => createBlock({
     docKey, kind: "OfficialText", order: i + 1, title: a.identifier,
-    fragments: [{ text: a.fullText, metadata: { identifier: a.identifier, path: a.path } }],
-    metadata: { identifier: a.identifier, path: a.path, paragraphs: a.paragraphs.length },
+    fragments: [{ text: a.fullText, metadata: { identifier: a.identifier, path: a.path, headingText: a.headingText } }],
+    metadata: { identifier: a.identifier, path: a.path, headingText: a.headingText, paragraphs: a.paragraphs.length },
   }));
   // Explainability = origem factual (não é resumo/interpretação): fonte, URL, vigência.
   const explain = createBlock({

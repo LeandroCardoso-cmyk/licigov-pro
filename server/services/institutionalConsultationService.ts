@@ -8,7 +8,9 @@
 
 import { createHash } from "crypto";
 import { buildOfficialKnowledgeCorpus, type OfficialCorpusBuildResult } from "./officialCorpus/officialCorpusBuilder";
-import { executeCognitiveTaskWithInstitutionalContext } from "./institutionalIntegration/institutionalKnowledgeIntegration";
+import { resolveInstitutionalContextPackage } from "./institutionalIntegration/institutionalKnowledgeIntegration";
+import { executeCognitiveTask, type CognitiveExecution } from "./aiExecutionEngine";
+import { LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS } from "../config/ai";
 import type { ContextPackage } from "../domain/institutionalIntegration/contextPackage";
 import {
   buildConsultationAnswer, sanitizeQuestion, normalizeQuestion, sanitizeErrorMessage,
@@ -57,9 +59,14 @@ const TASK_TYPE = "LEGAL_ANALYSIS";
 // no corpus.
 const CONSULTATION_MAX_PASSAGES_PER_DOC = 3;
 const CONSULTATION_MAX_PASSAGE_CHARS = 700;
-/** Teto de tokens de saída — custo por consulta não explode ao escalar. Com o "thinking" desligado nos
- *  modelos Flash, esse orçamento é integralmente da resposta (≈1 página completa, sem corte). */
-const CONSULTATION_MAX_OUTPUT_TOKENS = 1500;
+/** RAG-QUALITY-003 — teto de tokens de saída, configurável (ver `LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS`
+ *  em server/config/ai.ts). Custo por consulta não explode ao escalar mesmo com o valor maior. */
+const CONSULTATION_MAX_OUTPUT_TOKENS = LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS;
+/** No máximo 1 retry quando a geração for cortada por MAX_TOKENS — nunca mais que isso (sem laço). A
+ *  2ª tentativa reusa o MESMO ContextPackage/correlationId (a recuperação NUNCA é re-executada) e
+ *  recebe um orçamento maior, para maximizar a chance de completar a resposta em vez de cortá-la. */
+const MAX_TOKENS_RETRY_BUDGET_MULTIPLIER = 1.6;
+const MAX_TOKENS_RETRY_BUDGET_CEILING = 6000;
 
 function buildSources(tenantId: number, consultationId: string, pkg: ContextPackage, createdAt: string): ConsultationSource[] {
   const docById = new Map(pkg.documents.map(d => [d.documentId, d]));
@@ -82,6 +89,8 @@ function buildSnapshot(pkg: ContextPackage): string {
     documents: pkg.documents.map(d => ({ documentId: d.documentId, version: d.version, authority: d.authority, jurisdiction: d.jurisdiction, bindingLevel: d.bindingLevel })),
     citations: pkg.citations.map(c => ({ reference: c.reference, lineageId: c.lineageId })),
     passages: pkg.retrievedPassages.map(p => ({ blockId: p.blockId, identifier: p.identifier, score: p.score })),
+    // SOURCE-SCOPE-ROUTER-001 — auditoria durável da decisão de escopo (intenção, diploma, incluídas/descartadas, ampliação).
+    sourceScope: (pkg.metadata as { sourceScope?: unknown }).sourceScope ?? null,
   });
 }
 
@@ -140,17 +149,53 @@ export async function answerConsultation(params: AnswerConsultationParams): Prom
       try { userContext = await _profileResolver(params.organizationId); }
       catch { userContext = { state: null, municipality: null }; }
     }
-    const { execution, contextPackage } = await executeCognitiveTaskWithInstitutionalContext(getOfficialCorpus(), {
+    // RC-5.0 — resolvido UMA única vez: a recuperação é determinística (mesmo query/contexto →
+    // mesmo resultado) e NUNCA deve ser re-executada por um retry de geração (RAG-QUALITY-003) —
+    // reexecutá-la duplicaria os eventos de observabilidade de recuperação sem necessidade.
+    const contextPackage = resolveInstitutionalContextPackage(getOfficialCorpus(), {
       tenantId: params.organizationId, businessDomain: CONSULTATION_DOMAIN_CODE, taskType: TASK_TYPE,
       query: question, correlationId: params.correlationId, userContext,
       maxPassagesPerDocument: CONSULTATION_MAX_PASSAGES_PER_DOC, maxPassageChars: CONSULTATION_MAX_PASSAGE_CHARS,
-      cognitive: { task: "LEGAL_ANALYSIS", userId: String(params.userId), query: question, maxOutputTokens: CONSULTATION_MAX_OUTPUT_TOKENS },
+      // SOURCE-SCOPE-ROUTER-001 — roteamento determinístico de escopo ativo apenas no "Tirar Dúvidas".
+      enableSourceScopeRouting: true,
     });
+
+    // SOURCE-SCOPE-ROUTER-001 (lacuna 3) — pergunta ambígua: NÃO gerar resposta (sem retrieval
+    // conclusivo, sem chamada ao provider). A resposta é a solicitação de esclarecimento montada por
+    // buildConsultationAnswer a partir do escopo. Evita custo e qualquer alucinação sobre evidência vazia.
+    const isAmbiguous = (contextPackage.metadata as { sourceScope?: { ambiguous?: boolean } }).sourceScope?.ambiguous === true;
+
+    let generationTruncated = false;
+    let engineContent = "";
+    let providerIsMock = false;
+    if (!isAmbiguous) {
+      // RAG-QUALITY-003 — no máximo 1 retry quando a 1ª tentativa cortar por MAX_TOKENS. O
+      // correlationId é o MESMO nas duas tentativas (rastreável no log [cognitive-observability]); não
+      // é um replay (replayId/replayOfExecutionId são reservados a replay EXPLÍCITO pelo usuário) e não
+      // cria/duplica nenhum registro de histórico — só a chamada ao provider é repetida.
+      let execution: CognitiveExecution = await executeCognitiveTask({
+        task: "LEGAL_ANALYSIS", tenantId: params.organizationId, userId: String(params.userId), query: question,
+        correlationId: params.correlationId, contextPackage, maxOutputTokens: CONSULTATION_MAX_OUTPUT_TOKENS,
+      });
+      if (execution.context.outcome.finishReason === "max_tokens") {
+        const retryBudget = Math.min(Math.round(CONSULTATION_MAX_OUTPUT_TOKENS * MAX_TOKENS_RETRY_BUDGET_MULTIPLIER), MAX_TOKENS_RETRY_BUDGET_CEILING);
+        execution = await executeCognitiveTask({
+          task: "LEGAL_ANALYSIS", tenantId: params.organizationId, userId: String(params.userId), query: question,
+          correlationId: params.correlationId, contextPackage, maxOutputTokens: retryBudget,
+        });
+      }
+      // RAG-QUALITY-002 — se o provider cortar a geração por limite de tokens, a resposta pode estar
+      // incompleta — não pode ser classificada como "fundamentada" às cegas. (Tentativa FINAL.)
+      generationTruncated = execution.context.outcome.finishReason === "max_tokens";
+      engineContent = execution.response.content;
+      // AI-015 — se a execução caiu no mock (só possível em dev/test com flag), a resposta não é oficial.
+      providerIsMock = execution.context.outcome.provider === "mock";
+    }
     const t1 = clock();
 
     const answer = buildConsultationAnswer({
-      tenantId: params.organizationId, userId: params.userId, question, engineContent: execution.response.content,
-      contextPackage, executionId, replayId, replayOfExecutionId, createdAt,
+      tenantId: params.organizationId, userId: params.userId, question, engineContent,
+      contextPackage, executionId, replayId, replayOfExecutionId, createdAt, generationTruncated, providerIsMock,
     });
     const sources = buildSources(params.organizationId, executionId, contextPackage, createdAt);
     const t2 = clock();

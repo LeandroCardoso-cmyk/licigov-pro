@@ -25,6 +25,8 @@ export interface CognitiveObservability {
   readonly knowledgeGraphLog: string;
   readonly latencyMs: number;
   readonly tokenUsage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  /** RAG-QUALITY-002 — motivo de término do provider ("max_tokens" = geração cortada). Auditável. */
+  readonly finishReason: "stop" | "tool_calls" | "max_tokens" | "other";
   readonly structuredOutputValid: boolean;
   readonly structuredOutputErrors: readonly string[];
   // RC-4.0.1 — contrato universal
@@ -71,6 +73,7 @@ export function recordCognitiveObservability(params: {
     knowledgeGraphLog: `kg=${g.knowledgeGraphApplied} nodes=${g.knowledgeGraphNodes.length}`,
     latencyMs: context.outcome.latencyMs,
     tokenUsage: response.tokens,
+    finishReason: context.outcome.finishReason,
     structuredOutputValid: validation.valid,
     structuredOutputErrors: validation.errors,
     responseType: response.responseType,
@@ -102,6 +105,7 @@ export function recordCognitiveObservability(params: {
       correlationId: obs.correlationId, task: obs.task, provider: context.outcome.provider,
       responseType: obs.responseType, structuredData: obs.structuredDataPresent, contract: obs.contractVersion,
       latencyMs: obs.latencyMs, tokens: obs.tokenUsage.totalTokens, structuredOutputValid: obs.structuredOutputValid,
+      finishReason: obs.finishReason,
     }));
   } catch { /* noop */ }
 

@@ -23,11 +23,21 @@ const SAFETY_SETTINGS = [
 
 /**
  * Modelos Gemini Flash 2.5 ativam "thinking" por padrão, que consome tokens de saída (trunca a
- * resposta) e é cobrado. Este helper decide quando desligá-lo (`thinkingBudget: 0`), aplicável APENAS
- * aos Flash 2.5 — em outros modelos (ex.: Pro, que exige budget ≥ 128) não é aplicado.
+ * resposta) e é cobrado. Este helper decide quando desligá-lo (`thinkingConfig.thinkingBudget: 0`).
+ *
+ * RC-PR-B-001 — Só habilitado para IDs CONCRETOS explicitamente verificados como compatíveis.
+ * Aliases móveis (ex.: `gemini-flash-latest`) são EXCLUÍDOS: podem resolver para um modelo que
+ * rejeita `thinkingConfig` via o SDK legado `@google/generative-ai`, causando
+ * `400 INVALID_ARGUMENT — Request contains an invalid argument` na chamada real. Para ativar um
+ * modelo novo, adicione o ID concreto ao conjunto abaixo APÓS validação.
  */
+export const THINKING_DISABLE_COMPATIBLE_MODELS: ReadonlySet<string> = new Set([
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-preview-05-20",
+]);
+
 export function shouldDisableThinking(modelId: string): boolean {
-  return modelId.includes("flash-latest") || modelId.includes("2.5-flash");
+  return THINKING_DISABLE_COMPATIBLE_MODELS.has(modelId.trim());
 }
 
 export class GeminiProvider implements AIProvider {

@@ -33,9 +33,12 @@ export interface ProviderReadiness {
 
 export function providerReadiness(): ProviderReadiness {
   const providers = ALL_PROVIDER_NAMES.map(name => ({ name, implemented: isProviderImplemented(name) }));
-  // Resolução determinística (sem chave → mock). Não conecta nenhum provider real.
-  const selectionResolves = Boolean(selectProvider("gemini", "claude").provider);
-  const fallbackResolves = selectProvider("claude", "openai").selected === "mock";
+  // AI-015 — `selectProvider` agora é FAIL-CLOSED: sem provider real e sem mock autorizado, lança.
+  // Este health check tolera a falha (não conecta provider real): em dev/test resolve para mock; em
+  // staging/production sem chave, `selectProvider` lança e ambos reportam `false` (sinal de saúde real).
+  const safeSelect = (p: "gemini" | "claude", f: "claude" | "openai") => { try { return selectProvider(p, f); } catch { return null; } };
+  const selectionResolves = Boolean(safeSelect("gemini", "claude")?.provider);
+  const fallbackResolves = safeSelect("claude", "openai")?.selected === "mock";
   return {
     providers,
     implementedCount: providers.filter(p => p.implemented).length,

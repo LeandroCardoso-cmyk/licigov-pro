@@ -37,6 +37,13 @@ describe("Retrieval — expansão de siglas/vocabulário", () => {
   });
 
   it("consulta sem sigla conhecida permanece só com os termos tokenizados", () => {
-    expect(expandQueryTerms("quando usar concorrência").sort()).toEqual(["concorrencia", "quando", "usar"].sort());
+    expect(expandQueryTerms("usar concorrência").sort()).toEqual(["concorrencia", "usar"].sort());
+  });
+
+  it("RAG-QUALITY-001 — descarta pronomes interrogativos ('quando'), que não carregam conteúdo jurídico", () => {
+    // Sem normalização de comprimento, termos interrogativos favoreciam blocos grandes/genéricos que
+    // os contêm incidentalmente — generaliza para qualquer pergunta, não só o caso de teste do RAG-QUALITY-001.
+    expect(expandQueryTerms("quando usar concorrência")).not.toContain("quando");
+    expect(expandQueryTerms("quando usar concorrência").sort()).toEqual(["concorrencia", "usar"].sort());
   });
 });

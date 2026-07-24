@@ -23,6 +23,127 @@ export const CONSULTATION_DOMAIN_NAME = "Tirar Dúvidas";
  */
 export type ConsultationStatus = "pending" | "processing" | "completed" | "limited" | "failed";
 
+/**
+ * RAG-QUALITY-001 — Selo de suficiência de evidência (3 estados), exibido ao usuário:
+ * - "fundamentada": passagens cobrem boa parte dos termos da consulta E há ao menos uma passagem
+ *   com score forte — a resposta se apoia em dispositivo(s) diretamente aplicável(is).
+ * - "parcial": há base documental (ao menos 1 passagem), mas cobertura/score insuficientes para
+ *   afirmar que o dispositivo correto foi localizado com confiança — a resposta deve ser tratada
+ *   como orientação preliminar, a confirmar.
+ * - "insuficiente": nenhuma passagem foi recuperada — sem fundamento algum.
+ * Substitui o corte binário anterior (que classificava "Fundamentada" sempre que qualquer passagem,
+ * ainda que irrelevante, existisse — a causa do RAG-QUALITY-001).
+ */
+export type EvidenceSufficiency = "fundamentada" | "parcial" | "insuficiente";
+
+const EVIDENCE_COVERAGE_FUNDAMENTADA = 0.5;
+const EVIDENCE_SCORE_FUNDAMENTADA = 0.25;
+
+export interface EvidenceSufficiencyOptions {
+  /** RAG-QUALITY-002 — a geração do modelo foi cortada (finishReason="max_tokens"): a resposta pode
+   *  estar incompleta — nunca classificar como "fundamentada" às cegas quando isso ocorre. */
+  readonly generationTruncated?: boolean;
+}
+
+/**
+ * Classifica a suficiência de evidência — SEPARANDO duas dimensões (RAG-QUALITY-002):
+ * 1. SUFICIÊNCIA: as passagens recuperadas, isoladamente, sustentam alguma afirmação (cobertura de
+ *    termos + força do score)?
+ * 2. RELEVÂNCIA À INTENÇÃO: a passagem de maior score responde à MATÉRIA da pergunta, ou apenas
+ *    sustenta a frase incidentalmente — ex.: uma disposição transitória/geral que só cita os termos
+ *    de passagem, quando um capítulo temático específico competia e deveria prevalecer
+ *    (`topPassageGenericContainer`, calculado no retrieval)?
+ * Uma resposta só é "fundamentada" quando AMBAS as dimensões são satisfeitas E a geração do modelo
+ * não foi cortada — evidência que sustenta a frase mas não responde à intenção jurídica, ou uma
+ * resposta incompleta, nunca recebem o selo de maior confiança. Determinístico.
+ */
+export function classifyEvidenceSufficiency(pkg: ContextPackage, opts?: EvidenceSufficiencyOptions): EvidenceSufficiency {
+  if (pkg.documents.length === 0 || pkg.retrievedPassages.length === 0) return "insuficiente";
+  // SOURCE-SCOPE-ROUTER-001 (lacuna 2/3) — a evidência recuperada precisa responder à INTENÇÃO da
+  // pergunta, não apenas existir. Uma consulta ao TCE sem NENHUM trecho de jurisprudência, ou a um
+  // diploma citado sem NENHUM trecho desse diploma, é "evidência insuficiente ao mérito" — nunca
+  // "fundamentada". Pergunta ambígua (sem antecedente) também não tem mérito fundamentável.
+  if (!intentEvidenceSatisfied(pkg)) return "insuficiente";
+  const coverageRatio = typeof pkg.metadata.coverageRatio === "number" ? pkg.metadata.coverageRatio : 0;
+  const maxPassageScore = typeof pkg.metadata.maxPassageScore === "number"
+    ? pkg.metadata.maxPassageScore
+    : pkg.retrievedPassages.reduce((m, p) => Math.max(m, p.score), 0);
+  const evidenceIsSufficient = coverageRatio >= EVIDENCE_COVERAGE_FUNDAMENTADA && maxPassageScore >= EVIDENCE_SCORE_FUNDAMENTADA;
+  const topPassageGenericContainer = pkg.metadata.topPassageGenericContainer === true;
+  const evidenceIsRelevantToIntent = !topPassageGenericContainer;
+  const generationComplete = opts?.generationTruncated !== true;
+  if (evidenceIsSufficient && evidenceIsRelevantToIntent && generationComplete) return "fundamentada";
+  return "parcial";
+}
+
+interface ScopeForSeal {
+  readonly intent?: string;
+  readonly ambiguous?: boolean;
+  readonly requestedDiplomas?: readonly string[];
+  readonly applicability?: Record<string, { category?: string }>;
+}
+/**
+ * A evidência recuperada satisfaz a INTENÇÃO da pergunta? (SOURCE-SCOPE-ROUTER-001, lacuna 2).
+ * - ambígua → não há mérito a fundamentar.
+ * - jurisprudencial → exige ao menos um trecho de fonte de jurisprudência (TCU/TCE/manual/prejulgado).
+ * - diploma citado → exige ao menos um trecho desse diploma.
+ * Sem `sourceScope` (chamadas fora do "Tirar Dúvidas") → não aplica (compatível com o comportamento anterior).
+ */
+function intentEvidenceSatisfied(pkg: ContextPackage): boolean {
+  const scope = (pkg.metadata as { sourceScope?: ScopeForSeal }).sourceScope;
+  if (!scope) return true;
+  if (scope.ambiguous) return false;
+  const passageNorms = new Set(pkg.retrievedPassages.map(p => p.normId));
+  if (scope.intent === "jurisprudencial" && scope.applicability) {
+    const hasJurisprudence = [...passageNorms].some(n => scope.applicability?.[n]?.category === "jurisprudencia");
+    if (!hasJurisprudence) return false;
+  }
+  if (scope.requestedDiplomas && scope.requestedDiplomas.length > 0) {
+    const hasRequested = scope.requestedDiplomas.some(n => passageNorms.has(n));
+    if (!hasRequested) return false;
+  }
+  return true;
+}
+
+interface SourceApplicabilityInfoShape {
+  readonly category: string;
+  readonly srpSpecific: boolean;
+  readonly federalOnly: boolean;
+  readonly conditional: boolean;
+}
+interface SourceScopeAuditShape {
+  readonly includedNormIds?: readonly string[];
+  readonly applicability?: Record<string, SourceApplicabilityInfoShape>;
+}
+
+/**
+ * SOURCE-SCOPE-ROUTER-001 (ponto 6) — monta a ressalva de aplicabilidade quando o contexto de um
+ * tenant MUNICIPAL inclui normas que NÃO constituem obrigação municipal automática (exclusivas do
+ * SRP, restritas ao Executivo federal, ou condicionadas). Retorna null quando não há o que ressalvar.
+ * Determinístico; lê exclusivamente a auditoria de escopo persistida no ContextPackage.
+ */
+function buildApplicabilityCaveat(pkg: ContextPackage): string | null {
+  if (pkg.municipality == null) return null; // ressalva só faz sentido para consulta situada no município
+  const scope = (pkg.metadata as { sourceScope?: SourceScopeAuditShape }).sourceScope;
+  if (!scope || !scope.applicability || !scope.includedNormIds) return null;
+  const includedTitleByNorm = new Map(pkg.documents.map(d => [d.normId, d.title]));
+  const flagged: string[] = [];
+  for (const normId of scope.includedNormIds) {
+    const info = scope.applicability[normId];
+    if (!info) continue;
+    if (info.srpSpecific || info.federalOnly || info.conditional) {
+      const reason = info.srpSpecific
+        ? "regra específica do Sistema de Registro de Preços"
+        : info.federalOnly
+          ? "norma do Executivo federal"
+          : "norma de aplicação condicionada";
+      flagged.push(`${includedTitleByNorm.get(normId) ?? normId} (${reason})`);
+    }
+  }
+  if (flagged.length === 0) return null;
+  return `Atenção à aplicabilidade: ${flagged.join("; ")} — não constitui(em), por si só(s), obrigação geral do município; confirme a adoção/regulamentação municipal antes de utilizar como fundamento local.`;
+}
+
 /** Pergunta normalizada (para comparação/auditoria/contextReplayHash). Determinística. */
 export function normalizeQuestion(raw: string): string {
   return sanitizeQuestion(raw).toLowerCase();
@@ -177,6 +298,8 @@ export interface InstitutionalConsultationAnswer {
   readonly explainabilityLines: readonly string[];
   readonly limitations: readonly string[];
   readonly hasSufficientBasis: boolean;
+  /** RAG-QUALITY-001 — selo de 3 estados (ver `EvidenceSufficiency`). */
+  readonly evidenceSufficiency: EvidenceSufficiency;
   readonly createdAt: string;
 }
 
@@ -215,9 +338,18 @@ export function buildConsultationAnswer(params: {
   replayId?: string | null;
   replayOfExecutionId?: string | null;
   createdAt: string;
+  /** RAG-QUALITY-002 — a geração do modelo terminou por limite de tokens (resposta possivelmente incompleta). */
+  generationTruncated?: boolean;
+  /** AI-015 — a resposta foi produzida pelo provider MOCK (fallback autorizado só em dev/test). Nunca
+   *  pode ser apresentada como oficial/"Fundamentada". */
+  providerIsMock?: boolean;
 }): InstitutionalConsultationAnswer {
   const { contextPackage: pkg } = params;
-  const hasSufficientBasis = pkg.documents.length > 0 && pkg.retrievedPassages.length > 0;
+  const evidenceBase = classifyEvidenceSufficiency(pkg, { generationTruncated: params.generationTruncated });
+  // AI-015 — resposta de mock NUNCA é "fundamentada" (oficial); rebaixa para "parcial" no máximo.
+  const evidenceSufficiency: EvidenceSufficiency =
+    params.providerIsMock && evidenceBase === "fundamentada" ? "parcial" : evidenceBase;
+  const hasSufficientBasis = evidenceSufficiency !== "insuficiente";
 
   const documents: ConsultationDocumentRef[] = pkg.documents.map(d => ({
     documentId: d.documentId, title: d.title, authority: d.authority, jurisdiction: d.jurisdiction, version: d.version, bindingLevel: d.bindingLevel,
@@ -237,16 +369,51 @@ export function buildConsultationAnswer(params: {
     "Esta é uma orientação técnica fundamentada em normas oficiais — não substitui parecer jurídico nem decisão da autoridade competente.",
     "Toda resposta é supervisionada, explicável e auditável.",
   ];
+  // SOURCE-SCOPE-ROUTER-001 (ponto 6) — não apresentar como obrigação municipal geral uma regra
+  // exclusiva do SRP / restrita ao Executivo federal / condicionada. Quando tais fontes integram o
+  // contexto de um tenant municipal, adiciona-se uma ressalva explícita de aplicabilidade.
+  const applicabilityCaveat = buildApplicabilityCaveat(pkg);
+  if (applicabilityCaveat) observations.push(applicabilityCaveat);
+  const scopeMeta = (pkg.metadata as { sourceScope?: { ambiguous?: boolean; clarificationPrompt?: string | null; municipalNormUnavailableForTenant?: boolean } }).sourceScope;
   const limitations: string[] = [];
+  // AI-015 — resposta de MOCK (provedor de desenvolvimento) é sinalizada e nunca oficial.
+  if (params.providerIsMock) {
+    observations.push("⚠ Resposta gerada por provedor de desenvolvimento (mock) — NÃO é resposta oficial e não deve ser utilizada como fundamento.");
+    limitations.push("Provedor de IA real indisponível: resposta produzida por mock (apenas em ambiente de desenvolvimento/teste). Não classificada como oficial.");
+  }
   let answer: string;
-  if (hasSufficientBasis) {
+  if (scopeMeta?.ambiguous) {
+    // LACUNA 3 — pergunta ambígua: solicitar esclarecimento; NÃO executa retrieval conclusivo nem
+    // apresenta fundamento. Não é "fundamentada" nem afirma ausência de base — pede a matéria.
+    answer = scopeMeta.clarificationPrompt
+      ?? "Sua pergunta não indicou o assunto específico. Poderia especificar a matéria (ex.: dispensa, inexigibilidade, pregão, registro de preços) e, se for o caso, o diploma? Assim a consulta é respondida com a fonte correta.";
+    limitations.push("Pergunta ambígua: falta o assunto/antecedente específico para uma resposta conclusiva.");
+  } else if (hasSufficientBasis) {
     const esferas = [...new Set(pkg.documents.map(d => d.jurisdiction))];
     answer = params.engineContent && params.engineContent.trim().length > 0
       ? params.engineContent.trim()
       : `Consulta fundamentada nas normas aplicáveis (${esferas.join(" → ")}). Foram localizados ${pkg.retrievedPassages.length} trecho(s) oficial(is) pertinente(s) nos documentos abaixo; consulte a fundamentação e as citações para o texto oficial verbatim.`;
+    if (evidenceSufficiency === "parcial") {
+      if (params.generationTruncated) {
+        limitations.push("A resposta pode estar incompleta: a geração atingiu o limite de tamanho antes de concluir. Considere reformular a pergunta de forma mais objetiva ou solicitar novamente.");
+      }
+      if (pkg.metadata.topPassageGenericContainer === true) {
+        limitations.push("O trecho de maior pontuação veio de uma disposição geral/transitória — pode não ser o dispositivo que trata diretamente da matéria perguntada. Verifique também os demais trechos listados abaixo.");
+      }
+      if (!params.generationTruncated && pkg.metadata.topPassageGenericContainer !== true) {
+        limitations.push("Cobertura documental parcial: os trechos recuperados podem não ser o dispositivo mais diretamente aplicável — confirme com a autoridade competente antes de utilizar esta orientação.");
+      }
+    }
   } else {
     answer = "Não foi possível localizar base documental oficial suficiente no acervo institucional para fundamentar esta consulta. Recomenda-se refinar a pergunta ou consultar a autoridade competente. Nenhum fundamento é apresentado sem base oficial.";
     limitations.push("Base documental insuficiente no Official Knowledge Corpus para esta consulta.");
+  }
+  // LACUNA 4 (isolamento estrito) — pergunta municipal cujo ACERVO DESTE TENANT não possui a norma
+  // municipal. A mensagem fala EXCLUSIVAMENTE do acervo do próprio tenant — nunca afirma (nem nega)
+  // a existência de normas em outro tenant. Orienta a conferir o cadastro do município ou solicitar
+  // a inclusão da norma.
+  if (scopeMeta?.municipalNormUnavailableForTenant && !scopeMeta.ambiguous) {
+    limitations.push("O acervo institucional desta organização não possui norma municipal vinculada para esta consulta. Confira o cadastro do município do órgão ou solicite a inclusão da norma municipal no acervo institucional.");
   }
 
   const answerId = computeAnswerId(params.executionId);
@@ -256,7 +423,7 @@ export function buildConsultationAnswer(params: {
     contextReplayHash: pkg.replayHash,
     tenantId: params.tenantId, userId: params.userId, question: params.question,
     answer, foundation, documents, passages, citations, observations, explainabilityLines, limitations,
-    hasSufficientBasis, createdAt: params.createdAt,
+    hasSufficientBasis, evidenceSufficiency, createdAt: params.createdAt,
   };
 }
 
