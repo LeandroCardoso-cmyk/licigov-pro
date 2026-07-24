@@ -24,8 +24,8 @@ G1/G2/G3/G6. A série de hardening do runtime Gemini + recuperação jurídica +
 > **Regra de bloqueio.** Para autorizar a produção interna, **todo item aplicável do Gate
 > Obrigatório deve estar em `PASS`**. Os estados `FAIL`, `PARTIAL` e `NOT_VERIFIED` continuam
 > bloqueando o go-live — não basta eliminar apenas os itens em `FAIL`. Um item só deixa de
-> bloquear se for formalmente classificado como `N/A`, com justificativa documentada. Após a PR A,
-> os itens `PARTIAL` remanescentes (G4/G5/G8/G11) permanecem bloqueantes enquanto não forem `PASS`.
+> bloquear se for formalmente classificado como `N/A`, com justificativa documentada. Os itens
+> `PARTIAL` remanescentes (G5/G8/G11) permanecem bloqueantes enquanto não forem `PASS` (G4 já é PASS).
 
 | # | Item | Status | Evidência / condição de PASS |
 |---|---|:---:|---|
@@ -140,8 +140,8 @@ Moreira Sales. Relatórios detalhados em `docs/ai/RAG_QUALITY_00{1,2,3}_REPORT.m
 limpo no range da série · validação funcional manual no staging **concluída com sucesso**.
 
 **Fora do escopo desta série (permanecem):** migração para `@google/genai`, revogação da chave antiga,
-alterações em produção, e a PR B (fluxo operacional canônico). G7/G8/G11 e as ações operacionais de
-G4/G5 seguem pendentes conforme a tabela do Gate.
+alterações em produção, e a PR B (fluxo operacional canônico). G7/G8/G11 e a ação operacional de
+**G5** seguem pendentes conforme a tabela do Gate (G4 já está PASS).
 
 ---
 
