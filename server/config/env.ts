@@ -39,6 +39,12 @@ export const PRODUCTION_REQUIRED_ENV: ReadonlyArray<{ key: string; hint: string;
   { key: "AWS_S3_REGION",         hint: "região do bucket S3", productionOnly: true },
   { key: "AWS_S3_BUCKET",         hint: "nome do bucket S3", productionOnly: true },
   // GEMINI_API_KEY é OPCIONAL nesta RC (Provider real ainda não conectado).
+  // PR A.1 — e-mail institucional (convites/recuperação de senha). A validação fail-closed
+  // real (staging E production) mora em config/email.ts; estas entradas existem para que o
+  // diagnóstico (environmentDiagnostic/productionReadinessReport) também as reflita.
+  { key: "BREVO_API_KEY",         hint: "chave de API do Brevo (e-mail transacional)", productionOnly: true },
+  { key: "BREVO_SENDER_EMAIL",    hint: "remetente autenticado no painel Brevo", productionOnly: true },
+  { key: "APP_BASE_URL",          hint: "origem pública usada nos links de e-mail (convite/redefinição de senha)", productionOnly: true },
 ];
 
 export function validateRequiredEnv(): void {
@@ -51,6 +57,10 @@ export function validateRequiredEnv(): void {
     { key: "AWS_SECRET_ACCESS_KEY", hint: "credencial AWS S3 (Storage Service)", condition: IS_PRODUCTION },
     { key: "AWS_S3_REGION",         hint: "região do bucket S3", condition: IS_PRODUCTION },
     { key: "AWS_S3_BUCKET",         hint: "nome do bucket S3", condition: IS_PRODUCTION },
+    // PR A.1 — e-mail institucional; enforcement fail-closed completo (staging+production) em config/email.ts.
+    { key: "BREVO_API_KEY",         hint: "chave de API do Brevo (e-mail transacional)", condition: IS_PRODUCTION },
+    { key: "BREVO_SENDER_EMAIL",    hint: "remetente autenticado no painel Brevo", condition: IS_PRODUCTION },
+    { key: "APP_BASE_URL",          hint: "origem pública usada nos links de e-mail (convite/redefinição de senha)", condition: IS_PRODUCTION },
   ];
 
   const missing = required

@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "server/_core/index.ts": {
-    "mtime": 1782612419.2795498,
-    "ast_hash": "d85a37ea357c8b5fdfb7d23709aa6d18",
+    "mtime": 1784923613.1280715,
+    "ast_hash": "facc55a8566c34fead8c0863804f1920",
     "semantic_hash": ""
   },
   "server/_core/llm.ts": {
@@ -4230,8 +4230,8 @@
     "semantic_hash": ""
   },
   "server/config/env.ts": {
-    "mtime": 1784472875.8626738,
-    "ast_hash": "ebd3e49e4b5ecc2bd3dfc58e332210ee",
+    "mtime": 1784923608.4840717,
+    "ast_hash": "b924007336cfd4f4e8ea671a17bb6118",
     "semantic_hash": ""
   },
   "server/config/index.ts": {
@@ -9877,6 +9877,16 @@
   "drizzle/0287_invitations_email_outbox.sql": {
     "mtime": 1784923087.2680836,
     "ast_hash": "6e850363d12fa08ab0406c19ac8b1b6e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/email-config.test.ts": {
+    "mtime": 1784923687.3080697,
+    "ast_hash": "ca5a6b87d791e0facadfabb094535b56",
+    "semantic_hash": ""
+  },
+  "server/config/email.ts": {
+    "mtime": 1784923597.824072,
+    "ast_hash": "93f511df8cc41165440ec4cf510b8de4",
     "semantic_hash": ""
   }
 }

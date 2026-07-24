@@ -35,6 +35,11 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // PR A.1 — Railway roda a aplicação atrás de um proxy reverso; sem isto, `req.ip` é sempre o IP
+  // do proxy (não o do cliente), o que quebraria o rate limiting por IP (ex.: passwordReset) e a
+  // auditoria de `ipAddress`. `1` = confia em um único hop de proxy (o do Railway).
+  app.set("trust proxy", 1);
+
   app.use(helmet({
     contentSecurityPolicy: false, // gerenciado pelo Vite em dev
     crossOriginEmbedderPolicy: false,
