@@ -44,6 +44,11 @@ para processes, tasks, documents, comments; testes de autorização para deploym
 
 ## Bloco B — Fluxo canônico e interface (P1)
 
+> **Status: ENTREGUE para homologação** (corte controlado para o pipeline canônico —
+> Opção 2). Detalhes em [`PR_B_CANONICAL_CUTOVER.md`](./PR_B_CANONICAL_CUTOVER.md).
+> Confirmado não haver dados legados a migrar; legado desativado e inerte; SEC-037
+> implementado. Sem merge — aguardando homologação.
+
 **Objetivo:** o servidor navega e opera o fluxo principal sem cair em telas legadas/duplicadas
 ou de debug, e o que ele cria aparece na Central.
 
