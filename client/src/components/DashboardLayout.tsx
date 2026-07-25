@@ -24,7 +24,7 @@ import {
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun } from "lucide-react";
+import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -41,8 +41,12 @@ const menuItems = [
   { icon: ScrollText, label: "Contratos", path: "/contratos" },
   { icon: HelpCircle, label: "Tirar Dúvidas", path: "/tirar-duvidas" },
   { icon: LibraryBig, label: "Templates", path: "/templates" },
+  // PR A.1 — gestão de membros/convites da organização (qualquer usuário autenticado; o próprio
+  // router exige papel admin/owner para as ações — a página trata o resto).
+  { icon: Users, label: "Usuários", path: "/usuarios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
+  { icon: Building2, label: "Organizações", path: "/admin/organizacoes", adminOnly: true },
 ];
 
 // Controle de tema institucional (footer da sidebar) — claro / escuro / sistema.

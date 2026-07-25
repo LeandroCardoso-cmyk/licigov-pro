@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784927545.4319816,
-    "ast_hash": "d2c9c868c894239aa767879322fc3848",
+    "mtime": 1784928097.211969,
+    "ast_hash": "a977a893c4b26d2394634c28b6ef95c1",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1784472871.7506735,
-    "ast_hash": "ac351aec62f998640e9240ede923f7fc",
+    "mtime": 1784928109.1239686,
+    "ast_hash": "42b2e7960e610885c82a6de787e871ae",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -2095,8 +2095,8 @@
     "semantic_hash": ""
   },
   "client/src/const.ts": {
-    "mtime": 1784472873.1746736,
-    "ast_hash": "69ce24445e058e330086f95bad9d2a2f",
+    "mtime": 1784928133.983968,
+    "ast_hash": "d242aafb6e65e16dfb081f8b573de04a",
     "semantic_hash": ""
   },
   "client/src/contexts/ThemeContext.tsx": {
@@ -2200,8 +2200,8 @@
     "semantic_hash": ""
   },
   "client/src/main.tsx": {
-    "mtime": 1784927438.811984,
-    "ast_hash": "2fbaf208e552a8d98eb56ed223469d91",
+    "mtime": 1784928145.507968,
+    "ast_hash": "e5421af4319508f3bc49d816055c6e16",
     "semantic_hash": ""
   },
   "client/src/pages/AIUsageDashboard.tsx": {
@@ -3940,8 +3940,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/organizations.test.ts": {
-    "mtime": 1784927043.955993,
-    "ast_hash": "c9cf8e7f8045803a39f950d3c822e4df",
+    "mtime": 1784928275.223965,
+    "ast_hash": "40781d5cb3dfe1674e1fa0f4e0030cb1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/processes.test.ts": {
@@ -4335,8 +4335,8 @@
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
-    "mtime": 1784926387.656008,
-    "ast_hash": "711cc53ef7d0afbe664d8d2ba2017715",
+    "mtime": 1784927951.1159723,
+    "ast_hash": "d43e690b07bc3dd45ca8316d6d4c903e",
     "semantic_hash": ""
   },
   "server/db/platforms.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/organizationsRouter.ts": {
-    "mtime": 1784926532.6600049,
-    "ast_hash": "4ac2a0720de7dfce4ce6044de15ddb85",
+    "mtime": 1784927973.3559718,
+    "ast_hash": "a2423b006a17720e522415583746d181",
     "semantic_hash": ""
   },
   "server/routers/pilotReadinessRouter.ts": {
@@ -9660,8 +9660,8 @@
     "semantic_hash": ""
   },
   "client/src/darkmode-tokens.test.ts": {
-    "mtime": 1784927608.5039802,
-    "ast_hash": "2ad66b989030ef0da68c53e1985ba819",
+    "mtime": 1784928252.4719653,
+    "ast_hash": "a660e1461865706d05a212a073316c40",
     "semantic_hash": ""
   },
   "drizzle/0285_schema_reconciliation.sql": {
@@ -10040,8 +10040,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/organizations-router-membership.test.ts": {
-    "mtime": 1784926928.0639956,
-    "ast_hash": "948dd436ca2bda07b717f3150772d67c",
+    "mtime": 1784928313.543964,
+    "ast_hash": "e64b36874e860f58cb99190ab4c81395",
     "semantic_hash": ""
   },
   "server/__tests__/integration/tenant-onboarding-router.test.ts": {
@@ -10117,6 +10117,26 @@
   "client/src/utils/safeReturnTo.ts": {
     "mtime": 1784927448.5799837,
     "ast_hash": "a8dfdc792b44749c9220c6a507e64b2a",
+    "semantic_hash": ""
+  },
+  "client/src/pages/AdminOrganizacoes.tsx": {
+    "mtime": 1784928346.7879632,
+    "ast_hash": "71222cd7c5876ceacd6b956b2698b41c",
+    "semantic_hash": ""
+  },
+  "client/src/pages/Usuarios.tsx": {
+    "mtime": 1784928222.263966,
+    "ast_hash": "a351ac61c0dd74261d518ee7cd33cc5b",
+    "semantic_hash": ""
+  },
+  "client/src/utils/slugify.test.ts": {
+    "mtime": 1784928352.539963,
+    "ast_hash": "8daf7d3154774bec391b1e8950f6d59a",
+    "semantic_hash": ""
+  },
+  "client/src/utils/slugify.ts": {
+    "mtime": 1784928338.8479633,
+    "ast_hash": "36315ff418e0e45eaba7ef100d837735",
     "semantic_hash": ""
   }
 }

@@ -5,6 +5,8 @@ import {
   getOrganizationById,
   getMembersOfOrg,
   getAllMembersOfOrg,
+  getMembersWithUserInfo,
+  getAllOrganizations,
   addMemberToOrg,
   updateMemberRole,
   removeMemberFromOrg,
@@ -17,6 +19,7 @@ import {
 import { getUserByEmail } from "../db";
 import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
 import { LAST_TENANT_ADMIN, MEMBER_NOT_FOUND } from "../domain/authErrors";
+import { sanitizeUser } from "../services/userProjection";
 
 /**
  * PR A.1 — Proteção "último admin": rebaixar/desativar/remover um membro com papel admin NÃO
@@ -211,6 +214,19 @@ export const organizationsRouter = router({
     return await getAllMembersOfOrg(ctx.organizationId!);
   }),
 
+  /** PR A.1 — mesma lista, mas com nome/e-mail/último acesso do usuário (tela de gestão). */
+  listAllMembersWithUsers: orgRoleProcedure("admin").query(async ({ ctx }) => {
+    const rows = await getMembersWithUserInfo(ctx.organizationId!);
+    return rows.map(r => ({
+      userId: r.member.userId,
+      role: r.member.role,
+      ativo: r.member.ativo,
+      invitedBy: r.member.invitedBy,
+      createdAt: r.member.createdAt,
+      user: sanitizeUser(r.user),
+    }));
+  }),
+
   // ─── PR A.1 — Desativar membro (mesmo efeito de removeMember, nome mais claro p/ a UI) ─────
 
   deactivateMember: orgRoleProcedure("admin").input(
@@ -266,6 +282,12 @@ export const organizationsRouter = router({
     });
 
     return { success: true };
+  }),
+
+  // ─── Admin de plataforma: listar TODAS as organizações ───────────────────
+
+  adminList: adminProcedure.query(async () => {
+    return await getAllOrganizations();
   }),
 
   // ─── Admin: criar organização ─────────────────────────────────────────────

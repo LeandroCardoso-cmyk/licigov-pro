@@ -1,6 +1,6 @@
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, desc } from "drizzle-orm";
 import { getDb } from "./connection";
-import { organizations, organizationMembers } from "../../drizzle/schema";
+import { organizations, organizationMembers, users } from "../../drizzle/schema";
 import type { InsertOrganization, InsertOrganizationMember, OrgRole } from "../../drizzle/schema";
 
 export async function getOrganizationById(id: number) {
@@ -51,6 +51,13 @@ export async function getOrganizationBySlug(slug: string) {
     .limit(1);
 
   return rows[0] ?? null;
+}
+
+/** PR A.1 — todas as organizações (admin de plataforma — tela /admin/organizacoes). */
+export async function getAllOrganizations() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(organizations).orderBy(desc(organizations.createdAt));
 }
 
 export async function createOrganization(data: InsertOrganization) {
@@ -133,6 +140,22 @@ export async function getAllMembersOfOrg(organizationId: number) {
   return db
     .select()
     .from(organizationMembers)
+    .where(eq(organizationMembers.organizationId, organizationId));
+}
+
+/**
+ * PR A.1 — membros (ativos e inativos) COM dados do usuário (nome/e-mail/último acesso), para a
+ * tela de gestão de usuários. `getAllMembersOfOrg` continua enxuto (só a linha de membership) —
+ * usado pelas checagens internas do router, que não precisam de nome/e-mail.
+ */
+export async function getMembersWithUserInfo(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({ member: organizationMembers, user: users })
+    .from(organizationMembers)
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
     .where(eq(organizationMembers.organizationId, organizationId));
 }
 

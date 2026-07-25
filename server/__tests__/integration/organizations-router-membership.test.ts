@@ -20,6 +20,8 @@ vi.mock("../../db/organizations", () => ({
   createOrganization: vi.fn(),
   countActiveAdmins: vi.fn(),
   setMemberAtivo: vi.fn(),
+  getMembersWithUserInfo: vi.fn(),
+  getAllOrganizations: vi.fn(),
 }));
 vi.mock("../../db", () => ({ getUserByEmail: vi.fn() }));
 vi.mock("../../services/activityLogService", () => ({ logFromCtx: vi.fn() }));
@@ -30,6 +32,8 @@ import {
   removeMemberFromOrg,
   countActiveAdmins,
   setMemberAtivo,
+  getMembersWithUserInfo,
+  getAllOrganizations,
 } from "../../db/organizations";
 import { organizationsRouter } from "../../routers/organizationsRouter";
 
@@ -38,6 +42,8 @@ const updateMemberRoleDbMock = vi.mocked(updateMemberRoleDb);
 const removeMemberFromOrgMock = vi.mocked(removeMemberFromOrg);
 const countActiveAdminsMock = vi.mocked(countActiveAdmins);
 const setMemberAtivoMock = vi.mocked(setMemberAtivo);
+const getMembersWithUserInfoMock = vi.mocked(getMembersWithUserInfo);
+const getAllOrganizationsMock = vi.mocked(getAllOrganizations);
 
 // Admin de plataforma → bypass sintético do tenantProcedure (owner, organizationId do header).
 const ADMIN_USER = { id: 1, role: "admin" as const, openId: "admin", name: "Admin", email: "admin@x.com", theme: "light" as const, loginMethod: "email", passwordHash: null, signaturePassword: null, tokenVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
@@ -164,5 +170,41 @@ describe("organizationsRouter · activateMember", () => {
     const result = await caller().activateMember({ userId: 10 });
     expect(result).toEqual({ success: true });
     expect(setMemberAtivoMock).toHaveBeenCalledWith(1, 10, true);
+  });
+});
+
+describe("organizationsRouter · listAllMembersWithUsers", () => {
+  it("retorna membros com dados do usuário SANITIZADOS (nunca passwordHash)", async () => {
+    getMembersWithUserInfoMock.mockResolvedValue([
+      {
+        member: member(10, "admin"),
+        user: {
+          id: 10, openId: "o10", name: "Fulano", email: "fulano@x.com", role: "user", theme: "light",
+          loginMethod: "email", passwordHash: "$2b$12$secreto", signaturePassword: null, tokenVersion: 0,
+          createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
+        } as never,
+      },
+    ]);
+    const result = await caller().listAllMembersWithUsers();
+    expect(result).toHaveLength(1);
+    expect(result[0].user).not.toHaveProperty("passwordHash");
+    expect(result[0].user.email).toBe("fulano@x.com");
+    expect(result[0].role).toBe("admin");
+  });
+});
+
+describe("organizationsRouter · adminList", () => {
+  it("retorna todas as organizações (admin de plataforma)", async () => {
+    getAllOrganizationsMock.mockResolvedValue([
+      { id: 1, nome: "Org 1", cnpj: null, slug: "org-1", esfera: "municipal", uf: "SP", municipio: "SP", ativo: true, createdAt: new Date(), updatedAt: new Date() },
+    ]);
+    const result = await caller().adminList();
+    expect(result).toHaveLength(1);
+  });
+
+  it("usuário comum (não admin de plataforma) → FORBIDDEN", async () => {
+    const ctx = makeContext({ id: 5, role: "user" as const, openId: "u5", name: "Fulano", email: "fulano@x.com", theme: "light" as const, loginMethod: "email", passwordHash: null, signaturePassword: null, tokenVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as never);
+    const normalCaller = organizationsRouter.createCaller(ctx as never);
+    await expect(normalCaller.adminList()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
