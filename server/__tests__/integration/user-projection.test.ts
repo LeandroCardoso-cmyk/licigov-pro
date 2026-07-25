@@ -32,18 +32,24 @@ describe("userProjection · sanitizeUser", () => {
     expect(JSON.stringify(result)).not.toContain("hashedsignature");
   });
 
-  it("NUNCA inclui tokenVersion (mecanismo interno, irrelevante ao cliente)", () => {
+  it("NUNCA inclui nenhum campo interno sensível (passwordHash, signaturePassword, tokenVersion, openId, loginMethod, updatedAt)", () => {
     const result = sanitizeUser(makeUser()) as unknown as Record<string, unknown>;
-    expect(result).not.toHaveProperty("tokenVersion");
+    for (const forbidden of ["passwordHash", "signaturePassword", "tokenVersion", "openId", "loginMethod", "updatedAt"]) {
+      expect(result, `campo proibido "${forbidden}" vazou`).not.toHaveProperty(forbidden);
+    }
   });
 
-  it("mantém os campos públicos: id, openId, name, email, role, theme, createdAt, lastSignedIn", () => {
+  it("mantém APENAS os campos públicos: id, name, email, role, theme, createdAt, lastSignedIn", () => {
     const user = makeUser();
     const result = sanitizeUser(user);
     expect(result).toEqual({
-      id: user.id, openId: user.openId, name: user.name, email: user.email,
+      id: user.id, name: user.name, email: user.email,
       role: user.role, theme: user.theme, createdAt: user.createdAt, lastSignedIn: user.lastSignedIn,
     });
+    // trava a lista exata de chaves — adicionar um campo novo à projeção exige atualizar este teste
+    expect(Object.keys(result).sort()).toEqual(
+      ["createdAt", "email", "id", "lastSignedIn", "name", "role", "theme"]
+    );
   });
 
   it("compatível com toMatchObject({id,email,role}) usado por auth.test.ts", () => {

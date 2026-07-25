@@ -24,6 +24,7 @@ import {
   claimPendingEmails,
   markEmailSent,
   markEmailFailed,
+  reclaimStaleProcessing,
 } from "../../services/email/emailOutboxService";
 
 const getDbMock = vi.mocked(getDb);
@@ -82,9 +83,19 @@ function makeFakeDb(opts: { selectResult?: unknown[]; affectedRowsSequence?: num
     values: vi.fn((v: unknown) => { valuesCalls.push(v); return insertChain; }),
     onDuplicateKeyUpdate: vi.fn().mockResolvedValue(undefined),
   };
+  // O UPDATE de reclaimStaleProcessing (SET status='retryable_failure') NÃO consome a fila de
+  // affectedRows do claim (SET status='processing') — assim os testes de claim continuam
+  // controlando apenas as tentativas de reivindicação, como antes desta homologação.
+  let lastSet: Record<string, unknown> | null = null;
   const updateChain = {
-    set: vi.fn((v: unknown) => { setCalls.push(v); return updateChain; }),
-    where: vi.fn(() => Promise.resolve([{ affectedRows: affectedRowsQueue.length > 0 ? affectedRowsQueue.shift() : 1 }])),
+    set: vi.fn((v: unknown) => { setCalls.push(v); lastSet = v as Record<string, unknown>; return updateChain; }),
+    where: vi.fn(() => {
+      const isReclaim = lastSet?.status === "retryable_failure" && lastSet?.nextAttemptAt === null;
+      const affected = isReclaim
+        ? 0
+        : (affectedRowsQueue.length > 0 ? affectedRowsQueue.shift() : 1);
+      return Promise.resolve([{ affectedRows: affected }]);
+    }),
   };
 
   return {
@@ -147,12 +158,39 @@ describe("emailOutboxService · claimPendingEmails", () => {
     expect(claimed[0].status).toBe("processing"); // refletido localmente após o claim bem-sucedido
   });
 
-  it("nenhum candidato → [] sem tentar UPDATE", async () => {
-    const { db } = makeFakeDb({ selectResult: [] });
+  it("nenhum candidato → []; nenhum UPDATE de CLAIM (só o reclaim de órfãs, sempre executado)", async () => {
+    const { db, setCalls } = makeFakeDb({ selectResult: [] });
     getDbMock.mockResolvedValue(db as never);
     const claimed = await claimPendingEmails();
     expect(claimed).toEqual([]);
-    expect(db.update).not.toHaveBeenCalled();
+    // O único UPDATE é o reclaimStaleProcessing (SET status='retryable_failure'); nenhum claim
+    // (SET status='processing') foi tentado, pois não havia candidato.
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toMatchObject({ status: "retryable_failure", nextAttemptAt: null });
+  });
+});
+
+describe("emailOutboxService · reclaimStaleProcessing", () => {
+  it("emite UPDATE devolvendo mensagens 'processing' órfãs ao fluxo de retry (retryable_failure, nextAttemptAt=null)", async () => {
+    const { db, setCalls } = makeFakeDb();
+    getDbMock.mockResolvedValue(db as never);
+    await reclaimStaleProcessing();
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toEqual({ status: "retryable_failure", nextAttemptAt: null });
+  });
+
+  it("sem DB → 0, não lança", async () => {
+    getDbMock.mockResolvedValue(null);
+    await expect(reclaimStaleProcessing()).resolves.toBe(0);
+  });
+
+  it("claimPendingEmails chama reclaimStaleProcessing ANTES de selecionar candidatos", async () => {
+    const { db } = makeFakeDb({ selectResult: [] });
+    getDbMock.mockResolvedValue(db as never);
+    await claimPendingEmails();
+    // update (reclaim) aconteceu; select (candidatos) aconteceu depois
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(db.select).toHaveBeenCalledTimes(1);
   });
 });
 

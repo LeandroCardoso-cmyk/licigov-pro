@@ -187,7 +187,9 @@ describe("organizationsRouter · listAllMembersWithUsers", () => {
     ]);
     const result = await caller().listAllMembersWithUsers();
     expect(result).toHaveLength(1);
-    expect(result[0].user).not.toHaveProperty("passwordHash");
+    for (const forbidden of ["passwordHash", "signaturePassword", "tokenVersion", "openId", "loginMethod", "updatedAt"]) {
+      expect(result[0].user, `campo "${forbidden}" vazou`).not.toHaveProperty(forbidden);
+    }
     expect(result[0].user.email).toBe("fulano@x.com");
     expect(result[0].role).toBe("admin");
   });

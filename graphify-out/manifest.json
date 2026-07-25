@@ -3930,8 +3930,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/auth.test.ts": {
-    "mtime": 1784736428.9395123,
-    "ast_hash": "9dabedfb2bbd99c6a56b64baedf0ef5f",
+    "mtime": 1784942682.674783,
+    "ast_hash": "825029231a9ad244ca0c76edf2dc4099",
     "semantic_hash": ""
   },
   "server/__tests__/integration/documents.test.ts": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "server/_core/index.ts": {
-    "mtime": 1784924891.0800424,
-    "ast_hash": "727adb3166c80d68c0ebac4fff8d3763",
+    "mtime": 1784942626.3627799,
+    "ast_hash": "1b3a8de0ff1cb9cb8aea2001c2f1cf86",
     "semantic_hash": ""
   },
   "server/_core/llm.ts": {
@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "server/services/emailService.ts": {
-    "mtime": 1782612419.330427,
-    "ast_hash": "362e34ed3d3f643bbbf77f57b256e7b9",
+    "mtime": 1784942731.106786,
+    "ast_hash": "b3a614c986170bc99b90301725e1f439",
     "semantic_hash": ""
   },
   "server/services/embeddingAbstractionService.ts": {
@@ -9920,8 +9920,8 @@
     "semantic_hash": ""
   },
   "server/domain/passwordPolicy.ts": {
-    "mtime": 1784923962.6520636,
-    "ast_hash": "1a103c5aaa70498669681ff6717f308a",
+    "mtime": 1784942820.7667913,
+    "ast_hash": "09edfe5539bf55344fe210a2bc5e19c2",
     "semantic_hash": ""
   },
   "server/services/security/opaqueTokens.ts": {
@@ -9975,8 +9975,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-outbox-service.test.ts": {
-    "mtime": 1784925121.736037,
-    "ast_hash": "e9ce698c09232e9527b31266a6a2760f",
+    "mtime": 1784942799.95479,
+    "ast_hash": "87ebede73c91e5ab0d7b90cc4416ee09",
     "semantic_hash": ""
   },
   "server/services/email/emailDispatcher.ts": {
@@ -9985,8 +9985,8 @@
     "semantic_hash": ""
   },
   "server/services/email/emailOutboxService.ts": {
-    "mtime": 1784924833.1480436,
-    "ast_hash": "13e708b8e29e177d515ebd4bded2d3b9",
+    "mtime": 1784942603.5067785,
+    "ast_hash": "0c3d5588bd14aa0cfcdb63b6e0bd3d91",
     "semantic_hash": ""
   },
   "server/__tests__/integration/db-users-hardening.test.ts": {
@@ -10000,13 +10000,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/user-projection.test.ts": {
-    "mtime": 1784925565.6920269,
-    "ast_hash": "d9d3fdd10c16d409fb9fc9444e24fa60",
+    "mtime": 1784942658.4987817,
+    "ast_hash": "da6de2066c315a2776ef93d3a5b67c89",
     "semantic_hash": ""
   },
   "server/services/userProjection.ts": {
-    "mtime": 1784925372.0560312,
-    "ast_hash": "5fc64e06a2dc772661a2ef20dd6fb08e",
+    "mtime": 1784942640.9827807,
+    "ast_hash": "68a2c69cbc0049fe91bcc7ff23961671",
     "semantic_hash": ""
   },
   "server/__tests__/integration/password-reset-router.test.ts": {
@@ -10040,8 +10040,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/organizations-router-membership.test.ts": {
-    "mtime": 1784928313.543964,
-    "ast_hash": "e64b36874e860f58cb99190ab4c81395",
+    "mtime": 1784942711.9067848,
+    "ast_hash": "abd28913da0adc46289456765d9f7540",
     "semantic_hash": ""
   },
   "server/__tests__/integration/tenant-onboarding-router.test.ts": {
@@ -10140,8 +10140,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitations-mysql-smoke.test.ts": {
-    "mtime": 1784939321.6298602,
-    "ast_hash": "7048b907b7a807f69bb2e9c38b53962e",
+    "mtime": 1784942902.286796,
+    "ast_hash": "5092dd1ca3740f77382d809d8ab24e0f",
     "semantic_hash": ""
   },
   "docs/architecture/INVITATIONS_AND_PASSWORD_RECOVERY.md": {
@@ -10157,6 +10157,11 @@
   "docs/ops/ONBOARDING_MOREIRA_SALES.md": {
     "mtime": 1784939395.9498646,
     "ast_hash": "09aee79d8bd127e4b00bfd10aa0c7228",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/admin-router-sanitize.test.ts": {
+    "mtime": 1784942703.9987843,
+    "ast_hash": "fe229dc2eb336b34dbdd332a8813e200",
     "semantic_hash": ""
   }
 }

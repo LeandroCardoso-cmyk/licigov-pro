@@ -313,4 +313,50 @@ describe.skipIf(!DB)("PR A.1 — acesso institucional (MySQL real)", () => {
     expect(members.some(m => m.userId === ownerBId)).toBe(false);
     expect(members.some(m => m.userId === ownerAId)).toBe(true);
   }, 30_000);
+
+  // ─── 7. Recuperação de mensagem órfã presa em 'processing' (homologação Seção 6) ───────────
+
+  it("reclaimStaleProcessing devolve ao fluxo de retry uma mensagem presa em 'processing'", async () => {
+    const { reclaimStaleProcessing } = await import("../../services/email/emailOutboxService");
+
+    // Insere uma mensagem 'processing' com updatedAt bem no passado (simula instância que caiu
+    // entre o claim e o mark — 10 min atrás, além do STALE_PROCESSING_MS de 5 min).
+    const [ins] = await conn.execute<mysql.ResultSetHeader>(
+      `INSERT INTO email_outbox (organizationId, messageType, recipient, templateKey, payload, idempotencyKey, status, updatedAt)
+       VALUES (?, 'password_reset', ?, 'password_reset', '{}', ?, 'processing', DATE_SUB(NOW(), INTERVAL 10 MINUTE))`,
+      [ORG_A, `stale-${stamp}@teste.local`, `stale-processing-${stamp}`]
+    );
+    const staleId = ins.insertId;
+
+    const reclaimed = await reclaimStaleProcessing();
+    expect(reclaimed).toBeGreaterThanOrEqual(1);
+
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+      `SELECT status, nextAttemptAt, attempts FROM email_outbox WHERE id = ?`,
+      [staleId]
+    );
+    expect(rows[0].status).toBe("retryable_failure"); // devolvida ao fluxo de retry
+    expect(rows[0].nextAttemptAt).toBeNull();          // reivindicável já no próximo ciclo
+    expect(rows[0].attempts).toBe(0);                  // crash não consome tentativa de envio
+
+    await conn.execute(`DELETE FROM email_outbox WHERE id = ?`, [staleId]).catch(() => {});
+  }, 30_000);
+
+  it("mensagem 'processing' RECENTE (dentro da janela) NÃO é reclamada", async () => {
+    const { reclaimStaleProcessing } = await import("../../services/email/emailOutboxService");
+
+    const [ins] = await conn.execute<mysql.ResultSetHeader>(
+      `INSERT INTO email_outbox (organizationId, messageType, recipient, templateKey, payload, idempotencyKey, status)
+       VALUES (?, 'password_reset', ?, 'password_reset', '{}', ?, 'processing')`,
+      [ORG_A, `fresh-${stamp}@teste.local`, `fresh-processing-${stamp}`]
+    );
+    const freshId = ins.insertId;
+
+    await reclaimStaleProcessing();
+
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(`SELECT status FROM email_outbox WHERE id = ?`, [freshId]);
+    expect(rows[0].status).toBe("processing"); // recente → intocada (ainda pode estar em voo)
+
+    await conn.execute(`DELETE FROM email_outbox WHERE id = ?`, [freshId]).catch(() => {});
+  }, 30_000);
 });

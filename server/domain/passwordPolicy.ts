@@ -2,11 +2,20 @@
  * PR A.1 — Política de senha compartilhada entre os fluxos de acesso institucional
  * (redefinição de senha e aceite de convite com criação de conta).
  *
- * Deliberadamente a MESMA regra já aplicada em `authRouter.register` (min 8 / max 128 —
- * hoje só via `z.string().min(8).max(128)` inline), mais uma checagem adicional que o
- * register não tinha: a senha não pode ser igual ao e-mail normalizado. `validatePasswordStrength`
- * em services/passwordSecurity.ts (maiúscula/minúscula/número/especial, scoring 0-5) existe no
- * código mas não é aplicada por nenhum fluxo — é composição não adotada; este módulo não a usa.
+ * ORIGEM DO MÍNIMO DE 8 (homologação, Seção 8): o piso de 8 caracteres NÃO foi criado nesta PR —
+ * é a regra PREEXISTENTE do sistema, aplicada em `authRouter.register` desde antes desta PR
+ * (`z.string().min(8).max(128)`, presente na base `main` 695e2dc). Este módulo deliberadamente
+ * PRESERVA esse piso para manter a política de senha consistente em TODOS os fluxos (register,
+ * reset, aceite de convite) — elevar só os fluxos novos para 12 criaria a inconsistência de um
+ * usuário poder registrar com 8 mas ser obrigado a 12 ao redefinir. Alterar o piso global é uma
+ * decisão de produto separada (fora do escopo desta PR, que não deve mudar o comportamento
+ * preexistente do register).
+ *
+ * REGRA NOVA desta PR (que o register não tinha): a senha não pode ser igual ao e-mail
+ * normalizado (checagem `PASSWORD_EQUALS_EMAIL` abaixo). Passphrases são permitidas — não há
+ * regra de composição (maiúscula/número/especial). Hash continua bcrypt `SALT_ROUNDS=12`
+ * (services/passwordSecurity.ts). `validatePasswordStrength` (scoring 0-5) existe no código mas
+ * não é aplicada por nenhum fluxo — composição não adotada; este módulo não a usa.
  */
 
 export const PASSWORD_MIN_LENGTH = 8;

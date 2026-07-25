@@ -12,7 +12,7 @@ import { APP_CONFIG } from "../config/app";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { EMAIL_CONFIG } from "../config/email";
-import { start as startEmailDispatcher } from "../services/email/emailDispatcher";
+import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -81,6 +81,20 @@ async function startServer() {
   // (EMAIL_ENABLED) e fora da suíte de testes (VITEST nunca inicia timers de produção).
   if (EMAIL_CONFIG.enabled && process.env.VITEST !== "true") {
     startEmailDispatcher();
+
+    // Shutdown gracioso: no Railway, um deploy/restart envia SIGTERM. Paramos o intervalo do
+    // dispatcher (não deixa um ciclo novo começar) e fechamos o servidor HTTP. Uma mensagem que
+    // já estava em `processing` no momento do sinal é recuperada no próximo boot pelo
+    // reclaimStaleProcessing (ver emailOutboxService) — nunca fica órfã.
+    const shutdown = (signal: string) => {
+      console.info(`[SHUTDOWN] Sinal ${signal} recebido — encerrando graciosamente.`);
+      stopEmailDispatcher();
+      server.close(() => process.exit(0));
+      // Failsafe: se o server não fechar em 10s (conexões presas), força a saída.
+      setTimeout(() => process.exit(0), 10_000).unref();
+    };
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
+    process.once("SIGINT", () => shutdown("SIGINT"));
   }
 }
 

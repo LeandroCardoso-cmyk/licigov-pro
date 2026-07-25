@@ -1,3 +1,20 @@
+/**
+ * ⚠️ LEGADO (Resend) — NÃO USAR EM CÓDIGO NOVO.
+ *
+ * Este módulo é o provider de e-mail antigo (Resend, sender sandbox `onboarding@resend.dev`).
+ * Auditoria da PR A.1 (homologação): este arquivo está ÓRFÃO — nenhum router, service ou
+ * componente do sistema o importa (nem `sendEmailNotification`, `sendMemberAddedEmail`,
+ * `sendDocumentEditedEmail`). Ver relatório de homologação, seção "E-mail legado".
+ *
+ * Todo e-mail transacional institucional (convite, recuperação de senha, notificação de senha
+ * alterada) passa OBRIGATORIAMENTE pelo outbox + dispatcher da PR A.1
+ * (`server/services/email/*`), com provider Brevo em staging/produção — NUNCA por este módulo.
+ * `RESEND_API_KEY` NÃO é exigida por nenhum fluxo novo.
+ *
+ * Consolidação/remoção deste legado é uma tarefa de backlog (registrada em
+ * `docs/architecture/INVITATIONS_AND_PASSWORD_RECOVERY.md`, "Fora do escopo"). Mantido por ora
+ * para não introduzir regressão em qualquer integração externa não mapeada.
+ */
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);

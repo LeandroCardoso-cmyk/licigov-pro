@@ -12,7 +12,7 @@
  * entre o enqueue e o kick).
  */
 
-import { eq, and, or, isNull, lte } from "drizzle-orm";
+import { eq, and, or, isNull, lte, lt } from "drizzle-orm";
 import { getDb } from "../../db/connection";
 import { emailOutbox, type EmailOutboxMessage } from "../../../drizzle/schema";
 import { serviceLogger } from "../observabilityService";
@@ -20,6 +20,14 @@ import { EMAIL_CONFIG } from "../../config/email";
 import { calculateBackoffMs, isRetryable, type RetryPolicy } from "../../config/retryPolicy";
 
 const log = serviceLogger("EmailOutboxService");
+
+/**
+ * Uma mensagem em `processing` por mais tempo que isto é considerada ÓRFÃ: a instância que a
+ * reivindicou quase certamente morreu entre o claim e o mark (ex.: restart do Railway, crash).
+ * O valor é folgado em relação ao envio real (timeout HTTP do Brevo = 15s) para nunca "roubar"
+ * uma mensagem que ainda está legitimamente em voo.
+ */
+const STALE_PROCESSING_MS = 5 * 60 * 1000;
 
 export type EmailMessageType = "invitation" | "invitation_resent" | "password_reset" | "password_changed";
 
@@ -75,9 +83,39 @@ export async function enqueueEmail(input: EnqueueEmailInput, txDb?: unknown): Pr
  * lease com `lockedUntil` de outboxEvents; aqui o volume é baixo e cada envio é rápido o
  * suficiente para não precisar de expiração de lease.
  */
+/**
+ * Recupera mensagens presas em `processing` além de STALE_PROCESSING_MS, devolvendo-as ao fluxo
+ * de retry (`retryable_failure` com `nextAttemptAt=NULL`, para serem reivindicadas já no próximo
+ * ciclo). Sem isto, uma instância que caia entre o claim e o mark deixaria a mensagem órfã para
+ * sempre — o claim normal só enxerga `pending`/`retryable_failure`.
+ *
+ * Multi-instância-seguro: a transição de valor `processing → retryable_failure` é o próprio
+ * compare-and-swap (o `WHERE status='processing'` só casa até a primeira instância commitar; a
+ * segunda vê 0 linhas). NÃO incrementa `attempts` — um crash de infraestrutura não é uma tentativa
+ * de envio falha, e `maxAttempts` continua limitando as falhas de envio reais.
+ */
+export async function reclaimStaleProcessing(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS);
+  const result = await db
+    .update(emailOutbox)
+    .set({ status: "retryable_failure", nextAttemptAt: null })
+    .where(and(eq(emailOutbox.status, "processing"), lt(emailOutbox.updatedAt, cutoff)));
+
+  const reclaimed = (result[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0;
+  if (reclaimed > 0) log.warn("stale_processing_reclaimed", { count: reclaimed, staleMs: STALE_PROCESSING_MS });
+  return reclaimed;
+}
+
 export async function claimPendingEmails(batchSize = 10): Promise<EmailOutboxMessage[]> {
   const db = await getDb();
   if (!db) return [];
+
+  // Antes de reivindicar, devolve ao fluxo de retry qualquer mensagem órfã (processo anterior que
+  // caiu com a mensagem em `processing`).
+  await reclaimStaleProcessing();
 
   const now = new Date();
   const candidates = await db
