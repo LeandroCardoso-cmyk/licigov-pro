@@ -3,6 +3,14 @@ import { router, tenantProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
+import { logActivity } from "../services/activityLogService";
+import { assertStorageUsable, storageDelete, storagePut } from "../storage";
+import {
+  MAX_TASK_ATTACHMENT_BASE64_CHARS,
+  isAllowedTaskAttachmentMime,
+  sanitizeAttachmentFileName,
+  validateTaskAttachment,
+} from "../domain/taskAttachmentPolicy";
 
 const authzLog = serviceLogger("departmentTasksRouter");
 
@@ -138,25 +146,102 @@ export const departmentTasksRouter = router({
       return await db.listTaskAttachmentsForOrganization(input.taskId, ctx.organizationId);
     }),
 
+  // SEC-037 (PR B) — Upload SEGURO de anexo de tarefa.
+  // O cliente envia o CONTEÚDO em base64 (nunca uma URL arbitrária → sem SSRF).
+  // O servidor: (1) autoriza tenant + posse da tarefa; (2) valida allowlist de
+  // MIME e o conteúdo real por magic-bytes + limite de tamanho; (3) grava no
+  // Storage Service (S3) com chave interna segura; (4) persiste a referência de
+  // forma tenant-scoped; (5) compensa (remove o objeto) se a gravação falhar,
+  // evitando arquivo/registro órfão; (6) audita o evento.
   addAttachment: tenantProcedure
     .input(
       z.object({
         taskId: z.number(),
-        fileName: z.string(),
-        fileUrl: z.string(),
-        fileSize: z.number(),
-        mimeType: z.string(),
+        fileName: z
+          .string()
+          .min(1)
+          .max(255)
+          .regex(/^[^\\/]+$/, "Nome de arquivo inválido"),
+        fileBase64: z.string().min(1).max(MAX_TASK_ATTACHMENT_BASE64_CHARS),
+        mimeType: z
+          .string()
+          .refine(isAllowedTaskAttachmentMime, "Tipo de arquivo não permitido"),
       })
     )
-    .mutation(async () => {
-      // SEC-037 / SAFE_DISABLED_PENDING_STORAGE_INTEGRATION:
-      // O input aceitava fileUrl arbitrário (SSRF/URL injection). O pipeline de
-      // upload seguro (S3) é escopo da PR B. Até lá, a mutation fica desabilitada.
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message:
-          "Upload de anexos de tarefa temporariamente desabilitado por segurança (SAFE_DISABLED_PENDING_STORAGE_INTEGRATION).",
+    .mutation(async ({ input, ctx }) => {
+      // (1) Autorização: tenant + posse da tarefa (fail-closed, antes de qualquer
+      // upload). Cross-tenant/inexistente → o MESMO NOT_FOUND.
+      const task = await db.getTaskByIdForOrganization(input.taskId, ctx.organizationId);
+      if (!task) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.addAttachment",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.taskId,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+
+      // (2) Validação de conteúdo: tamanho + magic-bytes vs. MIME declarado.
+      const buffer = Buffer.from(input.fileBase64, "base64");
+      const validation = validateTaskAttachment(buffer, input.mimeType);
+      if (!validation.valid) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: validation.reason ?? "Arquivo inválido.",
+        });
+      }
+
+      // (3) Gravação no Storage Service com chave interna segura (nome sanitizado,
+      // sem path traversal). Em produção/staging o storage é obrigatório.
+      assertStorageUsable();
+      const safeName = sanitizeAttachmentFileName(input.fileName);
+      const s3Key = `tasks/${input.taskId}/${Date.now()}_${safeName}`;
+      const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
+
+      // (4) Persistência tenant-scoped + (5) compensação se a gravação falhar.
+      let attachmentId: number | null;
+      try {
+        attachmentId = await db.createTaskAttachmentForOrganization(
+          {
+            taskId: input.taskId,
+            fileName: safeName,
+            fileUrl: url,
+            fileSize: buffer.length,
+            uploadedBy: ctx.user.id,
+          },
+          ctx.organizationId,
+        );
+      } catch (err) {
+        await storageDelete(key).catch(() => {});
+        throw err;
+      }
+      if (attachmentId === null) {
+        // A tarefa deixou de pertencer à organização entre as checagens: remove o
+        // objeto recém-gravado para não deixar arquivo órfão.
+        await storageDelete(key).catch(() => {});
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.addAttachment",
+          organizationId: ctx.organizationId,
+          userId: ctx.user.id,
+          resourceId: input.taskId,
+          reason: "task_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada" });
+      }
+
+      // (6) Auditoria persistida (rastreabilidade obrigatória).
+      await logActivity({
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+        action: "adicionou anexo à tarefa",
+        entityType: "task",
+        entityId: input.taskId,
+        details: { fileName: safeName, fileSize: buffer.length, s3Key: key },
       });
+
+      return { success: true, id: attachmentId };
     }),
 
   deleteAttachment: tenantProcedure

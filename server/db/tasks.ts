@@ -135,7 +135,7 @@ export async function createTaskAttachment(attachment: {
   fileName: string;
   fileUrl: string;
   fileSize: number;
-  mimeType: string;
+  mimeType?: string; // não há coluna dedicada — mantido opcional por compat.
   uploadedBy: number;
 }) {
   const db = await getDb();
@@ -317,6 +317,26 @@ export async function createTaskCommentForOrganization(
 export async function listTaskAttachmentsForOrganization(taskId: number, organizationId: number) {
   if (!(await assertTaskInOrganization(taskId, organizationId))) return [];
   return listTaskAttachments(taskId);
+}
+
+/**
+ * SEC-037 — Cria um anexo de tarefa com isolamento por tenant. Só grava se a
+ * tarefa pertencer à organização (fail-closed). Cross-tenant/inexistente → null,
+ * sem revelar existência em outra organização. Persiste apenas colunas válidas
+ * (a referência de arquivo é a chave/URL do S3 — nunca binário no banco).
+ */
+export async function createTaskAttachmentForOrganization(
+  attachment: {
+    taskId: number;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    uploadedBy: number;
+  },
+  organizationId: number,
+): Promise<number | null> {
+  if (!(await assertTaskInOrganization(attachment.taskId, organizationId))) return null;
+  return createTaskAttachment(attachment);
 }
 
 export async function deleteTaskAttachmentForOrganization(

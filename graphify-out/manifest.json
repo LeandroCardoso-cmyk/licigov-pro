@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "client/src/components/TaskDetailModal.tsx": {
-    "mtime": 1782612418.278427,
-    "ast_hash": "0f9fa3ec18dc1ea47d28cdc7db1be6b5",
+    "mtime": 1785021142.3150365,
+    "ast_hash": "e07243bfa8e3fdf33a4f36148332447c",
     "semantic_hash": ""
   },
   "client/src/components/TaskKanban.tsx": {
@@ -4365,8 +4365,8 @@
     "semantic_hash": ""
   },
   "server/db/tasks.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "b64afae5e70839390b8663f9d77ca028",
+    "mtime": 1785020426.4726367,
+    "ast_hash": "9b7a678bfac2afbffdaa1e45883dfdc0",
     "semantic_hash": ""
   },
   "server/db/templates.ts": {
@@ -5105,8 +5105,8 @@
     "semantic_hash": ""
   },
   "server/routers/departmentTasksRouter.ts": {
-    "mtime": 1784733567.6717956,
-    "ast_hash": "3d93dff8c5a772c771f7a80ec3319ff8",
+    "mtime": 1785021131.259037,
+    "ast_hash": "a97822b24d4d7d58873c446478d69ee1",
     "semantic_hash": ""
   },
   "server/routers/deploymentRouter.ts": {
@@ -10222,6 +10222,21 @@
   "server/domain/legacyPipeline.ts": {
     "mtime": 1785019931.140649,
     "ast_hash": "cead2833321b9ca79bbe9366e55dc042",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sec-037-task-attachment-upload.test.ts": {
+    "mtime": 1785021284.943033,
+    "ast_hash": "6c6dd0dcaf8964b4bd4b26f19c3c279a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/task-attachment-policy.test.ts": {
+    "mtime": 1785021252.291034,
+    "ast_hash": "845960d04cf1cc09a3ef797b009dd2ed",
+    "semantic_hash": ""
+  },
+  "server/domain/taskAttachmentPolicy.ts": {
+    "mtime": 1785020403.4246373,
+    "ast_hash": "9312e0d463798da2721253f7af87abf1",
     "semantic_hash": ""
   }
 }
