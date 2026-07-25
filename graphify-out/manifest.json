@@ -10238,5 +10238,10 @@
     "mtime": 1785020403.4246373,
     "ast_hash": "9312e0d463798da2721253f7af87abf1",
     "semantic_hash": ""
+  },
+  "client/src/pr-b-canonical-wiring.test.ts": {
+    "mtime": 1785021619.3230247,
+    "ast_hash": "8f9c49100aa3fbbef0033a535b201ce0",
+    "semantic_hash": ""
   }
 }
