@@ -64,12 +64,15 @@ export async function getProcess(id: string, orgId: number): Promise<Procurement
   };
 }
 
-export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ id: string; processNumber: string; object: string; currentStage: string; status: string; updatedAt: string }>> {
+export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ id: string; processNumber: string; object: string; modality: string | null; currentStage: string; status: string; updatedAt: string }>> {
   const db = await getDb();
   if (!db) return [];
+  // Ordenação determinística: updatedAt desc + id como desempate estável
+  // (a Central depende de ordem previsível — Escopo 3 da PR B).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(eq(procurementProcessesTable.organizationId, orgId)).orderBy(desc(procurementProcessesTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", currentStage: r.currentStage, status: r.status, updatedAt: r.updatedAt }));
+    .where(eq(procurementProcessesTable.organizationId, orgId))
+    .orderBy(desc(procurementProcessesTable.updatedAt), asc(procurementProcessesTable.id)).limit(limit);
+  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, status: r.status, updatedAt: r.updatedAt }));
 }
 
 export async function updateProcessStage(id: string, orgId: number, stage: string, status: string, updatedAt: string): Promise<boolean> {
