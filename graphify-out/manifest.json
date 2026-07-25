@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784988340.0448787,
-    "ast_hash": "5516e866d6a832e512c222d11618ed90",
+    "mtime": 1785019709.6846547,
+    "ast_hash": "14b62eb8e9752be3240dcbcdbf3acbe7",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -10207,6 +10207,16 @@
   "server/__tests__/integration/user-management-rbac.test.ts": {
     "mtime": 1784988424.2368767,
     "ast_hash": "f7e6153bf35005a832796266089c0e7d",
+    "semantic_hash": ""
+  },
+  "client/src/pages/ProcessoLicitatorio.tsx": {
+    "mtime": 1785019637.2086565,
+    "ast_hash": "af1d1e44c7a5f419dd329de9c4566fb2",
+    "semantic_hash": ""
+  },
+  "docs/ops/PR_A1_POST_PRODUCTION_BACKLOG.md": {
+    "mtime": 1785014063.5862865,
+    "ast_hash": "c3e1de68efe48a5b6243dd1754eef322",
     "semantic_hash": ""
   }
 }
