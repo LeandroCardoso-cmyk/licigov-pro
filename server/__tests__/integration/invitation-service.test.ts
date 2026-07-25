@@ -72,7 +72,6 @@ function makeFakeDb(opts: { selectResult?: unknown[] } = {}) {
 
   const selectChain = { from: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), limit: vi.fn(() => Promise.resolve(selectResult)) };
   const updateChain = { set: vi.fn((v: unknown) => { updateSetCalls.push(v); return updateChain; }), where: vi.fn(() => Promise.resolve([{ affectedRows: 1 }])) };
-  const insertChain = { values: vi.fn((v: unknown) => { insertValuesCalls.push(v); return { onDuplicateKeyUpdate: vi.fn().mockResolvedValue(undefined) }; }) };
   // insert().values() sem onDuplicateKeyUpdate() é awaited direto (institutionalInvitations) — precisa também resolver como Promise com [{insertId}]
   const insertChainAwaitable = Object.assign(Promise.resolve([{ insertId: 999 }]), { onDuplicateKeyUpdate: vi.fn().mockResolvedValue(undefined) });
 

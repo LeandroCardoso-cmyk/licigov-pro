@@ -9940,8 +9940,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-templates.test.ts": {
-    "mtime": 1784924450.5160522,
-    "ast_hash": "84b80e31c35982221ef4ee9f0f15197a",
+    "mtime": 1784939564.5458746,
+    "ast_hash": "989f6bda05b17da86e1c644289982038",
     "semantic_hash": ""
   },
   "server/services/email/brevoProvider.ts": {
@@ -10030,8 +10030,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitation-service.test.ts": {
-    "mtime": 1784926793.4439988,
-    "ast_hash": "c0ce8e86d6e14f9dcbe3d278556c1021",
+    "mtime": 1784939509.7418714,
+    "ast_hash": "2be64541cb01e1075f5f973e161800ff",
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitations-router.test.ts": {
@@ -10137,6 +10137,26 @@
   "client/src/utils/slugify.ts": {
     "mtime": 1784928338.8479633,
     "ast_hash": "36315ff418e0e45eaba7ef100d837735",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/invitations-mysql-smoke.test.ts": {
+    "mtime": 1784939321.6298602,
+    "ast_hash": "7048b907b7a807f69bb2e9c38b53962e",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INVITATIONS_AND_PASSWORD_RECOVERY.md": {
+    "mtime": 1784939439.7458673,
+    "ast_hash": "7c84820bdfbc823ed122f9726c4d7ad9",
+    "semantic_hash": ""
+  },
+  "docs/ops/EMAIL_BREVO_RUNBOOK.md": {
+    "mtime": 1784939377.0578635,
+    "ast_hash": "fc1fe858183b0a36c1ce0d0d14765479",
+    "semantic_hash": ""
+  },
+  "docs/ops/ONBOARDING_MOREIRA_SALES.md": {
+    "mtime": 1784939395.9498646,
+    "ast_hash": "09aee79d8bd127e4b00bfd10aa0c7228",
     "semantic_hash": ""
   }
 }

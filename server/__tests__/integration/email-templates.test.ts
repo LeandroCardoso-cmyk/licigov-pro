@@ -76,7 +76,7 @@ describe("templates · buildInvitationEmail", () => {
   });
 
   it("recipientName ausente → saudação genérica, sem quebrar", () => {
-    const { recipientName, ...rest } = params;
+    const { recipientName: _recipientName, ...rest } = params;
     const r = buildInvitationEmail(rest);
     expect(r.html).toContain("Olá!");
   });
