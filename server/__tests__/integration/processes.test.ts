@@ -131,101 +131,29 @@ describe("Processes Router — Integração", () => {
     });
   });
 
-  // ── processes.create ────────────────────────────────────────────────────
-  describe("create", () => {
-    it("cria processo com dados válidos", async () => {
+  // ── processes.create (PR B — corte controlado: gravação legada DESATIVADA) ──
+  describe("create — pipeline legado desativado (PR B)", () => {
+    it("recusa a criação legada com FORBIDDEN + token estável", async () => {
       const caller = processesRouter.createCaller(makeContext(mockUser));
-      const result = await caller.create(validCreateInput);
-
-      expect(result.success).toBe(true);
-      expect(result.processId).toBe(10);
+      await expect(caller.create(validCreateInput)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: expect.stringContaining("LEGACY_PROCESS_PIPELINE_DISABLED"),
+      });
     });
 
-    it("associa o processo ao usuário autenticado (ownerId)", async () => {
+    it("NÃO grava processo legado (db.createProcess nunca é chamado)", async () => {
       const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create(validCreateInput);
-
-      expect(db.createProcess).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerId: mockUser.id }),
-      );
+      await expect(caller.create(validCreateInput)).rejects.toBeTruthy();
+      expect(db.createProcess).not.toHaveBeenCalled();
     });
 
-    it("define status inicial como 'em_dfd'", async () => {
+    it("NÃO dispara geração legada de DFD por IA", async () => {
       const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create(validCreateInput);
-
-      expect(db.createProcess).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "em_dfd" }),
-      );
+      await expect(caller.create(validCreateInput)).rejects.toBeTruthy();
+      expect(gemini.generateDFD).not.toHaveBeenCalled();
     });
 
-    it("converte estimatedValue de reais para centavos", async () => {
-      const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create({ ...validCreateInput, estimatedValue: 50000 });
-
-      expect(db.createProcess).toHaveBeenCalledWith(
-        expect.objectContaining({ estimatedValue: 5000000 }),
-      );
-    });
-
-    it("converte valor fracionado para centavos corretamente", async () => {
-      const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create({ ...validCreateInput, estimatedValue: 1234.56 });
-
-      expect(db.createProcess).toHaveBeenCalledWith(
-        expect.objectContaining({ estimatedValue: 123456 }),
-      );
-    });
-
-    it("registra log de atividade de criação", async () => {
-      const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create(validCreateInput);
-
-      expect(db.createActivityLog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          processId: 10,
-          userId: mockUser.id,
-          action: expect.stringContaining("criou o processo"),
-        }),
-      );
-    });
-
-    it("dispara geração de DFD em background (fire-and-forget)", async () => {
-      const caller = processesRouter.createCaller(makeContext(mockUser));
-      await caller.create(validCreateInput);
-
-      expect(gemini.generateDFD).toHaveBeenCalled();
-    });
-
-    it("retorna processId mesmo se DFD falhar (falha silenciosa)", async () => {
-      vi.mocked(gemini.generateDFD).mockRejectedValue(new Error("Gemini timeout"));
-      const caller = processesRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.create(validCreateInput);
-
-      expect(result.success).toBe(true);
-      expect(result.processId).toBe(10);
-    });
-
-    it("rejeita nome vazio com BAD_REQUEST", async () => {
-      await expect(
-        processesRouter.createCaller(makeContext(mockUser)).create({ ...validCreateInput, name: "" }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    });
-
-    it("rejeita estimatedValue negativo com BAD_REQUEST", async () => {
-      await expect(
-        processesRouter.createCaller(makeContext(mockUser)).create({ ...validCreateInput, estimatedValue: -100 }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    });
-
-    it("rejeita objeto vazio com BAD_REQUEST", async () => {
-      await expect(
-        processesRouter.createCaller(makeContext(mockUser)).create({ ...validCreateInput, object: "" }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    });
-
-    it("rejeita acesso sem autenticação com UNAUTHORIZED", async () => {
+    it("mantém a guarda de autenticação antes da trava (UNAUTHORIZED)", async () => {
       await expect(
         processesRouter.createCaller(makeContext(null)).create(validCreateInput),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
