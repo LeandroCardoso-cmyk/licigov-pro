@@ -33,12 +33,15 @@ function formatDateTimePtBR(date: Date): string {
   }).format(date) + " (horário de Brasília)";
 }
 
+// Nomenclatura institucional (deve espelhar client/src/utils/orgRoleLabels.ts). `owner` é
+// apresentado como "Administrador da Organização", nunca "Proprietário(a)" — apenas rótulo de
+// exibição; o enum interno OrgRole permanece inalterado.
 const ORG_ROLE_LABELS_PT: Record<OrgRole, string> = {
-  owner: "Proprietário(a)",
-  admin: "Administrador(a)",
-  manager: "Gerente",
-  operator: "Operador(a)",
-  viewer: "Visualizador(a)",
+  owner: "Administrador da Organização",
+  admin: "Administrador",
+  manager: "Gestor",
+  operator: "Operador",
+  viewer: "Visualizador",
 };
 
 /** Layout HTML compartilhado — cabeçalho com a marca, corpo, rodapé de segurança. */

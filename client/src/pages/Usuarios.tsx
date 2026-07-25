@@ -18,18 +18,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserPlus, Search, Send, X, Loader2 } from "lucide-react";
 import { translateAuthError } from "@/utils/authErrorMessages";
+import { ORG_ROLE_LABELS as ROLE_LABELS } from "@/utils/orgRoleLabels";
 
 type OrgRole = "owner" | "admin" | "manager" | "operator" | "viewer";
 /** Papéis atribuíveis via UI — owner só é definido pelo onboarding de tenant (nunca aqui). */
 type AssignableRole = Exclude<OrgRole, "owner">;
-
-const ROLE_LABELS: Record<OrgRole, string> = {
-  owner: "Proprietário(a)",
-  admin: "Administrador(a)",
-  manager: "Gerente",
-  operator: "Operador(a)",
-  viewer: "Visualizador(a)",
-};
 
 const INVITABLE_ROLES: AssignableRole[] = ["admin", "manager", "operator", "viewer"];
 const ASSIGNABLE_ROLES: AssignableRole[] = ["admin", "manager", "operator", "viewer"];
@@ -148,7 +141,7 @@ export default function Usuarios() {
                   <DialogHeader>
                     <DialogTitle>Convidar usuário</DialogTitle>
                     <DialogDescription>
-                      Um e-mail com o link de acesso será enviado. O convite expira em 7 dias.
+                      Será enviado um convite de acesso ao usuário informado. O convite expira em 7 dias.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
@@ -157,7 +150,7 @@ export default function Usuarios() {
                       <Input
                         id="invite-email"
                         type="email"
-                        placeholder="servidor@orgao.gov.br"
+                        placeholder="usuario@orgao.gov.br"
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
                         required

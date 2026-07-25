@@ -45,9 +45,9 @@ describe("templates · buildInvitationEmail", () => {
     expect(r.text).toContain(ACCEPT_URL);
   });
 
-  it("html e text mencionam o papel em português e o convidante", () => {
+  it("html e text mencionam o papel (nomenclatura institucional) e o convidante", () => {
     const r = buildInvitationEmail(params);
-    expect(r.html).toContain("Operador(a)");
+    expect(r.html).toContain("Operador"); // rótulo institucional (sem "(a)")
     expect(r.html).toContain("Maria Silva");
     expect(r.text).toContain("Maria Silva");
   });

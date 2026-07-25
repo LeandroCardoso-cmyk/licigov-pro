@@ -9,14 +9,7 @@ import { Label } from "@/components/ui/label";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { translateAuthError } from "@/utils/authErrorMessages";
 import { resolveInviteView } from "@/utils/inviteState";
-
-const ORG_ROLE_LABELS: Record<string, string> = {
-  owner: "Proprietário(a)",
-  admin: "Administrador(a)",
-  manager: "Gerente",
-  operator: "Operador(a)",
-  viewer: "Visualizador(a)",
-};
+import { orgRoleLabel } from "@/utils/orgRoleLabels";
 
 export default function AceitarConvite() {
   const [, navigate] = useLocation();
@@ -64,7 +57,7 @@ export default function AceitarConvite() {
     acceptExistingMutation.mutate({ token });
   };
 
-  const roleLabel = validateQuery.data?.role ? ORG_ROLE_LABELS[validateQuery.data.role] ?? validateQuery.data.role : "";
+  const roleLabel = validateQuery.data?.role ? orgRoleLabel(validateQuery.data.role) : "";
   const organizationName = validateQuery.data?.organizationName ?? "";
 
   return (

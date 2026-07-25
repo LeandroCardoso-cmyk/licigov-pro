@@ -1835,8 +1835,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ui/dialog.tsx": {
-    "mtime": 1782612418.3544269,
-    "ast_hash": "bd1bc6368eb5f3f0598d8493c5e18cad",
+    "mtime": 1784947325.798571,
+    "ast_hash": "55399cf1ad59c6e376427a332e8289bc",
     "semantic_hash": ""
   },
   "client/src/components/ui/drawer.tsx": {
@@ -9940,8 +9940,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-templates.test.ts": {
-    "mtime": 1784939564.5458746,
-    "ast_hash": "989f6bda05b17da86e1c644289982038",
+    "mtime": 1784947433.3065684,
+    "ast_hash": "d1d6fdb28930a5a09d1c90ed8a2e8791",
     "semantic_hash": ""
   },
   "server/services/email/brevoProvider.ts": {
@@ -9965,8 +9965,8 @@
     "semantic_hash": ""
   },
   "server/services/email/templates.ts": {
-    "mtime": 1784924386.6200538,
-    "ast_hash": "2b13d1bfca329604f37394bab20d1fe8",
+    "mtime": 1784947414.8665688,
+    "ast_hash": "094852a6532a344a0e25f2a12e92ebe0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-dispatcher.test.ts": {
@@ -10075,8 +10075,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/AceitarConvite.tsx": {
-    "mtime": 1784927527.171982,
-    "ast_hash": "815f6c2934abe83b0887210fbb8e050f",
+    "mtime": 1784947403.0265691,
+    "ast_hash": "0552f2344008974c2494ce58978a3bd1",
     "semantic_hash": ""
   },
   "client/src/pages/EsqueciSenha.tsx": {
@@ -10125,8 +10125,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Usuarios.tsx": {
-    "mtime": 1784928222.263966,
-    "ast_hash": "a351ac61c0dd74261d518ee7cd33cc5b",
+    "mtime": 1784947378.1385698,
+    "ast_hash": "6922938f100ef0905e637596ea5ded75",
     "semantic_hash": ""
   },
   "client/src/utils/slugify.test.ts": {
@@ -10162,6 +10162,16 @@
   "server/__tests__/integration/admin-router-sanitize.test.ts": {
     "mtime": 1784942703.9987843,
     "ast_hash": "fe229dc2eb336b34dbdd332a8813e200",
+    "semantic_hash": ""
+  },
+  "client/src/utils/orgRoleLabels.test.ts": {
+    "mtime": 1784947450.362568,
+    "ast_hash": "e8b5534aa000a6882fa24806a2e845a4",
+    "semantic_hash": ""
+  },
+  "client/src/utils/orgRoleLabels.ts": {
+    "mtime": 1784947357.4865704,
+    "ast_hash": "52f920d942c61e41365a1333757a15a8",
     "semantic_hash": ""
   }
 }
