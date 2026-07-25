@@ -33,9 +33,21 @@ destas faltar, ou se `EMAIL_PROVIDER` resolver para algo diferente de `brevo`.
 | `EMAIL_MAX_ATTEMPTS` | 5 (default) | 5 (default; ajustável) |
 | `EMAIL_DISPATCH_INTERVAL_MS` | 30000 (default) | 30000 (default; ajustável) |
 
-Definir todas no Railway (env do serviço), nunca em arquivo versionado. `EMAIL_PROVIDER`/
-`EMAIL_ENABLED` "console"/"fake" são **rejeitados** em staging/production pelo boot — não é
+Definir todas no Railway (env do serviço), nunca em arquivo versionado. `EMAIL_PROVIDER`
+"console"/"fake" é **rejeitado** em staging/production **quando o e-mail está habilitado** — não é
 possível contornar isso via configuração incorreta silenciosa.
+
+### Operabilidade de staging sem Brevo (`EMAIL_ENABLED=false`)
+
+O fail-closed acima só é aplicado **quando `EMAIL_ENABLED=true`** (o default em staging/production).
+Se você precisa subir staging para validar fluxos NÃO-e-mail **antes** de configurar o Brevo,
+defina explicitamente **`EMAIL_ENABLED=false`**: o boot é permitido, o dispatcher NÃO inicia e
+nenhum e-mail é enviado. Isso não compromete a segurança — desligar o e-mail é uma escolha
+explícita do operador, nunca um fallback silencioso para console/fake tratado como envio real.
+Fluxos que dependem de e-mail (convite, recuperação de senha) simplesmente ficarão com a mensagem
+presa em `pending` no `email_outbox`, sem side-effect visível, até o e-mail ser habilitado e
+configurado. Para o fluxo institucional funcionar de ponta a ponta, `EMAIL_ENABLED=true` + Brevo
+configurado é obrigatório.
 
 ## 3. Investigar falha de entrega
 

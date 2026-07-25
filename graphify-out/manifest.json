@@ -9880,13 +9880,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-config.test.ts": {
-    "mtime": 1784923687.3080697,
-    "ast_hash": "ca5a6b87d791e0facadfabb094535b56",
+    "mtime": 1784943414.6388266,
+    "ast_hash": "1d9caceb6def97ccf5485bcc6f44049d",
     "semantic_hash": ""
   },
   "server/config/email.ts": {
-    "mtime": 1784923597.824072,
-    "ast_hash": "93f511df8cc41165440ec4cf510b8de4",
+    "mtime": 1784943388.166825,
+    "ast_hash": "4eea4d57ee528b2b4cb24b0f0749150e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/domain-auth-errors.test.ts": {
@@ -10150,8 +10150,8 @@
     "semantic_hash": ""
   },
   "docs/ops/EMAIL_BREVO_RUNBOOK.md": {
-    "mtime": 1784939377.0578635,
-    "ast_hash": "fc1fe858183b0a36c1ce0d0d14765479",
+    "mtime": 1784943439.862828,
+    "ast_hash": "0146986e1973cd83e155571083ec4993",
     "semantic_hash": ""
   },
   "docs/ops/ONBOARDING_MOREIRA_SALES.md": {

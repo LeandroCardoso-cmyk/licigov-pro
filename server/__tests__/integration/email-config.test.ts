@@ -80,6 +80,19 @@ describe("config/email · resolveEmailConfig (pura) — fail-closed staging/prod
     expect(cfg.senderEmail).toBe("no-reply@x.com");
     expect(cfg.appBaseUrl).toBe("https://staging.x.com"); // barra final removida
   });
+  it("homologação — staging com EMAIL_ENABLED=false e SEM Brevo → NÃO lança (operável sem e-mail)", () => {
+    // Operabilidade de staging: desligar o e-mail explicitamente permite subir sem configurar o
+    // Brevo — nada é enviado (o dispatcher nem inicia), então não há risco de segurança.
+    expect(() => resolveEmailConfig({ EMAIL_ENABLED: "false" }, STAGING)).not.toThrow();
+    const cfg = resolveEmailConfig({ EMAIL_ENABLED: "false" }, STAGING);
+    expect(cfg.enabled).toBe(false);
+  });
+  it("homologação — production com EMAIL_ENABLED=false e SEM Brevo → NÃO lança (desligar é escolha explícita do operador)", () => {
+    expect(() => resolveEmailConfig({ EMAIL_ENABLED: "false" }, PROD)).not.toThrow();
+  });
+  it("homologação — staging com EMAIL_ENABLED=true (default) e provider console → CONTINUA lançando (fail-closed pleno quando habilitado)", () => {
+    expect(() => resolveEmailConfig({ EMAIL_ENABLED: "true", EMAIL_PROVIDER: "console" }, STAGING)).toThrow(/deve ser "brevo"/);
+  });
   it("development sem nada → resolve com defaults (console, appBaseUrl localhost), não lança", () => {
     const cfg = resolveEmailConfig({}, DEV);
     expect(cfg.provider).toBe("console");

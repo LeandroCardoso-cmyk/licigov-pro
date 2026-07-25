@@ -108,16 +108,25 @@ export function resolveEmailConfig(env: EmailConfigEnv, ctx: EmailRuntimeContext
     dispatchIntervalMs: parsePositiveInt(env.EMAIL_DISPATCH_INTERVAL_MS, DEFAULT_DISPATCH_INTERVAL_MS),
   };
 
-  if ((ctx.isStaging || ctx.isProduction) && !ctx.isTest) {
+  // Fail-closed em staging/production — MAS apenas quando o e-mail está HABILITADO. Se
+  // `EMAIL_ENABLED=false`, nada será enviado (o dispatcher nem inicia), então exigir Brevo seria
+  // travar o boot sem motivo de segurança — o operador pode querer subir staging para validar
+  // fluxos NÃO-e-mail antes de configurar o Brevo. Isso é "staging configurável e operacional sem
+  // comprometer a segurança": desligar o e-mail é uma escolha EXPLÍCITA do operador
+  // (EMAIL_ENABLED=false), nunca um fallback silencioso para console/fake tratado como real.
+  // Quando o e-mail está habilitado (default em staging/production), o fail-closed é PLENO: o
+  // provider TEM que ser brevo e as credenciais/URL são obrigatórias.
+  if ((ctx.isStaging || ctx.isProduction) && !ctx.isTest && config.enabled) {
     const missing: string[] = [];
-    if (config.provider !== "brevo") missing.push(`EMAIL_PROVIDER deve ser "brevo" em staging/production (atual: "${config.provider}")`);
+    if (config.provider !== "brevo") missing.push(`EMAIL_PROVIDER deve ser "brevo" em staging/production com e-mail habilitado (atual: "${config.provider}")`);
     if (!config.brevoApiKey) missing.push("BREVO_API_KEY");
     if (!config.senderEmail) missing.push("BREVO_SENDER_EMAIL");
     if (!config.appBaseUrl) missing.push("APP_BASE_URL");
     if (missing.length > 0) {
       throw new Error(
-        `[BOOT] Configuração de e-mail institucional incompleta para staging/production:\n` +
-        missing.map(m => `  • ${m}`).join("\n")
+        `[BOOT] E-mail institucional HABILITADO (EMAIL_ENABLED=true) em staging/production mas configuração incompleta:\n` +
+        missing.map(m => `  • ${m}`).join("\n") +
+        `\n  → configure as variáveis no Railway, ou defina EMAIL_ENABLED=false para subir sem e-mail.`
       );
     }
   }
