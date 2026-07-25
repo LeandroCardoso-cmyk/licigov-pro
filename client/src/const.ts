@@ -8,3 +8,6 @@ export const APP_SHORT_NAME = "LiciGov";
 export const APP_DESCRIPTION = "Sistema Operacional Cognitivo para Licitações Públicas";
 
 export const APP_LOGO = "/logo-original-transparent.png";
+
+/** PR A.1 — localStorage: organização selecionada pelo admin de plataforma (ver main.tsx). */
+export const SELECTED_ORGANIZATION_ID_STORAGE_KEY = "licigov:selectedOrganizationId";

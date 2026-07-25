@@ -11,6 +11,8 @@ import { bootstrap } from "../bootstrap";
 import { APP_CONFIG } from "../config/app";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
+import { EMAIL_CONFIG } from "../config/email";
+import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,6 +36,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // PR A.1 — Railway roda a aplicação atrás de um proxy reverso; sem isto, `req.ip` é sempre o IP
+  // do proxy (não o do cliente), o que quebraria o rate limiting por IP (ex.: passwordReset) e a
+  // auditoria de `ipAddress`. `1` = confia em um único hop de proxy (o do Railway).
+  app.set("trust proxy", 1);
 
   app.use(helmet({
     contentSecurityPolicy: false, // gerenciado pelo Vite em dev
@@ -68,6 +75,27 @@ async function startServer() {
   server.listen(port, () => {
     console.info(`[BOOT][${APP_CONFIG.env}] ${APP_CONFIG.name} rodando em http://localhost:${port}/`);
   });
+
+  // PR A.1 — o dispatcher NUNCA roda automaticamente ao importar o módulo (ver comentário em
+  // emailDispatcher.ts); precisa deste start() explícito, e só quando há algo para enviar
+  // (EMAIL_ENABLED) e fora da suíte de testes (VITEST nunca inicia timers de produção).
+  if (EMAIL_CONFIG.enabled && process.env.VITEST !== "true") {
+    startEmailDispatcher();
+
+    // Shutdown gracioso: no Railway, um deploy/restart envia SIGTERM. Paramos o intervalo do
+    // dispatcher (não deixa um ciclo novo começar) e fechamos o servidor HTTP. Uma mensagem que
+    // já estava em `processing` no momento do sinal é recuperada no próximo boot pelo
+    // reclaimStaleProcessing (ver emailOutboxService) — nunca fica órfã.
+    const shutdown = (signal: string) => {
+      console.info(`[SHUTDOWN] Sinal ${signal} recebido — encerrando graciosamente.`);
+      stopEmailDispatcher();
+      server.close(() => process.exit(0));
+      // Failsafe: se o server não fechar em 10s (conexões presas), força a saída.
+      setTimeout(() => process.exit(0), 10_000).unref();
+    };
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
+    process.once("SIGINT", () => shutdown("SIGINT"));
+  }
 }
 
 async function main() {

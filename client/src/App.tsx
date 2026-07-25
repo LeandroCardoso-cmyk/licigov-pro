@@ -6,6 +6,12 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
+import EsqueciSenha from "./pages/EsqueciSenha";
+import RedefinirSenha from "./pages/RedefinirSenha";
+import AceitarConvite from "./pages/AceitarConvite";
+import BemVindo from "./pages/BemVindo";
+import Usuarios from "./pages/Usuarios";
+import AdminOrganizacoes from "./pages/AdminOrganizacoes";
 import Dashboard from "./pages/Dashboard";
 import ProcessDetails from "./pages/ProcessDetails";
 import Settings from "./pages/Settings";
@@ -146,6 +152,8 @@ const DirectProcurementShellRoute = withAuthenticatedShell(DirectProcurement);
 const ParecerJuridicoShellRoute = withAuthenticatedShell(ParecerJuridico);
 const ContratosWorkspaceShellRoute = withAuthenticatedShell(ContratosWorkspace);
 const TirarDuvidasShellRoute = withAuthenticatedShell(TirarDuvidas);
+const UsuariosShellRoute = withAuthenticatedShell(Usuarios);
+const AdminOrganizacoesShellRoute = withAuthenticatedShell(AdminOrganizacoes);
 
 function Router() {
   return (
@@ -162,6 +170,8 @@ function Router() {
       <Route path={"/parecer"} component={ParecerJuridicoShellRoute} />
       <Route path={"/contratos"} component={ContratosWorkspaceShellRoute} />
       <Route path={"/tirar-duvidas"} component={TirarDuvidasShellRoute} />
+      <Route path={"/usuarios"} component={UsuariosShellRoute} />
+      <Route path={"/admin/organizacoes"} component={AdminOrganizacoesShellRoute} />
       <Route path={"/processos"} component={ProcessosShellRoute} />
       <Route path={"/gestao-comercial"} component={CommercialManagementRoute} />
       <Route path={"/novo-processo"} component={NewProcessRoute} />
@@ -208,6 +218,10 @@ function Router() {
       <Route path={"/test4"} component={TestPage4Route} />
       <Route path={"/login"} component={Login} />
       <Route path={"/register"} component={Register} />
+      <Route path={"/esqueci-senha"} component={EsqueciSenha} />
+      <Route path={"/redefinir-senha"} component={RedefinirSenha} />
+      <Route path={"/convite"} component={AceitarConvite} />
+      <Route path={"/bem-vindo"} component={BemVindo} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

@@ -9,9 +9,11 @@ import { z } from "zod";
 import * as db from "../db";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { SESSION_TTL_MS, ALLOW_PUBLIC_REGISTRATION } from "../config/auth";
+import { sanitizeUser } from "../services/userProjection";
 
 export const authRouter = router({
-  me: publicProcedure.query(opts => opts.ctx.user),
+  // PR A.1 — nunca mais a linha completa de `users` (passwordHash/signaturePassword) ao cliente.
+  me: publicProcedure.query(opts => (opts.ctx.user ? sanitizeUser(opts.ctx.user) : null)),
 
   register: publicProcedure
     .use(rateLimitMiddleware("login"))
@@ -58,6 +60,7 @@ export const authRouter = router({
         openId: user.openId,
         appId: "licigov-pro",
         name: user.name ?? "",
+        tv: user.tokenVersion,
       });
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -96,10 +99,15 @@ export const authRouter = router({
         openId: user.openId,
         appId: "licigov-pro",
         name: user.name ?? "",
+        tv: user.tokenVersion,
       });
 
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SESSION_TTL_MS });
+
+      // PR A.1 — "último acesso" na tela de gestão de membros. touchLastSignedIn nunca lança
+      // (best-effort internamente) — seguro dar `await` sem risco de derrubar um login válido.
+      await db.touchLastSignedIn(user.id);
 
       return { success: true, user: { id: user.id, name: user.name, email: user.email } };
     }),

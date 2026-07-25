@@ -2,12 +2,14 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
+import { sanitizeUsers } from "../services/userProjection";
 
 export const adminRouter = router({
   listUsers: protectedProcedure
     .query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Apenas administradores" });
-      return await db.getAllUsers();
+      // PR A.1 — nunca mais passwordHash/signaturePassword de TODOS os usuários ao cliente.
+      return sanitizeUsers(await db.getAllUsers());
     }),
 
   promoteToAdmin: protectedProcedure

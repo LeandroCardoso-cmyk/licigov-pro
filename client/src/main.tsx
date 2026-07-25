@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import "./index.css";
+import { SELECTED_ORGANIZATION_ID_STORAGE_KEY } from "./const";
 
 const queryClient = new QueryClient();
 
@@ -17,7 +18,12 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  window.location.href = "/login";
+  // PR A.1 — preserva a página atual (ex.: /convite?token=... com a sessão expirada no meio do
+  // aceite) como returnTo, para Login.tsx voltar o usuário para lá após reautenticar. Sem isto, a
+  // navegação forçada para /login apagaria o token do convite da URL.
+  const current = window.location.pathname + window.location.search;
+  const returnTo = current === "/login" ? "" : `?returnTo=${encodeURIComponent(current)}`;
+  window.location.href = `/login${returnTo}`;
 };
 
 queryClient.getQueryCache().subscribe(event => {
@@ -41,6 +47,13 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
+      // PR A.1 — lido quando o admin de plataforma escolhe "gerenciar" uma organização
+      // específica (AdminOrganizacoes.tsx); sem isto, tenantProcedure sempre resolveria a
+      // organização sintética padrão (id 1) para admins de plataforma.
+      headers() {
+        const selected = localStorage.getItem(SELECTED_ORGANIZATION_ID_STORAGE_KEY);
+        return selected ? { "x-organization-id": selected } : {};
+      },
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),

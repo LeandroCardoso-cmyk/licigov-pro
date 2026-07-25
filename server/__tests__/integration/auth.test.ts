@@ -108,6 +108,14 @@ describe("Auth Router — Integração", () => {
       const result = await caller.me();
       expect(result).toMatchObject({ role: "admin" });
     });
+
+    it("PR A.1 — projeção: me NUNCA vaza campos internos sensíveis", async () => {
+      const caller = authRouter.createCaller(makeContext(mockUser));
+      const result = (await caller.me()) as unknown as Record<string, unknown>;
+      for (const forbidden of ["passwordHash", "signaturePassword", "tokenVersion", "openId", "loginMethod", "updatedAt"]) {
+        expect(result, `campo "${forbidden}" vazou em auth.me`).not.toHaveProperty(forbidden);
+      }
+    });
   });
 
   // ── auth.login ───────────────────────────────────────────────────────────

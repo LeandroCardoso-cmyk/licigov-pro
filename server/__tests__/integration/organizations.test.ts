@@ -25,6 +25,12 @@ vi.mock("../../db/organizations", () => ({
   getUserOrganizations: vi.fn(),
   updateOrganization: vi.fn(),
   createOrganization: vi.fn(),
+  // PR A.1
+  getAllMembersOfOrg: vi.fn(),
+  countActiveAdmins: vi.fn(),
+  setMemberAtivo: vi.fn(),
+  getMembersWithUserInfo: vi.fn(),
+  getAllOrganizations: vi.fn(),
 }));
 
 vi.mock("../../db", async () => {
@@ -47,6 +53,11 @@ import {
   getUserOrganizations,
   removeMemberFromOrg,
   updateMemberRole,
+  getAllMembersOfOrg,
+  countActiveAdmins,
+  setMemberAtivo,
+  getMembersWithUserInfo,
+  getAllOrganizations,
 } from "../../db/organizations";
 import { getUserByEmail } from "../../db";
 
@@ -147,6 +158,51 @@ describe("Organization — RBAC de membros", () => {
     vi.mocked(removeMemberFromOrg).mockResolvedValue(undefined);
     await removeMemberFromOrg(1, 10);
     expect(removeMemberFromOrg).toHaveBeenCalledWith(1, 10);
+  });
+});
+
+// ─── PR A.1 — Testes de gestão de membros (ativação/desativação/último admin) ─────────────────
+
+describe("Organization — PR A.1 (gestão de membros)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("getAllMembersOfOrg retorna ativos e inativos (diferente de getMembersOfOrg)", async () => {
+    vi.mocked(getAllMembersOfOrg).mockResolvedValue([
+      buildMembership(1, 1, "admin"),
+      { ...buildMembership(2, 1, "operator"), ativo: false },
+    ]);
+    const members = await getAllMembersOfOrg(1);
+    expect(members).toHaveLength(2);
+    expect(members.some(m => !m.ativo)).toBe(true);
+  });
+
+  it("countActiveAdmins conta admin+owner ativos", async () => {
+    vi.mocked(countActiveAdmins).mockResolvedValue(2);
+    expect(await countActiveAdmins(1)).toBe(2);
+  });
+
+  it("setMemberAtivo é chamado com os parâmetros corretos", async () => {
+    vi.mocked(setMemberAtivo).mockResolvedValue(undefined);
+    await setMemberAtivo(1, 10, false);
+    expect(setMemberAtivo).toHaveBeenCalledWith(1, 10, false);
+  });
+
+  it("getMembersWithUserInfo retorna membro+usuário combinados (join)", async () => {
+    vi.mocked(getMembersWithUserInfo).mockResolvedValue([
+      { member: buildMembership(10, 1, "admin"), user: { id: 10, name: "Fulano", email: "fulano@x.com" } as never },
+    ]);
+    const rows = await getMembersWithUserInfo(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user.email).toBe("fulano@x.com");
+    expect(rows[0].member.role).toBe("admin");
+  });
+
+  it("getAllOrganizations retorna a lista de organizações", async () => {
+    vi.mocked(getAllOrganizations).mockResolvedValue([buildOrg(1), buildOrg(2)]);
+    const orgs = await getAllOrganizations();
+    expect(orgs).toHaveLength(2);
   });
 });
 

@@ -31,6 +31,13 @@ const MIGRATED_FILES = [
   "client/src/components/department-operation/labels.ts",
   "client/src/components/tirar-duvidas/TirarDuvidasHome.tsx",
   "client/src/pages/CentroOperacoes.tsx",
+  // PR A.1
+  "client/src/pages/EsqueciSenha.tsx",
+  "client/src/pages/RedefinirSenha.tsx",
+  "client/src/pages/AceitarConvite.tsx",
+  "client/src/pages/Usuarios.tsx",
+  "client/src/pages/AdminOrganizacoes.tsx",
+  "client/src/pages/BemVindo.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {

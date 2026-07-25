@@ -84,6 +84,28 @@ export const RATE_LIMITS = {
     max: 30,
     message: 'Muitas consultas ao catálogo. Tente novamente em 1 minuto.',
   },
+
+  // PR A.1 — Recuperação de senha: 3 por 15 minutos (por identifier via middleware, E por
+  // e-mail-alvo — checagem secundária manual em passwordResetService, ver checkRateLimit direto).
+  passwordReset: {
+    windowMs: 15 * 60 * 1000,
+    max: 3,
+    message: 'Muitas tentativas. Tente novamente em 15 minutos.',
+  },
+
+  // PR A.1 — Aceite de convite institucional (validateToken/accept/acceptExisting).
+  invitationAccept: {
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Muitas tentativas. Tente novamente em 15 minutos.',
+  },
+
+  // PR A.1 — Gestão de convites (criar/reenviar/cancelar) por um admin/manager da organização.
+  invitationManage: {
+    windowMs: 60 * 60 * 1000,
+    max: 30,
+    message: 'Limite de operações de convite atingido. Tente novamente em 1 hora.',
+  },
 };
 
 /**

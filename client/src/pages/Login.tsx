@@ -1,23 +1,30 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { APP_DESCRIPTION, APP_LOGO, APP_TITLE } from "@/const";
+import { isSafeReturnTo } from "@/utils/safeReturnTo";
 
 export default function Login() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
 
+  // PR A.1 — se o usuário chegou aqui via redirect de sessão expirada (ex.: no meio do aceite de
+  // um convite), volta para lá depois de logar em vez de sempre ir para /dashboard.
+  const returnToParam = new URLSearchParams(search).get("returnTo");
+  const destination = isSafeReturnTo(returnToParam) ? returnToParam : "/dashboard";
+
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: () => {
       utils.auth.me.invalidate();
-      navigate("/dashboard");
+      navigate(destination);
     },
     onError: (err) => {
       setError(err.message || "Erro ao fazer login. Tente novamente.");
@@ -67,7 +74,12 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Senha</Label>
+                <a href="/esqueci-senha" className="text-xs text-primary hover:underline">
+                  Esqueci minha senha
+                </a>
+              </div>
               <Input
                 id="password"
                 type="password"

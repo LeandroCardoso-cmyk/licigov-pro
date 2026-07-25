@@ -4,15 +4,38 @@ import { router, tenantProcedure, orgRoleProcedure, adminProcedure } from "../_c
 import {
   getOrganizationById,
   getMembersOfOrg,
+  getAllMembersOfOrg,
+  getMembersWithUserInfo,
+  getAllOrganizations,
   addMemberToOrg,
   updateMemberRole,
   removeMemberFromOrg,
   getUserOrganizations,
   updateOrganization,
   createOrganization,
+  countActiveAdmins,
+  setMemberAtivo,
 } from "../db/organizations";
 import { getUserByEmail } from "../db";
 import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
+import { LAST_TENANT_ADMIN, MEMBER_NOT_FOUND } from "../domain/authErrors";
+import { sanitizeUser } from "../services/userProjection";
+
+/**
+ * PR A.1 — Proteção "último admin": rebaixar/desativar/remover um membro com papel admin NÃO
+ * pode deixar a organização sem nenhum admin/owner ATIVO. `owner` já é protegido separadamente
+ * (nunca pode ser alterado/removido por esta API) — este guard cobre o caso de `admin`.
+ */
+async function assertNotLastActiveAdmin(organizationId: number, targetRole: string): Promise<void> {
+  if (targetRole !== "admin") return; // owner já bloqueado antes de chegar aqui; demais papéis não contam
+  const activeAdmins = await countActiveAdmins(organizationId);
+  if (activeAdmins <= 1) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: LAST_TENANT_ADMIN,
+    });
+  }
+}
 
 export const organizationsRouter = router({
   // ─── Listar organizações do usuário autenticado ──────────────────────────
@@ -127,6 +150,13 @@ export const organizationsRouter = router({
       });
     }
 
+    // PR A.1 — rebaixar o último admin ativo deixaria a organização sem ninguém que possa
+    // gerenciar membros/convites. Só se aplica quando o alvo É admin hoje (owner já é bloqueado
+    // acima; rebaixar operator/manager/viewer nunca reduz a contagem de admins).
+    if (target.role === "admin" && input.role !== "admin") {
+      await assertNotLastActiveAdmin(ctx.organizationId!, target.role);
+    }
+
     await updateMemberRole(ctx.organizationId!, input.userId, input.role);
 
     await logFromCtx(ctx as TrpcAuditCtx, null, "org.member_role_updated", {
@@ -166,6 +196,8 @@ export const organizationsRouter = router({
       });
     }
 
+    await assertNotLastActiveAdmin(ctx.organizationId!, target.role);
+
     await removeMemberFromOrg(ctx.organizationId!, input.userId);
 
     await logFromCtx(ctx as TrpcAuditCtx, null, "org.member_removed", {
@@ -174,6 +206,88 @@ export const organizationsRouter = router({
     });
 
     return { success: true };
+  }),
+
+  // ─── PR A.1 — Listar TODOS os membros (ativos e inativos), para a tela de gestão ─────────
+
+  listAllMembers: orgRoleProcedure("admin").query(async ({ ctx }) => {
+    return await getAllMembersOfOrg(ctx.organizationId!);
+  }),
+
+  /** PR A.1 — mesma lista, mas com nome/e-mail/último acesso do usuário (tela de gestão). */
+  listAllMembersWithUsers: orgRoleProcedure("admin").query(async ({ ctx }) => {
+    const rows = await getMembersWithUserInfo(ctx.organizationId!);
+    return rows.map(r => ({
+      userId: r.member.userId,
+      role: r.member.role,
+      ativo: r.member.ativo,
+      invitedBy: r.member.invitedBy,
+      createdAt: r.member.createdAt,
+      user: sanitizeUser(r.user),
+    }));
+  }),
+
+  // ─── PR A.1 — Desativar membro (mesmo efeito de removeMember, nome mais claro p/ a UI) ─────
+
+  deactivateMember: orgRoleProcedure("admin").input(
+    z.object({ userId: z.number().int().positive() }),
+  ).mutation(async ({ ctx, input }) => {
+    if (input.userId === ctx.user!.id) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode desativar a si mesmo." });
+    }
+
+    const members = await getAllMembersOfOrg(ctx.organizationId!);
+    const target = members.find(m => m.userId === input.userId);
+    if (!target) {
+      throw new TRPCError({ code: "NOT_FOUND", message: MEMBER_NOT_FOUND });
+    }
+    if (target.role === "owner") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "O owner não pode ser desativado." });
+    }
+    if (!target.ativo) {
+      return { success: true }; // idempotente — já estava desativado
+    }
+
+    await assertNotLastActiveAdmin(ctx.organizationId!, target.role);
+
+    await setMemberAtivo(ctx.organizationId!, input.userId, false);
+
+    await logFromCtx(ctx as TrpcAuditCtx, null, "member.deactivated", {
+      entityType: "OrganizationMember",
+      entityId: input.userId,
+    });
+
+    return { success: true };
+  }),
+
+  // ─── PR A.1 — Reativar membro previamente desativado ────────────────────────
+
+  activateMember: orgRoleProcedure("admin").input(
+    z.object({ userId: z.number().int().positive() }),
+  ).mutation(async ({ ctx, input }) => {
+    const members = await getAllMembersOfOrg(ctx.organizationId!);
+    const target = members.find(m => m.userId === input.userId);
+    if (!target) {
+      throw new TRPCError({ code: "NOT_FOUND", message: MEMBER_NOT_FOUND });
+    }
+    if (target.ativo) {
+      return { success: true }; // idempotente — já estava ativo
+    }
+
+    await setMemberAtivo(ctx.organizationId!, input.userId, true);
+
+    await logFromCtx(ctx as TrpcAuditCtx, null, "member.activated", {
+      entityType: "OrganizationMember",
+      entityId: input.userId,
+    });
+
+    return { success: true };
+  }),
+
+  // ─── Admin de plataforma: listar TODAS as organizações ───────────────────
+
+  adminList: adminProcedure.query(async () => {
+    return await getAllOrganizations();
   }),
 
   // ─── Admin: criar organização ─────────────────────────────────────────────

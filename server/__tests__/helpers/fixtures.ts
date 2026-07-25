@@ -11,6 +11,7 @@ export const mockUser: User = {
   theme: "light",
   passwordHash: "$2b$12$hashedpassword",
   signaturePassword: null,
+  tokenVersion: 0,
   createdAt: new Date("2025-01-01"),
   updatedAt: new Date("2025-01-01"),
   lastSignedIn: new Date("2025-01-01"),

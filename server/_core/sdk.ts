@@ -16,6 +16,8 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  /** PR A.1 — tokenVersion do usuário no momento da emissão (revogação de sessão). Default 0. */
+  tv?: number;
 };
 
 class SDKServer {
@@ -48,6 +50,8 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      // PR A.1 — claim `tv`: comparado contra users.tokenVersion em authenticateRequest.
+      tv: payload.tv ?? 0,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -56,7 +60,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; tv: number } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -67,7 +71,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, tv } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -78,7 +82,10 @@ class SDKServer {
         return null;
       }
 
-      return { openId, appId, name };
+      // PR A.1 — sessões emitidas ANTES desta mudança não têm o claim `tv`; tratamos como 0
+      // (retrocompatível — continuam válidas até a próxima redefinição de senha, que bumpa
+      // tokenVersion para 1 e as invalida).
+      return { openId, appId, name, tv: typeof tv === "number" ? tv : 0 };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
       return null;
@@ -98,6 +105,12 @@ class SDKServer {
 
     if (!user) {
       throw ForbiddenError("User not found");
+    }
+
+    // PR A.1 — revogação de sessão: se a senha foi redefinida depois que este JWT foi emitido,
+    // users.tokenVersion já avançou além do que o token carrega — a sessão não vale mais.
+    if (session.tv !== (user.tokenVersion ?? 0)) {
+      throw ForbiddenError("Session revoked");
     }
 
     return user;
