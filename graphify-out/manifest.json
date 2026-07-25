@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1785019709.6846547,
-    "ast_hash": "14b62eb8e9752be3240dcbcdbf3acbe7",
+    "mtime": 1785022620.927814,
+    "ast_hash": "ef7aabe036965626fa6eb82728aea825",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -8265,8 +8265,8 @@
     "semantic_hash": ""
   },
   "client/src/components/department-operation/DepartmentOperationHome.tsx": {
-    "mtime": 1785021452.159029,
-    "ast_hash": "a2634cefbc0b43ef45e64f355f21dfab",
+    "mtime": 1785022601.2878144,
+    "ast_hash": "3ae427752c4ed3547036f337767e1739",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/LegacyImportWizard.tsx": {
@@ -9780,8 +9780,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PRODUCTION_REMEDIATION_PLAN.md": {
-    "mtime": 1784730666.424584,
-    "ast_hash": "d629444c0da0f25f9ee6814293df550c",
+    "mtime": 1785021912.9950173,
+    "ast_hash": "2dda05d8b37abf8467fa20d0a1a66769",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/ROUTES_AND_ROUTERS_INVENTORY.md": {
@@ -10242,6 +10242,11 @@
   "client/src/pr-b-canonical-wiring.test.ts": {
     "mtime": 1785021619.3230247,
     "ast_hash": "8f9c49100aa3fbbef0033a535b201ce0",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PR_B_CANONICAL_CUTOVER.md": {
+    "mtime": 1785022637.6038134,
+    "ast_hash": "f23f07f29eec4706f122e2944a5283a4",
     "semantic_hash": ""
   }
 }

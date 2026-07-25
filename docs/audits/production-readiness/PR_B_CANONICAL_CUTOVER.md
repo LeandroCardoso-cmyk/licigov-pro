@@ -53,6 +53,14 @@ shell de navegação** entre etapas. Correção mínima = criar o shell + roteam
 | `/modulos` | redirect | `/dashboard` |
 | `/test`, `/test2`, `/test3`, `/test4` | **removidas** | NotFound |
 
+**Deep link `/processo/:id` — documentado expressamente:** o `:id` é o ID **numérico**
+da tabela legada `processes`. O fluxo canônico usa IDs **string** de
+`procurementProcessesTable` e navega por **estado interno** no shell (não expõe URL
+por processo). Como (a) não há dados legados e (b) os espaços de ID são distintos,
+**não existe deep link válido a preservar** — o ID legado não tem alvo canônico.
+A rota, portanto, não tem mais uso e redireciona à listagem canônica (comentário
+correspondente em `App.tsx`).
+
 A home legada (`Dashboard.tsx`) e as telas `NewProcess`/`ProcessDetails` deixaram
 de ser importadas por qualquer rota — ficam **órfãs/inertes** (sem acesso pela
 interface, sem acesso por URL direta).
@@ -115,8 +123,10 @@ Não há migration nesta PR: `task_attachments` usa isolamento por join com `tas
 ## 9. Deixado para pós-piloto (P3)
 
 - Remoção física do código legado (páginas, routers órfãos) — `LEGACY-070..074`.
-- Renderização real de **DOCX/PDF** do Relatório Operacional (hoje entrega o
-  conteúdo consolidado em Markdown; o botão passou a **entregar** o arquivo).
+- Renderização real de **DOCX/PDF** do Relatório Operacional. Hoje o Document
+  Engine produz o relatório em **Markdown**; o botão ("Baixar relatório
+  operacional") e o arquivo (`.md`) refletem o formato real — não prometem
+  DOCX/PDF. A renderização binária permanece follow-up.
 - `generateDFD` **por IA** no canônico (hoje o DFD é **importado** — atende o
   piloto; a geração do zero por IA é evolução).
 - Migração de dark-mode dos workspaces `components/procurement/*` (mantidos com

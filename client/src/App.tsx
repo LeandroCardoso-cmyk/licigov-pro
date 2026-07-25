@@ -193,7 +193,12 @@ function Router() {
       <Route path={'/parecer-juridico/analytics'} component={LegalOpinionsAnalyticsRoute} />
       <Route path={'/parecer-juridico/novo'} component={NewLegalOpinionRoute} />
       <Route path={'/parecer-juridico/:id'} component={LegalOpinionDetailsRoute} />
-      {/* PR B — Detalhe legado de processo desativado: redireciona à jornada canônica. */}
+      {/* PR B — Detalhe legado de processo desativado. Documentado expressamente:
+              o :id aqui é o ID NUMÉRICO da tabela legada `processes`. O fluxo canônico
+              usa IDs string de `procurementProcessesTable` e navega por estado interno
+              no shell (não expõe URL por processo). Como (a) não há dados legados e
+              (b) os espaços de ID são distintos, NÃO existe deep link válido a
+              preservar — o ID não tem alvo canônico. Redireciona à listagem canônica. */}
       <Route path="/processo/:id" component={() => <Redirect to="/processos" replace />} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
