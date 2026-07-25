@@ -1074,8 +1074,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_errorboundary",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": "errorboundary.tsx"
     },
     {
@@ -1085,8 +1085,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_props",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": "props"
     },
     {
@@ -1096,8 +1096,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_state",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": "state"
     },
     {
@@ -1107,8 +1107,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_errorboundary",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": "errorboundary"
     },
     {
@@ -1118,8 +1118,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_errorboundary_constructor",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": ".constructor()"
     },
     {
@@ -1129,8 +1129,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_errorboundary_getderivedstatefromerror",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": ".getderivedstatefromerror()"
     },
     {
@@ -1140,8 +1140,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "client_src_components_errorboundary_errorboundary_render",
-      "community": 7,
-      "community_name": "cn",
+      "community": 16,
+      "community_name": "itemMatchingEngine.ts",
       "norm_label": ".render()"
     },
     {
@@ -1690,8 +1690,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskdetailmodal.tsx"
     },
     {
@@ -1701,8 +1701,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal_taskdetailmodalprops",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskdetailmodalprops"
     },
     {
@@ -1712,8 +1712,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_components_taskdetailmodal_taskdetailmodal",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskdetailmodal()"
     },
     {
@@ -5507,8 +5507,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_business_domains_licensingdashboard",
-      "community": 1090,
-      "community_name": "LicensingDashboard.tsx",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "licensingdashboard.tsx"
     },
     {
@@ -5518,8 +5518,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_business_domains_licensingdashboard_planbadgeclasses",
-      "community": 1090,
-      "community_name": "LicensingDashboard.tsx",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "planbadgeclasses()"
     },
     {
@@ -5529,8 +5529,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "client_src_components_business_domains_licensingdashboard_licensingdashboard",
-      "community": 1090,
-      "community_name": "LicensingDashboard.tsx",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "licensingdashboard()"
     },
     {
@@ -5540,8 +5540,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_business_domains_modulestatuscard",
-      "community": 1082,
-      "community_name": "marked",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "modulestatuscard.tsx"
     },
     {
@@ -5551,8 +5551,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_business_domains_modulestatuscard_businessdomaincode",
-      "community": 1082,
-      "community_name": "marked",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "businessdomaincode"
     },
     {
@@ -5562,8 +5562,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "client_src_components_business_domains_modulestatuscard_modulestatuscardprops",
-      "community": 1082,
-      "community_name": "marked",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "modulestatuscardprops"
     },
     {
@@ -5573,8 +5573,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_business_domains_modulestatuscard_modulestatuscard",
-      "community": 1082,
-      "community_name": "marked",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "modulestatuscard()"
     },
     {
@@ -5683,8 +5683,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_candidatecomparisonview",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "candidatecomparisonview.tsx"
     },
     {
@@ -5694,8 +5694,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_candidatecomparisonview_candidatedata",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "candidatedata"
     },
     {
@@ -5705,8 +5705,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_candidatecomparisonview_candidatecomparisonviewprops",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "candidatecomparisonviewprops"
     },
     {
@@ -5716,8 +5716,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_candidatecomparisonview_column",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "column()"
     },
     {
@@ -5727,8 +5727,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_candidatecomparisonview_candidatecomparisonview",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "candidatecomparisonview()"
     },
     {
@@ -5782,8 +5782,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_rankingvisualization",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "rankingvisualization.tsx"
     },
     {
@@ -5793,8 +5793,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_rankingvisualization_rankingitem",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "rankingitem"
     },
     {
@@ -5804,8 +5804,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_rankingvisualization_rankingvisualizationprops",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "rankingvisualizationprops"
     },
     {
@@ -5815,8 +5815,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_rankingvisualization_medals",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "medals"
     },
     {
@@ -5826,8 +5826,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_candidate_review_rankingvisualization_rankingvisualization",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "rankingvisualization()"
     },
     {
@@ -7718,8 +7718,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel",
-      "community": 7,
-      "community_name": "cn",
+      "community": 1073,
+      "community_name": "helmet",
       "norm_label": "copilotcomparisonpanel.tsx"
     },
     {
@@ -7729,8 +7729,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_copilot_meta",
-      "community": 7,
-      "community_name": "cn",
+      "community": 1073,
+      "community_name": "helmet",
       "norm_label": "copilot_meta"
     },
     {
@@ -7740,8 +7740,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_metafor",
-      "community": 7,
-      "community_name": "cn",
+      "community": 1073,
+      "community_name": "helmet",
       "norm_label": "metafor()"
     },
     {
@@ -7751,8 +7751,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotcomparisonpanel_copilotcomparisonpanel",
-      "community": 7,
-      "community_name": "cn",
+      "community": 1073,
+      "community_name": "helmet",
       "norm_label": "copilotcomparisonpanel()"
     },
     {
@@ -8213,8 +8213,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotworkspace",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "copilotworkspace.tsx"
     },
     {
@@ -8224,8 +8224,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotworkspace_status_badge",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "status_badge"
     },
     {
@@ -8235,8 +8235,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotworkspace_workspaceresult",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "workspaceresult"
     },
     {
@@ -8246,8 +8246,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "client_src_components_copilots_copilotworkspace_copilotworkspace",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "ContractDetails.tsx",
       "norm_label": "copilotworkspace()"
     },
     {
@@ -8507,7 +8507,7 @@
       "label": "Tab",
       "file_type": "code",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "client_src_components_department_operation_departmentoperationhome_tab",
       "community": 37,
@@ -8518,7 +8518,7 @@
       "label": "TABS",
       "file_type": "code",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L23",
+      "source_location": "L24",
       "_origin": "ast",
       "id": "client_src_components_department_operation_departmentoperationhome_tabs",
       "community": 37,
@@ -8529,7 +8529,7 @@
       "label": "DepartmentOperationHomeProps",
       "file_type": "code",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "client_src_components_department_operation_departmentoperationhome_departmentoperationhomeprops",
       "community": 37,
@@ -8540,7 +8540,7 @@
       "label": "DepartmentOperationHome()",
       "file_type": "code",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L42",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "client_src_components_department_operation_departmentoperationhome_departmentoperationhome",
       "community": 37,
@@ -12184,8 +12184,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "responsepanel.tsx"
     },
     {
@@ -12195,8 +12195,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel_responsepanelprops",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "responsepanelprops"
     },
     {
@@ -12206,8 +12206,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel_response_types",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "response_types"
     },
     {
@@ -12217,8 +12217,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel_response_statuses",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "response_statuses"
     },
     {
@@ -12228,8 +12228,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel_signature_methods",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "signature_methods"
     },
     {
@@ -12239,8 +12239,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "client_src_components_institutional_request_responsepanel_responsepanel",
-      "community": 797,
-      "community_name": "@aws-sdk/s3-request-presigner",
+      "community": 693,
+      "community_name": "reconciliation-mysql-smoke.test.ts",
       "norm_label": "responsepanel()"
     },
     {
@@ -12635,8 +12635,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_item_tr_semanticcandidatepanel",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "semanticcandidatepanel.tsx"
     },
     {
@@ -12646,8 +12646,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_item_tr_semanticcandidatepanel_semanticcandidateitem",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "semanticcandidateitem"
     },
     {
@@ -12657,8 +12657,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "client_src_components_item_tr_semanticcandidatepanel_semanticcandidatepanelprops",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "semanticcandidatepanelprops"
     },
     {
@@ -12668,8 +12668,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "client_src_components_item_tr_semanticcandidatepanel_sourcelabels",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "sourcelabels"
     },
     {
@@ -12679,8 +12679,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "client_src_components_item_tr_semanticcandidatepanel_semanticcandidatepanel",
-      "community": 7,
-      "community_name": "cn",
+      "community": 694,
+      "community_name": "@radix-ui/react-dropdown-menu",
       "norm_label": "semanticcandidatepanel()"
     },
     {
@@ -20819,8 +20819,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskcomments",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskcomments.tsx"
     },
     {
@@ -20830,8 +20830,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskcomments_comment",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "comment"
     },
     {
@@ -20841,8 +20841,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskcomments_props",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "props"
     },
     {
@@ -20852,8 +20852,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskcomments_taskcomments",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskcomments()"
     },
     {
@@ -20863,8 +20863,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskinfopanel.tsx"
     },
     {
@@ -20874,8 +20874,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_priority_colors",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "priority_colors"
     },
     {
@@ -20885,8 +20885,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_priority_labels",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "priority_labels"
     },
     {
@@ -20896,8 +20896,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_status_colors",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "status_colors"
     },
     {
@@ -20907,8 +20907,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_status_labels",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "status_labels"
     },
     {
@@ -20918,8 +20918,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_task",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "task"
     },
     {
@@ -20929,8 +20929,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "client_src_components_task_detail_taskinfopanel_taskinfopanel",
-      "community": 85,
-      "community_name": "LiciGov Pro \u2014 Decis\u00f5es Arquiteturais",
+      "community": 1,
+      "community_name": "card.tsx",
       "norm_label": "taskinfopanel()"
     },
     {
@@ -24856,8 +24856,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_ui_resizable",
-      "community": 101,
-      "community_name": "businessDomains.ts",
+      "community": 7,
+      "community_name": "cn",
       "norm_label": "resizable.tsx"
     },
     {
@@ -24867,8 +24867,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "client_src_components_ui_resizable_resizablepanelgroup",
-      "community": 101,
-      "community_name": "businessDomains.ts",
+      "community": 7,
+      "community_name": "cn",
       "norm_label": "resizablepanelgroup()"
     },
     {
@@ -24878,8 +24878,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "client_src_components_ui_resizable_resizablepanel",
-      "community": 101,
-      "community_name": "businessDomains.ts",
+      "community": 7,
+      "community_name": "cn",
       "norm_label": "resizablepanel()"
     },
     {
@@ -24889,8 +24889,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "client_src_components_ui_resizable_resizablehandle",
-      "community": 101,
-      "community_name": "businessDomains.ts",
+      "community": 7,
+      "community_name": "cn",
       "norm_label": "resizablehandle()"
     },
     {
@@ -38320,8 +38320,8 @@
       "source_location": "L615",
       "_origin": "ast",
       "id": "drizzle_schema_tasks",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "tasks"
     },
     {
@@ -38342,8 +38342,8 @@
       "source_location": "L641",
       "_origin": "ast",
       "id": "drizzle_schema_inserttask",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "inserttask"
     },
     {
@@ -38353,8 +38353,8 @@
       "source_location": "L646",
       "_origin": "ast",
       "id": "drizzle_schema_taskcomments",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskcomments"
     },
     {
@@ -38386,8 +38386,8 @@
       "source_location": "L660",
       "_origin": "ast",
       "id": "drizzle_schema_taskattachments",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskattachments"
     },
     {
@@ -38419,8 +38419,8 @@
       "source_location": "L685",
       "_origin": "ast",
       "id": "drizzle_schema_taskhistory",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskhistory"
     },
     {
@@ -38441,8 +38441,8 @@
       "source_location": "L691",
       "_origin": "ast",
       "id": "drizzle_schema_taskeditlocks",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskeditlocks"
     },
     {
@@ -39222,8 +39222,8 @@
       "source_location": "L1484",
       "_origin": "ast",
       "id": "drizzle_schema_organizations",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "organizations"
     },
     {
@@ -39233,8 +39233,8 @@
       "source_location": "L1500",
       "_origin": "ast",
       "id": "drizzle_schema_organization",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "organization"
     },
     {
@@ -39266,8 +39266,8 @@
       "source_location": "L1519",
       "_origin": "ast",
       "id": "drizzle_schema_organizationmember",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "organizationmember"
     },
     {
@@ -39299,8 +39299,8 @@
       "source_location": "L1531",
       "_origin": "ast",
       "id": "drizzle_schema_outboxevents",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "outboxevents"
     },
     {
@@ -39332,8 +39332,8 @@
       "source_location": "L1560",
       "_origin": "ast",
       "id": "drizzle_schema_outboxdeadletters",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "outboxdeadletters"
     },
     {
@@ -39365,8 +39365,8 @@
       "source_location": "L1584",
       "_origin": "ast",
       "id": "drizzle_schema_idempotencykeys",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "idempotencykeys"
     },
     {
@@ -39409,8 +39409,8 @@
       "source_location": "L1641",
       "_origin": "ast",
       "id": "drizzle_schema_institutionalinvitation",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "institutionalinvitation"
     },
     {
@@ -39464,8 +39464,8 @@
       "source_location": "L1679",
       "_origin": "ast",
       "id": "drizzle_schema_emailoutbox",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "emailoutbox"
     },
     {
@@ -39761,8 +39761,8 @@
       "source_location": "L1909",
       "_origin": "ast",
       "id": "drizzle_schema_importstagingitems",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "importstagingitems"
     },
     {
@@ -44942,8 +44942,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "package_dependencies_diff_match_patch",
-      "community": 1099,
-      "community_name": "diff-match-patch",
+      "community": 772,
+      "community_name": "@trpc/react-query",
       "norm_label": "diff-match-patch"
     },
     {
@@ -44953,8 +44953,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "diff_match_patch",
-      "community": 1099,
-      "community_name": "diff-match-patch",
+      "community": 772,
+      "community_name": "@trpc/react-query",
       "norm_label": "diff-match-patch"
     },
     {
@@ -45294,8 +45294,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "package_dependencies_nanoid",
-      "community": 772,
-      "community_name": "@trpc/react-query",
+      "community": 1088,
+      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
       "norm_label": "nanoid"
     },
     {
@@ -45305,8 +45305,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "nanoid",
-      "community": 772,
-      "community_name": "@trpc/react-query",
+      "community": 1088,
+      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
       "norm_label": "nanoid"
     },
     {
@@ -47128,8 +47128,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "seed_tasks",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "seed-tasks.mjs"
     },
     {
@@ -47139,8 +47139,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "seed_tasks_db",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "db"
     },
     {
@@ -47150,8 +47150,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "seed_tasks_sampletasks",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "sampletasks"
     },
     {
@@ -47161,8 +47161,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "seed_tasks_seed",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "seed()"
     },
     {
@@ -47667,8 +47667,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_domain_auth_errors_test",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "domain-auth-errors.test.ts"
     },
     {
@@ -47876,8 +47876,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_email_outbox_service_test",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "email-outbox-service.test.ts"
     },
     {
@@ -47887,8 +47887,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_tests_integration_email_outbox_service_test_getdbmock",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "getdbmock"
     },
     {
@@ -47898,8 +47898,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "server_tests_integration_email_outbox_service_test_makefakedb",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "makefakedb()"
     },
     {
@@ -51693,8 +51693,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_router_test",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "tenant-onboarding-router.test.ts"
     },
     {
@@ -51704,8 +51704,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_router_test_onboardtenantmock",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "onboardtenantmock"
     },
     {
@@ -51715,8 +51715,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_router_test_platform_admin",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "platform_admin"
     },
     {
@@ -51726,8 +51726,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_router_test_normal_user",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "normal_user"
     },
     {
@@ -51737,8 +51737,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_router_test_valid_input",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "valid_input"
     },
     {
@@ -51748,8 +51748,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "tenant-onboarding-service.test.ts"
     },
     {
@@ -51759,8 +51759,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_getdbmock",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "getdbmock"
     },
     {
@@ -51770,8 +51770,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_getorganizationbyslugmock",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "getorganizationbyslugmock"
     },
     {
@@ -51781,8 +51781,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_createinvitationmock",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "createinvitationmock"
     },
     {
@@ -51792,8 +51792,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_logactivitymock",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "logactivitymock"
     },
     {
@@ -51803,8 +51803,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_makeorg",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "makeorg()"
     },
     {
@@ -51814,8 +51814,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_makeinvitation",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "makeinvitation()"
     },
     {
@@ -51825,8 +51825,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_base_input",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "base_input"
     },
     {
@@ -51836,8 +51836,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "server_tests_integration_tenant_onboarding_service_test_makefakedb",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "makefakedb()"
     },
     {
@@ -52683,8 +52683,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_core_cookies",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 18,
+      "community_name": "routers.ts",
       "norm_label": "cookies.ts"
     },
     {
@@ -52694,8 +52694,8 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "server_core_cookies_local_hosts",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 18,
+      "community_name": "routers.ts",
       "norm_label": "local_hosts"
     },
     {
@@ -52705,8 +52705,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "server_core_cookies_isipaddress",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 18,
+      "community_name": "routers.ts",
       "norm_label": "isipaddress()"
     },
     {
@@ -52716,8 +52716,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_core_cookies_issecurerequest",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 18,
+      "community_name": "routers.ts",
       "norm_label": "issecurerequest()"
     },
     {
@@ -52727,8 +52727,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_core_cookies_getsessioncookieoptions",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 18,
+      "community_name": "routers.ts",
       "norm_label": "getsessioncookieoptions()"
     },
     {
@@ -53299,8 +53299,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_core_notification",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "notification.ts"
     },
     {
@@ -53310,8 +53310,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "server_core_notification_notificationpayload",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "notificationpayload"
     },
     {
@@ -53321,8 +53321,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "server_core_notification_validate",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "validate()"
     },
     {
@@ -53332,8 +53332,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_core_notification_notifyowner",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "notifyowner()"
     },
     {
@@ -54267,8 +54267,8 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "server_config_email_email_config",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "email_config"
     },
     {
@@ -54388,8 +54388,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_config_retrypolicy",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "retrypolicy.ts"
     },
     {
@@ -54399,8 +54399,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "server_config_retrypolicy_retrypolicy",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "retrypolicy"
     },
     {
@@ -54410,8 +54410,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "server_config_retrypolicy_calculatebackoffms",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "calculatebackoffms()"
     },
     {
@@ -54421,8 +54421,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_config_retrypolicy_isretryable",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "isretryable()"
     },
     {
@@ -54432,8 +54432,8 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "server_config_retrypolicy_retrypolicyname",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "retrypolicyname"
     },
     {
@@ -58535,8 +58535,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "server_db_organizations_getorganizationbyslug",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "getorganizationbyslug()"
     },
     {
@@ -59712,8 +59712,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_db_tasks",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "tasks.ts"
     },
     {
@@ -59723,8 +59723,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "server_db_tasks_createtask",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "createtask()"
     },
     {
@@ -59734,8 +59734,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_db_tasks_gettaskbyid",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "gettaskbyid()"
     },
     {
@@ -59745,8 +59745,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_db_tasks_getalltasks",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "getalltasks()"
     },
     {
@@ -59756,8 +59756,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "server_db_tasks_listtasks",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtasks()"
     },
     {
@@ -59767,8 +59767,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "server_db_tasks_updatetask",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "updatetask()"
     },
     {
@@ -59778,8 +59778,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "server_db_tasks_deletetask",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "deletetask()"
     },
     {
@@ -59789,8 +59789,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "server_db_tasks_updatetaskstatus",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "updatetaskstatus()"
     },
     {
@@ -59800,8 +59800,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "server_db_tasks_gettaskstats",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "gettaskstats()"
     },
     {
@@ -59811,8 +59811,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "server_db_tasks_getoverduetasks",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "getoverduetasks()"
     },
     {
@@ -59822,8 +59822,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "server_db_tasks_listtaskcomments",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtaskcomments()"
     },
     {
@@ -59833,8 +59833,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_db_tasks_createtaskcomment",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "createtaskcomment()"
     },
     {
@@ -59844,8 +59844,8 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "server_db_tasks_listtaskattachments",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtaskattachments()"
     },
     {
@@ -59855,8 +59855,8 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "server_db_tasks_createtaskattachment",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "createtaskattachment()"
     },
     {
@@ -59866,8 +59866,8 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "server_db_tasks_deletetaskattachment",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "deletetaskattachment()"
     },
     {
@@ -59877,8 +59877,8 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "server_db_tasks_asserttaskinorganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "asserttaskinorganization()"
     },
     {
@@ -59888,8 +59888,8 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "server_db_tasks_gettaskbyidfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "gettaskbyidfororganization()"
     },
     {
@@ -59899,8 +59899,8 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "server_db_tasks_listtasksfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtasksfororganization()"
     },
     {
@@ -59910,8 +59910,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "server_db_tasks_updatetaskfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "updatetaskfororganization()"
     },
     {
@@ -59921,8 +59921,8 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "server_db_tasks_updatetaskstatusfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "updatetaskstatusfororganization()"
     },
     {
@@ -59932,8 +59932,8 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "server_db_tasks_deletetaskfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "deletetaskfororganization()"
     },
     {
@@ -59943,8 +59943,8 @@
       "source_location": "L276",
       "_origin": "ast",
       "id": "server_db_tasks_gettaskstatsfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "gettaskstatsfororganization()"
     },
     {
@@ -59954,8 +59954,8 @@
       "source_location": "L291",
       "_origin": "ast",
       "id": "server_db_tasks_getoverduetasksfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "getoverduetasksfororganization()"
     },
     {
@@ -59965,8 +59965,8 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "server_db_tasks_listtaskcommentsfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtaskcommentsfororganization()"
     },
     {
@@ -59976,8 +59976,8 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "server_db_tasks_createtaskcommentfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "createtaskcommentfororganization()"
     },
     {
@@ -59987,8 +59987,8 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "server_db_tasks_listtaskattachmentsfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "listtaskattachmentsfororganization()"
     },
     {
@@ -59998,8 +59998,8 @@
       "source_location": "L328",
       "_origin": "ast",
       "id": "server_db_tasks_createtaskattachmentfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "createtaskattachmentfororganization()"
     },
     {
@@ -60009,8 +60009,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "server_db_tasks_deletetaskattachmentfororganization",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "deletetaskattachmentfororganization()"
     },
     {
@@ -62891,8 +62891,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_autherrors",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "autherrors.ts"
     },
     {
@@ -62902,8 +62902,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "server_domain_autherrors_auth_error_codes",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "auth_error_codes"
     },
     {
@@ -62913,8 +62913,8 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "server_domain_autherrors_autherrorcode",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "autherrorcode"
     },
     {
@@ -82229,8 +82229,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection",
-      "community": 1073,
-      "community_name": "helmet",
+      "community": 20,
+      "community_name": "ProcessDetails.tsx",
       "norm_label": "knowledgeprojection.ts"
     },
     {
@@ -82240,8 +82240,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgenode",
-      "community": 1073,
-      "community_name": "helmet",
+      "community": 20,
+      "community_name": "ProcessDetails.tsx",
       "norm_label": "legalknowledgenode"
     },
     {
@@ -82251,8 +82251,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgeedge",
-      "community": 1073,
-      "community_name": "helmet",
+      "community": 20,
+      "community_name": "ProcessDetails.tsx",
       "norm_label": "legalknowledgeedge"
     },
     {
@@ -82262,8 +82262,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgeprojection",
-      "community": 1073,
-      "community_name": "helmet",
+      "community": 20,
+      "community_name": "ProcessDetails.tsx",
       "norm_label": "legalknowledgeprojection"
     },
     {
@@ -82273,8 +82273,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_projectlegalknowledge",
-      "community": 1073,
-      "community_name": "helmet",
+      "community": 20,
+      "community_name": "ProcessDetails.tsx",
       "norm_label": "projectlegalknowledge()"
     },
     {
@@ -92569,8 +92569,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_contactrouter",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "contactrouter.ts"
     },
     {
@@ -92580,8 +92580,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "server_routers_contactrouter_contactrouter",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "contactrouter"
     },
     {
@@ -93537,8 +93537,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "server_routers_invitationsrouter_invitationsrouter",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "invitationsrouter"
     },
     {
@@ -94791,8 +94791,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_taskrouter",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskrouter.ts"
     },
     {
@@ -94802,8 +94802,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "server_routers_taskrouter_authzlog",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "authzlog"
     },
     {
@@ -94813,8 +94813,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_routers_taskrouter_taskrouter",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskrouter"
     },
     {
@@ -94846,8 +94846,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_tenantonboardingrouter",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "tenantonboardingrouter.ts"
     },
     {
@@ -94857,8 +94857,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_routers_tenantonboardingrouter_tenantonboardingrouter",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "tenantonboardingrouter"
     },
     {
@@ -101828,8 +101828,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "dlqobservabilityservice.ts"
     },
     {
@@ -101839,8 +101839,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_log",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "log"
     },
     {
@@ -101850,8 +101850,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_dlqmetrics",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "dlqmetrics"
     },
     {
@@ -101861,8 +101861,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_stuckevent",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "stuckevent"
     },
     {
@@ -101872,8 +101872,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_poisoneventpattern",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "poisoneventpattern"
     },
     {
@@ -101883,8 +101883,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_getdlqmetrics",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "getdlqmetrics()"
     },
     {
@@ -101894,8 +101894,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_detectstuckevents",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "detectstuckevents()"
     },
     {
@@ -101905,8 +101905,8 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_detectpoisonevents",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "detectpoisonevents()"
     },
     {
@@ -101916,8 +101916,8 @@
       "source_location": "L172",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_releasestuckevent",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "releasestuckevent()"
     },
     {
@@ -101927,8 +101927,8 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "server_services_dlqobservabilityservice_replaydeadletter",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "replaydeadletter()"
     },
     {
@@ -103852,8 +103852,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "emailoutboxservice.ts"
     },
     {
@@ -103863,8 +103863,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_log",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "log"
     },
     {
@@ -103874,8 +103874,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_emailmessagetype",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "emailmessagetype"
     },
     {
@@ -103885,8 +103885,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_enqueueemailinput",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "enqueueemailinput"
     },
     {
@@ -103907,8 +103907,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_reclaimstaleprocessing",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "reclaimstaleprocessing()"
     },
     {
@@ -103918,8 +103918,8 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_claimpendingemails",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "claimpendingemails()"
     },
     {
@@ -103940,8 +103940,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_markemailfailedoutcome",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "markemailfailedoutcome"
     },
     {
@@ -103951,8 +103951,8 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "server_services_email_emailoutboxservice_markemailfailed",
-      "community": 29,
-      "community_name": "react",
+      "community": 689,
+      "community_name": "@radix-ui/react-aspect-ratio",
       "norm_label": "markemailfailed()"
     },
     {
@@ -107273,8 +107273,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_idempotencyservice",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "idempotencyservice.ts"
     },
     {
@@ -107284,8 +107284,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_log",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "log"
     },
     {
@@ -107295,8 +107295,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_idempotencyresult",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "idempotencyresult"
     },
     {
@@ -107328,8 +107328,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_failidempotencykey",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "failidempotencykey()"
     },
     {
@@ -107339,8 +107339,8 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_cleanupexpiredkeys",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "cleanupexpiredkeys()"
     },
     {
@@ -107812,8 +107812,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_importstagingservice",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "importstagingservice.ts"
     },
     {
@@ -107823,8 +107823,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "server_services_importstagingservice_log",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "log"
     },
     {
@@ -107845,8 +107845,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "server_services_importstagingservice_getstagingitems",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "getstagingitems()"
     },
     {
@@ -107856,8 +107856,8 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "server_services_importstagingservice_getstagingitem",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "getstagingitem()"
     },
     {
@@ -107867,8 +107867,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "server_services_importstagingservice_reviewaction",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "reviewaction"
     },
     {
@@ -107878,8 +107878,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "server_services_importstagingservice_reviewstagingitem",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "reviewstagingitem()"
     },
     {
@@ -107889,8 +107889,8 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "server_services_importstagingservice_bulkreviewstagingitems",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "bulkreviewstagingitems()"
     },
     {
@@ -107900,8 +107900,8 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "server_services_importstagingservice_cleanupexpiredstaging",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "cleanupexpiredstaging()"
     },
     {
@@ -107911,8 +107911,8 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "server_services_importstagingservice_deletesessionstaging",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "deletesessionstaging()"
     },
     {
@@ -107922,8 +107922,8 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "server_services_importstagingservice_stagingsummary",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "stagingsummary"
     },
     {
@@ -107933,8 +107933,8 @@
       "source_location": "L201",
       "_origin": "ast",
       "id": "server_services_importstagingservice_getstagingsummary",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 3,
+      "community_name": "getDb",
       "norm_label": "getstagingsummary()"
     },
     {
@@ -110012,8 +110012,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "knowledgeobservabilityservice.ts"
     },
     {
@@ -110023,8 +110023,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_knowledgeeventtype",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "knowledgeeventtype"
     },
     {
@@ -110034,8 +110034,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_knowledgeevent",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "knowledgeevent"
     },
     {
@@ -110045,8 +110045,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_bycorrelation",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "_bycorrelation"
     },
     {
@@ -110056,8 +110056,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_recordknowledgeevent",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "recordknowledgeevent()"
     },
     {
@@ -110067,8 +110067,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_getknowledgeevents",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "getknowledgeevents()"
     },
     {
@@ -110078,8 +110078,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_clearknowledgeevents",
-      "community": 20,
-      "community_name": "ProcessDetails.tsx",
+      "community": 797,
+      "community_name": "@aws-sdk/s3-request-presigner",
       "norm_label": "clearknowledgeevents()"
     },
     {
@@ -111662,8 +111662,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_observabilityservice",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "observabilityservice.ts"
     },
     {
@@ -111673,8 +111673,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_observabilityservice_loglevel",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "loglevel"
     },
     {
@@ -111684,8 +111684,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "server_services_observabilityservice_spanresult",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "spanresult"
     },
     {
@@ -111695,8 +111695,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "server_services_observabilityservice_structuredlogentry",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "structuredlogentry"
     },
     {
@@ -111706,8 +111706,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_services_observabilityservice_structuredlog",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "structuredlog()"
     },
     {
@@ -111717,8 +111717,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_services_observabilityservice_timed",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "timed()"
     },
     {
@@ -111728,8 +111728,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "server_services_observabilityservice_span",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "span()"
     },
     {
@@ -111739,8 +111739,8 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "server_services_observabilityservice_servicelogger",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "servicelogger()"
     },
     {
@@ -113213,8 +113213,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_outboxservice",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "outboxservice.ts"
     },
     {
@@ -113224,8 +113224,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "server_services_outboxservice_log",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "log"
     },
     {
@@ -113235,8 +113235,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_services_outboxservice_tenantcontext",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "tenantcontext"
     },
     {
@@ -113246,8 +113246,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_services_outboxservice_outboxeventpayload",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "outboxeventpayload"
     },
     {
@@ -113257,8 +113257,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "server_services_outboxservice_appendoutboxevent",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "appendoutboxevent()"
     },
     {
@@ -113268,8 +113268,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "server_services_outboxservice_claimpendingevents",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "claimpendingevents()"
     },
     {
@@ -113279,8 +113279,8 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "server_services_outboxservice_markdelivered",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "markdelivered()"
     },
     {
@@ -113290,8 +113290,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "server_services_outboxservice_markfailed",
-      "community": 783,
-      "community_name": "CopilotCenter.tsx",
+      "community": 2,
+      "community_name": "trpc.ts",
       "norm_label": "markfailed()"
     },
     {
@@ -119428,8 +119428,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_tasknotifications",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "tasknotifications.ts"
     },
     {
@@ -119439,8 +119439,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "server_services_tasknotifications_checktaskdeadlines",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "checktaskdeadlines()"
     },
     {
@@ -119450,8 +119450,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_services_tasknotifications_gettaskdeadlinesummary",
-      "community": 428,
-      "community_name": "embeddings.ts",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "gettaskdeadlinesummary()"
     },
     {
@@ -119461,8 +119461,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_taskreports",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "taskreports.ts"
     },
     {
@@ -119472,8 +119472,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_services_taskreports_generatetasksexcelreport",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "generatetasksexcelreport()"
     },
     {
@@ -119483,8 +119483,8 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "server_services_taskreports_generatetaskspdfcontent",
-      "community": 3,
-      "community_name": "getDb",
+      "community": 29,
+      "community_name": "react",
       "norm_label": "generatetaskspdfcontent()"
     },
     {
@@ -119736,8 +119736,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "tenantonboardingservice.ts"
     },
     {
@@ -119747,8 +119747,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_log",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "log"
     },
     {
@@ -119758,8 +119758,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_isduplicateentryerror",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "isduplicateentryerror()"
     },
     {
@@ -119769,8 +119769,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_orgesfera",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "orgesfera"
     },
     {
@@ -119780,8 +119780,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_onboardtenantinput",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "onboardtenantinput"
     },
     {
@@ -119791,8 +119791,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_onboardtenantresult",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "onboardtenantresult"
     },
     {
@@ -119802,8 +119802,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "server_services_tenantonboardingservice_onboardtenant",
-      "community": 689,
-      "community_name": "@radix-ui/react-aspect-ratio",
+      "community": 195,
+      "community_name": "sprint5xx-consolidation.test.ts",
       "norm_label": "onboardtenant()"
     },
     {
@@ -141538,8 +141538,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_termos_aditivos_addenda",
-      "community": 656,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 700,
+      "community_name": "@radix-ui/react-progress",
       "norm_label": "termos aditivos (addenda)"
     },
     {
@@ -141549,8 +141549,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_tipos_de_aditivo",
-      "community": 656,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 700,
+      "community_name": "@radix-ui/react-progress",
       "norm_label": "tipos de aditivo"
     },
     {
@@ -141626,8 +141626,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_exemplo_de_transi\u00e7\u00e3o_de_estado",
-      "community": 656,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 700,
+      "community_name": "@radix-ui/react-progress",
       "norm_label": "exemplo de transicao de estado"
     },
     {
@@ -141637,8 +141637,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_princ\u00edpios",
-      "community": 656,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 700,
+      "community_name": "@radix-ui/react-progress",
       "norm_label": "principios"
     },
     {
@@ -141648,8 +141648,8 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_addenda_fora_de_escopo",
-      "community": 656,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 700,
+      "community_name": "@radix-ui/react-progress",
       "norm_label": "fora de escopo"
     },
     {
@@ -141659,8 +141659,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_apostilles",
-      "community": 317,
-      "community_name": "evidenceSelectionService.ts",
+      "community": 656,
+      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
       "norm_label": "apostilles.md"
     },
     {
@@ -141769,8 +141769,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_architecture",
-      "community": 317,
-      "community_name": "evidenceSelectionService.ts",
+      "community": 656,
+      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
       "norm_label": "architecture.md"
     },
     {
@@ -142022,8 +142022,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_imported_contracts",
-      "community": 317,
-      "community_name": "evidenceSelectionService.ts",
+      "community": 656,
+      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
       "norm_label": "imported-contracts.md"
     },
     {
@@ -142363,8 +142363,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow",
-      "community": 317,
-      "community_name": "evidenceSelectionService.ts",
+      "community": 656,
+      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
       "norm_label": "workflow.md"
     },
     {
@@ -142429,8 +142429,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_abas_do_workspace",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "abas do workspace"
     },
     {
@@ -142440,8 +142440,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_1_contrato",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "1. contrato"
     },
     {
@@ -142451,8 +142451,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_2_aditivos",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "2. aditivos"
     },
     {
@@ -142462,8 +142462,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_3_apostilamentos",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "3. apostilamentos"
     },
     {
@@ -142473,8 +142473,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_4_documentos",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "4. documentos"
     },
     {
@@ -142484,8 +142484,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "docs_business_domains_contracts_workflow_5_ocorr\u00eancias",
-      "community": 694,
-      "community_name": "@radix-ui/react-dropdown-menu",
+      "community": 317,
+      "community_name": "evidenceSelectionService.ts",
       "norm_label": "5. ocorrencias"
     },
     {
@@ -160700,8 +160700,8 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "todo_fase_2_funcionalidades_core_do_mvp",
-      "community": 1081,
-      "community_name": "@radix-ui/react-avatar",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 2 - funcionalidades core do mvp"
     },
     {
@@ -160711,8 +160711,8 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "todo_formul\u00e1rio_novo_processo",
-      "community": 1081,
-      "community_name": "@radix-ui/react-avatar",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "formulario \"novo processo\""
     },
     {
@@ -160722,8 +160722,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "todo_integra\u00e7\u00e3o_com_ia_google_gemini",
-      "community": 1081,
-      "community_name": "@radix-ui/react-avatar",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "integracao com ia (google gemini)"
     },
     {
@@ -160733,8 +160733,8 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "todo_tela_de_detalhes_do_processo",
-      "community": 1081,
-      "community_name": "@radix-ui/react-avatar",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "tela de detalhes do processo"
     },
     {
@@ -160854,8 +160854,8 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "todo_fase_6_aplicar_personaliza\u00e7\u00e3o_e_downloads",
-      "community": 1104,
-      "community_name": "@tailwindcss/vite",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 6 - aplicar personalizacao e downloads"
     },
     {
@@ -160865,8 +160865,8 @@
       "source_location": "L216",
       "_origin": "ast",
       "id": "todo_integra\u00e7\u00e3o_de_cabe\u00e7alho_rodap\u00e9_nos_documentos",
-      "community": 1104,
-      "community_name": "@tailwindcss/vite",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "integracao de cabecalho/rodape nos documentos"
     },
     {
@@ -160876,8 +160876,8 @@
       "source_location": "L225",
       "_origin": "ast",
       "id": "todo_implementa\u00e7\u00e3o_de_downloads",
-      "community": 1104,
-      "community_name": "@tailwindcss/vite",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "implementacao de downloads"
     },
     {
@@ -161019,8 +161019,8 @@
       "source_location": "L307",
       "_origin": "ast",
       "id": "todo_fase_12_hist\u00f3rico_de_vers\u00f5es",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1082,
+      "community_name": "marked",
       "norm_label": "fase 12 - historico de versoes"
     },
     {
@@ -161030,8 +161030,8 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "todo_visualiza\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1082,
+      "community_name": "marked",
       "norm_label": "visualizacao de versoes"
     },
     {
@@ -161041,8 +161041,8 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "todo_restaura\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1082,
+      "community_name": "marked",
       "norm_label": "restauracao de versoes"
     },
     {
@@ -162317,8 +162317,8 @@
       "source_location": "L1114",
       "_origin": "ast",
       "id": "todo_m\u00f3dulo_5_gest\u00e3o_do_departamento_funcionalidades_colaborativas",
-      "community": 1092,
-      "community_name": "M\u00f3dulo 5 - Gest\u00e3o do Departamento: Funcionalidades Colaborativas",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "modulo 5 - gestao do departamento: funcionalidades colaborativas"
     },
     {
@@ -162328,8 +162328,8 @@
       "source_location": "L1116",
       "_origin": "ast",
       "id": "todo_backend_implementado",
-      "community": 1092,
-      "community_name": "M\u00f3dulo 5 - Gest\u00e3o do Departamento: Funcionalidades Colaborativas",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "backend (implementado)"
     },
     {
@@ -162339,8 +162339,8 @@
       "source_location": "L1122",
       "_origin": "ast",
       "id": "todo_frontend_pendente_de_integra\u00e7\u00e3o",
-      "community": 1092,
-      "community_name": "M\u00f3dulo 5 - Gest\u00e3o do Departamento: Funcionalidades Colaborativas",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "frontend (pendente de integracao)"
     },
     {
@@ -162834,8 +162834,8 @@
       "source_location": "L1457",
       "_origin": "ast",
       "id": "todo_fase_14_completar_interface_administrativa",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1081,
+      "community_name": "@radix-ui/react-avatar",
       "norm_label": "fase 14 - completar interface administrativa"
     },
     {
@@ -162845,8 +162845,8 @@
       "source_location": "L1459",
       "_origin": "ast",
       "id": "todo_tooltip_no_badge_de_plataforma",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1081,
+      "community_name": "@radix-ui/react-avatar",
       "norm_label": "tooltip no badge de plataforma"
     },
     {
@@ -162856,8 +162856,8 @@
       "source_location": "L1464",
       "_origin": "ast",
       "id": "todo_save_de_instru\u00e7\u00f5es_de_templates",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1081,
+      "community_name": "@radix-ui/react-avatar",
       "norm_label": "save de instrucoes de templates"
     },
     {
@@ -162867,8 +162867,8 @@
       "source_location": "L1472",
       "_origin": "ast",
       "id": "todo_crud_de_checklists",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 1081,
+      "community_name": "@radix-ui/react-avatar",
       "norm_label": "crud de checklists"
     },
     {
@@ -162878,8 +162878,8 @@
       "source_location": "L1484",
       "_origin": "ast",
       "id": "todo_fase_15_melhorias_finais_da_interface_administrativa",
-      "community": 1088,
-      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 15 - melhorias finais da interface administrativa"
     },
     {
@@ -162889,8 +162889,8 @@
       "source_location": "L1486",
       "_origin": "ast",
       "id": "todo_getplatforminstructions_din\u00e2mico",
-      "community": 1088,
-      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "getplatforminstructions dinamico"
     },
     {
@@ -162900,8 +162900,8 @@
       "source_location": "L1491",
       "_origin": "ast",
       "id": "todo_reordena\u00e7\u00e3o_de_passos",
-      "community": 1088,
-      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "reordenacao de passos"
     },
     {
@@ -162911,8 +162911,8 @@
       "source_location": "L1499",
       "_origin": "ast",
       "id": "todo_preview_de_mudan\u00e7as",
-      "community": 1088,
-      "community_name": "Fase 15 - Melhorias Finais da Interface Administrativa",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "preview de mudancas"
     },
     {
@@ -187612,7 +187612,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L42",
+      "source_location": "L43",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187623,7 +187623,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187634,7 +187634,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187645,7 +187645,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187657,7 +187657,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L10",
+      "source_location": "L11",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187669,7 +187669,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187681,7 +187681,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187693,7 +187693,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187705,7 +187705,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L4",
+      "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187717,7 +187717,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L8",
+      "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187729,7 +187729,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L6",
+      "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187741,7 +187741,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187753,7 +187753,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187765,7 +187765,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L2",
+      "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187777,7 +187777,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L2",
+      "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome",
@@ -187802,7 +187802,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "client/src/components/department-operation/DepartmentOperationHome.tsx",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_department_operation_departmentoperationhome_departmentoperationhome",
@@ -497242,5 +497242,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "6d2e039f9b8ca5a5ed4dec8d3a0710db94ff36fc"
+  "built_at_commit": "6b338a3fde8ce14559165ce0afb831f107481502"
 }

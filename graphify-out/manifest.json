@@ -8265,8 +8265,8 @@
     "semantic_hash": ""
   },
   "client/src/components/department-operation/DepartmentOperationHome.tsx": {
-    "mtime": 1784472872.0106735,
-    "ast_hash": "bc6a93ca5d21692cf2b2e13c4dae139a",
+    "mtime": 1785021452.159029,
+    "ast_hash": "a2634cefbc0b43ef45e64f355f21dfab",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/LegacyImportWizard.tsx": {
