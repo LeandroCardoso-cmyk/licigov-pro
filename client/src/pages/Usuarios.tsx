@@ -16,9 +16,14 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
   AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { UserPlus, Search, Send, X, Loader2 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
+import { UserPlus, Search, Send, X, Loader2, MoreVertical, ShieldAlert } from "lucide-react";
 import { translateAuthError } from "@/utils/authErrorMessages";
-import { ORG_ROLE_LABELS as ROLE_LABELS } from "@/utils/orgRoleLabels";
+import { ORG_ROLE_LABELS as ROLE_LABELS, orgRoleLabelShort } from "@/utils/orgRoleLabels";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 
 type OrgRole = "owner" | "admin" | "manager" | "operator" | "viewer";
 /** Papéis atribuíveis via UI — owner só é definido pelo onboarding de tenant (nunca aqui). */
@@ -50,11 +55,16 @@ export default function Usuarios() {
   const [inviteRole, setInviteRole] = useState<AssignableRole>("operator");
   const [inviteError, setInviteError] = useState("");
 
-  const [pendingRemoval, setPendingRemoval] = useState<{ userId: number; label: string } | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{ userId: number; label: string; kind: "deactivate" | "remove" } | null>(null);
+
+  // PR A.1 (refinamento) — autorização de EXPERIÊNCIA por papel de organização (o backend já
+  // protege cada procedure com orgRoleProcedure("admin")). Só admin/owner gerenciam usuários.
+  const { canManageUsers, isLoading: roleLoading } = useOrgRole();
 
   const currentOrgQuery = trpc.organizations.getCurrent.useQuery();
-  const membersQuery = trpc.organizations.listAllMembersWithUsers.useQuery();
-  const invitationsQuery = trpc.invitations.list.useQuery();
+  // Queries administrativas só disparam para quem pode gerenciar — evita FORBIDDEN desnecessário.
+  const membersQuery = trpc.organizations.listAllMembersWithUsers.useQuery(undefined, { enabled: canManageUsers });
+  const invitationsQuery = trpc.invitations.list.useQuery(undefined, { enabled: canManageUsers });
 
   const invalidateAll = () => {
     utils.organizations.listAllMembersWithUsers.invalidate();
@@ -99,6 +109,11 @@ export default function Usuarios() {
     onError: (err) => toast.error(translateAuthError(err.message)),
   });
 
+  const removeMutation = trpc.organizations.removeMember.useMutation({
+    onSuccess: () => { toast.success("Usuário removido da organização."); setPendingRemoval(null); invalidateAll(); },
+    onError: (err) => { toast.error(translateAuthError(err.message)); setPendingRemoval(null); },
+  });
+
   const members = membersQuery.data ?? [];
   const filteredMembers = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -116,6 +131,39 @@ export default function Usuarios() {
     setInviteError("");
     createInviteMutation.mutate({ email: inviteEmail, role: inviteRole, invitedName: inviteName || undefined });
   };
+
+  // ── Guarda de rota: acesso direto por URL sem papel admin/owner → "Acesso não autorizado".
+  //    (O backend já retorna FORBIDDEN; isto é a experiência correta no frontend.)
+  if (roleLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (!canManageUsers) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <ShieldAlert className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Acesso não autorizado</CardTitle>
+            <CardDescription>
+              A gestão de usuários é restrita a administradores da organização. Fale com um
+              administrador se precisar de acesso.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => (window.location.href = "/dashboard")}>
+              Voltar ao início
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background">
@@ -237,58 +285,85 @@ export default function Usuarios() {
                       </TableCell>
                     </TableRow>
                   )}
-                  {filteredMembers.map(m => (
+                  {filteredMembers.map(m => {
+                    const isOwner = m.role === "owner";
+                    const memberLabel = m.user.name ?? m.user.email ?? "este membro";
+                    return (
                     <TableRow key={m.userId}>
                       <TableCell className="font-medium">{m.user.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{m.user.email ?? "—"}</TableCell>
                       <TableCell>
-                        {m.role === "owner" ? (
-                          <Badge variant="secondary">{ROLE_LABELS.owner}</Badge>
-                        ) : (
-                          <Select
-                            value={m.role}
-                            onValueChange={(v) => updateRoleMutation.mutate({ userId: m.userId, role: v as AssignableRole })}
-                            disabled={updateRoleMutation.isPending}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ASSIGNABLE_ROLES.map(role => (
-                                <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        {/* Papel: badge com rótulo CURTO (owner→"Administrador" na tabela). */}
+                        <Badge variant={isOwner ? "secondary" : "outline"}>{orgRoleLabelShort(m.role)}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={m.ativo ? "default" : "outline"}>{m.ativo ? "Ativo" : "Desativado"}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(m.user.lastSignedIn)}</TableCell>
                       <TableCell className="text-right">
-                        {m.role !== "owner" && (
-                          m.ativo ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setPendingRemoval({ userId: m.userId, label: m.user.name ?? m.user.email ?? "este membro" })}
-                            >
-                              Desativar
+                        {/* Menu de contexto (⋮) — estruturado para expansão futura. */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações para ${memberLabel}`}>
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={activateMutation.isPending}
-                              onClick={() => activateMutation.mutate({ userId: m.userId })}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuLabel className="truncate">{memberLabel}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem disabled>Editar usuário (em breve)</DropdownMenuItem>
+
+                            {/* Alterar papel — submenu (owner não pode ser alterado por esta API). */}
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger disabled={isOwner || updateRoleMutation.isPending}>
+                                Alterar papel
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {ASSIGNABLE_ROLES.map(role => (
+                                  <DropdownMenuItem
+                                    key={role}
+                                    disabled={m.role === role}
+                                    onClick={() => updateRoleMutation.mutate({ userId: m.userId, role })}
+                                  >
+                                    {ROLE_LABELS[role]}
+                                    {m.role === role && <span className="ml-auto text-xs text-muted-foreground">atual</span>}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+
+                            <DropdownMenuSeparator />
+
+                            {m.ativo ? (
+                              <DropdownMenuItem
+                                disabled={isOwner}
+                                onClick={() => setPendingRemoval({ userId: m.userId, label: memberLabel, kind: "deactivate" })}
+                              >
+                                Desativar
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                disabled={activateMutation.isPending}
+                                onClick={() => activateMutation.mutate({ userId: m.userId })}
+                              >
+                                Reativar
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuItem
+                              variant="destructive"
+                              disabled={isOwner}
+                              onClick={() => setPendingRemoval({ userId: m.userId, label: memberLabel, kind: "remove" })}
                             >
-                              Reativar
-                            </Button>
-                          )
-                        )}
+                              Remover da organização
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -384,17 +459,25 @@ export default function Usuarios() {
       <AlertDialog open={pendingRemoval !== null} onOpenChange={(open) => !open && setPendingRemoval(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Desativar membro</AlertDialogTitle>
+            <AlertDialogTitle>
+              {pendingRemoval?.kind === "remove" ? "Remover da organização" : "Desativar membro"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingRemoval && `${pendingRemoval.label} perderá acesso a esta organização. Você pode reativar depois.`}
+              {pendingRemoval && (pendingRemoval.kind === "remove"
+                ? `${pendingRemoval.label} deixará de ter acesso a esta organização.`
+                : `${pendingRemoval.label} perderá acesso a esta organização. Você pode reativar depois.`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => pendingRemoval && deactivateMutation.mutate({ userId: pendingRemoval.userId })}
+              onClick={() => {
+                if (!pendingRemoval) return;
+                if (pendingRemoval.kind === "remove") removeMutation.mutate({ userId: pendingRemoval.userId });
+                else deactivateMutation.mutate({ userId: pendingRemoval.userId });
+              }}
             >
-              Desativar
+              {pendingRemoval?.kind === "remove" ? "Remover" : "Desativar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

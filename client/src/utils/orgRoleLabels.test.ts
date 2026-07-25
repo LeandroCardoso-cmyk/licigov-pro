@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { ORG_ROLE_LABELS, orgRoleLabel } from "./orgRoleLabels";
+import { ORG_ROLE_LABELS, ORG_ROLE_LABELS_SHORT, orgRoleLabel, orgRoleLabelShort } from "./orgRoleLabels";
 
 describe("orgRoleLabels", () => {
   it("owner é 'Administrador da Organização' — nunca 'Proprietário(a)'", () => {
@@ -31,5 +31,15 @@ describe("orgRoleLabels", () => {
   it("orgRoleLabel: papel conhecido → rótulo; desconhecido → o próprio valor (defensivo)", () => {
     expect(orgRoleLabel("operator")).toBe("Operador");
     expect(orgRoleLabel("desconhecido")).toBe("desconhecido");
+  });
+
+  it("SHORT (tabela): owner vira 'Administrador' (curto); descritivo mantém 'Administrador da Organização'", () => {
+    expect(ORG_ROLE_LABELS_SHORT.owner).toBe("Administrador");
+    expect(ORG_ROLE_LABELS.owner).toBe("Administrador da Organização");
+    expect(orgRoleLabelShort("owner")).toBe("Administrador");
+    // Demais papéis: curto == descritivo.
+    for (const r of ["admin", "manager", "operator", "viewer"] as const) {
+      expect(ORG_ROLE_LABELS_SHORT[r]).toBe(ORG_ROLE_LABELS[r]);
+    }
   });
 });

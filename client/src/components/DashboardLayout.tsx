@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -41,9 +42,10 @@ const menuItems = [
   { icon: ScrollText, label: "Contratos", path: "/contratos" },
   { icon: HelpCircle, label: "Tirar Dúvidas", path: "/tirar-duvidas" },
   { icon: LibraryBig, label: "Templates", path: "/templates" },
-  // PR A.1 — gestão de membros/convites da organização (qualquer usuário autenticado; o próprio
-  // router exige papel admin/owner para as ações — a página trata o resto).
-  { icon: Users, label: "Usuários", path: "/usuarios" },
+  // PR A.1 — gestão de membros/convites da organização. `requiresOrgAdmin`: só aparece para papel
+  // organizacional admin/owner (mesmo gate do backend, orgRoleProcedure("admin")). Operador,
+  // Visualizador e Gestor NÃO veem este item.
+  { icon: Users, label: "Usuários", path: "/usuarios", requiresOrgAdmin: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
   { icon: Building2, label: "Organizações", path: "/admin/organizacoes", adminOnly: true },
@@ -140,6 +142,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { canManageUsers } = useOrgRole();
   const { theme, setTheme } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -236,6 +239,8 @@ function DashboardLayoutContent({
             <SidebarMenu className="px-2 py-1">
               {menuItems
                 .filter(item => !item.adminOnly || user?.role === "admin")
+                // PR A.1 — itens `requiresOrgAdmin` só para papel organizacional admin/owner.
+                .filter(item => !("requiresOrgAdmin" in item && item.requiresOrgAdmin) || canManageUsers)
                 .map(item => {
                 const isActive = location === item.path;
                 return (

@@ -30,13 +30,14 @@ export default function AceitarConvite() {
   const acceptMutation = trpc.invitations.accept.useMutation({
     onSuccess: () => {
       utils.auth.me.invalidate();
-      navigate("/dashboard");
+      // Primeiro acesso vindo do convite → tela de boas-vindas institucional (exibida uma vez).
+      navigate("/bem-vindo");
     },
     onError: (err) => setError(translateAuthError(err.message)),
   });
 
   const acceptExistingMutation = trpc.invitations.acceptExisting.useMutation({
-    onSuccess: () => navigate("/dashboard"),
+    onSuccess: () => navigate("/bem-vindo"),
     onError: (err) => setError(translateAuthError(err.message)),
   });
 

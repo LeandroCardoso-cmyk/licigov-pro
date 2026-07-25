@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import EsqueciSenha from "./pages/EsqueciSenha";
 import RedefinirSenha from "./pages/RedefinirSenha";
 import AceitarConvite from "./pages/AceitarConvite";
+import BemVindo from "./pages/BemVindo";
 import Usuarios from "./pages/Usuarios";
 import AdminOrganizacoes from "./pages/AdminOrganizacoes";
 import Dashboard from "./pages/Dashboard";
@@ -220,6 +221,7 @@ function Router() {
       <Route path={"/esqueci-senha"} component={EsqueciSenha} />
       <Route path={"/redefinir-senha"} component={RedefinirSenha} />
       <Route path={"/convite"} component={AceitarConvite} />
+      <Route path={"/bem-vindo"} component={BemVindo} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

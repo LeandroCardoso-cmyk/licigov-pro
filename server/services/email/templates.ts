@@ -67,7 +67,7 @@ ${opts.bodyHtml}
 </td></tr>
 <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
 <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.5;">
-Esta é uma mensagem automática do LiciGov Pro. Se você não esperava este e-mail, pode ignorá-lo com segurança — nenhuma ação será tomada.
+Esta é uma mensagem automática do LiciGov Pro.
 </p>
 </td></tr>
 </table>
@@ -79,7 +79,7 @@ Esta é uma mensagem automática do LiciGov Pro. Se você não esperava este e-m
 
 function button(url: string, label: string): string {
   return `<div style="text-align:center;margin:28px 0;">
-<a href="${escapeHtml(url)}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 28px;border-radius:6px;">${escapeHtml(label)}</a>
+<a href="${escapeHtml(url)}" style="display:inline-block;background:#0369a1;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 30px;border-radius:6px;">${escapeHtml(label)}</a>
 </div>
 <p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;word-break:break-all;">Ou copie e cole este link no navegador:<br>${escapeHtml(url)}</p>`;
 }

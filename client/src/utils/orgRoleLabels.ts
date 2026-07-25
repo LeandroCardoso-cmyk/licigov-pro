@@ -11,6 +11,7 @@
 
 export type OrgRoleKey = "owner" | "admin" | "manager" | "operator" | "viewer";
 
+/** Rótulos DESCRITIVOS (longos) — detalhes, permissões, convites, aceite, e-mail. */
 export const ORG_ROLE_LABELS: Record<OrgRoleKey, string> = {
   owner: "Administrador da Organização",
   admin: "Administrador",
@@ -19,7 +20,25 @@ export const ORG_ROLE_LABELS: Record<OrgRoleKey, string> = {
   viewer: "Visualizador",
 };
 
-/** Rótulo seguro para qualquer string de papel (cai no próprio valor se desconhecido). */
+/**
+ * Rótulos CURTOS — para tabelas/badges (espaço restrito). Só `owner` difere do descritivo:
+ * "Administrador da Organização" é longo demais para uma célula → "Administrador" na listagem
+ * (Seção 6 da homologação). Apenas apresentação; o enum interno permanece `owner`.
+ */
+export const ORG_ROLE_LABELS_SHORT: Record<OrgRoleKey, string> = {
+  owner: "Administrador",
+  admin: "Administrador",
+  manager: "Gestor",
+  operator: "Operador",
+  viewer: "Visualizador",
+};
+
+/** Rótulo descritivo (longo) seguro para qualquer string de papel. */
 export function orgRoleLabel(role: string): string {
   return ORG_ROLE_LABELS[role as OrgRoleKey] ?? role;
+}
+
+/** Rótulo curto (tabelas/badges) seguro para qualquer string de papel. */
+export function orgRoleLabelShort(role: string): string {
+  return ORG_ROLE_LABELS_SHORT[role as OrgRoleKey] ?? role;
 }

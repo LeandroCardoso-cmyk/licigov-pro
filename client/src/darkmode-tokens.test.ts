@@ -37,6 +37,7 @@ const MIGRATED_FILES = [
   "client/src/pages/AceitarConvite.tsx",
   "client/src/pages/Usuarios.tsx",
   "client/src/pages/AdminOrganizacoes.tsx",
+  "client/src/pages/BemVindo.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {

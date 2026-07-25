@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1784928097.211969,
-    "ast_hash": "a977a893c4b26d2394634c28b6ef95c1",
+    "mtime": 1784988340.0448787,
+    "ast_hash": "5516e866d6a832e512c222d11618ed90",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1784928109.1239686,
-    "ast_hash": "42b2e7960e610885c82a6de787e871ae",
+    "mtime": 1784988253.7128808,
+    "ast_hash": "3c063705bafc77fa384b88863d5969c0",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -9660,8 +9660,8 @@
     "semantic_hash": ""
   },
   "client/src/darkmode-tokens.test.ts": {
-    "mtime": 1784928252.4719653,
-    "ast_hash": "a660e1461865706d05a212a073316c40",
+    "mtime": 1784988475.9688756,
+    "ast_hash": "12dc002daaeedce47f79acfd5660531e",
     "semantic_hash": ""
   },
   "drizzle/0285_schema_reconciliation.sql": {
@@ -9965,8 +9965,8 @@
     "semantic_hash": ""
   },
   "server/services/email/templates.ts": {
-    "mtime": 1784947414.8665688,
-    "ast_hash": "094852a6532a344a0e25f2a12e92ebe0",
+    "mtime": 1784988367.6448781,
+    "ast_hash": "8820a58e80161127d74a82536b404c7c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/email-dispatcher.test.ts": {
@@ -10075,8 +10075,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/AceitarConvite.tsx": {
-    "mtime": 1784947403.0265691,
-    "ast_hash": "0552f2344008974c2494ce58978a3bd1",
+    "mtime": 1784988348.0648785,
+    "ast_hash": "d6012915f3a7a36e4a21bde6c8761cc4",
     "semantic_hash": ""
   },
   "client/src/pages/EsqueciSenha.tsx": {
@@ -10125,8 +10125,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Usuarios.tsx": {
-    "mtime": 1784947378.1385698,
-    "ast_hash": "6922938f100ef0905e637596ea5ded75",
+    "mtime": 1784950030.6689975,
+    "ast_hash": "37f7a3346241f1fc9c4e284a0cb1c3c3",
     "semantic_hash": ""
   },
   "client/src/utils/slugify.test.ts": {
@@ -10165,13 +10165,48 @@
     "semantic_hash": ""
   },
   "client/src/utils/orgRoleLabels.test.ts": {
-    "mtime": 1784947450.362568,
-    "ast_hash": "e8b5534aa000a6882fa24806a2e845a4",
+    "mtime": 1784988523.0408745,
+    "ast_hash": "99e7f8c1415d497870640f2dc82b1ec5",
     "semantic_hash": ""
   },
   "client/src/utils/orgRoleLabels.ts": {
-    "mtime": 1784947357.4865704,
-    "ast_hash": "52f920d942c61e41365a1333757a15a8",
+    "mtime": 1784949806.0330026,
+    "ast_hash": "9d38f9103fdef26d6336c53475eaa1fa",
+    "semantic_hash": ""
+  },
+  "client/src/_core/hooks/useOrgRole.ts": {
+    "mtime": 1784949820.6890023,
+    "ast_hash": "69419cec8bdc3346c7b9021199937906",
+    "semantic_hash": ""
+  },
+  "client/src/pages/BemVindo.tsx": {
+    "mtime": 1784988322.4128792,
+    "ast_hash": "21fa96b743fa86ec061fc1aed6949077",
+    "semantic_hash": ""
+  },
+  "client/src/utils/orgPermissions.test.ts": {
+    "mtime": 1784988438.9488764,
+    "ast_hash": "df4d6c64ac440b81316d4f1acd24936a",
+    "semantic_hash": ""
+  },
+  "client/src/utils/orgPermissions.ts": {
+    "mtime": 1784949795.4210029,
+    "ast_hash": "149f1daaac2ff6432015d97b0751c037",
+    "semantic_hash": ""
+  },
+  "client/src/utils/welcomeGate.test.ts": {
+    "mtime": 1784988449.5208762,
+    "ast_hash": "9f03615497ed057e22ea1b02c7f1f0ae",
+    "semantic_hash": ""
+  },
+  "client/src/utils/welcomeGate.ts": {
+    "mtime": 1784988303.4808795,
+    "ast_hash": "0d0793e42105e14dd88fa5655e8ac6b2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/user-management-rbac.test.ts": {
+    "mtime": 1784988424.2368767,
+    "ast_hash": "f7e6153bf35005a832796266089c0e7d",
     "semantic_hash": ""
   }
 }
