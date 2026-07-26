@@ -55,7 +55,8 @@ const START_OPTIONS: { value: StartOption; title: string; description: string }[
   ];
 
 export type NovoProcessoWizardProps = {
-  onCreated?: (processId: string) => void;
+  /** Recebe o processId e a forma de início escolhida (para abrir na etapa certa). */
+  onCreated?: (processId: string, startOption: StartOption) => void;
 };
 
 export default function NovoProcessoWizard({
@@ -67,7 +68,7 @@ export default function NovoProcessoWizard({
 
   const createProcess = trpc.procurementProcess.createProcess.useMutation({
     onSuccess: (result) => {
-      onCreated?.(result.process.id);
+      onCreated?.(result.process.id, result.process.startOption as StartOption);
     },
   });
 

@@ -23,15 +23,15 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
-  rascunho: "bg-gray-100 text-gray-700",
+  rascunho: "bg-muted text-foreground",
   em_andamento: "bg-blue-100 text-blue-700",
   em_revisao: "bg-amber-100 text-amber-700",
   emitido: "bg-green-100 text-green-700",
-  arquivado: "bg-gray-100 text-gray-500",
+  arquivado: "bg-muted text-muted-foreground",
 };
 
 const ITEM_STATUS_META: { key: string; label: string; className: string }[] = [
-  { key: "pendente", label: "Pendentes", className: "bg-gray-100 text-gray-700" },
+  { key: "pendente", label: "Pendentes", className: "bg-muted text-foreground" },
   { key: "em_analise", label: "Em análise", className: "bg-blue-100 text-blue-700" },
   { key: "aprovado", label: "Aprovados", className: "bg-green-100 text-green-700" },
   { key: "rejeitado", label: "Rejeitados", className: "bg-red-100 text-red-700" },
@@ -51,7 +51,7 @@ export default function ProcessOverview({
 
   if (!processId) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+      <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
         Selecione um processo para ver o resumo.
       </div>
     );
@@ -60,16 +60,16 @@ export default function ProcessOverview({
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4 p-2">
-        <div className="h-20 rounded-xl bg-gray-100" />
-        <div className="h-24 rounded-xl bg-gray-100" />
-        <div className="h-40 rounded-xl bg-gray-100" />
+        <div className="h-20 rounded-xl bg-muted" />
+        <div className="h-24 rounded-xl bg-muted" />
+        <div className="h-40 rounded-xl bg-muted" />
       </div>
     );
   }
 
   if (!data || !data.process) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+      <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
         Processo não encontrado.
       </div>
     );
@@ -87,18 +87,18 @@ export default function ProcessOverview({
   return (
     <div className="space-y-4 p-2">
       {/* Cabeçalho */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-sm font-semibold text-gray-900">
+            <p className="font-mono text-sm font-semibold text-foreground">
               {process.processNumber}
             </p>
-            <p className="mt-1 text-gray-700">{process.object}</p>
+            <p className="mt-1 text-foreground">{process.object}</p>
           </div>
           <span
             className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
               PROCESS_STATUS_CLASSES[process.status] ??
-              "bg-gray-100 text-gray-700"
+              "bg-muted text-foreground"
             }`}
           >
             {process.status}
@@ -108,10 +108,10 @@ export default function ProcessOverview({
           <span className="rounded-md bg-indigo-50 px-2 py-1 text-indigo-700">
             Etapa: {STAGE_LABELS[process.currentStage] ?? process.currentStage}
           </span>
-          <span className="rounded-md bg-gray-50 px-2 py-1 text-gray-600">
+          <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
             Modalidade: {process.modality || "—"}
           </span>
-          <span className="rounded-md bg-gray-50 px-2 py-1 text-gray-600">
+          <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
             Copilotos: {process.activeCopilots.length}
           </span>
         </div>
@@ -122,9 +122,9 @@ export default function ProcessOverview({
         {ITEM_STATUS_META.map((m) => (
           <div
             key={m.key}
-            className="rounded-xl border border-gray-200 bg-white p-4 text-center"
+            className="rounded-xl border border-border bg-card p-4 text-center"
           >
-            <p className="text-2xl font-semibold text-gray-900">
+            <p className="text-2xl font-semibold text-foreground">
               {counts[m.key] ?? 0}
             </p>
             <span
@@ -137,23 +137,23 @@ export default function ProcessOverview({
       </div>
 
       {/* Documentos */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 font-semibold text-gray-900">
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 font-semibold text-foreground">
           Documentos gerados
         </h2>
         {documents.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhum documento ainda.</p>
+          <p className="text-sm text-muted-foreground">Nenhum documento ainda.</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {documents.map((d) => (
               <li key={d.id} className="flex items-center justify-between py-2">
                 <div>
-                  <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium uppercase text-gray-600">
+                  <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs font-medium uppercase text-muted-foreground">
                     {d.kind}
                   </span>
-                  <span className="text-sm text-gray-800">{d.title}</span>
+                  <span className="text-sm text-foreground">{d.title}</span>
                 </div>
-                <span className="text-xs text-gray-500">{d.status}</span>
+                <span className="text-xs text-muted-foreground">{d.status}</span>
               </li>
             ))}
           </ul>
@@ -161,18 +161,18 @@ export default function ProcessOverview({
       </div>
 
       {/* Eventos recentes */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 font-semibold text-gray-900">Eventos recentes</h2>
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 font-semibold text-foreground">Eventos recentes</h2>
         {recentTimeline.length === 0 ? (
-          <p className="text-sm text-gray-400">Sem eventos.</p>
+          <p className="text-sm text-muted-foreground">Sem eventos.</p>
         ) : (
           <ul className="space-y-2">
             {recentTimeline.map((e) => (
               <li key={e.id} className="flex items-start gap-2 text-sm">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                 <div>
-                  <p className="text-gray-800">{e.summary}</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-foreground">{e.summary}</p>
+                  <p className="text-xs text-muted-foreground">
                     {e.actor} ·{" "}
                     {new Date(e.createdAt).toLocaleString("pt-BR")}
                   </p>

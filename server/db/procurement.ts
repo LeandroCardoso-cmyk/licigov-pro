@@ -309,3 +309,20 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
     .where(and(eq(generatedDocumentsTable.processId, processId), eq(generatedDocumentsTable.organizationId, orgId)));
   return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, status: r.status }));
 }
+
+/** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
+export async function getGeneratedDocumentByKind(
+  processId: string, orgId: number, kind: string,
+): Promise<{ id: string; kind: string; title: string; content: string; status: string; updatedAt: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(generatedDocumentsTable)
+    .where(and(
+      eq(generatedDocumentsTable.processId, processId),
+      eq(generatedDocumentsTable.organizationId, orgId),
+      eq(generatedDocumentsTable.kind, kind),
+    )).limit(1);
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status, updatedAt: fromDb(r.updatedAt) };
+}

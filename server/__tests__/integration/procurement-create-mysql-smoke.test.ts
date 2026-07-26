@@ -15,7 +15,9 @@ import mysql from "mysql2/promise";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import {
   insertProcess, getProcess, listProcesses, recordProcessEvent, listProcessTimeline,
+  getGeneratedDocumentByKind, listGeneratedDocuments,
 } from "../../db/procurement";
+import { generateDFDDraft, saveDFDDraft } from "../../services/procurementProcessService";
 
 const DB = process.env.DATABASE_URL;
 
@@ -43,6 +45,18 @@ const DDL_TIMELINE = `CREATE TABLE IF NOT EXISTS \`process_timeline\` (
   PRIMARY KEY (\`id\`), INDEX \`idx_ptl_org\` (\`organization_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
 
+const DDL_GENERATED_DOCS = `CREATE TABLE IF NOT EXISTS \`generated_documents\` (
+  \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
+  \`process_id\` VARCHAR(20) NOT NULL, \`kind\` VARCHAR(20) NOT NULL DEFAULT 'etp',
+  \`title\` VARCHAR(500) NOT NULL DEFAULT '', \`content\` TEXT NULL,
+  \`status\` VARCHAR(20) NOT NULL DEFAULT 'rascunho', \`sources\` TEXT NULL,
+  \`modality\` VARCHAR(40) NULL, \`form\` VARCHAR(20) NULL, \`platform\` VARCHAR(40) NULL,
+  \`legal_justification\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+  \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  \`updated_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (\`id\`), INDEX \`idx_gd_org\` (\`organization_id\`), INDEX \`idx_gd_process\` (\`process_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+
 const ORG_A = 950100;
 const ORG_B = 950101;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -51,6 +65,7 @@ async function cleanup() {
   const conn = await mysql.createConnection(DB!);
   await conn.query("DELETE FROM `procurement_processes` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
   await conn.query("DELETE FROM `process_timeline` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
+  await conn.query("DELETE FROM `generated_documents` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
   await conn.end();
 }
 
@@ -59,6 +74,7 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     const conn = await mysql.createConnection(DB!);
     await conn.query(DDL_PROCESSES);
     await conn.query(DDL_TIMELINE);
+    await conn.query(DDL_GENERATED_DOCS);
     await conn.end();
     await cleanup();
   });
@@ -117,5 +133,40 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     // A modalidade real é projetada (Escopo 3 — Central).
     expect(rows[0].modality).toBeDefined();
     expect(rows[0].updatedAt).toMatch(ISO);
+  });
+
+  it('"Criar DFD do zero": cria, salva e persiste o DFD (kind dfd) no MySQL real', async () => {
+    const process = createProcurementWorkspace({
+      organizationId: ORG_A, processNumber: "400/2026", object: "Aquisição de Equipamentos de Informática",
+      startOption: "criar_dfd", responsibleUser: 1, correlationId: "smoke-dfd",
+    });
+    await insertProcess(process);
+
+    // Criar DFD do zero → documento canônico kind "dfd", rascunho.
+    const created = await generateDFDDraft({
+      organizationId: ORG_A, processId: process.id, object: process.object, correlationId: "smoke-dfd",
+    });
+    expect(created.kind).toBe("dfd");
+    expect(created.status).toBe("rascunho");
+
+    // Persistido e recuperável (com conteúdo) — reflete na Visão Geral (listGeneratedDocuments).
+    const loaded = await getGeneratedDocumentByKind(process.id, ORG_A, "dfd");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.content).toContain("Documento de Formalização da Demanda");
+    const docs = await listGeneratedDocuments(process.id, ORG_A);
+    expect(docs.some(d => d.kind === "dfd")).toBe(true);
+
+    // Salvar edição → atualiza o MESMO documento (sem duplicar).
+    await saveDFDDraft({
+      organizationId: ORG_A, processId: process.id, object: process.object,
+      content: "# DFD revisado\nConteúdo editado pelo servidor.", correlationId: "smoke-dfd",
+    });
+    const afterSave = await listGeneratedDocuments(process.id, ORG_A).then(ds => ds.filter(d => d.kind === "dfd"));
+    expect(afterSave.length).toBe(1); // retry/edição não duplica
+    const reloaded = await getGeneratedDocumentByKind(process.id, ORG_A, "dfd");
+    expect(reloaded!.content).toContain("DFD revisado");
+
+    // Isolamento: outro tenant não enxerga o DFD.
+    expect(await getGeneratedDocumentByKind(process.id, ORG_B, "dfd")).toBeNull();
   });
 });

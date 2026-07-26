@@ -1,0 +1,111 @@
+/**
+ * PR B (homologação) — "Criar DFD do zero" no fluxo canônico.
+ *
+ * Cobre o ROUTER (generateDFD/saveDFD/loadDFD): criação do rascunho estruturado,
+ * edição/salvamento, idempotência (id determinístico → retry não duplica),
+ * isolamento cross-tenant (NOT_FOUND, sem gravar) e o construtor de domínio do
+ * rascunho (art. 12 §1º). Persistência mockada; a persistência real é coberta pelo
+ * smoke MySQL.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../../db/procurement");
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn().mockResolvedValue({
+    organizationId: 1,
+    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
+}));
+vi.mock("../../_core/sdk", () => ({
+  sdk: { signSession: vi.fn().mockResolvedValue("fake-token"), authenticateRequest: vi.fn().mockResolvedValue(null) },
+}));
+
+import { procurementProcessRouter } from "../../routers/procurementProcessRouter";
+import * as procDb from "../../db/procurement";
+import { buildDFDDraft } from "../../domain/generatedDocument";
+import { makeContext, mockUser } from "../helpers/fixtures";
+
+const PID = "proc-100-2026";
+const mockProcess = { id: PID, organizationId: 1, processNumber: "100/2026", object: "Aquisição de Equipamentos de Informática" };
+
+describe("procurementProcess — Criar DFD do zero (PR B)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(procDb.getProcess).mockResolvedValue(mockProcess as any);
+    vi.mocked(procDb.insertGeneratedDocument).mockResolvedValue(null as any);
+    vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null as any);
+  });
+
+  it("generateDFD cria rascunho estruturado kind 'dfd' status 'rascunho'", async () => {
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    const { document } = await caller.generateDFD({ processId: PID });
+
+    expect(document.kind).toBe("dfd");
+    expect(document.status).toBe("rascunho");
+    expect(document.processId).toBe(PID);
+    expect(document.content).toContain("Documento de Formalização da Demanda");
+    expect(document.content).toContain("Aquisição de Equipamentos de Informática");
+    // Persistiu como documento canônico + registrou evento.
+    expect(procDb.insertGeneratedDocument).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(procDb.insertGeneratedDocument).mock.calls[0][0].kind).toBe("dfd");
+    expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("id determinístico por (processo, kind) → retry NÃO duplica", async () => {
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    const a = await caller.generateDFD({ processId: PID });
+    const b = await caller.generateDFD({ processId: PID });
+    expect(a.document.id).toBe(b.document.id);
+  });
+
+  it("saveDFD atualiza o conteúdo do rascunho (mesmo documento)", async () => {
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    const created = await caller.generateDFD({ processId: PID });
+    const edited = "# DFD editado pelo servidor\nConteúdo revisado.";
+    const { document } = await caller.saveDFD({ processId: PID, content: edited });
+
+    expect(document.id).toBe(created.document.id); // mesmo documento
+    expect(document.content).toBe(edited);
+    expect(document.kind).toBe("dfd");
+  });
+
+  it("loadDFD retorna o rascunho persistido (ou null)", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(
+      { id: "d1", kind: "dfd", title: "DFD — X", content: "conteúdo", status: "rascunho", updatedAt: "2026-07-26T00:00:00.000Z" } as any,
+    );
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    const res = await caller.loadDFD({ processId: PID });
+    expect(res.document?.kind).toBe("dfd");
+    expect(res.document?.content).toBe("conteúdo");
+  });
+
+  it("cross-tenant / processo inexistente → NOT_FOUND, sem gravar", async () => {
+    vi.mocked(procDb.getProcess).mockResolvedValue(null as any);
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    await expect(caller.generateDFD({ processId: "outro" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(caller.saveDFD({ processId: "outro", content: "x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
+  });
+
+  it("exige autenticação (UNAUTHORIZED)", async () => {
+    await expect(
+      procurementProcessRouter.createCaller(makeContext(null)).generateDFD({ processId: PID }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("buildDFDDraft (domínio)", () => {
+  it("estrutura as seções do art. 12 §1º e injeta o objeto", () => {
+    const draft = buildDFDDraft("Aquisição de mobiliário");
+    expect(draft).toContain("Art. 12, §1º");
+    expect(draft).toContain("Justificativa da necessidade");
+    expect(draft).toContain("Quantitativo estimado");
+    expect(draft).toContain("Aquisição de mobiliário");
+  });
+  it("usa placeholder quando o objeto é vazio", () => {
+    expect(buildDFDDraft("   ")).toContain("[descrever o objeto]");
+  });
+});

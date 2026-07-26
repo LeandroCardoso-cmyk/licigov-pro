@@ -165,6 +165,50 @@ a lacuna é registrada aqui para decisão do responsável (implementar `generate
 por IA, rerotular a opção para refletir a importação assistida, ou desabilitá-la).
 Fora do escopo desta correção pontual.
 
+## 9.3. "Criar DFD do zero" agora funciona (homologação DFD)
+
+**Consulta Graphify (antes de implementar):** apontou `dfdState.ts` (domínio de
+estado do DFD), `DFDWorkspace.tsx`, o princípio "DFD é um estado, não um documento",
+o serviço `generateDocument` (usado por ETP/TR) e a tabela `generated_documents`.
+
+**Divergências confirmadas no código:**
+- `importDFD` **não persistia** nada — criava um `createDFDState` em memória e só
+  registrava um evento de timeline; o estado do DFD no workspace era client-side
+  (por isso ficava sempre "Inexistente").
+- `generateDocument` exige **itens aprovados** (que vêm depois do DFD) e tem conteúdo
+  ETP/TR-específico → não serve para o DFD.
+- `gemini.generateDFD` (legado) exige campos do processo legado (estimatedValue,
+  category) inexistentes no canônico → não reutilizável de forma limpa.
+- `DocumentKind` não incluía "dfd".
+
+**Implementação (mínima, production-ready, reutilizando estrutura existente):**
+- DFD passa a ser um **documento canônico** `generated_documents` de `kind "dfd"`,
+  status "rascunho" — reutiliza `createGeneratedDocument`/`insertGeneratedDocument`/
+  `listGeneratedDocuments` (aparece na Visão Geral). Sem tabela nova, sem migration
+  (coluna `kind` é VARCHAR).
+- `buildDFDDraft(object)` (domínio): rascunho **estruturado e editável** com as
+  seções do art. 12 §1º. Determinístico, sem Kernel/IA.
+- Serviço `generateDFDDraft`/`saveDFDDraft`; router `generateDFD`/`saveDFD`/`loadDFD`
+  (tenantProcedure + requireProcess; idempotente por id determinístico `gdoc:{org}:{proc}:dfd`).
+- `DFDWorkspace`: "Criar DFD do zero" → rascunho editável → "Salvar rascunho";
+  estado passa de **Inexistente → Rascunho**; mantém "Importar DFD"; reflete na
+  Visão Geral; continuidade para ETP/TR preservada (mesmo `processId`).
+- **Formas de início**: a aba inicial agora segue o modo — `iniciar_etp` abre no
+  ETP; `criar_dfd`/`importar_*` abrem no DFD (mesmo `processId`, sem URL manual).
+
+**Supervisão humana preservada:** sempre rascunho, nunca aprovação automática.
+**Capacidade de IA deferida:** a geração do DFD **assistida por IA plena**
+(enriquecimento pela porta de IA) fica como evolução — a capacidade atual é a
+elaboração estruturada editável (o DFDWorkspace informa isso ao usuário). A opção
+"Criar DFD do zero" **não** foi removida nem renomeada.
+
+**Dark mode:** os 7 workspaces canônicos (Visão Geral, DFD, Pesquisa de Preços,
+Itens Inteligentes, ETP, TR, Edital) migrados para tokens semânticos e guardados
+por `darkmode-tokens`.
+
+**Graphify:** regenerado no commit (reflete `generated_documents kind "dfd"`, o
+fluxo DFD canônico, routers/services novos e os workspaces ajustados).
+
 ## 10. Validação
 
 - **Suíte completa:** 4268 passed / 102 skipped · **0 falhas** (baseline 4247 →

@@ -92,11 +92,17 @@ export default function ProcessoLicitatorio() {
     utils.departmentOperation.monitoringPanel.invalidate();
   }
 
-  function openProcess(processId: string) {
+  function openProcess(processId: string, tab: StageTab = "overview") {
     setActiveProcessId(processId);
-    setActiveTab("overview");
+    setActiveTab(tab);
     setOpenItemId(null);
     setView("process");
+  }
+
+  // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial —
+  // assim "Criar/Importar DFD" abre no DFD e "Iniciar direto no ETP" abre no ETP.
+  function tabForStartOption(startOption: string): StageTab {
+    return startOption === "iniciar_etp" ? "etp" : "dfd";
   }
 
   function backToList() {
@@ -131,9 +137,9 @@ export default function ProcessoLicitatorio() {
           />
         </div>
         <NovoProcessoWizard
-          onCreated={(processId) => {
+          onCreated={(processId, startOption) => {
             invalidateProcessSurfaces();
-            openProcess(processId);
+            openProcess(processId, tabForStartOption(startOption));
           }}
         />
       </div>

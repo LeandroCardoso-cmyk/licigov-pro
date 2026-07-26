@@ -18,13 +18,14 @@ import {
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
-import { generateDocument, generateNotice } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
   insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
   updateItemStatus, recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
+  getGeneratedDocumentByKind,
 } from "../db/procurement";
 
 const log = serviceLogger("procurementProcessRouter");
@@ -133,6 +134,45 @@ export const procurementProcessRouter = router({
         correlationId: ctx.correlationId,
       });
       return { dfd };
+    }),
+
+  /** Carrega o DFD (rascunho) do processo, se existir. */
+  loadDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const document = await getGeneratedDocumentByKind(input.processId, orgId, "dfd");
+      return { document };
+    }),
+
+  /**
+   * "Criar DFD do zero": estrutura um rascunho editável do DFD (art. 12, §1º) e
+   * persiste como documento canônico (kind "dfd", rascunho). Idempotente.
+   */
+  generateDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await generateDFDDraft({
+        organizationId: orgId, processId: input.processId, object: process.object,
+        correlationId: ctx.correlationId,
+      });
+      return { document };
+    }),
+
+  /** Salva a edição do rascunho de DFD (supervisão humana; mantém status rascunho). */
+  saveDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), content: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await saveDFDDraft({
+        organizationId: orgId, processId: input.processId, object: process.object,
+        content: input.content, correlationId: ctx.correlationId,
+      });
+      return { document };
     }),
 
   generateETP: tenantProcedure

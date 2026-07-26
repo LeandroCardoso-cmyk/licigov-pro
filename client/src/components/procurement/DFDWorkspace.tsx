@@ -1,36 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 
 /**
  * DFDWorkspace — REAL (wired to tRPC).
  *
- * UX: baseada em REVISÃO. O DFD pode ser importado de várias fontes e então
- * validado — nunca um grande formulário manual.
+ * UX: o DFD pode ser CRIADO do zero (rascunho estruturado editável, art. 12 §1º)
+ * ou IMPORTADO de uma fonte. Ambos produzem um rascunho que o servidor revisa —
+ * nunca um documento finalizado automaticamente. Contraste dark mode via tokens.
  */
 
 type DFDSource = "pdf" | "docx" | "oficio" | "memorando";
-type DFDState =
-  | "inexistente"
-  | "importado"
-  | "em_elaboracao"
-  | "em_revisao"
-  | "aprovado";
-
-const DFD_STATE_LABELS: Record<DFDState, string> = {
-  inexistente: "Inexistente",
-  importado: "Importado",
-  em_elaboracao: "Em elaboração",
-  em_revisao: "Em revisão",
-  aprovado: "Aprovado",
-};
-
-const DFD_STATE_CLASSES: Record<DFDState, string> = {
-  inexistente: "bg-gray-100 text-gray-600",
-  importado: "bg-blue-100 text-blue-700",
-  em_elaboracao: "bg-indigo-100 text-indigo-700",
-  em_revisao: "bg-amber-100 text-amber-700",
-  aprovado: "bg-green-100 text-green-700",
-};
 
 const SOURCE_LABELS: Record<DFDSource, string> = {
   pdf: "PDF",
@@ -39,96 +18,169 @@ const SOURCE_LABELS: Record<DFDSource, string> = {
   memorando: "Memorando",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho",
+  em_revisao: "Em revisão",
+  aprovado: "Aprovado",
+};
+
 export type DFDWorkspaceProps = {
   processId?: string;
 };
 
 export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
+  const utils = trpc.useUtils();
   const [source, setSource] = useState<DFDSource>("pdf");
-  const [state, setState] = useState<DFDState>("inexistente");
+  const [draft, setDraft] = useState("");
+  const loadedFor = useRef<string | null>(null);
 
-  const importDFD = trpc.procurementProcess.importDFD.useMutation({
-    onSuccess: () => setState("importado"),
-  });
+  const { data, isLoading } = trpc.procurementProcess.loadDFD.useQuery(
+    { processId },
+    { enabled: !!processId },
+  );
+  const doc = data?.document ?? null;
 
-  const handleImport = () => {
+  // Sincroniza o editor com o rascunho carregado (sem sobrescrever edições em curso).
+  useEffect(() => {
+    if (doc && loadedFor.current !== doc.id) {
+      setDraft(doc.content);
+      loadedFor.current = doc.id;
+    }
+    if (!doc) loadedFor.current = null;
+  }, [doc]);
+
+  const invalidate = () => {
     if (!processId) return;
-    importDFD.mutate({ processId, source });
+    utils.procurementProcess.loadDFD.invalidate({ processId });
+    utils.procurementProcess.loadProcess.invalidate({ processId }); // reflete na Visão Geral
   };
+
+  const generateDFD = trpc.procurementProcess.generateDFD.useMutation({ onSuccess: invalidate });
+  const saveDFD = trpc.procurementProcess.saveDFD.useMutation({ onSuccess: invalidate });
+  const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
+
+  const state = doc ? (STATUS_LABELS[doc.status] ?? doc.status) : "Inexistente";
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
+          <h1 className="text-xl font-semibold text-foreground">
             DFD — Documento de Formalização da Demanda
           </h1>
-          <p className="text-sm text-gray-500">Art. 12, § 1º da Lei 14.133/2021</p>
+          <p className="text-sm text-muted-foreground">Art. 12, § 1º da Lei 14.133/2021</p>
         </div>
         <span
-          className={`rounded-full px-3 py-1 text-xs font-medium ${DFD_STATE_CLASSES[state]}`}
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+            doc ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          }`}
         >
-          {DFD_STATE_LABELS[state]}
+          {state}
         </span>
       </div>
 
-      {/* Trilha de estados possíveis do DFD */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        {(Object.keys(DFD_STATE_LABELS) as DFDState[]).map((s) => (
-          <span
-            key={s}
-            className={`rounded-md px-2 py-1 text-xs ${
-              s === state
-                ? DFD_STATE_CLASSES[s]
-                : "bg-gray-50 text-gray-400"
-            }`}
-          >
-            {DFD_STATE_LABELS[s]}
-          </span>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 font-medium text-gray-900">Importar DFD</h2>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex flex-1 flex-col text-sm">
-            <span className="mb-1 font-medium text-gray-700">Fonte</span>
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value as DFDSource)}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-            >
-              {(Object.keys(SOURCE_LABELS) as DFDSource[]).map((s) => (
-                <option key={s} value={s}>
-                  {SOURCE_LABELS[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleImport}
-            disabled={!processId || importDFD.isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {importDFD.isPending ? "Importando..." : "Importar DFD"}
-          </button>
+      {isLoading ? (
+        <div className="animate-pulse space-y-3">
+          <div className="h-24 rounded-xl bg-muted" />
+          <div className="h-40 rounded-xl bg-muted" />
         </div>
-        {!processId && (
-          <p className="mt-2 text-xs text-amber-600">
-            Selecione um processo para importar o DFD.
-          </p>
-        )}
-        {importDFD.isSuccess && (
-          <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-            DFD importado ({SOURCE_LABELS[source]}). Revise os campos extraídos
-            antes de prosseguir.
-          </p>
-        )}
-        {importDFD.isError && (
-          <p className="mt-3 text-sm text-red-600">Falha ao importar o DFD.</p>
-        )}
-      </div>
+      ) : !doc ? (
+        <div className="space-y-4">
+          {/* Criar do zero */}
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h2 className="mb-1 font-medium text-foreground">Criar DFD do zero</h2>
+            <p className="mb-3 text-sm text-muted-foreground">
+              O sistema estrutura um rascunho editável com as seções do art. 12, §1º.
+              Você revisa e complementa antes de salvar.
+            </p>
+            <button
+              type="button"
+              onClick={() => processId && generateDFD.mutate({ processId })}
+              disabled={!processId || generateDFD.isPending}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              {generateDFD.isPending ? "Criando..." : "Criar DFD do zero"}
+            </button>
+            {generateDFD.isError && (
+              <p className="mt-2 text-sm text-destructive">
+                {generateDFD.error?.message || "Falha ao criar o DFD."}
+              </p>
+            )}
+          </div>
+
+          {/* Importar */}
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h2 className="mb-3 font-medium text-foreground">Importar DFD existente</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="flex flex-1 flex-col text-sm">
+                <span className="mb-1 font-medium text-foreground">Fonte</span>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value as DFDSource)}
+                  className="rounded-lg border border-input bg-background px-3 py-2 text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {(Object.keys(SOURCE_LABELS) as DFDSource[]).map((s) => (
+                    <option key={s} value={s}>
+                      {SOURCE_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => processId && importDFD.mutate({ processId, source })}
+                disabled={!processId || importDFD.isPending}
+                className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              >
+                {importDFD.isPending ? "Importando..." : "Importar DFD"}
+              </button>
+            </div>
+            {importDFD.isError && (
+              <p className="mt-2 text-sm text-destructive">Falha ao importar o DFD.</p>
+            )}
+          </div>
+
+          {!processId && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Selecione um processo para criar ou importar o DFD.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            <strong>Revisão obrigatória.</strong> Rascunho estruturado do DFD. Revise,
+            edite e salve. A geração assistida por IA plena é evolução futura.
+          </div>
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium text-foreground">Conteúdo do DFD</span>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={18}
+              className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => processId && saveDFD.mutate({ processId, content: draft })}
+              disabled={!processId || !draft.trim() || saveDFD.isPending}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              {saveDFD.isPending ? "Salvando..." : "Salvar rascunho"}
+            </button>
+            {saveDFD.isSuccess && (
+              <span className="text-sm text-green-600 dark:text-green-400">Rascunho salvo.</span>
+            )}
+            {saveDFD.isError && (
+              <span className="text-sm text-destructive">
+                {saveDFD.error?.message || "Falha ao salvar o rascunho."}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
