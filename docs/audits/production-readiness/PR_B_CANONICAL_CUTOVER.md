@@ -132,6 +132,39 @@ Não há migration nesta PR: `task_attachments` usa isolamento por join com `tas
 - Migração de dark-mode dos workspaces `components/procurement/*` (mantidos com
   estilo próprio; fora do redesign).
 
+## 9.1. Correção de homologação — criação canônica de processo (DATETIME)
+
+Na 1ª homologação em staging, "Novo Processo → Criar processo" falhava com "Erro
+ao criar o processo". **Causa-raiz:** o fluxo canônico gravava timestamps ISO
+(`new Date().toISOString()` → `"…T…Z"`) em colunas MySQL `DATETIME(3)`, que o
+MySQL em modo estrito rejeita. O pipeline legado nunca inseria datetime explícito
+(usava o default do banco), por isso o bug só apareceu no canônico recém-conectado;
+a suíte in-memory/mockada não o capturava (mesmo padrão já documentado no smoke de
+consultas institucionais).
+
+**Correção:** `db/procurement.ts` passou a usar os helpers oficiais
+`toDbDatetime`/`fromDbDatetime` na fronteira do banco (escrita normaliza, leitura
+volta a ISO). `createProcess` agora loga o erro técnico com `correlationId` (sem
+mascarar) e retorna mensagem amigável pt-BR; a criação é idempotente (id
+determinístico + `onDuplicateKeyUpdate`). Contraste dark mode das telas expostas
+(listagem + wizard) corrigido com tokens semânticos. Guardado por um smoke MySQL
+real ligado ao job "Smoke MySQL" do CI.
+
+## 9.2. Lacuna reportada — "Criar DFD do zero" (geração por IA)
+
+A opção **"Criar DFD do zero"** do wizard é aceita na CRIAÇÃO do processo (o
+`startOption` é válido e persistido; o processo é criado corretamente). Porém a
+capacidade de **gerar o DFD do zero por IA** NÃO existe no fluxo canônico: o
+`DFDWorkspace` só oferece **importação** (`importDFD`) e não há procedure
+`generateDFD` no `procurementProcessRouter` (achado da Fase 0). Ou seja, a etapa
+DFD é alcançável e funcional por importação, mas a promessa "do zero por IA" não é
+atendida na etapa seguinte.
+
+Conforme instrução de homologação, **a opção NÃO foi removida nem desabilitada** —
+a lacuna é registrada aqui para decisão do responsável (implementar `generateDFD`
+por IA, rerotular a opção para refletir a importação assistida, ou desabilitá-la).
+Fora do escopo desta correção pontual.
+
 ## 10. Validação
 
 - **Suíte completa:** 4268 passed / 102 skipped · **0 falhas** (baseline 4247 →
