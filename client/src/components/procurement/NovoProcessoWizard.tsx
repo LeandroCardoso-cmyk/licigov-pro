@@ -6,6 +6,10 @@ import { trpc } from "../../lib/trpc";
  *
  * UX: em vez de um grande formulário, o operador informa o essencial
  * (número + objeto) e escolhe COMO deseja iniciar. O sistema assume a partir daí.
+ *
+ * PR B: contraste dark mode via tokens semânticos; a mensagem de erro exibe o
+ * texto amigável em pt-BR retornado pelo servidor (sem mascarar o erro técnico,
+ * que é logado no backend com correlationId).
  */
 
 type StartOption =
@@ -87,15 +91,15 @@ export default function NovoProcessoWizard({
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Novo Processo</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <h1 className="text-2xl font-semibold text-foreground">Novo Processo</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
         Informe o essencial e escolha como deseja iniciar. O restante é
         assistido.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="flex flex-col text-sm">
-          <span className="mb-1 font-medium text-gray-700">
+          <span className="mb-1 font-medium text-foreground">
             Número do processo
           </span>
           <input
@@ -103,22 +107,22 @@ export default function NovoProcessoWizard({
             value={processNumber}
             onChange={(e) => setProcessNumber(e.target.value)}
             placeholder="2026/0001"
-            className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
         <label className="flex flex-col text-sm sm:col-span-2">
-          <span className="mb-1 font-medium text-gray-700">Objeto</span>
+          <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input
             type="text"
             value={object}
             onChange={(e) => setObject(e.target.value)}
             placeholder="Aquisição de equipamentos de informática"
-            className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       </div>
 
-      <h2 className="mt-8 text-lg font-medium text-gray-900">
+      <h2 className="mt-8 text-lg font-medium text-foreground">
         Como deseja iniciar?
       </h2>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -129,14 +133,14 @@ export default function NovoProcessoWizard({
               key={opt.value}
               type="button"
               onClick={() => setStartOption(opt.value)}
-              className={`rounded-xl border p-4 text-left transition ${
+              className={`rounded-xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 selected
-                  ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
-                  : "border-gray-200 bg-white hover:border-blue-300"
+                  ? "border-primary bg-primary/5 ring-2 ring-ring"
+                  : "border-border bg-card hover:border-primary/40"
               }`}
             >
-              <p className="font-medium text-gray-900">{opt.title}</p>
-              <p className="mt-1 text-xs text-gray-500">{opt.description}</p>
+              <p className="font-medium text-foreground">{opt.title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{opt.description}</p>
             </button>
           );
         })}
@@ -146,23 +150,24 @@ export default function NovoProcessoWizard({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           {createProcess.isPending ? "Criando..." : "Criar processo"}
         </button>
         {createProcess.isError && (
-          <span className="text-sm text-red-600">
-            Erro ao criar o processo. Tente novamente.
+          <span className="text-sm text-destructive">
+            {createProcess.error?.message ||
+              "Erro ao criar o processo. Tente novamente."}
           </span>
         )}
       </div>
 
       {created && (
-        <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4">
-          <p className="text-sm font-medium text-green-800">
+        <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+          <p className="text-sm font-medium text-green-700 dark:text-green-400">
             Processo criado com sucesso.
           </p>
-          <p className="mt-1 font-mono text-sm text-green-700">
+          <p className="mt-1 font-mono text-sm text-green-700 dark:text-green-400">
             {created.processNumber}
           </p>
         </div>

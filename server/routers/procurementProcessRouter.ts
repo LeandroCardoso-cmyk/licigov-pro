@@ -20,11 +20,14 @@ import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/pr
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
 import { generateDocument, generateNotice } from "../services/procurementProcessService";
 import { enrichItem } from "../services/itemIntelligenceService";
+import { serviceLogger } from "../services/observabilityService";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
   insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
   updateItemStatus, recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
 } from "../db/procurement";
+
+const log = serviceLogger("procurementProcessRouter");
 
 const START_OPTIONS = ["criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp"] as const;
 const STAGES = ["NEW_PROCESS", "DFD", "ETP", "PRICE_RESEARCH", "ITEM_WORKSPACE", "TR", "NOTICE", "REVIEW", "ISSUED", "ARCHIVED"] as const;
@@ -53,12 +56,28 @@ export const procurementProcessRouter = router({
         modality: input.modality, startOption: input.startOption as StartOption,
         responsibleUser: ctx.user.id, correlationId: ctx.correlationId,
       });
-      await insertProcess(process);
-      await recordProcessEvent({
-        organizationId: orgId, processId: process.id, eventType: "workspace_created",
-        actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
-        refId: process.id, correlationId: ctx.correlationId,
-      });
+      try {
+        // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
+        // clique repetido/retry NÃO cria processo duplicado.
+        await insertProcess(process);
+        await recordProcessEvent({
+          organizationId: orgId, processId: process.id, eventType: "workspace_created",
+          actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
+          refId: process.id, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
+        // ao usuário, mensagem amigável e estável em pt-BR.
+        log.error("create_process_failed", {
+          organizationId: orgId, userId: ctx.user.id, processNumber: input.processNumber,
+          startOption: input.startOption, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível criar o processo. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
       return { process };
     }),
 

@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
-    "mtime": 1784472872.7066736,
-    "ast_hash": "e3a3bcb139cdbffab5507ac713bbdd4d",
+    "mtime": 1785025250.820325,
+    "ast_hash": "a199b3eb9e7f4d4b4a9e5e0551f144e7",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
@@ -1385,8 +1385,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessoLicitatorioHome.tsx": {
-    "mtime": 1784472872.7066736,
-    "ast_hash": "3f2b1e926f4638395b87287d57f4a61c",
+    "mtime": 1785025225.2363257,
+    "ast_hash": "a7c4d9324a55c35665ee8a295cae67ae",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1785020206.2846422,
-    "ast_hash": "9c3d48549d2cae09d553b02f87bab9e9",
+    "mtime": 1785025431.868319,
+    "ast_hash": "9476ada162d8769dbdef58265e0758be",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1784472877.1826737,
-    "ast_hash": "0add866ed80464a0b6a906276c9860b7",
+    "mtime": 1785025170.1763275,
+    "ast_hash": "ac298d10261cf5a3eb4f9cb82ef6119d",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1784481786.6797333,
-    "ast_hash": "e05b12c5a6634d9fc0751d755a3a41dd",
+    "mtime": 1785025683.1603107,
+    "ast_hash": "50e70ad6e182676ab0b6eaeacdf3906f",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -9660,8 +9660,8 @@
     "semantic_hash": ""
   },
   "client/src/darkmode-tokens.test.ts": {
-    "mtime": 1784988475.9688756,
-    "ast_hash": "12dc002daaeedce47f79acfd5660531e",
+    "mtime": 1785025257.2443247,
+    "ast_hash": "e0cb77f8a62e6a211a3889a5739b90c3",
     "semantic_hash": ""
   },
   "drizzle/0285_schema_reconciliation.sql": {
@@ -10247,6 +10247,16 @@
   "docs/audits/production-readiness/PR_B_CANONICAL_CUTOVER.md": {
     "mtime": 1785022637.6038134,
     "ast_hash": "f23f07f29eec4706f122e2944a5283a4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
+    "mtime": 1785025670.1403112,
+    "ast_hash": "6a6a21bc54302d51e4c9d46edb2c3ff2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/procurement-create-process.test.ts": {
+    "mtime": 1785025637.4963121,
+    "ast_hash": "506dbbf598523b97b4bd8b6aeaba2caf",
     "semantic_hash": ""
   }
 }

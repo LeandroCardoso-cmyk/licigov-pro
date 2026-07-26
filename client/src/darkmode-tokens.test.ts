@@ -38,6 +38,10 @@ const MIGRATED_FILES = [
   "client/src/pages/Usuarios.tsx",
   "client/src/pages/AdminOrganizacoes.tsx",
   "client/src/pages/BemVindo.tsx",
+  // PR B — telas canônicas expostas (contraste dark mode)
+  "client/src/pages/ProcessoLicitatorio.tsx",
+  "client/src/components/procurement/ProcessoLicitatorioHome.tsx",
+  "client/src/components/procurement/NovoProcessoWizard.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {

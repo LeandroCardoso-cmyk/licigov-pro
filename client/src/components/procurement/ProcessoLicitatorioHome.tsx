@@ -7,6 +7,10 @@ import { trpc } from "../../lib/trpc";
  * UX: esta é a porta de entrada do domínio Processo Licitatório.
  * A experiência é baseada em REVISÃO/validação, nunca em grandes formulários:
  * o operador escolhe um processo (card) e passa a validar recomendações do servidor.
+ *
+ * PR B: contraste dark mode via tokens semânticos (bg-card, text-foreground,
+ * text-muted-foreground, border-border, bg-primary). Cores funcionais de status
+ * (blue/amber/green) preservadas.
  */
 
 const STAGE_LABELS: Record<string, string> = {
@@ -23,11 +27,11 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
-  rascunho: "bg-gray-100 text-gray-700",
-  em_andamento: "bg-blue-100 text-blue-700",
-  em_revisao: "bg-amber-100 text-amber-700",
-  emitido: "bg-green-100 text-green-700",
-  arquivado: "bg-gray-100 text-gray-500",
+  rascunho: "bg-muted text-muted-foreground",
+  em_andamento: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  em_revisao: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  emitido: "bg-green-500/15 text-green-600 dark:text-green-400",
+  arquivado: "bg-muted text-muted-foreground",
 };
 
 const PROCESS_STATUS_LABELS: Record<string, string> = {
@@ -57,10 +61,10 @@ export default function ProcessoLicitatorioHome({
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="text-2xl font-semibold text-foreground">
             Processos Licitatórios
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Fluxo DFD → ETP → TR → Edital. Você valida recomendações; o sistema
             estrutura a contratação.
           </p>
@@ -68,7 +72,7 @@ export default function ProcessoLicitatorioHome({
         <button
           type="button"
           onClick={onCreateProcess}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           + Novo Processo
         </button>
@@ -79,29 +83,29 @@ export default function ProcessoLicitatorioHome({
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="animate-pulse rounded-xl border border-gray-200 bg-white p-5"
+              className="animate-pulse rounded-xl border border-border bg-card p-5"
             >
-              <div className="mb-3 h-4 w-24 rounded bg-gray-200" />
-              <div className="mb-2 h-3 w-full rounded bg-gray-100" />
-              <div className="mb-4 h-3 w-2/3 rounded bg-gray-100" />
-              <div className="h-5 w-20 rounded-full bg-gray-200" />
+              <div className="mb-3 h-4 w-24 rounded bg-muted" />
+              <div className="mb-2 h-3 w-full rounded bg-muted" />
+              <div className="mb-4 h-3 w-2/3 rounded bg-muted" />
+              <div className="h-5 w-20 rounded-full bg-muted" />
             </div>
           ))}
         </div>
       ) : !data || data.processes.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
-          <p className="text-gray-500">Nenhum processo cadastrado ainda.</p>
+        <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+          <p className="text-muted-foreground">Nenhum processo cadastrado ainda.</p>
           <button
             type="button"
             onClick={onCreateProcess}
-            className="mt-3 text-sm font-medium text-blue-600 hover:underline"
+            className="mt-3 text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Criar o primeiro processo
           </button>
         </div>
       ) : (
         <>
-          <p className="mb-3 text-xs text-gray-400">
+          <p className="mb-3 text-xs text-muted-foreground">
             {data.total} processo(s) encontrado(s)
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -110,29 +114,29 @@ export default function ProcessoLicitatorioHome({
                 key={p.id}
                 type="button"
                 onClick={() => onOpenProcess?.(p.id)}
-                className="rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:shadow"
+                className="rounded-xl border border-border bg-card p-5 text-left shadow-sm transition hover:border-primary/40 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="font-mono text-sm font-semibold text-gray-900">
+                  <span className="font-mono text-sm font-semibold text-foreground">
                     {p.processNumber}
                   </span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                       PROCESS_STATUS_CLASSES[p.status] ??
-                      "bg-gray-100 text-gray-700"
+                      "bg-muted text-muted-foreground"
                     }`}
                   >
                     {PROCESS_STATUS_LABELS[p.status] ?? p.status}
                   </span>
                 </div>
-                <p className="mb-4 line-clamp-2 text-sm text-gray-600">
+                <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
                   {p.object}
                 </p>
                 <div className="flex items-center justify-between">
-                  <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">
+                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                     {STAGE_LABELS[p.currentStage] ?? p.currentStage}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {new Date(p.updatedAt).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
