@@ -76,6 +76,25 @@ export async function renderOfficialDocument(params: { organizationId: number; d
   return storeRenderedArtifact({ doc, format: params.format, buffer });
 }
 
+/**
+ * Renderiza um CONTEÚDO arbitrário (Markdown/representação intermediária) para o
+ * artefato binário (DOCX/PDF). Primitiva genérica do Document Engine, reutilizada
+ * pelo pipeline COMUM de exportação (`documentExportService`). Mantém a fronteira
+ * RC-3.5.2: o Document Engine é o ÚNICO a acionar o DocumentConverter. NÃO toca no
+ * Storage/S3 — isso é responsabilidade do chamador.
+ */
+export async function renderContent(params: {
+  content: string;
+  fileName: string;
+  format: OfficialFormat;
+  header?: { organizationName?: string; address?: string; cnpj?: string; phone?: string; email?: string; website?: string };
+}): Promise<Buffer> {
+  const h = params.header ?? {};
+  return params.format === "docx"
+    ? convertToDOCX(params.content, params.fileName, h.organizationName, h.address, h.cnpj, h.phone, h.email, h.website)
+    : convertToPDF(params.content, params.fileName, h.organizationName, h.address, h.cnpj, h.phone, h.email, h.website);
+}
+
 /** Prévia (conteúdo Markdown) do documento oficial — sem gerar binário. */
 export async function previewOfficialDocument(params: { organizationId: number; documentId: string }): Promise<{ document: OfficialDocument | null }> {
   const document = await getOfficialDocument(params.documentId, params.organizationId);

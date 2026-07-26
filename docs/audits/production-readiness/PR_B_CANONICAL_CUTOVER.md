@@ -220,3 +220,17 @@ fluxo DFD canônico, routers/services novos e os workspaces ajustados).
   `no-explicit-any` idiomáticos aos mocks de teste).
 - Testes novos: política de anexo (13), router SEC-037 (8), wiring canônico (8),
   bloqueio de criação legada (4).
+
+## 11. Pipeline comum de exportação (DOCX/PDF)
+
+Infraestrutura transversal reutilizável (ver `docs/architecture/DOCUMENT_EXPORT_PIPELINE.md`),
+integrada **apenas** ao Processo Licitário (DFD/ETP/TR/Edital) nesta PR:
+
+- `documentExportService` (módulo-agnóstico): conteúdo → DOCX/PDF → S3 → URL assinada.
+- Fronteira RC-3.5.2 preservada: renderização via `documentEngineService.renderContent`
+  (Engine é o único a acionar o DocumentConverter); storage isolado por tenant.
+- Adapter do Processo: `procurementProcess.exportDocument` (mapeia processId+kind →
+  conteúdo); botões DOCX/PDF por documento na Visão Geral.
+- Adapters de Contratos/Aditivos/Contratação Direta/Parecer documentados (não
+  implementados — aguardam autorização). Parecer já tem exportação parcial
+  (`legalOpinionExportService`) a consolidar sobre o núcleo comum.

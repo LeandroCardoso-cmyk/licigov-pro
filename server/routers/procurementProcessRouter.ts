@@ -21,6 +21,7 @@ import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
+import { exportDocument as exportDocumentCore } from "../services/documentExportService";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
   insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
@@ -134,6 +135,42 @@ export const procurementProcessRouter = router({
         correlationId: ctx.correlationId,
       });
       return { dfd };
+    }),
+
+  /**
+   * ADAPTER de exportação do Processo Licitatório para o núcleo comum
+   * (documentExportService). Mapeia (processId, kind) → conteúdo do documento
+   * canônico e delega a renderização/armazenamento/URL ao pipeline transversal.
+   * Reutilizável pela mesma via por Contratos/Aditivos/Contratação Direta/Parecer
+   * (cada um com seu próprio adapter). Sem lógica de exportação aqui.
+   */
+  exportDocument: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1),
+      kind: z.enum(["dfd", "etp", "tr", "edital"]),
+      format: z.enum(["docx", "pdf"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
+      if (!document || !document.content.trim()) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+      }
+      const exported = await exportDocumentCore({
+        organizationId: orgId,
+        content: document.content,
+        baseName: `${input.kind.toUpperCase()}_${process.processNumber}`,
+        format: input.format,
+        scope: "processo",
+      });
+      await recordProcessEvent({
+        organizationId: orgId, processId: input.processId, eventType: "change",
+        actor: String(ctx.user.id),
+        summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
+        refId: document.id, correlationId: ctx.correlationId,
+      });
+      return { url: exported.url, format: exported.format, fileName: exported.fileName };
     }),
 
   /** Carrega o DFD (rascunho) do processo, se existir. */

@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
-    "mtime": 1785033590.192978,
-    "ast_hash": "d317c5956fb4f7b0a1c8b4996decf271",
+    "mtime": 1785036659.9425912,
+    "ast_hash": "03dbdc1c0658c7894bd3cee1ff606efd",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessoLicitatorioHome.tsx": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1785033417.20075,
-    "ast_hash": "1d884205f8e84a4e25de7d372ce74348",
+    "mtime": 1785036615.786591,
+    "ast_hash": "883426d3d012c94da2221757091eb11d",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -8535,8 +8535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1784472877.191241,
-    "ast_hash": "e9aae06821812c54d0328f7cb356af17",
+    "mtime": 1785037122.882594,
+    "ast_hash": "61565587dd72fc93aecd91496433e438",
     "semantic_hash": ""
   },
   "docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md": {
@@ -10245,8 +10245,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PR_B_CANONICAL_CUTOVER.md": {
-    "mtime": 1785033927.1487384,
-    "ast_hash": "38fca6eba6714b54a4eb9bcb61a9a58a",
+    "mtime": 1785037432.5225961,
+    "ast_hash": "ea4e3d83426f6cf1782d6e5f309ca3ca",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
@@ -10262,6 +10262,26 @@
   "server/__tests__/integration/procurement-dfd.test.ts": {
     "mtime": 1785033677.280744,
     "ast_hash": "1315dbd17e623262eb640c70a96c442f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-export-service.test.ts": {
+    "mtime": 1785037160.8145943,
+    "ast_hash": "1fd585ddcea89d949b75c36ac2789a4e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/procurement-export.test.ts": {
+    "mtime": 1785036778.542592,
+    "ast_hash": "bec777d14fa24f5d4aa597e7be952dc5",
+    "semantic_hash": ""
+  },
+  "server/services/documentExportService.ts": {
+    "mtime": 1785037136.9425943,
+    "ast_hash": "e6d4679db917ac8098103012f8756172",
+    "semantic_hash": ""
+  },
+  "docs/architecture/DOCUMENT_EXPORT_PIPELINE.md": {
+    "mtime": 1785037415.738596,
+    "ast_hash": "a91df5679305f36f811c3fe845cec078",
     "semantic_hash": ""
   }
 }

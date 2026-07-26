@@ -1,4 +1,5 @@
 import React from "react";
+import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
 
 /**
@@ -41,6 +42,8 @@ export type ProcessOverviewProps = {
   processId?: string;
 };
 
+const EXPORTABLE_KINDS = new Set(["dfd", "etp", "tr", "edital"]);
+
 export default function ProcessOverview({
   processId = "",
 }: ProcessOverviewProps) {
@@ -48,6 +51,13 @@ export default function ProcessOverview({
     { processId },
     { enabled: !!processId },
   );
+
+  // Exportação DOCX/PDF via o núcleo comum (documentExportService) — abre a URL
+  // assinada retornada. Reutilizável por outros módulos pelo mesmo padrão.
+  const exportDoc = trpc.procurementProcess.exportDocument.useMutation({
+    onSuccess: (r) => window.open(r.url, "_blank", "noopener,noreferrer"),
+    onError: (e) => toast.error("Falha ao exportar: " + e.message),
+  });
 
   if (!processId) {
     return (
@@ -145,17 +155,40 @@ export default function ProcessOverview({
           <p className="text-sm text-muted-foreground">Nenhum documento ainda.</p>
         ) : (
           <ul className="divide-y divide-border">
-            {documents.map((d) => (
-              <li key={d.id} className="flex items-center justify-between py-2">
-                <div>
-                  <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs font-medium uppercase text-muted-foreground">
-                    {d.kind}
-                  </span>
-                  <span className="text-sm text-foreground">{d.title}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">{d.status}</span>
-              </li>
-            ))}
+            {documents.map((d) => {
+              const exportable = EXPORTABLE_KINDS.has(d.kind);
+              const busy = (fmt: "docx" | "pdf") =>
+                exportDoc.isPending &&
+                exportDoc.variables?.kind === d.kind &&
+                exportDoc.variables?.format === fmt;
+              return (
+                <li key={d.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs font-medium uppercase text-muted-foreground">
+                      {d.kind}
+                    </span>
+                    <span className="text-sm text-foreground">{d.title}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{d.status}</span>
+                    {exportable &&
+                      (["docx", "pdf"] as const).map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() =>
+                            exportDoc.mutate({ processId, kind: d.kind as "dfd" | "etp" | "tr" | "edital", format: fmt })
+                          }
+                          disabled={exportDoc.isPending}
+                          className="rounded-md border border-input px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                        >
+                          {busy(fmt) ? "..." : fmt.toUpperCase()}
+                        </button>
+                      ))}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
