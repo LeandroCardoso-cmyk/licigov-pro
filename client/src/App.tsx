@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LandingPage from "./pages/LandingPage";
@@ -12,8 +12,11 @@ import AceitarConvite from "./pages/AceitarConvite";
 import BemVindo from "./pages/BemVindo";
 import Usuarios from "./pages/Usuarios";
 import AdminOrganizacoes from "./pages/AdminOrganizacoes";
-import Dashboard from "./pages/Dashboard";
-import ProcessDetails from "./pages/ProcessDetails";
+// PR B — Pipeline canônico: /processos passa a servir o fluxo Processo → DFD →
+// ETP → TR → Edital (ProcessoLicitatorio). As telas legadas Dashboard,
+// ProcessDetails, NewProcess e ModuleSelectionDashboard saíram da navegação e
+// suas rotas antigas redirecionam para a jornada canônica (ver Router()).
+import ProcessoLicitatorio from "./pages/ProcessoLicitatorio";
 import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
 import Admin from "./pages/Admin";
@@ -28,12 +31,6 @@ import AdminDocuments from "./pages/AdminDocuments";
 // import AdminDefaultDashboard from "./pages/AdminDefaultDashboard";
 // import AdminContractsReport from "./pages/AdminContractsReport";
 // import AdminFinancialReports from "./pages/AdminFinancialReports";
-import NewProcess from "./pages/NewProcess";
-import ModuleSelectionDashboard from "./pages/ModuleSelectionDashboard";
-import TestPage from "./pages/TestPage";
-import TestPage2 from "./pages/TestPage2";
-import TestPage3 from "./pages/TestPage3";
-import TestPage4 from "./pages/TestPage4";
 import DocumentSettings from "./pages/DocumentSettings";
 import Templates from "./pages/Templates";
 import ActivityReport from "./pages/ActivityReport";
@@ -113,10 +110,7 @@ function withAuthenticatedShell(Component: React.ComponentType) {
 }
 
 // Wrapper components para evitar re-criação em cada render
-const ModuleSelectionRoute = () => <AuthenticatedRoute component={ModuleSelectionDashboard} />;
-const NewProcessRoute = () => <AuthenticatedRoute component={NewProcess} />;
 const DocumentSettingsRoute = () => <AuthenticatedRoute component={DocumentSettings} />;
-const ProcessDetailsRoute = () => <AuthenticatedRoute component={ProcessDetails} />;
 const SettingsRoute = () => <AuthenticatedRoute component={Settings} />;
 const AnalyticsRoute = () => <AuthenticatedRoute component={Analytics} />;
 const AdminRoute = () => <AuthenticatedRoute component={Admin} />;
@@ -129,7 +123,6 @@ const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments}
 const TermsOfUseRoute = () => <AuthenticatedRoute component={TermsOfUse} />;
 const PrivacyPolicyRoute = () => <AuthenticatedRoute component={PrivacyPolicy} />;
 // const AuditLogsRoute = () => <AuthenticatedRoute component={AuditLogs} />;
-const TestPage4Route = () => <AuthenticatedRoute component={TestPage4} />;
 const TemplatesRoute = () => <AuthenticatedRoute component={Templates} />;
 const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport} />;
 const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
@@ -147,7 +140,8 @@ const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpini
 // Centro de Operações é a home canônica: /dashboard e /centro-operacoes usam a MESMA
 // implementação (CentroOperacoes → DepartmentOperationHome), sem duplicar lógica/estado.
 const OperationsHomeShellRoute = withAuthenticatedShell(CentroOperacoes);
-const ProcessosShellRoute = withAuthenticatedShell(Dashboard);
+// PR B — /processos serve o fluxo canônico (Processo → DFD → ETP → TR → Edital).
+const ProcessosShellRoute = withAuthenticatedShell(ProcessoLicitatorio);
 const DirectProcurementShellRoute = withAuthenticatedShell(DirectProcurement);
 const ParecerJuridicoShellRoute = withAuthenticatedShell(ParecerJuridico);
 const ContratosWorkspaceShellRoute = withAuthenticatedShell(ContratosWorkspace);
@@ -163,8 +157,8 @@ function Router() {
               /dashboard e /centro-operacoes apontam para a MESMA implementação. */}
       <Route path={"/dashboard"} component={OperationsHomeShellRoute} />
       <Route path={"/centro-operacoes"} component={OperationsHomeShellRoute} />
-      {/* Seletor de módulos legado — preservado em /modulos (retrocompatibilidade temporária). */}
-      <Route path={"/modulos"} component={ModuleSelectionRoute} />
+      {/* PR B — Seletor de módulos legado desativado: redireciona à home canônica. */}
+      <Route path={"/modulos"} component={() => <Redirect to="/dashboard" replace />} />
       {/* RC-6 — Business Domains no shell (rotas críticas de homologação) */}
       <Route path={"/contratacao-direta"} component={DirectProcurementShellRoute} />
       <Route path={"/parecer"} component={ParecerJuridicoShellRoute} />
@@ -174,7 +168,9 @@ function Router() {
       <Route path={"/admin/organizacoes"} component={AdminOrganizacoesShellRoute} />
       <Route path={"/processos"} component={ProcessosShellRoute} />
       <Route path={"/gestao-comercial"} component={CommercialManagementRoute} />
-      <Route path={"/novo-processo"} component={NewProcessRoute} />
+      {/* PR B — Criação legada de processo desativada: o novo processo nasce no
+              fluxo canônico (/processos → "Novo Processo"). */}
+      <Route path={"/novo-processo"} component={() => <Redirect to="/processos" replace />} />
       <Route path={"/personalizacao-documentos"} component={DocumentSettingsRoute} />
       <Route path={"/templates"} component={TemplatesRoute} />
       <Route path={"/auditoria"} component={ActivityReportRoute} />
@@ -197,7 +193,13 @@ function Router() {
       <Route path={'/parecer-juridico/analytics'} component={LegalOpinionsAnalyticsRoute} />
       <Route path={'/parecer-juridico/novo'} component={NewLegalOpinionRoute} />
       <Route path={'/parecer-juridico/:id'} component={LegalOpinionDetailsRoute} />
-      <Route path="/processo/:id" component={ProcessDetailsRoute} />
+      {/* PR B — Detalhe legado de processo desativado. Documentado expressamente:
+              o :id aqui é o ID NUMÉRICO da tabela legada `processes`. O fluxo canônico
+              usa IDs string de `procurementProcessesTable` e navega por estado interno
+              no shell (não expõe URL por processo). Como (a) não há dados legados e
+              (b) os espaços de ID são distintos, NÃO existe deep link válido a
+              preservar — o ID não tem alvo canônico. Redireciona à listagem canônica. */}
+      <Route path="/processo/:id" component={() => <Redirect to="/processos" replace />} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
       <Route path={"/admin"} component={AdminRoute} />
@@ -212,10 +214,8 @@ function Router() {
       {/* <Route path={"/audit-logs"} component={AuditLogsRoute} /> */}
       <Route path={"/planos"} component={Plans} />
       <Route path={"/solicitar-proposta"} component={SolicitarProposta} />
-      <Route path={"/test"} component={TestPage} />
-      <Route path={"/test2"} component={TestPage2} />
-      <Route path={"/test3"} component={TestPage3} />
-      <Route path={"/test4"} component={TestPage4Route} />
+      {/* PR B — Rotas de teste/debug (/test, /test2, /test3, /test4) removidas da
+              aplicação: caem no NotFound, fora de qualquer experiência institucional. */}
       <Route path={"/login"} component={Login} />
       <Route path={"/register"} component={Register} />
       <Route path={"/esqueci-senha"} component={EsqueciSenha} />

@@ -18,7 +18,7 @@ const ITEM_STATUS_LABELS: Record<string, string> = {
 };
 
 const ITEM_STATUS_CLASSES: Record<string, string> = {
-  pendente: "bg-gray-100 text-gray-700",
+  pendente: "bg-muted text-foreground",
   em_analise: "bg-blue-100 text-blue-700",
   aprovado: "bg-green-100 text-green-700",
   rejeitado: "bg-red-100 text-red-700",
@@ -58,37 +58,37 @@ export default function ItemIntelligenceWorkspace({
   return (
     <div className="p-6">
       <div className="mb-1 flex items-center gap-2">
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-foreground">
           Itens Inteligentes
         </h1>
-        <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-medium text-white">
+        <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-medium text-primary-foreground">
           Núcleo
         </span>
       </div>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-muted-foreground">
         Valide as recomendações do sistema. O servidor decide o CATMAT; você
         aprova ou rejeita cada item.
       </p>
 
       {!processId ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
           Selecione um processo para ver seus itens.
         </div>
       ) : isLoading ? (
         <div className="animate-pulse space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-12 rounded-lg bg-gray-100" />
+            <div key={i} className="h-12 rounded-lg bg-muted" />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
           Nenhum item inteligente. Importe uma pesquisa de preços primeiro.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3">Descrição</th>
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Un.</th>
@@ -98,9 +98,9 @@ export default function ItemIntelligenceWorkspace({
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {items.map((it) => (
-                <tr key={it.id} className="hover:bg-gray-50">
+                <tr key={it.id} className="hover:bg-muted">
                   <td className="px-4 py-3">
                     <button
                       type="button"
@@ -110,9 +110,9 @@ export default function ItemIntelligenceWorkspace({
                       {it.description}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{it.quantity}</td>
-                  <td className="px-4 py-3 text-gray-700">{it.unit}</td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-foreground">{it.quantity}</td>
+                  <td className="px-4 py-3 text-foreground">{it.unit}</td>
+                  <td className="px-4 py-3 text-foreground">
                     {brl(it.averagePrice)}
                   </td>
                   <td className="px-4 py-3">
@@ -124,7 +124,7 @@ export default function ItemIntelligenceWorkspace({
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         ITEM_STATUS_CLASSES[it.status] ??
-                        "bg-gray-100 text-gray-700"
+                        "bg-muted text-foreground"
                       }`}
                     >
                       {ITEM_STATUS_LABELS[it.status] ?? it.status}
@@ -136,7 +136,7 @@ export default function ItemIntelligenceWorkspace({
                         type="button"
                         onClick={() => approveItem.mutate({ itemId: it.id })}
                         disabled={approveItem.isPending}
-                        className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                        className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:opacity-50"
                       >
                         Aprovar
                       </button>
@@ -144,7 +144,7 @@ export default function ItemIntelligenceWorkspace({
                         type="button"
                         onClick={() => rejectItem.mutate({ itemId: it.id })}
                         disabled={rejectItem.isPending}
-                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 disabled:opacity-50"
                       >
                         Rejeitar
                       </button>

@@ -16,7 +16,11 @@
 
 import { assertKernelAccess } from "./kernelAccessService";
 // Motor de conversão (ENGINE OFICIAL) — produz o artefato binário (DOCX/PDF).
-import { convertToDOCX, convertToPDF } from "./documentConverter";
+import {
+  convertToDOCX, convertToPDF,
+  buildInstitutionalModel, renderInstitutionalDOCX, renderInstitutionalPDF,
+  type InstitutionalMeta,
+} from "./documentConverter";
 // Ciclo de vida documental (versão, timeline, hash, storage, signed URL).
 import { createDocument, storeRenderedArtifact, type StoredArtifact } from "./officialDocumentLifecycleService";
 import {
@@ -76,6 +80,41 @@ export async function renderOfficialDocument(params: { organizationId: number; d
   return storeRenderedArtifact({ doc, format: params.format, buffer });
 }
 
+/**
+ * Renderiza um CONTEÚDO arbitrário (Markdown/representação intermediária) para o
+ * artefato binário (DOCX/PDF). Primitiva genérica do Document Engine, reutilizada
+ * pelo pipeline COMUM de exportação (`documentExportService`). Mantém a fronteira
+ * RC-3.5.2: o Document Engine é o ÚNICO a acionar o DocumentConverter. NÃO toca no
+ * Storage/S3 — isso é responsabilidade do chamador.
+ */
+export async function renderContent(params: {
+  content: string;
+  fileName: string;
+  format: OfficialFormat;
+  header?: { organizationName?: string; address?: string; cnpj?: string; phone?: string; email?: string; website?: string };
+}): Promise<Buffer> {
+  const h = params.header ?? {};
+  return params.format === "docx"
+    ? convertToDOCX(params.content, params.fileName, h.organizationName, h.address, h.cnpj, h.phone, h.email, h.website)
+    : convertToPDF(params.content, params.fileName, h.organizationName, h.address, h.cnpj, h.phone, h.email, h.website);
+}
+
+/**
+ * Renderiza um documento com ACABAMENTO INSTITUCIONAL (cabeçalho: organização,
+ * processo, objeto, status, versão, data; destaque de RASCUNHO; corpo Markdown
+ * interpretado via `marked`, sem artefatos) para DOCX/PDF, a partir de um MODELO
+ * intermediário comum consumido pelos dois renderers. Fronteira RC-3.5.2: o
+ * DocumentConverter é acionado apenas aqui. NÃO toca no Storage/S3.
+ */
+export async function renderInstitutionalContent(params: {
+  content: string;
+  meta: InstitutionalMeta;
+  format: OfficialFormat;
+}): Promise<Buffer> {
+  const model = buildInstitutionalModel(params.content, params.meta);
+  return params.format === "docx" ? renderInstitutionalDOCX(model) : renderInstitutionalPDF(model);
+}
+
 /** Prévia (conteúdo Markdown) do documento oficial — sem gerar binário. */
 export async function previewOfficialDocument(params: { organizationId: number; documentId: string }): Promise<{ document: OfficialDocument | null }> {
   const document = await getOfficialDocument(params.documentId, params.organizationId);
@@ -83,3 +122,4 @@ export async function previewOfficialDocument(params: { organizationId: number; 
 }
 
 export { getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId };
+export type { InstitutionalMeta } from "./documentConverter";

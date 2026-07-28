@@ -78,6 +78,12 @@ jobs:
           CI: true
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/licigov
 
+      - name: Smoke test contra MySQL real (criação canônica de Processo Licitatório / regressão de DATETIME)
+        run: pnpm exec vitest run server/__tests__/integration/procurement-create-mysql-smoke.test.ts
+        env:
+          CI: true
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/licigov
+
   security:
     name: Auditoria de Segurança
     runs-on: ubuntu-latest

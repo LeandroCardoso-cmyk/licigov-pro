@@ -9,6 +9,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getDb } from "./connection";
+import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 import {
   procurementProcessesTable,
   priceResearchTable,
@@ -33,6 +34,21 @@ function parseArr<T>(raw: string | null): T[] {
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p as T[] : []; } catch { return []; }
 }
 
+/**
+ * Conversão de data na FRONTEIRA DO BANCO (reutiliza os helpers oficiais do
+ * projeto — mesma convenção do repositório de consultas institucionais).
+ *
+ * Causa-raiz da falha de criação do Processo Licitatório canônico (PR B): o
+ * domínio produz timestamps via `new Date().toISOString()` (com separador `T` e
+ * sufixo `Z`), que colunas MySQL `DATETIME(3)` em modo estrito rejeitam
+ * ("Incorrect datetime value"). O pipeline legado nunca inseria datetime
+ * explícito (usava o default do banco), por isso o bug só aparece no fluxo
+ * canônico recém-conectado. `toDb` normaliza na escrita; `fromDbDatetime` volta
+ * a ISO na leitura (round-trip). Timestamps do domínio são sempre ISO válidos.
+ */
+const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
+const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
+
 // ─── Process ─────────────────────────────────────────────────────────────────
 
 export async function insertProcess(p: ProcurementWorkspace): Promise<ProcurementWorkspace | null> {
@@ -43,8 +59,8 @@ export async function insertProcess(p: ProcurementWorkspace): Promise<Procuremen
     modality: p.modality, currentStage: p.currentStage, status: p.status, startOption: p.startOption,
     responsibleUser: p.responsibleUser, participants: JSON.stringify(p.participants),
     activeCopilots: JSON.stringify(p.activeCopilots), correlationId: p.correlationId,
-    createdAt: p.createdAt, updatedAt: p.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { currentStage: p.currentStage, status: p.status, modality: p.modality, updatedAt: p.updatedAt } });
+    createdAt: toDb(p.createdAt), updatedAt: toDb(p.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { currentStage: p.currentStage, status: p.status, modality: p.modality, updatedAt: toDb(p.updatedAt) } });
   return p;
 }
 
@@ -60,22 +76,25 @@ export async function getProcess(id: string, orgId: number): Promise<Procurement
     modality: r.modality, currentStage: r.currentStage as ProcessStage, status: r.status as ProcessStatus,
     startOption: r.startOption as StartOption, responsibleUser: r.responsibleUser,
     participants: parseArr<number>(r.participants), activeCopilots: parseArr<ProcurementWorkspace["activeCopilots"][number]>(r.activeCopilots),
-    correlationId: r.correlationId, createdAt: r.createdAt, updatedAt: r.updatedAt,
+    correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
   };
 }
 
-export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ id: string; processNumber: string; object: string; currentStage: string; status: string; updatedAt: string }>> {
+export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ id: string; processNumber: string; object: string; modality: string | null; currentStage: string; status: string; updatedAt: string }>> {
   const db = await getDb();
   if (!db) return [];
+  // Ordenação determinística: updatedAt desc + id como desempate estável
+  // (a Central depende de ordem previsível — Escopo 3 da PR B).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(eq(procurementProcessesTable.organizationId, orgId)).orderBy(desc(procurementProcessesTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", currentStage: r.currentStage, status: r.status, updatedAt: r.updatedAt }));
+    .where(eq(procurementProcessesTable.organizationId, orgId))
+    .orderBy(desc(procurementProcessesTable.updatedAt), asc(procurementProcessesTable.id)).limit(limit);
+  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
 
 export async function updateProcessStage(id: string, orgId: number, stage: string, status: string, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(procurementProcessesTable).set({ currentStage: stage, status, updatedAt })
+  await db.update(procurementProcessesTable).set({ currentStage: stage, status, updatedAt: toDb(updatedAt) })
     .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId)));
   return true;
 }
@@ -87,7 +106,7 @@ export async function insertResearch(r: PriceResearchWorkspace): Promise<PriceRe
   if (!db) return null;
   await db.insert(priceResearchTable).values({
     id: r.id, organizationId: r.organizationId, processId: r.processId, source: r.source,
-    itemCount: r.itemCount, correlationId: r.correlationId, createdAt: r.createdAt,
+    itemCount: r.itemCount, correlationId: r.correlationId, createdAt: toDb(r.createdAt),
   }).onDuplicateKeyUpdate({ set: { itemCount: r.itemCount } });
   return r;
 }
@@ -99,7 +118,7 @@ export async function insertResearchItem(it: PriceResearchItem): Promise<PriceRe
     id: it.id, organizationId: it.organizationId, researchId: it.researchId, processId: it.processId,
     description: it.description, quantity: String(it.quantity), unit: it.unit, supplier: it.supplier,
     brand: it.brand, model: it.model, value: String(it.value), observations: it.observations,
-    source: it.source, createdAt: it.createdAt,
+    source: it.source, createdAt: toDb(it.createdAt),
   }).onDuplicateKeyUpdate({ set: { value: String(it.value), quantity: String(it.quantity) } });
   return it;
 }
@@ -116,8 +135,8 @@ export async function insertIntelligentItem(it: IntelligentProcurementItem): Pro
     alternativeCatmat: JSON.stringify(it.alternativeCATMAT), specifications: JSON.stringify(it.specifications),
     risks: JSON.stringify(it.risks), recommendations: JSON.stringify(it.recommendations),
     status: it.status, approvedBy: it.approvedBy, correlationId: it.correlationId,
-    createdAt: it.createdAt, updatedAt: it.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { status: it.status, suggestedCatmat: it.suggestedCATMAT, approvedBy: it.approvedBy, updatedAt: it.updatedAt } });
+    createdAt: toDb(it.createdAt), updatedAt: toDb(it.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { status: it.status, suggestedCatmat: it.suggestedCATMAT, approvedBy: it.approvedBy, updatedAt: toDb(it.updatedAt) } });
   return it;
 }
 
@@ -135,7 +154,7 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
     alternativeCATMAT: parseArr<string>(r.alternativeCatmat), specifications: parseArr<string>(r.specifications),
     risks: parseArr<string>(r.risks), recommendations: parseArr<string>(r.recommendations),
     status: r.status as ItemStatus, approvedBy: r.approvedBy ?? null, correlationId: r.correlationId,
-    createdAt: r.createdAt, updatedAt: r.updatedAt,
+    createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
   };
 }
 
@@ -150,7 +169,7 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
 export async function updateItemStatus(id: string, orgId: number, status: ItemStatus, approvedBy: number | null, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(intelligentItemsTable).set({ status, approvedBy, updatedAt })
+  await db.update(intelligentItemsTable).set({ status, approvedBy, updatedAt: toDb(updatedAt) })
     .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId)));
   return true;
 }
@@ -158,7 +177,7 @@ export async function updateItemStatus(id: string, orgId: number, status: ItemSt
 export async function updateItemCatmat(id: string, orgId: number, catmat: string, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(intelligentItemsTable).set({ suggestedCatmat: catmat, updatedAt })
+  await db.update(intelligentItemsTable).set({ suggestedCatmat: catmat, updatedAt: toDb(updatedAt) })
     .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId)));
   return true;
 }
@@ -171,7 +190,7 @@ export async function insertCatmatMatch(m: CATMATMatch): Promise<CATMATMatch | n
   await db.insert(itemCatmatMatchesTable).values({
     id: m.id, organizationId: m.organizationId, itemId: m.itemId, catmatCode: m.catmatCode,
     catmatDescription: m.catmatDescription, score: String(m.score), matchRank: m.rank,
-    decision: m.decision, correlationId: m.correlationId, createdAt: m.createdAt,
+    decision: m.decision, correlationId: m.correlationId, createdAt: toDb(m.createdAt),
   }).onDuplicateKeyUpdate({ set: { decision: m.decision } });
   return m;
 }
@@ -202,7 +221,7 @@ export async function insertItemRecommendation(rec: ItemRecommendation): Promise
     id: rec.id, organizationId: rec.organizationId, itemId: rec.itemId, recType: rec.type,
     summary: rec.summary, reasoning: rec.reasoning, explainability: rec.explainability,
     provenance: rec.provenance, confidence: String(rec.confidence),
-    accepted: rec.accepted === null ? null : (rec.accepted ? 1 : 0), correlationId: rec.correlationId, createdAt: rec.createdAt,
+    accepted: rec.accepted === null ? null : (rec.accepted ? 1 : 0), correlationId: rec.correlationId, createdAt: toDb(rec.createdAt),
   }).onDuplicateKeyUpdate({ set: { accepted: rec.accepted === null ? null : (rec.accepted ? 1 : 0) } });
   return rec;
 }
@@ -221,7 +240,7 @@ export async function insertItemRisk(risk: ItemRisk): Promise<ItemRisk | null> {
   await db.insert(itemRisksTable).values({
     id: risk.id, organizationId: risk.organizationId, itemId: risk.itemId, riskType: risk.type,
     severity: risk.severity, description: risk.description, explanation: risk.explanation,
-    correlationId: risk.correlationId, createdAt: risk.createdAt,
+    correlationId: risk.correlationId, createdAt: toDb(risk.createdAt),
   }).onDuplicateKeyUpdate({ set: { severity: risk.severity } });
   return risk;
 }
@@ -266,7 +285,7 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
   const rows = await db.select().from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, processId), eq(processTimelineTable.organizationId, orgId)))
     .orderBy(asc(processTimelineTable.eventOrder));
-  return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: r.createdAt }));
+  return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: fromDb(r.createdAt) }));
 }
 
 // ─── Generated documents ─────────────────────────────────────────────────────
@@ -278,8 +297,8 @@ export async function insertGeneratedDocument(d: GeneratedDocument): Promise<Gen
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,
     content: d.content, status: d.status, sources: JSON.stringify(d.sources), modality: d.modality,
     form: d.form, platform: d.platform, legalJustification: d.legalJustification,
-    correlationId: d.correlationId, createdAt: d.createdAt, updatedAt: d.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: d.updatedAt } });
+    correlationId: d.correlationId, createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: toDb(d.updatedAt) } });
   return d;
 }
 
@@ -289,4 +308,21 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
   const rows = await db.select().from(generatedDocumentsTable)
     .where(and(eq(generatedDocumentsTable.processId, processId), eq(generatedDocumentsTable.organizationId, orgId)));
   return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, status: r.status }));
+}
+
+/** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
+export async function getGeneratedDocumentByKind(
+  processId: string, orgId: number, kind: string,
+): Promise<{ id: string; kind: string; title: string; content: string; status: string; updatedAt: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(generatedDocumentsTable)
+    .where(and(
+      eq(generatedDocumentsTable.processId, processId),
+      eq(generatedDocumentsTable.organizationId, orgId),
+      eq(generatedDocumentsTable.kind, kind),
+    )).limit(1);
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status, updatedAt: fromDb(r.updatedAt) };
 }

@@ -18,13 +18,19 @@ import {
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
-import { generateDocument, generateNotice } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
 import { enrichItem } from "../services/itemIntelligenceService";
+import { serviceLogger } from "../services/observabilityService";
+import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
+import { getOrganizationById } from "../db/organizations";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
   insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
   updateItemStatus, recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
+  getGeneratedDocumentByKind,
 } from "../db/procurement";
+
+const log = serviceLogger("procurementProcessRouter");
 
 const START_OPTIONS = ["criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp"] as const;
 const STAGES = ["NEW_PROCESS", "DFD", "ETP", "PRICE_RESEARCH", "ITEM_WORKSPACE", "TR", "NOTICE", "REVIEW", "ISSUED", "ARCHIVED"] as const;
@@ -37,6 +43,20 @@ async function requireProcess(id: string, orgId: number) {
   if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
   return p;
 }
+
+// Acabamento institucional das exportações (PR #188).
+const DOC_TITLES: Record<"dfd" | "etp" | "tr" | "edital", string> = {
+  dfd: "DFD — Documento de Formalização da Demanda",
+  etp: "ETP — Estudo Técnico Preliminar",
+  tr: "TR — Termo de Referência",
+  edital: "Edital",
+};
+const STATUS_LABELS: Record<string, string> = {
+  rascunho: "RASCUNHO", em_revisao: "EM REVISÃO", aprovado: "APROVADO", rejeitado: "REJEITADO",
+};
+const STATUS_SLUGS: Record<string, string> = {
+  rascunho: "rascunho", em_revisao: "em-revisao", aprovado: "aprovado", rejeitado: "rejeitado",
+};
 
 export const procurementProcessRouter = router({
   createProcess: tenantProcedure
@@ -53,12 +73,28 @@ export const procurementProcessRouter = router({
         modality: input.modality, startOption: input.startOption as StartOption,
         responsibleUser: ctx.user.id, correlationId: ctx.correlationId,
       });
-      await insertProcess(process);
-      await recordProcessEvent({
-        organizationId: orgId, processId: process.id, eventType: "workspace_created",
-        actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
-        refId: process.id, correlationId: ctx.correlationId,
-      });
+      try {
+        // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
+        // clique repetido/retry NÃO cria processo duplicado.
+        await insertProcess(process);
+        await recordProcessEvent({
+          organizationId: orgId, processId: process.id, eventType: "workspace_created",
+          actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
+          refId: process.id, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
+        // ao usuário, mensagem amigável e estável em pt-BR.
+        log.error("create_process_failed", {
+          organizationId: orgId, userId: ctx.user.id, processNumber: input.processNumber,
+          startOption: input.startOption, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível criar o processo. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
       return { process };
     }),
 
@@ -114,6 +150,99 @@ export const procurementProcessRouter = router({
         correlationId: ctx.correlationId,
       });
       return { dfd };
+    }),
+
+  /**
+   * ADAPTER de exportação do Processo Licitatório para o núcleo comum
+   * (documentExportService). Mapeia (processId, kind) → conteúdo do documento
+   * canônico e delega a renderização/armazenamento/URL ao pipeline transversal.
+   * Reutilizável pela mesma via por Contratos/Aditivos/Contratação Direta/Parecer
+   * (cada um com seu próprio adapter). Sem lógica de exportação aqui.
+   */
+  exportDocument: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1),
+      kind: z.enum(["dfd", "etp", "tr", "edital"]),
+      format: z.enum(["docx", "pdf"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
+      if (!document || !document.content.trim()) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+      }
+      const org = await getOrganizationById(orgId);
+      const statusLabel = STATUS_LABELS[document.status] ?? document.status.toUpperCase();
+      const statusSlug = STATUS_SLUGS[document.status] ?? document.status;
+      const version = 1; // generated_documents é rascunho único evolutivo (sem versionamento próprio).
+      const procNumberFile = process.processNumber.replace(/\//g, "-");
+
+      const exported = await exportDocumentCore({
+        organizationId: orgId,
+        content: document.content, // conteúdo persistido, renderizado FIELMENTE (sem correção)
+        baseName: `${input.kind.toUpperCase()}_${process.processNumber}`,
+        // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
+        downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,
+        format: input.format,
+        scope: "processo",
+        meta: {
+          organizationName: org?.nome || undefined,
+          documentTitle: DOC_TITLES[input.kind],
+          processNumber: process.processNumber,
+          object: process.object,
+          statusLabel,
+          isDraft: document.status === "rascunho",
+          version,
+          exportedAtLabel: formatBrazilianDateTime(new Date()),
+        },
+      });
+      await recordProcessEvent({
+        organizationId: orgId, processId: input.processId, eventType: "change",
+        actor: String(ctx.user.id),
+        summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
+        refId: document.id, correlationId: ctx.correlationId,
+      });
+      return { url: exported.url, format: exported.format, fileName: exported.fileName };
+    }),
+
+  /** Carrega o DFD (rascunho) do processo, se existir. */
+  loadDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const document = await getGeneratedDocumentByKind(input.processId, orgId, "dfd");
+      return { document };
+    }),
+
+  /**
+   * "Criar DFD do zero": estrutura um rascunho editável do DFD (art. 12, §1º) e
+   * persiste como documento canônico (kind "dfd", rascunho). Idempotente.
+   */
+  generateDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await generateDFDDraft({
+        organizationId: orgId, processId: input.processId, object: process.object,
+        correlationId: ctx.correlationId,
+      });
+      return { document };
+    }),
+
+  /** Salva a edição do rascunho de DFD (supervisão humana; mantém status rascunho). */
+  saveDFD: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), content: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const document = await saveDFDDraft({
+        organizationId: orgId, processId: input.processId, object: process.object,
+        content: input.content, correlationId: ctx.correlationId,
+      });
+      return { document };
     }),
 
   generateETP: tenantProcedure

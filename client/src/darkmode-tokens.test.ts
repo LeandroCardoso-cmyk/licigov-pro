@@ -38,6 +38,18 @@ const MIGRATED_FILES = [
   "client/src/pages/Usuarios.tsx",
   "client/src/pages/AdminOrganizacoes.tsx",
   "client/src/pages/BemVindo.tsx",
+  // PR B — telas canônicas expostas (contraste dark mode)
+  "client/src/pages/ProcessoLicitatorio.tsx",
+  "client/src/components/procurement/ProcessoLicitatorioHome.tsx",
+  "client/src/components/procurement/NovoProcessoWizard.tsx",
+  // PR B (homologação DFD) — os 7 workspaces canônicos expostos
+  "client/src/components/procurement/ProcessOverview.tsx",
+  "client/src/components/procurement/DFDWorkspace.tsx",
+  "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
+  "client/src/components/procurement/ItemIntelligenceWorkspace.tsx",
+  "client/src/components/procurement/ETPWorkspace.tsx",
+  "client/src/components/procurement/TRWorkspace.tsx",
+  "client/src/components/procurement/EditalWorkspace.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {

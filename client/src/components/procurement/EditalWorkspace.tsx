@@ -76,31 +76,31 @@ export default function EditalWorkspace({
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <h1 className="text-xl font-semibold text-gray-900">Edital</h1>
-      <p className="text-sm text-gray-500">
+      <h1 className="text-xl font-semibold text-foreground">Edital</h1>
+      <p className="text-sm text-muted-foreground">
         Modalidade, forma e critério montados pelo sistema conforme a Lei
         14.133/2021.
       </p>
 
-      <div className="mt-5 space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+      <div className="mt-5 space-y-4 rounded-xl border border-border bg-card p-5">
         <label className="flex flex-col text-sm">
-          <span className="mb-1 font-medium text-gray-700">Objeto</span>
+          <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input
             type="text"
             value={object}
             onChange={(e) => setObject(e.target.value)}
             placeholder="Registro de preços para materiais de expediente"
-            className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
           />
         </label>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-gray-700">Modalidade</span>
+            <span className="mb-1 font-medium text-foreground">Modalidade</span>
             <select
               value={modality}
               onChange={(e) => setModality(e.target.value as Modality)}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
             >
               {(Object.keys(MODALITY_LABELS) as Modality[]).map((m) => (
                 <option key={m} value={m}>
@@ -111,11 +111,11 @@ export default function EditalWorkspace({
           </label>
 
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-gray-700">Forma</span>
+            <span className="mb-1 font-medium text-foreground">Forma</span>
             <select
               value={form}
               onChange={(e) => setForm(e.target.value as Form)}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
             >
               {(Object.keys(FORM_LABELS) as Form[]).map((f) => (
                 <option key={f} value={f}>
@@ -127,18 +127,18 @@ export default function EditalWorkspace({
         </div>
 
         {form === "presencial" ? (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Justificativa legal automática.</strong> A forma presencial
             exige justificativa (art. 17, § 2º). O sistema a incluirá
             automaticamente no edital.
           </div>
         ) : (
           <label className="flex flex-col text-sm sm:max-w-xs">
-            <span className="mb-1 font-medium text-gray-700">Plataforma</span>
+            <span className="mb-1 font-medium text-foreground">Plataforma</span>
             <select
               value={platform}
               onChange={(e) => setPlatform(e.target.value as Platform)}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
             >
               {(Object.keys(PLATFORM_LABELS) as Platform[]).map((p) => (
                 <option key={p} value={p}>
@@ -153,17 +153,17 @@ export default function EditalWorkspace({
           type="button"
           onClick={handleGenerate}
           disabled={!processId || !object.trim() || generateNotice.isPending}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {generateNotice.isPending ? "Gerando..." : "Gerar edital"}
         </button>
         {!processId && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-amber-600 dark:text-amber-400">
             Selecione um processo para gerar o edital.
           </p>
         )}
         {generateNotice.isError && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-destructive">
             {generateNotice.error.message || "Falha ao gerar o edital."}
           </p>
         )}
@@ -171,13 +171,13 @@ export default function EditalWorkspace({
 
       {draft && (
         <div className="mt-6">
-          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Edital gerado pelo sistema.
             Revise antes de publicar.
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-2 font-semibold text-gray-900">{draft.title}</h2>
-            <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
+            <pre className="whitespace-pre-wrap font-sans text-sm text-foreground">
               {draft.content}
             </pre>
           </div>

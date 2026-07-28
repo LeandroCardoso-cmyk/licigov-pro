@@ -54,8 +54,13 @@ export default function TaskDetailModal({ taskId, open, onClose }: TaskDetailMod
     if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande! Limite: 10MB"); return; }
     setUploadingFile(true);
     const reader = new FileReader();
+    reader.onerror = () => { toast.error("Falha ao ler o arquivo."); setUploadingFile(false); };
     reader.onload = () => {
-      addAttachmentMutation.mutate({ taskId, fileName: file.name, fileUrl: reader.result as string, fileSize: file.size, mimeType: file.type });
+      // SEC-037 — envia o CONTEÚDO em base64 (data URL "data:...;base64,<b64>").
+      // O servidor valida allowlist + magic-bytes e grava no S3 (sem URL arbitrária).
+      const result = reader.result as string;
+      const fileBase64 = result.includes(",") ? result.slice(result.indexOf(",") + 1) : result;
+      addAttachmentMutation.mutate({ taskId, fileName: file.name, fileBase64, mimeType: file.type });
     };
     reader.readAsDataURL(file);
   };

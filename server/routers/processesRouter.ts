@@ -12,8 +12,8 @@ import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
-import { generateDFD } from "../services/gemini";
 import { serviceLogger } from "../services/observabilityService";
+import { throwLegacyProcessPipelineDisabled } from "../domain/legacyPipeline";
 
 const log = serviceLogger("processesRouter");
 
@@ -74,65 +74,14 @@ export const processesRouter = router({
       category: z.string().min(1),
       platformId: z.number().nullable().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const valueInCents = Math.round(input.estimatedValue * 100);
-
-      const processId = await db.createProcess({
-        name: input.name,
-        description: input.description,
-        object: input.object,
-        estimatedValue: valueInCents,
-        modality: input.modality,
-        category: input.category,
-        platformId: input.platformId || null,
-        ownerId: ctx.user.id,
-        organizationId: ctx.organizationId,
-        status: "em_dfd",
-      });
-
-      await db.createActivityLog({
-        processId,
-        userId: ctx.user.id,
-        action: "criou o processo",
-        details: JSON.stringify({ name: input.name }),
-      });
-
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
-
-      generateDFD({
-        processName: input.name,
-        object: input.object,
-        estimatedValue: valueInCents,
-        modality: input.modality,
-        category: input.category,
-        platformId: input.platformId || null,
-        organizationName: settings?.organizationName || undefined,
-        address: settings?.address || undefined,
-        cnpj: settings?.cnpj || undefined,
-        phone: settings?.phone || undefined,
-        email: settings?.email || undefined,
-        website: settings?.website || undefined,
-      })
-        .then(async (dfdContent) => {
-          await db.createDocument({
-            processId,
-            type: "dfd",
-            content: dfdContent,
-            version: 1,
-            organizationId: ctx.organizationId,
-          });
-          await db.createActivityLog({
-            processId,
-            userId: ctx.user.id,
-            action: "gerou o DFD automaticamente",
-            details: JSON.stringify({ generatedBy: "AI" }),
-          });
-        })
-        .catch(() => {
-          // Fire-and-forget: error silently swallowed, no user-facing impact
-        });
-
-      return { success: true, processId };
+    .mutation(async () => {
+      // PR B — Corte controlado: o pipeline legado de Processo Licitatório não
+      // recebe novas gravações. A criação e a condução do processo (incluindo a
+      // geração de DFD/ETP/TR/Edital) ocorrem EXCLUSIVAMENTE pelo fluxo canônico
+      // (procurementProcess.createProcess). Procedure mantida registrada apenas
+      // por inércia técnica — nenhuma tela a alcança (rota /novo-processo
+      // redireciona para a jornada canônica).
+      throwLegacyProcessPipelineDisabled();
     }),
 
   getById: tenantProcedure

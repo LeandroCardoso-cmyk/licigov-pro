@@ -8,9 +8,54 @@
 
 import { createHash } from "crypto";
 
-export type DocumentKind = "etp" | "tr" | "edital";
+export type DocumentKind = "dfd" | "etp" | "tr" | "edital";
 
 export type DocumentStatus = "rascunho" | "em_revisao" | "aprovado";
+
+/**
+ * DFD — Documento de Formalização da Demanda (art. 12, §1º da Lei 14.133/2021).
+ *
+ * "Criar DFD do zero": produz um RASCUNHO ESTRUTURADO e editável (não é uma
+ * finalização automática). O servidor estrutura as seções obrigatórias a partir
+ * do objeto; o usuário revisa/edita e salva. A geração ASSISTIDA POR IA plena
+ * (enriquecimento do conteúdo pela porta de IA) fica como evolução — aqui a
+ * capacidade production-ready mínima é a elaboração estruturada editável.
+ */
+export function buildDFDDraft(object: string): string {
+  const obj = object.trim() || "[descrever o objeto]";
+  return [
+    "# DFD — Documento de Formalização da Demanda",
+    "_Art. 12, §1º da Lei 14.133/2021 — rascunho estruturado (revisar e editar antes de prosseguir)._",
+    "",
+    "## 1. Identificação da demanda",
+    `Objeto: ${obj}`,
+    "Setor/unidade demandante: [preencher]",
+    "Responsável pela demanda: [preencher]",
+    "",
+    "## 2. Justificativa da necessidade da contratação",
+    `Descrever a necessidade pública que motiva a contratação de "${obj}", com o `,
+    "problema a ser resolvido e o interesse público envolvido. [preencher]",
+    "",
+    "## 3. Descrição sucinta do objeto",
+    `${obj} — detalhar características essenciais, natureza (bem/serviço) e finalidade. [preencher]`,
+    "",
+    "## 4. Quantitativo estimado e unidade",
+    "Quantidade estimada: [preencher] · Unidade: [preencher]",
+    "Memória de cálculo/critério da estimativa: [preencher]",
+    "",
+    "## 5. Previsão da contratação no planejamento",
+    "Alinhamento ao Plano de Contratações Anual (PCA) e ao planejamento do órgão. [preencher]",
+    "",
+    "## 6. Estimativa preliminar de recursos orçamentários",
+    "Indicar a previsão orçamentária preliminar, se disponível. [preencher]",
+    "",
+    "## 7. Grau de prioridade e prazo desejado",
+    "Prioridade: [baixa/média/alta] · Prazo pretendido para a contratação: [preencher]",
+    "",
+    "> Rascunho gerado pelo sistema para estruturação da demanda. Revisão obrigatória",
+    "> pelo servidor responsável antes de avançar para o ETP.",
+  ].join("\n");
+}
 
 // ─── Edital: modalidade, forma e plataforma ──────────────────────────────────
 

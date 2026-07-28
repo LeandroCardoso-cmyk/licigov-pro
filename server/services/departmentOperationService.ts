@@ -67,7 +67,7 @@ export async function getMonitoringPanel(params: { organizationId: number; today
   const concluded = new Set(["emitido", "arquivado", "concluido", "publicado"]);
 
   const fromProcesses: MonitoringRow[] = processes.map(p => ({
-    processId: p.id, processNumber: p.processNumber, object: p.object, modality: "",
+    processId: p.id, processNumber: p.processNumber, object: p.object, modality: p.modality ?? "",
     currentStage: p.currentStage, origin: "processo_licitatorio",
     situation: situationColor({ overdue: false, concluded: concluded.has(p.status), hasFutureEvent: false, started: p.currentStage !== "NEW_PROCESS" }),
   }));

@@ -1,4 +1,5 @@
 import React from "react";
+import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
 import OperationalDashboard from "./OperationalDashboard";
 import OperationalMonitoringPanel from "./OperationalMonitoringPanel";
@@ -41,12 +42,37 @@ interface DepartmentOperationHomeProps {
 
 export default function DepartmentOperationHome({ showPageHeader = true }: DepartmentOperationHomeProps) {
   const [tab, setTab] = React.useState<Tab>("centro");
-  const generateReport = trpc.departmentOperation.generateReport.useMutation();
+  // PR B (Escopo 4) — o botão agora ENTREGA o relatório: antes a mutation era
+  // disparada e o resultado descartado (botão sem comportamento visível). O
+  // Document Engine ainda produz o relatório em MARKDOWN; para não prometer o que
+  // não entrega, o botão e o arquivo refletem o formato real (.md). A renderização
+  // binária em DOCX/PDF permanece follow-up documentado (PR_B_CANONICAL_CUTOVER.md).
+  const generateReport = trpc.departmentOperation.generateReport.useMutation({
+    onSuccess: (report) => {
+      try {
+        const blob = new Blob([report.content], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        // Nome e extensão compatíveis com o conteúdo real (Markdown).
+        const safeBase = report.title.replace(/[^a-zA-Z0-9_\-. ]/g, "_").trim() || "relatorio-operacional";
+        a.download = `${safeBase}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast.success("Relatório operacional baixado (Markdown).");
+      } catch {
+        toast.error("Não foi possível baixar o relatório.");
+      }
+    },
+    onError: (e) => toast.error("Erro ao gerar o relatório: " + e.message),
+  });
 
   const reportButton = (
     <button type="button" onClick={() => generateReport.mutate({ kind: "operacional" })} disabled={generateReport.isPending}
       className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50">
-      {generateReport.isPending ? "Gerando…" : "Relatório Operacional (DOCX/PDF)"}
+      {generateReport.isPending ? "Gerando…" : "Baixar relatório operacional"}
     </button>
   );
 

@@ -12,6 +12,7 @@ import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { DOMAIN_COPILOTS } from "../domain/procurementProcess";
 import {
+  buildDFDDraft,
   createGeneratedDocument,
   defaultPresencialJustification,
   validateEdital,
@@ -24,6 +25,53 @@ import {
 import { insertGeneratedDocument, recordProcessEvent, listIntelligentItems } from "../db/procurement";
 
 const DOMAIN = "processo_licitatorio" as const;
+
+/**
+ * "Criar DFD do zero" (production-ready mínimo): estrutura um RASCUNHO editável do
+ * DFD (art. 12, §1º) e persiste como documento canônico (kind "dfd", status
+ * "rascunho"). NÃO usa Kernel/IA (template determinístico) — a geração assistida
+ * por IA plena fica como evolução. Supervisão humana: sempre rascunho, nunca
+ * aprovação automática. Idempotente: id determinístico por (processo, kind) →
+ * retry não duplica.
+ */
+export async function generateDFDDraft(params: {
+  organizationId: number; processId: string; object: string; correlationId: string;
+}): Promise<GeneratedDocument> {
+  const doc = createGeneratedDocument({
+    processId: params.processId, organizationId: params.organizationId,
+    kind: "dfd", title: `DFD — ${params.object}`,
+    content: buildDFDDraft(params.object),
+    sources: ["estrutura:art_12_par_1_lei_14133"],
+    correlationId: params.correlationId,
+  });
+  await insertGeneratedDocument(doc);
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: params.processId, eventType: "change",
+    actor: "sistema", summary: "DFD criado (rascunho estruturado).", refId: doc.id,
+    correlationId: params.correlationId,
+  });
+  return doc;
+}
+
+/** Salva a edição do rascunho de DFD (mantém status rascunho; atualiza conteúdo). */
+export async function saveDFDDraft(params: {
+  organizationId: number; processId: string; object: string; content: string; correlationId: string;
+}): Promise<GeneratedDocument> {
+  const doc = createGeneratedDocument({
+    processId: params.processId, organizationId: params.organizationId,
+    kind: "dfd", title: `DFD — ${params.object}`,
+    content: params.content,
+    sources: ["edicao_manual"],
+    correlationId: params.correlationId,
+  });
+  await insertGeneratedDocument(doc); // onDuplicateKeyUpdate → atualiza conteúdo do mesmo documento
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: params.processId, eventType: "change",
+    actor: String(params.organizationId), summary: "DFD salvo (rascunho).", refId: doc.id,
+    correlationId: params.correlationId,
+  });
+  return doc;
+}
 
 /**
  * Gera um documento (ETP/TR) a partir do fluxo: aciona os copilotos do domínio
