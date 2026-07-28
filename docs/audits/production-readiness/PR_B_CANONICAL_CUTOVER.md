@@ -234,3 +234,32 @@ integrada **apenas** ao Processo Licitário (DFD/ETP/TR/Edital) nesta PR:
 - Adapters de Contratos/Aditivos/Contratação Direta/Parecer documentados (não
   implementados — aguardam autorização). Parecer já tem exportação parcial
   (`legalOpinionExportService`) a consolidar sobre o núcleo comum.
+
+## 12. Acabamento institucional das exportações (PR #188)
+
+Consulta Graphify + confirmação no código: o núcleo comum (`documentExportService`)
+e o Document Engine já existiam; o `documentConverter` usa `marked` (v17, já no
+projeto). Divergência confirmada: o **DOCX** fazia parsing ingênuo (`split("\n")`)
+→ `_itálico_`/`>` vazavam como texto; o **PDF** usava `marked` mas `stripInline`
+removia a ênfase. Ajustes (apenas apresentação — conteúdo persistido intocado):
+
+- **Modelo intermediário comum** (`buildInstitutionalModel`) via tokens inline do
+  `marked` — consumido pelos dois renderers (`renderInstitutionalDOCX/PDF`): mesmos
+  metadados, seções, status; negrito/itálico reais; blockquote → **bloco de aviso**
+  (sem `>`); nenhum marcador Markdown literal.
+- **Cabeçalho institucional**: organização (via `getOrganizationById`), título do
+  documento, processo, objeto (fiel, sem correção), **status**, versão, data de
+  exportação. **RASCUNHO** destacado com aviso de revisão obrigatória.
+- **DOCX e PDF** partilham o mesmo modelo lógico (diferem só no formato).
+- **Nome de download determinístico** (`DFD_100-2026_rascunho_v1.docx`) separado da
+  **chave interna** do storage (com timestamp) via `Content-Disposition` na URL
+  assinada (`storageSignedUrl(..., downloadFileName)`).
+- **Data pt-BR** (`formatBrazilianDateTime`, America/Sao_Paulo) só na apresentação;
+  armazenamento interno permanece UTC.
+- **Fronteira RC-3.5.2** preservada: os renderers vivem no `documentConverter`
+  (renderer interno) e são acionados via `documentEngineService.renderInstitutionalContent`.
+- Sem migration; `generated_documents` é rascunho único (versão 1). Segurança/tenant/
+  auditoria inalterados; conteúdo buscado no backend, não confiado ao frontend.
+
+Reutilizável pelos adapters futuros (Contratos/Aditivos/Contratação Direta/Parecer):
+cada um fornece `{content, baseName, meta}` ao mesmo núcleo.

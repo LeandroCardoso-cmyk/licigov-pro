@@ -16,7 +16,11 @@
 
 import { assertKernelAccess } from "./kernelAccessService";
 // Motor de conversão (ENGINE OFICIAL) — produz o artefato binário (DOCX/PDF).
-import { convertToDOCX, convertToPDF } from "./documentConverter";
+import {
+  convertToDOCX, convertToPDF,
+  buildInstitutionalModel, renderInstitutionalDOCX, renderInstitutionalPDF,
+  type InstitutionalMeta,
+} from "./documentConverter";
 // Ciclo de vida documental (versão, timeline, hash, storage, signed URL).
 import { createDocument, storeRenderedArtifact, type StoredArtifact } from "./officialDocumentLifecycleService";
 import {
@@ -95,6 +99,22 @@ export async function renderContent(params: {
     : convertToPDF(params.content, params.fileName, h.organizationName, h.address, h.cnpj, h.phone, h.email, h.website);
 }
 
+/**
+ * Renderiza um documento com ACABAMENTO INSTITUCIONAL (cabeçalho: organização,
+ * processo, objeto, status, versão, data; destaque de RASCUNHO; corpo Markdown
+ * interpretado via `marked`, sem artefatos) para DOCX/PDF, a partir de um MODELO
+ * intermediário comum consumido pelos dois renderers. Fronteira RC-3.5.2: o
+ * DocumentConverter é acionado apenas aqui. NÃO toca no Storage/S3.
+ */
+export async function renderInstitutionalContent(params: {
+  content: string;
+  meta: InstitutionalMeta;
+  format: OfficialFormat;
+}): Promise<Buffer> {
+  const model = buildInstitutionalModel(params.content, params.meta);
+  return params.format === "docx" ? renderInstitutionalDOCX(model) : renderInstitutionalPDF(model);
+}
+
 /** Prévia (conteúdo Markdown) do documento oficial — sem gerar binário. */
 export async function previewOfficialDocument(params: { organizationId: number; documentId: string }): Promise<{ document: OfficialDocument | null }> {
   const document = await getOfficialDocument(params.documentId, params.organizationId);
@@ -102,3 +122,4 @@ export async function previewOfficialDocument(params: { organizationId: number; 
 }
 
 export { getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId };
+export type { InstitutionalMeta } from "./documentConverter";

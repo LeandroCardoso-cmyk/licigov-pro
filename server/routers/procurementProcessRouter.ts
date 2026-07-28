@@ -21,7 +21,8 @@ import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
-import { exportDocument as exportDocumentCore } from "../services/documentExportService";
+import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
+import { getOrganizationById } from "../db/organizations";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
   insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
@@ -42,6 +43,20 @@ async function requireProcess(id: string, orgId: number) {
   if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
   return p;
 }
+
+// Acabamento institucional das exportações (PR #188).
+const DOC_TITLES: Record<"dfd" | "etp" | "tr" | "edital", string> = {
+  dfd: "DFD — Documento de Formalização da Demanda",
+  etp: "ETP — Estudo Técnico Preliminar",
+  tr: "TR — Termo de Referência",
+  edital: "Edital",
+};
+const STATUS_LABELS: Record<string, string> = {
+  rascunho: "RASCUNHO", em_revisao: "EM REVISÃO", aprovado: "APROVADO", rejeitado: "REJEITADO",
+};
+const STATUS_SLUGS: Record<string, string> = {
+  rascunho: "rascunho", em_revisao: "em-revisao", aprovado: "aprovado", rejeitado: "rejeitado",
+};
 
 export const procurementProcessRouter = router({
   createProcess: tenantProcedure
@@ -157,12 +172,30 @@ export const procurementProcessRouter = router({
       if (!document || !document.content.trim()) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
       }
+      const org = await getOrganizationById(orgId);
+      const statusLabel = STATUS_LABELS[document.status] ?? document.status.toUpperCase();
+      const statusSlug = STATUS_SLUGS[document.status] ?? document.status;
+      const version = 1; // generated_documents é rascunho único evolutivo (sem versionamento próprio).
+      const procNumberFile = process.processNumber.replace(/\//g, "-");
+
       const exported = await exportDocumentCore({
         organizationId: orgId,
-        content: document.content,
+        content: document.content, // conteúdo persistido, renderizado FIELMENTE (sem correção)
         baseName: `${input.kind.toUpperCase()}_${process.processNumber}`,
+        // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
+        downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,
         format: input.format,
         scope: "processo",
+        meta: {
+          organizationName: org?.nome || undefined,
+          documentTitle: DOC_TITLES[input.kind],
+          processNumber: process.processNumber,
+          object: process.object,
+          statusLabel,
+          isDraft: document.status === "rascunho",
+          version,
+          exportedAtLabel: formatBrazilianDateTime(new Date()),
+        },
       });
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",

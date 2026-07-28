@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1785036615.786591,
-    "ast_hash": "883426d3d012c94da2221757091eb11d",
+    "mtime": 1785203434.0804129,
+    "ast_hash": "3b225af0155c86bd89fea625805216b3",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1784472877.191241,
-    "ast_hash": "97ab1b0bab8c820c419d5aeac7f9b4f6",
+    "mtime": 1785203570.876421,
+    "ast_hash": "618320d7dc20bb36566e8f96e907cb1b",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -6340,8 +6340,8 @@
     "semantic_hash": ""
   },
   "server/storage.ts": {
-    "mtime": 1784472878.0506737,
-    "ast_hash": "0736866563cfafec987d59c41924d347",
+    "mtime": 1785203174.2843974,
+    "ast_hash": "ca78183e6f3c983dc0e28d76e8a3e7da",
     "semantic_hash": ""
   },
   "shared/_core/errors.ts": {
@@ -8535,8 +8535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1785037122.882594,
-    "ast_hash": "61565587dd72fc93aecd91496433e438",
+    "mtime": 1785203360.0164084,
+    "ast_hash": "8ef6cadc63280fb1763e8368d903d723",
     "semantic_hash": ""
   },
   "docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md": {
@@ -10245,8 +10245,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PR_B_CANONICAL_CUTOVER.md": {
-    "mtime": 1785037432.5225961,
-    "ast_hash": "ea4e3d83426f6cf1782d6e5f309ca3ca",
+    "mtime": 1785203699.1124287,
+    "ast_hash": "4c4965074bf8b3e189ff1a54bb30aa23",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
@@ -10265,23 +10265,28 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-export-service.test.ts": {
-    "mtime": 1785037160.8145943,
-    "ast_hash": "1fd585ddcea89d949b75c36ac2789a4e",
+    "mtime": 1785203524.3564181,
+    "ast_hash": "ea8e30aa59fc1f692a98329141cc9632",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-export.test.ts": {
-    "mtime": 1785036778.542592,
-    "ast_hash": "bec777d14fa24f5d4aa597e7be952dc5",
+    "mtime": 1785203546.2964196,
+    "ast_hash": "93242737c9e84f8ced836f0a22075361",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
-    "mtime": 1785037136.9425943,
-    "ast_hash": "e6d4679db917ac8098103012f8756172",
+    "mtime": 1785203403.100411,
+    "ast_hash": "536fa7f1fd568dc7de516952de456842",
     "semantic_hash": ""
   },
   "docs/architecture/DOCUMENT_EXPORT_PIPELINE.md": {
     "mtime": 1785037415.738596,
     "ast_hash": "a91df5679305f36f811c3fe845cec078",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-institutional-render.test.ts": {
+    "mtime": 1785203501.8644168,
+    "ast_hash": "db44fdf41cc80b8aea98dea457e4bec8",
     "semantic_hash": ""
   }
 }

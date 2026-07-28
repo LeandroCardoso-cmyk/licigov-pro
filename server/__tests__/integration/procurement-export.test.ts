@@ -5,12 +5,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db/procurement");
-vi.mock("../../services/documentExportService", () => ({
-  exportDocument: vi.fn().mockResolvedValue({
-    key: "exports/processo/1/1_ETP_100_2026.pdf", url: "https://s3/signed", format: "pdf",
-    mimeType: "application/pdf", fileName: "ETP_100_2026.pdf",
-  }),
+vi.mock("../../db/organizations", () => ({
+  getOrganizationById: vi.fn().mockResolvedValue({ id: 1, nome: "Prefeitura de Moreira Sales" }),
 }));
+vi.mock("../../services/documentExportService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/documentExportService")>();
+  return {
+    ...actual, // mantém formatBrazilianDateTime real
+    exportDocument: vi.fn().mockResolvedValue({
+      key: "exports/processo/1/1_ETP.pdf", url: "https://s3/signed", format: "pdf",
+      mimeType: "application/pdf", fileName: "ETP_100-2026_rascunho_v1.pdf",
+    }),
+  };
+});
 vi.mock("../../services/tenantService", () => ({
   resolveTenantForUser: vi.fn().mockResolvedValue({
     organizationId: 1,
@@ -46,12 +53,18 @@ describe("procurementProcess.exportDocument (adapter)", () => {
     const r = await caller.exportDocument({ processId: PID, kind: "etp", format: "pdf" });
 
     expect(r.url).toBe("https://s3/signed");
-    expect(r.fileName).toBe("ETP_100_2026.pdf");
-    // Delegou ao núcleo comum com o conteúdo do documento + nome-base do módulo.
+    expect(r.fileName).toBe("ETP_100-2026_rascunho_v1.pdf");
+    // Delegou ao núcleo comum com o conteúdo do documento + metadados institucionais.
     const arg = vi.mocked(exportCore).mock.calls[0][0];
-    expect(arg.content).toContain("conteúdo");
+    expect(arg.content).toContain("conteúdo"); // conteúdo persistido, fiel
     expect(arg.baseName).toBe("ETP_100/2026");
+    expect(arg.downloadBaseName).toBe("ETP_100-2026_rascunho_v1"); // determinístico, sem timestamp
     expect(arg.organizationId).toBe(1);
+    expect(arg.meta?.statusLabel).toBe("RASCUNHO");
+    expect(arg.meta?.isDraft).toBe(true);
+    expect(arg.meta?.processNumber).toBe("100/2026");
+    expect(arg.meta?.organizationName).toBe("Prefeitura de Moreira Sales");
+    expect(arg.meta?.documentTitle).toContain("Estudo Técnico Preliminar");
     expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1); // auditoria
   });
 
