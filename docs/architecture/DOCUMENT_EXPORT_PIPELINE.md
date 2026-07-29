@@ -126,3 +126,12 @@ Chave interna do storage (linhagem) separada do nome de download.
   cobre o fluxo hoje).
 
 Sem migration. Segurança/tenant/auditoria preservadas; conteúdo buscado no backend.
+
+### Homologação funcional diferida (PR B.1)
+
+A **validação visual e funcional com documentos reais** (conferência manual do binário
+DOCX/PDF aberto e da impressão) ficou **DIFERIDA para o piloto**: não há documentos
+oficiais reais disponíveis no momento do merge para conferência. A corretude está
+coberta por **testes verdes** (adapter compartilhado, façade do Parecer, renderização
+institucional/modelo intermediário, fronteira RC-3.5.2) e **CI verde**. A conferência
+end-to-end com dados reais será feita durante o piloto, sem alterar a lógica entregue.
