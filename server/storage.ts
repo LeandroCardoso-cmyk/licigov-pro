@@ -141,12 +141,16 @@ export async function storagePut(
  * Gera uma URL de download pré-assinada para um objeto privado do S3.
  * Expira em 1 hora por padrão.
  */
+export type StorageDisposition = "attachment" | "inline";
+
 export async function storageGet(
   relKey: string,
   expiresInSeconds = 3600,
   /** Nome de download APRESENTADO ao usuário (Content-Disposition) — desacopla o
    * nome legível da chave interna técnica do storage. */
-  downloadFileName?: string
+  downloadFileName?: string,
+  /** "attachment" (baixar) ou "inline" (visualizar/imprimir no navegador). */
+  disposition: StorageDisposition = "attachment"
 ): Promise<{ key: string; url: string }> {
   const s3 = getS3();
   const key = normalizeKey(relKey);
@@ -157,7 +161,7 @@ export async function storageGet(
       Bucket: ENV.awsS3Bucket,
       Key: key,
       ...(downloadFileName
-        ? { ResponseContentDisposition: `attachment; filename="${downloadFileName.replace(/"/g, "")}"` }
+        ? { ResponseContentDisposition: `${disposition}; filename="${downloadFileName.replace(/"/g, "")}"` }
         : {}),
     }),
     { expiresIn: expiresInSeconds }
@@ -169,14 +173,15 @@ export async function storageGet(
 /**
  * Alias semântico de `storageGet` — URL assinada de download (contrato oficial).
  * `downloadFileName` (opcional) define o nome apresentado ao usuário, separado da
- * chave interna do storage.
+ * chave interna do storage; `disposition` alterna entre baixar e visualizar (impressão).
  */
 export async function storageSignedUrl(
   relKey: string,
   expiresInSeconds = 3600,
-  downloadFileName?: string
+  downloadFileName?: string,
+  disposition: StorageDisposition = "attachment"
 ): Promise<{ key: string; url: string }> {
-  return storageGet(relKey, expiresInSeconds, downloadFileName);
+  return storageGet(relKey, expiresInSeconds, downloadFileName, disposition);
 }
 
 /**

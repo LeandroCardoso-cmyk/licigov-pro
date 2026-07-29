@@ -1,13 +1,23 @@
 /**
- * RC-3.5.2 — Classificação: **LEGACY** (compatibilidade apenas).
+ * PR B.1 — FAÇADE de exportação de parecer jurídico (entidade legada `legal_opinions`).
  *
- * Exportador ad-hoc (docx/pdfkit direto) de pareceres, fora do pipeline oficial
- * (OfficialDocumentLifecycleService). Registrado na allowlist central
- * (`LEGACY_EXPORTERS`). Não remover, não reescrever, não migrar. Novos fluxos DEVEM
- * usar o Document Engine oficial.
+ * Antes: renderizador ad-hoc (docx/pdfkit direto), duplicando a renderização e
+ * contornando a fronteira RC-3.5.2. Agora: monta o conteúdo (Markdown) + metadados
+ * institucionais e DELEGA a renderização ao Document Engine comum
+ * (`renderInstitutionalContent`), que é o único a acionar o DocumentConverter.
+ *
+ * Contrato público PRESERVADO: as duas funções continuam recebendo o mesmo
+ * `LegalOpinion`/`DocumentSettings` e retornando `Buffer` — o router e o cliente
+ * (base64 → download) permanecem inalterados. Sem renderer paralelo; sem mudança de
+ * status/versão (exportação é leitura).
+ *
+ * Compat: a entrada em `LEGACY_EXPORTERS` (legacyBoundaries.ts) é mantida por ora —
+ * inofensiva, pois esta façade não aciona mais o DocumentConverter diretamente
+ * (a conversão ocorre no Document Engine). Classificação LEGACY preservada no
+ * histórico da entidade `legal_opinions`.
  */
-import PDFDocument from "pdfkit";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
+import { renderInstitutionalContent, type InstitutionalMeta } from "./documentEngineService";
+import { formatBrazilianDateTime } from "./documentExportService";
 
 interface LegalOpinion {
   id: number;
@@ -17,6 +27,8 @@ interface LegalOpinion {
   opinion: string | null;
   conclusion: string | null;
   createdAt: Date;
+  /** Status persistido (draft|in_review|approved|archived). Opcional por compat. */
+  status?: string | null;
 }
 
 interface DocumentSettings {
@@ -29,216 +41,63 @@ interface DocumentSettings {
   logoUrl: string | null;
 }
 
-function stripInline(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/`(.+?)`/g, "$1")
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1");
+const STATUS_MAP: Record<string, { label: string; isDraft: boolean }> = {
+  draft: { label: "RASCUNHO", isDraft: true },
+  in_review: { label: "EM REVISÃO", isDraft: true },
+  approved: { label: "APROVADO", isDraft: false },
+  archived: { label: "ARQUIVADO", isDraft: false },
+};
+
+/** Monta o conteúdo Markdown do parecer a partir das seções persistidas. */
+function buildContent(op: LegalOpinion, signatureBlock?: string): string {
+  const parts: string[] = [
+    "## Questão Jurídica",
+    op.legalQuestion || "—",
+  ];
+  if (op.context) parts.push("", "## Contexto", op.context);
+  parts.push("", "## Parecer", op.opinion || "Parecer não gerado ainda.");
+  parts.push("", "## Conclusão", op.conclusion || "Conclusão não disponível.");
+  if (signatureBlock) parts.push("", "## Assinatura", signatureBlock);
+  return parts.join("\n");
 }
 
-/**
- * Gera PDF do parecer jurídico com pdfkit (pure-JS, compatível Railway).
- */
+/** Metadados institucionais do parecer (status real; versão sintetizada = 1). */
+function buildMeta(op: LegalOpinion, settings: DocumentSettings): InstitutionalMeta {
+  const s = STATUS_MAP[op.status ?? "draft"] ?? STATUS_MAP.draft;
+  return {
+    organizationName: settings.organizationName || undefined,
+    documentTitle: `Parecer Jurídico — ${op.title}`,
+    // `legal_opinions` não tem número de processo fiel nem versão próprios → omitidos.
+    statusLabel: s.label,
+    isDraft: s.isDraft,
+    draftNoticeLabel: s.label,
+    version: 1,
+    exportedAtLabel: formatBrazilianDateTime(new Date()),
+  };
+}
+
+/** Gera o PDF do parecer via o Document Engine comum (institucional). */
 export async function exportLegalOpinionToPDF(
   legalOpinion: LegalOpinion,
   settings: DocumentSettings,
   signatureBlock?: string
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 56, size: "A4" });
-    const chunks: Buffer[] = [];
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-
-    const pageWidth = doc.page.width - 112;
-    const orgName = settings.organizationName || "Órgão Público";
-
-    // Cabeçalho
-    doc.fontSize(14).font("Helvetica-Bold").text(orgName, { align: "center" });
-    if (settings.organizationAddress)
-      doc.fontSize(9).font("Helvetica").text(settings.organizationAddress, { align: "center" });
-    if (settings.organizationCnpj)
-      doc.fontSize(9).font("Helvetica").text(`CNPJ: ${settings.organizationCnpj}`, { align: "center" });
-    doc.moveDown(0.5)
-      .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
-      .strokeColor("black").lineWidth(1.5).stroke().lineWidth(1)
-      .moveDown(0.8);
-
-    // Título
-    doc.fontSize(13).font("Helvetica-Bold").text("PARECER JURÍDICO", { align: "center" });
-    doc.fontSize(11).font("Helvetica-Bold").text(legalOpinion.title, { align: "center" });
-    doc.moveDown(1);
-
-    const section = (title: string, body: string) => {
-      doc.fontSize(11).font("Helvetica-Bold").text(title.toUpperCase());
-      doc.moveDown(0.2)
-        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
-        .strokeColor("#666").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1)
-        .moveDown(0.4);
-      doc.fontSize(11).font("Helvetica").text(stripInline(body), { align: "justify", lineGap: 1 });
-      doc.moveDown(0.8);
-    };
-
-    section("Questão Jurídica", legalOpinion.legalQuestion);
-    if (legalOpinion.context) section("Contexto", legalOpinion.context);
-    section("Parecer", legalOpinion.opinion || "Parecer não gerado ainda.");
-    section("Conclusão", legalOpinion.conclusion || "Conclusão não disponível.");
-
-    // Data
-    doc.moveDown(0.5).fontSize(10).font("Helvetica-Oblique")
-      .text(`Data: ${new Date(legalOpinion.createdAt).toLocaleDateString("pt-BR")}`, { align: "right" });
-
-    // Assinatura
-    if (signatureBlock) {
-      doc.moveDown(1).fontSize(10).font("Helvetica")
-        .text(stripInline(signatureBlock), { align: "center" });
-    }
-
-    // Rodapé
-    const footerParts = [
-      settings.organizationPhone,
-      settings.organizationEmail,
-      settings.organizationWebsite,
-    ].filter(Boolean).join(" | ");
-    if (footerParts) {
-      doc.moveDown(1)
-        .moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y)
-        .strokeColor("black").lineWidth(0.5).stroke().lineWidth(1)
-        .moveDown(0.4);
-      doc.fontSize(9).font("Helvetica").text(footerParts, { align: "center" });
-    }
-
-    doc.end();
+  return renderInstitutionalContent({
+    content: buildContent(legalOpinion, signatureBlock),
+    meta: buildMeta(legalOpinion, settings),
+    format: "pdf",
   });
 }
 
-/**
- * Gera DOCX do parecer jurídico com formatação profissional
- */
+/** Gera o DOCX do parecer via o Document Engine comum (institucional). */
 export async function exportLegalOpinionToDOCX(
   legalOpinion: LegalOpinion,
   settings: DocumentSettings,
   signatureBlock?: string
 ): Promise<Buffer> {
-  const doc = new Document({
-    sections: [
-      {
-        properties: {},
-        children: [
-          // Cabeçalho
-          new Paragraph({
-            text: settings.organizationName || "Órgão Público",
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: settings.organizationAddress || "",
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: `CNPJ: ${settings.organizationCnpj || ""}`,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }), // Espaço
-
-          // Título do Parecer
-          new Paragraph({
-            text: "PARECER JURÍDICO",
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: legalOpinion.title,
-            heading: HeadingLevel.HEADING_2,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-
-          // Questão Jurídica
-          new Paragraph({
-            text: "QUESTÃO JURÍDICA",
-            heading: HeadingLevel.HEADING_2,
-          }),
-          new Paragraph({
-            text: legalOpinion.legalQuestion,
-          }),
-          new Paragraph({ text: "" }),
-
-          // Contexto (se houver)
-          ...(legalOpinion.context
-            ? [
-                new Paragraph({
-                  text: "CONTEXTO",
-                  heading: HeadingLevel.HEADING_2,
-                }),
-                new Paragraph({
-                  text: legalOpinion.context,
-                }),
-                new Paragraph({ text: "" }),
-              ]
-            : []),
-
-          // Parecer
-          new Paragraph({
-            text: "PARECER",
-            heading: HeadingLevel.HEADING_2,
-          }),
-          ...(legalOpinion.opinion
-            ? legalOpinion.opinion.split("\n\n").map(
-                (para) =>
-                  new Paragraph({
-                    text: para,
-                  })
-              )
-            : [new Paragraph({ text: "Parecer não gerado ainda." })]),
-          new Paragraph({ text: "" }),
-
-          // Conclusão
-          new Paragraph({
-            text: "CONCLUSÃO",
-            heading: HeadingLevel.HEADING_2,
-          }),
-          ...(legalOpinion.conclusion
-            ? legalOpinion.conclusion.split("\n\n").map(
-                (para) =>
-                  new Paragraph({
-                    text: para,
-                  })
-              )
-            : [new Paragraph({ text: "Conclusão não disponível." })]),
-          new Paragraph({ text: "" }),
-
-          // Assinatura Digital
-          ...(signatureBlock
-            ? signatureBlock.split("\n\n").map(
-                (para) =>
-                  new Paragraph({
-                    text: para.replace(/[#*`]/g, ""), // Remove markdown
-                  })
-              )
-            : []),
-          new Paragraph({ text: "" }),
-
-          // Rodapé
-          new Paragraph({
-            text: `Data: ${legalOpinion.createdAt.toLocaleDateString("pt-BR")}`,
-            alignment: AlignmentType.RIGHT,
-          }),
-          new Paragraph({
-            text: settings.organizationEmail || "",
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: settings.organizationPhone || "",
-            alignment: AlignmentType.CENTER,
-          }),
-        ],
-      },
-    ],
+  return renderInstitutionalContent({
+    content: buildContent(legalOpinion, signatureBlock),
+    meta: buildMeta(legalOpinion, settings),
+    format: "docx",
   });
-
-  return await Packer.toBuffer(doc);
 }
-

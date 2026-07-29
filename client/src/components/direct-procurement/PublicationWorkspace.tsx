@@ -1,6 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { formatDate } from "./labels";
+import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 
 /**
  * PublicationWorkspace — REAL (tRPC).
@@ -53,6 +54,11 @@ export default function PublicationWorkspace({ workspaceId, publications = [] }:
           ))}
         </ul>
       )}
+
+      {/* PR B.1 — documentos oficiais persistidos (justificativa/ratificação/extrato/
+          aviso) com Baixar DOCX/PDF + Imprimir institucional. LEITURA apenas — não
+          dispara `publish`/geração. */}
+      <OfficialDocumentPanel businessDomain="contratacao_direta" origin={workspaceId} title="Documentos Oficiais (DOCX/PDF)" />
     </div>
   );
 }

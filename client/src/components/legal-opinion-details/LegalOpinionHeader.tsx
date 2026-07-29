@@ -11,6 +11,7 @@ import {
   XCircle,
   AlertCircle,
   Download,
+  Printer,
   BookmarkPlus,
   Shield,
   ShieldCheck,
@@ -30,6 +31,8 @@ interface Props {
   onSignClick: () => void;
   onExportPDF: () => void;
   onExportDOCX: () => void;
+  onPrint?: () => void;
+  printPending?: boolean;
   onSaveAsTemplate: () => void;
 }
 
@@ -65,6 +68,8 @@ export function LegalOpinionHeader({
   onSignClick,
   onExportPDF,
   onExportDOCX,
+  onPrint,
+  printPending,
   onSaveAsTemplate,
 }: Props) {
   const statusConfig = STATUS_LABELS[opinion.status] ?? { label: opinion.status, variant: "outline" as const };
@@ -114,6 +119,12 @@ export function LegalOpinionHeader({
                   {exportDOCXPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                   DOCX
                 </Button>
+                {onPrint && (
+                  <Button variant="outline" size="sm" onClick={onPrint} disabled={printPending}>
+                    {printPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
+                    Imprimir
+                  </Button>
+                )}
               </>
             )}
 

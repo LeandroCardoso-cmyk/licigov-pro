@@ -2,3 +2,6 @@
 cache/
 # Snapshots datados que o graphify mantém a cada rebuild (histórico volumoso).
 20*/
+# Artefatos locais não versionados (visualização HTML e assinatura de labels).
+graph.html
+*.sig

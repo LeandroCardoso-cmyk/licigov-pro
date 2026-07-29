@@ -50,6 +50,8 @@ const MIGRATED_FILES = [
   "client/src/components/procurement/ETPWorkspace.tsx",
   "client/src/components/procurement/TRWorkspace.tsx",
   "client/src/components/procurement/EditalWorkspace.tsx",
+  // PR B.1 — painel compartilhado de documentos oficiais (DOCX/PDF/Imprimir)
+  "client/src/components/documents/OfficialDocumentPanel.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {
