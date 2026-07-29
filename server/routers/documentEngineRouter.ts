@@ -12,6 +12,7 @@ import {
   generateOfficialDocument, renderOfficialDocument, previewOfficialDocument,
   getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId,
 } from "../services/documentEngineService";
+import { exportOfficialDocument } from "../services/officialDocumentExportAdapter";
 
 const DOMAINS = ["processo_licitatorio", "contratacao_direta", "parecer_juridico", "contratos"] as const;
 const DOC_TYPES = ["dfd", "etp", "tr", "edital", "justificativa_contratacao", "justificativa_preco", "ratificacao", "aviso", "extrato_contrato", "parecer_inicial", "parecer_final", "despacho", "contrato", "aditivo", "apostilamento", "rescisao", "outro"] as const;
@@ -82,7 +83,7 @@ export const documentEngineRouter = router({
       return previewOfficialDocument({ organizationId: orgId, documentId: input.documentId });
     }),
 
-  /** Exporta o documento em DOCX ou PDF (base64 do binário real). */
+  /** Exporta o documento em DOCX ou PDF (base64 do binário real). Caminho legado. */
   download: tenantProcedure
     .input(z.object({ documentId: z.string().min(1), format: z.enum(FORMATS) }))
     .mutation(async ({ input, ctx }) => {
@@ -92,5 +93,28 @@ export const documentEngineRouter = router({
       } catch (e) {
         throw new TRPCError({ code: "NOT_FOUND", message: e instanceof Error ? e.message : "Falha ao exportar." });
       }
+    }),
+
+  /**
+   * PR B.1 — Exportação INSTITUCIONAL (DOCX/PDF) de um documento oficial: cabeçalho
+   * institucional, status/versão fiéis, sem artefatos Markdown, nome de download
+   * legível/determinístico. Reutiliza o núcleo comum da PR B (renderInstitucional +
+   * S3 + URL assinada). Ação de LEITURA — não gera, não versiona, não altera status.
+   * Serve Contratos/Aditivos, Contratação Direta e Parecer (todos em official_documents).
+   */
+  exportInstitutional: tenantProcedure
+    .input(z.object({
+      documentId: z.string().min(1),
+      format: z.enum(FORMATS),
+      /** true → URL inline (visualizar/imprimir); default false (baixar). */
+      inline: z.boolean().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return exportOfficialDocument({
+        organizationId: ctx.organizationId!, userId: ctx.user.id,
+        documentId: input.documentId, format: input.format,
+        disposition: input.inline ? "inline" : "attachment",
+        correlationId: ctx.correlationId,
+      });
     }),
 });

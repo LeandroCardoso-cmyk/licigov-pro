@@ -306,6 +306,9 @@ export interface InstitutionalMeta {
   isDraft: boolean;
   version: number;
   exportedAtLabel: string; // já formatado pt-BR pela camada de apresentação
+  /** Palavra usada no aviso de não-finalizado (default "RASCUNHO"). Documentos
+   *  oficiais usam o status real (ex.: "GERADO"/"REVISADO"). */
+  draftNoticeLabel?: string;
 }
 
 export interface InstitutionalModel {
@@ -394,7 +397,10 @@ function metaLines(meta: InstitutionalMeta): { label: string; value: string; str
   return lines;
 }
 
-const DRAFT_NOTICE = "RASCUNHO — revisão obrigatória. Este arquivo NÃO é uma versão oficial aprovada.";
+function draftNotice(meta: InstitutionalMeta): string {
+  const label = meta.draftNoticeLabel ?? "RASCUNHO";
+  return `${label} — revisão obrigatória. Este arquivo ainda NÃO é uma versão oficial finalizada.`;
+}
 
 /** Renderiza o modelo institucional para DOCX. */
 export async function renderInstitutionalDOCX(model: InstitutionalModel): Promise<Buffer> {
@@ -412,7 +418,7 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
     }));
   }
   if (meta.isDraft) {
-    paras.push(new Paragraph({ children: [new TextRun({ text: DRAFT_NOTICE, bold: true, italics: true })], spacing: { before: 120, after: 120 } }));
+    paras.push(new Paragraph({ children: [new TextRun({ text: draftNotice(meta), bold: true, italics: true })], spacing: { before: 120, after: 120 } }));
   }
   paras.push(new Paragraph({ text: "", border: { bottom: { color: "1e40af", size: 6, style: BorderStyle.SINGLE, space: 1 } } }));
 
@@ -457,7 +463,7 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
         .font(ln.strong ? "Helvetica-Bold" : "Helvetica").text(ln.value);
     }
     if (meta.isDraft) {
-      doc.moveDown(0.3).fontSize(10).font("Helvetica-BoldOblique").fillColor("#b91c1c").text(DRAFT_NOTICE).fillColor("black");
+      doc.moveDown(0.3).fontSize(10).font("Helvetica-BoldOblique").fillColor("#b91c1c").text(draftNotice(meta)).fillColor("black");
     }
     doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#1e40af").lineWidth(1.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.6);
 

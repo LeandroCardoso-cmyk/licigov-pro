@@ -42,6 +42,8 @@ export interface ExportDocumentParams {
   /** Cabeçalho legado (usado apenas quando `meta` ausente). */
   header?: ExportHeader;
   expiresInSeconds?: number;
+  /** "attachment" (baixar) ou "inline" (visualizar/imprimir). Default attachment. */
+  disposition?: "attachment" | "inline";
 }
 
 export interface ExportedDocument {
@@ -109,8 +111,8 @@ export async function exportDocument(params: ExportDocumentParams): Promise<Expo
   // Chave INTERNA por tenant (timestamp evita colisão/sobrescrita entre exportações).
   const key = `exports/${scope}/${params.organizationId}/${Date.now()}_${safeInternal}.${ext}`;
   await storagePut(key, buffer, MIME[params.format]);
-  // URL assinada com o nome de download apresentado ao usuário (Content-Disposition).
-  const { url } = await storageSignedUrl(key, params.expiresInSeconds ?? 3600, downloadFileName);
+  // URL assinada com o nome apresentado (Content-Disposition); inline p/ impressão.
+  const { url } = await storageSignedUrl(key, params.expiresInSeconds ?? 3600, downloadFileName, params.disposition ?? "attachment");
 
   return { key, url, format: params.format, mimeType: MIME[params.format], fileName: downloadFileName };
 }

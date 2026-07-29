@@ -73,6 +73,18 @@ export default function LegalOpinionDetails() {
     onError: (e) => toast.error(e.message || "Erro ao exportar DOCX"),
   });
 
+  // PR B.1 — Imprimir: reusa o PDF institucional (façade) e abre INLINE numa nova
+  // aba (blob), sem chrome da aplicação → o usuário imprime pelo visualizador.
+  const printPDFMutation = trpc.legalOpinions.exportPDF.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([Uint8Array.from(atob(data.buffer), (c) => c.charCodeAt(0))], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    },
+    onError: (e) => toast.error(e.message || "Erro ao imprimir"),
+  });
+
   const signMutation = trpc.legalOpinions.sign.useMutation({
     onSuccess: (data) => {
       toast.success(`✅ Parecer assinado digitalmente! (${data.signaturesCount}/${data.requiredSignatures})`);
@@ -119,6 +131,8 @@ export default function LegalOpinionDetails() {
         onSignClick={handleSignClick}
         onExportPDF={() => exportPDFMutation.mutate({ id: opinion.id })}
         onExportDOCX={() => exportDOCXMutation.mutate({ id: opinion.id })}
+        onPrint={() => printPDFMutation.mutate({ id: opinion.id })}
+        printPending={printPDFMutation.isPending}
         onSaveAsTemplate={() => (updateMutation as any).mutate({ id: opinion.id, isTemplate: true })}
       />
 
