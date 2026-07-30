@@ -11,10 +11,15 @@
 - **Agendado:** diariamente às **06:00 UTC** (03:00 BRT) via `schedule`.
 - **Manual:** Actions → "Backup do Banco (agendado + manual)" → "Run workflow".
 - **Método:** `mysqldump --single-transaction` (snapshot consistente, somente leitura).
-- **Artefato:** dump `.sql.gz` **+ checksum `.sha256`**, retenção **14 dias**.
-- **Integridade:** falha explícita se o dump sair vazio/curto; checksum SHA-256 gerado.
+- **Artefato:** dump `.sql.gz` (ou `.sql.gz.enc` se cifrado) **+ checksum `.sha256`**, retenção **14 dias**.
+- **Integridade:** falha explícita se o dump sair vazio/curto; checksum SHA-256 do artifact final.
+- **Criptografia at-rest (secure-by-default):** se o secret `BACKUP_ENCRYPTION_KEY` estiver definido,
+  o dump é **cifrado** com `openssl aes-256-cbc -pbkdf2` antes do upload. Sem a chave, o workflow
+  **avisa** e sobe o dump apenas **restrito ao repositório** (artifacts do GitHub são privados aos
+  colaboradores, mas não cifrados por nós) — definir a chave é ação operacional.
 - **Segurança:** host/usuário/senha **não** aparecem nos logs; o dump **nunca** é versionado no Git.
-- **Secret necessário:** `BACKUP_DATABASE_URL` (MySQL público de produção — ex.: `MYSQL_PUBLIC_URL` do Railway).
+- **Secrets:** `BACKUP_DATABASE_URL` (obrigatório) e `BACKUP_ENCRYPTION_KEY` (recomendado).
+  Para restaurar um dump cifrado: `openssl enc -d -aes-256-cbc -pbkdf2 -in dump.sql.gz.enc -out dump.sql.gz -pass env:BACKUP_ENCRYPTION_KEY`.
 
 ## Teste de restauração (isolado — automatizado)
 
@@ -46,11 +51,25 @@ exige o secret `BACKUP_DATABASE_URL` e infraestrutura de destino não-produtiva 
 
 Só após esse drill o item de gate **G11** pode ser considerado plenamente `PASS` para o backup real.
 
+## Healthcheck canônico (Railway)
+
+- **Rota canônica de readiness:** **`/readyz`** (200 quando o banco responde; 503 quando não).
+  Declarada em [`railway.json`](../../railway.json) (`deploy.healthcheckPath`). `/health` e
+  `/healthz` são aliases equivalentes; `/livez` é liveness (sempre 200) — não usar como healthcheck
+  de deploy (não detectaria o banco indisponível).
+- **Ação operacional (painel Railway):** confirmar em Service → Settings que o healthcheck aponta
+  para `/readyz` e habilitar *Wait for CI* para o deploy aguardar os checks do GitHub.
+
 ## OPERATOR_ACTION_REQUIRED
 
-- **SEC (dependências):** `pnpm audit --prod` acusa vulnerabilidades **críticas/altas
-  pré-existentes** em dependências transitivas. Planejar upgrades controlados (fora do PR D),
-  validando em staging. O gate de CI roda o audit de forma transparente (advisory).
+- **SEC (dependências):** 3 críticas + 45 altas **pré-existentes** (triagem em
+  [`DEPENDENCY_AUDIT_TRIAGE.md`](./DEPENDENCY_AUDIT_TRIAGE.md)). O gate de CI (`pnpm audit:gate`)
+  bloqueia **novas**; reduzir o baseline via upgrades controlados (validar em staging).
 - **G11 (restore real):** executar o drill acima com `BACKUP_DATABASE_URL` e registrar a evidência.
-- **SEC-036 (CSP):** habilitar `HELMET_CSP_ENABLED=true` primeiro em **staging**, validar que o
-  SPA não quebra, e só então em produção.
+- **Criptografia de backup:** definir o secret `BACKUP_ENCRYPTION_KEY` para cifrar o dump at-rest.
+- **Required checks / Wait for CI:** configurar branch protection na `main` e *Wait for CI* no
+  Railway (ver [`CI_CD_GATES.md`](../architecture/CI_CD_GATES.md)).
+- **Healthcheck:** confirmar `/readyz` no painel do Railway.
+- **SEC-036 (CSP):** a CSP é **secure-by-default** (ligada em produção/staging). Validar em
+  **staging** que a CSP padrão não quebra o SPA; se quebrar, ajustar as diretivas — nunca desligar
+  em produção sem substituto (`HELMET_CSP_ENABLED=false` é só escape hatch de emergência).

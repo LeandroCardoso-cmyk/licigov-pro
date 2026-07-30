@@ -119,6 +119,10 @@ jobs:
       - name: Smoke — criação canônica de Processo Licitatório (regressão de DATETIME)
         run: pnpm exec vitest run server/__tests__/integration/procurement-create-mysql-smoke.test.ts
 
+      # PR D — concorrência/rollback do versionamento (transação + SELECT ... FOR UPDATE).
+      - name: Smoke — concorrência e rollback do versionamento (DATA-012)
+        run: pnpm exec vitest run server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts
+
       # ISOLAMENTO multi-tenant / RBAC — G7 exige que o isolamento não regrida no gate de CI.
       - name: Smoke — isolamento multi-tenant / RBAC (test:smoke:security)
         run: pnpm test:smoke:security
@@ -149,15 +153,14 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # ── ADVISORY (não bloqueia): auditoria de dependências, transparente ──
-  # NÃO usa `|| true` (não mascara): roda o audit completo e o resultado fica visível. É marcada
-  # como não-bloqueante via `continue-on-error` porque a base tem vulnerabilidades CRÍTICAS/ALTAS
-  # pré-existentes em dependências transitivas, cuja correção (upgrades) está FORA do escopo do
-  # PR D. A dívida está registrada no runbook como OPERATOR_ACTION_REQUIRED (SEC).
+  # ── GATE OBRIGATÓRIO 5: auditoria de dependências com BASELINE (bloqueia REGRESSÃO) ──
+  # A dívida PRÉ-EXISTENTE (críticas/altas em deps transitivas) está registrada em
+  # security/audit-baseline.json e NÃO bloqueia. Mas qualquer NOVA vulnerabilidade high/critical
+  # fora do baseline FALHA o pipeline (sem `|| true`, sem regressão silenciosa). O relatório
+  # completo fica visível. Reduzir o baseline = OPERATOR_ACTION_REQUIRED (SEC).
   security-audit:
-    name: Auditoria de Dependências (advisory)
+    name: Auditoria de Dependências (gate de não-regressão)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -169,14 +172,16 @@ jobs:
         run: corepack enable
       - name: Instalar dependências (lockfile)
         run: pnpm install --frozen-lockfile
-      - name: Auditoria de dependências de produção (relatório completo, visível)
-        run: pnpm audit --prod
+      # Gate: imprime o resumo high/critical e FALHA apenas em NOVA vulnerabilidade fora do
+      # baseline (sem `|| true`, sem mascarar). A dívida pré-existente é auditável no baseline.
+      - name: Gate de auditoria (não-regressão)
+        run: pnpm audit:gate
 
   # ── DEPLOY (preparação): SÓ avança se TODOS os gates obrigatórios passarem ──
   deploy:
     name: Deploy (Preparação)
     runs-on: ubuntu-latest
-    needs: [quality, test, mysql-smoke, build]   # dependências REAIS — audit advisory não entra
+    needs: [quality, test, mysql-smoke, build, security-audit]   # todos os gates obrigatórios
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout código

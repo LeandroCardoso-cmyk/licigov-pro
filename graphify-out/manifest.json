@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1785377708.366282,
-    "ast_hash": "a4009d78a2e0d52b8b45e8cb5bdb5460",
+    "mtime": 1785455075.0059912,
+    "ast_hash": "43bce0159a887ded2a9af4b11d37f849",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -4115,8 +4115,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1785374712.299111,
-    "ast_hash": "ba52fae5e21b738b92e48a03f6d50795",
+    "mtime": 1785455383.5819843,
+    "ast_hash": "f3bc70267da54bffd5c9a40380fd019b",
     "semantic_hash": ""
   },
   "server/_core/ai/provider.ts": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "server/_core/index.ts": {
-    "mtime": 1785376502.7742102,
-    "ast_hash": "eabc2017b8d1161ab5788f11eed625f5",
+    "mtime": 1785454468.6100051,
+    "ast_hash": "b936e0d30de9b8443c9a28aaa3d97092",
     "semantic_hash": ""
   },
   "server/_core/llm.ts": {
@@ -4215,8 +4215,8 @@
     "semantic_hash": ""
   },
   "server/config/app.ts": {
-    "mtime": 1785376480.038209,
-    "ast_hash": "1b8307d30b709e1f0e153be0fe81d0f1",
+    "mtime": 1785454460.2220054,
+    "ast_hash": "734344b45f8cdfaebd2ca25b8daf9abf",
     "semantic_hash": ""
   },
   "server/config/auth.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1785377530.9462714,
-    "ast_hash": "c13784a7fb00cbdb52a8c1637ac2a0e7",
+    "mtime": 1785455110.2859905,
+    "ast_hash": "258c680702851bfb8a274ad036972510",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -8520,8 +8520,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1785374712.3047662,
-    "ast_hash": "47dd2215e9b355bfaed3d33c0e73fba0",
+    "mtime": 1785454680.9540002,
+    "ast_hash": "7da758a05d7b15f458617a2f49b79767",
     "semantic_hash": ""
   },
   "server/domain/officialDocument.ts": {
@@ -8590,8 +8590,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1785374712.457501,
-    "ast_hash": "2857b0026da661201b6c5ec763fe6e78",
+    "mtime": 1785454728.5099993,
+    "ast_hash": "01c0ef98bfce969a0afa52c43b1e2470",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
@@ -9690,8 +9690,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1785377604.8822758,
-    "ast_hash": "3791a20b97154e67fd9994104483a092",
+    "mtime": 1785455165.133989,
+    "ast_hash": "796fde8ddc9af83db6242115dc0b8081",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
@@ -9760,8 +9760,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1785377922.7142947,
-    "ast_hash": "3d13c496ac664f5ac96b2fa8b12d18ee",
+    "mtime": 1785455256.789987,
+    "ast_hash": "4ff9e21eeca8589eeb3ff840cd3636ed",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -10310,8 +10310,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-resilience.test.ts": {
-    "mtime": 1785376804.278228,
-    "ast_hash": "f82102ce2ea873d610f725d862c47cf4",
+    "mtime": 1785454553.0740032,
+    "ast_hash": "434c49faf23d50aec96ca1efd66cdf40",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-version-transaction.test.ts": {
@@ -10350,18 +10350,43 @@
     "semantic_hash": ""
   },
   "docs/architecture/CI_CD_GATES.md": {
-    "mtime": 1785377832.0142891,
-    "ast_hash": "ecd9e6e323c46c32169b9555604cb8a0",
+    "mtime": 1785455204.1139884,
+    "ast_hash": "892c6c6bccb73df9a6b2f32e0632c397",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PR_D_PRODUCTION_RESILIENCE.md": {
-    "mtime": 1785377897.562293,
-    "ast_hash": "60dab9a9d118eb447a23c50c43fbe4d1",
+    "mtime": 1785455310.2819858,
+    "ast_hash": "aa9c2ab0b69479a9cf7d111108529407",
     "semantic_hash": ""
   },
   "docs/ops/DB_RESTORE_RUNBOOK.md": {
-    "mtime": 1785377853.7502904,
-    "ast_hash": "4c8072f9ebffae3c8783a3626364c89b",
+    "mtime": 1785455237.1979876,
+    "ast_hash": "0a4d160883bfc32e9c92996d6c5c2091",
+    "semantic_hash": ""
+  },
+  "railway.json": {
+    "mtime": 1785455136.3579898,
+    "ast_hash": "081d1279cca22ab6365df967a8b34e77",
+    "semantic_hash": ""
+  },
+  "scripts/audit-gate.mjs": {
+    "mtime": 1785455052.5819917,
+    "ast_hash": "c7ebdb28ccfacd9e1dfda6f5e96a4c9b",
+    "semantic_hash": ""
+  },
+  "security/audit-baseline.json": {
+    "mtime": 1785455034.0619922,
+    "ast_hash": "76a821874a701d79d2ff47d7e5a78df0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts": {
+    "mtime": 1785454927.8419945,
+    "ast_hash": "1e97187b7686d896fb1ccf935b7f56f1",
+    "semantic_hash": ""
+  },
+  "docs/ops/DEPENDENCY_AUDIT_TRIAGE.md": {
+    "mtime": 1785455034.0619922,
+    "ast_hash": "2e85ec3339015c7bc3c7a292aaed7275",
     "semantic_hash": ""
   }
 }

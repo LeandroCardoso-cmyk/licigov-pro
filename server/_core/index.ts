@@ -43,8 +43,8 @@ async function startServer() {
   // auditoria de `ipAddress`. `1` = confia em um único hop de proxy (o do Railway).
   app.set("trust proxy", 1);
 
-  // SEC-036 — em dev a CSP fica desligada (Vite injeta scripts inline). Em produção/staging,
-  // liga a CSP padrão do Helmet apenas com HELMET_CSP_ENABLED=true (opt-in validável em staging).
+  // SEC-036 — secure-by-default: em produção/staging a CSP padrão do Helmet fica LIGADA por padrão
+  // (desliga só com HELMET_CSP_ENABLED=false); em dev fica desligada (o Vite injeta scripts inline).
   app.use(helmet({
     contentSecurityPolicy: APP_CONFIG.cspEnabled ? undefined : false,
     crossOriginEmbedderPolicy: false,

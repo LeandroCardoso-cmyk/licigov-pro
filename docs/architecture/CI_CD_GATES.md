@@ -18,8 +18,8 @@
 | **test** | Suíte automatizada completa | `pnpm test` | ✅ Sim |
 | **mysql-smoke** | Smokes MySQL reais + **isolamento multi-tenant/RBAC** | reconciliação, consulta, criação de processo + `pnpm test:smoke:security` | ✅ Sim |
 | **build** | Build de produção real + artefato | `pnpm build` → `dist/` | ✅ Sim |
-| **security-audit** | Auditoria de dependências (transparente) | `pnpm audit --prod` | ⚠️ Não (advisory) |
-| **deploy** | Preparação; confirma o artefato validado | `needs: [quality, test, mysql-smoke, build]` | — |
+| **security-audit** | Auditoria de deps com baseline (bloqueia NOVA high/critical) | `pnpm audit:gate` | ✅ Sim |
+| **deploy** | Preparação; confirma o artefato validado | `needs: [quality, test, mysql-smoke, build, security-audit]` | — |
 
 O job **deploy** só roda em `main` e **só depois** de todos os gates obrigatórios passarem
 (`needs`). Ele não faz deploy em produção — a plataforma (Railway) faz o deploy efetivo; este job
@@ -45,14 +45,36 @@ ou exigir uma faxina ampla fora de escopo, o gate exige **zero problema apenas n
 3. Reduzir `no-explicit-any` (552) — tipagem incremental por módulo.
 Quando a base ficar limpa, trocar o passo de não-regressão por `pnpm lint` completo.
 
-## Auditoria de dependências — por que é advisory
+## Auditoria de dependências — gate de não-regressão (baseline)
 
 `pnpm audit --prod` revela **vulnerabilidades críticas/altas pré-existentes** em dependências
-transitivas. Corrigi-las exige upgrades de dependências — fora do escopo do PR D e com risco de
-regressão. O job roda o audit **completo e visível** (sem `|| true`), mas é marcado
-`continue-on-error` (transparente, não bloqueia o gate de código). A correção está registrada
-como **OPERATOR_ACTION_REQUIRED (SEC)** no [runbook de restore/ops](../ops/DB_RESTORE_RUNBOOK.md)
-e no [resumo do PR D](../audits/production-readiness/PR_D_PRODUCTION_RESILIENCE.md).
+transitivas (3 críticas + 45 altas). Corrigi-las exige upgrades — fora do escopo do PR D. Em vez de
+mascarar (`|| true`) ou bloquear no que já existe, o gate usa um **baseline auditável**
+([`security/audit-baseline.json`](../../security/audit-baseline.json), 40 GHSA): `pnpm audit:gate`
+(`scripts/audit-gate.mjs`) roda o audit, imprime o resumo e **FALHA em qualquer NOVA high/critical
+fora do baseline** — sem regressão silenciosa. Triagem em
+[`docs/ops/DEPENDENCY_AUDIT_TRIAGE.md`](../ops/DEPENDENCY_AUDIT_TRIAGE.md). Reduzir o baseline via
+upgrades é **OPERATOR_ACTION_REQUIRED (SEC)**. O baseline nunca deve crescer silenciosamente
+(adicionar um GHSA exige justificativa explícita no arquivo).
+
+## Gate de deploy real — Railway e required checks (ação operacional)
+
+O `needs` do job `deploy` garante a ordem **dentro** do workflow, mas **por si só não bloqueia** um
+deploy do Railway nem um merge na `main`. Para que os gates sejam de fato obrigatórios, é necessária
+configuração operacional (fora do que o código controla):
+
+1. **Branch protection na `main`** (GitHub → Settings → Branches): marcar como **required status
+   checks** os jobs `Typecheck + Lint (gate)`, `Testes Automatizados (gate)`,
+   `Smoke MySQL + Isolamento (gate)`, `Build de Produção (gate)` e
+   `Auditoria de Dependências (gate de não-regressão)`. Assim nenhum merge ocorre com gate vermelho.
+2. **Railway "Wait for CI"** (Railway → Service → Settings → Deploys): habilitar *Check Status /
+   Wait for CI* para que o deploy só dispare após os checks do GitHub passarem. Sem essa opção, o
+   Railway faz deploy no push independentemente do CI — o `needs` do workflow **não** o impede.
+3. **Healthcheck do Railway:** `deploy.healthcheckPath` = `/readyz` já está declarado em
+   [`railway.json`](../../railway.json); confirmar no painel que o healthcheck aponta para `/readyz`.
+
+> **Não afirmar** que o deploy está bloqueado apenas porque o job `deploy` tem `needs`: o bloqueio
+> efetivo depende de (1) e (2) acima, que são ação operacional no GitHub e no Railway.
 
 ## Observabilidade do gate
 

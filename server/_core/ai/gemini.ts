@@ -1,11 +1,14 @@
 import {
   GoogleGenerativeAI,
+  FunctionCallingMode,
   HarmBlockThreshold,
   HarmCategory,
   type Content,
   type FunctionDeclaration,
+  type FunctionDeclarationSchema,
   type GenerateContentResult,
   type Tool as GeminiTool,
+  type ToolConfig,
 } from "@google/generative-ai";
 import type {
   AIGenerateOptions,
@@ -13,6 +16,13 @@ import type {
   AIProvider,
   AIToolCall,
 } from "./types";
+import { AI_CONFIG } from "../../config/ai";
+
+// AI-014 — timeout suportado pelo SDK (RequestOptions.timeout): aborta a chamada HTTP real ao
+// Gemini quando excede o limite. Complementa o withTimeout externo (que rejeita a promise). O SDK
+// legado @google/generative-ai não expõe AbortSignal, então este é o mecanismo de cancelamento
+// efetivo do request de rede.
+const REQUEST_OPTIONS = { timeout: AI_CONFIG.timeoutMs } as const;
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -56,7 +66,7 @@ export class GeminiProvider implements AIProvider {
     const model = this.client.getGenerativeModel({
       model: this.modelId,
       safetySettings: SAFETY_SETTINGS,
-    });
+    }, REQUEST_OPTIONS);
     const result = await model.generateContent(prompt);
     return result.response.text();
   }
@@ -77,7 +87,7 @@ export class GeminiProvider implements AIProvider {
                 (t): FunctionDeclaration => ({
                   name: t.name,
                   description: t.description ?? "",
-                  parameters: t.parameters as any,
+                  parameters: t.parameters as unknown as FunctionDeclarationSchema,
                 })
               ),
             },
@@ -85,18 +95,18 @@ export class GeminiProvider implements AIProvider {
         : undefined;
 
     // Build tool config
-    let toolConfig: any = undefined;
+    let toolConfig: ToolConfig | undefined = undefined;
     if (toolChoice === "none") {
-      toolConfig = { functionCallingConfig: { mode: "NONE" } };
+      toolConfig = { functionCallingConfig: { mode: FunctionCallingMode.NONE } };
     } else if (toolChoice && typeof toolChoice === "object" && "name" in toolChoice) {
       toolConfig = {
         functionCallingConfig: {
-          mode: "ANY",
+          mode: FunctionCallingMode.ANY,
           allowedFunctionNames: [toolChoice.name],
         },
       };
     } else if (tools && tools.length > 0) {
-      toolConfig = { functionCallingConfig: { mode: "AUTO" } };
+      toolConfig = { functionCallingConfig: { mode: FunctionCallingMode.AUTO } };
     }
 
     // Build response schema (JSON mode)
@@ -121,7 +131,7 @@ export class GeminiProvider implements AIProvider {
       ...(geminiTools ? { tools: geminiTools } : {}),
       ...(toolConfig ? { toolConfig } : {}),
       generationConfig: Object.keys(generationConfig).length > 0 ? generationConfig : undefined,
-    });
+    }, REQUEST_OPTIONS);
 
     // Convert messages to Gemini Content[]
     const contents: Content[] = history.map((m) => ({

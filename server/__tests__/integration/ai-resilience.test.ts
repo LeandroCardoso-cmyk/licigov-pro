@@ -68,6 +68,48 @@ describe("resilientAiCall — retry controlado", () => {
   });
 });
 
+describe("resilientAiCall — replay safety (sem retry concorrente / chamada tardia descartada)", () => {
+  it("re-tentativas são SEQUENCIAIS (nunca há duas chamadas em voo)", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let calls = 0;
+    const gen = async () => {
+      inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => { const t = setTimeout(r, 5); (t as { unref?: () => void }).unref?.(); });
+      inFlight--;
+      calls++;
+      if (calls < 2) throw new Error("503 unavailable"); // transitório → força 1 retry
+      return { text: "ok" };
+    };
+    const result = await resilientAiCall(() => gen(), { provider: "gemini", model: "m", operation: "seq" });
+    expect(result).toEqual({ text: "ok" });
+    expect(maxInFlight).toBe(1); // nunca duas chamadas simultâneas
+  });
+
+  it("chamada tardia de uma tentativa que estourou timeout é DESCARTADA (não vira resultado)", async () => {
+    vi.resetModules();
+    vi.stubEnv("AI_TIMEOUT_MS", "20");
+    vi.stubEnv("AI_MAX_ATTEMPTS", "2");
+    const { resilientAiCall: call } = await import("../../_core/ai/aiResilience");
+
+    let attempt = 0;
+    const gen = () => {
+      attempt++;
+      if (attempt === 1) {
+        // pendura além do timeout e "resolve" tarde — esse valor NÃO pode virar o resultado
+        return new Promise((resolve) => {
+          const t = setTimeout(() => resolve({ text: "tardio-1" }), 500);
+          (t as { unref?: () => void }).unref?.();
+        });
+      }
+      return Promise.resolve({ text: "attempt-2" });
+    };
+
+    const result = await call(() => gen(), { provider: "gemini", model: "m", operation: "late" });
+    expect(result).toEqual({ text: "attempt-2" }); // vence a 2ª tentativa; a tardia é ignorada
+  });
+});
+
 describe("resilientAiCall — timeout real + AbortController (AI-014)", () => {
   it("estoura TimeoutError e aciona o abort quando o provider pendura", async () => {
     vi.resetModules();

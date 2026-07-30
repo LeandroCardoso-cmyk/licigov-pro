@@ -12,10 +12,13 @@ export const APP_CONFIG = {
   port: parseInt(process.env.PORT ?? "3000"),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   /**
-   * SEC-036 — Content-Security-Policy do Helmet. Em dev fica sempre desligado (o Vite injeta
-   * scripts inline). Em produção/staging, habilitar a CSP padrão do Helmet só quando
-   * `HELMET_CSP_ENABLED=true` — flag opt-in para permitir validação em staging antes de
-   * ligar em produção (uma CSP estrita pode bloquear assets do SPA). Default seguro: desligado.
+   * SEC-036 — Content-Security-Policy do Helmet. **Secure-by-default**: em produção/staging a CSP
+   * padrão do Helmet fica **LIGADA por padrão**; só é desligada com `HELMET_CSP_ENABLED=false`
+   * (escape hatch operacional explícito). Em desenvolvimento fica desligada (o Vite injeta scripts
+   * inline). Ação operacional: validar em staging que a CSP padrão não quebra assets do SPA; se
+   * quebrar, ajustar as diretivas — nunca desligar em produção sem substituto.
    */
-  cspEnabled: process.env.HELMET_CSP_ENABLED === "true",
+  cspEnabled: (IS_PRODUCTION || IS_STAGING)
+    ? process.env.HELMET_CSP_ENABLED !== "false"
+    : process.env.HELMET_CSP_ENABLED === "true",
 };

@@ -167,13 +167,21 @@ Ver detalhes em [`PR_D_PRODUCTION_RESILIENCE.md`](./PR_D_PRODUCTION_RESILIENCE.m
   o job `deploy` dependendo de todos via `needs` (sem `|| true`, sem build simbólico). Typecheck,
   build e os testes novos foram validados localmente. **PASS pleno** de G7 fica condicionado ao CI
   executar **verde** no PR (a suíte completa + smokes MySQL rodam no runner com o serviço MySQL).
-- **G11 (backup/restore):** backup **agendado** (diário) + checksum + retenção (14d) e um
-  **teste de restauração isolado** (fixture, com evidência) foram entregues. O **PASS pleno**
-  depende ainda do **drill de restauração com backup real** (ação operacional, `BACKUP_DATABASE_URL`),
-  descrito no [runbook](../../ops/DB_RESTORE_RUNBOOK.md) — jamais executado sobre produção.
-- Também entregues no Bloco D: `/health` (OBS-043), timeout/retry de IA (AI-014, sem tocar no
-  fail-closed AI-015 de G12), transações no versionamento (DATA-012), CSP configurável (SEC-036) e
-  correção documental de `AWS_S3_REGION` (DOC-056).
+- **G11 (backup/restore): permanece `PARTIAL`.** Entregues: backup **agendado** (diário) + checksum
+  + retenção (14d) + **criptografia opcional** (`BACKUP_ENCRYPTION_KEY`) e um **teste de restauração
+  isolado** (apenas **fixture sintética**, com evidência). Enquanto houver **só fixture**, o item
+  segue `PARTIAL`: o **PASS pleno** exige o **drill de restauração com backup real** (ação
+  operacional, `BACKUP_DATABASE_URL`) descrito no [runbook](../../ops/DB_RESTORE_RUNBOOK.md) —
+  jamais sobre produção. Teste mecânico ≠ drill real.
+- Também entregues no Bloco D: `/health`+`/readyz` (OBS-043, healthcheck do Railway em `railway.json`);
+  timeout/retry de IA com **timeout no SDK** (AI-014, sem tocar no fail-closed AI-015 de G12);
+  transações no versionamento **e em `officialDocumentLifecycle.createDocument`** (DATA-012);
+  **CSP secure-by-default** em produção/staging (SEC-036); gate de auditoria de deps com **baseline**
+  (bloqueia regressão); smoke MySQL de **concorrência/rollback**; e `AWS_S3_REGION` (DOC-056).
 
-> Pendências fora do escopo do PR D (não mascaradas): vulnerabilidades de dependências
-> (audit advisory), transações P1/P3/P4, gate de lint completo — ver o resumo do PR D.
+> **Gate ≠ `needs`:** o bloqueio efetivo do deploy exige branch protection na `main` + *Wait for CI*
+> no Railway (ações operacionais — ver [`CI_CD_GATES.md`](../../architecture/CI_CD_GATES.md)).
+>
+> Pendências fora do escopo do PR D (não mascaradas, com evidência honesta): reduzir o baseline de
+> vulnerabilidades de dependências (upgrades), drill de restore real, transações P3/P4
+> (aditivos/processo+evento), gate de lint completo — ver o [resumo do PR D](./PR_D_PRODUCTION_RESILIENCE.md).

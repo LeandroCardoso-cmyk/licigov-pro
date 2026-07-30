@@ -11,6 +11,11 @@ import { getDb } from "./connection";
 import { officialDocumentsTable, officialDocumentTimelineTable } from "../../drizzle/schema";
 import type { OfficialDocument, DocumentBusinessDomain, OfficialDocumentType, OfficialDocumentStatus } from "../domain/officialDocument";
 
+// PR D — executor aceita a conexão (db) ou uma transação (tx), permitindo compor estas operações
+// atomicamente (ver officialDocumentLifecycleService.createDocument). Quando ausente, usa getDb().
+type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type OfficialDocsExecutor = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+
 function rowToDoc(r: typeof officialDocumentsTable.$inferSelect): OfficialDocument {
   let metadata: Record<string, unknown> = {};
   try { metadata = r.metadata ? JSON.parse(r.metadata) as Record<string, unknown> : {}; } catch { metadata = {}; }
@@ -24,8 +29,8 @@ function rowToDoc(r: typeof officialDocumentsTable.$inferSelect): OfficialDocume
   };
 }
 
-export async function insertOfficialDocument(doc: OfficialDocument): Promise<OfficialDocument | null> {
-  const db = await getDb();
+export async function insertOfficialDocument(doc: OfficialDocument, executor?: OfficialDocsExecutor): Promise<OfficialDocument | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(officialDocumentsTable).values({
     id: doc.id, tenantId: doc.tenantId, businessDomain: doc.businessDomain, documentType: doc.documentType,
@@ -61,8 +66,8 @@ export async function getOfficialDocument(id: string, tenantId: number): Promise
 }
 
 /** Última versão de uma linhagem (para versionamento incremental). */
-export async function getLatestByLineage(lineageId: string, tenantId: number): Promise<OfficialDocument | null> {
-  const db = await getDb();
+export async function getLatestByLineage(lineageId: string, tenantId: number, executor?: OfficialDocsExecutor): Promise<OfficialDocument | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   const rows = await db.select().from(officialDocumentsTable)
     .where(and(eq(officialDocumentsTable.lineageId, lineageId), eq(officialDocumentsTable.tenantId, tenantId)))
@@ -70,8 +75,8 @@ export async function getLatestByLineage(lineageId: string, tenantId: number): P
   return rows.length ? rowToDoc(rows[0]) : null;
 }
 
-export async function countVersions(lineageId: string, tenantId: number): Promise<number> {
-  const db = await getDb();
+export async function countVersions(lineageId: string, tenantId: number, executor?: OfficialDocsExecutor): Promise<number> {
+  const db = executor ?? await getDb();
   if (!db) return 0;
   const rows = await db.select({ id: officialDocumentsTable.id }).from(officialDocumentsTable)
     .where(and(eq(officialDocumentsTable.lineageId, lineageId), eq(officialDocumentsTable.tenantId, tenantId)));
@@ -100,16 +105,16 @@ export async function listOfficialDocuments(tenantId: number, opts: { businessDo
 
 // ─── Timeline documental (append-only) ────────────────────────────────────────
 
-export async function countDocumentTimeline(lineageId: string, tenantId: number): Promise<number> {
-  const db = await getDb();
+export async function countDocumentTimeline(lineageId: string, tenantId: number, executor?: OfficialDocsExecutor): Promise<number> {
+  const db = executor ?? await getDb();
   if (!db) return 0;
   const rows = await db.select({ id: officialDocumentTimelineTable.id }).from(officialDocumentTimelineTable)
     .where(and(eq(officialDocumentTimelineTable.lineageId, lineageId), eq(officialDocumentTimelineTable.tenantId, tenantId)));
   return rows.length;
 }
 
-export async function insertDocumentTimelineEntry(params: { tenantId: number; lineageId: string; documentId: string; order: number; eventType: string; actor: string; summary: string; correlationId: string }): Promise<void> {
-  const db = await getDb();
+export async function insertDocumentTimelineEntry(params: { tenantId: number; lineageId: string; documentId: string; order: number; eventType: string; actor: string; summary: string; correlationId: string }, executor?: OfficialDocsExecutor): Promise<void> {
+  const db = executor ?? await getDb();
   if (!db) return;
   const id = createHash("sha256").update(`odtl:${params.tenantId}:${params.lineageId}:${params.order}:${params.eventType}`).digest("hex").slice(0, 20);
   await db.insert(officialDocumentTimelineTable).values({

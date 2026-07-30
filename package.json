@@ -23,7 +23,8 @@
     "db:generate":    "drizzle-kit generate",
     "db:migrate":     "drizzle-kit migrate",
     "db:audit":       "tsx scripts/schema-audit.ts",
-    "ai:models":      "tsx scripts/ai-models.ts"
+    "ai:models":      "tsx scripts/ai-models.ts",
+    "audit:gate":     "node scripts/audit-gate.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

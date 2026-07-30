@@ -26,6 +26,7 @@ jobs:
       - name: Dump do banco + checksum
         env:
           DB_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
@@ -61,19 +62,33 @@ jobs:
             exit 1
           fi
 
-          # Checksum SHA-256 para verificação de integridade na restauração.
-          sha256sum "$FILE" > "${FILE}.sha256"
+          # Criptografia at-rest do dump (AES-256, PBKDF2). Secure-by-default: se
+          # BACKUP_ENCRYPTION_KEY estiver definido, o artifact é CIFRADO (recomendado). Sem a chave,
+          # o artifact segue apenas restrito ao repositório — avisamos e registramos a ação operacional.
+          ARTIFACT="$FILE"
+          if [ -n "${ENC_KEY:-}" ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in "$FILE" -out "${FILE}.enc" -pass env:ENC_KEY
+            rm -f "$FILE"
+            ARTIFACT="${FILE}.enc"
+            echo "🔒 Dump cifrado (AES-256-CBC/PBKDF2)."
+          else
+            echo "⚠️ BACKUP_ENCRYPTION_KEY não definido — artifact NÃO cifrado (apenas restrito ao repo)."
+            echo "   Ação operacional: defina o secret BACKUP_ENCRYPTION_KEY para cifrar o dump."
+          fi
 
-          echo "✅ Backup concluído: ${FILE} (${BYTES} bytes)."
-          echo "   Checksum: $(cut -d' ' -f1 "${FILE}.sha256")"
-          echo "BACKUP_FILE=$FILE" >> "$GITHUB_ENV"
+          # Checksum SHA-256 do artifact final (cifrado ou não) para verificação na restauração.
+          sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
+
+          echo "✅ Backup concluído: ${ARTIFACT} ($(stat -c%s "$ARTIFACT") bytes)."
+          echo "   Checksum: $(cut -d' ' -f1 "${ARTIFACT}.sha256")"
+          echo "BACKUP_ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
 
       - name: Publicar artifact (dump + checksum, retenção 14 dias)
         uses: actions/upload-artifact@v4
         with:
           name: db-backup
           path: |
-            ${{ env.BACKUP_FILE }}
-            ${{ env.BACKUP_FILE }}.sha256
+            ${{ env.BACKUP_ARTIFACT }}
+            ${{ env.BACKUP_ARTIFACT }}.sha256
           retention-days: 14
           if-no-files-found: error
