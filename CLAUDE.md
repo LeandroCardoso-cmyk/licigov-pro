@@ -28,16 +28,20 @@ Fluxo principal de documentos: **DFD → ETP → TR → Edital**
 - Plataforma completa de pregão eletrônico
 
 ## Stack
-- **Frontend:** React + TypeScript + Vite + TailwindCSS + wouter
-- **Backend:** Node.js + TypeScript + Express + tRPC 11
+- **Frontend:** React 19 + TypeScript + Vite 7 + TailwindCSS 4 + wouter (roteamento) + TanStack Query + Radix UI / shadcn + TipTap (editor) + Recharts
+- **Backend:** Node.js + TypeScript + Express 4 + tRPC 11 (com superjson)
 - **ORM:** Drizzle ORM
-- **Banco:** MySQL (Railway)
-- **Storage:** AWS S3
+- **Banco:** MySQL (via `mysql2`)
+- **Storage:** AWS S3 (`@aws-sdk/client-s3`)
 - **Infraestrutura:** Railway
 - **Testes:** Vitest (obrigatório — migrations, staging e testes são regras fundamentais)
-- **IA:** Gemini 2.5 Flash via `@google/generative-ai`
+- **IA:** multi-provider via `server/_core/llm.ts` — default Gemini 2.5 Flash (`@google/generative-ai`); Claude e OpenAI preparados (ver `docs/architecture/AI_PROVIDER_CONFIG.md`)
 - **Auth:** JWT em cookie HTTP-only via `jose` + bcrypt (email/senha próprio)
-- **Package manager:** pnpm
+- **E-mail transacional:** Brevo (convites e recuperação de senha) — provider `console`/`fake` em dev
+- **Billing:** Stripe (`billingRouter`)
+- **Config:** leitura de env centralizada em `server/config/*` (nunca `process.env` direto)
+- **Package manager:** pnpm (`pnpm@10.4.1`)
+- **Runtime dev:** `tsx watch`; build de produção com `vite build` + `esbuild`
 
 ## Estrutura de pastas
 ```
@@ -52,16 +56,70 @@ licigov-pro/
 │   │   ├── trpc.ts      # Procedures: publicProcedure / protectedProcedure / adminProcedure
 │   │   ├── context.ts   # createContext (auth)
 │   │   ├── sdk.ts       # JWT (jose) — auth próprio email/senha
-│   │   ├── llm.ts       # Abstração LLM → Gemini 2.5 Flash
-│   │   └── env.ts       # ENV vars tipadas
-│   ├── routers.ts       # AppRouter (15+ sub-routers)
-│   ├── db.ts            # Queries Drizzle
-│   └── services/        # gemini.ts, RAG, etc.
+│   │   ├── llm.ts       # Abstração LLM multi-provider
+│   │   ├── ai/          # Providers de IA (gemini, mock, adapter, policy)
+│   │   └── env.ts       # @deprecated — re-exporta server/config (compat)
+│   ├── config/          # Leitura/validação de env (fonte única: env.ts, ai.ts, aws.ts, auth.ts, email.ts…)
+│   ├── routers.ts       # AppRouter (60+ sub-routers)
+│   ├── routers/         # Um arquivo por sub-router (authRouter, billingRouter, contractsRouter…)
+│   ├── bootstrap.ts     # Bootstrap institucional / admin inicial
+│   ├── db/              # Camada de dados Drizzle
+│   ├── domain/          # Regras de negócio
+│   ├── kernel/          # Núcleo institucional
+│   ├── middleware/      # Middlewares Express
+│   ├── parsers/         # Parsing de documentos
+│   ├── providers/       # Integrações externas
+│   ├── rag/             # RAG sobre Lei 14.133/2021
+│   ├── services/        # email/ (Brevo), invitations, exports, etc.
+│   ├── storage.ts       # Upload/download S3
+│   └── __tests__/       # Testes Vitest (unit + integration)
 ├── drizzle/
-│   ├── schema.ts        # ~20 tabelas MySQL
+│   ├── schema.ts        # ~297 tabelas MySQL
 │   └── migrations/      # migrations obrigatórias
-└── shared/              # Tipos e constantes compartilhados
+├── shared/              # Tipos e constantes compartilhados
+├── docs/architecture/   # Documentação arquitetural (PRODUCT_NORTH_STAR, AI_PROVIDER_CONFIG…)
+├── scripts/             # schema-audit.ts, ai-models.ts
+└── .githooks/           # pre-commit (grafo Graphify), ativado pelo script `prepare`
 ```
+
+## Como rodar (comandos)
+Requer **pnpm** e um MySQL acessível via `DATABASE_URL`.
+
+```bash
+pnpm install            # instala deps + configura git hooks (script `prepare`)
+cp .env.example .env    # preencher DATABASE_URL, JWT_SECRET, ADMIN_PASSWORD, GEMINI_API_KEY…
+
+# Desenvolvimento (tsx watch, APP_ENV=development)
+pnpm dev
+pnpm dev:staging        # APP_ENV=staging
+
+# Qualidade
+pnpm check              # tsc --noEmit (type-check)
+pnpm lint               # eslint . --max-warnings 0
+pnpm format             # prettier --write .
+
+# Testes (Vitest)
+pnpm test               # vitest run (suíte completa)
+pnpm test:smoke:security # smoke de isolamento multi-tenant / RBAC
+
+# Banco (Drizzle Kit)
+pnpm db:generate        # gerar migration a partir do schema (obrigatório ao mudar schema)
+pnpm db:migrate         # aplicar migrations
+pnpm db:push            # push direto — SÓ em dev/local, NUNCA em produção
+pnpm db:audit           # auditoria de schema
+
+# Build / produção
+pnpm build              # vite build + esbuild do server → dist/
+pnpm start              # node dist/index.js
+pnpm start:staging      # APP_ENV=staging
+
+# Utilitários
+pnpm ai:models          # inspeciona modelos de IA disponíveis
+```
+
+**Ambiente:** `APP_ENV` (development | staging | production) tem **precedência sobre `NODE_ENV`**.
+**CI (GitHub Actions):** `ci.yml`, `schema-audit.yml`, `db-backup.yml`, `ai-models.yml`.
+**Git hooks:** `.githooks/pre-commit` mantém o grafo Graphify sincronizado (não bloqueia o commit se ausente).
 
 ## Módulos oficiais (arquitetura funcional)
 | Módulo | Descrição | Status |
@@ -89,22 +147,49 @@ licigov-pro/
 - Vinculação com processos licitatórios
 
 ## Variáveis de ambiente necessárias
+> Referência completa e comentada em [`.env.example`](.env.example). Leitura sempre via `server/config/*`.
+
 ```env
+# Servidor — APP_ENV tem precedência sobre NODE_ENV
 NODE_ENV=development
+APP_ENV=development           # development | staging | production
 PORT=3000
-DATABASE_URL=mysql://usuario:senha@host:3306/licigov   # Railway MySQL
+
+# Banco (MySQL ou compatível)
+DATABASE_URL=mysql://usuario:senha@host:3306/licigov
+
+# Auth / sessão
 JWT_SECRET=string-longa-minimo-32-chars
+SESSION_TTL_HOURS=24          # 1..720 (default 24)
+ALLOW_PUBLIC_REGISTRATION=false  # fail-closed; NUNCA true em produção
+ADMIN_PASSWORD=senha-forte    # obrigatória em staging/produção (mín. 8 chars)
+# ADMIN_EMAIL=admin@seu-orgao.gov.br
+# ADMIN_NAME=Administrador
+
+# IA — default Gemini; multi-provider (ver docs/architecture/AI_PROVIDER_CONFIG.md)
 GEMINI_API_KEY=sua-chave-gemini
-# IA multi-provider (ver docs/architecture/AI_PROVIDER_CONFIG.md) — opcionais:
-AI_PROVIDER=gemini            # gemini | claude | openai (default: gemini)
-AI_MODEL=gemini-2.5-flash     # modelo do provider primário (default: padrão do provider)
-ANTHROPIC_API_KEY=            # Claude (contrato preparado)
-OPENAI_API_KEY=               # OpenAI (contrato preparado)
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_S3_BUCKET=...
-AWS_REGION=...
+# AI_PROVIDER=gemini           # gemini | claude | openai (default: gemini)
+# AI_MODEL=gemini-2.5-flash
+# ANTHROPIC_API_KEY=           # Claude (contrato preparado)
+# OPENAI_API_KEY=              # OpenAI (contrato preparado)
+
+# E-mail transacional (Brevo) — convites e recuperação de senha
+# EMAIL_PROVIDER=console       # brevo | console | fake (default: console em dev, brevo em staging/prod)
+# EMAIL_ENABLED=false
+# BREVO_API_KEY=               # obrigatórias em staging/produção (fail-closed)
+# BREVO_SENDER_EMAIL=
+# BREVO_SENDER_NAME=LiciGov Pro
+# APP_BASE_URL=http://localhost:3000
+
+# AWS S3 — obrigatório em produção
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_REGION=us-east-1
+AWS_S3_BUCKET=
 ```
+
+> **Legado Manus:** variáveis `OAUTH_SERVER_URL`, `VITE_APP_ID`, `OWNER_OPEN_ID`, `BUILT_IN_FORGE_API_*`
+> não são mais usadas após a Fase 2 do plano de recuperação (ver skill `manus-migration`).
 
 ## Integrações externas planejadas
 - **CATMAT/CATSER:** `https://dadosabertos.compras.gov.br` — API pública, sem autenticação
@@ -139,8 +224,8 @@ Toda saída de IA deve ser: **editável, revisável e validada por humano.**
 
 ### Ao trabalhar em `server/_core/llm.ts`
 - Manter a mesma assinatura de `invokeLLM(params: InvokeParams): Promise<InvokeResult>`
-- Provedor: Gemini 2.5 Flash via `@google/generative-ai`
-- Usar variáveis via `env.ts`, nunca `process.env` direto
+- Multi-provider: default Gemini 2.5 Flash (`@google/generative-ai`); Claude/OpenAI selecionáveis via `AI_PROVIDER`
+- Ler configuração via `server/config/*` (nunca `process.env` direto — `server/_core/env.ts` é re-export deprecado)
 
 ### Ao trabalhar em autenticação
 - `signSession` e `verifySession` com `jose` já existem — reutilizar
@@ -158,8 +243,9 @@ Toda saída de IA deve ser: **editável, revisável e validada por humano.**
 - Sempre incluir aviso de revisão obrigatória ao usuário
 
 ### Ao mexer no banco (Drizzle)
+- Schema em `drizzle/schema.ts`; camada de acesso em `server/db/`
 - Nunca string interpolation — sempre parâmetros Drizzle
-- Sempre gerar migration (`drizzle-kit generate`) — nunca só `db:push` em produção
+- Sempre gerar migration (`pnpm db:generate`) e aplicar com `pnpm db:migrate` — nunca só `db:push` em produção
 - Numeração de processos: transação atômica (padrão AAAA/NNNN)
 
 ### Jamais
