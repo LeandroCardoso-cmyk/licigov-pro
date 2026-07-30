@@ -11,6 +11,7 @@ import { bootstrap } from "../bootstrap";
 import { APP_CONFIG } from "../config/app";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
+import { registerHealthRoutes } from "./health";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
@@ -42,14 +43,21 @@ async function startServer() {
   // auditoria de `ipAddress`. `1` = confia em um único hop de proxy (o do Railway).
   app.set("trust proxy", 1);
 
+  // SEC-036 — em dev a CSP fica desligada (Vite injeta scripts inline). Em produção/staging,
+  // liga a CSP padrão do Helmet apenas com HELMET_CSP_ENABLED=true (opt-in validável em staging).
   app.use(helmet({
-    contentSecurityPolicy: false, // gerenciado pelo Vite em dev
+    contentSecurityPolicy: APP_CONFIG.cspEnabled ? undefined : false,
     crossOriginEmbedderPolicy: false,
   }));
 
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
   app.use(correlationMiddleware);
+
+  // PR D — health check HTTP (liveness/readiness). ANTES do tRPC e do catch-all do SPA,
+  // rota pública e leve para o Railway/load balancer.
+  registerHealthRoutes(app);
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -65,11 +73,16 @@ async function startServer() {
     serveStatic(app);
   }
 
+  // PR D — binding de porta: em produção/staging a plataforma (Railway) injeta a PORT e o
+  // healthcheck aponta para ela; subir em porta diferente deixaria o serviço inalcançável.
+  // Por isso só varremos por porta livre em desenvolvimento; fora dele, usamos a porta exata.
   const preferredPort = APP_CONFIG.port;
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.info(`[BOOT] Porta ${preferredPort} ocupada, usando porta ${port}`);
+  let port = preferredPort;
+  if (IS_DEVELOPMENT) {
+    port = await findAvailablePort(preferredPort);
+    if (port !== preferredPort) {
+      console.info(`[BOOT] Porta ${preferredPort} ocupada, usando porta ${port}`);
+    }
   }
 
   server.listen(port, () => {

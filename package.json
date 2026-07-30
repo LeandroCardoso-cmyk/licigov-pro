@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=20 <23",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "prepare":        "git config core.hooksPath .githooks || true",
     "dev":            "APP_ENV=development tsx watch server/_core/index.ts",

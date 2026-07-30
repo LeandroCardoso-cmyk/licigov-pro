@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
-import { getDb } from "../db/connection";
 import { APP_CONFIG } from "../config/app";
 import { AI_CONFIG } from "../config/ai";
+// PR D — ping de banco consolidado com a rota HTTP /health (fonte única, com timeout curto).
+import { pingDatabase } from "./health";
 // RC-3.5 — o healthcheck do S3 passa pelo Storage Service (nunca acessa a AWS direto).
 import { storageHealthCheck } from "../storage";
 // RC-4.2.2 — Monitor Operacional Institucional (diagnóstico consolidado, read-only).
@@ -13,14 +13,7 @@ import { runProductionHealthCheck, toPublicSummary } from "../services/productio
 const REQUIRED_ENV_KEYS = ["DATABASE_URL", "JWT_SECRET", "GEMINI_API_KEY"] as const;
 
 async function checkDb(): Promise<boolean> {
-  try {
-    const db = await getDb();
-    if (!db) return false;
-    await db.execute(sql`SELECT 1`);
-    return true;
-  } catch {
-    return false;
-  }
+  return pingDatabase();
 }
 
 async function checkS3(): Promise<boolean> {

@@ -155,3 +155,25 @@ timeout de IA + backup agendado com teste de restauração)**, resolvendo també
 (backup/restore) permanece bloqueante** até haver backup agendado e ao menos um teste de
 restauração bem-sucedido; e **G4** exige `ADMIN_PASSWORD` obrigatória confirmada no ambiente. O
 Bloco C (governança cognitiva) é aceitável como correção durante o piloto.
+
+---
+
+## Adendo — PR D (Produção e Resiliência)
+
+Ver detalhes em [`PR_D_PRODUCTION_RESILIENCE.md`](./PR_D_PRODUCTION_RESILIENCE.md).
+
+- **G7 (CI):** o gate de CI real foi implementado — `pnpm check` (typecheck), lint de
+  não-regressão, `pnpm test`, smokes de **isolamento** (`test:smoke:security`) e `pnpm build`, com
+  o job `deploy` dependendo de todos via `needs` (sem `|| true`, sem build simbólico). Typecheck,
+  build e os testes novos foram validados localmente. **PASS pleno** de G7 fica condicionado ao CI
+  executar **verde** no PR (a suíte completa + smokes MySQL rodam no runner com o serviço MySQL).
+- **G11 (backup/restore):** backup **agendado** (diário) + checksum + retenção (14d) e um
+  **teste de restauração isolado** (fixture, com evidência) foram entregues. O **PASS pleno**
+  depende ainda do **drill de restauração com backup real** (ação operacional, `BACKUP_DATABASE_URL`),
+  descrito no [runbook](../../ops/DB_RESTORE_RUNBOOK.md) — jamais executado sobre produção.
+- Também entregues no Bloco D: `/health` (OBS-043), timeout/retry de IA (AI-014, sem tocar no
+  fail-closed AI-015 de G12), transações no versionamento (DATA-012), CSP configurável (SEC-036) e
+  correção documental de `AWS_S3_REGION` (DOC-056).
+
+> Pendências fora do escopo do PR D (não mascaradas): vulnerabilidades de dependências
+> (audit advisory), transações P1/P3/P4, gate de lint completo — ver o resumo do PR D.
