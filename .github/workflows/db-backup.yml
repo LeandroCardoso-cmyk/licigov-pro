@@ -140,14 +140,19 @@ jobs:
           [ -n "${TGT_URL:-}" ] || { echo "❌ RESTORE_TARGET_URL ausente (destino obrigatório)."; exit 1; }
           [ -n "${ENC_KEY:-}" ] || { echo "❌ BACKUP_ENCRYPTION_KEY ausente (drill exige backup cifrado)."; exit 1; }
 
-          # Parser silencioso de mysql://user:senha@host:porta/banco (nada é ecoado).
+          # Parser silencioso de mysql://user:senha@host[:porta][/banco][?params] (nada é ecoado).
+          # Robusto a: porta ausente/vazia/não-numérica (→ 3306), '@' na senha, query params.
           parse() { # $1=url ; define ${2}_USER/_PASS/_HOST/_PORT/_DB
-            local s="${1#mysql://}"; local creds="${s%%@*}"; local rest="${s#*@}"
-            local hp="${rest%%/*}"; local db="${rest#*/}"; db="${db%%\?*}"
+            local s="${1#mysql://}"; s="${s#mysql2://}"
+            local creds="${s%@*}"       # tudo antes do ÚLTIMO @ (senha pode conter @)
+            local hostpart="${s##*@}"   # tudo após o último @: host[:porta][/db][?params]
+            local hp="${hostpart%%/*}"; hp="${hp%%\?*}"
+            local host="${hp%%:*}"
+            local port="${hp##*:}"; case "$port" in ""|"$hp"|*[!0-9]*) port=3306;; esac
+            local db="${hostpart#*/}"; db="${db%%\?*}"; [ "$db" = "$hostpart" ] && db=""
             eval "${2}_USER=\"${creds%%:*}\""
             eval "${2}_PASS=\"${creds#*:}\""
-            eval "${2}_HOST=\"${hp%%:*}\""
-            local port="${hp#*:}"; [ "$port" = "$hp" ] && port=3306
+            eval "${2}_HOST=\"$host\""
             eval "${2}_PORT=\"$port\""
             eval "${2}_DB=\"$db\""
           }
