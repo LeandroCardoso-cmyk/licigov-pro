@@ -32,22 +32,41 @@
   tenant** → registra **evidência** (artifact `restore-evidence`, 90 dias) → destrói o ambiente.
 - **Objetivo:** comprovar a **mecânica** de backup→restauração de forma segura e repetível.
 
-## ⚠️ Drill de restauração com backup REAL (ação operacional — pendente)
+## Drill de restauração com backup REAL (workflow gated — dispatch-only)
 
-O teste automatizado valida a mecânica com fixture. Um drill com **backup real de produção**
-exige o secret `BACKUP_DATABASE_URL` e infraestrutura de destino não-produtiva — é um exercício
-**operacional gated** e **não** foi executado nesta PR (jamais restaurar sobre produção).
+O drill com **backup real** é executado por um **job gated** dentro de
+[`.github/workflows/db-backup.yml`](../../.github/workflows/db-backup.yml) — job `restore-drill`.
+Não há restauração manual/local: o exercício roda **inteiramente no workflow**, de forma auditável.
 
-**Procedimento do drill (executar manualmente, fora de produção):**
-1. Baixar o artefato `db-backup` mais recente (dump + `.sha256`).
-2. `sha256sum -c backup-*.sql.gz.sha256` → confirmar integridade.
-3. Subir um MySQL **descartável** (container/instância isolada) — nunca o de produção.
-4. `gunzip -c backup-*.sql.gz | mysql --host=<isolado> <db_target>`.
-5. Validar: schema restaurado, tabelas críticas (`organizations`, `users`,
-   `documents`, `document_versions`, `activity_logs`), contagens plausíveis, login/consulta básica.
-6. Registrar a evidência (data, run, tipo, checksum, resultado, duração, testes) **sem** expor
-   dados/credenciais.
-7. Destruir o ambiente isolado.
+**Por que dentro do db-backup.yml?** `workflow_dispatch` só é disparável para workflows presentes na
+**default branch**. `db-backup.yml` já está na `main`; assim o drill é disparável a partir da branch
+da PR (`ref`) **sem merge**. O job `restore-drill` é **dispatch-only** e **desligado por padrão**
+(`run_restore_drill=false`), então o backup agendado diário **nunca** dispara restauração.
+
+**Como disparar (manual):** Actions → "Backup do Banco (agendado + manual)" → "Run workflow" →
+selecionar a branch → marcar `run_restore_drill = true`.
+
+**Secrets consumidos:** `BACKUP_DATABASE_URL` (origem, só-leitura), `BACKUP_ENCRYPTION_KEY`
+(decifra o dump), `RESTORE_TARGET_URL` (**único** destino).
+
+**Invariantes de segurança (verificadas em runtime, sem expor valores):**
+1. destino = **exclusivamente** `RESTORE_TARGET_URL`; `DATABASE_URL` **nunca** é lida/usada;
+2. **recusa** se origem == destino (host+porta+banco, ou host+banco);
+3. destino precisa estar **acessível** e **vazio** (prod/staging teriam tabelas → aborta);
+4. dump precisa estar **cifrado** (`.enc`); **checksum SHA-256** conferido antes de decifrar;
+5. **origem só-leitura** (o dump vem do backup; a origem não é tocada no restore);
+6. **nenhuma aplicação** conectada ao destino (apenas o cliente `mysql`);
+7. **nenhum** secret/host/URL/dado nos logs — só contagens/aggregates;
+8. arquivos decifrados **removidos** ao final; o banco de destino **não** é dropado
+   (a exclusão do projeto Railway é **manual**, pelo operador).
+
+**Validações pós-restore:** schema restaurado, `__drizzle_migrations` (migrations aplicadas),
+tabelas essenciais (`organizations`, `users`, `processes`, `documents`, `document_versions`,
+`activity_logs`, `official_documents`) presentes e legíveis, isolamento multi-tenant
+(versões órfãs = 0, mismatch tenant versão↔documento = 0), smoke de join canônico.
+
+**Evidência:** artifact `restore-drill-evidence` (retenção 90 dias) com apenas metadados agregados
+(run, data, checksum, duração, nº de tabelas, testes, resultado) — **sem** dados/hosts/URLs/secrets.
 
 Só após esse drill o item de gate **G11** pode ser considerado plenamente `PASS` para o backup real.
 
