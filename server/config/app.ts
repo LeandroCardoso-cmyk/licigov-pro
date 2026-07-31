@@ -1,4 +1,5 @@
 import { APP_ENV, IS_DEVELOPMENT, IS_PRODUCTION, IS_STAGING, ENV_TAG } from "./env";
+import { isCspEnabled } from "./csp";
 
 export const APP_CONFIG = {
   name: "LiciGov Pro",
@@ -12,13 +13,10 @@ export const APP_CONFIG = {
   port: parseInt(process.env.PORT ?? "3000"),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   /**
-   * SEC-036 — Content-Security-Policy do Helmet. **Secure-by-default**: em produção/staging a CSP
-   * padrão do Helmet fica **LIGADA por padrão**; só é desligada com `HELMET_CSP_ENABLED=false`
-   * (escape hatch operacional explícito). Em desenvolvimento fica desligada (o Vite injeta scripts
-   * inline). Ação operacional: validar em staging que a CSP padrão não quebra assets do SPA; se
-   * quebrar, ajustar as diretivas — nunca desligar em produção sem substituto.
+   * SEC-036 — Content-Security-Policy. **Secure-by-default**: em produção/staging fica **LIGADA por
+   * padrão**; só é desligada com `HELMET_CSP_ENABLED=false` (escape hatch operacional explícito).
+   * Em desenvolvimento fica desligada (o Vite injeta scripts inline). Fonte única da decisão:
+   * `isCspEnabled()` em server/config/csp.ts (onde também vivem as diretivas explícitas).
    */
-  cspEnabled: (IS_PRODUCTION || IS_STAGING)
-    ? process.env.HELMET_CSP_ENABLED !== "false"
-    : process.env.HELMET_CSP_ENABLED === "true",
+  cspEnabled: isCspEnabled(),
 };

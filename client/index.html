@@ -11,21 +11,10 @@
     <title>LiciGov Pro</title>
 
     <!-- Tema institucional: aplica claro/escuro ANTES do React montar (sem flash / FOUC).
-         Deve espelhar a lógica de client/src/contexts/ThemeContext.tsx (chave "theme"). -->
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem("theme");
-          var pref = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-          var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          var resolved = pref === "system" ? (systemDark ? "dark" : "light") : pref;
-          var root = document.documentElement;
-          root.classList.toggle("dark", resolved === "dark");
-          root.style.colorScheme = resolved;
-        } catch (e) { /* localStorage indisponível — usa o tema padrão do CSS */ }
-      })();
-    </script>
-    
+         SEC-036 — externalizado para /theme-init.js (servido a partir de 'self') para respeitar
+         a CSP `script-src 'self'` sem `unsafe-inline`. Bloqueante no <head> → roda antes do paint. -->
+    <script src="/theme-init.js"></script>
+
     <!-- SEO Meta Tags -->
     <meta name="description" content="Sistema SaaS completo para automação de processos licitatórios no Brasil. Geração inteligente de documentos, gestão de contratos, contratação direta e conformidade com Lei 14.133/2021." />
     <meta name="keywords" content="licitação, pregão eletrônico, lei 14.133, gestão de contratos, contratação direta, sistema de licitações, órgão público, compras públicas" />
@@ -49,14 +38,11 @@
     <meta name="twitter:image" content="https://licigovpro.com.br/og-image.png" />
     <meta name="twitter:image:alt" content="LiciGov Pro - Sistema de Gestão de Licitações" />
     
-    <!-- Google Analytics GA4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-N0PT3PG3R1"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-N0PT3PG3R1');
-    </script>
+    <!-- SEC-036 — Google Analytics GA4 NÃO é mais injetado inline no shell (violava
+         `script-src 'self'` e carregava em TODA rota, inclusive login/app autenticado e staging).
+         Agora é carregado em runtime por client/src/lib/analytics.ts, condicionado a
+         VITE_GA_MEASUREMENT_ID — assim fica desligado em staging/dev (variável ausente) e a CSP
+         só libera os domínios do Google quando a analítica é habilitada. -->
     <!-- Add Google Fonts here, example:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

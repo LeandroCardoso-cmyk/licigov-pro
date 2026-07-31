@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrap } from "../bootstrap";
 import { APP_CONFIG } from "../config/app";
+import { buildHelmetContentSecurityPolicy } from "../config/csp";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
@@ -43,10 +44,12 @@ async function startServer() {
   // auditoria de `ipAddress`. `1` = confia em um único hop de proxy (o do Railway).
   app.set("trust proxy", 1);
 
-  // SEC-036 — secure-by-default: em produção/staging a CSP padrão do Helmet fica LIGADA por padrão
-  // (desliga só com HELMET_CSP_ENABLED=false); em dev fica desligada (o Vite injeta scripts inline).
+  // SEC-036 — secure-by-default: em produção/staging a CSP fica LIGADA por padrão (desliga só com
+  // HELMET_CSP_ENABLED=false); em dev fica desligada (o Vite injeta scripts inline no HMR). A
+  // política é explícita e centralizada em server/config/csp.ts (restritiva, sem 'unsafe-inline'
+  // em script-src; libera domínios de analítica só quando CSP_ALLOW_ANALYTICS=true).
   app.use(helmet({
-    contentSecurityPolicy: APP_CONFIG.cspEnabled ? undefined : false,
+    contentSecurityPolicy: buildHelmetContentSecurityPolicy(),
     crossOriginEmbedderPolicy: false,
   }));
 

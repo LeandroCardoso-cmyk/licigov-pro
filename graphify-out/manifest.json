@@ -2200,8 +2200,8 @@
     "semantic_hash": ""
   },
   "client/src/main.tsx": {
-    "mtime": 1785374711.436746,
-    "ast_hash": "e5421af4319508f3bc49d816055c6e16",
+    "mtime": 1785464702.850844,
+    "ast_hash": "27b1b978ca89ba67dba8551d54051c7f",
     "semantic_hash": ""
   },
   "client/src/pages/AIUsageDashboard.tsx": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "server/_core/index.ts": {
-    "mtime": 1785454468.6100051,
-    "ast_hash": "b936e0d30de9b8443c9a28aaa3d97092",
+    "mtime": 1785464761.306843,
+    "ast_hash": "c1d68a52b1ab79e82119a0401e585a8d",
     "semantic_hash": ""
   },
   "server/_core/llm.ts": {
@@ -4215,8 +4215,8 @@
     "semantic_hash": ""
   },
   "server/config/app.ts": {
-    "mtime": 1785454460.2220054,
-    "ast_hash": "734344b45f8cdfaebd2ca25b8daf9abf",
+    "mtime": 1785464772.9268427,
+    "ast_hash": "0675f92999e8046ea8831d50e75c1b09",
     "semantic_hash": ""
   },
   "server/config/auth.ts": {
@@ -6615,8 +6615,8 @@
     "semantic_hash": ""
   },
   "client/index.html": {
-    "mtime": 1785374711.2493722,
-    "ast_hash": "f49b30b63cf91f3390a239f943c63f37",
+    "mtime": 1785464670.5148447,
+    "ast_hash": "a85cb43c6d3100cd56f80d99ec62cbe4",
     "semantic_hash": ""
   },
   "data/decreto_11462_2023.txt": {
@@ -10390,8 +10390,38 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1785456967.5067728,
-    "ast_hash": "cf4047fdee3d09346edd633e19c85bb9",
+    "mtime": 1785462517.4325304,
+    "ast_hash": "9be9560744093a3dca06ed8d82ecf4bd",
+    "semantic_hash": ""
+  },
+  "client/public/theme-init.js": {
+    "mtime": 1785464656.2108448,
+    "ast_hash": "3bacae0c8e5b4dbc45fb75f16509e233",
+    "semantic_hash": ""
+  },
+  "client/src/lib/analytics.ts": {
+    "mtime": 1785464688.6908443,
+    "ast_hash": "959add5741117978bdfc37fa07ac8ad6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/csp-headers.test.ts": {
+    "mtime": 1785464854.2428415,
+    "ast_hash": "744cf02dbc5273d48c41fa01da77f3a0",
+    "semantic_hash": ""
+  },
+  "server/config/csp.ts": {
+    "mtime": 1785464738.9308434,
+    "ast_hash": "ca9470b5e2f1adab88f0b35eeb020182",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/CSP_STAGING_HOMOLOGATION.md": {
+    "mtime": 1785465104.050837,
+    "ast_hash": "1d7fd94c793542babb470921aa0001bd",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PR_B2_IMPORT_UX_FINDINGS.md": {
+    "mtime": 1785465118.2388368,
+    "ast_hash": "174360cd8a66f5b74f99a4c3960da861",
     "semantic_hash": ""
   }
 }
