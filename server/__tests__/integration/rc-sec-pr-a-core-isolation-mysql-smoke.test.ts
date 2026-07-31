@@ -143,34 +143,27 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
     expect(rows[0].status).toBe("em_dfd"); // inalterado
   });
 
-  it("processes.create: sucesso, ID inteiro, org do contexto, activity_log com o MESMO ID (regressão insertId)", async () => {
+  it("processes.create (legado): corte controlado — recusa FORBIDDEN com token estável e NÃO grava (PR B)", async () => {
+    // PR B — Corte controlado: o pipeline legado de Processo Licitatório deixou de
+    // aceitar gravações. A criação/condução passou a ser EXCLUSIVA do fluxo canônico
+    // (procurementProcess.createProcess). Este smoke deixa de exercitar o caminho
+    // legado feliz (que não existe mais) e passa a GUARDAR o corte: contra MySQL real,
+    // a criação legada é recusada com FORBIDDEN + token estável e nada é persistido.
     const callerA = await makeCaller(userA);
     const uniqueName = `Novo processo A ${Date.now()}`;
-    // RC-SEC-PR-A: create executa uma vez sem exceção após o insert; retorna um
-    // processId inteiro positivo (bug de insertId=NaN corrigido); grava
-    // organizationId resolvido pelo contexto; o activity_log referencia o MESMO id.
-    const res: any = await callerA.processes.create({
-      name: uniqueName, object: "Objeto novo suficiente para validação",
-      estimatedValue: 1000, modality: "pregao_eletronico", category: "compras",
-    } as any);
-    expect(res.success).toBe(true);
-    const processId = res.processId;
-    expect(Number.isInteger(processId)).toBe(true);
-    expect(processId).toBeGreaterThan(0);
 
-    const [rows] = await conn.execute<any[]>(`SELECT id, organizationId FROM processes WHERE id = ?`, [processId]);
-    expect(rows.length).toBe(1);
-    expect(rows[0].organizationId).toBe(ORG_A);
+    await expect(
+      callerA.processes.create({
+        name: uniqueName, object: "Objeto novo suficiente para validação",
+        estimatedValue: 1000, modality: "pregao_eletronico", category: "compras",
+      } as any),
+    ).rejects.toThrow(/LEGACY_PROCESS_PIPELINE_DISABLED/);
 
-    // O activity_log de criação referencia exatamente o mesmo processId (nunca NaN).
-    const [logs] = await conn.execute<any[]>(
-      `SELECT processId FROM activity_logs WHERE processId = ? AND action = 'criou o processo'`, [processId],
+    // O caminho de escrita legado está fechado: nada foi gravado na tabela `processes`.
+    const [rows] = await conn.execute<any[]>(
+      `SELECT id FROM processes WHERE organizationId = ? AND name = ?`, [ORG_A, uniqueName],
     );
-    expect(logs.length).toBeGreaterThanOrEqual(1);
-
-    await conn.execute(`DELETE FROM activity_logs WHERE processId = ?`, [processId]).catch(() => {});
-    await conn.execute(`DELETE FROM documents WHERE processId = ?`, [processId]).catch(() => {});
-    await conn.execute(`DELETE FROM processes WHERE id = ?`, [processId]).catch(() => {});
+    expect(rows.length).toBe(0);
   }, 30000);
 
   // ── Documentos ─────────────────────────────────────────────────────────────
