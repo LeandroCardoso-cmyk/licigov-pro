@@ -150,24 +150,17 @@ jobs:
               const p = process.env.P;
               const b = s => Buffer.from(String(s == null ? "" : s)).toString("base64");
               const emit = (k, v) => console.log(p + "_" + k + "_B64=" + b(v));
-              let user, pass, host, port, db;
-              try {
-                // URL bem-formada (credenciais percent-encoded): decodifica corretamente.
-                const u = new URL(raw);
-                user = decodeURIComponent(u.username || "");
-                pass = decodeURIComponent(u.password || "");
-                host = u.hostname || "";
-                port = u.port || "3306";
-                db = (u.pathname || "").replace(/^\//, "");
-              } catch (e) {
-                // Fallback tolerante: senha pode conter caracteres literais (#, @, :, espaço…).
-                const m = raw.match(/^[a-zA-Z][\w+.-]*:\/\/(?:([^:@\/]+)(?::([\s\S]*))?@)?([^:\/?#@]+)(?::(\d+))?(?:\/([^?#]*))?/);
-                if (!m) { process.stderr.write("parse-failed"); process.exit(2); }
-                user = m[1] || ""; pass = m[2] || ""; host = m[3] || "";
-                port = m[4] || "3306"; db = (m[5] || "").split("?")[0];
-              }
-              emit("USER", user); emit("PASS", pass); emit("HOST", host);
-              emit("PORT", port); emit("DB", db);
+              // Regex tolerante (NÃO usar new URL(): ela trunca a autoridade no 1º "/" da senha,
+              // devolvendo o usuário como host). A senha ([\s\S]*) é gulosa e faz backtracking até
+              // o último "@", então aceita "/", "@", ":", "#" literais. Senha usada LITERAL (sem
+              // decode) — idêntico ao job de backup, que conecta com sucesso na mesma URL.
+              const m = raw.match(/^[a-zA-Z][\w+.-]*:\/\/(?:([^:@\/]+)(?::([\s\S]*))?@)?([^:\/?#@]+)(?::(\d+))?(?:\/([^?#]*))?/);
+              if (!m) { process.stderr.write("parse-failed"); process.exit(2); }
+              emit("USER", m[1] || "");
+              emit("PASS", m[2] || "");
+              emit("HOST", m[3] || "");
+              emit("PORT", m[4] || "3306");
+              emit("DB", (m[5] || "").split("?")[0]);
             ') || { echo "❌ Falha ao parsear a URL de conexão (formato inválido)."; exit 1; }
             eval "$kv"
             local k
