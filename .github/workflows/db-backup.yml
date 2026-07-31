@@ -171,6 +171,20 @@ jobs:
           parse "$SRC_URL" SRC
           parse "$TGT_URL" TGT
 
+          # INVARIANTE: RESTORE_TARGET_URL bem-formada. O sintoma "host = usuário" (ex.: 'root')
+          # ocorre quando falta o segmento @host. Checagem sem expor o valor do secret.
+          case "$TGT_URL" in
+            *@*) : ;;
+            *) echo "❌ RESTORE_TARGET_URL malformada: não contém '@' (falta o segmento @host)."
+               echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
+               exit 1;;
+          esac
+          if [ -n "${TGT_USER:-}" ] && [ "$TGT_HOST" = "$TGT_USER" ]; then
+            echo "❌ RESTORE_TARGET_URL malformada: o host resolveu para o próprio usuário (segmento @host ausente/incorreto)."
+            echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
+            exit 1
+          fi
+
           # INVARIANTE: destino precisa ter host público (nunca socket/localhost). Se vazio/localhost,
           # é problema da RESTORE_TARGET_URL (não do drill) — falha com mensagem acionável, sem expor valor.
           case "${TGT_HOST:-}" in
