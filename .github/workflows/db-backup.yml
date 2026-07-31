@@ -140,24 +140,37 @@ jobs:
           [ -n "${TGT_URL:-}" ] || { echo "❌ RESTORE_TARGET_URL ausente (destino obrigatório)."; exit 1; }
           [ -n "${ENC_KEY:-}" ] || { echo "❌ BACKUP_ENCRYPTION_KEY ausente (drill exige backup cifrado)."; exit 1; }
 
-          # Parser silencioso de mysql://user:senha@host[:porta][/banco][?params] (nada é ecoado).
-          # Robusto a: porta ausente/vazia/não-numérica (→ 3306), '@' na senha, query params.
-          parse() { # $1=url ; define ${2}_USER/_PASS/_HOST/_PORT/_DB
-            local s="${1#mysql://}"; s="${s#mysql2://}"
-            local creds="${s%@*}"       # tudo antes do ÚLTIMO @ (senha pode conter @)
-            local hostpart="${s##*@}"   # tudo após o último @: host[:porta][/db][?params]
-            local hp="${hostpart%%/*}"; hp="${hp%%\?*}"
-            local host="${hp%%:*}"
-            local port="${hp##*:}"; case "$port" in ""|"$hp"|*[!0-9]*) port=3306;; esac
-            local db="${hostpart#*/}"; db="${db%%\?*}"; [ "$db" = "$hostpart" ] && db=""
-            eval "${2}_USER=\"${creds%%:*}\""
-            eval "${2}_PASS=\"${creds#*:}\""
-            eval "${2}_HOST=\"$host\""
-            eval "${2}_PORT=\"$port\""
-            eval "${2}_DB=\"$db\""
+          # Parser via URL nativa do Node (robusto a porta ausente, caracteres especiais e '@' na
+          # senha percent-encoded). Emite ${P}_{USER,PASS,HOST,PORT,DB}_B64 (base64, seguro para
+          # eval e sem vazar nada no log); os valores são decodificados em seguida.
+          parse() { # $1=url ; $2=prefixo → define ${2}_USER/_PASS/_HOST/_PORT/_DB
+            local kv
+            kv=$(THE_URL="$1" P="$2" node -e '
+              const u = new URL(process.env.THE_URL.trim());
+              const b = s => Buffer.from(String(s)).toString("base64");
+              const p = process.env.P;
+              const emit = (k, v) => console.log(p + "_" + k + "_B64=" + b(v));
+              emit("USER", decodeURIComponent(u.username || ""));
+              emit("PASS", decodeURIComponent(u.password || ""));
+              emit("HOST", u.hostname || "");
+              emit("PORT", u.port || "3306");
+              emit("DB", (u.pathname || "").replace(/^\//, "").split("?")[0]);
+            ') || { echo "❌ Falha ao parsear a URL de conexão (formato inválido)."; exit 1; }
+            eval "$kv"
+            local k
+            for k in USER PASS HOST PORT DB; do
+              eval "${2}_${k}=\$(printf %s \"\$${2}_${k}_B64\" | base64 -d)"
+            done
           }
           parse "$SRC_URL" SRC
           parse "$TGT_URL" TGT
+
+          # INVARIANTE: destino precisa ter host público (nunca socket/localhost). Se vazio/localhost,
+          # é problema da RESTORE_TARGET_URL (não do drill) — falha com mensagem acionável, sem expor valor.
+          case "${TGT_HOST:-}" in
+            ""|localhost|127.0.0.1|::1|"::"|0.0.0.0)
+              echo "❌ RESTORE_TARGET_URL sem host público (vazio/localhost) — informe o endpoint público do banco descartável."; exit 1;;
+          esac
 
           # 1) INVARIANTE: origem != destino (nunca restaurar sobre a origem).
           if [ "$SRC_HOST" = "$TGT_HOST" ] && [ "$SRC_DB" = "$TGT_DB" ]; then
@@ -168,7 +181,8 @@ jobs:
           fi
           echo "✅ Origem e destino são distintos."
 
-          TGT() { MYSQL_PWD="$TGT_PASS" mysql --host="$TGT_HOST" --port="$TGT_PORT" --user="$TGT_USER" "$@"; }
+          # --protocol=TCP força TCP (evita fallback para socket local mesmo que o host seja "localhost").
+          TGT() { MYSQL_PWD="$TGT_PASS" mysql --protocol=TCP --host="$TGT_HOST" --port="$TGT_PORT" --user="$TGT_USER" "$@"; }
 
           # 2) Destino ACESSÍVEL.
           TGT -N -e "SELECT 1;" >/dev/null || { echo "❌ Destino inacessível."; exit 1; }
