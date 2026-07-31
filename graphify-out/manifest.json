@@ -6440,8 +6440,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1785377730.5502832,
-    "ast_hash": "0e97d5ae3eb329f978f26e4d718ecc22",
+    "mtime": 1785457449.1477318,
+    "ast_hash": "261f4bf38926252953d382b518645c99",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -9795,8 +9795,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts": {
-    "mtime": 1785456816.8187761,
-    "ast_hash": "95c7ec530fbe83cb0b4966858bf78f47",
+    "mtime": 1785457801.3957238,
+    "ast_hash": "84f25108144efc9af8d65b95671f0d6f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts": {
@@ -10387,6 +10387,11 @@
   "docs/ops/DEPENDENCY_AUDIT_TRIAGE.md": {
     "mtime": 1785455034.0619922,
     "ast_hash": "2e85ec3339015c7bc3c7a292aaed7275",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1785456967.5067728,
+    "ast_hash": "cf4047fdee3d09346edd633e19c85bb9",
     "semantic_hash": ""
   }
 }
