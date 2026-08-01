@@ -15,7 +15,7 @@
 | **DATA-012** | Versionamento e documento oficial sem transação (colisão de versão / ponteiro divergente / evento perdido) | `documentVersionService.createVersion`/`restoreToVersion` (`db.transaction` + `SELECT … FOR UPDATE`) **e** `officialDocumentLifecycle.createDocument` (transação + `GET_LOCK` por linhagem, serializa até a 1ª versão) |
 | **SEC-036** | Helmet `contentSecurityPolicy:false` incondicional em produção | **CSP secure-by-default**: ligada por padrão em produção/staging; `HELMET_CSP_ENABLED=false` só como escape hatch; validação em staging = ação operacional |
 | **DOC-056** | Docs diziam `AWS_REGION`; código lê `AWS_S3_REGION` | Documentação corrigida para `AWS_S3_REGION` (código já estava correto) |
-| **DEPLOY-050 / DEPLOY-051 / G11** | Backup só manual, sem checksum; restore nunca testado | Backup **agendado** + checksum + retenção + **criptografia opcional**; **teste de restauração isolado** (fixture, `PARTIAL`) com evidência ([runbook](../../ops/DB_RESTORE_RUNBOOK.md)) |
+| **DEPLOY-050 / DEPLOY-051 / G11** | Backup só manual, sem checksum; restore nunca testado | Backup **agendado** + checksum + retenção + **criptografia**; teste isolado por fixture **+ drill de restauração com backup REAL concluído** em banco descartável (run `30682397855`, **312 tabelas / 120 migrations / órfãs=0 / mismatch=0**, **PASS**) → **G11 = PASS** ([evidência](./DB_RESTORE_DRILL_EVIDENCE.md), [runbook](../../ops/DB_RESTORE_RUNBOOK.md)) |
 | **DEPLOY-049 (deps)** | Audit mascarado (`\|\| true`) | Gate de auditoria com **baseline** (`security/audit-baseline.json`): bloqueia NOVA high/critical, dívida pré-existente auditável ([triagem](../../ops/DEPENDENCY_AUDIT_TRIAGE.md)) |
 | **OBS-044** | Observabilidade incompleta | Eventos estruturados (via `serviceLogger`/`structuredLog`) para readiness degradado, retry/timeout/falha de IA e rollback de transação crítica |
 | **PERF-052 / binding de porta** | `findAvailablePort` varria portas mesmo em produção | Varredura de porta só em **dev**; produção/staging usa a porta injetada; `railway.json` aponta o healthcheck para `/readyz` |
@@ -30,8 +30,11 @@
   usadas no fluxo canônico (versão de documento e documento oficial) **foram** cobertas.
 - **Dependências vulneráveis (SEC):** 3 críticas + 45 altas pré-existentes; correção = upgrades
   (fora do escopo). O gate **bloqueia novas** (baseline); reduzir o baseline é ação operacional.
-- **Drill de restore com backup REAL (G11 `PARTIAL`):** workflow + validação por fixture + runbook
-  entregues; o drill com `BACKUP_DATABASE_URL` é **ação operacional** (jamais sobre produção).
+- **Drill de restore com backup REAL (G11 `PASS`):** ✅ **concluído** em banco descartável e isolado
+  (`RESTORE_TARGET_URL`, endpoint público) — run `30682397855`, evidência segura em
+  [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md). Ressalva: falso negativo de cleanup
+  posterior às validações, corrigido em `0fd5099`. A **política definitiva de backup institucional**
+  (retenção longa/rotação/off-site) permanece como follow-up.
 - **Required checks / Wait for CI:** o bloqueio efetivo do deploy exige branch protection + Railway
   (ação operacional — o `needs` sozinho não bloqueia).
 - **Gate de lint completo:** hoje não-regressão; caminho documentado em CI_CD_GATES.

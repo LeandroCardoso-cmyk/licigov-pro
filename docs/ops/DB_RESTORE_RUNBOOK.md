@@ -70,6 +70,14 @@ tabelas essenciais (`organizations`, `users`, `processes`, `documents`, `documen
 
 Só após esse drill o item de gate **G11** pode ser considerado plenamente `PASS` para o backup real.
 
+> ✅ **Drill real CONCLUÍDO (G11 = PASS).** Executado no run `30682397855` #8 em banco descartável
+> e isolado (`RESTORE_TARGET_URL`, endpoint público): checksum `b882…685e`, 770s, **312 tabelas**,
+> **120 migrations**, isolamento **órfãs=0/mismatch=0**, resultado **PASS**. O job foi marcado
+> "failure" por um **falso negativo de cleanup posterior às validações** (`ls` sem correspondência
+> sob `set -euo pipefail`), corrigido preventivamente em `0fd5099` — sem reexecução com dados reais.
+> Evidência: [`../audits/production-readiness/DB_RESTORE_DRILL_EVIDENCE.md`](../audits/production-readiness/DB_RESTORE_DRILL_EVIDENCE.md).
+> A **política definitiva de backup institucional** (retenção longa/rotação/off-site) segue como follow-up.
+
 ## Healthcheck canônico (Railway)
 
 - **Rota canônica de readiness:** **`/readyz`** (200 quando o banco responde; 503 quando não).
@@ -84,7 +92,8 @@ Só após esse drill o item de gate **G11** pode ser considerado plenamente `PAS
 - **SEC (dependências):** 3 críticas + 45 altas **pré-existentes** (triagem em
   [`DEPENDENCY_AUDIT_TRIAGE.md`](./DEPENDENCY_AUDIT_TRIAGE.md)). O gate de CI (`pnpm audit:gate`)
   bloqueia **novas**; reduzir o baseline via upgrades controlados (validar em staging).
-- **G11 (restore real):** executar o drill acima com `BACKUP_DATABASE_URL` e registrar a evidência.
+- **G11 (restore real):** ✅ **CONCLUÍDO** — drill real registrado (run `30682397855`; evidência em
+  [`DB_RESTORE_DRILL_EVIDENCE.md`](../audits/production-readiness/DB_RESTORE_DRILL_EVIDENCE.md)).
 - **Criptografia de backup:** definir o secret `BACKUP_ENCRYPTION_KEY` para cifrar o dump at-rest.
 - **Required checks / Wait for CI:** configurar branch protection na `main` e *Wait for CI* no
   Railway (ver [`CI_CD_GATES.md`](../architecture/CI_CD_GATES.md)).

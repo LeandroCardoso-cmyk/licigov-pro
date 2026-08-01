@@ -39,11 +39,15 @@ G1/G2/G3/G6. A série de hardening do runtime Gemini + recuperação jurídica +
 | G8 | Fluxo principal navegável e sem telas de debug/duplicadas | **PARTIAL** | UI-054, LEGACY-013; PASS = rotas de teste e legadas fora da navegação |
 | G9 | Login/sessão/logout funcionais | **PASS** | JWT httpOnly ok; SEC-022 corrigido — TTL de sessão padrão **24h, configurável** via `SESSION_TTL_HOURS` (1–720h; `SESSION_TTL_MS` em `config/auth.ts`, aplicado ao JWT em `_core/sdk.ts`). O default de 1 ano foi removido |
 | G10 | Suíte de testes verde no snapshot | **PASS** | 3924 passed / 92 skipped / 0 falhas; typecheck 0 erros; build ok (snapshot pós AI-015 fail-closed) |
-| G11 | Backup e restauração disponíveis | **PARTIAL** | DEPLOY-051; backup manual + DR documentado; **restore nunca testado**. PASS = backup agendado/automatizado + retenção definida + ≥1 teste de restauração bem-sucedido registrado |
+| G11 | Backup e restauração disponíveis | **PASS** | DEPLOY-051 resolvido: backup **agendado** + checksum + retenção (14d) + criptografia; **drill de restauração com backup REAL** concluído em banco descartável (run `30682397855` #8, checksum `b882…685e`, 770s, **312 tabelas**, **120 migrations**, isolamento **órfãs=0/mismatch=0**, **PASS**). Ressalva: job marcado "failure" por falso negativo de cleanup **posterior** às validações — correção preventiva em `0fd5099`. Evidência: [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md) |
 | G12 | IA nunca serve conteúdo mock como oficial sem sinalizar | **PASS** | AI-015 resolvido em duas frentes: (a) `thinkingConfig` deixou de derrubar a chamada real e `GEMINI_API_KEY` foi rotacionada e **validada em staging**; (b) **fail-closed do provider** — o fallback implícito para `MockAIProvider` é PROIBIDO em staging/production (`selectProvider` lança `NoRealAIProviderError`); sem provider real a consulta falha de forma controlada e NÃO persiste resposta oficial (`failed`); erro de runtime do Gemini não cai no mock; mock só em dev/test com `AI_ALLOW_MOCK_FALLBACK=true` (default false) e, quando usado, é marcado (`provider=mock`) e NUNCA classificado como oficial/"Fundamentada". Selos de suficiência + evidência-por-intenção complementam. Testes: `ai-015-mock-fallback-policy.test.ts`. Ver adendo |
 
 **Resultado do Gate Obrigatório (pós-PR A + hardening Gemini/retrieval + AI-015 fail-closed): 8 PASS · 1 FAIL · 3 PARTIAL · 0 NOT_VERIFIED · 0 N/A (total 12).**
 PASS: G1, G2, G3, G4, G6, G9, G10, G12 · FAIL: G7 · PARTIAL: G5, G8, G11.
+> **Atualização (PR D):** **G11 → `PASS`** — drill de restauração com backup **real** concluído
+> em banco descartável (evidência em [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md);
+> ver linha da tabela e adendo PR D). G7 endereçado pelo gate de CI real (ver adendo). Restam
+> pendentes apenas **G5** e **G8**.
 Pela regra de bloqueio acima, enquanto qualquer item aplicável não estiver em `PASS` — incluindo
 os `PARTIAL` (G5/G8/G11) — o go-live **não** é autorizado. A PR A moveu G1/G2/G3/G6 para PASS;
 a série Gemini/retrieval + AI-015 fail-closed fechou **G12**; a confirmação de `ADMIN_PASSWORD` no
@@ -167,12 +171,16 @@ Ver detalhes em [`PR_D_PRODUCTION_RESILIENCE.md`](./PR_D_PRODUCTION_RESILIENCE.m
   o job `deploy` dependendo de todos via `needs` (sem `|| true`, sem build simbólico). Typecheck,
   build e os testes novos foram validados localmente. **PASS pleno** de G7 fica condicionado ao CI
   executar **verde** no PR (a suíte completa + smokes MySQL rodam no runner com o serviço MySQL).
-- **G11 (backup/restore): permanece `PARTIAL`.** Entregues: backup **agendado** (diário) + checksum
-  + retenção (14d) + **criptografia opcional** (`BACKUP_ENCRYPTION_KEY`) e um **teste de restauração
-  isolado** (apenas **fixture sintética**, com evidência). Enquanto houver **só fixture**, o item
-  segue `PARTIAL`: o **PASS pleno** exige o **drill de restauração com backup real** (ação
-  operacional, `BACKUP_DATABASE_URL`) descrito no [runbook](../../ops/DB_RESTORE_RUNBOOK.md) —
-  jamais sobre produção. Teste mecânico ≠ drill real.
+- **G11 (backup/restore): `PASS`.** Entregues: backup **agendado** (diário) + checksum + retenção
+  (14d) + **criptografia** (`BACKUP_ENCRYPTION_KEY`), o teste de restauração isolado por **fixture**,
+  e — fechando o item — o **drill de restauração com backup REAL** em banco **descartável e isolado**
+  (`RESTORE_TARGET_URL`, endpoint público; jamais produção/staging). Run `30682397855` #8: checksum
+  `b882…685e`, 770s, **312 tabelas**, **120 migrations**, isolamento **órfãs=0/mismatch=0**,
+  resultado **PASS**. **Ressalva:** o job foi marcado "failure" por um **falso negativo de cleanup
+  posterior a todas as validações** (`ls` sem correspondência sob `set -euo pipefail`); correção
+  preventiva em `0fd5099` (não autoriza nova execução; a evidência original é preservada). Evidência
+  segura: [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md). A **política definitiva de
+  backup institucional** (retenção longa/rotação/off-site) segue como follow-up.
 - Também entregues no Bloco D: `/health`+`/readyz` (OBS-043, healthcheck do Railway em `railway.json`);
   timeout/retry de IA com **timeout no SDK** (AI-014, sem tocar no fail-closed AI-015 de G12);
   transações no versionamento **e em `officialDocumentLifecycle.createDocument`** (DATA-012);

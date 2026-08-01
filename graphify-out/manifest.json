@@ -9690,8 +9690,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1785455165.133989,
-    "ast_hash": "796fde8ddc9af83db6242115dc0b8081",
+    "mtime": 1785557599.2362542,
+    "ast_hash": "4ca7a89ba7dea47cc0a9a05f0c86e53f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
@@ -9760,8 +9760,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1785455256.789987,
-    "ast_hash": "4ff9e21eeca8589eeb3ff840cd3636ed",
+    "mtime": 1785558433.0624354,
+    "ast_hash": "b64193feda5c889782bbb692ded4bd61",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -10355,13 +10355,13 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PR_D_PRODUCTION_RESILIENCE.md": {
-    "mtime": 1785455310.2819858,
-    "ast_hash": "aa9c2ab0b69479a9cf7d111108529407",
+    "mtime": 1785558472.5224376,
+    "ast_hash": "f8e28a6826aeb8d6e8250b7947bae935",
     "semantic_hash": ""
   },
   "docs/ops/DB_RESTORE_RUNBOOK.md": {
-    "mtime": 1785455237.1979876,
-    "ast_hash": "0a4d160883bfc32e9c92996d6c5c2091",
+    "mtime": 1785558450.8024364,
+    "ast_hash": "971c83c9c5b721aec0d31d5d58154a60",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -10422,6 +10422,11 @@
   "docs/audits/production-readiness/PR_B2_IMPORT_UX_FINDINGS.md": {
     "mtime": 1785465118.2388368,
     "ast_hash": "174360cd8a66f5b74f99a4c3960da861",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/DB_RESTORE_DRILL_EVIDENCE.md": {
+    "mtime": 1785558371.7104316,
+    "ast_hash": "c14678d8c020e6e9a6cee3e25b5b8194",
     "semantic_hash": ""
   }
 }
