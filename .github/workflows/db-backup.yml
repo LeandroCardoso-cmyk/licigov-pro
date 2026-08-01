@@ -302,7 +302,9 @@ jobs:
 
           # 8) Cleanup: remover TODO arquivo decifrado/temporário do runner (mantém só a evidência).
           rm -f dump.sql.gz *.sql.gz.enc *.sha256 *.sql 2>/dev/null || true
-          LEFT=$(ls -1 *.sql.gz *.sql *.enc 2>/dev/null | wc -l | tr -d ' ')
+          # `ls` sem correspondência sai com código 2; sob `set -euo pipefail` isso derrubaria o script
+          # (falso negativo — justamente porque o cleanup funcionou). O `|| true` neutraliza esse caso.
+          LEFT=$( { ls -1 *.sql.gz *.sql *.enc 2>/dev/null || true; } | wc -l | tr -d ' ')
           [ "$LEFT" = "0" ] || { echo "❌ Restaram arquivos sensíveis no runner ($LEFT)."; exit 1; }
           echo "✅ Cleanup: nenhum dump decifrado/cifrado remanescente no runner."
           echo "ℹ️ O banco de destino NÃO foi dropado (exclusão do projeto Railway é manual, pelo operador)."
