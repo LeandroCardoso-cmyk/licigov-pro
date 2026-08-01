@@ -179,6 +179,16 @@ jobs:
                echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
                exit 1;;
           esac
+          # Host VAZIO (ex.: "@:porta" ou "@/banco"): o trecho após o ÚLTIMO '@' começa com ':' , '/',
+          # '?' ou '#' (ou está vazio). Robusto a '@' na senha (usa o último '@'). Sem expor valor.
+          TGT_AFTER_AT="${TGT_URL##*@}"
+          case "$TGT_AFTER_AT" in
+            ""|:*|/*|"?"*|"#"*)
+              echo "❌ RESTORE_TARGET_URL com hostname VAZIO (padrão '@:porta' ou '@/banco')."
+              echo "   O host entre '@' e ':porta' está ausente — provavelmente a variável de host do Railway não foi resolvida na URL."
+              echo "   Use o MYSQL_PUBLIC_URL completo: mysql://usuario:senha@HOST.proxy.rlwy.net:PORTA/banco."
+              exit 1;;
+          esac
           if [ -n "${TGT_USER:-}" ] && [ "$TGT_HOST" = "$TGT_USER" ]; then
             echo "❌ RESTORE_TARGET_URL malformada: o host resolveu para o próprio usuário (segmento @host ausente/incorreto)."
             echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
