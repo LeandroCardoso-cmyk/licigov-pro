@@ -1,29 +1,44 @@
-name: Backup do Banco (manual)
+name: Backup do Banco (agendado + manual)
 
-# Rodar manualmente: aba "Actions" → "Backup do Banco (manual)" → "Run workflow".
-# Requer o secret BACKUP_DATABASE_URL (string de conexão MySQL PÚBLICA — ex.: o
-# MYSQL_PUBLIC_URL do Railway de produção). Somente leitura no banco:
-# mysqldump --single-transaction (snapshot consistente, sem travar tabelas).
-# O dump comprimido fica disponível como ARTIFACT do run (Actions → run → Artifacts),
-# com retenção de 7 dias — baixe e guarde localmente após o download.
+# Backup lógico do MySQL de produção (mysqldump --single-transaction: snapshot consistente,
+# somente leitura, sem travar tabelas). Executa:
+#   - AGENDADO: todo dia às 06:00 UTC (03:00 BRT);
+#   - MANUAL:  aba "Actions" → "Backup do Banco (agendado + manual)" → "Run workflow".
+#
+# Requer o secret BACKUP_DATABASE_URL (string de conexão MySQL PÚBLICA — ex.: o MYSQL_PUBLIC_URL
+# do Railway de produção). O dump comprimido + o checksum SHA-256 ficam como ARTIFACT do run
+# (Actions → run → Artifacts), com retenção de 14 dias. Nunca versiona o dump no Git.
 on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC diariamente
   workflow_dispatch:
+    inputs:
+      run_restore_drill:
+        description: "Após o backup, executar o DRILL de restauração real no RESTORE_TARGET_URL (dispatch-only; NUNCA no agendamento). Destino deve ser um MySQL descartável e VAZIO — nunca produção/staging."
+        type: boolean
+        default: false
+
+# Evita dois backups simultâneos (agendado + manual disparados juntos).
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
 
 jobs:
   backup:
-    name: Dump completo (mysqldump)
+    name: Dump completo (mysqldump) + checksum
     runs-on: ubuntu-latest
     steps:
-      - name: Dump do banco
+      - name: Dump do banco + checksum
         env:
           DB_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
             echo "❌ Secret BACKUP_DATABASE_URL não definido (use o MYSQL_PUBLIC_URL do Railway)."
             exit 1
           fi
-          # Parse de mysql://user:senha@host:porta/banco (senha pode conter caracteres especiais)
+          # Parse de mysql://user:senha@host:porta/banco (senha pode conter caracteres especiais).
           proto_stripped="${DB_URL#mysql://}"
           creds="${proto_stripped%%@*}"
           rest="${proto_stripped#*@}"
@@ -34,7 +49,8 @@ jobs:
           DB_HOST="${hostport%%:*}"
           DB_PORT="${hostport#*:}"
 
-          echo "Host: $DB_HOST:$DB_PORT | Banco: $DB_NAME | Usuário: $DB_USER"
+          # Não expõe host/usuário/senha nos logs (apenas o nome do banco, não sensível).
+          echo "Iniciando backup do banco \"$DB_NAME\"…"
           STAMP="$(date -u +%Y%m%d-%H%M%S)"
           FILE="backup-${DB_NAME}-${STAMP}.sql.gz"
 
@@ -44,16 +60,260 @@ jobs:
             --set-gtid-purged=OFF --no-tablespaces \
             "$DB_NAME" | gzip > "$FILE"
 
-          ls -lh "$FILE"
-          TABLES=$(MYSQL_PWD="$DB_PASS" mysql --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
-            -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'")
-          echo "✅ Backup concluído: $TABLES tabelas em $FILE"
-          echo "BACKUP_FILE=$FILE" >> "$GITHUB_ENV"
+          # Falha explícita se o dump saiu vazio/curto (não gera evidência falsa de backup).
+          BYTES=$(stat -c%s "$FILE")
+          if [ "$BYTES" -lt 1024 ]; then
+            echo "❌ Dump suspeito (apenas ${BYTES} bytes) — abortando."
+            exit 1
+          fi
 
-      - name: Publicar artifact (retenção 7 dias)
+          # Criptografia at-rest do dump (AES-256, PBKDF2). Secure-by-default: se
+          # BACKUP_ENCRYPTION_KEY estiver definido, o artifact é CIFRADO (recomendado). Sem a chave,
+          # o artifact segue apenas restrito ao repositório — avisamos e registramos a ação operacional.
+          ARTIFACT="$FILE"
+          if [ -n "${ENC_KEY:-}" ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in "$FILE" -out "${FILE}.enc" -pass env:ENC_KEY
+            rm -f "$FILE"
+            ARTIFACT="${FILE}.enc"
+            echo "🔒 Dump cifrado (AES-256-CBC/PBKDF2)."
+          else
+            echo "⚠️ BACKUP_ENCRYPTION_KEY não definido — artifact NÃO cifrado (apenas restrito ao repo)."
+            echo "   Ação operacional: defina o secret BACKUP_ENCRYPTION_KEY para cifrar o dump."
+          fi
+
+          # Checksum SHA-256 do artifact final (cifrado ou não) para verificação na restauração.
+          sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
+
+          echo "✅ Backup concluído: ${ARTIFACT} ($(stat -c%s "$ARTIFACT") bytes)."
+          echo "   Checksum: $(cut -d' ' -f1 "${ARTIFACT}.sha256")"
+          echo "BACKUP_ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
+
+      - name: Publicar artifact (dump + checksum, retenção 14 dias)
         uses: actions/upload-artifact@v4
         with:
           name: db-backup
-          path: ${{ env.BACKUP_FILE }}
-          retention-days: 7
+          path: |
+            ${{ env.BACKUP_ARTIFACT }}
+            ${{ env.BACKUP_ARTIFACT }}.sha256
+          retention-days: 14
           if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  # DRILL de restauração REAL (dispatch-only, gated). Restaura o backup cifrado recém-gerado em um
+  # MySQL DESCARTÁVEL e ISOLADO (RESTORE_TARGET_URL) — NUNCA produção/staging, NUNCA a origem.
+  #
+  # Invariantes de segurança (todas verificadas em runtime, sem expor valores):
+  #   - origem = BACKUP_DATABASE_URL (somente leitura; nunca modificada);
+  #   - destino = EXCLUSIVAMENTE RESTORE_TARGET_URL (DATABASE_URL nunca é usada/lida aqui);
+  #   - recusa se origem == destino (host+porta+banco, ou host+banco);
+  #   - destino precisa estar ACESSÍVEL e VAZIO (prod/staging teriam tabelas → aborta);
+  #   - dump precisa estar CIFRADO (.enc); checksum SHA-256 conferido antes de decifrar;
+  #   - nenhum secret/host/URL/dado é impresso nos logs (só contagens/aggregates);
+  #   - nenhuma aplicação é conectada ao destino (só o cliente mysql);
+  #   - arquivos decifrados são removidos ao final; o banco de destino NÃO é dropado.
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  restore-drill:
+    name: Drill de restauração real (destino descartável)
+    needs: backup
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_restore_drill == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar cliente MySQL + baixar backup cifrado
+        uses: actions/download-artifact@v4
+        with:
+          name: db-backup
+
+      - name: Instalar mysql-client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client openssl
+
+      - name: Drill — validar destino, restaurar e verificar (sem expor dados/secrets)
+        env:
+          SRC_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          TGT_URL: ${{ secrets.RESTORE_TARGET_URL }}
+          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          START=$SECONDS
+
+          # 0) Secrets obrigatórios presentes.
+          [ -n "${SRC_URL:-}" ] || { echo "❌ BACKUP_DATABASE_URL ausente."; exit 1; }
+          [ -n "${TGT_URL:-}" ] || { echo "❌ RESTORE_TARGET_URL ausente (destino obrigatório)."; exit 1; }
+          [ -n "${ENC_KEY:-}" ] || { echo "❌ BACKUP_ENCRYPTION_KEY ausente (drill exige backup cifrado)."; exit 1; }
+
+          # Parser via URL nativa do Node (robusto a porta ausente, caracteres especiais e '@' na
+          # senha percent-encoded). Emite ${P}_{USER,PASS,HOST,PORT,DB}_B64 (base64, seguro para
+          # eval e sem vazar nada no log); os valores são decodificados em seguida.
+          parse() { # $1=url ; $2=prefixo → define ${2}_USER/_PASS/_HOST/_PORT/_DB
+            local kv
+            kv=$(THE_URL="$1" P="$2" node -e '
+              const raw = process.env.THE_URL.trim();
+              const p = process.env.P;
+              const b = s => Buffer.from(String(s == null ? "" : s)).toString("base64");
+              const emit = (k, v) => console.log(p + "_" + k + "_B64=" + b(v));
+              // Regex tolerante (NÃO usar new URL(): ela trunca a autoridade no 1º "/" da senha,
+              // devolvendo o usuário como host). A senha ([\s\S]*) é gulosa e faz backtracking até
+              // o último "@", então aceita "/", "@", ":", "#" literais. Senha usada LITERAL (sem
+              // decode) — idêntico ao job de backup, que conecta com sucesso na mesma URL.
+              const m = raw.match(/^[a-zA-Z][\w+.-]*:\/\/(?:([^:@\/]+)(?::([\s\S]*))?@)?([^:\/?#@]+)(?::(\d+))?(?:\/([^?#]*))?/);
+              if (!m) { process.stderr.write("parse-failed"); process.exit(2); }
+              emit("USER", m[1] || "");
+              emit("PASS", m[2] || "");
+              emit("HOST", m[3] || "");
+              emit("PORT", m[4] || "3306");
+              emit("DB", (m[5] || "").split("?")[0]);
+            ') || { echo "❌ Falha ao parsear a URL de conexão (formato inválido)."; exit 1; }
+            eval "$kv"
+            local k
+            for k in USER PASS HOST PORT DB; do
+              eval "${2}_${k}=\$(printf %s \"\$${2}_${k}_B64\" | base64 -d)"
+            done
+          }
+          parse "$SRC_URL" SRC
+          parse "$TGT_URL" TGT
+
+          # INVARIANTE: RESTORE_TARGET_URL bem-formada. O sintoma "host = usuário" (ex.: 'root')
+          # ocorre quando falta o segmento @host. Checagem sem expor o valor do secret.
+          case "$TGT_URL" in
+            *@*) : ;;
+            *) echo "❌ RESTORE_TARGET_URL malformada: não contém '@' (falta o segmento @host)."
+               echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
+               exit 1;;
+          esac
+          # Host VAZIO (ex.: "@:porta" ou "@/banco"): o trecho após o ÚLTIMO '@' começa com ':' , '/',
+          # '?' ou '#' (ou está vazio). Robusto a '@' na senha (usa o último '@'). Sem expor valor.
+          TGT_AFTER_AT="${TGT_URL##*@}"
+          case "$TGT_AFTER_AT" in
+            ""|:*|/*|"?"*|"#"*)
+              echo "❌ RESTORE_TARGET_URL com hostname VAZIO (padrão '@:porta' ou '@/banco')."
+              echo "   O host entre '@' e ':porta' está ausente — provavelmente a variável de host do Railway não foi resolvida na URL."
+              echo "   Use o MYSQL_PUBLIC_URL completo: mysql://usuario:senha@HOST.proxy.rlwy.net:PORTA/banco."
+              exit 1;;
+          esac
+          if [ -n "${TGT_USER:-}" ] && [ "$TGT_HOST" = "$TGT_USER" ]; then
+            echo "❌ RESTORE_TARGET_URL malformada: o host resolveu para o próprio usuário (segmento @host ausente/incorreto)."
+            echo "   Formato esperado: mysql://usuario:senha@HOST:PORTA/banco (endpoint PÚBLICO do banco descartável)."
+            exit 1
+          fi
+
+          # INVARIANTE: destino precisa ter host público (nunca socket/localhost). Se vazio/localhost,
+          # é problema da RESTORE_TARGET_URL (não do drill) — falha com mensagem acionável, sem expor valor.
+          case "${TGT_HOST:-}" in
+            ""|localhost|127.0.0.1|::1|"::"|0.0.0.0)
+              echo "❌ RESTORE_TARGET_URL sem host público (vazio/localhost) — informe o endpoint público do banco descartável."; exit 1;;
+          esac
+
+          # 1) INVARIANTE: origem != destino (nunca restaurar sobre a origem).
+          if [ "$SRC_HOST" = "$TGT_HOST" ] && [ "$SRC_DB" = "$TGT_DB" ]; then
+            echo "❌ Origem e destino coincidem (mesmo host+banco) — abortando o drill."; exit 1
+          fi
+          if [ "$SRC_HOST" = "$TGT_HOST" ] && [ "$SRC_PORT" = "$TGT_PORT" ] && [ "$SRC_DB" = "$TGT_DB" ]; then
+            echo "❌ Origem e destino idênticos — abortando."; exit 1
+          fi
+          echo "✅ Origem e destino são distintos."
+
+          # --protocol=TCP força TCP (evita fallback para socket local mesmo que o host seja "localhost").
+          TGT() { MYSQL_PWD="$TGT_PASS" mysql --protocol=TCP --host="$TGT_HOST" --port="$TGT_PORT" --user="$TGT_USER" "$@"; }
+
+          # 2) Destino ACESSÍVEL.
+          TGT -N -e "SELECT 1;" >/dev/null || { echo "❌ Destino inacessível."; exit 1; }
+          echo "✅ Destino acessível."
+
+          # 3) Destino VAZIO (prod/staging teriam tabelas → salvaguarda contra alvo errado).
+          PRE=$(TGT -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$TGT_DB';")
+          if [ "$PRE" -ne 0 ]; then
+            echo "❌ Destino NÃO está vazio (${PRE} tabelas) — recusando para não sobrescrever um banco real."; exit 1
+          fi
+          echo "✅ Destino vazio (0 tabelas) — descartável confirmado."
+
+          # 4) Artefato precisa estar CIFRADO (.enc) e com checksum íntegro.
+          ENC=$(ls -1 *.sql.gz.enc 2>/dev/null | head -n1 || true)
+          [ -n "$ENC" ] || { echo "❌ Nenhum dump cifrado (.enc) no artifact — drill exige backup cifrado."; exit 1; }
+          if ls -1 *.sql.gz 2>/dev/null | grep -qv '\.enc$'; then
+            echo "❌ Há dump NÃO cifrado no artifact — abortando (política: apenas cifrado)."; exit 1
+          fi
+          sha256sum -c "${ENC}.sha256"
+          echo "✅ Checksum SHA-256 íntegro."
+          CHK=$(cut -d' ' -f1 "${ENC}.sha256")
+
+          # 5) Decifrar (AES-256-CBC/PBKDF2) → restaurar SOMENTE no destino.
+          openssl enc -d -aes-256-cbc -pbkdf2 -salt -in "$ENC" -out dump.sql.gz -pass env:ENC_KEY
+          gunzip -c dump.sql.gz | TGT "$TGT_DB"
+          echo "✅ Restauração concluída no destino descartável."
+
+          # 6) Validações (só contagens/aggregates — nada de registros/e-mails/conteúdo).
+          TABLES=$(TGT -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$TGT_DB';")
+          echo "Tabelas restauradas: $TABLES"
+          [ "$TABLES" -gt 0 ] || { echo "❌ Nenhuma tabela após restore."; exit 1; }
+
+          # 6a) migrations aplicadas (journal do Drizzle).
+          MIG=$(TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.\`__drizzle_migrations\`;" 2>/dev/null || echo "ERR")
+          [ "$MIG" != "ERR" ] || { echo "❌ Tabela __drizzle_migrations ausente (migrations não restauradas)."; exit 1; }
+          [ "$MIG" -ge 1 ] || { echo "❌ Journal de migrations vazio."; exit 1; }
+          echo "✅ Migrations aplicadas (journal com $MIG registros)."
+
+          # 6b) tabelas essenciais existem e são legíveis (COUNT executa).
+          ESSENTIAL="organizations users processes documents document_versions activity_logs official_documents"
+          for t in $ESSENTIAL; do
+            TGT -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='$TGT_DB' AND table_name='$t';" | grep -q 1 \
+              || { echo "❌ Tabela essencial ausente: $t"; exit 1; }
+            C=$(TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.\`$t\`;")
+            echo "  - $t: $C linhas"
+          done
+          echo "✅ Tabelas essenciais presentes e legíveis."
+
+          # 6c) Isolamento multi-tenant + consistência mínima (aggregates; hard-fail só em corrupção clara).
+          ORGS=$(TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.organizations;")
+          DOC_ORGS=$(TGT -N -e "SELECT COUNT(DISTINCT organizationId) FROM \`$TGT_DB\`.documents WHERE organizationId IS NOT NULL;")
+          ORPHANS=$(TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.document_versions v LEFT JOIN \`$TGT_DB\`.documents d ON d.id=v.documentId WHERE d.id IS NULL;")
+          MISMATCH=$(TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.document_versions v JOIN \`$TGT_DB\`.documents d ON d.id=v.documentId WHERE v.organizationId IS NOT NULL AND d.organizationId IS NOT NULL AND v.organizationId<>d.organizationId;")
+          echo "Organizações: $ORGS | orgs distintas em documents: $DOC_ORGS | versões órfãs: $ORPHANS | mismatch tenant versão↔doc: $MISMATCH"
+          [ "$ORPHANS" -eq 0 ] || { echo "❌ Consistência: há document_versions órfãs ($ORPHANS)."; exit 1; }
+          [ "$MISMATCH" -eq 0 ] || { echo "❌ Isolamento: version.organizationId difere do documento pai ($MISMATCH)."; exit 1; }
+          echo "✅ Isolamento multi-tenant e consistência mínima OK."
+
+          # 6d) Smoke funcional: join canônico processo/documento executa.
+          TGT -N -e "SELECT COUNT(*) FROM \`$TGT_DB\`.documents d JOIN \`$TGT_DB\`.document_versions v ON v.documentId=d.id;" >/dev/null
+          echo "✅ Smoke funcional (join documents↔document_versions) OK."
+
+          DUR=$((SECONDS - START))
+
+          # 7) Evidência SEGURA (sem dados/hosts/URLs/secrets) — só metadados agregados.
+          cat > restore-drill-evidence.md <<EOF
+          # Evidência — Drill de Restauração REAL (backup cifrado → destino descartável)
+
+          | Campo | Valor |
+          |---|---|
+          | Workflow / run | ${{ github.workflow }} #${{ github.run_number }} (id ${{ github.run_id }}) |
+          | Data (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |
+          | Origem | backup cifrado de produção (somente leitura; não modificada) |
+          | Destino | banco MySQL descartável e ISOLADO (RESTORE_TARGET_URL); vazio antes do restore |
+          | Criptografia | AES-256-CBC / PBKDF2 (openssl) |
+          | Checksum SHA-256 (artifact) | ${CHK} |
+          | Duração do drill | ${DUR}s |
+          | Tabelas restauradas | ${TABLES} |
+          | Migrations (journal) | ${MIG} |
+          | Testes | destino vazio+acessível, origem≠destino, checksum, schema, migrations, tabelas essenciais, isolamento tenant, órfãs, smoke join |
+          | Isolamento | versões órfãs=${ORPHANS}, mismatch tenant=${MISMATCH} (ambos 0) |
+          | Resultado agregado | PASS |
+
+          > Nenhum registro, e-mail, host, URL ou secret é exposto nesta evidência.
+          EOF
+          echo "----- EVIDÊNCIA -----"; cat restore-drill-evidence.md
+
+          # 8) Cleanup: remover TODO arquivo decifrado/temporário do runner (mantém só a evidência).
+          rm -f dump.sql.gz *.sql.gz.enc *.sha256 *.sql 2>/dev/null || true
+          # `ls` sem correspondência sai com código 2; sob `set -euo pipefail` isso derrubaria o script
+          # (falso negativo — justamente porque o cleanup funcionou). O `|| true` neutraliza esse caso.
+          LEFT=$( { ls -1 *.sql.gz *.sql *.enc 2>/dev/null || true; } | wc -l | tr -d ' ')
+          [ "$LEFT" = "0" ] || { echo "❌ Restaram arquivos sensíveis no runner ($LEFT)."; exit 1; }
+          echo "✅ Cleanup: nenhum dump decifrado/cifrado remanescente no runner."
+          echo "ℹ️ O banco de destino NÃO foi dropado (exclusão do projeto Railway é manual, pelo operador)."
+
+      - name: Publicar evidência do drill (retenção 90 dias)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-evidence
+          path: restore-drill-evidence.md
+          retention-days: 90
+          if-no-files-found: warn

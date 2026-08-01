@@ -18,6 +18,8 @@ import type { BusinessDomainCode } from "../domain/businessDomain";
 import { assertKernelAccess } from "./kernelAccessService";
 import { getExecutionPolicy, type AITaskId, type AIExecutionPolicy } from "../_core/ai/executionPolicy";
 import { selectProvider, type ProviderResolution } from "../_core/ai/providerAdapter";
+// PR D / AI-014 — timeout + retry controlado em volta da chamada ao provider (sem tocar na seleção).
+import { resilientAiCall } from "../_core/ai/aiResilience";
 // RC-4.0 — fundação cognitiva
 import {
   getCognitiveTask, isBusinessDomainAllowed, type CognitiveTaskId,
@@ -134,11 +136,17 @@ export async function executeAITask(input: AIExecutionInput): Promise<AIExecutio
   const resolution: ProviderResolution = selectProvider(policy.preferredProvider, policy.fallbackProvider);
   stages.push({ stage: "provider", status: "applied", detail: `Provider selecionado: ${resolution.selected}${resolution.usedFallback ? " (fallback)" : ""}.` });
 
-  // Stage: LLM
-  const generated = await resolution.provider.generate({
-    messages,
-    maxTokens: policy.maxContext,
-  });
+  // Stage: LLM (com timeout + retry controlado — AI-014)
+  const generated = await resilientAiCall(
+    () => resolution.provider.generate({ messages, maxTokens: policy.maxContext }),
+    {
+      provider: resolution.provider.name,
+      model: policy.model,
+      operation: "executeAITask",
+      correlationId: input.correlationId,
+      task: input.task,
+    },
+  );
   stages.push({ stage: "llm", status: "applied", detail: `Inferência concluída (${resolution.provider.name}).` });
 
   // Stage: Reasoning
@@ -278,16 +286,25 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const resolution = selectProvider(policy.preferredProvider, policy.fallbackProvider);
   push("provider", "applied", `Provider selecionado: ${resolution.selected}${resolution.usedFallback ? " (fallback)" : ""}.`);
 
-  // Stage: LLM
+  // Stage: LLM (com timeout + retry controlado — AI-014)
   const startedAt = Date.now();
-  const generated = await resolution.provider.generate({
-    messages: [
-      { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
-    ],
-    // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
-    maxTokens: input.maxOutputTokens ?? policy.maxContext,
-  });
+  const generated = await resilientAiCall(
+    () => resolution.provider.generate({
+      messages: [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ],
+      // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
+      maxTokens: input.maxOutputTokens ?? policy.maxContext,
+    }),
+    {
+      provider: resolution.provider.name,
+      model: policy.model,
+      operation: "executeCognitiveTask",
+      correlationId: input.correlationId,
+      task: String(input.task),
+    },
+  );
   const latencyMs = Math.max(0, Date.now() - startedAt);
   push("llm", "applied", `Inferência concluída (${resolution.provider.name}).`);
 

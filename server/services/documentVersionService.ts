@@ -13,10 +13,14 @@ import type {
   ActorSnapshot,
   WorkflowSnapshot,
   VersionSourceContext,
-  DocumentStatusValue,
 } from "../domain/documentTypes";
 
 const log = serviceLogger("DocumentVersionService");
+
+// PR D — tipos do executor: aceitam tanto a conexão (db) quanto uma transação (tx),
+// para compor operações multi-gravação atômicas reutilizando o mesmo callback.
+type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface CreateVersionParams {
   documentId:     number;
@@ -31,18 +35,29 @@ export interface CreateVersionParams {
 }
 
 /**
- * Cria um snapshot imutável do documento.
- * Retorna a versão criada (com id e versionNumber).
+ * PR D / DATA-012 — Insere uma nova versão DENTRO de uma transação, de forma race-safe.
+ *
+ * O `versionNumber` era calculado com `MAX(...)+1` fora de qualquer lock: duas requisições
+ * concorrentes geravam o MESMO número (violando o histórico imutável). Agora:
+ *  1) tomamos um lock na linha-pai `documents` (`FOR UPDATE`) — mutex por documento, serializa
+ *     toda a numeração de versão daquele documento;
+ *  2) só então lemos o `MAX(versionNumber)` e inserimos a nova versão.
+ *
+ * Deve ser chamada sempre dentro de `tx` (o chamador abre a transação).
  */
-export async function createVersion(
+async function insertVersionTx(
+  tx: Tx,
   params: CreateVersionParams,
-  ctx:    TrpcAuditCtx,
+  ctx: TrpcAuditCtx,
 ): Promise<typeof documentVersions.$inferSelect> {
-  const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
+  // Mutex por documento (a linha-pai sempre existe): serializa a numeração concorrente.
+  await tx
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.id, params.documentId), eq(documents.organizationId, params.organizationId)))
+    .for("update");
 
-  // Determina o próximo versionNumber
-  const rows = await db
+  const rows = await tx
     .select({ maxVer: sql<number>`COALESCE(MAX(${documentVersions.versionNumber}), 0)` })
     .from(documentVersions)
     .where(eq(documentVersions.documentId, params.documentId));
@@ -58,7 +73,7 @@ export async function createVersion(
     orgName: ctx.orgName ?? "",
   };
 
-  const [inserted] = await db.insert(documentVersions).values({
+  const [inserted] = await tx.insert(documentVersions).values({
     organizationId:     params.organizationId,
     documentId:         params.documentId,
     versionNumber:      nextVersionNumber,
@@ -74,7 +89,7 @@ export async function createVersion(
     createdBy:          ctx.user.id,
   }).$returningId();
 
-  const version = await db
+  const version = await tx
     .select()
     .from(documentVersions)
     .where(eq(documentVersions.id, inserted.id))
@@ -85,9 +100,35 @@ export async function createVersion(
     versionNumber:  nextVersionNumber,
     sourceContext:  params.sourceContext,
     organizationId: params.organizationId,
+    correlationId:  params.correlationId ?? ctx.correlationId ?? undefined,
   });
 
   return version[0];
+}
+
+/**
+ * Cria um snapshot imutável do documento (transacional e race-safe).
+ * Retorna a versão criada (com id e versionNumber).
+ */
+export async function createVersion(
+  params: CreateVersionParams,
+  ctx:    TrpcAuditCtx,
+): Promise<typeof documentVersions.$inferSelect> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
+
+  try {
+    return await db.transaction((tx) => insertVersionTx(tx, params, ctx));
+  } catch (error) {
+    // Observabilidade (OBS): rollback de operação crítica (nenhum estado parcial persistido).
+    log.error("version_transaction_rollback", {
+      documentId: params.documentId,
+      organizationId: params.organizationId,
+      correlationId: params.correlationId ?? ctx.correlationId ?? undefined,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 /**
@@ -172,54 +213,84 @@ export async function restoreToVersion(
   const orgId = ctx.organizationId;
   if (!orgId) throw new TRPCError({ code: "BAD_REQUEST", message: "organizationId obrigatório." });
 
-  const targetVersion = await getVersion(documentId, versionNumber, orgId);
-  if (!targetVersion) {
-    throw new TRPCError({ code: "NOT_FOUND", message: `Versão ${versionNumber} não encontrada.` });
+  // PR D / DATA-012 — criar a nova versão E mover o ponteiro do documento devem ser ATÔMICOS:
+  // se o update do ponteiro falhar depois da versão criada, o documento ficaria com histórico
+  // novo mas ponteiro/estado antigo. Uma única transação garante tudo-ou-nada.
+  let result: { updated: typeof documents.$inferSelect; newVersionId: number };
+  try {
+    result = await db.transaction(async (tx) => {
+    // Lock + leitura da linha-pai (mutex por documento; consistente com insertVersionTx).
+    const docRows = await tx
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.organizationId, orgId)))
+      .for("update")
+      .limit(1);
+
+    if (docRows.length === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+    }
+    const doc = docRows[0];
+
+    const targetRows = await tx
+      .select()
+      .from(documentVersions)
+      .where(and(
+        eq(documentVersions.documentId,     documentId),
+        eq(documentVersions.versionNumber,  versionNumber),
+        eq(documentVersions.organizationId, orgId),
+      ))
+      .limit(1);
+    const targetVersion = targetRows[0];
+    if (!targetVersion) {
+      throw new TRPCError({ code: "NOT_FOUND", message: `Versão ${versionNumber} não encontrada.` });
+    }
+
+    // Nova versão a partir do snapshot histórico (na MESMA transação).
+    const newVersion = await insertVersionTx(tx, {
+      documentId,
+      organizationId:     orgId,
+      contentSnapshot:    targetVersion.contentSnapshot,
+      structuredSnapshot: targetVersion.structuredSnapshot as StructuredDocumentContent | null,
+      changeReason:       `Restaurado para versão ${versionNumber}`,
+      sourceContext:      "restore",
+      correlationId:      ctx.correlationId,
+      requestId:          ctx.requestId,
+    }, ctx);
+
+    await tx
+      .update(documents)
+      .set({
+        content:           targetVersion.contentSnapshot    ?? doc.content,
+        structuredContent: targetVersion.structuredSnapshot ?? doc.structuredContent,
+        currentVersionId:  newVersion.id,
+        version:           doc.version + 1,
+        updatedBy:         ctx.user.id,
+      })
+      .where(eq(documents.id, documentId));
+
+      const updated = await tx.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+      return { updated: updated[0], newVersionId: newVersion.id };
+    });
+  } catch (error) {
+    // Observabilidade (OBS): rollback de operação crítica (versão + ponteiro — tudo-ou-nada).
+    log.error("restore_transaction_rollback", {
+      documentId,
+      fromVersion: versionNumber,
+      organizationId: orgId,
+      correlationId: ctx.correlationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-
-  const docRows = await db
-    .select()
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.organizationId, orgId)))
-    .limit(1);
-
-  if (docRows.length === 0) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
-  }
-
-  const doc = docRows[0];
-
-  // Cria nova versão a partir do snapshot histórico
-  const newVersion = await createVersion({
-    documentId,
-    organizationId:     orgId,
-    contentSnapshot:    targetVersion.contentSnapshot,
-    structuredSnapshot: targetVersion.structuredSnapshot as StructuredDocumentContent | null,
-    changeReason:       `Restaurado para versão ${versionNumber}`,
-    sourceContext:      "restore",
-    correlationId:      ctx.correlationId,
-    requestId:          ctx.requestId,
-  }, ctx);
-
-  // Atualiza o documento com o conteúdo restaurado
-  await db
-    .update(documents)
-    .set({
-      content:          targetVersion.contentSnapshot    ?? doc.content,
-      structuredContent: targetVersion.structuredSnapshot ?? doc.structuredContent,
-      currentVersionId: newVersion.id,
-      version:          doc.version + 1,
-      updatedBy:        ctx.user.id,
-    })
-    .where(eq(documents.id, documentId));
 
   log.info("document_restored", {
     documentId,
     fromVersion: versionNumber,
-    newVersionId: newVersion.id,
+    newVersionId: result.newVersionId,
     organizationId: orgId,
+    correlationId: ctx.correlationId,
   });
 
-  const updated = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
-  return updated[0];
+  return result.updated;
 }

@@ -14,6 +14,8 @@
  */
 
 import { createHash } from "crypto";
+import { sql } from "drizzle-orm";
+import { getDb } from "../db/connection";
 import {
   createOfficialDocument, computeLineageId, officialFilename, OFFICIAL_MIME_TYPES,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
@@ -21,18 +23,19 @@ import {
 import {
   insertOfficialDocument, getLatestByLineage, countVersions,
   countDocumentTimeline, insertDocumentTimelineEntry, updateOfficialDocumentStorageRefs,
+  type OfficialDocsExecutor,
 } from "../db/officialDocuments";
 // Único consumidor do Storage Service no fluxo documental (Document Engine nunca toca no S3).
 import { isStorageConfigured, storageFallbackAllowed, assertStorageUsable, storagePut, storageSignedUrl } from "../storage";
 
 // ─── Timeline (append-only) — responsabilidade do Lifecycle ───────────────────
 
-async function recordDocEvent(doc: OfficialDocument, eventType: string, summary: string): Promise<void> {
-  const order = await countDocumentTimeline(doc.lineageId, doc.tenantId);
+async function recordDocEvent(doc: OfficialDocument, eventType: string, summary: string, executor?: OfficialDocsExecutor): Promise<void> {
+  const order = await countDocumentTimeline(doc.lineageId, doc.tenantId, executor);
   await insertDocumentTimelineEntry({
     tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
     eventType, actor: doc.author, summary, correlationId: doc.correlationId,
-  });
+  }, executor);
 }
 
 // ─── Criação/versionamento + persistência de metadados ────────────────────────
@@ -57,17 +60,43 @@ export interface CreateDocumentParams {
  */
 export async function createDocument(params: CreateDocumentParams): Promise<OfficialDocument> {
   const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType, origin: params.origin });
-  const previous = await getLatestByLineage(lineageId, params.organizationId);
-  const version = ((await countVersions(lineageId, params.organizationId)) || (previous ? previous.version : 0)) + 1;
 
-  const doc = createOfficialDocument({
+  const makeDoc = (version: number): OfficialDocument => createOfficialDocument({
     tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType,
     origin: params.origin, title: params.title, content: params.content, version, metadata: params.metadata,
     author: params.author, status: params.status, correlationId: params.correlationId,
   });
-  await insertOfficialDocument(doc);
-  await recordDocEvent(doc, version === 1 ? "documento_criado" : "nova_versao", `${version === 1 ? "Documento" : `Versão ${version} do documento`} "${doc.title}" (${doc.documentType}) gerado(a) pelo Document Engine.`);
-  return doc;
+  const summaryFor = (doc: OfficialDocument, version: number) =>
+    `${version === 1 ? "Documento" : `Versão ${version} do documento`} "${doc.title}" (${doc.documentType}) gerado(a) pelo Document Engine.`;
+
+  const db = await getDb();
+
+  // Degradação graciosa sem DB (comportamento anterior preservado): computa e devolve sem persistir.
+  if (!db) {
+    const previous = await getLatestByLineage(lineageId, params.organizationId);
+    const version = ((await countVersions(lineageId, params.organizationId)) || (previous ? previous.version : 0)) + 1;
+    return makeDoc(version);
+  }
+
+  // PR D / DATA-012 — ATOMICIDADE: cálculo de versão + inserção do documento oficial + evento de
+  // timeline numa ÚNICA transação (rollback = nada persistido). A numeração é serializada por
+  // linhagem com um lock nomeado (GET_LOCK) — evita colisão de versão e perda silenciosa de evento
+  // por corrida, INCLUSIVE na 1ª versão, sem exigir migration. O lock é liberado sempre (finally),
+  // pois locks nomeados não são desfeitos por rollback.
+  const lockKey = `odoc:${params.organizationId}:${lineageId}`.slice(0, 60);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT GET_LOCK(${lockKey}, 10)`);
+    try {
+      const previous = await getLatestByLineage(lineageId, params.organizationId, tx);
+      const version = ((await countVersions(lineageId, params.organizationId, tx)) || (previous ? previous.version : 0)) + 1;
+      const doc = makeDoc(version);
+      await insertOfficialDocument(doc, tx);
+      await recordDocEvent(doc, version === 1 ? "documento_criado" : "nova_versao", summaryFor(doc, version), tx);
+      return doc;
+    } finally {
+      await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);
+    }
+  });
 }
 
 // ─── Armazenamento do artefato renderizado ────────────────────────────────────

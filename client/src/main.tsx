@@ -7,6 +7,7 @@ import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 import { SELECTED_ORGANIZATION_ID_STORAGE_KEY } from "./const";
+import { initAnalytics } from "./lib/analytics";
 
 const queryClient = new QueryClient();
 
@@ -71,3 +72,7 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </trpc.Provider>
 );
+
+// SEC-036 — analítica opcional (GA4), só quando VITE_GA_MEASUREMENT_ID está definido no build.
+// No-op em staging/dev (variável ausente): nenhuma requisição externa, CSP permanece limpa.
+initAnalytics();

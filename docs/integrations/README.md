@@ -11,7 +11,7 @@
 ### AWS S3
 - Armazenamento de arquivos (attachments, uploads)
 - Presigned URLs para upload direto do cliente
-- Configuração: `AWS_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`
+- Configuração: `AWS_S3_BUCKET`, `AWS_S3_REGION`, `AWS_ACCESS_KEY_ID`
 
 ### IA / LLM (Sprint 4)
 - Integração planejada para normalização de descrições
@@ -34,7 +34,7 @@
 DATABASE_URL=mysql://...
 
 # AWS S3
-AWS_REGION=us-east-1
+AWS_S3_REGION=us-east-1
 AWS_BUCKET=licigov-uploads
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...

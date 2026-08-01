@@ -96,7 +96,7 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
 
   afterAll(async () => {
     if (conn) {
-      const del = async (sql: string, p: any[]) => { await conn.execute(sql, p).catch(() => {}); };
+      const del = async (sql: string, p: unknown[]) => { await conn.execute(sql, p).catch(() => {}); };
       await del(`DELETE FROM documents WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
       await del(`DELETE FROM tasks WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
       await del(`DELETE FROM direct_contracts WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
@@ -111,21 +111,21 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
   async function makeCaller(userId: number, role: "user" | "admin" = "user") {
     const { appRouter } = await import("../../routers");
     return appRouter.createCaller({
-      user: { id: userId, role, name: `Usuário ${userId}`, email: `u${userId}@teste.local` } as any,
-      req: { headers: {} } as any,
-      res: {} as any,
+      user: { id: userId, role, name: `Usuário ${userId}`, email: `u${userId}@teste.local` },
+      req: { headers: {} },
+      res: {},
       correlationId: "test-sec-pra",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
   }
 
   // ── Processos ────────────────────────────────────────────────────────────────
   it("processes.list: A vê só processos de A", async () => {
     const a = await (await makeCaller(userA)).processes.list();
     const b = await (await makeCaller(userB)).processes.list();
-    expect(a.some((p: any) => p.id === processA)).toBe(true);
-    expect(a.some((p: any) => p.id === processB)).toBe(false);
-    expect(b.some((p: any) => p.id === processB)).toBe(true);
-    expect(b.some((p: any) => p.id === processA)).toBe(false);
+    expect(a.some((p) => p.id === processA)).toBe(true);
+    expect(a.some((p) => p.id === processB)).toBe(false);
+    expect(b.some((p) => p.id === processB)).toBe(true);
+    expect(b.some((p) => p.id === processA)).toBe(false);
   }, 30000);
 
   it("processes.getById: próprio ok; cross-tenant e inexistente → mesmo NOT_FOUND", async () => {
@@ -138,46 +138,39 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
 
   it("processes.updateStatus cross-tenant é bloqueado", async () => {
     const callerA = await makeCaller(userA);
-    await expect(callerA.processes.updateStatus({ id: processB, status: "em_etp" as any })).rejects.toThrow(/não encontrado/i);
-    const [rows] = await conn.execute<any[]>(`SELECT status FROM processes WHERE id = ?`, [processB]);
+    await expect(callerA.processes.updateStatus({ id: processB, status: "em_etp" })).rejects.toThrow(/não encontrado/i);
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(`SELECT status FROM processes WHERE id = ?`, [processB]);
     expect(rows[0].status).toBe("em_dfd"); // inalterado
   });
 
-  it("processes.create: sucesso, ID inteiro, org do contexto, activity_log com o MESMO ID (regressão insertId)", async () => {
+  it("processes.create (legado): corte controlado — recusa FORBIDDEN com token estável e NÃO grava (PR B)", async () => {
+    // PR B — Corte controlado: o pipeline legado de Processo Licitatório deixou de
+    // aceitar gravações. A criação/condução passou a ser EXCLUSIVA do fluxo canônico
+    // (procurementProcess.createProcess). Este smoke deixa de exercitar o caminho
+    // legado feliz (que não existe mais) e passa a GUARDAR o corte: contra MySQL real,
+    // a criação legada é recusada com FORBIDDEN + token estável e nada é persistido.
     const callerA = await makeCaller(userA);
     const uniqueName = `Novo processo A ${Date.now()}`;
-    // RC-SEC-PR-A: create executa uma vez sem exceção após o insert; retorna um
-    // processId inteiro positivo (bug de insertId=NaN corrigido); grava
-    // organizationId resolvido pelo contexto; o activity_log referencia o MESMO id.
-    const res: any = await callerA.processes.create({
-      name: uniqueName, object: "Objeto novo suficiente para validação",
-      estimatedValue: 1000, modality: "pregao_eletronico", category: "compras",
-    } as any);
-    expect(res.success).toBe(true);
-    const processId = res.processId;
-    expect(Number.isInteger(processId)).toBe(true);
-    expect(processId).toBeGreaterThan(0);
 
-    const [rows] = await conn.execute<any[]>(`SELECT id, organizationId FROM processes WHERE id = ?`, [processId]);
-    expect(rows.length).toBe(1);
-    expect(rows[0].organizationId).toBe(ORG_A);
+    await expect(
+      callerA.processes.create({
+        name: uniqueName, object: "Objeto novo suficiente para validação",
+        estimatedValue: 1000, modality: "pregao_eletronico", category: "compras",
+      }),
+    ).rejects.toThrow(/LEGACY_PROCESS_PIPELINE_DISABLED/);
 
-    // O activity_log de criação referencia exatamente o mesmo processId (nunca NaN).
-    const [logs] = await conn.execute<any[]>(
-      `SELECT processId FROM activity_logs WHERE processId = ? AND action = 'criou o processo'`, [processId],
+    // O caminho de escrita legado está fechado: nada foi gravado na tabela `processes`.
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+      `SELECT id FROM processes WHERE organizationId = ? AND name = ?`, [ORG_A, uniqueName],
     );
-    expect(logs.length).toBeGreaterThanOrEqual(1);
-
-    await conn.execute(`DELETE FROM activity_logs WHERE processId = ?`, [processId]).catch(() => {});
-    await conn.execute(`DELETE FROM documents WHERE processId = ?`, [processId]).catch(() => {});
-    await conn.execute(`DELETE FROM processes WHERE id = ?`, [processId]).catch(() => {});
+    expect(rows.length).toBe(0);
   }, 30000);
 
   // ── Documentos ─────────────────────────────────────────────────────────────
   it("documents.listByProcess cross-tenant → NOT_FOUND", async () => {
     const callerA = await makeCaller(userA);
     const own = await callerA.documents.listByProcess({ processId: processA });
-    expect(own.some((d: any) => d.id === documentA)).toBe(true);
+    expect(own.some((d) => d.id === documentA)).toBe(true);
     await expect(callerA.documents.listByProcess({ processId: processB })).rejects.toThrow(/não encontrado/i);
   });
 
@@ -189,10 +182,12 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
   // ── Tarefas ────────────────────────────────────────────────────────────────
   it("tasks.list isolada; getById cross-tenant → NOT_FOUND", async () => {
     const callerA = await makeCaller(userA);
-    const resA: any = await callerA.tasks.list({});
-    const list = Array.isArray(resA) ? resA : (resA.tasks ?? resA.items ?? []);
-    expect(list.some((t: any) => t.id === taskA)).toBe(true);
-    expect(list.some((t: any) => t.id === taskB)).toBe(false);
+    const resA = (await callerA.tasks.list({})) as unknown as
+      | { id: number }[]
+      | { tasks?: { id: number }[]; items?: { id: number }[] };
+    const list: { id: number }[] = Array.isArray(resA) ? resA : (resA.tasks ?? resA.items ?? []);
+    expect(list.some((t) => t.id === taskA)).toBe(true);
+    expect(list.some((t) => t.id === taskB)).toBe(false);
     await expect(callerA.tasks.getById({ id: taskB })).rejects.toThrow(/não encontrad/i);
   });
 
@@ -205,15 +200,15 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
   });
 
   it("directContracts.analytics.getOverview de A não conta contratos de B", async () => {
-    const overviewA: any = await (await makeCaller(userA)).directContracts.analytics.getOverview();
-    const overviewB: any = await (await makeCaller(userB)).directContracts.analytics.getOverview();
+    const overviewA = await (await makeCaller(userA)).directContracts.analytics.getOverview();
+    const overviewB = await (await makeCaller(userB)).directContracts.analytics.getOverview();
     // Cada org enxerga pelo menos o próprio contrato e o total reflete só a sua org.
     expect(overviewA.total).toBeGreaterThanOrEqual(1);
     expect(overviewB.total).toBeGreaterThanOrEqual(1);
     // A soma dos totais por org não vaza — recentes de A não incluem o contrato de B.
-    const recentA: any = await (await makeCaller(userA)).directContracts.analytics.getRecent({ limit: 50 });
-    expect(recentA.some((c: any) => c.id === directB)).toBe(false);
-    expect(recentA.some((c: any) => c.id === directA)).toBe(true);
+    const recentA = await (await makeCaller(userA)).directContracts.analytics.getRecent({ limit: 50 });
+    expect(recentA.some((c) => c.id === directB)).toBe(false);
+    expect(recentA.some((c) => c.id === directA)).toBe(true);
   });
 
   // ── Usuário sem organização ──────────────────────────────────────────────────

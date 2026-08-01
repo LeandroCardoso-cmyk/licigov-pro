@@ -117,6 +117,28 @@ export function mockFallbackAllowed(opts: { isDevelopment: boolean; allowMockFla
   return opts.isDevelopment === true && opts.allowMockFlag === true;
 }
 
+/**
+ * PR D / AI-014 — Timeout e re-tentativas para chamadas de IA. Antes NÃO existia qualquer limite:
+ * uma chamada ao provider podia pendurar indefinidamente e falhas transitórias derrubavam a operação
+ * inteira. Configurável por ENV; defaults conservadores. O retry só ocorre para erros TRANSITÓRIOS
+ * (ver `_core/ai/aiResilience.ts`) — nunca para erros determinísticos (entrada/auth/política).
+ */
+const DEFAULT_AI_TIMEOUT_MS = 30_000;
+const DEFAULT_AI_MAX_ATTEMPTS = 2; // 1 tentativa + 1 re-tentativa
+
+export function resolveAiTimeoutMs(env: { AI_TIMEOUT_MS?: string }): number {
+  const n = parseInt((env.AI_TIMEOUT_MS ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_AI_TIMEOUT_MS;
+}
+export function resolveAiMaxAttempts(env: { AI_MAX_ATTEMPTS?: string }): number {
+  const n = parseInt((env.AI_MAX_ATTEMPTS ?? "").trim(), 10);
+  // Limite defensivo: no mínimo 1 tentativa, no máximo 5 (evita loop de retry custoso).
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_AI_MAX_ATTEMPTS;
+  return Math.min(n, 5);
+}
+export const AI_TIMEOUT_MS = resolveAiTimeoutMs({ AI_TIMEOUT_MS: process.env.AI_TIMEOUT_MS });
+export const AI_MAX_ATTEMPTS = resolveAiMaxAttempts({ AI_MAX_ATTEMPTS: process.env.AI_MAX_ATTEMPTS });
+
 const runtime = resolveAiRuntime({ AI_PROVIDER: process.env.AI_PROVIDER, AI_MODEL: process.env.AI_MODEL });
 
 export const AI_CONFIG = {
@@ -134,4 +156,8 @@ export const AI_CONFIG = {
   model: runtime.model,
   /** Catálogo de modelos padrão por provider — útil para uma futura UI de seleção. */
   defaultModels: DEFAULT_MODEL_BY_PROVIDER,
+
+  /** AI-014 — timeout (ms) por chamada ao provider e nº máximo de tentativas (incl. a 1ª). */
+  timeoutMs: AI_TIMEOUT_MS,
+  maxAttempts: AI_MAX_ATTEMPTS,
 };

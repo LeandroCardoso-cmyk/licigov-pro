@@ -23,7 +23,7 @@ ADMIN_EMAIL           # Email do admin inicial
 ADMIN_PASSWORD        # Senha do admin inicial
 JWT_SECRET            # Segredo para JWT
 AWS_BUCKET            # Bucket S3 para uploads
-AWS_REGION            # Região AWS
+AWS_S3_REGION         # Região AWS (S3)
 AWS_ACCESS_KEY_ID     # Credencial AWS
 AWS_SECRET_ACCESS_KEY # Credencial AWS
 ```

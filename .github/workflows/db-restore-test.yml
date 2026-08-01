@@ -1,0 +1,148 @@
+name: Teste de Restauração (isolado, agendado + manual)
+
+# Valida o CICLO backup → restauração de ponta a ponta, em BANCO EFÊMERO E ISOLADO do CI
+# (nunca produção, nunca nenhum banco real). Usa uma FIXTURE sintética (sem dados reais/segredos):
+# gera um dump, confere o checksum, restaura num segundo banco isolado e roda verificações
+# estruturais + isolamento por tenant. Produz uma EVIDÊNCIA (sem conteúdo do dump).
+#
+# IMPORTANTE — este workflow NÃO restaura backup real de produção (isso exige secret e é um
+# exercício operacional gated; ver docs/ops/DB_RESTORE_RUNBOOK.md). Ele comprova a MECÂNICA de
+# restauração de forma segura e repetível.
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # segunda-feira 07:00 UTC (semanal)
+  workflow_dispatch:
+
+concurrency:
+  group: db-restore-test
+  cancel-in-progress: false
+
+jobs:
+  restore-test:
+    name: Restauração em ambiente isolado (fixture)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      MYSQL_PWD: root
+      HOSTARGS: "--host=127.0.0.1 --port=3306 --user=root"
+    steps:
+      - name: Instalar cliente MySQL (mysql + mysqldump)
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: 1) Criar banco de ORIGEM e semear fixture sintética
+        run: |
+          set -euo pipefail
+          mysql $HOSTARGS -e "CREATE DATABASE restore_src CHARACTER SET utf8mb4;"
+          mysql $HOSTARGS restore_src <<'SQL'
+          CREATE TABLE organizations (id INT PRIMARY KEY, name VARCHAR(120) NOT NULL);
+          CREATE TABLE users (id INT PRIMARY KEY, organization_id INT NOT NULL, email VARCHAR(160) NOT NULL);
+          CREATE TABLE documents (id INT PRIMARY KEY, organization_id INT NOT NULL, title VARCHAR(200) NOT NULL);
+          CREATE TABLE document_versions (id INT PRIMARY KEY, document_id INT NOT NULL, version_number INT NOT NULL);
+          CREATE TABLE activity_logs (id INT PRIMARY KEY, organization_id INT NOT NULL, action VARCHAR(80) NOT NULL);
+          -- Dois tenants sintéticos (para verificar isolamento após o restore).
+          INSERT INTO organizations VALUES (700001,'Tenant A'),(700002,'Tenant B');
+          INSERT INTO users VALUES (1,700001,'a1@example.test'),(2,700001,'a2@example.test'),(3,700002,'b1@example.test');
+          INSERT INTO documents VALUES (10,700001,'DFD A'),(11,700001,'ETP A'),(12,700002,'DFD B');
+          INSERT INTO document_versions VALUES (100,10,1),(101,10,2),(102,12,1);
+          INSERT INTO activity_logs VALUES (1000,700001,'created'),(1001,700002,'created');
+          SQL
+          echo "Fixture semeada em restore_src."
+
+      - name: 2) Gerar dump + checksum
+        run: |
+          set -euo pipefail
+          mysqldump $HOSTARGS --single-transaction --routines --triggers --no-tablespaces \
+            restore_src | gzip > backup-fixture.sql.gz
+          BYTES=$(stat -c%s backup-fixture.sql.gz)
+          [ "$BYTES" -ge 256 ] || { echo "❌ Dump suspeito (${BYTES} bytes)."; exit 1; }
+          sha256sum backup-fixture.sql.gz > backup-fixture.sql.gz.sha256
+          echo "Dump gerado (${BYTES} bytes), checksum $(cut -d' ' -f1 backup-fixture.sql.gz.sha256)."
+
+      - name: 3) Verificar checksum antes de restaurar
+        run: |
+          set -euo pipefail
+          sha256sum -c backup-fixture.sql.gz.sha256
+          echo "✅ Checksum íntegro."
+
+      - name: 4) Restaurar em banco ISOLADO (nunca produção)
+        run: |
+          set -euo pipefail
+          mysql $HOSTARGS -e "CREATE DATABASE restore_target CHARACTER SET utf8mb4;"
+          gunzip -c backup-fixture.sql.gz | mysql $HOSTARGS restore_target
+          echo "Restauração concluída em restore_target."
+
+      - name: 5) Verificações estruturais + isolamento por tenant
+        run: |
+          set -euo pipefail
+          # (a) tabelas críticas existem
+          for t in organizations users documents document_versions activity_logs; do
+            mysql $HOSTARGS -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='restore_target' AND table_name='$t';" | grep -q 1 \
+              || { echo "❌ Tabela ausente após restore: $t"; exit 1; }
+          done
+          echo "✅ Tabelas críticas presentes."
+
+          # (b) contagens batem entre origem e destino (integridade)
+          for t in organizations users documents document_versions activity_logs; do
+            SRC=$(mysql $HOSTARGS -N -e "SELECT COUNT(*) FROM restore_src.$t;")
+            DST=$(mysql $HOSTARGS -N -e "SELECT COUNT(*) FROM restore_target.$t;")
+            [ "$SRC" = "$DST" ] || { echo "❌ Divergência em $t: origem=$SRC destino=$DST"; exit 1; }
+          done
+          echo "✅ Contagens íntegras (origem = destino)."
+
+          # (c) isolamento por tenant preservado (documentos por organização)
+          A=$(mysql $HOSTARGS -N -e "SELECT COUNT(*) FROM restore_target.documents WHERE organization_id=700001;")
+          B=$(mysql $HOSTARGS -N -e "SELECT COUNT(*) FROM restore_target.documents WHERE organization_id=700002;")
+          [ "$A" = "2" ] && [ "$B" = "1" ] || { echo "❌ Isolamento por tenant inconsistente (A=$A, B=$B)."; exit 1; }
+          echo "✅ Isolamento por tenant preservado (A=2, B=1)."
+
+      - name: 6) Registrar evidência (sem conteúdo de dados)
+        if: always()
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CHK=$(cut -d' ' -f1 backup-fixture.sql.gz.sha256 2>/dev/null || echo "n/d")
+          RESULT="${{ job.status }}"
+          cat > restore-evidence.md <<EOF
+          # Evidência de Teste de Restauração — LiciGov Pro
+
+          | Campo | Valor |
+          |---|---|
+          | Data (UTC) | ${STAMP} |
+          | Workflow / run | ${{ github.workflow }} #${{ github.run_number }} (${{ github.run_id }}) |
+          | Tipo de backup | fixture sintética (isolada; NÃO é backup de produção) |
+          | Checksum SHA-256 | ${CHK} |
+          | Resultado | ${RESULT} |
+          | Ambiente | banco efêmero do CI (restore_target) — descartável |
+          | Testes | tabelas críticas, contagens origem=destino, isolamento por tenant |
+          | Origem | automatizada (GitHub Actions) |
+
+          > Este teste comprova a MECÂNICA de backup→restauração de forma segura. O restore de um
+          > backup REAL de produção é um exercício operacional gated — ver docs/ops/DB_RESTORE_RUNBOOK.md.
+          EOF
+          echo "Evidência gerada:"; cat restore-evidence.md
+
+      - name: 7) Publicar evidência (retenção 90 dias)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-evidence
+          path: restore-evidence.md
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: 8) Limpeza dos bancos isolados
+        if: always()
+        run: |
+          mysql $HOSTARGS -e "DROP DATABASE IF EXISTS restore_src; DROP DATABASE IF EXISTS restore_target;" || true
+          echo "Ambiente isolado destruído."
