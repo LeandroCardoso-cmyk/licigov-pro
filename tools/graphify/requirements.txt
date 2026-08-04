@@ -1,0 +1,7 @@
+# Toolchain reproduzível do Graphify — LiciGov Pro
+# Pin determinístico do pacote que mantém o grafo de conhecimento em graphify-out/.
+#
+# Origem da versão: PyPI (https://pypi.org/project/graphifyy/) — release estável mais
+# recente em 2026-08-04, canal público, sem pré-release.
+# Instalação isolada (NUNCA global): ver tools/graphify/README.md.
+graphifyy==0.9.32
