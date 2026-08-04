@@ -123,32 +123,43 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   }
 
   /**
-   * PR B.2.1 — Índice NÃO-único em tabela preexistente (lookup, não unicidade).
-   * Usado para dedup por checksum na ingestão: o mesmo checksum pode reaparecer
-   * legitimamente (re-import após rejeição/arquivamento), então é índice de busca,
-   * nunca UNIQUE. Idempotente e seguro para rodar em todo boot.
+   * PR B.2.1 — Verificação SEM mutação de colunas esperadas em tabela preexistente.
+   *
+   * Diferente de addColumnIfMissing, NÃO altera o schema: apenas confere se as colunas
+   * (criadas por migration formal — ver drizzle/0288) já existem. Se a tabela existe mas
+   * falta alguma coluna:
+   *   - produção/staging → FALHA acionável (não muta silenciosamente o schema de produção);
+   *   - desenvolvimento  → aviso acionável (dev pode ter DB legado sem a migration aplicada).
    */
-  async function addIndexIfMissing(
+  async function assertColumnsPresent(
     table: string,
-    indexName: string,
-    columns: string
+    columns: string[],
+    hint: string,
   ): Promise<void> {
     const [tableRows] = await connection.execute<RowDataPacket[]>(
       `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
       [table]
     );
-    if ((tableRows[0] as ColRow).cnt === 0) return;
+    if ((tableRows[0] as ColRow).cnt === 0) return; // tabela ainda não existe: nada a verificar
 
-    const [idxRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
-      [table, indexName]
+    const [colRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table]
     );
-    if ((idxRows[0] as ColRow).cnt > 0) return;
+    const present = new Set(colRows.map(r => String((r as RowDataPacket).COLUMN_NAME)));
+    const missing = columns.filter(c => !present.has(c));
+    if (missing.length === 0) return;
 
-    await connection.execute(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
-    log("DB", `✓ Schema corrigido: índice ${indexName} criado em ${table} (${columns})`);
+    const msg =
+      `Schema desatualizado: \`${table}\` sem coluna(s) [${missing.join(", ")}]. ` +
+      `Aplique as migrations (pnpm db:migrate). ${hint}`;
+    if (APP_CONFIG.isDevelopment) {
+      log("DB", `⚠ ${msg}`);
+    } else {
+      throw new Error(`[bootstrap] ${msg}`);
+    }
   }
 
   // Colunas pré-Sprint 1 (legacy)
@@ -271,15 +282,15 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  // PR B.2.1 — Ingestão canônica: campos aditivos em import_sessions.
-  // Roda APÓS o CREATE TABLE acima para cobrir tanto DBs novos (tabela recém-criada)
-  // quanto DBs existentes (ALTER idempotente). checksum (dedup sha256), processId
-  // (vínculo/lineage) e importPurpose (finalidade). Índice de busca NÃO-único: o mesmo
-  // checksum pode reaparecer em re-import legítimo (após rejeição/arquivamento).
-  await addColumnIfMissing("import_sessions", "checksum",      "varchar(64)");
-  await addColumnIfMissing("import_sessions", "processId",     "int");
-  await addColumnIfMissing("import_sessions", "importPurpose", "varchar(50)");
-  await addIndexIfMissing("import_sessions", "import_sessions_org_checksum_idx", "`organizationId`, `checksum`");
+  // PR B.2.1 — Ingestão canônica: os campos checksum/processId/importPurpose e o índice
+  // de dedup são criados pela migration FORMAL drizzle/0288 (não pelo ensureSchema). Aqui
+  // apenas VERIFICAMOS a presença — sem mutar o schema. runMigrations() roda antes do
+  // ensureSchema (ver bootstrap()), então em boot normal as colunas já existem.
+  await assertColumnsPresent(
+    "import_sessions",
+    ["checksum", "processId", "importPurpose"],
+    "Campos da ingestão canônica (drizzle/0288).",
+  );
 
   // Sprint 2.8 — Import Staging Items table
   await connection.execute(`

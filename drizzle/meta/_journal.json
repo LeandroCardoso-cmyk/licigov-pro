@@ -1928,6 +1928,13 @@
       "when": 1784419200002,
       "tag": "0287_invitations_email_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "5",
+      "when": 1784419200003,
+      "tag": "0288_import_session_canonical_fields",
+      "breakpoints": true
     }
   ]
 }
