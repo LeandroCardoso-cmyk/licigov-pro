@@ -14,10 +14,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
 import { router, tenantProcedure } from "../_core/trpc";
-import { getDb } from "../db/connection";
-import { processes } from "../../drizzle/schema";
 import type { TrpcContext } from "../_core/context";
 import type { TrpcAuditCtx } from "../services/activityLogService";
 import { logActivity } from "../services/activityLogService";
@@ -36,7 +33,6 @@ import {
   type ReviewAction,
 } from "../services/importStagingService";
 import { enqueueImport } from "../services/importQueueService";
-import { storageGetBytes } from "../storage";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
   assertCanonicalIngestionEnabled,
@@ -120,17 +116,8 @@ export const ingestionRouter = router({
         throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Formato não suportado." });
       }
 
-      // Autorização por processo: quando informado, precisa pertencer ao tenant.
-      if (input.processId !== undefined) {
-        const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
-        const proc = await db.select({ id: processes.id }).from(processes)
-          .where(and(eq(processes.id, input.processId), eq(processes.organizationId, orgId)))
-          .limit(1);
-        if (proc.length === 0) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
-        }
-      }
+      // Autorização por processo (processId + organizationId) é validada no serviço
+      // createImportSession — fonte autoritativa, independente do caller.
 
       // Idempotência (replay-safe): payloadHash = checksum garante mesmo arquivo sob mesma chave.
       const idem = await checkIdempotency(
@@ -228,14 +215,12 @@ export const ingestionRouter = router({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Arquivo ainda não enviado para esta sessão." });
       }
 
-      let buffer: Buffer;
-      try {
-        buffer = await storageGetBytes(session.sourceFileId);
-      } catch {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível ler o arquivo do storage." });
+      // Enfileira por storageKey (o worker recupera os bytes do storage — nunca trafega Buffer aqui).
+      const jobId = enqueueImport(session.id, orgId, session.sourceFileId, { correlationId: ctx.correlationId });
+      if (jobId === null) {
+        // Já em voo neste processo (corrida) — idempotente, não re-enfileira.
+        return { sessionId: session.id, status: session.status, enqueued: false, alreadyInFlight: true };
       }
-
-      const jobId = enqueueImport(session.id, orgId, buffer);
       await updateSessionStatus(session.id, orgId, "queued", { progress: 5, stage: "queued" });
 
       await logActivity({

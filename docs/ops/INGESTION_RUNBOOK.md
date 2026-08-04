@@ -37,12 +37,25 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
   a mesma chave e mesmo arquivo retorna a resposta cacheada; com arquivo diferente → `CONFLICT`.
 - **Replay do processamento:** `enqueueProcessing` é seguro para reexecutar; não duplica jobs em voo.
 
-## Fila (in-memory)
+## Fila (in-memory) e recuperação
 
 - `importQueueService`: retry com backoff (até `MAX_RETRIES=3`), depois **DLQ**.
-- Reinício do processo **esvazia** a fila in-memory: reprocessar via novo `enqueueProcessing`
-  (os bytes são relidos do S3 durável — nada se perde no storage).
+- O **job não carrega o arquivo** — só `storageKey`+metadados; o worker baixa do S3 no parse.
+- Reinício do processo **esvazia** a fila in-memory, mas `recoverStuckImportSessions` roda no boot
+  e reidrata sessões presas (`queued`/`parsing`) com **claim atômico** (sem execução duplicada),
+  limite de tentativas, DLQ e correlationId preservado. É **fail-closed por tenant** (só reprocessa
+  orgs com `FF_CANONICAL_INGESTION` ligada) — em produção com a flag desligada, é no-op.
+- Os bytes são relidos do S3 durável — nada se perde no storage.
 - Sem GEMINI/LLM no caminho (extração é 100% local/AST-based).
+
+## Upload (multipart streaming)
+
+- `POST /api/ingestion/upload/:sessionId` — `multipart/form-data` (campo de arquivo único).
+- Auth/tenant/flag são resolvidos ANTES de consumir o corpo; o limite (50 MB) é aplicado durante
+  o stream e aborta imediatamente ao exceder (413).
+- Falha no meio do upload (limite, interrupção do cliente, storage) → o objeto parcial é removido
+  automaticamente (cleanup em `finally`).
+- Toolchain de streaming: `busboy` (parser) + `@aws-sdk/lib-storage` (upload multipart ao S3).
 
 ## Observações
 

@@ -8,20 +8,13 @@
  * sessões, e emissão de audit log. Sem DB real — serviços existentes são mockados.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const hoisted = vi.hoisted(() => ({ processRows: [] as Array<{ id: number }> }));
+import { TRPCError } from "@trpc/server";
 
 // ── Mocks de infraestrutura de tenant/auth (para tenantProcedure) ──
 vi.mock("../../services/tenantService", () => ({
   resolveTenantForUser: vi.fn().mockResolvedValue({
     organizationId: 1,
     membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
-  }),
-}));
-
-vi.mock("../../db/connection", () => ({
-  getDb: vi.fn().mockResolvedValue({
-    select: () => ({ from: () => ({ where: () => ({ limit: async () => hoisted.processRows }) }) }),
   }),
 }));
 
@@ -57,10 +50,6 @@ vi.mock("../../services/importStagingService", () => ({
 
 vi.mock("../../services/importQueueService", () => ({
   enqueueImport: vi.fn().mockReturnValue("job_1_123"),
-}));
-
-vi.mock("../../storage", () => ({
-  storageGetBytes: vi.fn().mockResolvedValue(Buffer.from("fornecedor,item\nACME,Caneta\n")),
 }));
 
 // ── Imports (após os mocks) ──
@@ -101,7 +90,6 @@ const validCreateInput = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  hoisted.processRows = [];
   vi.mocked(flags.isFeatureEnabled).mockResolvedValue(true);
   vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "new" });
   vi.mocked(ingestion.findActiveSessionByChecksum).mockResolvedValue(null);
@@ -157,16 +145,21 @@ describe("createSession", () => {
       .rejects.toThrowError(/não suportado/i);
   });
 
-  it("processId de outro tenant → NOT_FOUND", async () => {
-    hoisted.processRows = []; // nenhuma linha = processo não pertence à org
+  it("processId de outro tenant → NOT_FOUND (validado no serviço createImportSession)", async () => {
+    vi.mocked(ingestion.createImportSession).mockRejectedValue(
+      new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." }),
+    );
     await expect(caller().createSession({ ...validCreateInput, processId: 999 }))
       .rejects.toThrowError(/processo não encontrado/i);
   });
 
   it("processId válido do tenant → aceito", async () => {
-    hoisted.processRows = [{ id: 5 }];
     const r = await caller().createSession({ ...validCreateInput, processId: 5 });
     expect(r.sessionId).toBe(100);
+    expect(ingestion.createImportSession).toHaveBeenCalledWith(
+      expect.objectContaining({ processId: 5 }),
+      expect.anything(),
+    );
   });
 });
 
@@ -209,7 +202,14 @@ describe("enqueueProcessing — replay-safe", () => {
     vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "uploaded", stage: "file_stored" }) as any);
     const r = await caller().enqueueProcessing({ sessionId: 100 });
     expect(r.enqueued).toBe(true);
-    expect(queue.enqueueImport).toHaveBeenCalledWith(100, 1, expect.any(Buffer));
+    // Job carrega storageKey + metadados — NUNCA Buffer.
+    const [sid, org, key, opts] = vi.mocked(queue.enqueueImport).mock.calls[0];
+    expect(sid).toBe(100);
+    expect(org).toBe(1);
+    expect(key).toBe("imports/1/20260804/abc-planilha.xlsx");
+    expect(Buffer.isBuffer(key)).toBe(false);
+    expect(Buffer.isBuffer(opts)).toBe(false);
+    expect(typeof opts).toBe("object");
     expect(audit.logActivity).toHaveBeenCalled();
   });
 });

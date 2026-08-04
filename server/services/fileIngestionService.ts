@@ -5,11 +5,11 @@
  * Idempotent: mesmo arquivo + mesmo sessionId não cria duplicata.
  * Tenant-safe: organizationId obrigatório em todas as operações.
  */
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createHash } from "crypto";
 import { getDb } from "../db/connection";
-import { importSessions } from "../../drizzle/schema";
+import { importSessions, processes } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
 import { logActivity } from "./activityLogService";
 import {
@@ -78,6 +78,16 @@ export async function createImportSession(
 
   const orgId = ctx.organizationId;
   if (!orgId) throw new TRPCError({ code: "BAD_REQUEST", message: "organizationId obrigatório." });
+
+  // Autorização por processo: quando informado, o processo DEVE pertencer ao tenant.
+  if (params.processId != null) {
+    const proc = await db.select({ id: processes.id }).from(processes)
+      .where(and(eq(processes.id, params.processId), eq(processes.organizationId, orgId)))
+      .limit(1);
+    if (proc.length === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
+    }
+  }
 
   const parserType = detectParserType(params.sourceMimeType, params.sourceFileName) ?? "auto";
 
@@ -207,6 +217,45 @@ export async function attachStoredFile(
   ));
 
   log.info("import_file_stored", { sessionId, organizationId, size: params.sourceSize });
+}
+
+/**
+ * PR B.2.1 — Sessões "presas" em processamento (queued/parsing) — usadas na recuperação
+ * determinística após restart (a fila in-memory é volátil). Cross-tenant por natureza
+ * (varredura de recovery no boot); cada uma carrega organizationId para reprocessamento
+ * tenant-safe.
+ */
+export async function listStuckImportSessions(
+  limit = 500,
+): Promise<(typeof importSessions.$inferSelect)[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(importSessions)
+    .where(inArray(importSessions.status, ["queued", "parsing"]))
+    .limit(limit);
+}
+
+/**
+ * PR B.2.1 — Claim atômico para recuperação: marca a sessão como "recovering" apenas se
+ * ainda estiver presa (queued/parsing) e não reivindicada. Retorna true se ESTE chamador
+ * ganhou o claim — impede execução concorrente duplicada (mesma instância ou instâncias
+ * paralelas), pois o UPDATE condicional é resolvido pelo row-lock do MySQL.
+ */
+export async function claimSessionForRecovery(
+  sessionId:      number,
+  organizationId: number,
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.update(importSessions)
+    .set({ stage: "recovering" })
+    .where(and(
+      eq(importSessions.id,             sessionId),
+      eq(importSessions.organizationId, organizationId),
+      inArray(importSessions.status,    ["queued", "parsing"]),
+      ne(importSessions.stage,          "recovering"),
+    ));
+  return ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) === 1;
 }
 
 // ─── Status transitions ───────────────────────────────────────────────────────

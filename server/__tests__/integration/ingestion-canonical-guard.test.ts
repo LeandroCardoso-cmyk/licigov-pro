@@ -19,6 +19,7 @@ const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 const ROUTER = read("server/routers/ingestionRouter.ts");
 const UPLOAD = read("server/routes/ingestionUploadRoute.ts");
 const UPLOAD_SVC = read("server/services/ingestionUploadService.ts");
+const QUEUE = read("server/services/importQueueService.ts");
 const APP = read("server/routers.ts");
 const INDEX = read("server/_core/index.ts");
 
@@ -52,9 +53,28 @@ describe("ingestão — sem base64/binário no tRPC", () => {
     expect(ROUTER).not.toMatch(BASE64_USAGE);
     expect(ROUTER).not.toMatch(/fileContent\s*:/);
   });
-  it("o byte-upload usa express.raw (binário cru) e não decodifica base64", () => {
-    expect(UPLOAD).toContain("express.raw");
+  it("o byte-upload é multipart streaming (busboy) e não decodifica base64", () => {
+    expect(UPLOAD).toContain("busboy");
+    expect(UPLOAD).toContain("streamFileToStorage");
+    expect(UPLOAD).not.toContain("express.raw");
     expect(UPLOAD).not.toMatch(BASE64_USAGE);
+  });
+  it("streaming: sem materializar o arquivo inteiro (usa pipeline/Transform, não Buffer.concat do corpo)", () => {
+    expect(UPLOAD_SVC).toContain("pipeline");
+    expect(UPLOAD_SVC).toContain("storagePutStream");
+  });
+});
+
+describe("fila — sem Buffer no job (recuperável)", () => {
+  it("o job da fila NÃO transporta Buffer (apenas storageKey + metadados)", () => {
+    // A interface ImportJob não deve declarar um campo buffer.
+    expect(QUEUE).not.toMatch(/buffer\s*:\s*Buffer/);
+    expect(QUEUE).toContain("storageKey:");
+    expect(QUEUE).toContain("correlationId");
+  });
+  it("expõe recuperação replay-safe após restart", () => {
+    expect(QUEUE).toContain("recoverStuckImportSessions");
+    expect(QUEUE).toContain("claimSessionForRecovery");
   });
 });
 
@@ -72,8 +92,7 @@ describe("byte-upload — segurança server-side", () => {
     expect(UPLOAD).toContain("authenticateRequest");
     expect(UPLOAD).toContain("resolveTenantForUser");
     expect(UPLOAD).toContain("assertCanonicalIngestionEnabled");
-    expect(UPLOAD).toContain("validateUploadContent");
-    expect(UPLOAD).toContain("storagePut");
+    expect(UPLOAD).toContain("streamFileToStorage");
   });
   it("gera a chave de storage no servidor (nome não controlado pelo cliente)", () => {
     expect(UPLOAD_SVC).toContain("buildIngestionStorageKey");

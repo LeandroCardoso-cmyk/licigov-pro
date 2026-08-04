@@ -229,8 +229,8 @@ approveSession (tRPC)               → aprova após revisão (NÃO promove ao d
 | Contrato | Tipo | Descrição |
 |---|---|---|
 | `ingestion.createSession` | mutation | Cria a sessão (tenant, usuário, `processId?`, `importType`, `importPurpose?`, `checksum`, `correlationId?`, `idempotencyKey`). Idempotente por chave; dedup por checksum; chave de storage gerada no servidor. Não recebe bytes. |
-| *(byte-upload)* `POST /api/ingestion/upload/:sessionId` | Express | Binário cru (`application/octet-stream`) via `express.raw`. Mesma auth do tRPC; valida MIME por *magic bytes*, checksum, tamanho, tenant; grava no S3 (Storage Service). |
-| `ingestion.enqueueProcessing` | mutation | Enfileira o processamento (parse→staging). Replay-safe por status (não re-enfileira em voo; conflito em estado terminal). Lê os bytes do storage durável. |
+| *(byte-upload)* `POST /api/ingestion/upload/:sessionId` | Express | **multipart/form-data em streaming** (busboy). Auth/tenant/flag resolvidos ANTES de consumir o corpo; limite aplicado DURANTE o stream com abort imediato; SHA-256 incremental; validação de *magic bytes*; chave gerada no servidor; **streaming direto ao S3** (`@aws-sdk/lib-storage`) — sem Buffer completo, sem base64; cleanup de parcial em falha. |
+| `ingestion.enqueueProcessing` | mutation | Enfileira o processamento (parse→staging). Replay-safe por status (não re-enfileira em voo; conflito em estado terminal). O **job carrega só metadados** (`storageKey`+correlationId, nunca Buffer); o worker baixa os bytes do storage. |
 | `ingestion.getSessionStatus` | query | Status, progresso, parser+versão, warnings, erro **sanitizado**, tentativas, timestamps + resumo de staging. |
 | `ingestion.listStagingItems` | query | Itens de staging paginados, tenant-safe, com confiança/proveniência/avisos. |
 | `ingestion.reviewItem` / `reviewBulk` | mutation | Revisão humana (aceitar/rejeitar/pular) com ator, justificativa e transição auditados. Idempotente. |
@@ -241,6 +241,16 @@ approveSession (tRPC)               → aprova após revisão (NÃO promove ao d
 propagado; audit log persistido; validação de conteúdo (magic bytes, não só extensão); proteção
 contra path traversal (nome de objeto gerado pelo servidor); nenhuma URL/credencial/conteúdo em logs;
 nenhuma gravação direta de extração no domínio; nenhuma aprovação automática.
+
+**Recuperação após restart:** a fila é in-memory; no boot, `recoverStuckImportSessions` reidrata
+sessões presas (`queued`/`parsing`) de forma determinística — claim atômico no banco (impede
+execução concorrente duplicada), respeita o limite de tentativas, encaminha à DLQ quando esgota,
+preserva correlationId/lineage e é **fail-closed por tenant** (só reprocessa orgs com a flag ligada).
+
+**Schema:** `checksum`/`processId`/`importPurpose` são criados pela migration **formal** e versionada
+[`drizzle/0288`](../../drizzle/0288_import_session_canonical_fields.sql) (aditiva, nullable, índice
+tenant-aware não-único). O `ensureSchema` **não** cria essas colunas — apenas verifica e falha de
+forma acionável em produção/staging se ausentes (nunca muta o schema silenciosamente).
 
 **Ainda NÃO implementado (fora do escopo da B.2.1):** promoção ao domínio (DFD/ETP/Pesquisa de
 Preços/TR), parser real de PDF/DOCX, alterações nos workspaces, remoção do caminho legado.

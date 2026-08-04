@@ -14,6 +14,7 @@ import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
 import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
+import { recoverStuckImportSessions } from "../services/importQueueService";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
@@ -122,6 +123,13 @@ async function startServer() {
 async function main() {
   await bootstrap();
   await startServer();
+  // PR B.2.1 — recuperação determinística de imports presos (queued/parsing) após restart.
+  // Best-effort e fail-closed por tenant (só reprocessa orgs com a flag ligada). Nunca
+  // bloqueia o boot nem derruba o servidor em caso de falha.
+  void recoverStuckImportSessions().then(
+    r => { if (r.recovered || r.dlq) console.info(`[BOOT] ingestion recovery: ${JSON.stringify(r)}`); },
+    err => console.warn("[BOOT] ingestion recovery falhou:", err instanceof Error ? err.message : err),
+  );
 }
 
 main().catch((err) => {
