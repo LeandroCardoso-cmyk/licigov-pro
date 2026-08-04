@@ -19,6 +19,8 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Upload } from "@aws-sdk/lib-storage";
+import type { Readable } from "node:stream";
 import { ENV } from "./_core/env";
 import { IS_PRODUCTION, IS_STAGING } from "./config/env";
 
@@ -168,6 +170,32 @@ export async function storageGet(
   );
 
   return { key, url };
+}
+
+/**
+ * PR B.2.1 — Upload em STREAMING para o S3 (multipart via @aws-sdk/lib-storage).
+ *
+ * Consome um Readable e envia em partes (sem materializar o arquivo inteiro em memória) —
+ * usado pela ingestão canônica para transmitir o binário direto do request para o storage.
+ * Se o `body` for destruído com erro (limite excedido, interrupção do cliente), `done()`
+ * rejeita e o multipart é abortado pela lib; o caller faz o cleanup do objeto parcial.
+ */
+export async function storagePutStream(
+  relKey: string,
+  body: Readable,
+  contentType = "application/octet-stream",
+): Promise<{ key: string }> {
+  const s3 = getS3();
+  const key = normalizeKey(relKey);
+  const upload = new Upload({
+    client: s3,
+    params: { Bucket: ENV.awsS3Bucket, Key: key, Body: body, ContentType: contentType },
+    queueSize: 4,
+    partSize: 5 * 1024 * 1024, // 5 MB por parte (mínimo do S3)
+    leavePartsOnError: false,   // aborta o multipart em erro (não deixa partes órfãs)
+  });
+  await upload.done();
+  return { key };
 }
 
 /**

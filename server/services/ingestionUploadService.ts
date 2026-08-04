@@ -8,16 +8,22 @@
  *
  * Não persiste nada no domínio. Não expõe URLs, credenciais nem conteúdo em logs.
  */
-import { createHash } from "crypto";
+import { createHash, type Hash } from "crypto";
 import { nanoid } from "nanoid";
+import { Transform, PassThrough, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { TRPCError } from "@trpc/server";
 import { isFeatureEnabled } from "./featureFlagService";
+import { storagePutStream, storageDelete } from "../storage";
+import { serviceLogger } from "./observabilityService";
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
   detectParserType,
   type ParserType,
 } from "../domain/importTypes";
+
+const log = serviceLogger("IngestionUploadService");
 
 /** Flag tenant-aware que habilita a superfície de ingestão canônica. Default: desabilitada. */
 export const CANONICAL_INGESTION_FLAG = "FF_CANONICAL_INGESTION";
@@ -175,4 +181,128 @@ export function buildIngestionStorageKey(
 /** Reexport util: mimes aceitos (para validação de entrada no createSession). */
 export function isAllowedMime(mime: string): boolean {
   return Object.prototype.hasOwnProperty.call(ALLOWED_MIME_TYPES, mime);
+}
+
+// ─── Streaming: validação incremental + upload direto ao storage ────────────────
+
+const SNIFF_BYTES = 16;
+
+/**
+ * Transform que valida o arquivo À MEDIDA que ele flui (streaming), sem nunca reter o
+ * conteúdo completo em memória:
+ *  - impõe o teto de tamanho DURANTE o streaming e aborta imediatamente ao exceder;
+ *  - calcula o SHA-256 incrementalmente (autoridade do servidor);
+ *  - valida magic bytes × MIME declarado assim que os primeiros bytes chegam;
+ *  - repassa os chunks adiante (backpressure preservado pelo pipeline).
+ */
+class ValidationTransform extends Transform {
+  private readonly hash: Hash = createHash("sha256");
+  private bytes = 0;
+  private head = Buffer.alloc(0);
+  private validated = false;
+  private _checksum = "";
+
+  constructor(private readonly opts: { maxBytes: number; declaredMime: string; fileName: string }) {
+    super();
+  }
+
+  private validateHead(): TRPCError | null {
+    const parserType = detectParserType(this.opts.declaredMime, this.opts.fileName);
+    if (!parserType) return new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Formato não suportado." });
+    const category = sniffContent(this.head);
+    const compat = PARSER_CONTENT_COMPAT[parserType] ?? [];
+    if (!compat.includes(category)) {
+      return new TRPCError({ code: "BAD_REQUEST", message: "Conteúdo do arquivo não corresponde ao tipo declarado." });
+    }
+    return null;
+  }
+
+  override _transform(chunk: Buffer, _enc: BufferEncoding, cb: (err?: Error | null, data?: Buffer) => void): void {
+    this.bytes += chunk.length;
+    if (this.bytes > this.opts.maxBytes) {
+      // Aborta imediatamente ao exceder o limite (não drena o resto do corpo).
+      cb(new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: `Arquivo excede ${this.opts.maxBytes / 1024 / 1024}MB.` }));
+      return;
+    }
+    this.hash.update(chunk);
+    if (!this.validated) {
+      if (this.head.length < SNIFF_BYTES) {
+        this.head = Buffer.concat([this.head, chunk.subarray(0, SNIFF_BYTES - this.head.length)]);
+      }
+      if (this.head.length >= 8) {
+        const err = this.validateHead();
+        if (err) { cb(err); return; }
+        this.validated = true;
+      }
+    }
+    cb(null, chunk);
+  }
+
+  override _flush(cb: (err?: Error | null) => void): void {
+    if (this.bytes === 0) { cb(new TRPCError({ code: "BAD_REQUEST", message: "Arquivo vazio." })); return; }
+    if (!this.validated) {
+      // Arquivo menor que 8 bytes: valida com o que há.
+      const err = this.validateHead();
+      if (err) { cb(err); return; }
+    }
+    this._checksum = this.hash.digest("hex");
+    cb();
+  }
+
+  getChecksum(): string { return this._checksum; }
+  getSize(): number { return this.bytes; }
+}
+
+export interface StreamUploadInput {
+  source:            Readable;
+  storageKey:        string;
+  declaredMime:      string;
+  fileName:          string;
+  maxBytes?:         number;
+  /** Checksum esperado (informado pelo cliente); apenas validado contra o SHA-256 do servidor. */
+  declaredChecksum?: string;
+}
+
+export interface StreamUploadResult {
+  checksum: string;
+  size:     number;
+}
+
+/**
+ * Faz o upload em STREAMING do `source` para o storage, validando durante o fluxo.
+ * Nunca materializa o arquivo inteiro em memória (nem em base64). Em qualquer falha
+ * (limite excedido, conteúdo inválido, interrupção do cliente, erro do storage), faz o
+ * cleanup do objeto parcial em `finally`.
+ */
+export async function streamFileToStorage(input: StreamUploadInput): Promise<StreamUploadResult> {
+  const maxBytes = input.maxBytes ?? MAX_FILE_SIZE_BYTES;
+  const transform = new ValidationTransform({ maxBytes, declaredMime: input.declaredMime, fileName: input.fileName });
+  const sink = new PassThrough();
+
+  // Upload consome o `sink`; o pipeline empurra source → validação → sink com backpressure.
+  const uploadPromise = storagePutStream(input.storageKey, sink, input.declaredMime);
+  let ok = false;
+  try {
+    const results = await Promise.allSettled([
+      pipeline(input.source, transform, sink),
+      uploadPromise,
+    ]);
+    const failed = results.find(r => r.status === "rejected") as PromiseRejectedResult | undefined;
+    if (failed) throw failed.reason;
+
+    const checksum = transform.getChecksum();
+    const size = transform.getSize();
+    if (input.declaredChecksum && input.declaredChecksum.toLowerCase() !== checksum) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Checksum divergente do arquivo enviado." });
+    }
+    ok = true;
+    return { checksum, size };
+  } finally {
+    if (!ok) {
+      // Garante que uma eventual promise de upload não vire unhandled rejection.
+      await uploadPromise.catch(() => {});
+      await storageDelete(input.storageKey).catch(() => {});
+      log.warn("ingestion_upload_partial_cleanup", { storageKey: input.storageKey });
+    }
+  }
 }
