@@ -3,6 +3,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { authRouter } from "./routers/authRouter";
 import { processesRouter } from "./routers/processesRouter";
 import { documentsRouter } from "./routers/documentsRouter";
+import { ingestionRouter } from "./routers/ingestionRouter";
 import { editalParametersRouter } from "./routers/editalParametersRouter";
 import { activitiesRouter } from "./routers/activitiesRouter";
 import { collaborationRouter } from "./routers/collaborationRouter";
@@ -155,6 +156,7 @@ export const appRouter = router({
   operationRecord: operationRecordRouter,
   documentEngine: documentEngineRouter,
   institutionalConsultation: institutionalConsultationRouter,
+  ingestion: ingestionRouter,
 });
 
 export type AppRouter = typeof appRouter;

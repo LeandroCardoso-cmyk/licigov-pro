@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { users, organizations, organizationMembers } from "../drizzle/schema";
+import { users, organizationMembers } from "../drizzle/schema";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
@@ -120,6 +120,35 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
 
     await connection.execute(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${indexName}\` UNIQUE (\`${column}\`)`);
     log("DB", `✓ Schema corrigido: índice único ${indexName} criado em ${table}.${column}`);
+  }
+
+  /**
+   * PR B.2.1 — Índice NÃO-único em tabela preexistente (lookup, não unicidade).
+   * Usado para dedup por checksum na ingestão: o mesmo checksum pode reaparecer
+   * legitimamente (re-import após rejeição/arquivamento), então é índice de busca,
+   * nunca UNIQUE. Idempotente e seguro para rodar em todo boot.
+   */
+  async function addIndexIfMissing(
+    table: string,
+    indexName: string,
+    columns: string
+  ): Promise<void> {
+    const [tableRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table]
+    );
+    if ((tableRows[0] as ColRow).cnt === 0) return;
+
+    const [idxRows] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+      [table, indexName]
+    );
+    if ((idxRows[0] as ColRow).cnt > 0) return;
+
+    await connection.execute(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
+    log("DB", `✓ Schema corrigido: índice ${indexName} criado em ${table} (${columns})`);
   }
 
   // Colunas pré-Sprint 1 (legacy)
@@ -241,6 +270,16 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
       INDEX \`idx_import_sessions_file\`   (\`organizationId\`, \`sourceFileId\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // PR B.2.1 — Ingestão canônica: campos aditivos em import_sessions.
+  // Roda APÓS o CREATE TABLE acima para cobrir tanto DBs novos (tabela recém-criada)
+  // quanto DBs existentes (ALTER idempotente). checksum (dedup sha256), processId
+  // (vínculo/lineage) e importPurpose (finalidade). Índice de busca NÃO-único: o mesmo
+  // checksum pode reaparecer em re-import legítimo (após rejeição/arquivamento).
+  await addColumnIfMissing("import_sessions", "checksum",      "varchar(64)");
+  await addColumnIfMissing("import_sessions", "processId",     "int");
+  await addColumnIfMissing("import_sessions", "importPurpose", "varchar(50)");
+  await addIndexIfMissing("import_sessions", "import_sessions_org_checksum_idx", "`organizationId`, `checksum`");
 
   // Sprint 2.8 — Import Staging Items table
   await connection.execute(`

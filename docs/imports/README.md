@@ -209,5 +209,44 @@ interface ExtractionProvenance {
 
 ---
 
-*Para motor documental: [architecture/DOCUMENT_ENGINE.md](../../architecture/DOCUMENT_ENGINE.md)*
-*Para arquitetura de importação: [architecture/IMPORT_ENGINE.md](../../architecture/IMPORT_ENGINE.md)*
+---
+
+## API Canônica de Ingestão (PR B.2.1)
+
+> **Superfície tRPC `ingestion.*`** que expõe o motor acima. Tenant-safe, gated por feature flag
+> `FF_CANONICAL_INGESTION` (tenant-aware, **desabilitada por padrão** / fail-closed). **Não** promove
+> ao domínio, **não** implementa parser PDF/DOCX real e **não** substitui o caminho legado.
+
+Fluxo canônico:
+```
+createSession (tRPC)                → cria sessão `uploaded` + chave S3 gerada no servidor
+POST /api/ingestion/upload/:id      → byte-upload (Express, binário cru, NUNCA base64/tRPC)
+enqueueProcessing (tRPC)            → parse → staging (replay-safe)
+listStagingItems / reviewItem(Bulk) → revisão humana
+approveSession (tRPC)               → aprova após revisão (NÃO promove ao domínio nesta etapa)
+```
+
+| Contrato | Tipo | Descrição |
+|---|---|---|
+| `ingestion.createSession` | mutation | Cria a sessão (tenant, usuário, `processId?`, `importType`, `importPurpose?`, `checksum`, `correlationId?`, `idempotencyKey`). Idempotente por chave; dedup por checksum; chave de storage gerada no servidor. Não recebe bytes. |
+| *(byte-upload)* `POST /api/ingestion/upload/:sessionId` | Express | Binário cru (`application/octet-stream`) via `express.raw`. Mesma auth do tRPC; valida MIME por *magic bytes*, checksum, tamanho, tenant; grava no S3 (Storage Service). |
+| `ingestion.enqueueProcessing` | mutation | Enfileira o processamento (parse→staging). Replay-safe por status (não re-enfileira em voo; conflito em estado terminal). Lê os bytes do storage durável. |
+| `ingestion.getSessionStatus` | query | Status, progresso, parser+versão, warnings, erro **sanitizado**, tentativas, timestamps + resumo de staging. |
+| `ingestion.listStagingItems` | query | Itens de staging paginados, tenant-safe, com confiança/proveniência/avisos. |
+| `ingestion.reviewItem` / `reviewBulk` | mutation | Revisão humana (aceitar/rejeitar/pular) com ator, justificativa e transição auditados. Idempotente. |
+| `ingestion.approveSession` | mutation | Aprova **após** revisão completa (bloqueia se há itens pendentes). **Não promove** ao domínio. |
+
+**Garantias de segurança:** isolamento multi-tenant em todas as queries; autorização por processo
+(quando informado) e organização; idempotência (chave + payloadHash); replay-safety; correlationId
+propagado; audit log persistido; validação de conteúdo (magic bytes, não só extensão); proteção
+contra path traversal (nome de objeto gerado pelo servidor); nenhuma URL/credencial/conteúdo em logs;
+nenhuma gravação direta de extração no domínio; nenhuma aprovação automática.
+
+**Ainda NÃO implementado (fora do escopo da B.2.1):** promoção ao domínio (DFD/ETP/Pesquisa de
+Preços/TR), parser real de PDF/DOCX, alterações nos workspaces, remoção do caminho legado.
+
+---
+
+*Para motor documental: [architecture/DOCUMENT_ENGINE_OFFICIAL.md](../architecture/DOCUMENT_ENGINE_OFFICIAL.md)*
+*Para arquitetura de importação: [architecture/IMPORT_ENGINE.md](../architecture/IMPORT_ENGINE.md)*
+*Troubleshooting da ingestão: [ops/INGESTION_RUNBOOK.md](../ops/INGESTION_RUNBOOK.md)*

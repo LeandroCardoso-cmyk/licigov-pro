@@ -171,6 +171,25 @@ export async function storageGet(
 }
 
 /**
+ * PR B.2.1 — Download server-side do objeto como Buffer (contrato oficial: "download").
+ * Diferente de `storageGet` (que devolve URL assinada para o cliente), esta variante lê os
+ * bytes no servidor — necessária para realimentar a fila de ingestão in-memory a partir do
+ * storage durável (enqueueProcessing/retry replay-safe), sem trafegar binário pelo cliente.
+ */
+export async function storageGetBytes(relKey: string): Promise<Buffer> {
+  const s3 = getS3();
+  const key = normalizeKey(relKey);
+  const out = await s3.send(
+    new GetObjectCommand({ Bucket: ENV.awsS3Bucket, Key: key })
+  );
+  if (!out.Body) {
+    throw new Error(`Objeto ausente ou vazio no storage: ${key}`);
+  }
+  const bytes = await (out.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
+  return Buffer.from(bytes);
+}
+
+/**
  * Alias semântico de `storageGet` — URL assinada de download (contrato oficial).
  * `downloadFileName` (opcional) define o nome apresentado ao usuário, separado da
  * chave interna do storage; `disposition` alterna entre baixar e visualizar (impressão).

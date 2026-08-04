@@ -1875,6 +1875,12 @@ export const importSessions = mysqlTable("import_sessions", {
   sourceFileName:     varchar("sourceFileName", { length: 255 }).notNull(),
   sourceMimeType:     varchar("sourceMimeType", { length: 100 }).notNull(),
   sourceSize:         int("sourceSize").notNull().default(0),
+  // PR B.2.1 — Ingestão canônica: checksum (dedup), vínculo de processo e finalidade da importação.
+  // Colunas aditivas/nullable, aplicadas via ensureSchema (server/bootstrap.ts) por serem
+  // alterações em tabela preexistente (convenção do projeto — ver cabeçalho de drizzle/0285/0287).
+  checksum:           varchar("checksum",       { length: 64  }),
+  processId:          int("processId"),
+  importPurpose:      varchar("importPurpose",  { length: 50  }),
   importType:         varchar("importType",     { length: 50  }).notNull().default("generic"),
   parserType:         varchar("parserType",     { length: 20  }).notNull().default("auto"),
   parserVersion:      varchar("parserVersion",  { length: 20  }).notNull().default("1.0.0"),

@@ -13,6 +13,7 @@ import { buildHelmetContentSecurityPolicy } from "../config/csp";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
+import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
@@ -60,6 +61,10 @@ async function startServer() {
   // PR D — health check HTTP (liveness/readiness). ANTES do tRPC e do catch-all do SPA,
   // rota pública e leve para o Railway/load balancer.
   registerHealthRoutes(app);
+
+  // PR B.2.1 — byte-upload da ingestão canônica (Express, binário cru, fora do tRPC).
+  // Montado ANTES do tRPC; gated por feature flag tenant-aware (fail-closed).
+  registerIngestionUploadRoute(app);
 
   // tRPC API
   app.use(
