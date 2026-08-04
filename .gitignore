@@ -105,3 +105,6 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# venv isolado do Graphify (toolchain reproduzível — ver tools/graphify/README.md)
+.venv-graphify/

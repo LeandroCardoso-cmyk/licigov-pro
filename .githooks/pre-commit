@@ -2,9 +2,12 @@
 #
 # LiciGov Pro — pre-commit: mantém o grafo de conhecimento Graphify atualizado.
 #
-# Sempre que o commit tocar código (server/ ou client/), regenera o grafo
-# localmente (100% local, sem LLM) e re-inclui os artefatos versionados.
-# Não bloqueia o commit se o Graphify não estiver instalado.
+# Sempre que o commit toca código (server/ ou client/), regenera o grafo localmente
+# (100% local, sem LLM) via o WRAPPER reproduzível (tools/graphify/run.sh), que fixa a
+# versão exata do graphifyy num venv isolado — sem depender de instalação global.
+#
+# Diferente da versão antiga, NÃO há skip silencioso: se a toolchain não puder rodar,
+# o hook FALHA com mensagem acionável, para nunca deixar o grafo dessincronizado do código.
 #
 set -u
 
@@ -19,28 +22,27 @@ if ! git diff --cached --name-only | grep -qE '^(server|client)/'; then
   exit 0
 fi
 
-# Localiza o graphify (PATH ou ~/.local/bin) ou usa "python -m graphify".
-GRAPHIFY=""
-if command -v graphify >/dev/null 2>&1; then GRAPHIFY="graphify"
-elif [ -x "$HOME/.local/bin/graphify" ]; then GRAPHIFY="$HOME/.local/bin/graphify"
-elif python3 -c "import graphify" >/dev/null 2>&1; then GRAPHIFY="python3 -m graphify"
+REPO="$(git rev-parse --show-toplevel)"
+WRAPPER="$REPO/tools/graphify/run.sh"
+
+if [ ! -x "$WRAPPER" ]; then
+  echo "[pre-commit] ERRO: wrapper do Graphify ausente/não-executável: $WRAPPER" >&2
+  echo "[pre-commit] server/ ou client/ mudaram — não é permitido pular a atualização do grafo." >&2
+  echo "[pre-commit] Restaure tools/graphify/run.sh (chmod +x) e tente novamente." >&2
+  exit 1
 fi
 
-if [ -z "$GRAPHIFY" ]; then
-  echo "[pre-commit] Graphify não encontrado — pulando atualização do grafo."
-  echo "[pre-commit] Instale com: pip install graphifyy --break-system-packages"
-  exit 0
-fi
-
-echo "[pre-commit] Atualizando grafo de conhecimento (Graphify, 100% local)…"
-if ! $GRAPHIFY update . >/dev/null 2>&1; then
-  echo "[pre-commit] Falha ao atualizar o grafo — commit segue sem alteração do grafo."
-  exit 0
+echo "[pre-commit] Atualizando grafo de conhecimento (Graphify, toolchain fixada, 100% local)…"
+if ! "$WRAPPER" update "$REPO" >/dev/null 2>&1; then
+  echo "[pre-commit] ERRO: falha ao atualizar o grafo com a toolchain fixada (tools/graphify/requirements.txt)." >&2
+  echo "[pre-commit] A 1ª execução requer python3 + rede para preparar o venv isolado." >&2
+  echo "[pre-commit] Rode 'tools/graphify/run.sh update .' para ver o erro detalhado." >&2
+  exit 1
 fi
 
 # Re-inclui apenas os artefatos versionados (cache/ e snapshots datados são ignorados).
 for f in graphify-out/graph.json graphify-out/GRAPH_REPORT.md graphify-out/manifest.json graphify-out/.graphify_labels.json; do
-  [ -f "$f" ] && git add "$f"
+  [ -f "$REPO/$f" ] && git add "$REPO/$f"
 done
 
 echo "[pre-commit] Grafo atualizado e incluído no commit."

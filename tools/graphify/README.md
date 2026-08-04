@@ -20,33 +20,38 @@ grafo de conhecimento do repositório em [`graphify-out/`](../../graphify-out).
 O pin está em [`requirements.txt`](./requirements.txt). **Nunca** instalar `graphifyy`
 globalmente — sempre em ambiente Python isolado.
 
-## Instalação reproduzível (ambiente isolado)
+## Wrapper reproduzível (forma canônica)
+
+Use SEMPRE o wrapper [`run.sh`](./run.sh): ele garante a versão exata fixada num venv isolado
+(`.venv-graphify/`, gitignored) e executa a CLI. **Nunca** depende de instalação global.
 
 ```bash
-# a partir da raiz do repositório
-python3 -m venv .venv-graphify                 # venv isolado (fora do controle de versão)
+# a partir da raiz do repositório — cria/atualiza o venv sob demanda e roda o comando
+tools/graphify/run.sh update .          # atualiza o grafo (100% local, sem LLM)
+tools/graphify/run.sh --version         # → graphify 0.9.32
+```
+
+Variável opcional `GRAPHIFY_VENV` aponta o venv para outro caminho (ex.: fora da árvore).
+
+### Instalação manual equivalente (se preferir sem o wrapper)
+
+```bash
+python3 -m venv .venv-graphify
 ./.venv-graphify/bin/python -m pip install --upgrade pip
 ./.venv-graphify/bin/python -m pip install -r tools/graphify/requirements.txt
-
-# sanity check
-./.venv-graphify/bin/graphify --version         # → graphify 0.9.32
 ```
 
-> Adicione `.venv-graphify/` ao seu `.gitignore` local se criá-lo dentro do repo, ou use um
-> caminho fora da árvore. O artefato versionado é **apenas** `requirements.txt`.
+## Integração com o git hook
 
-## Atualizar o grafo (100% local, sem LLM, custo de tokens zero)
-
-```bash
-./.venv-graphify/bin/graphify update .
-```
+O `.githooks/pre-commit` chama **`tools/graphify/run.sh update .`** quando o commit toca
+`server/` ou `client/`, re-incluindo os 4 artefatos versionados. Diferente da versão antiga,
+**não há skip silencioso**: se a toolchain não puder rodar (sem `python3`/rede na 1ª instalação),
+o hook **falha** com mensagem acionável em vez de deixar o grafo desatualizado.
 
 - Extrai a AST de `server/`, `client/`, `shared/`, `docs/` etc. e reescreve
   `graphify-out/{graph.json,GRAPH_REPORT.md,manifest.json,.graphify_labels.json}`.
-- O `.githooks/pre-commit` chama `graphify update .` automaticamente quando o commit toca
-  `server/` ou `client/` (ver [`.githooks/README.md`](../../.githooks/README.md)).
-- A nomeação de comunidades por LLM (`graphify label`) é **opcional** e **não** é usada no
-  fluxo determinístico: sem chave de API, o `update` nomeia comunidades pelo hub (determinístico).
+- A nomeação de comunidades por LLM (`graphify label`) é **opcional** e **não** é usada no fluxo
+  determinístico: sem chave de API, o `update` nomeia comunidades pelo hub (determinístico).
 
 ## Notas de compatibilidade (validação 0.9.32 × grafo canônico)
 
