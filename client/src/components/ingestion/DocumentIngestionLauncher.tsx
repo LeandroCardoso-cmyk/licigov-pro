@@ -41,6 +41,12 @@ interface DocumentIngestionLauncherProps {
   manualSlot?: ReactNode;
   /** Permite ocultar a aba "colar conteúdo" quando não fizer sentido para o domínio. */
   allowPaste?: boolean;
+  /**
+   * Restringe a capacidade aos formatos RELEVANTES para este documento (ex.: DFD/ETP só fazem
+   * sentido a partir de PDF/DOCX). Se nenhum formato relevante for `supported` (parser real), a
+   * importação é apresentada como indisponível — sem ofertar formatos alheios ao documento.
+   */
+  relevantFormatKeys?: string[];
   onApproved?: (sessionId: number) => void;
 }
 
@@ -52,9 +58,18 @@ export function DocumentIngestionLauncher({
   description,
   manualSlot,
   allowPaste = true,
+  relevantFormatKeys,
   onApproved,
 }: DocumentIngestionLauncherProps) {
-  const { capabilities, enabled, isLoading } = useIngestionCapabilities();
+  const { capabilities: rawCaps, enabled, isLoading } = useIngestionCapabilities();
+
+  // Capacidade escopada aos formatos relevantes do documento (quando informado).
+  const capabilities = useMemo(() => {
+    if (!rawCaps) return undefined;
+    if (!relevantFormatKeys) return rawCaps;
+    const formats = rawCaps.formats.filter((f) => relevantFormatKeys.includes(f.key));
+    return { ...rawCaps, formats, supportedFormats: formats.filter((f) => f.supported) };
+  }, [rawCaps, relevantFormatKeys]);
   const ingestion = useSupervisedIngestion({ importType, processId, importPurpose, onApproachReview: () => {} });
   const inReview = REVIEW_PHASES.includes(ingestion.phase);
   const review = useStagingReview(ingestion.sessionId, inReview);
