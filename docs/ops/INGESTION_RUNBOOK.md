@@ -1,0 +1,94 @@
+# Runbook — Ingestão Canônica (PR B.2.1)
+
+Troubleshooting da superfície `ingestion.*` e da rota de byte-upload. Somente operação — não
+altera produção/secrets. Arquitetura em [`../architecture/IMPORT_ENGINE.md`](../architecture/IMPORT_ENGINE.md).
+
+## Habilitar/desabilitar por tenant
+
+A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
+
+- Habilitar para um tenant: criar/ligar o registro em `tenant_feature_flags`
+  (`featureFlagService.isFeatureEnabled(flagName, organizationId)`), default **desligado**.
+- Kill-switch global: uma flag global desligada mantém todos os tenants bloqueados.
+- Verificação rápida: `getSessionStatus` retorna `FORBIDDEN` → flag desligada para o tenant.
+
+## Sintomas → causa provável → ação
+
+| Sintoma (HTTP/tRPC) | Causa provável | Ação |
+|---|---|---|
+| `FORBIDDEN` "não habilitada" | Flag `FF_CANONICAL_INGESTION` desligada p/ o tenant | Ligar a flag do tenant |
+| `401` no upload | Cookie JWT ausente/expirado | Reautenticar; conferir `sdk.authenticateRequest` |
+| `403` no upload | Usuário sem membership ativo na org | Conferir `organization_members.ativo` |
+| `415` "não suportado" | MIME fora de `ALLOWED_MIME_TYPES` | Enviar XLSX/CSV/PDF/DOCX válido |
+| `400` "não corresponde ao tipo declarado" | *Magic bytes* ≠ MIME declarado (ex.: PDF renomeado p/ .xlsx) | Enviar o arquivo correto |
+| `400` "checksum divergente" | Bytes enviados ≠ checksum declarado no `createSession` | Recalcular sha256 e reenviar |
+| `413` "excede 50MB" | Arquivo acima do teto | Dividir/reduzir o arquivo |
+| `409` no upload | Sessão não está mais em `uploaded` (ou re-upload com checksum diferente) | Criar nova sessão |
+| `412` "arquivo ainda não enviado" (enqueue) | `enqueueProcessing` antes do upload concluir | Fazer o upload antes de enfileirar |
+| `409` "estado terminal" (enqueue) | Sessão já aprovada/arquivada/rejeitada | Criar nova sessão |
+| `412` "revisão incompleta" (approve) | Há itens de staging `pending` | Revisar todos os itens antes de aprovar |
+| `CONFLICT` "outro arquivo" (createSession) | `idempotencyKey` reusada com checksum diferente | Usar nova chave idempotente |
+
+## Dedup e idempotência
+
+- **Dedup por checksum:** `createSession` reutiliza a sessão **ativa** (não `rejected`/`archived`)
+  do tenant com o mesmo `checksum` → retorna `{ duplicate: true }` sem criar nova linha.
+- **Idempotência de `createSession`:** por `idempotencyKey` (+ payloadHash = checksum). Replay com
+  a mesma chave e mesmo arquivo retorna a resposta cacheada; com arquivo diferente → `CONFLICT`.
+- **Replay do processamento:** `enqueueProcessing` é seguro para reexecutar; não duplica jobs em voo.
+
+## Fila (in-memory) e recuperação
+
+- `importQueueService`: retry com backoff (até `MAX_RETRIES=3`), depois **DLQ**.
+- O **job não carrega o arquivo** — só `storageKey`+metadados; o worker baixa do S3 no parse.
+- Reinício do processo **esvazia** a fila in-memory, mas `recoverStuckImportSessions` roda no boot
+  e reidrata sessões presas (`queued`/`parsing`) com **claim atômico** (sem execução duplicada),
+  limite de tentativas, DLQ e correlationId preservado. É **fail-closed por tenant** (só reprocessa
+  orgs com `FF_CANONICAL_INGESTION` ligada) — em produção com a flag desligada, é no-op.
+- Os bytes são relidos do S3 durável — nada se perde no storage.
+- Sem GEMINI/LLM no caminho (extração é 100% local/AST-based).
+
+## Upload (multipart streaming)
+
+- `POST /api/ingestion/upload/:sessionId` — `multipart/form-data` (campo de arquivo único).
+- Auth/tenant/flag são resolvidos ANTES de consumir o corpo; o limite (50 MB) é aplicado durante
+  o stream e aborta imediatamente ao exceder (413).
+- Falha no meio do upload (limite, interrupção do cliente, storage) → o objeto parcial é removido
+  automaticamente (cleanup em `finally`).
+- Toolchain de streaming: `busboy` (parser) + `@aws-sdk/lib-storage` (upload multipart ao S3).
+
+## Schema canônico e migration 0288 (reconciliadora)
+
+Os campos canônicos de `import_sessions` — `checksum` `varchar(64)` NULL, `processId` `int` NULL
+(compatível com `processes.id`), `importPurpose` `varchar(50)` NULL — e o índice tenant-aware
+**não exclusivo** `import_sessions_org_checksum_idx (organizationId, checksum)` são criados pela
+migration **formal** `drizzle/0288`, não pelo `ensureSchema`.
+
+**Contexto operacional:** um estado intermediário anterior (commit `91bd893`) criava essas colunas
+via `ensureSchema`/`addColumnIfMissing`. Em um banco que já passou por esse estado (ex.: staging), a
+versão antiga da 0288 (`ALTER ... ADD checksum`) colidia com a coluna existente
+(`ER_DUP_FIELDNAME` / `42S21`), derrubando o boot no `runMigrations()`.
+
+**A 0288 é RECONCILIADORA** (consulta `INFORMATION_SCHEMA` + SQL dinâmico `PREPARE/EXECUTE`), segura
+para os três estados, sem intervenção manual no banco:
+
+| Estado do banco | Comportamento da 0288 |
+|---|---|
+| Novo (sem os campos) | adiciona as 3 colunas + o índice |
+| Transitório (colunas já criadas pelo `ensureSchema` antigo) | **não recria** (sem `ER_DUP_FIELDNAME`); adiciona só o índice que faltava |
+| Parcial / repetido / concorrente | completa o que falta; idempotente |
+| Coluna/índice existente **incompatível** (tipo, tamanho, nulabilidade) | **aborta de forma acionável** (tabela-sentinela `erro_0288_*`) — nunca muta silenciosamente |
+
+Defesa em profundidade: após o `runMigrations()`, o `ensureSchema → assertColumnsPresent` revalida
+**presença + tipo + tamanho + nulabilidade** dessas colunas e falha de forma acionável em
+staging/produção (aviso em dev) — **sem** mutar o schema.
+
+**Rollback lógico** (se necessário): as colunas são aditivas e nuláveis; dropar as 3 colunas + o
+índice é seguro (sem dados obrigatórios) e faz a 0288 reaplicá-las no próximo boot. Nenhuma marcação
+manual do journal é necessária — o drizzle decide pela cadeia (`created_at < folderMillis`).
+
+## Observações
+
+- Parser **PDF/DOCX** ainda é *stub* (não extrai itens reais) — planejado para etapa posterior.
+- **Nenhuma** gravação direta no domínio: itens ficam em `import_staging_items` até promoção (futura).
+- Logs **nunca** contêm URL assinada, credenciais ou conteúdo de documento.

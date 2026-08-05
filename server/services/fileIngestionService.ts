@@ -5,16 +5,14 @@
  * Idempotent: mesmo arquivo + mesmo sessionId não cria duplicata.
  * Tenant-safe: organizationId obrigatório em todas as operações.
  */
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createHash } from "crypto";
 import { getDb } from "../db/connection";
-import { importSessions } from "../../drizzle/schema";
+import { importSessions, processes } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
 import { logActivity } from "./activityLogService";
-import { parserRegistry } from "../parsers/parserRegistry";
 import {
-  ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
   detectParserType,
   type ImportType,
@@ -65,6 +63,10 @@ export interface CreateImportSessionParams {
   sourceFileId:   string;
   importType:     ImportType;
   correlationId?: string;
+  // PR B.2.1 — vínculo canônico + dedup
+  processId?:     number | null;
+  importPurpose?: string | null;
+  checksum?:      string | null;
 }
 
 export async function createImportSession(
@@ -76,6 +78,16 @@ export async function createImportSession(
 
   const orgId = ctx.organizationId;
   if (!orgId) throw new TRPCError({ code: "BAD_REQUEST", message: "organizationId obrigatório." });
+
+  // Autorização por processo: quando informado, o processo DEVE pertencer ao tenant.
+  if (params.processId != null) {
+    const proc = await db.select({ id: processes.id }).from(processes)
+      .where(and(eq(processes.id, params.processId), eq(processes.organizationId, orgId)))
+      .limit(1);
+    if (proc.length === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
+    }
+  }
 
   const parserType = detectParserType(params.sourceMimeType, params.sourceFileName) ?? "auto";
 
@@ -93,6 +105,9 @@ export async function createImportSession(
     progress:        0,
     retryCount:      0,
     correlationId:   params.correlationId ?? ctx.correlationId ?? null,
+    processId:       params.processId     ?? null,
+    importPurpose:   params.importPurpose ?? null,
+    checksum:        params.checksum      ?? null,
   }).$returningId();
 
   await logActivity({
@@ -154,6 +169,95 @@ export async function listImportSessions(
     .limit(limit);
 }
 
+/**
+ * PR B.2.1 — Dedup por checksum: retorna a sessão NÃO-terminal mais recente do tenant
+ * com o mesmo checksum. Sessões `rejected`/`archived` são ignoradas (re-import legítimo).
+ * Usado pelo createSession para evitar duplicação de ingestão do mesmo arquivo.
+ */
+export async function findActiveSessionByChecksum(
+  organizationId: number,
+  checksum:       string,
+): Promise<typeof importSessions.$inferSelect | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db.select().from(importSessions)
+    .where(and(
+      eq(importSessions.organizationId, organizationId),
+      eq(importSessions.checksum,       checksum),
+    ));
+
+  const active = rows.filter(r => r.status !== "rejected" && r.status !== "archived");
+  // Mais recente primeiro (id crescente = criação crescente).
+  active.sort((a, b) => b.id - a.id);
+  return active[0] ?? null;
+}
+
+/**
+ * PR B.2.1 — Registra que o binário foi persistido no storage (após storagePut na rota
+ * de upload). Atualiza tamanho real e checksum verificado server-side; mantém a sessão em
+ * `uploaded` (o enqueueProcessing é um passo explícito e replay-safe). Tenant-safe.
+ */
+export async function attachStoredFile(
+  sessionId:      number,
+  organizationId: number,
+  params:         { sourceSize: number; checksum: string; stage?: string },
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
+
+  await db.update(importSessions).set({
+    sourceSize: params.sourceSize,
+    checksum:   params.checksum,
+    stage:      params.stage ?? "file_stored",
+    progress:   3,
+  }).where(and(
+    eq(importSessions.id,             sessionId),
+    eq(importSessions.organizationId, organizationId),
+  ));
+
+  log.info("import_file_stored", { sessionId, organizationId, size: params.sourceSize });
+}
+
+/**
+ * PR B.2.1 — Sessões "presas" em processamento (queued/parsing) — usadas na recuperação
+ * determinística após restart (a fila in-memory é volátil). Cross-tenant por natureza
+ * (varredura de recovery no boot); cada uma carrega organizationId para reprocessamento
+ * tenant-safe.
+ */
+export async function listStuckImportSessions(
+  limit = 500,
+): Promise<(typeof importSessions.$inferSelect)[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(importSessions)
+    .where(inArray(importSessions.status, ["queued", "parsing"]))
+    .limit(limit);
+}
+
+/**
+ * PR B.2.1 — Claim atômico para recuperação: marca a sessão como "recovering" apenas se
+ * ainda estiver presa (queued/parsing) e não reivindicada. Retorna true se ESTE chamador
+ * ganhou o claim — impede execução concorrente duplicada (mesma instância ou instâncias
+ * paralelas), pois o UPDATE condicional é resolvido pelo row-lock do MySQL.
+ */
+export async function claimSessionForRecovery(
+  sessionId:      number,
+  organizationId: number,
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.update(importSessions)
+    .set({ stage: "recovering" })
+    .where(and(
+      eq(importSessions.id,             sessionId),
+      eq(importSessions.organizationId, organizationId),
+      inArray(importSessions.status,    ["queued", "parsing"]),
+      ne(importSessions.stage,          "recovering"),
+    ));
+  return ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) === 1;
+}
+
 // ─── Status transitions ───────────────────────────────────────────────────────
 
 export async function updateSessionStatus(
@@ -179,10 +283,10 @@ export async function updateSessionStatus(
     status,
     ...(extras?.progress          !== undefined ? { progress:          extras.progress }          : {}),
     ...(extras?.stage             !== undefined ? { stage:             extras.stage }             : {}),
-    ...(extras?.confidenceScore   !== undefined ? { confidenceScore:   String(extras.confidenceScore) as any } : {}),
-    ...(extras?.extractionSummary !== undefined ? { extractionSummary: extras.extractionSummary as any }       : {}),
-    ...(extras?.warnings          !== undefined ? { warnings:          extras.warnings as any }   : {}),
-    ...(extras?.errors            !== undefined ? { errors:            extras.errors   as any }   : {}),
+    ...(extras?.confidenceScore   !== undefined ? { confidenceScore:   String(extras.confidenceScore) } : {}),
+    ...(extras?.extractionSummary !== undefined ? { extractionSummary: extras.extractionSummary }       : {}),
+    ...(extras?.warnings          !== undefined ? { warnings:          extras.warnings }   : {}),
+    ...(extras?.errors            !== undefined ? { errors:            extras.errors }     : {}),
     ...(extras?.failedAt          !== undefined ? { failedAt:          extras.failedAt }          : {}),
     ...(extras?.finishedAt        !== undefined ? { finishedAt:        extras.finishedAt }        : {}),
     ...(extras?.startedAt         !== undefined ? { startedAt:         extras.startedAt }         : {}),
@@ -227,7 +331,7 @@ export async function startIngestion(
 export async function cancelImportSession(
   sessionId:      number,
   organizationId: number,
-  ctx:            TrpcAuditCtx,
+  _ctx:           TrpcAuditCtx,
 ): Promise<void> {
   const session = await getImportSession(sessionId, organizationId);
   if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
