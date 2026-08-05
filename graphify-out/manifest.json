@@ -1350,13 +1350,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "3695e53a9a68965c5ce743ca231465d9",
+    "mtime": 1785968702.7702487,
+    "ast_hash": "7ecf9ace2f483d71fa417fc1045f8a33",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "35580b705dbf14806987d58b6c1fa8fe",
+    "mtime": 1785968791.122245,
+    "ast_hash": "cafe52e2a52815e6a5cc6fe61885df5c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
@@ -1375,8 +1375,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "da98baabd233baff03ca7ea493bad643",
+    "mtime": 1785968572.742254,
+    "ast_hash": "1f09c4ba567b8315ff583a56a2e84117",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
@@ -7050,8 +7050,8 @@
     "semantic_hash": ""
   },
   "docs/imports/README.md": {
-    "mtime": 1785869432.9134884,
-    "ast_hash": "df1787b58c2d371941de0cb0658e3cb0",
+    "mtime": 1785969368.9662218,
+    "ast_hash": "a0851d2ed69ca7189da1c98499c5c245",
     "semantic_hash": ""
   },
   "docs/imports/REVIEW_WORKFLOW.md": {
@@ -10440,8 +10440,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1785868697.5454447,
-    "ast_hash": "886c94c37dd0f4b65281088399767ded",
+    "mtime": 1785968298.146265,
+    "ast_hash": "751431c071965a5cf1dd47d4ec595875",
     "semantic_hash": ""
   },
   "server/routes/ingestionUploadRoute.ts": {
@@ -10502,6 +10502,116 @@
   "server/__tests__/integration/ingestion-0288-reconciliation-mysql-smoke.test.ts": {
     "mtime": 1785907115.4940171,
     "ast_hash": "f0847753c406c247716b6030a98d0e19",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/DocumentIngestionLauncher.tsx": {
+    "mtime": 1785968651.2302508,
+    "ast_hash": "12c32f5f47fb2b05bcedd989a616847f",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/FileDropzone.tsx": {
+    "mtime": 1785968080.918274,
+    "ast_hash": "647f69f4383e31462e608f5ff0c65c2f",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/IngestionAuditSummary.tsx": {
+    "mtime": 1785968133.8342717,
+    "ast_hash": "e35e64c412b111bce5433cf137baeb94",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/IngestionErrorState.tsx": {
+    "mtime": 1785968103.430273,
+    "ast_hash": "e456c9cd3a9f7b664fff1bdac501b101",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/IngestionSessionProgress.tsx": {
+    "mtime": 1785968303.7582648,
+    "ast_hash": "dd214d00735be7deee8e40200b0e0b23",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/IngestionStatusBadge.tsx": {
+    "mtime": 1785968052.650275,
+    "ast_hash": "edad0f2d66354d33aa7c5ac919f9ab1f",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/IngestionWarningsPanel.tsx": {
+    "mtime": 1785968093.6862733,
+    "ast_hash": "c6b8b76a6397730a05276d6914c48c68",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/StagingReviewDrawer.tsx": {
+    "mtime": 1785968406.7622607,
+    "ast_hash": "436d9df2380703d0e074b3d57b5a41b5",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/StagingReviewTable.tsx": {
+    "mtime": 1785968391.8102612,
+    "ast_hash": "c18abe274fd25f36542b5750a5717d9d",
+    "semantic_hash": ""
+  },
+  "client/src/hooks/ingestion/useIngestionCapabilities.ts": {
+    "mtime": 1785967921.2342803,
+    "ast_hash": "fb2bebed9d2d95bec3d8e419cc3f2ea2",
+    "semantic_hash": ""
+  },
+  "client/src/hooks/ingestion/useStagingReview.ts": {
+    "mtime": 1785968013.6062765,
+    "ast_hash": "2054d3e1c55498a14a5df4861ca5a0a2",
+    "semantic_hash": ""
+  },
+  "client/src/hooks/ingestion/useSupervisedIngestion.ts": {
+    "mtime": 1785968380.1262617,
+    "ast_hash": "3d885fc2d262f24b600ab0dbd708cde5",
+    "semantic_hash": ""
+  },
+  "client/src/ingestion-ui-guards.test.ts": {
+    "mtime": 1785969128.8542314,
+    "ast_hash": "4d6b93225c15a6594f1d94f512e7c3df",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/capabilities.test.ts": {
+    "mtime": 1785968958.8822384,
+    "ast_hash": "34592dcc9f9760a7c3df7aceaffa053f",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/capabilities.ts": {
+    "mtime": 1785967914.6382806,
+    "ast_hash": "13ae9f8d2a2171409afe0d9654f70e31",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/sha256.test.ts": {
+    "mtime": 1785968996.2222369,
+    "ast_hash": "d2b6240e331346d29d3c9feef9b1cf37",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/sha256.ts": {
+    "mtime": 1785967807.634285,
+    "ast_hash": "3015478abbdbe201a22c5c7473dfbde5",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/staging.test.ts": {
+    "mtime": 1785968986.1702373,
+    "ast_hash": "0177ad1896a7c4b6f53ed489b0a661cd",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/staging.ts": {
+    "mtime": 1785968373.642262,
+    "ast_hash": "d9ff44a03f80bfdf345fabc21f525d74",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/status.test.ts": {
+    "mtime": 1785968973.7622378,
+    "ast_hash": "02e470cb6139fddd8b686c6568bea06c",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/status.ts": {
+    "mtime": 1785967797.3542852,
+    "ast_hash": "20b64b30cdcd4a4c9a14d02103732f6a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/ingestion-capabilities.test.ts": {
+    "mtime": 1785968940.086239,
+    "ast_hash": "c8d670918cf41f316e0ed4c9ba3718de",
     "semantic_hash": ""
   }
 }
