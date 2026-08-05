@@ -57,6 +57,36 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
   automaticamente (cleanup em `finally`).
 - Toolchain de streaming: `busboy` (parser) + `@aws-sdk/lib-storage` (upload multipart ao S3).
 
+## Schema canônico e migration 0288 (reconciliadora)
+
+Os campos canônicos de `import_sessions` — `checksum` `varchar(64)` NULL, `processId` `int` NULL
+(compatível com `processes.id`), `importPurpose` `varchar(50)` NULL — e o índice tenant-aware
+**não exclusivo** `import_sessions_org_checksum_idx (organizationId, checksum)` são criados pela
+migration **formal** `drizzle/0288`, não pelo `ensureSchema`.
+
+**Contexto operacional:** um estado intermediário anterior (commit `91bd893`) criava essas colunas
+via `ensureSchema`/`addColumnIfMissing`. Em um banco que já passou por esse estado (ex.: staging), a
+versão antiga da 0288 (`ALTER ... ADD checksum`) colidia com a coluna existente
+(`ER_DUP_FIELDNAME` / `42S21`), derrubando o boot no `runMigrations()`.
+
+**A 0288 é RECONCILIADORA** (consulta `INFORMATION_SCHEMA` + SQL dinâmico `PREPARE/EXECUTE`), segura
+para os três estados, sem intervenção manual no banco:
+
+| Estado do banco | Comportamento da 0288 |
+|---|---|
+| Novo (sem os campos) | adiciona as 3 colunas + o índice |
+| Transitório (colunas já criadas pelo `ensureSchema` antigo) | **não recria** (sem `ER_DUP_FIELDNAME`); adiciona só o índice que faltava |
+| Parcial / repetido / concorrente | completa o que falta; idempotente |
+| Coluna/índice existente **incompatível** (tipo, tamanho, nulabilidade) | **aborta de forma acionável** (tabela-sentinela `erro_0288_*`) — nunca muta silenciosamente |
+
+Defesa em profundidade: após o `runMigrations()`, o `ensureSchema → assertColumnsPresent` revalida
+**presença + tipo + tamanho + nulabilidade** dessas colunas e falha de forma acionável em
+staging/produção (aviso em dev) — **sem** mutar o schema.
+
+**Rollback lógico** (se necessário): as colunas são aditivas e nuláveis; dropar as 3 colunas + o
+índice é seguro (sem dados obrigatórios) e faz a 0288 reaplicá-las no próximo boot. Nenhuma marcação
+manual do journal é necessária — o drizzle decide pela cadeia (`created_at < folderMillis`).
+
 ## Observações
 
 - Parser **PDF/DOCX** ainda é *stub* (não extrai itens reais) — planejado para etapa posterior.

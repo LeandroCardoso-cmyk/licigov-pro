@@ -126,14 +126,20 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
    * PR B.2.1 — Verificação SEM mutação de colunas esperadas em tabela preexistente.
    *
    * Diferente de addColumnIfMissing, NÃO altera o schema: apenas confere se as colunas
-   * (criadas por migration formal — ver drizzle/0288) já existem. Se a tabela existe mas
-   * falta alguma coluna:
+   * (criadas por migration formal — ver drizzle/0288) já existem E têm forma compatível
+   * (tipo, tamanho e nulabilidade). Defesa em profundidade sobre a própria 0288, que já
+   * reconcilia/valida durante o migrate. Se a tabela existe mas há divergência (coluna
+   * ausente OU tipo/tamanho/nulabilidade incompatível):
    *   - produção/staging → FALHA acionável (não muta silenciosamente o schema de produção);
    *   - desenvolvimento  → aviso acionável (dev pode ter DB legado sem a migration aplicada).
+   *
+   * `dataType` compara com INFORMATION_SCHEMA.COLUMNS.DATA_TYPE (minúsculo: "varchar", "int").
+   * `charLen` (opcional) compara CHARACTER_MAXIMUM_LENGTH — só para tipos textuais. `nullable`
+   * exige IS_NULLABLE = 'YES'/'NO' correspondente.
    */
   async function assertColumnsPresent(
     table: string,
-    columns: string[],
+    expected: Array<{ name: string; dataType: string; charLen?: number; nullable: boolean }>,
     hint: string,
   ): Promise<void> {
     const [tableRows] = await connection.execute<RowDataPacket[]>(
@@ -144,17 +150,38 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     if ((tableRows[0] as ColRow).cnt === 0) return; // tabela ainda não existe: nada a verificar
 
     const [colRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      `SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+       FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
       [table]
     );
-    const present = new Set(colRows.map(r => String((r as RowDataPacket).COLUMN_NAME)));
-    const missing = columns.filter(c => !present.has(c));
-    if (missing.length === 0) return;
+    const byName = new Map<string, RowDataPacket>();
+    for (const r of colRows) byName.set(String((r as RowDataPacket).COLUMN_NAME), r as RowDataPacket);
+
+    const problems: string[] = [];
+    for (const col of expected) {
+      const row = byName.get(col.name);
+      if (!row) {
+        problems.push(`coluna ausente: ${col.name}`);
+        continue;
+      }
+      const dataType = String(row.DATA_TYPE).toLowerCase();
+      const isNullable = String(row.IS_NULLABLE).toUpperCase() === "YES";
+      const charLen = row.CHARACTER_MAXIMUM_LENGTH == null ? undefined : Number(row.CHARACTER_MAXIMUM_LENGTH);
+      if (dataType !== col.dataType) {
+        problems.push(`${col.name}: tipo '${dataType}' ≠ esperado '${col.dataType}'`);
+      } else if (col.charLen !== undefined && charLen !== col.charLen) {
+        problems.push(`${col.name}: tamanho ${charLen ?? "∅"} ≠ esperado ${col.charLen}`);
+      }
+      if (isNullable !== col.nullable) {
+        problems.push(`${col.name}: ${isNullable ? "aceita NULL" : "não aceita NULL"} ≠ esperado (${col.nullable ? "nulável" : "obrigatório"})`);
+      }
+    }
+    if (problems.length === 0) return;
 
     const msg =
-      `Schema desatualizado: \`${table}\` sem coluna(s) [${missing.join(", ")}]. ` +
-      `Aplique as migrations (pnpm db:migrate). ${hint}`;
+      `Schema incompatível em \`${table}\`: ${problems.join("; ")}. ` +
+      `Aplique/reconcilie as migrations (pnpm db:migrate). ${hint}`;
     if (APP_CONFIG.isDevelopment) {
       log("DB", `⚠ ${msg}`);
     } else {
@@ -288,7 +315,11 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   // ensureSchema (ver bootstrap()), então em boot normal as colunas já existem.
   await assertColumnsPresent(
     "import_sessions",
-    ["checksum", "processId", "importPurpose"],
+    [
+      { name: "checksum",      dataType: "varchar", charLen: 64, nullable: true },
+      { name: "processId",     dataType: "int",                  nullable: true },
+      { name: "importPurpose", dataType: "varchar", charLen: 50, nullable: true },
+    ],
     "Campos da ingestão canônica (drizzle/0288).",
   );
 

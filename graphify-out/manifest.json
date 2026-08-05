@@ -3870,13 +3870,13 @@
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
-    "mtime": 1785862334.335574,
-    "ast_hash": "7afe6c484798639dbd37b549b61386ce",
+    "mtime": 1785889987.8826833,
+    "ast_hash": "87524e943afc4088e9d055d7da1eb437",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1785868257.5494184,
-    "ast_hash": "7b575dbe13fdafd3ae321116554fdf88",
+    "mtime": 1785890203.5426822,
+    "ast_hash": "bce3f7aa620a4732fc8126ea2736d758",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1785868363.121425,
-    "ast_hash": "31d37ba77c68062fde74c594215c5719",
+    "mtime": 1785895189.0403495,
+    "ast_hash": "4cc77b4734f276b1478dcbf07eca17ce",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1785862333.702467,
-    "ast_hash": "bc458ad81c960941f0eb48069944c82f",
+    "mtime": 1785907136.0740163,
+    "ast_hash": "1e00b5f02ba5a607b5e7e73c6d18fd53",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -10460,8 +10460,8 @@
     "semantic_hash": ""
   },
   "docs/ops/INGESTION_RUNBOOK.md": {
-    "mtime": 1785869476.5334911,
-    "ast_hash": "ce2cc1571d42dfda3d245592671a594b",
+    "mtime": 1785907177.7140145,
+    "ast_hash": "0dfb86a7532708003dcdfa4420c56a50",
     "semantic_hash": ""
   },
   "tools/graphify/README.md": {
@@ -10475,13 +10475,13 @@
     "semantic_hash": ""
   },
   "drizzle/0288_import_session_canonical_fields.sql": {
-    "mtime": 1785868282.01342,
-    "ast_hash": "c482fd53aaebeff2966c1fd88332f12a",
+    "mtime": 1785895137.6046503,
+    "ast_hash": "ed1bd89e32bc741d19ded51f04443ec2",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-migration.test.ts": {
-    "mtime": 1785869076.7334673,
-    "ast_hash": "16a232831e45a7abb82b9a728e447e1c",
+    "mtime": 1785895241.7163484,
+    "ast_hash": "2a35bf48cdd55a644672e5087c28f119",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-queue-recovery.test.ts": {
@@ -10497,6 +10497,11 @@
   "tools/graphify/run.sh": {
     "mtime": 1785869489.3374918,
     "ast_hash": "088a679d3fe017f6c87b4b5ca43aa858",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/ingestion-0288-reconciliation-mysql-smoke.test.ts": {
+    "mtime": 1785907115.4940171,
+    "ast_hash": "f0847753c406c247716b6030a98d0e19",
     "semantic_hash": ""
   }
 }

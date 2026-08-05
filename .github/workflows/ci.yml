@@ -130,6 +130,12 @@ jobs:
       - name: Smoke — isolamento multi-tenant / RBAC (test:smoke:security)
         run: pnpm test:smoke:security
 
+      # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
+      # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: cria estados sintéticos
+      # em import_sessions e nenhum step depende dessa tabela depois.
+      - name: Smoke — reconciliação da 0288 (campos canônicos de ingestão)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-0288-reconciliation-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)
