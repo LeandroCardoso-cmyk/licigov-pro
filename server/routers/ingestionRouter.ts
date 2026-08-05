@@ -38,12 +38,38 @@ import {
   assertCanonicalIngestionEnabled,
   isAllowedMime,
   buildIngestionStorageKey,
+  CANONICAL_INGESTION_FLAG,
 } from "../services/ingestionUploadService";
+import { isFeatureEnabled } from "../services/featureFlagService";
+import { parserRegistry } from "../parsers/parserRegistry";
 import {
   MAX_FILE_SIZE_BYTES,
   isValidImportTransition,
   type ImportType,
 } from "../domain/importTypes";
+
+/**
+ * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
+ * parserRegistry (fonte única da verdade): um formato é funcional apenas se o parser
+ * resolvido NÃO for stub (parserVersion sem sufixo "-stub"). Assim a UI nunca apresenta
+ * como funcional um formato cujo parser ainda é stub (PDF/DOCX até a B.2.3).
+ */
+const USER_FACING_FORMATS: ReadonlyArray<{
+  key: string; label: string; extensions: string[]; mimeTypes: string[];
+}> = [
+  { key: "csv",  label: "CSV",          extensions: [".csv", ".txt"], mimeTypes: ["text/csv", "application/csv", "text/plain"] },
+  { key: "xlsx", label: "Excel (XLSX)", extensions: [".xlsx"],        mimeTypes: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
+  { key: "xls",  label: "Excel (XLS)",  extensions: [".xls"],         mimeTypes: ["application/vnd.ms-excel"] },
+  { key: "pdf",  label: "PDF",          extensions: [".pdf"],         mimeTypes: ["application/pdf"] },
+  { key: "docx", label: "Word (DOCX)",  extensions: [".docx", ".doc"],mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"] },
+];
+
+/** Resolve, via parserRegistry, se um formato tem parser real (não-stub). */
+function isFormatSupported(mimeType: string, sampleExt: string): boolean {
+  const parser = parserRegistry.resolve(mimeType, `amostra${sampleExt}`);
+  if (!parser) return false;
+  return !parser.capabilities.parserVersion.endsWith("-stub");
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +101,8 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     parserType:    s.parserType,
     parserVersion: s.parserVersion,
     retryCount:    s.retryCount,
+    // correlationId de rastreabilidade (para suporte/observabilidade — não é segredo/PII).
+    correlationId: s.correlationId ?? null,
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
     warnings:      Array.isArray(s.warnings) ? s.warnings : [],
     errors:        Array.isArray(s.errors)
@@ -91,6 +119,33 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
 // ─── Router ─────────────────────────────────────────────────────────────────────
 
 export const ingestionRouter = router({
+  /**
+   * Capacidades da ingestão canônica para o tenant. Query read-only usada pelo frontend
+   * para GATEAR a superfície (sem flag → interface não exposta) e refletir a capacidade REAL:
+   *  - `enabled`: estado da feature flag tenant-aware existente (fail-closed; NÃO cria flag nova);
+   *  - `formats`: cada formato com `supported` derivado do parserRegistry (stub ⇒ não funcional).
+   * NÃO lança quando desabilitada (diferente das demais): reporta `enabled:false` para a UI ocultar.
+   * O backend continua autorizando cada operação individualmente (não confia no frontend).
+   */
+  getCapabilities: tenantProcedure
+    .query(async ({ ctx }) => {
+      const orgId = ctx.organizationId!;
+      const enabled = await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId);
+      const formats = USER_FACING_FORMATS.map(f => ({
+        key:        f.key,
+        label:      f.label,
+        extensions: f.extensions,
+        mimeTypes:  f.mimeTypes,
+        supported:  isFormatSupported(f.mimeTypes[0], f.extensions[0]),
+      }));
+      return {
+        enabled,
+        maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+        formats,
+        supportedFormats: formats.filter(f => f.supported),
+      };
+    }),
+
   /**
    * Cria uma sessão de ingestão (metadados). NÃO recebe bytes: gera a chave de storage
    * server-side onde o upload subsequente gravará o arquivo. Idempotente por idempotencyKey
