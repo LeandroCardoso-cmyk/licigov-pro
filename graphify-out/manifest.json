@@ -1350,13 +1350,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1785968702.7702487,
-    "ast_hash": "7ecf9ace2f483d71fa417fc1045f8a33",
+    "mtime": 1785985311.8767667,
+    "ast_hash": "746231397e45c53e1898ffae04e6dc88",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1785968791.122245,
-    "ast_hash": "cafe52e2a52815e6a5cc6fe61885df5c",
+    "mtime": 1785985318.8967664,
+    "ast_hash": "829bd5235519e84445ff65b6946bb0df",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
@@ -1375,8 +1375,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1785968572.742254,
-    "ast_hash": "1f09c4ba567b8315ff583a56a2e84117",
+    "mtime": 1785985307.4007668,
+    "ast_hash": "4874f627bcb9c115dbcbf02d1ceb594b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1785868291.1052225,
-    "ast_hash": "0520129602c9c757f5d415abd4b37c46",
+    "mtime": 1785984808.7647781,
+    "ast_hash": "4a2caf415115e1dfd8086fbab942b165",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3865,8 +3865,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1785864985.7657053,
-    "ast_hash": "f974d0c3aa86609bcdd895bdafcd80bc",
+    "mtime": 1785984748.9327796,
+    "ast_hash": "2f4c3d05fb7f42f9b8e03c9c6496c319",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4935,13 +4935,13 @@
     "semantic_hash": ""
   },
   "server/parsers/baseParser.ts": {
-    "mtime": 1785862334.818238,
-    "ast_hash": "fd3730e278239c33230ba1245cb955a9",
+    "mtime": 1785984505.1647851,
+    "ast_hash": "a4e78413a48ec3d65028b963fa306278",
     "semantic_hash": ""
   },
   "server/parsers/csvParser.ts": {
-    "mtime": 1785862334.8192055,
-    "ast_hash": "78db122b3f2182151364c2a0fa739bda",
+    "mtime": 1785984514.6327848,
+    "ast_hash": "ac9a264f856c4bed7e0e92b4ec4074b7",
     "semantic_hash": ""
   },
   "server/parsers/parserRegistry.ts": {
@@ -4950,13 +4950,13 @@
     "semantic_hash": ""
   },
   "server/parsers/pdfParser.ts": {
-    "mtime": 1785862334.8192055,
-    "ast_hash": "9c1da6a55dca9db89387d0b04a4d65b0",
+    "mtime": 1785984680.9459982,
+    "ast_hash": "f6cb04772471e7c6cd238fb45b02208e",
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
-    "mtime": 1785862334.8192055,
-    "ast_hash": "c272061314b2f74fb1fde31552469ede",
+    "mtime": 1785984519.1167848,
+    "ast_hash": "0d3b5f65fa51f55a6fc4c9fecc451d37",
     "semantic_hash": ""
   },
   "server/providers/claude/claudeAdapter.ts": {
@@ -5795,8 +5795,8 @@
     "semantic_hash": ""
   },
   "server/services/fileIngestionService.ts": {
-    "mtime": 1785868601.245439,
-    "ast_hash": "7a10495f45c3c2f1067e2c13ace26f19",
+    "mtime": 1785984877.8887765,
+    "ast_hash": "ea03d050a511e74c8df6ffa4db0263be",
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1785907136.0740163,
-    "ast_hash": "1e00b5f02ba5a607b5e7e73c6d18fd53",
+    "mtime": 1785985501.8007624,
+    "ast_hash": "f39554da5781731c3494e7263264de25",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -7050,8 +7050,8 @@
     "semantic_hash": ""
   },
   "docs/imports/README.md": {
-    "mtime": 1785969368.9662218,
-    "ast_hash": "a0851d2ed69ca7189da1c98499c5c245",
+    "mtime": 1785985713.7967575,
+    "ast_hash": "28db9f48f40dd9765bf984adf392a9e1",
     "semantic_hash": ""
   },
   "docs/imports/REVIEW_WORKFLOW.md": {
@@ -10430,8 +10430,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
-    "mtime": 1785869097.5014684,
-    "ast_hash": "c8e5f6ea402b0acfe4d33cdcc67bcc32",
+    "mtime": 1785985451.4967635,
+    "ast_hash": "eaf383fbde96df68e9fce9a01ded81f9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-upload-service.test.ts": {
@@ -10440,8 +10440,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1785968298.146265,
-    "ast_hash": "751431c071965a5cf1dd47d4ec595875",
+    "mtime": 1785985095.2807717,
+    "ast_hash": "c00713de33b32a09f30856c4953d6560",
     "semantic_hash": ""
   },
   "server/routes/ingestionUploadRoute.ts": {
@@ -10480,8 +10480,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-migration.test.ts": {
-    "mtime": 1785895241.7163484,
-    "ast_hash": "2a35bf48cdd55a644672e5087c28f119",
+    "mtime": 1785985372.6647654,
+    "ast_hash": "d97a36d96a5b4f54849712ff98f4bad8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-queue-recovery.test.ts": {
@@ -10505,8 +10505,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/DocumentIngestionLauncher.tsx": {
-    "mtime": 1785968651.2302508,
-    "ast_hash": "12c32f5f47fb2b05bcedd989a616847f",
+    "mtime": 1785985290.3967671,
+    "ast_hash": "56a44b964ba54d01a62c2a0d27f8bcf2",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/FileDropzone.tsx": {
@@ -10515,8 +10515,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/IngestionAuditSummary.tsx": {
-    "mtime": 1785968133.8342717,
-    "ast_hash": "e35e64c412b111bce5433cf137baeb94",
+    "mtime": 1785985302.556767,
+    "ast_hash": "f599e93e36ff599ffdba31b37ca5428b",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/IngestionErrorState.tsx": {
@@ -10555,13 +10555,13 @@
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useStagingReview.ts": {
-    "mtime": 1785968013.6062765,
-    "ast_hash": "2054d3e1c55498a14a5df4861ca5a0a2",
+    "mtime": 1785985241.6447682,
+    "ast_hash": "84f54af1ce321717bcaeb75380b7bbcc",
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useSupervisedIngestion.ts": {
-    "mtime": 1785968380.1262617,
-    "ast_hash": "3d885fc2d262f24b600ab0dbd708cde5",
+    "mtime": 1785985219.3927689,
+    "ast_hash": "a87e9591417e4a1cb167050362dab6c2",
     "semantic_hash": ""
   },
   "client/src/ingestion-ui-guards.test.ts": {
@@ -10612,6 +10612,21 @@
   "server/__tests__/integration/ingestion-capabilities.test.ts": {
     "mtime": 1785968940.086239,
     "ast_hash": "c8d670918cf41f316e0ed4c9ba3718de",
+    "semantic_hash": ""
+  },
+  "drizzle/0289_import_session_procurement_link.sql": {
+    "mtime": 1785984803.3807783,
+    "ast_hash": "e6e8afd3c3bbd21d834b38cab4cadac6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/ingestion-process-binding-mysql-smoke.test.ts": {
+    "mtime": 1785985490.4007626,
+    "ast_hash": "433a6dc9699754d581f16939663a5b2f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/parser-capabilities.test.ts": {
+    "mtime": 1785984616.2407825,
+    "ast_hash": "de359140c37eaf981bb4d3ca18c10073",
     "semantic_hash": ""
   }
 }
