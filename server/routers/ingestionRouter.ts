@@ -53,9 +53,9 @@ import {
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
- * parserRegistry (fonte única da verdade): um formato é funcional apenas se o parser
- * resolvido NÃO for stub (parserVersion sem sufixo "-stub"). Assim a UI nunca apresenta
- * como funcional um formato cujo parser ainda é stub (PDF/DOCX até a B.2.3).
+ * parserRegistry (fonte única da verdade): um formato é funcional apenas quando o parser
+ * resolvido declara `capabilityStatus: "supported"`. Na B.2.3 CSV/XLS/XLSX/PDF/DOCX são
+ * suportados (extração real); OCR de PDF escaneado permanece não suportado (limitação declarada).
  */
 const USER_FACING_FORMATS: ReadonlyArray<{
   key: string; label: string; extensions: string[]; mimeTypes: string[];
