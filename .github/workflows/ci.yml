@@ -141,6 +141,11 @@ jobs:
       - name: Smoke — correção humana auditável (B.2.2)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-correction-mysql-smoke.test.ts
 
+      # PR B.2.4 — promoção transacional ao domínio (idempotência, lineage, rollback, isolamento). Também
+      # exige import_sessions/import_staging_items no formato canônico completo → antes da reconciliação da 0288.
+      - name: Smoke — promoção transacional ao domínio (B.2.4)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-promotion-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.
