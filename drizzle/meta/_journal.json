@@ -1949,6 +1949,13 @@
       "when": 1784419200005,
       "tag": "0290_import_item_corrections",
       "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "5",
+      "when": 1784419200006,
+      "tag": "0291_import_session_promotion",
+      "breakpoints": true
     }
   ]
 }
