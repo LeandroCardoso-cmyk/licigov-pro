@@ -36,6 +36,7 @@ vi.mock("../../services/fileIngestionService", () => ({
   createImportSession: vi.fn(),
   getImportSession: vi.fn(),
   findActiveSessionByChecksum: vi.fn().mockResolvedValue(null),
+  findResumableSessionForProcess: vi.fn().mockResolvedValue(null),
   updateSessionStatus: vi.fn().mockResolvedValue(undefined),
   attachStoredFile: vi.fn().mockResolvedValue(undefined),
 }));
@@ -86,6 +87,7 @@ const validCreateInput = {
   sourceSize: 10,
   checksum: "a".repeat(64),
   idempotencyKey: "idem-key-123456",
+  procurementProcessId: "PROC-CANON-01", // B.2.2 — vínculo canônico obrigatório
 };
 
 beforeEach(() => {
@@ -160,6 +162,60 @@ describe("createSession", () => {
       expect.objectContaining({ processId: 5 }),
       expect.anything(),
     );
+  });
+});
+
+describe("vínculo com processo canônico (B.2.2)", () => {
+  it("createSession propaga procurementProcessId ao serviço", async () => {
+    await caller().createSession(validCreateInput);
+    expect(ingestion.createImportSession).toHaveBeenCalledWith(
+      expect.objectContaining({ procurementProcessId: "PROC-CANON-01" }),
+      expect.anything(),
+    );
+  });
+
+  it("createSession com processo canônico de outro tenant / forjado → NOT_FOUND", async () => {
+    vi.mocked(ingestion.createImportSession).mockRejectedValue(
+      new TRPCError({ code: "NOT_FOUND", message: "Processo canônico não encontrado nesta organização." }),
+    );
+    await expect(caller().createSession({ ...validCreateInput, procurementProcessId: "FORJADO" }))
+      .rejects.toThrowError(/processo canônico não encontrado/i);
+  });
+
+  it("sessionId válido usado no PROCESSO ERRADO → NOT_FOUND (status/staging/approve)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    await expect(caller().getSessionStatus({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+    await expect(caller().listStagingItems({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "awaiting_review", procurementProcessId: "P1" }) as any);
+    await expect(caller().approveSession({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("reviewItem/reviewBulk validam o processo da sessão", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    await expect(caller().reviewItem({ sessionId: 100, procurementProcessId: "P2", itemId: 1, action: "approved" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+    await expect(caller().reviewBulk({ sessionId: 100, procurementProcessId: "P2", itemIds: [1], action: "approved" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("mesmo processo → operações liberadas (status expõe o vínculo canônico)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    const r = await caller().getSessionStatus({ sessionId: 100, procurementProcessId: "P1" });
+    expect(r.session.procurementProcessId).toBe("P1");
+  });
+
+  it("getActiveSession retorna a sessão resumível do processo, ou null", async () => {
+    vi.mocked(ingestion.findResumableSessionForProcess).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    const r = await caller().getActiveSession({ procurementProcessId: "P1" });
+    expect(r.session?.id).toBe(100);
+
+    vi.mocked(ingestion.findResumableSessionForProcess).mockResolvedValue(null);
+    const r2 = await caller().getActiveSession({ procurementProcessId: "P1" });
+    expect(r2.session).toBeNull();
   });
 });
 

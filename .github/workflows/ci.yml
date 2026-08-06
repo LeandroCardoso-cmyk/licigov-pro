@@ -136,6 +136,10 @@ jobs:
       - name: Smoke — reconciliação da 0288 (campos canônicos de ingestão)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-0288-reconciliation-mysql-smoke.test.ts
 
+      # PR B.2.2 — vínculo da sessão ao processo canônico (ownership, retomada e dedup por processo).
+      - name: Smoke — ingestão × processo canônico (B.2.2)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-process-binding-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)
