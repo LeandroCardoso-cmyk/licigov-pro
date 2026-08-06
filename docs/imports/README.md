@@ -345,34 +345,38 @@ retomada (`getActiveSession`) são **escopados por processo**; o reload retoma s
 processo. Capacidade explícita: `capabilityStatus` (supported/stub/disabled) declarado por cada parser
 é a fonte da verdade do gating (não a convenção de versão).
 
-### Correção humana de itens — MODELO PROPOSTO (aguardando aprovação de migration)
-O schema atual **não comporta** correção auditável sem migration: `import_staging_items` guarda só os
-valores originais (`raw*`) + `reviewNote`, e `import_review_transitions` (que tem estado `corrected`)
-está **desconectada** e com id incompatível (`varchar(26)` × `int`). Conforme a regra de parada,
-apresenta-se o modelo para aprovação **antes** de criar a 2ª migration:
+### Correção humana de itens — IMPLEMENTADA (migration 0290)
+Correção auditável de item de staging, com **original imutável + projeção atual + histórico**:
 
-- **Opção A (recomendada):** migration aditiva com (a) colunas de sobreposição em
-  `import_staging_items` — `correctedFields json NULL`, `correctedBy int NULL`, `correctedAt timestamp
-  NULL`, `revision int NOT NULL DEFAULT 0` (concorrência otimista); os `raw*` permanecem **imutáveis**
-  (provenance preservada); e (b) tabela de histórico `import_item_corrections` (id, stagingItemId int,
-  importSessionId, procurementProcessId, organizationId, actorUserId, before json, after json,
-  changedFields json, justification text, correlationId, idempotencyKey, createdAt) — histórico
-  consultável, nunca só log textual.
-- **Opção B:** reabilitar/realinhar `import_review_transitions` (mudar `stagingItemId` para `int` e
-  wire de persistência) — maior esforço, mistura transição de estado com correção de valores.
-- **Contrato:** `ingestion.correctItem` (sessionId, procurementProcessId, itemId, fields permitidos por
-  importType, justificativa, revision esperada p/ optimistic-lock, idempotencyKey) → valida campos
-  permitidos, rejeita desconhecidos, preserva original, grava histórico before/after, e permite
-  aceitar/rejeitar após a correção; `approveSession` continua bloqueando itens sem resolução.
-- **Impacto:** 1 migration aditiva (colunas nullable + 1 tabela nova), tenant-aware, sem backfill,
-  compatível com banco novo/existente, coberta por smoke MySQL. **NÃO** pertence à B.2.3 (parsers).
-
-> Esta funcionalidade **não foi implementada** nesta rodada: depende da aprovação da migration acima.
+- **Schema (migration 0290):** `import_staging_items` ganha `correctionRevision INT NOT NULL DEFAULT
+  0`, `correctedPayload JSON NULL` (overlay validado), `correctedAt`, `correctedByUserId`. Os `raw*`
+  permanecem **imutáveis** (provenance preservada). Tabela de histórico **imutável e consultável**
+  `import_item_corrections` (org, procurementProcessId, importSessionId, stagingItemId, fromRevision,
+  toRevision, beforePayload, afterPayload, changedFields, justification, actorUserId, idempotencyKey,
+  correlationId, createdAt) com unicidade `(org, item, toRevision)` e `(org, idempotencyKey)`.
+- **Conteúdo efetivo** = `raw*` + `correctedPayload` (overlay vence). Nunca sobrescreve o raw.
+- **Contrato `ingestion.correctItem`** (sessionId, procurementProcessId, itemId, expectedRevision,
+  corrections, justification, idempotencyKey): valida tenant + processo canônico + sessão + item;
+  valida campos permitidos por importType (allowlist explícita; rejeita desconhecidos e raw);
+  exige justificativa; **concorrência otimista** (UPDATE só avança se `correctionRevision =
+  expectedRevision`; senão `CONFLICT` acionável, sem histórico parcial); **idempotência** por
+  `idempotencyKey`; grava histórico e projeção na **mesma transação**; incrementa a revisão uma vez.
+- **Optimistic locking / idempotência:** conflito real (outro revisor) → `CONFLICT`; replay da mesma
+  chave → no-op de sucesso (idempotente).
+- **Allowlist price_research:** `description`, `quantity`, `unit`, `unitPrice`, `totalPrice`, com
+  tipo/limite/normalização (decimais pt-BR/en-US). importTypes sem contrato → capacidade indisponível.
+- **Semântica de revisão:** corrigir **não aprova** o item — ele segue pendente até aceitar/rejeitar/
+  pular; `approveSession` continua exigindo zero pendentes. **Nenhuma promoção ao domínio.**
+- **Fluxo visual (StagingReviewDrawer):** Original × Atual por campo, justificativa obrigatória,
+  revisão atual, selo "Conteúdo corrigido", autor/hora; conflito exibe "Este item foi alterado por
+  outro revisor. Atualize os dados antes de continuar." com refetch e preservação do rascunho local.
+- **Observabilidade:** eventos auditáveis (correção criada/replay) só com identificadores seguros —
+  nunca overlay/conteúdo, storageKey, URL, credenciais.
 
 ### Limitações remanescentes (registradas)
-- PDF/DOCX permanecem **stub** — importação de DFD/ETP indisponível até a B.2.3.
-- **Correção de valores** de item: modelo proposto acima, **aguardando aprovação** da migration.
-- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — não fabricado; para B.2.4.
+- PDF/DOCX permanecem **stub** — importação de DFD/ETP indisponível até a **B.2.3** (parsers reais).
+- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — para B.2.4.
+- Promoção transacional ao domínio oficial — **B.2.4**.
 
 ### Troubleshooting
 | Sintoma | Causa provável | Ação |
@@ -386,8 +390,10 @@ apresenta-se o modelo para aprovação **antes** de criar a 2ª migration:
 ### Evidência Graphify
 Grafo canônico atualizado **após** código + testes + build verdes (regra Graphify 6). Superfícies
 confirmadas no código: `ProcessoLicitatorio` (abas `dfd`/`price`/`etp`) e os workspaces em
-`client/src/components/procurement/`. Divergências registradas acima (PDF/DOCX stub; ausência de
-contrato de correção/ETP-manual; `processId` int × id canônico string).
+`client/src/components/procurement/`. Estado das divergências: **resolvido** — vínculo canônico
+(migration 0289) e correção humana auditável (migration 0290) implementados; capacidade de parser
+explícita. Permanecem para etapas futuras: PDF/DOCX stub (B.2.3) e persistência/criação manual de
+ETP + promoção ao domínio (B.2.4).
 
 ---
 
