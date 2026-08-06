@@ -35,6 +35,7 @@ import {
   type ReviewAction,
 } from "../services/importStagingService";
 import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
+import { promoteApprovedSessionToDomain } from "../services/importPromotionService";
 import { enqueueImport } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
@@ -610,5 +611,36 @@ export const ingestionRouter = router({
       });
 
       return { sessionId: session.id, status: "approved" as const, idempotent: false, summary };
+    }),
+
+  /**
+   * PR B.2.4 — Promoção TRANSACIONAL e supervisionada da sessão APROVADA ao domínio canônico.
+   * Precondição = pós-condição de approveSession (status 'approved', zero pendentes). Só `price_research`
+   * é promovível hoje (DFD/ETP são documentos, não contêineres de linhas — capacidade indisponível).
+   * Idempotente (uma promoção por sessão) e escopada por tenant + processo. Não faz merge nem decide juridicamente.
+   */
+  promoteSession: tenantProcedure
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      idempotencyKey:       z.string().min(8).max(64),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+
+      return await promoteApprovedSessionToDomain({
+        sessionId:            input.sessionId,
+        organizationId:       orgId,
+        procurementProcessId: input.procurementProcessId,
+        actorUserId:          ctx.user!.id,
+        actorName:            ctx.user!.name ?? undefined,
+        idempotencyKey:       input.idempotencyKey,
+        correlationId:        ctx.correlationId ?? "",
+      });
     }),
 });
