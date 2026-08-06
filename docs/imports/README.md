@@ -334,14 +334,45 @@ Dropzone com `role="button"`, `tabIndex`, `aria-label`/`aria-describedby`, ativa
 foco visível (`focus-visible:ring`); estados anunciados via `role="status"`/`role="alert"`; dark mode
 via tokens semânticos + variantes `dark:`.
 
-### Limitações remanescentes (registradas para B.2.3/B.2.4)
+### Vínculo com o processo canônico (B.2.2 — correções)
+As sessões de ingestão são vinculadas ao **processo canônico** (`procurement_processes.id`, `varchar(20)`)
+via `import_sessions.procurementProcessId` (migration aditiva **0289**, índice tenant-aware
+`(organizationId, procurementProcessId)`). Semanticamente **separado** do `processId` legado (int).
+Garantias: `createSession` valida que o processo pertence à organização; toda operação
+(`status`/`staging`/`reviewItem`/`reviewBulk`/`approveSession`) valida **tenant e processo** — uma
+sessão de um processo **não** é operável em outro processo do mesmo tenant; dedup por checksum e
+retomada (`getActiveSession`) são **escopados por processo**; o reload retoma somente a sessão daquele
+processo. Capacidade explícita: `capabilityStatus` (supported/stub/disabled) declarado por cada parser
+é a fonte da verdade do gating (não a convenção de versão).
+
+### Correção humana de itens — MODELO PROPOSTO (aguardando aprovação de migration)
+O schema atual **não comporta** correção auditável sem migration: `import_staging_items` guarda só os
+valores originais (`raw*`) + `reviewNote`, e `import_review_transitions` (que tem estado `corrected`)
+está **desconectada** e com id incompatível (`varchar(26)` × `int`). Conforme a regra de parada,
+apresenta-se o modelo para aprovação **antes** de criar a 2ª migration:
+
+- **Opção A (recomendada):** migration aditiva com (a) colunas de sobreposição em
+  `import_staging_items` — `correctedFields json NULL`, `correctedBy int NULL`, `correctedAt timestamp
+  NULL`, `revision int NOT NULL DEFAULT 0` (concorrência otimista); os `raw*` permanecem **imutáveis**
+  (provenance preservada); e (b) tabela de histórico `import_item_corrections` (id, stagingItemId int,
+  importSessionId, procurementProcessId, organizationId, actorUserId, before json, after json,
+  changedFields json, justification text, correlationId, idempotencyKey, createdAt) — histórico
+  consultável, nunca só log textual.
+- **Opção B:** reabilitar/realinhar `import_review_transitions` (mudar `stagingItemId` para `int` e
+  wire de persistência) — maior esforço, mistura transição de estado com correção de valores.
+- **Contrato:** `ingestion.correctItem` (sessionId, procurementProcessId, itemId, fields permitidos por
+  importType, justificativa, revision esperada p/ optimistic-lock, idempotencyKey) → valida campos
+  permitidos, rejeita desconhecidos, preserva original, grava histórico before/after, e permite
+  aceitar/rejeitar após a correção; `approveSession` continua bloqueando itens sem resolução.
+- **Impacto:** 1 migration aditiva (colunas nullable + 1 tabela nova), tenant-aware, sem backfill,
+  compatível com banco novo/existente, coberta por smoke MySQL. **NÃO** pertence à B.2.3 (parsers).
+
+> Esta funcionalidade **não foi implementada** nesta rodada: depende da aprovação da migration acima.
+
+### Limitações remanescentes (registradas)
 - PDF/DOCX permanecem **stub** — importação de DFD/ETP indisponível até a B.2.3.
-- **Correção de valores** de item na revisão não tem contrato na B.2.1 (só aceitar/rejeitar/pular +
-  nota) — diferida para a B.2.3.
-- `ingestion.createSession.processId` é FK **int** (→ `processes.id`), incompatível com o id **string**
-  do processo canônico; as sessões da B.2.2 são escopadas por organização, sem vínculo numérico de
-  processo — lineage/promoção ao processo canônico ficam para a **B.2.4**.
-- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — não fabricado.
+- **Correção de valores** de item: modelo proposto acima, **aguardando aprovação** da migration.
+- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — não fabricado; para B.2.4.
 
 ### Troubleshooting
 | Sintoma | Causa provável | Ação |
