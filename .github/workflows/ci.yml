@@ -140,6 +140,10 @@ jobs:
       - name: Smoke — ingestão × processo canônico (B.2.2)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-process-binding-mysql-smoke.test.ts
 
+      # PR B.2.2 — correção humana auditável (imutabilidade do raw, histórico, optimistic lock, idempotência).
+      - name: Smoke — correção humana auditável (B.2.2)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-correction-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

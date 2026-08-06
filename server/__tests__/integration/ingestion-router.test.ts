@@ -47,6 +47,7 @@ vi.mock("../../services/importStagingService", () => ({
   reviewStagingItem: vi.fn().mockResolvedValue(undefined),
   bulkReviewStagingItems: vi.fn().mockResolvedValue(0),
   getStagingSummary: vi.fn().mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 }),
+  correctStagingItem: vi.fn().mockResolvedValue({ item: {}, revision: 1, idempotent: false }),
 }));
 
 vi.mock("../../services/importQueueService", () => ({
@@ -216,6 +217,41 @@ describe("vínculo com processo canônico (B.2.2)", () => {
     vi.mocked(ingestion.findResumableSessionForProcess).mockResolvedValue(null);
     const r2 = await caller().getActiveSession({ procurementProcessId: "P1" });
     expect(r2.session).toBeNull();
+  });
+});
+
+describe("correctItem — correção humana (B.2.2)", () => {
+  const correctInput = {
+    sessionId: 100, procurementProcessId: "P1", itemId: 7, expectedRevision: 0,
+    corrections: { unitPrice: "12,50" }, justification: "valor digitado errado", idempotencyKey: "corr-key-123456",
+  };
+
+  it("valida o processo canônico da sessão (processo errado → NOT_FOUND)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "price_research", procurementProcessId: "P1" }) as any);
+    await expect(caller().correctItem({ ...correctInput, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("importType não corrigível → FORBIDDEN (sem patch genérico)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "generic", procurementProcessId: "P1" }) as any);
+    await expect(caller().correctItem(correctInput)).rejects.toThrowError(/não disponível/i);
+  });
+
+  it("delega ao serviço e audita (idempotência refletida)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "price_research", procurementProcessId: "P1" }) as any);
+    vi.mocked(staging.correctStagingItem).mockResolvedValue({ item: {} as any, revision: 1, idempotent: false });
+    const r = await caller().correctItem(correctInput);
+    expect(r.revision).toBe(1);
+    expect(r.idempotent).toBe(false);
+    expect(staging.correctStagingItem).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: 7, importType: "price_research", expectedRevision: 0, idempotencyKey: "corr-key-123456",
+    }));
+    expect(audit.logActivity).toHaveBeenCalled();
+  });
+
+  it("flag desligada → FORBIDDEN", async () => {
+    vi.mocked(flags.isFeatureEnabled).mockResolvedValue(false);
+    await expect(caller().correctItem(correctInput)).rejects.toThrowError(/não habilitada/i);
   });
 });
 
