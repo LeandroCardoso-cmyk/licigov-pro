@@ -157,13 +157,13 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
       }
 
       try {
-        await enqueue.mutateAsync({ sessionId: created.sessionId });
+        await enqueue.mutateAsync({ sessionId: created.sessionId, procurementProcessId: opts.procurementProcessId });
       } catch (err) {
         // Sessão duplicada que ainda não recebeu bytes: envia agora e re-enfileira.
         if (isPreconditionFailed(err) && created.duplicate) {
           setClientPhase("uploading");
           await uploadBytes(created.uploadPath, blob, fileName);
-          await enqueue.mutateAsync({ sessionId: created.sessionId });
+          await enqueue.mutateAsync({ sessionId: created.sessionId, procurementProcessId: opts.procurementProcessId });
         } else {
           throw err;
         }
@@ -185,7 +185,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     submittingRef.current = true;
     setClientError(null);
     try {
-      await enqueue.mutateAsync({ sessionId });
+      await enqueue.mutateAsync({ sessionId, procurementProcessId: opts.procurementProcessId });
       void statusQuery.refetch();
     } catch (err) {
       setClientError(err instanceof Error ? err.message : "Falha ao reprocessar.");

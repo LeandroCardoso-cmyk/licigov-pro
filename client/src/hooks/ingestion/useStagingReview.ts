@@ -30,6 +30,15 @@ export function useStagingReview(sessionId: number | null, enabled: boolean, pro
   const reviewItem = trpc.ingestion.reviewItem.useMutation({ onSuccess: invalidate });
   const reviewBulk = trpc.ingestion.reviewBulk.useMutation({ onSuccess: invalidate });
   const approveSession = trpc.ingestion.approveSession.useMutation({ onSuccess: invalidate });
+  const correctItemMut = trpc.ingestion.correctItem.useMutation({ onSuccess: invalidate });
+
+  const doCorrectItem = useCallback(
+    (itemId: number, expectedRevision: number, corrections: Record<string, string | null>, justification: string, idempotencyKey: string) => {
+      if (sessionId == null || correctItemMut.isPending) return;
+      return correctItemMut.mutateAsync({ sessionId, procurementProcessId, itemId, expectedRevision, corrections, justification, idempotencyKey });
+    },
+    [sessionId, procurementProcessId, correctItemMut],
+  );
 
   const doReviewItem = useCallback(
     (itemId: number, action: ReviewAction, note?: string) => {
@@ -66,8 +75,11 @@ export function useStagingReview(sessionId: number | null, enabled: boolean, pro
     reviewItem: doReviewItem,
     reviewBulk: doReviewBulk,
     approveSession: doApprove,
+    correctItem: doCorrectItem,
     isReviewing: reviewItem.isPending || reviewBulk.isPending,
     isApproving: approveSession.isPending,
+    isCorrecting: correctItemMut.isPending,
     approveError: approveSession.error ?? null,
+    correctError: correctItemMut.error ?? null,
   };
 }

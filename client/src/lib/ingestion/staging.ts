@@ -23,6 +23,11 @@ export interface StagingItem {
   reviewedBy: number | null;
   reviewedAt: string | Date | null;
   reviewNote: string | null;
+  // PR B.2.2 — correção humana (overlay sobre os raw* imutáveis).
+  correctionRevision?: number;
+  correctedPayload?: unknown;
+  correctedAt?: string | Date | null;
+  correctedByUserId?: number | null;
 }
 
 export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {

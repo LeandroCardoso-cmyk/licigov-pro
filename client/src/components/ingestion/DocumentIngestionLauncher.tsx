@@ -242,8 +242,12 @@ export function DocumentIngestionLauncher({
           item={detailItem}
           open={drawerOpen}
           disabled={review.isReviewing || ingestion.phase === "approved"}
+          importType={importType}
+          isCorrecting={review.isCorrecting}
+          correctError={review.correctError}
           onOpenChange={setDrawerOpen}
           onReview={(id, action, note) => review.reviewItem(id, action, note)}
+          onCorrect={(id, rev, patch, justification, key) => review.correctItem(id, rev, patch, justification, key)}
         />
       </CardContent>
     </Card>
