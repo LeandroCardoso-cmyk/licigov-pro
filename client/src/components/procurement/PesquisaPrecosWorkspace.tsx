@@ -127,6 +127,7 @@ export default function PesquisaPrecosWorkspace({ processId = "" }: PesquisaPrec
       ) : enabled ? (
         <DocumentIngestionLauncher
           importType="price_research"
+          procurementProcessId={processId}
           importPurpose="price_research"
           title="Pesquisa de preços — ingestão supervisionada"
           description="Envie um arquivo (CSV/Excel) ou cole o conteúdo tabular. Você revisará as linhas extraídas antes de aprovar."

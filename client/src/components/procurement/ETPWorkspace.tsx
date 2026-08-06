@@ -79,6 +79,7 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
         <div className="mt-5">
           <DocumentIngestionLauncher
             importType="generic"
+            procurementProcessId={processId}
             importPurpose="etp_import"
             title="Importar ETP existente"
             description="A importação assistida de ETP passará por revisão humana antes de qualquer uso."

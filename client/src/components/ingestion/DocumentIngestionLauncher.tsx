@@ -33,7 +33,8 @@ const REVIEW_PHASES: IngestionPhase[] = ["awaiting_review", "partially_reviewed"
 
 interface DocumentIngestionLauncherProps {
   importType: IngestionImportType;
-  processId?: number;
+  /** Processo CANÔNICO (id string) do workspace atual. A ingestão só é exposta com processo válido. */
+  procurementProcessId?: string;
   importPurpose?: string;
   title?: string;
   description?: string;
@@ -52,7 +53,7 @@ interface DocumentIngestionLauncherProps {
 
 export function DocumentIngestionLauncher({
   importType,
-  processId,
+  procurementProcessId,
   importPurpose,
   title = "Importar por arquivo",
   description,
@@ -70,9 +71,14 @@ export function DocumentIngestionLauncher({
     const formats = rawCaps.formats.filter((f) => relevantFormatKeys.includes(f.key));
     return { ...rawCaps, formats, supportedFormats: formats.filter((f) => f.supported) };
   }, [rawCaps, relevantFormatKeys]);
-  const ingestion = useSupervisedIngestion({ importType, processId, importPurpose, onApproachReview: () => {} });
+  const ingestion = useSupervisedIngestion({
+    importType,
+    procurementProcessId: procurementProcessId ?? "",
+    importPurpose,
+    onApproachReview: () => {},
+  });
   const inReview = REVIEW_PHASES.includes(ingestion.phase);
-  const review = useStagingReview(ingestion.sessionId, inReview);
+  const review = useStagingReview(ingestion.sessionId, inReview, procurementProcessId ?? "");
 
   const [pasteText, setPasteText] = useState("");
   const [detailItem, setDetailItem] = useState<StagingItem | null>(null);
@@ -89,6 +95,17 @@ export function DocumentIngestionLauncher({
     return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" /> Carregando…</div>;
   }
   if (!enabled || !capabilities) return null;
+
+  // Sem processo canônico selecionado, a ingestão não é exposta (vínculo é obrigatório).
+  if (!procurementProcessId) {
+    return (
+      <Alert>
+        <Info className="size-4" aria-hidden="true" />
+        <AlertTitle>Selecione um processo</AlertTitle>
+        <AlertDescription>A importação por arquivo fica disponível dentro de um processo licitatório.</AlertDescription>
+      </Alert>
+    );
+  }
 
   // Capability-aware: habilitado, porém sem formato real disponível (ex.: DFD/ETP dependem de
   // PDF/DOCX, ainda stub) → não expõe funcionalidade incompleta; informa objetivamente.
@@ -189,7 +206,7 @@ export function DocumentIngestionLauncher({
         {/* Revisão humana */}
         {inReview && (
           <div className="space-y-3">
-            <IngestionAuditSummary summary={summary} sessionId={ingestion.sessionId} processId={processId} />
+            <IngestionAuditSummary summary={summary} sessionId={ingestion.sessionId} procurementProcessId={procurementProcessId} />
             <StagingReviewTable
               items={review.items as unknown as StagingItem[]}
               disabled={review.isReviewing || ingestion.phase === "approved"}

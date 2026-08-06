@@ -9,7 +9,7 @@ import { eq, and, ne, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createHash } from "crypto";
 import { getDb } from "../db/connection";
-import { importSessions, processes } from "../../drizzle/schema";
+import { importSessions, processes, procurementProcessesTable } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
 import { logActivity } from "./activityLogService";
 import {
@@ -63,8 +63,10 @@ export interface CreateImportSessionParams {
   sourceFileId:   string;
   importType:     ImportType;
   correlationId?: string;
-  // PR B.2.1 — vínculo canônico + dedup
+  // PR B.2.1 — vínculo legado (int → tabela `processes`) + dedup
   processId?:     number | null;
+  // PR B.2.2 — vínculo com o PROCESSO CANÔNICO (varchar(20) → procurement_processes.id)
+  procurementProcessId?: string | null;
   importPurpose?: string | null;
   checksum?:      string | null;
 }
@@ -79,13 +81,27 @@ export async function createImportSession(
   const orgId = ctx.organizationId;
   if (!orgId) throw new TRPCError({ code: "BAD_REQUEST", message: "organizationId obrigatório." });
 
-  // Autorização por processo: quando informado, o processo DEVE pertencer ao tenant.
+  // Autorização por processo LEGADO (int): quando informado, DEVE pertencer ao tenant.
   if (params.processId != null) {
     const proc = await db.select({ id: processes.id }).from(processes)
       .where(and(eq(processes.id, params.processId), eq(processes.organizationId, orgId)))
       .limit(1);
     if (proc.length === 0) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
+    }
+  }
+
+  // Autorização por processo CANÔNICO (varchar): quando informado, DEVE pertencer ao tenant.
+  // Ownership em nível de aplicação (procurementProcessId + organizationId) — sem confiar no cliente.
+  if (params.procurementProcessId != null) {
+    const proc = await db.select({ id: procurementProcessesTable.id }).from(procurementProcessesTable)
+      .where(and(
+        eq(procurementProcessesTable.id, params.procurementProcessId),
+        eq(procurementProcessesTable.organizationId, orgId),
+      ))
+      .limit(1);
+    if (proc.length === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Processo canônico não encontrado nesta organização." });
     }
   }
 
@@ -106,6 +122,7 @@ export async function createImportSession(
     retryCount:      0,
     correlationId:   params.correlationId ?? ctx.correlationId ?? null,
     processId:       params.processId     ?? null,
+    procurementProcessId: params.procurementProcessId ?? null,
     importPurpose:   params.importPurpose ?? null,
     checksum:        params.checksum      ?? null,
   }).$returningId();
@@ -170,13 +187,15 @@ export async function listImportSessions(
 }
 
 /**
- * PR B.2.1 — Dedup por checksum: retorna a sessão NÃO-terminal mais recente do tenant
- * com o mesmo checksum. Sessões `rejected`/`archived` são ignoradas (re-import legítimo).
- * Usado pelo createSession para evitar duplicação de ingestão do mesmo arquivo.
+ * PR B.2.1/B.2.2 — Dedup por checksum, ESCOPADO ao processo canônico: retorna a sessão NÃO-terminal
+ * mais recente do tenant com o mesmo checksum E o mesmo `procurementProcessId`. Assim uma sessão de
+ * um processo NUNCA é reutilizada por outro processo do mesmo tenant. Sessões `rejected`/`archived`
+ * são ignoradas (re-import legítimo).
  */
 export async function findActiveSessionByChecksum(
-  organizationId: number,
-  checksum:       string,
+  organizationId:       number,
+  checksum:             string,
+  procurementProcessId: string | null = null,
 ): Promise<typeof importSessions.$inferSelect | null> {
   const db = await getDb();
   if (!db) return null;
@@ -187,10 +206,39 @@ export async function findActiveSessionByChecksum(
       eq(importSessions.checksum,       checksum),
     ));
 
-  const active = rows.filter(r => r.status !== "rejected" && r.status !== "archived");
+  const active = rows.filter(r =>
+    r.status !== "rejected" && r.status !== "archived" &&
+    // Dedup só dentro do MESMO processo canônico (null == null para o fluxo sem processo).
+    (r.procurementProcessId ?? null) === (procurementProcessId ?? null),
+  );
   // Mais recente primeiro (id crescente = criação crescente).
   active.sort((a, b) => b.id - a.id);
   return active[0] ?? null;
+}
+
+/**
+ * PR B.2.2 — Retomada por processo: a sessão RESUMÍVEL mais recente (não-terminal) daquele
+ * processo canônico + tenant. Usada no reload para retomar somente a sessão daquele processo
+ * (nunca de outro). Terminais (`approved`/`archived`/`rejected`) não são retomadas.
+ */
+export async function findResumableSessionForProcess(
+  organizationId:       number,
+  procurementProcessId: string,
+): Promise<typeof importSessions.$inferSelect | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db.select().from(importSessions)
+    .where(and(
+      eq(importSessions.organizationId,       organizationId),
+      eq(importSessions.procurementProcessId, procurementProcessId),
+    ));
+
+  const resumable = rows.filter(r =>
+    r.status !== "approved" && r.status !== "archived" && r.status !== "rejected",
+  );
+  resumable.sort((a, b) => b.id - a.id);
+  return resumable[0] ?? null;
 }
 
 /**

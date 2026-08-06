@@ -11,14 +11,14 @@ import { trpc } from "@/lib/trpc";
 export type ReviewAction = "approved" | "rejected" | "skipped";
 export type ReviewFilter = "pending" | "approved" | "rejected" | "skipped" | undefined;
 
-export function useStagingReview(sessionId: number | null, enabled: boolean) {
+export function useStagingReview(sessionId: number | null, enabled: boolean, procurementProcessId: string) {
   const utils = trpc.useUtils();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [filter, setFilter] = useState<ReviewFilter>(undefined);
 
   const list = trpc.ingestion.listStagingItems.useQuery(
-    { sessionId: sessionId ?? 0, page, pageSize, reviewStatus: filter },
+    { sessionId: sessionId ?? 0, procurementProcessId, page, pageSize, reviewStatus: filter },
     { enabled: enabled && sessionId != null, refetchOnWindowFocus: false, placeholderData: (prev) => prev },
   );
 
@@ -34,23 +34,23 @@ export function useStagingReview(sessionId: number | null, enabled: boolean) {
   const doReviewItem = useCallback(
     (itemId: number, action: ReviewAction, note?: string) => {
       if (sessionId == null || reviewItem.isPending) return; // guarda de submissão duplicada
-      return reviewItem.mutateAsync({ sessionId, itemId, action, note });
+      return reviewItem.mutateAsync({ sessionId, procurementProcessId, itemId, action, note });
     },
-    [sessionId, reviewItem],
+    [sessionId, procurementProcessId, reviewItem],
   );
 
   const doReviewBulk = useCallback(
     (itemIds: number[], action: ReviewAction, note?: string) => {
       if (sessionId == null || itemIds.length === 0 || reviewBulk.isPending) return;
-      return reviewBulk.mutateAsync({ sessionId, itemIds, action, note });
+      return reviewBulk.mutateAsync({ sessionId, procurementProcessId, itemIds, action, note });
     },
-    [sessionId, reviewBulk],
+    [sessionId, procurementProcessId, reviewBulk],
   );
 
   const doApprove = useCallback(() => {
     if (sessionId == null || approveSession.isPending) return;
-    return approveSession.mutateAsync({ sessionId });
-  }, [sessionId, approveSession]);
+    return approveSession.mutateAsync({ sessionId, procurementProcessId });
+  }, [sessionId, procurementProcessId, approveSession]);
 
   return {
     items: list.data?.items ?? [],

@@ -1880,6 +1880,10 @@ export const importSessions = mysqlTable("import_sessions", {
   // alterações em tabela preexistente (convenção do projeto — ver cabeçalho de drizzle/0285/0287).
   checksum:           varchar("checksum",       { length: 64  }),
   processId:          int("processId"),
+  // PR B.2.2 — vínculo com o PROCESSO CANÔNICO (procurement_processes.id é varchar(20)).
+  // Semanticamente SEPARADO do `processId` legado (int → tabela `processes`). Nullable/aditivo;
+  // ownership validado no serviço por (procurementProcessId + organizationId). Ver drizzle/0289.
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }),
   importPurpose:      varchar("importPurpose",  { length: 50  }),
   importType:         varchar("importType",     { length: 50  }).notNull().default("generic"),
   parserType:         varchar("parserType",     { length: 20  }).notNull().default("auto"),

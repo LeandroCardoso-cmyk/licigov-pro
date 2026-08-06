@@ -22,6 +22,7 @@ import {
   createImportSession,
   getImportSession,
   findActiveSessionByChecksum,
+  findResumableSessionForProcess,
   updateSessionStatus,
 } from "../services/fileIngestionService";
 import {
@@ -113,6 +114,7 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     importType:    s.importType,
     importPurpose: s.importPurpose,
     processId:     s.processId,
+    procurementProcessId: s.procurementProcessId ?? null,
     parserType:    s.parserType,
     parserVersion: s.parserVersion,
     retryCount:    s.retryCount,
@@ -129,6 +131,21 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     failedAt:      s.failedAt,
     updatedAt:     s.updatedAt,
   };
+}
+
+/**
+ * PR B.2.2 — Guarda de vínculo com o processo canônico. Uma sessão que pertence a um processo
+ * (procurementProcessId != null — todas as sessões canônicas da B.2.2) NÃO pode ser operada no
+ * contexto de OUTRO processo do mesmo tenant: exige que o chamador informe o mesmo id. Sessões sem
+ * processo (legado/B.2.1) mantêm a validação apenas por tenant. Retorna NOT_FOUND (não vaza existência).
+ */
+function assertSessionProcess(
+  session: { procurementProcessId: string | null },
+  procurementProcessId: string | undefined,
+): void {
+  if (session.procurementProcessId != null && session.procurementProcessId !== procurementProcessId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada para este processo." });
+  }
 }
 
 // ─── Router ─────────────────────────────────────────────────────────────────────
@@ -181,6 +198,9 @@ export const ingestionRouter = router({
       sourceSize:     z.number().int().nonnegative().max(MAX_FILE_SIZE_BYTES),
       checksum:       SHA256,
       idempotencyKey: z.string().min(8).max(64),
+      // PR B.2.2 — vínculo OBRIGATÓRIO com o processo canônico (id string). Semanticamente
+      // separado do `processId` legado (int), mantido opcional apenas por compatibilidade.
+      procurementProcessId: z.string().min(1).max(20),
       processId:      z.number().int().positive().optional(),
       importPurpose:  z.string().min(1).max(50).optional(),
       correlationId:  z.string().max(36).optional(),
@@ -211,8 +231,8 @@ export const ingestionRouter = router({
       }
 
       try {
-        // Dedup por checksum: reutiliza sessão ativa do mesmo arquivo.
-        const existing = await findActiveSessionByChecksum(orgId, input.checksum);
+        // Dedup por checksum ESCOPADO ao processo canônico (nunca reutiliza entre processos).
+        const existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId);
         if (existing) {
           const dupResult = {
             sessionId:  existing.id,
@@ -234,6 +254,7 @@ export const ingestionRouter = router({
             importType:     input.importType as ImportType,
             correlationId:  input.correlationId,
             processId:      input.processId ?? null,
+            procurementProcessId: input.procurementProcessId,
             importPurpose:  input.importPurpose ?? null,
             checksum:       input.checksum,
           },
@@ -255,13 +276,33 @@ export const ingestionRouter = router({
 
   /** Estado atual da sessão: status, progresso, parser, warnings, erro sanitizado, timestamps. */
   getSessionStatus: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
       const summary = await getStagingSummary(input.sessionId, orgId);
+      return { session: toSessionStatus(session), staging: summary };
+    }),
+
+  /**
+   * PR B.2.2 — Retomada por processo: retorna a sessão RESUMÍVEL (não-terminal) mais recente do
+   * processo canônico + tenant, ou null. Usada no reload para retomar SOMENTE a sessão daquele
+   * processo. Não lança quando não há sessão (retorna null).
+   */
+  getActiveSession: tenantProcedure
+    .input(z.object({ procurementProcessId: z.string().min(1).max(20) }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const session = await findResumableSessionForProcess(orgId, input.procurementProcessId);
+      if (!session) return { session: null, staging: null };
+      const summary = await getStagingSummary(session.id, orgId);
       return { session: toSessionStatus(session), staging: summary };
     }),
 
@@ -318,6 +359,7 @@ export const ingestionRouter = router({
   listStagingItems: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       page:      z.number().int().positive().default(1),
       pageSize:  z.number().int().positive().max(200).default(50),
       reviewStatus: z.enum(["pending", "approved", "rejected", "skipped"]).optional(),
@@ -328,6 +370,7 @@ export const ingestionRouter = router({
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       const all = await getStagingItems(input.sessionId, orgId);
       const filtered = input.reviewStatus
@@ -365,6 +408,7 @@ export const ingestionRouter = router({
   reviewItem: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       itemId:    z.number().int().positive(),
       action:    REVIEW_ACTION,
       note:      z.string().max(1000).optional(),
@@ -372,6 +416,13 @@ export const ingestionRouter = router({
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
+
+      // Vínculo com o processo canônico: valida que a sessão pertence ao processo informado.
+      if (input.procurementProcessId != null) {
+        const session = await getImportSession(input.sessionId, orgId);
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+        assertSessionProcess(session, input.procurementProcessId);
+      }
 
       const item = await getStagingItem(input.itemId, orgId);
       if (!item || item.importSessionId !== input.sessionId) {
@@ -407,6 +458,7 @@ export const ingestionRouter = router({
   reviewBulk: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       itemIds:   z.array(z.number().int().positive()).min(1).max(500),
       action:    REVIEW_ACTION,
       note:      z.string().max(1000).optional(),
@@ -417,6 +469,7 @@ export const ingestionRouter = router({
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       // Garante que todos os itens pertencem à sessão + tenant (defesa contra IDs cruzados).
       const owned = await getStagingItems(input.sessionId, orgId);
@@ -447,13 +500,17 @@ export const ingestionRouter = router({
    * Exige status `awaiting_review` e zero itens pendentes (aprovação sem revisão é bloqueada).
    */
   approveSession: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       if (session.status === "approved") {
         return { sessionId: session.id, status: "approved" as const, idempotent: true };

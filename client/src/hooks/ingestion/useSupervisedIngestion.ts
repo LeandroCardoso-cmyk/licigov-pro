@@ -8,7 +8,7 @@
  * Garante: guarda de duplo-clique, chave idempotente estável por tentativa, checksum no cliente
  * (o servidor é a autoridade), cancelamento sem corromper o estado persistido, retry idempotente.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { sha256HexOfBlob, sha256HexOfText, newIdempotencyKey } from "@/lib/ingestion/sha256";
 import {
@@ -29,7 +29,8 @@ export type StartInput = StartFileInput | StartTextInput;
 
 interface UseSupervisedIngestionOptions {
   importType: IngestionImportType;
-  processId?: number;
+  /** Processo CANÔNICO (id string) ao qual a sessão fica vinculada. Obrigatório. */
+  procurementProcessId: string;
   importPurpose?: string;
   onApproachReview?: (sessionId: number) => void;
 }
@@ -54,7 +55,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
   const enqueue = trpc.ingestion.enqueueProcessing.useMutation();
 
   const statusQuery = trpc.ingestion.getSessionStatus.useQuery(
-    { sessionId: sessionId ?? 0 },
+    { sessionId: sessionId ?? 0, procurementProcessId: opts.procurementProcessId },
     {
       enabled: sessionId != null,
       refetchInterval: (q) => {
@@ -64,6 +65,16 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
       refetchOnWindowFocus: false,
     },
   );
+
+  // Retomada por processo (reload): adota a sessão resumível SOMENTE deste processo canônico.
+  const activeQuery = trpc.ingestion.getActiveSession.useQuery(
+    { procurementProcessId: opts.procurementProcessId },
+    { enabled: !!opts.procurementProcessId && sessionId == null, refetchOnWindowFocus: false },
+  );
+  useEffect(() => {
+    const resumed = activeQuery.data?.session?.id;
+    if (sessionId == null && typeof resumed === "number") setSessionId(resumed);
+  }, [activeQuery.data, sessionId]);
 
   const session = statusQuery.data?.session ?? null;
   const staging = statusQuery.data?.staging ?? null;
@@ -134,7 +145,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
         sourceSize: blob.size,
         checksum,
         idempotencyKey: idempotencyRef.current,
-        processId: opts.processId,
+        procurementProcessId: opts.procurementProcessId,
         importPurpose: opts.importPurpose,
       });
 

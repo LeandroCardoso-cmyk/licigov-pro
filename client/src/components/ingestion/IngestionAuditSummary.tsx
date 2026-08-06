@@ -20,11 +20,11 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: str
 export function IngestionAuditSummary({
   summary,
   sessionId,
-  processId,
+  procurementProcessId,
 }: {
   summary: StagingSummary | null;
   sessionId?: number | null;
-  processId?: number | null;
+  procurementProcessId?: string | null;
 }) {
   return (
     <div className="space-y-2">
@@ -39,7 +39,7 @@ export function IngestionAuditSummary({
       )}
       <p className="text-xs text-muted-foreground">
         {sessionId != null && <>Sessão <code className="font-mono">#{sessionId}</code></>}
-        {processId != null && <> · Processo <code className="font-mono">#{processId}</code></>}
+        {procurementProcessId != null && <> · Processo <code className="font-mono">{procurementProcessId}</code></>}
       </p>
     </div>
   );

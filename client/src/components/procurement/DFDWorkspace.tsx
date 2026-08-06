@@ -119,6 +119,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
           {ingestionEnabled ? (
             <DocumentIngestionLauncher
               importType="generic"
+              procurementProcessId={processId}
               importPurpose="dfd_import"
               title="Importar DFD existente"
               description="A importação assistida de DFD passará por revisão humana antes de qualquer uso."
