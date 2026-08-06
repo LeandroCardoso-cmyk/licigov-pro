@@ -24,11 +24,11 @@ describe("parserRegistry — capacidade declarada", () => {
     }
   });
 
-  it("matriz real: CSV/XLSX supported; PDF/DOCX stub", () => {
+  it("matriz real (B.2.3): CSV/XLSX/PDF/DOCX supported", () => {
     const byType = Object.fromEntries(parserRegistry.list().map(p => [p.parserType, p.capabilities.capabilityStatus]));
     expect(byType.csv).toBe("supported");
     expect(byType.xlsx).toBe("supported");
-    expect(byType.pdf).toBe("stub");
-    expect(byType.docx).toBe("stub");
+    expect(byType.pdf).toBe("supported");
+    expect(byType.docx).toBe("supported");
   });
 });

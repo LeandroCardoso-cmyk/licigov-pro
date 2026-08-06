@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,6 @@ import {
   isValidImportTransition,
   isTerminalStatus,
   canRetry,
-  IMPORT_TRANSITIONS,
 } from "../../domain/importTypes";
 
 import {
@@ -63,7 +62,8 @@ import {
 
 import { CsvParser } from "../../parsers/csvParser";
 import { XlsxParser } from "../../parsers/xlsxParser";
-import { PdfParser, DocxParser } from "../../parsers/pdfParser";
+import { PdfParser } from "../../parsers/pdfParser";
+import { DocxParser } from "../../parsers/docxParser";
 import { ParserRegistry } from "../../parsers/parserRegistry";
 
 // ─── ImportTypes ──────────────────────────────────────────────────────────────
@@ -525,7 +525,7 @@ describe("XlsxParser", () => {
   it("parse de buffer inválido retorna resultado sem crash", async () => {
     const buf  = Buffer.from("not an xlsx file");
     const opts = { importSessionId: 10, sourceFileId: "f10", sourceFileName: "bad.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceChecksum: "", organizationId: 1 };
-    const result = await parser.safeParse(buf, opts as any);
+    const result = await parser.safeParse(buf, opts);
     expect(result).toBeDefined();
     expect(Array.isArray(result.items)).toBe(true);
   });
@@ -560,21 +560,20 @@ describe("PdfParser", () => {
     expect(result.errors[0].code).toBe("CORRUPT_FILE");
   });
 
-  it("aceita PDF com magic bytes %PDF e retorna warning stub", async () => {
+  it("capacidade é supported (não mais stub) na B.2.3", () => {
+    expect(parser.capabilities.capabilityStatus).toBe("supported");
+    expect(parser.capabilities.supportsStructuredExtraction).toBe(true);
+    expect(parser.capabilities.parserVersion).not.toContain("stub");
+  });
+
+  it("PDF assinado porém malformado é rejeitado (parser real, sem stub)", async () => {
     const buf  = Buffer.from("%PDF-1.4 fake content");
     const opts = { importSessionId: 21, sourceFileId: "f21", sourceFileName: "real.pdf", sourceMimeType: "application/pdf", organizationId: 1 };
     const result = await parser.parse(buf, opts);
-    expect(result.errors).toHaveLength(0);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0].code).toBe("HEADER_INFERENCE");
-    expect(result.rawMetadata).toMatchObject({ stubMode: true });
-  });
-
-  it("items vazio em modo stub", async () => {
-    const buf  = Buffer.from("%PDF-1.4 content");
-    const opts = { importSessionId: 22, sourceFileId: "f22", sourceFileName: "r.pdf", sourceMimeType: "application/pdf", organizationId: 1 };
-    const result = await parser.parse(buf, opts);
     expect(result.items).toHaveLength(0);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+    expect(result.errors[0].fatal).toBe(true);
+    expect(result.rawMetadata).not.toMatchObject({ stubMode: true });
   });
 });
 
@@ -596,16 +595,23 @@ describe("DocxParser", () => {
     const opts = { importSessionId: 30, sourceFileId: "f30", sourceFileName: "fake.docx", sourceMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", organizationId: 1 };
     const result = await parser.parse(buf, opts);
     expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].code).toBe("CORRUPT_FILE");
+    expect(result.errors[0].code).toBe("UNSUPPORTED_FORMAT");
   });
 
-  it("aceita buffer ZIP (DOCX magic bytes) e retorna warning stub", async () => {
+  it("capacidade é supported (não mais stub) na B.2.3", () => {
+    expect(parser.capabilities.capabilityStatus).toBe("supported");
+    expect(parser.capabilities.supportsStructuredExtraction).toBe(true);
+    expect(parser.capabilities.parserVersion).not.toContain("stub");
+  });
+
+  it("buffer com assinatura ZIP porém sem diretório central é rejeitado (parser real)", async () => {
     const buf  = Buffer.from([0x50, 0x4B, 0x03, 0x04, ...Buffer.from("fake zip content")]);
     const opts = { importSessionId: 31, sourceFileId: "f31", sourceFileName: "doc.docx", sourceMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", organizationId: 1 };
     const result = await parser.parse(buf, opts);
-    expect(result.errors).toHaveLength(0);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.rawMetadata).toMatchObject({ stubMode: true });
+    expect(result.items).toHaveLength(0);
+    expect(result.errors.length).toBeGreaterThanOrEqual(1);
+    expect(result.errors[0].code).toBe("CORRUPT_FILE");
+    expect(result.rawMetadata).not.toMatchObject({ stubMode: true });
   });
 });
 
