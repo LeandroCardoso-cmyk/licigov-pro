@@ -94,17 +94,22 @@ uploaded → queued → parsing → extracted → normalized → awaiting_review
 - **Detecção de cabeçalho**: Automática (primeira linha) ou linha configurável
 - **Limite**: 50MB, 100k linhas
 
-### PDF Parser (stub — Sprint 3)
+### PDF Parser (real — B.2.3)
 - **MIME types**: `application/pdf`
 - **Extensões**: `.pdf`
-- **Status**: Interface definida, implementação na Sprint 3
-- **Estratégia**: pdfjs + análise estrutural de tabelas
+- **Status**: `supported` — extração real via `pdf-parse` (pdfjs-dist/legacy)
+- **Estratégia**: texto por página + tabelas estruturadas (`getTable`); heurística ancorada à direita
+  para tabelas textuais; proveniência por página/linha/tabela.
+- **Limitações declaradas**: PDF escaneado (somente imagem) → aviso `OCR_REQUIRED`/`SCANNED_PDF_UNSUPPORTED`
+  (OCR **não** suportado, sem apresentar como extraído); limites de páginas/itens/tempo.
 
-### DOCX Parser (stub — Sprint 3)
+### DOCX Parser (real — B.2.3)
 - **MIME types**: `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
 - **Extensões**: `.docx`
-- **Status**: Interface definida, implementação na Sprint 3
-- **Estratégia**: Extração de tabelas e listas estruturadas
+- **Status**: `supported` — extração real via `mammoth`
+- **Estratégia**: prioriza tabelas (segmentação do HTML); parágrafos como fallback de baixa confiança;
+  proveniência por tabela/linha. Guarda de **zip-bomb** por inspeção do diretório central; `.doc` legado
+  (binário OLE) é rejeitado.
 
 ### ParserRegistry
 O `ParserRegistry` resolve o parser correto para cada arquivo:
@@ -264,9 +269,9 @@ Preços/TR), parser real de PDF/DOCX, alterações nos workspaces, remoção do 
 
 ### Roadmap dos blocos
 - **B.2.1** — fundação canônica (API, upload streaming, fila, staging, migration 0288). ✅
-- **B.2.2** — conecta as interfaces (esta etapa): Pesquisa de Preços, DFD e ETP. ✅
-- **B.2.3** — parsers reais de PDF/DOCX (habilita a extração desses formatos).
-- **B.2.4** — promoção transacional ao domínio (incorporação ao processo).
+- **B.2.2** — conecta as interfaces: Pesquisa de Preços, DFD e ETP. ✅
+- **B.2.3** — parsers reais de PDF (`pdf-parse`) e DOCX (`mammoth`); OCR não suportado. ✅
+- **B.2.4** — promoção transacional e supervisionada ao domínio (Pesquisa de Preços). ✅
 
 ### Camada de frontend
 - **Lib pura e testável** (`client/src/lib/ingestion/`): `status` (fases institucionais + `derivePhase`),
@@ -291,12 +296,13 @@ exposta) e reflete a capacidade REAL: `supported` de cada formato é **derivado 
 | CSV | `text/csv`, `application/csv`, `text/plain`, `.csv`/`.txt` | `csvParser 1.0.0` | ✅ **suportado** |
 | XLSX | OOXML spreadsheet, `.xlsx` | `xlsxParser 1.0.0` (SheetJS) | ✅ **suportado** |
 | XLS | `application/vnd.ms-excel`, `.xls` | `xlsxParser 1.0.0` (OLE via SheetJS) | ✅ **suportado** |
-| PDF | `application/pdf`, `.pdf` | `pdfParser 1.0.0-stub` | ❌ **stub (B.2.3)** |
-| DOCX/DOC | OOXML word / `application/msword`, `.docx`/`.doc` | `docxParser 1.0.0-stub` | ❌ **stub (B.2.3)** |
+| PDF | `application/pdf`, `.pdf` | `pdfParser 2.0.0` (pdf-parse/pdfjs) | ✅ **suportado** (B.2.3; OCR não) |
+| DOCX | OOXML word, `.docx` | `docxParser 2.0.0` (mammoth) | ✅ **suportado** (B.2.3) |
 | Conteúdo colado | enviado como `text/csv` (bytes UTF-8) | `csvParser 1.0.0` | ✅ **suportado** |
 
-> Formatos com parser **stub NÃO são apresentados como funcionais**. Um upload de PDF/DOCX é
-> rejeitado no cliente (mensagem objetiva) e no servidor.
+> `supported` é **derivado do `capabilityStatus` do parser**. PDF/DOCX passam a suportados na B.2.3, com
+> **limitações declaradas** (OCR de PDF escaneado não suportado; `.doc` legado rejeitado). OCR permanece
+> **não suportado** — um PDF só-imagem retorna aviso `OCR_REQUIRED`, nunca é apresentado como extraído.
 
 ### Pesquisa de Preços (fim a fim)
 Com a flag LIGADA, o `DocumentIngestionLauncher` (importType `price_research`) oferece três entradas:
@@ -308,11 +314,12 @@ e o comportamento legado permanece idêntico.
 
 ### DFD e ETP (capability-aware)
 - **DFD**: preserva "Criar DFD do zero"; "Importar DFD existente" usa a fundação canônica
-  (`relevantFormatKeys=[pdf,docx]`). Como PDF/DOCX são stub, a importação aparece **indisponível** de
-  forma objetiva (sem ofertar formatos alheios nem fluxo sem resultado). Legado congelado quando a
-  flag está desligada.
+  (`relevantFormatKeys=[pdf,docx]`). Com PDF/DOCX **suportados** (B.2.3), a importação passa a **extrair
+  para staging** (revisão humana). A **promoção** de DFD ao domínio permanece **indisponível** (DFD é
+  documento, não contêiner de linhas — ver B.2.4). Legado congelado quando a flag está desligada.
 - **ETP**: preserva "Gerar ETP a partir do processo"; adiciona "Importar ETP existente" (canônico,
-  capability-aware). Sem geração jurídica autônoma; sem promoção; revisão humana obrigatória.
+  capability-aware). Sem geração jurídica autônoma; **sem promoção** de ETP ao domínio (mesma razão do
+  DFD); revisão humana obrigatória.
 
 ### Estados de sessão visíveis (institucionais, pt-BR)
 `Preparando → Enviando → Enviado → Na fila → Processando → Aguardando revisão → Parcialmente revisado
@@ -373,27 +380,68 @@ Correção auditável de item de staging, com **original imutável + projeção 
 - **Observabilidade:** eventos auditáveis (correção criada/replay) só com identificadores seguros —
   nunca overlay/conteúdo, storageKey, URL, credenciais.
 
+### Parsers reais PDF/DOCX — IMPLEMENTADOS (B.2.3)
+- **PDF (`pdf-parse` / pdfjs-dist legacy):** texto por página + tabelas estruturadas (`getTable`);
+  quando não há tabela, heurística determinística ancorada à direita (descrição + qtd/unid/valores);
+  proveniência por **página/linha/tabela**; detecção de PDF vazio, corrompido, **protegido por senha**
+  e **escaneado** (só imagem → `OCR_REQUIRED`/`SCANNED_PDF_UNSUPPORTED`, **sem** OCR e sem apresentar
+  como extraído). Limites: tamanho, páginas, itens, **tempo** de processamento.
+- **DOCX (`mammoth`):** prioriza **tabelas** (segmentação do HTML → matriz); parágrafos como fallback
+  de baixa confiança (revisáveis); proveniência por **tabela/linha**; **guarda de zip-bomb** por
+  inspeção do diretório central (soma de tamanhos descompactados, nº de entradas, taxa de expansão);
+  `.doc` legado (binário OLE) rejeitado.
+- **Contrato preservado:** `ParseResult` (raw*/proveniência/confiança/avisos) inalterado; `parserVersion`
+  explícita (`2.0.0`); `capabilityStatus: "supported"` só após implementação + testes. Não grava no
+  domínio, não decide juridicamente, não inventa dados. `getCapabilities` passa a expor PDF/DOCX como
+  suportados **com limitações reais** (OCR = não suportado).
+
+### Promoção transacional ao domínio — IMPLEMENTADA (migration 0291)
+Promoção **supervisionada** da sessão aprovada ao domínio canônico, reutilizando os agregados reais:
+
+- **Destino real:** `price_research` + `price_research_items` (via `server/db/procurement`), espelhando o
+  fluxo existente `procurementProcess.importPriceResearch`. **Somente `price_research`** é promovível
+  hoje. **DFD/ETP** são documentos (`generated_documents`, não contêineres de linhas) → **capacidade
+  indisponível** (registrada, sem fabricar um segundo domínio). `tr_items`/`catmat`/`generic` → indisponível.
+- **Schema (migration 0291, aditiva/reconciliadora):** `import_sessions` ganha `promotionStatus`
+  (`none`/`promoted`), `promotedAt`, `promotedByUserId`, `promotionRef`; **ledger imutável**
+  `import_promotions` com `UNIQUE (org, importSessionId)` (**uma promoção por sessão**) e
+  `UNIQUE (org, idempotencyKey)` (idempotência tenant-aware).
+- **Serviço `promoteApprovedSessionToDomain` / `ingestion.promoteSession`:** exige flag habilitada,
+  sessão **`approved`**, tenant + processo canônico validados, **zero pendentes** e ≥1 item aprovado;
+  papel institucional mínimo **`manager`** (segregação: operador revisa, gestor promove). **Uma única
+  transação** (research + itens + projeção da sessão + ledger) com `SELECT … FOR UPDATE` na sessão —
+  **sem gravação parcial**, **idempotente/replay-safe** (dupla promoção impedida). O conteúdo promovido
+  é o **efetivo** = `raw*` + `correctedPayload`; os `raw*` e o histórico **não** são alterados.
+- **Lineage + auditoria:** ledger e observações do item preservam org, processo, sessão, item, revisão de
+  correção, `correlationId`, ator e timestamp; auditoria sem conteúdo sensível; timeline do processo
+  atualizada. **Não** marca nada como juridicamente aprovado (status permanece `approved`).
+- **UI (`PromoteToDomainPanel`):** ação "Promover conteúdo revisado" **só quando elegível**, com
+  **confirmação humana** explicando destino/efeito, anti-duplo-clique, sucesso/conflito/erro acionável e
+  **estado persistido após reload**. Dark mode e acessibilidade.
+
 ### Limitações remanescentes (registradas)
-- PDF/DOCX permanecem **stub** — importação de DFD/ETP indisponível até a **B.2.3** (parsers reais).
-- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — para B.2.4.
-- Promoção transacional ao domínio oficial — **B.2.4**.
+- **OCR** de PDF escaneado **não** suportado (aviso `OCR_REQUIRED`); DOCX prioriza tabelas (texto corrido
+  vira item de baixa confiança).
+- Promoção ao domínio disponível **apenas para Pesquisa de Preços**; DFD/ETP não têm contêiner de linhas
+  (capacidade registrada como indisponível — sem fabricar domínio).
+- Enriquecimento em **Itens Inteligentes** (CATMAT/IA) permanece o fluxo existente, separado da promoção.
 
 ### Troubleshooting
 | Sintoma | Causa provável | Ação |
 |---|---|---|
 | Superfície canônica não aparece | Flag desligada para o tenant | Comportamento esperado (fail-closed); habilitar a flag por tenant fora de produção |
-| "Formato não suportado" ao enviar PDF/DOCX | Parser stub (B.2.3) | Esperado; usar CSV/XLSX ou aguardar B.2.3 |
+| PDF importado sem itens + aviso `OCR_REQUIRED` | PDF escaneado (só imagem) | Esperado; OCR não suportado — enviar PDF textual ou planilha |
+| DOCX rejeitado `ZIP_BOMB` | Expansão/entradas acima do limite de segurança | Esperado; revisar o arquivo |
 | Upload 413 | Arquivo acima de 50 MB | Reduzir o arquivo |
-| Upload 400 "conteúdo não corresponde" | *magic bytes* × extensão divergentes | Reenviar o arquivo correto |
+| "Promover conteúdo revisado" não aparece | Sessão não aprovada / tipo não promovível / já promovida | Esperado (só price_research aprovada e não promovida) |
+| Promoção retorna `FORBIDDEN` | Papel abaixo de `manager` | Solicitar a um gestor a promoção ao domínio |
 | Aprovação bloqueada | Itens pendentes de revisão | Revisar todos os itens antes de aprovar |
 
 ### Evidência Graphify
-Grafo canônico atualizado **após** código + testes + build verdes (regra Graphify 6). Superfícies
-confirmadas no código: `ProcessoLicitatorio` (abas `dfd`/`price`/`etp`) e os workspaces em
-`client/src/components/procurement/`. Estado das divergências: **resolvido** — vínculo canônico
-(migration 0289) e correção humana auditável (migration 0290) implementados; capacidade de parser
-explícita. Permanecem para etapas futuras: PDF/DOCX stub (B.2.3) e persistência/criação manual de
-ETP + promoção ao domínio (B.2.4).
+Grafo canônico atualizado **após** código + testes + build verdes (regra Graphify 6). Estado das
+divergências: **resolvido** — vínculo canônico (0289), correção humana auditável (0290), **parsers reais
+PDF/DOCX (B.2.3)** e **promoção transacional ao domínio (0291)** implementados; capacidade de parser
+explícita. Sem pendências de escopo B.2.3/B.2.4 (OCR permanece fora de escopo, declarado como limitação).
 
 ---
 
