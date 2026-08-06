@@ -64,11 +64,26 @@ const USER_FACING_FORMATS: ReadonlyArray<{
   { key: "docx", label: "Word (DOCX)",  extensions: [".docx", ".doc"],mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"] },
 ];
 
-/** Resolve, via parserRegistry, se um formato tem parser real (não-stub). */
-function isFormatSupported(mimeType: string, sampleExt: string): boolean {
+/** Metadado de capacidade EXPLÍCITO do parser que atende o formato (fonte da verdade). */
+function formatCapability(mimeType: string, sampleExt: string): {
+  supported: boolean;
+  capabilityStatus: "supported" | "stub" | "disabled" | "unknown";
+  supportsStructuredExtraction: boolean;
+  parserVersion: string | null;
+  limitations: string[];
+} {
   const parser = parserRegistry.resolve(mimeType, `amostra${sampleExt}`);
-  if (!parser) return false;
-  return !parser.capabilities.parserVersion.endsWith("-stub");
+  if (!parser) {
+    return { supported: false, capabilityStatus: "unknown", supportsStructuredExtraction: false, parserVersion: null, limitations: [] };
+  }
+  const c = parser.capabilities;
+  return {
+    supported: c.capabilityStatus === "supported",
+    capabilityStatus: c.capabilityStatus,
+    supportsStructuredExtraction: c.supportsStructuredExtraction,
+    parserVersion: c.parserVersion,
+    limitations: c.limitations ?? [],
+  };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -131,13 +146,20 @@ export const ingestionRouter = router({
     .query(async ({ ctx }) => {
       const orgId = ctx.organizationId!;
       const enabled = await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId);
-      const formats = USER_FACING_FORMATS.map(f => ({
-        key:        f.key,
-        label:      f.label,
-        extensions: f.extensions,
-        mimeTypes:  f.mimeTypes,
-        supported:  isFormatSupported(f.mimeTypes[0], f.extensions[0]),
-      }));
+      const formats = USER_FACING_FORMATS.map(f => {
+        const cap = formatCapability(f.mimeTypes[0], f.extensions[0]);
+        return {
+          key:              f.key,
+          label:            f.label,
+          extensions:       f.extensions,
+          mimeTypes:        f.mimeTypes,
+          supported:        cap.supported,
+          capabilityStatus: cap.capabilityStatus,
+          supportsStructuredExtraction: cap.supportsStructuredExtraction,
+          parserVersion:    cap.parserVersion,
+          limitations:      cap.limitations,
+        };
+      });
       return {
         enabled,
         maxFileSizeBytes: MAX_FILE_SIZE_BYTES,

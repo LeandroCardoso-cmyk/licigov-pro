@@ -26,6 +26,9 @@ export class PdfParser extends BaseParser {
     supportsStreaming:     false,
     supportsProgressEvents: false,
     parserVersion:         "1.0.0-stub",
+    capabilityStatus:      "stub",
+    supportsStructuredExtraction: false,
+    limitations:           ["Extração real de PDF disponível na B.2.3 (requer pdf-parse)."],
     requiresExternalLib:   "pdf-parse",
   };
 
@@ -93,6 +96,9 @@ export class DocxParser extends BaseParser {
     supportsStreaming:     false,
     supportsProgressEvents: false,
     parserVersion:         "1.0.0-stub",
+    capabilityStatus:      "stub",
+    supportsStructuredExtraction: false,
+    limitations:           ["Extração real de DOCX disponível na B.2.3 (requer mammoth)."],
     requiresExternalLib:   "mammoth",
   };
 
