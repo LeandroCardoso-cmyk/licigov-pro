@@ -31,8 +31,10 @@ import {
   reviewStagingItem,
   bulkReviewStagingItems,
   getStagingSummary,
+  correctStagingItem,
   type ReviewAction,
 } from "../services/importStagingService";
+import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
 import { enqueueImport } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
@@ -312,13 +314,17 @@ export const ingestionRouter = router({
    * Lê os bytes do storage durável (não recebe binário por tRPC).
    */
   enqueueProcessing: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       // Já em processamento ou processada → idempotente (não re-enfileira).
       if (["queued", "parsing", "extracted", "normalized", "awaiting_review"].includes(session.status)) {
@@ -393,6 +399,11 @@ export const ingestionRouter = router({
         reviewedBy:         i.reviewedBy,
         reviewedAt:         i.reviewedAt,
         reviewNote:         i.reviewNote,
+        // Correção humana (overlay sobre os raw* imutáveis) — o cliente computa o efetivo.
+        correctionRevision: i.correctionRevision,
+        correctedPayload:   i.correctedPayload,
+        correctedAt:        i.correctedAt,
+        correctedByUserId:  i.correctedByUserId,
       }));
 
       return {
@@ -452,6 +463,64 @@ export const ingestionRouter = router({
       });
 
       return { itemId: item.id, action: input.action, idempotent: false };
+    }),
+
+  /**
+   * PR B.2.2 — Correção humana AUDITÁVEL de um item de staging. Valida tenant + processo canônico +
+   * sessão + item; valida campos permitidos por importType (rejeita chaves desconhecidas e raw);
+   * exige justificativa; concorrência otimista por expectedRevision (CONFLICT acionável); idempotente
+   * por idempotencyKey; grava histórico before/after. NÃO aprova o item nem promove ao domínio.
+   */
+  correctItem: tenantProcedure
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      itemId:               z.number().int().positive(),
+      expectedRevision:     z.number().int().nonnegative(),
+      corrections:          z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
+      justification:        z.string().min(1).max(1000),
+      idempotencyKey:       z.string().min(8).max(64),
+      correlationId:        z.string().max(36).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+
+      if (!isImportTypeCorrectable(session.importType)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: `Correção não disponível para o tipo "${session.importType}".` });
+      }
+
+      const result = await correctStagingItem({
+        itemId:               input.itemId,
+        organizationId:       orgId,
+        importSessionId:      input.sessionId,
+        procurementProcessId: session.procurementProcessId ?? input.procurementProcessId,
+        importType:           session.importType,
+        actorUserId:          ctx.user!.id,
+        corrections:          input.corrections,
+        justification:        input.justification,
+        expectedRevision:     input.expectedRevision,
+        idempotencyKey:       input.idempotencyKey,
+        correlationId:        ctx.correlationId ?? input.correlationId ?? null,
+      });
+
+      await logActivity({
+        organizationId: orgId,
+        userId:         ctx.user!.id,
+        action:         result.idempotent ? "import_item_correction_replayed" : "import_item_corrected",
+        entityType:     "import_staging_item",
+        entityId:       input.itemId,
+        correlationId:  ctx.correlationId,
+        requestId:      ctx.requestId,
+        // Sem overlay/conteúdo — apenas identificadores seguros.
+        details:        { sessionId: input.sessionId, revision: result.revision, idempotent: result.idempotent },
+      });
+
+      return { itemId: input.itemId, revision: result.revision, idempotent: result.idempotent };
     }),
 
   /** Revisão em lote de itens PENDENTES da sessão. Só afeta pendentes (idempotente por natureza). */
