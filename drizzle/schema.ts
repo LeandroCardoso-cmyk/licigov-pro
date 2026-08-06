@@ -1935,6 +1935,13 @@ export const importStagingItems = mysqlTable("import_staging_items", {
   reviewedBy:          int("reviewedBy"),
   reviewedAt:          timestamp("reviewedAt"),
   reviewNote:          text("reviewNote"),
+  // PR B.2.2 (correção humana auditável) — os `raw*` permanecem IMUTÁVEIS (original/provenance).
+  // A correção é um OVERLAY validado; o conteúdo efetivo = raw* + correctedPayload. Concorrência
+  // otimista por `correctionRevision`. Ver drizzle/0290 e import_item_corrections (histórico).
+  correctionRevision:  int("correctionRevision").notNull().default(0),
+  correctedPayload:    json("correctedPayload"),
+  correctedAt:         timestamp("correctedAt"),
+  correctedByUserId:   int("correctedByUserId"),
   expiresAt:           timestamp("expiresAt"),
   createdAt:           timestamp("createdAt").defaultNow().notNull(),
   updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1969,6 +1976,34 @@ export const importReviewTransitions = mysqlTable("import_review_transitions", {
 
 export type ImportReviewTransitionRow       = typeof importReviewTransitions.$inferSelect;
 export type InsertImportReviewTransitionRow = typeof importReviewTransitions.$inferInsert;
+
+/**
+ * PR B.2.2 (correção humana auditável) — Histórico IMUTÁVEL de correções de item de staging.
+ * Cada linha registra uma transição de revisão de correção (fromRevision → toRevision) com
+ * before/after/changedFields e a justificativa do revisor. Consultável (não é log textual).
+ * Ownership/lineage: organizationId + procurementProcessId + importSessionId + stagingItemId.
+ * Índices e unicidade da revisão por item (tenant-aware) são criados na migration drizzle/0290.
+ */
+export const importItemCorrections = mysqlTable("import_item_corrections", {
+  id:                   int("id").autoincrement().primaryKey(),
+  organizationId:       int("organizationId").notNull(),
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }),
+  importSessionId:      int("importSessionId").notNull(),
+  stagingItemId:        int("stagingItemId").notNull(),
+  fromRevision:         int("fromRevision").notNull(),
+  toRevision:           int("toRevision").notNull(),
+  beforePayload:        json("beforePayload"),
+  afterPayload:         json("afterPayload"),
+  changedFields:        json("changedFields"),
+  justification:        text("justification").notNull(),
+  actorUserId:          int("actorUserId"),
+  idempotencyKey:       varchar("idempotencyKey", { length: 64 }),
+  correlationId:        varchar("correlationId",  { length: 36 }),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ImportItemCorrectionRow       = typeof importItemCorrections.$inferSelect;
+export type InsertImportItemCorrectionRow = typeof importItemCorrections.$inferInsert;
 
 /**
  * Sprint 2.9 — Semantic Candidates.
