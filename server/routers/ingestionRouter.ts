@@ -14,7 +14,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
 import type { TrpcAuditCtx } from "../services/activityLogService";
 import { logActivity } from "../services/activityLogService";
@@ -121,6 +121,9 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     parserType:    s.parserType,
     parserVersion: s.parserVersion,
     retryCount:    s.retryCount,
+    // PR B.2.4 — estado de promoção ao domínio (gate da ação de promoção na UI).
+    promotionStatus: s.promotionStatus ?? "none",
+    promotionRef:    s.promotionRef ?? null,
     // correlationId de rastreabilidade (para suporte/observabilidade — não é segredo/PII).
     correlationId: s.correlationId ?? null,
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
@@ -618,8 +621,9 @@ export const ingestionRouter = router({
    * Precondição = pós-condição de approveSession (status 'approved', zero pendentes). Só `price_research`
    * é promovível hoje (DFD/ETP são documentos, não contêineres de linhas — capacidade indisponível).
    * Idempotente (uma promoção por sessão) e escopada por tenant + processo. Não faz merge nem decide juridicamente.
+   * Exige papel institucional mínimo 'manager' (segregação de deveres: operador revisa; gestor promove ao domínio).
    */
-  promoteSession: tenantProcedure
+  promoteSession: orgRoleProcedure("manager")
     .input(z.object({
       sessionId:            z.number().int().positive(),
       procurementProcessId: z.string().min(1).max(20),

@@ -20,6 +20,7 @@ import {
   type IngestionPhase,
   type IngestionSessionStatus,
 } from "@/lib/ingestion/status";
+import { canPromoteSession } from "@/lib/ingestion/promotion";
 
 export type IngestionImportType = "price_research" | "tr_items" | "catmat" | "generic";
 
@@ -194,6 +195,37 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     }
   }, [sessionId, enqueue, statusQuery]);
 
+  // PR B.2.4 — promoção supervisionada ao domínio (só quando elegível; idempotente; anti-duplo-clique).
+  const promoteMut = trpc.ingestion.promoteSession.useMutation();
+  const promotingRef = useRef(false);
+  const promoteKeyRef = useRef<string | null>(null);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
+
+  const promotionStatus = ((session as { promotionStatus?: string } | null)?.promotionStatus) ?? "none";
+  const canPromote = canPromoteSession(
+    session as { status?: string; importType?: string; promotionStatus?: string } | null,
+    pending,
+  );
+
+  const promote = useCallback(async () => {
+    if (sessionId == null || promotingRef.current || !canPromote) return;
+    promotingRef.current = true;
+    setPromoteError(null);
+    try {
+      if (!promoteKeyRef.current) promoteKeyRef.current = newIdempotencyKey();
+      await promoteMut.mutateAsync({
+        sessionId,
+        procurementProcessId: opts.procurementProcessId,
+        idempotencyKey: promoteKeyRef.current,
+      });
+      void statusQuery.refetch(); // reflete o estado de promoção PERSISTIDO (após reload também)
+    } catch (err) {
+      setPromoteError(err instanceof Error ? err.message : "Falha ao promover o conteúdo revisado.");
+    } finally {
+      promotingRef.current = false;
+    }
+  }, [sessionId, canPromote, promoteMut, opts.procurementProcessId, statusQuery]);
+
   const cancel = useCallback(() => {
     // Aborta o envio em curso; o backend faz cleanup do parcial. A sessão persiste.
     abortRef.current?.abort();
@@ -209,9 +241,11 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     abortRef.current = null;
     submittingRef.current = false;
     idempotencyRef.current = null;
+    promoteKeyRef.current = null;
     setSessionId(null);
     setClientPhase("idle");
     setClientError(null);
+    setPromoteError(null);
   }, []);
 
   return {
@@ -225,5 +259,12 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     retry,
     cancel,
     reset,
+    // PR B.2.4 — promoção supervisionada ao domínio
+    promote,
+    canPromote,
+    promotionStatus,
+    isPromoting: promoteMut.isPending,
+    promoteError,
+    promotionResult: promoteMut.data ?? null,
   };
 }
