@@ -22,6 +22,7 @@ import {
   createImportSession,
   getImportSession,
   findActiveSessionByChecksum,
+  findResumableSessionForProcess,
   updateSessionStatus,
 } from "../services/fileIngestionService";
 import {
@@ -30,20 +31,63 @@ import {
   reviewStagingItem,
   bulkReviewStagingItems,
   getStagingSummary,
+  correctStagingItem,
   type ReviewAction,
 } from "../services/importStagingService";
+import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
 import { enqueueImport } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
   assertCanonicalIngestionEnabled,
   isAllowedMime,
   buildIngestionStorageKey,
+  CANONICAL_INGESTION_FLAG,
 } from "../services/ingestionUploadService";
+import { isFeatureEnabled } from "../services/featureFlagService";
+import { parserRegistry } from "../parsers/parserRegistry";
 import {
   MAX_FILE_SIZE_BYTES,
   isValidImportTransition,
   type ImportType,
 } from "../domain/importTypes";
+
+/**
+ * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
+ * parserRegistry (fonte única da verdade): um formato é funcional apenas se o parser
+ * resolvido NÃO for stub (parserVersion sem sufixo "-stub"). Assim a UI nunca apresenta
+ * como funcional um formato cujo parser ainda é stub (PDF/DOCX até a B.2.3).
+ */
+const USER_FACING_FORMATS: ReadonlyArray<{
+  key: string; label: string; extensions: string[]; mimeTypes: string[];
+}> = [
+  { key: "csv",  label: "CSV",          extensions: [".csv", ".txt"], mimeTypes: ["text/csv", "application/csv", "text/plain"] },
+  { key: "xlsx", label: "Excel (XLSX)", extensions: [".xlsx"],        mimeTypes: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
+  { key: "xls",  label: "Excel (XLS)",  extensions: [".xls"],         mimeTypes: ["application/vnd.ms-excel"] },
+  { key: "pdf",  label: "PDF",          extensions: [".pdf"],         mimeTypes: ["application/pdf"] },
+  { key: "docx", label: "Word (DOCX)",  extensions: [".docx", ".doc"],mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"] },
+];
+
+/** Metadado de capacidade EXPLÍCITO do parser que atende o formato (fonte da verdade). */
+function formatCapability(mimeType: string, sampleExt: string): {
+  supported: boolean;
+  capabilityStatus: "supported" | "stub" | "disabled" | "unknown";
+  supportsStructuredExtraction: boolean;
+  parserVersion: string | null;
+  limitations: string[];
+} {
+  const parser = parserRegistry.resolve(mimeType, `amostra${sampleExt}`);
+  if (!parser) {
+    return { supported: false, capabilityStatus: "unknown", supportsStructuredExtraction: false, parserVersion: null, limitations: [] };
+  }
+  const c = parser.capabilities;
+  return {
+    supported: c.capabilityStatus === "supported",
+    capabilityStatus: c.capabilityStatus,
+    supportsStructuredExtraction: c.supportsStructuredExtraction,
+    parserVersion: c.parserVersion,
+    limitations: c.limitations ?? [],
+  };
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -72,9 +116,12 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     importType:    s.importType,
     importPurpose: s.importPurpose,
     processId:     s.processId,
+    procurementProcessId: s.procurementProcessId ?? null,
     parserType:    s.parserType,
     parserVersion: s.parserVersion,
     retryCount:    s.retryCount,
+    // correlationId de rastreabilidade (para suporte/observabilidade — não é segredo/PII).
+    correlationId: s.correlationId ?? null,
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
     warnings:      Array.isArray(s.warnings) ? s.warnings : [],
     errors:        Array.isArray(s.errors)
@@ -88,9 +135,58 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
   };
 }
 
+/**
+ * PR B.2.2 — Guarda de vínculo com o processo canônico. Uma sessão que pertence a um processo
+ * (procurementProcessId != null — todas as sessões canônicas da B.2.2) NÃO pode ser operada no
+ * contexto de OUTRO processo do mesmo tenant: exige que o chamador informe o mesmo id. Sessões sem
+ * processo (legado/B.2.1) mantêm a validação apenas por tenant. Retorna NOT_FOUND (não vaza existência).
+ */
+function assertSessionProcess(
+  session: { procurementProcessId: string | null },
+  procurementProcessId: string | undefined,
+): void {
+  if (session.procurementProcessId != null && session.procurementProcessId !== procurementProcessId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada para este processo." });
+  }
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────────
 
 export const ingestionRouter = router({
+  /**
+   * Capacidades da ingestão canônica para o tenant. Query read-only usada pelo frontend
+   * para GATEAR a superfície (sem flag → interface não exposta) e refletir a capacidade REAL:
+   *  - `enabled`: estado da feature flag tenant-aware existente (fail-closed; NÃO cria flag nova);
+   *  - `formats`: cada formato com `supported` derivado do parserRegistry (stub ⇒ não funcional).
+   * NÃO lança quando desabilitada (diferente das demais): reporta `enabled:false` para a UI ocultar.
+   * O backend continua autorizando cada operação individualmente (não confia no frontend).
+   */
+  getCapabilities: tenantProcedure
+    .query(async ({ ctx }) => {
+      const orgId = ctx.organizationId!;
+      const enabled = await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId);
+      const formats = USER_FACING_FORMATS.map(f => {
+        const cap = formatCapability(f.mimeTypes[0], f.extensions[0]);
+        return {
+          key:              f.key,
+          label:            f.label,
+          extensions:       f.extensions,
+          mimeTypes:        f.mimeTypes,
+          supported:        cap.supported,
+          capabilityStatus: cap.capabilityStatus,
+          supportsStructuredExtraction: cap.supportsStructuredExtraction,
+          parserVersion:    cap.parserVersion,
+          limitations:      cap.limitations,
+        };
+      });
+      return {
+        enabled,
+        maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+        formats,
+        supportedFormats: formats.filter(f => f.supported),
+      };
+    }),
+
   /**
    * Cria uma sessão de ingestão (metadados). NÃO recebe bytes: gera a chave de storage
    * server-side onde o upload subsequente gravará o arquivo. Idempotente por idempotencyKey
@@ -104,6 +200,9 @@ export const ingestionRouter = router({
       sourceSize:     z.number().int().nonnegative().max(MAX_FILE_SIZE_BYTES),
       checksum:       SHA256,
       idempotencyKey: z.string().min(8).max(64),
+      // PR B.2.2 — vínculo OBRIGATÓRIO com o processo canônico (id string). Semanticamente
+      // separado do `processId` legado (int), mantido opcional apenas por compatibilidade.
+      procurementProcessId: z.string().min(1).max(20),
       processId:      z.number().int().positive().optional(),
       importPurpose:  z.string().min(1).max(50).optional(),
       correlationId:  z.string().max(36).optional(),
@@ -134,8 +233,8 @@ export const ingestionRouter = router({
       }
 
       try {
-        // Dedup por checksum: reutiliza sessão ativa do mesmo arquivo.
-        const existing = await findActiveSessionByChecksum(orgId, input.checksum);
+        // Dedup por checksum ESCOPADO ao processo canônico (nunca reutiliza entre processos).
+        const existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId);
         if (existing) {
           const dupResult = {
             sessionId:  existing.id,
@@ -157,6 +256,7 @@ export const ingestionRouter = router({
             importType:     input.importType as ImportType,
             correlationId:  input.correlationId,
             processId:      input.processId ?? null,
+            procurementProcessId: input.procurementProcessId,
             importPurpose:  input.importPurpose ?? null,
             checksum:       input.checksum,
           },
@@ -178,13 +278,33 @@ export const ingestionRouter = router({
 
   /** Estado atual da sessão: status, progresso, parser, warnings, erro sanitizado, timestamps. */
   getSessionStatus: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
       const summary = await getStagingSummary(input.sessionId, orgId);
+      return { session: toSessionStatus(session), staging: summary };
+    }),
+
+  /**
+   * PR B.2.2 — Retomada por processo: retorna a sessão RESUMÍVEL (não-terminal) mais recente do
+   * processo canônico + tenant, ou null. Usada no reload para retomar SOMENTE a sessão daquele
+   * processo. Não lança quando não há sessão (retorna null).
+   */
+  getActiveSession: tenantProcedure
+    .input(z.object({ procurementProcessId: z.string().min(1).max(20) }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const session = await findResumableSessionForProcess(orgId, input.procurementProcessId);
+      if (!session) return { session: null, staging: null };
+      const summary = await getStagingSummary(session.id, orgId);
       return { session: toSessionStatus(session), staging: summary };
     }),
 
@@ -194,13 +314,17 @@ export const ingestionRouter = router({
    * Lê os bytes do storage durável (não recebe binário por tRPC).
    */
   enqueueProcessing: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       // Já em processamento ou processada → idempotente (não re-enfileira).
       if (["queued", "parsing", "extracted", "normalized", "awaiting_review"].includes(session.status)) {
@@ -241,6 +365,7 @@ export const ingestionRouter = router({
   listStagingItems: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       page:      z.number().int().positive().default(1),
       pageSize:  z.number().int().positive().max(200).default(50),
       reviewStatus: z.enum(["pending", "approved", "rejected", "skipped"]).optional(),
@@ -251,6 +376,7 @@ export const ingestionRouter = router({
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       const all = await getStagingItems(input.sessionId, orgId);
       const filtered = input.reviewStatus
@@ -273,6 +399,11 @@ export const ingestionRouter = router({
         reviewedBy:         i.reviewedBy,
         reviewedAt:         i.reviewedAt,
         reviewNote:         i.reviewNote,
+        // Correção humana (overlay sobre os raw* imutáveis) — o cliente computa o efetivo.
+        correctionRevision: i.correctionRevision,
+        correctedPayload:   i.correctedPayload,
+        correctedAt:        i.correctedAt,
+        correctedByUserId:  i.correctedByUserId,
       }));
 
       return {
@@ -288,6 +419,7 @@ export const ingestionRouter = router({
   reviewItem: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       itemId:    z.number().int().positive(),
       action:    REVIEW_ACTION,
       note:      z.string().max(1000).optional(),
@@ -295,6 +427,13 @@ export const ingestionRouter = router({
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
+
+      // Vínculo com o processo canônico: valida que a sessão pertence ao processo informado.
+      if (input.procurementProcessId != null) {
+        const session = await getImportSession(input.sessionId, orgId);
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+        assertSessionProcess(session, input.procurementProcessId);
+      }
 
       const item = await getStagingItem(input.itemId, orgId);
       if (!item || item.importSessionId !== input.sessionId) {
@@ -326,10 +465,69 @@ export const ingestionRouter = router({
       return { itemId: item.id, action: input.action, idempotent: false };
     }),
 
+  /**
+   * PR B.2.2 — Correção humana AUDITÁVEL de um item de staging. Valida tenant + processo canônico +
+   * sessão + item; valida campos permitidos por importType (rejeita chaves desconhecidas e raw);
+   * exige justificativa; concorrência otimista por expectedRevision (CONFLICT acionável); idempotente
+   * por idempotencyKey; grava histórico before/after. NÃO aprova o item nem promove ao domínio.
+   */
+  correctItem: tenantProcedure
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      itemId:               z.number().int().positive(),
+      expectedRevision:     z.number().int().nonnegative(),
+      corrections:          z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
+      justification:        z.string().min(1).max(1000),
+      idempotencyKey:       z.string().min(8).max(64),
+      correlationId:        z.string().max(36).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+
+      if (!isImportTypeCorrectable(session.importType)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: `Correção não disponível para o tipo "${session.importType}".` });
+      }
+
+      const result = await correctStagingItem({
+        itemId:               input.itemId,
+        organizationId:       orgId,
+        importSessionId:      input.sessionId,
+        procurementProcessId: session.procurementProcessId ?? input.procurementProcessId,
+        importType:           session.importType,
+        actorUserId:          ctx.user!.id,
+        corrections:          input.corrections,
+        justification:        input.justification,
+        expectedRevision:     input.expectedRevision,
+        idempotencyKey:       input.idempotencyKey,
+        correlationId:        ctx.correlationId ?? input.correlationId ?? null,
+      });
+
+      await logActivity({
+        organizationId: orgId,
+        userId:         ctx.user!.id,
+        action:         result.idempotent ? "import_item_correction_replayed" : "import_item_corrected",
+        entityType:     "import_staging_item",
+        entityId:       input.itemId,
+        correlationId:  ctx.correlationId,
+        requestId:      ctx.requestId,
+        // Sem overlay/conteúdo — apenas identificadores seguros.
+        details:        { sessionId: input.sessionId, revision: result.revision, idempotent: result.idempotent },
+      });
+
+      return { itemId: input.itemId, revision: result.revision, idempotent: result.idempotent };
+    }),
+
   /** Revisão em lote de itens PENDENTES da sessão. Só afeta pendentes (idempotente por natureza). */
   reviewBulk: tenantProcedure
     .input(z.object({
       sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
       itemIds:   z.array(z.number().int().positive()).min(1).max(500),
       action:    REVIEW_ACTION,
       note:      z.string().max(1000).optional(),
@@ -340,6 +538,7 @@ export const ingestionRouter = router({
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       // Garante que todos os itens pertencem à sessão + tenant (defesa contra IDs cruzados).
       const owned = await getStagingItems(input.sessionId, orgId);
@@ -370,13 +569,17 @@ export const ingestionRouter = router({
    * Exige status `awaiting_review` e zero itens pendentes (aprovação sem revisão é bloqueada).
    */
   approveSession: tenantProcedure
-    .input(z.object({ sessionId: z.number().int().positive() }))
+    .input(z.object({
+      sessionId: z.number().int().positive(),
+      procurementProcessId: z.string().max(20).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
 
       const session = await getImportSession(input.sessionId, orgId);
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
 
       if (session.status === "approved") {
         return { sessionId: session.id, status: "approved" as const, idempotent: true };

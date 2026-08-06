@@ -9,6 +9,15 @@ import type { ImportWarning, ImportError, ExtractionSummary } from "../domain/im
 
 // ─── Parser capabilities ──────────────────────────────────────────────────────
 
+/**
+ * Estado EXPLÍCITO de capacidade do parser — fonte única para o gating público (getCapabilities).
+ * Não inferir suporte por convenção de versão ("-stub"): o parser DECLARA seu estado.
+ *   - "supported": extração real disponível;
+ *   - "stub":      contrato definido, sem extração real (não deve ser ofertado como funcional);
+ *   - "disabled":  desligado operacionalmente (nunca ofertado).
+ */
+export type ParserCapabilityStatus = "supported" | "stub" | "disabled";
+
 export interface ParserCapabilities {
   supportedMimeTypes:    string[];
   supportedExtensions:   string[];
@@ -16,6 +25,12 @@ export interface ParserCapabilities {
   supportsStreaming:     boolean;
   supportsProgressEvents: boolean;
   parserVersion:         string;
+  /** Estado explícito de capacidade (obrigatório) — dirige o que a UI pode ofertar. */
+  capabilityStatus:      ParserCapabilityStatus;
+  /** Se o parser extrai itens estruturados de fato (false em stubs). */
+  supportsStructuredExtraction: boolean;
+  /** Limitações conhecidas, exibíveis ao operador (ex.: "PDF: extração real na B.2.3"). */
+  limitations?:          string[];
   requiresExternalLib?:  string; // nome da lib se não bundlada
 }
 

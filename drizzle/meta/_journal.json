@@ -1935,6 +1935,20 @@
       "when": 1784419200003,
       "tag": "0288_import_session_canonical_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "5",
+      "when": 1784419200004,
+      "tag": "0289_import_session_procurement_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "5",
+      "when": 1784419200005,
+      "tag": "0290_import_item_corrections",
+      "breakpoints": true
     }
   ]
 }

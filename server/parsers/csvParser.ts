@@ -85,6 +85,8 @@ export class CsvParser extends BaseParser {
     supportsStreaming:     false,
     supportsProgressEvents: false,
     parserVersion:         "1.0.0",
+    capabilityStatus:      "supported",
+    supportsStructuredExtraction: true,
   };
 
   canHandle(mimeType: string, extension: string): boolean {

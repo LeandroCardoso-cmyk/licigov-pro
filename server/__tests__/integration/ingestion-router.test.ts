@@ -36,6 +36,7 @@ vi.mock("../../services/fileIngestionService", () => ({
   createImportSession: vi.fn(),
   getImportSession: vi.fn(),
   findActiveSessionByChecksum: vi.fn().mockResolvedValue(null),
+  findResumableSessionForProcess: vi.fn().mockResolvedValue(null),
   updateSessionStatus: vi.fn().mockResolvedValue(undefined),
   attachStoredFile: vi.fn().mockResolvedValue(undefined),
 }));
@@ -46,6 +47,7 @@ vi.mock("../../services/importStagingService", () => ({
   reviewStagingItem: vi.fn().mockResolvedValue(undefined),
   bulkReviewStagingItems: vi.fn().mockResolvedValue(0),
   getStagingSummary: vi.fn().mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 }),
+  correctStagingItem: vi.fn().mockResolvedValue({ item: {}, revision: 1, idempotent: false }),
 }));
 
 vi.mock("../../services/importQueueService", () => ({
@@ -86,6 +88,7 @@ const validCreateInput = {
   sourceSize: 10,
   checksum: "a".repeat(64),
   idempotencyKey: "idem-key-123456",
+  procurementProcessId: "PROC-CANON-01", // B.2.2 — vínculo canônico obrigatório
 };
 
 beforeEach(() => {
@@ -160,6 +163,95 @@ describe("createSession", () => {
       expect.objectContaining({ processId: 5 }),
       expect.anything(),
     );
+  });
+});
+
+describe("vínculo com processo canônico (B.2.2)", () => {
+  it("createSession propaga procurementProcessId ao serviço", async () => {
+    await caller().createSession(validCreateInput);
+    expect(ingestion.createImportSession).toHaveBeenCalledWith(
+      expect.objectContaining({ procurementProcessId: "PROC-CANON-01" }),
+      expect.anything(),
+    );
+  });
+
+  it("createSession com processo canônico de outro tenant / forjado → NOT_FOUND", async () => {
+    vi.mocked(ingestion.createImportSession).mockRejectedValue(
+      new TRPCError({ code: "NOT_FOUND", message: "Processo canônico não encontrado nesta organização." }),
+    );
+    await expect(caller().createSession({ ...validCreateInput, procurementProcessId: "FORJADO" }))
+      .rejects.toThrowError(/processo canônico não encontrado/i);
+  });
+
+  it("sessionId válido usado no PROCESSO ERRADO → NOT_FOUND (status/staging/approve)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    await expect(caller().getSessionStatus({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+    await expect(caller().listStagingItems({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "awaiting_review", procurementProcessId: "P1" }) as any);
+    await expect(caller().approveSession({ sessionId: 100, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("reviewItem/reviewBulk validam o processo da sessão", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    await expect(caller().reviewItem({ sessionId: 100, procurementProcessId: "P2", itemId: 1, action: "approved" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+    await expect(caller().reviewBulk({ sessionId: 100, procurementProcessId: "P2", itemIds: [1], action: "approved" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("mesmo processo → operações liberadas (status expõe o vínculo canônico)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    const r = await caller().getSessionStatus({ sessionId: 100, procurementProcessId: "P1" });
+    expect(r.session.procurementProcessId).toBe("P1");
+  });
+
+  it("getActiveSession retorna a sessão resumível do processo, ou null", async () => {
+    vi.mocked(ingestion.findResumableSessionForProcess).mockResolvedValue(sessionRow({ procurementProcessId: "P1" }) as any);
+    const r = await caller().getActiveSession({ procurementProcessId: "P1" });
+    expect(r.session?.id).toBe(100);
+
+    vi.mocked(ingestion.findResumableSessionForProcess).mockResolvedValue(null);
+    const r2 = await caller().getActiveSession({ procurementProcessId: "P1" });
+    expect(r2.session).toBeNull();
+  });
+});
+
+describe("correctItem — correção humana (B.2.2)", () => {
+  const correctInput = {
+    sessionId: 100, procurementProcessId: "P1", itemId: 7, expectedRevision: 0,
+    corrections: { unitPrice: "12,50" }, justification: "valor digitado errado", idempotencyKey: "corr-key-123456",
+  };
+
+  it("valida o processo canônico da sessão (processo errado → NOT_FOUND)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "price_research", procurementProcessId: "P1" }) as any);
+    await expect(caller().correctItem({ ...correctInput, procurementProcessId: "P2" }))
+      .rejects.toThrowError(/não encontrada para este processo/i);
+  });
+
+  it("importType não corrigível → FORBIDDEN (sem patch genérico)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "generic", procurementProcessId: "P1" }) as any);
+    await expect(caller().correctItem(correctInput)).rejects.toThrowError(/não disponível/i);
+  });
+
+  it("delega ao serviço e audita (idempotência refletida)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "price_research", procurementProcessId: "P1" }) as any);
+    vi.mocked(staging.correctStagingItem).mockResolvedValue({ item: {} as any, revision: 1, idempotent: false });
+    const r = await caller().correctItem(correctInput);
+    expect(r.revision).toBe(1);
+    expect(r.idempotent).toBe(false);
+    expect(staging.correctStagingItem).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: 7, importType: "price_research", expectedRevision: 0, idempotencyKey: "corr-key-123456",
+    }));
+    expect(audit.logActivity).toHaveBeenCalled();
+  });
+
+  it("flag desligada → FORBIDDEN", async () => {
+    vi.mocked(flags.isFeatureEnabled).mockResolvedValue(false);
+    await expect(caller().correctItem(correctInput)).rejects.toThrowError(/não habilitada/i);
   });
 });
 

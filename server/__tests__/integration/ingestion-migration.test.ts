@@ -68,7 +68,9 @@ describe("migration 0288 — reconciliadora, aditiva, segura", () => {
   it("está registrada no journal (1:1)", () => {
     const tags = JOURNAL.entries.map((e: { tag: string }) => e.tag);
     expect(tags).toContain("0288_import_session_canonical_fields");
-    expect(JOURNAL.entries[JOURNAL.entries.length - 1].tag).toBe("0288_import_session_canonical_fields");
+    // A 0289 (vínculo canônico) passou a ser a última entrada; a 0288 permanece registrada 1:1.
+    const idx288 = JOURNAL.entries.find((e: { idx: number }) => e.idx === 288);
+    expect(idx288?.tag).toBe("0288_import_session_canonical_fields");
   });
 });
 

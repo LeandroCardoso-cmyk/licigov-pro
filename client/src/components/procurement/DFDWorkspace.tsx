@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
+import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
+import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 
 /**
  * DFDWorkspace — REAL (wired to tRPC).
@@ -30,6 +32,7 @@ export type DFDWorkspaceProps = {
 
 export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
+  const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const [source, setSource] = useState<DFDSource>("pdf");
   const [draft, setDraft] = useState("");
   const loadedFor = useRef<string | null>(null);
@@ -108,37 +111,53 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
             )}
           </div>
 
-          {/* Importar */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h2 className="mb-3 font-medium text-foreground">Importar DFD existente</h2>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex flex-1 flex-col text-sm">
-                <span className="mb-1 font-medium text-foreground">Fonte</span>
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value as DFDSource)}
-                  className="rounded-lg border border-input bg-background px-3 py-2 text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {/* Importar DFD existente — capability-aware (B.2.2).
+              Com a ingestão canônica LIGADA, a importação usa a fundação supervisionada; como os
+              parsers de PDF/DOCX ainda são stub (B.2.3), a ação é apresentada como indisponível de
+              forma objetiva (sem ofertar formatos alheios ao DFD nem fluxo sem resultado). Com a
+              flag DESLIGADA, o caminho legado permanece congelado. */}
+          {ingestionEnabled ? (
+            <DocumentIngestionLauncher
+              importType="generic"
+              procurementProcessId={processId}
+              importPurpose="dfd_import"
+              title="Importar DFD existente"
+              description="A importação assistida de DFD passará por revisão humana antes de qualquer uso."
+              relevantFormatKeys={["pdf", "docx"]}
+              allowPaste={false}
+            />
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <h2 className="mb-3 font-medium text-foreground">Importar DFD existente</h2>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="flex flex-1 flex-col text-sm">
+                  <span className="mb-1 font-medium text-foreground">Fonte</span>
+                  <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value as DFDSource)}
+                    className="rounded-lg border border-input bg-background px-3 py-2 text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {(Object.keys(SOURCE_LABELS) as DFDSource[]).map((s) => (
+                      <option key={s} value={s}>
+                        {SOURCE_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => processId && importDFD.mutate({ processId, source })}
+                  disabled={!processId || importDFD.isPending}
+                  className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
-                  {(Object.keys(SOURCE_LABELS) as DFDSource[]).map((s) => (
-                    <option key={s} value={s}>
-                      {SOURCE_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => processId && importDFD.mutate({ processId, source })}
-                disabled={!processId || importDFD.isPending}
-                className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                {importDFD.isPending ? "Importando..." : "Importar DFD"}
-              </button>
+                  {importDFD.isPending ? "Importando..." : "Importar DFD"}
+                </button>
+              </div>
+              {importDFD.isError && (
+                <p className="mt-2 text-sm text-destructive">Falha ao importar o DFD.</p>
+              )}
             </div>
-            {importDFD.isError && (
-              <p className="mt-2 text-sm text-destructive">Falha ao importar o DFD.</p>
-            )}
-          </div>
+          )}
 
           {!processId && (
             <p className="text-xs text-amber-600 dark:text-amber-400">

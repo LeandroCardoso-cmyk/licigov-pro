@@ -8,9 +8,6 @@
  * DOCX: extrai parágrafos e tabelas (requer mammoth — sprint 3)
  */
 import { BaseParser } from "./baseParser";
-import { createRawItem } from "../domain/importExtraction";
-import { buildProvenance } from "../domain/importProvenance";
-import { aggregateConfidence, buildFieldConfidence } from "../domain/importConfidence";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -26,6 +23,9 @@ export class PdfParser extends BaseParser {
     supportsStreaming:     false,
     supportsProgressEvents: false,
     parserVersion:         "1.0.0-stub",
+    capabilityStatus:      "stub",
+    supportsStructuredExtraction: false,
+    limitations:           ["Extração real de PDF disponível na B.2.3 (requer pdf-parse)."],
     requiresExternalLib:   "pdf-parse",
   };
 
@@ -33,7 +33,7 @@ export class PdfParser extends BaseParser {
     return mimeType === "application/pdf" || extension.toLowerCase() === "pdf";
   }
 
-  async parse(buffer: Buffer, opts: ParseOptions): Promise<ParseResult> {
+  async parse(buffer: Buffer, _opts: ParseOptions): Promise<ParseResult> {
     const startMs = Date.now();
 
     // Stub: detecta se é PDF pelo magic bytes %PDF
@@ -93,6 +93,9 @@ export class DocxParser extends BaseParser {
     supportsStreaming:     false,
     supportsProgressEvents: false,
     parserVersion:         "1.0.0-stub",
+    capabilityStatus:      "stub",
+    supportsStructuredExtraction: false,
+    limitations:           ["Extração real de DOCX disponível na B.2.3 (requer mammoth)."],
     requiresExternalLib:   "mammoth",
   };
 
@@ -101,7 +104,7 @@ export class DocxParser extends BaseParser {
            ["docx", "doc"].includes(extension.toLowerCase());
   }
 
-  async parse(buffer: Buffer, opts: ParseOptions): Promise<ParseResult> {
+  async parse(buffer: Buffer, _opts: ParseOptions): Promise<ParseResult> {
     const startMs = Date.now();
 
     // Stub: detecta ZIP magic bytes (DOCX é um ZIP)

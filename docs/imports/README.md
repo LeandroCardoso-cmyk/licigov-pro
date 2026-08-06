@@ -257,6 +257,146 @@ Preços/TR), parser real de PDF/DOCX, alterações nos workspaces, remoção do 
 
 ---
 
+## Interface Canônica de Ingestão (PR B.2.2)
+
+> **B.2.2 conecta as INTERFACES** à fundação da B.2.1. Não implementa parser PDF/DOCX (B.2.3) nem
+> promoção transacional ao domínio (B.2.4). **Nenhum documento oficial é criado nesta etapa.**
+
+### Roadmap dos blocos
+- **B.2.1** — fundação canônica (API, upload streaming, fila, staging, migration 0288). ✅
+- **B.2.2** — conecta as interfaces (esta etapa): Pesquisa de Preços, DFD e ETP. ✅
+- **B.2.3** — parsers reais de PDF/DOCX (habilita a extração desses formatos).
+- **B.2.4** — promoção transacional ao domínio (incorporação ao processo).
+
+### Camada de frontend
+- **Lib pura e testável** (`client/src/lib/ingestion/`): `status` (fases institucionais + `derivePhase`),
+  `capabilities` (accept/validação), `staging` (confidence/provenance), `sha256` (checksum do cliente).
+- **Hooks** (`client/src/hooks/ingestion/`, TanStack Query): `useIngestionCapabilities`,
+  `useSupervisedIngestion` (create → upload multipart via `fetch`/`FormData` → enqueue → polling;
+  guarda de duplo-clique; idempotência; cancel; retry), `useStagingReview` (lista paginada +
+  reviewItem/bulk + approve).
+- **Componentes** (`client/src/components/ingestion/`, shadcn + dark mode + a11y): `DocumentIngestionLauncher`,
+  `FileDropzone` (`<input type="file">` real), `IngestionSessionProgress`, `IngestionStatusBadge`,
+  `StagingReviewTable`, `StagingReviewDrawer`, `IngestionWarningsPanel`, `IngestionErrorState`,
+  `IngestionAuditSummary`.
+
+### Query de capacidades — `ingestion.getCapabilities`
+Read-only, tenant-aware. A UI gateia por `enabled` (flag existente; sem flag → superfície não
+exposta) e reflete a capacidade REAL: `supported` de cada formato é **derivado do parserRegistry**
+(stub ⇒ `false`). O backend continua autorizando cada operação (não confia no frontend).
+
+### Matriz de capacidades real (formato × parser × estado)
+| Formato | MIME / extensão | Parser | Estado |
+|---|---|---|---|
+| CSV | `text/csv`, `application/csv`, `text/plain`, `.csv`/`.txt` | `csvParser 1.0.0` | ✅ **suportado** |
+| XLSX | OOXML spreadsheet, `.xlsx` | `xlsxParser 1.0.0` (SheetJS) | ✅ **suportado** |
+| XLS | `application/vnd.ms-excel`, `.xls` | `xlsxParser 1.0.0` (OLE via SheetJS) | ✅ **suportado** |
+| PDF | `application/pdf`, `.pdf` | `pdfParser 1.0.0-stub` | ❌ **stub (B.2.3)** |
+| DOCX/DOC | OOXML word / `application/msword`, `.docx`/`.doc` | `docxParser 1.0.0-stub` | ❌ **stub (B.2.3)** |
+| Conteúdo colado | enviado como `text/csv` (bytes UTF-8) | `csvParser 1.0.0` | ✅ **suportado** |
+
+> Formatos com parser **stub NÃO são apresentados como funcionais**. Um upload de PDF/DOCX é
+> rejeitado no cliente (mensagem objetiva) e no servidor.
+
+### Pesquisa de Preços (fim a fim)
+Com a flag LIGADA, o `DocumentIngestionLauncher` (importType `price_research`) oferece três entradas:
+**Inserir manualmente** (caminho legado `procurementProcess.importPriceResearch`, preservado/congelado),
+**Colar conteúdo** (enviado como CSV) e **Enviar arquivo** (dropzone real, CSV/XLSX/XLS). O fluxo é
+`createSession → upload multipart → fila → staging → revisão humana (aceitar/rejeitar/pular + nota) →
+aprovação da revisão`. Com a flag DESLIGADA (padrão de produção), a superfície canônica não é exposta
+e o comportamento legado permanece idêntico.
+
+### DFD e ETP (capability-aware)
+- **DFD**: preserva "Criar DFD do zero"; "Importar DFD existente" usa a fundação canônica
+  (`relevantFormatKeys=[pdf,docx]`). Como PDF/DOCX são stub, a importação aparece **indisponível** de
+  forma objetiva (sem ofertar formatos alheios nem fluxo sem resultado). Legado congelado quando a
+  flag está desligada.
+- **ETP**: preserva "Gerar ETP a partir do processo"; adiciona "Importar ETP existente" (canônico,
+  capability-aware). Sem geração jurídica autônoma; sem promoção; revisão humana obrigatória.
+
+### Estados de sessão visíveis (institucionais, pt-BR)
+`Preparando → Enviando → Enviado → Na fila → Processando → Aguardando revisão → Parcialmente revisado
+→ Revisado → Revisão aprovada`; além de `Falhou`, `Enviado para DLQ` e `Arquivado`. O progresso reflete
+o estado **persistido** (nunca progresso simulado).
+
+### Feature flag
+`FF_CANONICAL_INGESTION` — tenant-aware, **fail-closed**, **desabilitada em produção** (esta etapa não
+a habilita). Sem registro para o tenant → superfície não exposta e cada operação retorna `FORBIDDEN`.
+
+### Segurança / observabilidade (frontend + backend)
+Isolamento por organização; **nenhum binário/base64 em tRPC** (upload só por `fetch`/`FormData` com
+`credentials`); nenhum caminho de storage exposto; checksum do cliente é só expectativa (servidor é a
+autoridade); `correlationId` disponível para suporte (sem PII); mensagens de erro sanitizadas; guarda
+de duplo-clique e submissão duplicada; cancelamento sem corromper o estado persistido; retry idempotente.
+
+### Acessibilidade
+Dropzone com `role="button"`, `tabIndex`, `aria-label`/`aria-describedby`, ativação por Enter/Espaço e
+foco visível (`focus-visible:ring`); estados anunciados via `role="status"`/`role="alert"`; dark mode
+via tokens semânticos + variantes `dark:`.
+
+### Vínculo com o processo canônico (B.2.2 — correções)
+As sessões de ingestão são vinculadas ao **processo canônico** (`procurement_processes.id`, `varchar(20)`)
+via `import_sessions.procurementProcessId` (migration aditiva **0289**, índice tenant-aware
+`(organizationId, procurementProcessId)`). Semanticamente **separado** do `processId` legado (int).
+Garantias: `createSession` valida que o processo pertence à organização; toda operação
+(`status`/`staging`/`reviewItem`/`reviewBulk`/`approveSession`) valida **tenant e processo** — uma
+sessão de um processo **não** é operável em outro processo do mesmo tenant; dedup por checksum e
+retomada (`getActiveSession`) são **escopados por processo**; o reload retoma somente a sessão daquele
+processo. Capacidade explícita: `capabilityStatus` (supported/stub/disabled) declarado por cada parser
+é a fonte da verdade do gating (não a convenção de versão).
+
+### Correção humana de itens — IMPLEMENTADA (migration 0290)
+Correção auditável de item de staging, com **original imutável + projeção atual + histórico**:
+
+- **Schema (migration 0290):** `import_staging_items` ganha `correctionRevision INT NOT NULL DEFAULT
+  0`, `correctedPayload JSON NULL` (overlay validado), `correctedAt`, `correctedByUserId`. Os `raw*`
+  permanecem **imutáveis** (provenance preservada). Tabela de histórico **imutável e consultável**
+  `import_item_corrections` (org, procurementProcessId, importSessionId, stagingItemId, fromRevision,
+  toRevision, beforePayload, afterPayload, changedFields, justification, actorUserId, idempotencyKey,
+  correlationId, createdAt) com unicidade `(org, item, toRevision)` e `(org, idempotencyKey)`.
+- **Conteúdo efetivo** = `raw*` + `correctedPayload` (overlay vence). Nunca sobrescreve o raw.
+- **Contrato `ingestion.correctItem`** (sessionId, procurementProcessId, itemId, expectedRevision,
+  corrections, justification, idempotencyKey): valida tenant + processo canônico + sessão + item;
+  valida campos permitidos por importType (allowlist explícita; rejeita desconhecidos e raw);
+  exige justificativa; **concorrência otimista** (UPDATE só avança se `correctionRevision =
+  expectedRevision`; senão `CONFLICT` acionável, sem histórico parcial); **idempotência** por
+  `idempotencyKey`; grava histórico e projeção na **mesma transação**; incrementa a revisão uma vez.
+- **Optimistic locking / idempotência:** conflito real (outro revisor) → `CONFLICT`; replay da mesma
+  chave → no-op de sucesso (idempotente).
+- **Allowlist price_research:** `description`, `quantity`, `unit`, `unitPrice`, `totalPrice`, com
+  tipo/limite/normalização (decimais pt-BR/en-US). importTypes sem contrato → capacidade indisponível.
+- **Semântica de revisão:** corrigir **não aprova** o item — ele segue pendente até aceitar/rejeitar/
+  pular; `approveSession` continua exigindo zero pendentes. **Nenhuma promoção ao domínio.**
+- **Fluxo visual (StagingReviewDrawer):** Original × Atual por campo, justificativa obrigatória,
+  revisão atual, selo "Conteúdo corrigido", autor/hora; conflito exibe "Este item foi alterado por
+  outro revisor. Atualize os dados antes de continuar." com refetch e preservação do rascunho local.
+- **Observabilidade:** eventos auditáveis (correção criada/replay) só com identificadores seguros —
+  nunca overlay/conteúdo, storageKey, URL, credenciais.
+
+### Limitações remanescentes (registradas)
+- PDF/DOCX permanecem **stub** — importação de DFD/ETP indisponível até a **B.2.3** (parsers reais).
+- Não há contrato de "criar ETP manualmente" nem persistência de ETP (só `generateETP`) — para B.2.4.
+- Promoção transacional ao domínio oficial — **B.2.4**.
+
+### Troubleshooting
+| Sintoma | Causa provável | Ação |
+|---|---|---|
+| Superfície canônica não aparece | Flag desligada para o tenant | Comportamento esperado (fail-closed); habilitar a flag por tenant fora de produção |
+| "Formato não suportado" ao enviar PDF/DOCX | Parser stub (B.2.3) | Esperado; usar CSV/XLSX ou aguardar B.2.3 |
+| Upload 413 | Arquivo acima de 50 MB | Reduzir o arquivo |
+| Upload 400 "conteúdo não corresponde" | *magic bytes* × extensão divergentes | Reenviar o arquivo correto |
+| Aprovação bloqueada | Itens pendentes de revisão | Revisar todos os itens antes de aprovar |
+
+### Evidência Graphify
+Grafo canônico atualizado **após** código + testes + build verdes (regra Graphify 6). Superfícies
+confirmadas no código: `ProcessoLicitatorio` (abas `dfd`/`price`/`etp`) e os workspaces em
+`client/src/components/procurement/`. Estado das divergências: **resolvido** — vínculo canônico
+(migration 0289) e correção humana auditável (migration 0290) implementados; capacidade de parser
+explícita. Permanecem para etapas futuras: PDF/DOCX stub (B.2.3) e persistência/criação manual de
+ETP + promoção ao domínio (B.2.4).
+
+---
+
 *Para motor documental: [architecture/DOCUMENT_ENGINE_OFFICIAL.md](../architecture/DOCUMENT_ENGINE_OFFICIAL.md)*
 *Para arquitetura de importação: [architecture/IMPORT_ENGINE.md](../architecture/IMPORT_ENGINE.md)*
 *Troubleshooting da ingestão: [ops/INGESTION_RUNBOOK.md](../ops/INGESTION_RUNBOOK.md)*
