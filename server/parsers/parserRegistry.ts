@@ -58,7 +58,8 @@ export const parserRegistry = new ParserRegistry();
 // Self-registering parsers at module init — order doesn't matter (resolve uses priority: hint > mime > ext)
 import { csvParser }  from "./csvParser";
 import { xlsxParser } from "./xlsxParser";
-import { pdfParser, docxParser } from "./pdfParser";
+import { pdfParser }  from "./pdfParser";
+import { docxParser } from "./docxParser";
 
 parserRegistry
   .register(csvParser)

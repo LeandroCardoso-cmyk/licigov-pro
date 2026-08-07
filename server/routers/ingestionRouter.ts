@@ -14,7 +14,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
 import type { TrpcAuditCtx } from "../services/activityLogService";
 import { logActivity } from "../services/activityLogService";
@@ -35,6 +35,7 @@ import {
   type ReviewAction,
 } from "../services/importStagingService";
 import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
+import { promoteApprovedSessionToDomain } from "../services/importPromotionService";
 import { enqueueImport } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
@@ -53,9 +54,9 @@ import {
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
- * parserRegistry (fonte única da verdade): um formato é funcional apenas se o parser
- * resolvido NÃO for stub (parserVersion sem sufixo "-stub"). Assim a UI nunca apresenta
- * como funcional um formato cujo parser ainda é stub (PDF/DOCX até a B.2.3).
+ * parserRegistry (fonte única da verdade): um formato é funcional apenas quando o parser
+ * resolvido declara `capabilityStatus: "supported"`. Na B.2.3 CSV/XLS/XLSX/PDF/DOCX são
+ * suportados (extração real); OCR de PDF escaneado permanece não suportado (limitação declarada).
  */
 const USER_FACING_FORMATS: ReadonlyArray<{
   key: string; label: string; extensions: string[]; mimeTypes: string[];
@@ -120,6 +121,9 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     parserType:    s.parserType,
     parserVersion: s.parserVersion,
     retryCount:    s.retryCount,
+    // PR B.2.4 — estado de promoção ao domínio (gate da ação de promoção na UI).
+    promotionStatus: s.promotionStatus ?? "none",
+    promotionRef:    s.promotionRef ?? null,
     // correlationId de rastreabilidade (para suporte/observabilidade — não é segredo/PII).
     correlationId: s.correlationId ?? null,
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
@@ -610,5 +614,37 @@ export const ingestionRouter = router({
       });
 
       return { sessionId: session.id, status: "approved" as const, idempotent: false, summary };
+    }),
+
+  /**
+   * PR B.2.4 — Promoção TRANSACIONAL e supervisionada da sessão APROVADA ao domínio canônico.
+   * Precondição = pós-condição de approveSession (status 'approved', zero pendentes). Só `price_research`
+   * é promovível hoje (DFD/ETP são documentos, não contêineres de linhas — capacidade indisponível).
+   * Idempotente (uma promoção por sessão) e escopada por tenant + processo. Não faz merge nem decide juridicamente.
+   * Exige papel institucional mínimo 'manager' (segregação de deveres: operador revisa; gestor promove ao domínio).
+   */
+  promoteSession: orgRoleProcedure("manager")
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      idempotencyKey:       z.string().min(8).max(64),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+
+      return await promoteApprovedSessionToDomain({
+        sessionId:            input.sessionId,
+        organizationId:       orgId,
+        procurementProcessId: input.procurementProcessId,
+        actorUserId:          ctx.user!.id,
+        actorName:            ctx.user!.name ?? undefined,
+        idempotencyKey:       input.idempotencyKey,
+        correlationId:        ctx.correlationId ?? "",
+      });
     }),
 });

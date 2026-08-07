@@ -1904,12 +1904,42 @@ export const importSessions = mysqlTable("import_sessions", {
   startedAt:          timestamp("startedAt"),
   finishedAt:         timestamp("finishedAt"),
   failedAt:           timestamp("failedAt"),
+  // PR B.2.4 — projeção do estado de promoção transacional ao domínio (ledger em import_promotions).
+  // 'none' → nunca promovida; 'promoted' → promovida (uma única vez). Ver drizzle/0291.
+  promotionStatus:    varchar("promotionStatus",  { length: 20 }).notNull().default("none"),
+  promotedAt:         timestamp("promotedAt"),
+  promotedByUserId:   int("promotedByUserId"),
+  promotionRef:       varchar("promotionRef",     { length: 20 }),
   createdAt:          timestamp("createdAt").defaultNow().notNull(),
   updatedAt:          timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ImportSession       = typeof importSessions.$inferSelect;
 export type InsertImportSession = typeof importSessions.$inferInsert;
+
+/**
+ * PR B.2.4 — Ledger IMUTÁVEL de promoções de sessão de ingestão ao domínio canônico.
+ * Uma linha por promoção; UNIQUE (organizationId, importSessionId) garante UMA promoção por sessão
+ * (impede dupla promoção concorrente) e UNIQUE (organizationId, idempotencyKey) dá idempotência
+ * tenant-aware. `targetKind` = agregado de destino (ex.: "price_research"); `targetRef` = id criado.
+ */
+export const importPromotions = mysqlTable("import_promotions", {
+  id:                   int("id").autoincrement().primaryKey(),
+  organizationId:       int("organizationId").notNull(),
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }),
+  importSessionId:      int("importSessionId").notNull(),
+  importType:           varchar("importType",  { length: 30 }).notNull(),
+  targetKind:           varchar("targetKind",  { length: 30 }).notNull(),
+  targetRef:            varchar("targetRef",   { length: 20 }),
+  itemsPromoted:        int("itemsPromoted").notNull().default(0),
+  idempotencyKey:       varchar("idempotencyKey", { length: 64 }),
+  correlationId:        varchar("correlationId",  { length: 36 }),
+  actorUserId:          int("actorUserId"),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ImportPromotionRow       = typeof importPromotions.$inferSelect;
+export type InsertImportPromotionRow = typeof importPromotions.$inferInsert;
 
 /**
  * Sprint 2.8 — Import Staging Items.

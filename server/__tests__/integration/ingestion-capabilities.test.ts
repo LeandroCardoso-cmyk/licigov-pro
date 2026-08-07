@@ -25,7 +25,7 @@ import * as flags from "../../services/featureFlagService";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const caller = () => ingestionRouter.createCaller(makeContext(mockUser) as any);
 
-function bykey(formats: Array<{ key: string; supported: boolean }>, key: string) {
+function bykey(formats: Array<{ key: string; supported: boolean; limitations?: string[] }>, key: string) {
   return formats.find(f => f.key === key);
 }
 
@@ -53,12 +53,13 @@ describe("ingestion.getCapabilities — capacidade real e fail-closed", () => {
     expect(bykey(caps.formats, "xls")?.supported).toBe(true);
   });
 
-  it("PDF/DOCX NÃO são suportados (parser stub) — nunca apresentados como funcionais", async () => {
+  it("PDF/DOCX passam a ser suportados na B.2.3 (extração real) com limitações declaradas", async () => {
     const caps = await caller().getCapabilities();
-    expect(bykey(caps.formats, "pdf")?.supported).toBe(false);
-    expect(bykey(caps.formats, "docx")?.supported).toBe(false);
-    // supportedFormats só contém formatos com parser real.
-    expect(caps.supportedFormats.map(f => f.key).sort()).toEqual(["csv", "xls", "xlsx"]);
-    expect(caps.supportedFormats.some(f => f.key === "pdf" || f.key === "docx")).toBe(false);
+    expect(bykey(caps.formats, "pdf")?.supported).toBe(true);
+    expect(bykey(caps.formats, "docx")?.supported).toBe(true);
+    // supportedFormats agora inclui pdf/docx; nenhum stub é apresentado como funcional.
+    expect(caps.supportedFormats.map(f => f.key).sort()).toEqual(["csv", "docx", "pdf", "xls", "xlsx"]);
+    // Limitações reais (ex.: OCR não suportado no PDF) são expostas para o operador.
+    expect((bykey(caps.formats, "pdf")?.limitations ?? []).some(l => /OCR/i.test(l))).toBe(true);
   });
 });

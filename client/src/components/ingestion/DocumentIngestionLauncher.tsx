@@ -28,6 +28,7 @@ import { IngestionErrorState } from "./IngestionErrorState";
 import { IngestionAuditSummary } from "./IngestionAuditSummary";
 import { StagingReviewTable } from "./StagingReviewTable";
 import { StagingReviewDrawer } from "./StagingReviewDrawer";
+import { PromoteToDomainPanel } from "./PromoteToDomainPanel";
 
 const REVIEW_PHASES: IngestionPhase[] = ["awaiting_review", "partially_reviewed", "reviewed", "approved"];
 
@@ -216,10 +217,21 @@ export function DocumentIngestionLauncher({
             />
 
             {ingestion.phase === "approved" ? (
-              <Alert className="border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100">
-                <AlertTitle>{PHASE_META.approved.label}</AlertTitle>
-                <AlertDescription>{INSTITUTIONAL_COPY.notOfficialYet}</AlertDescription>
-              </Alert>
+              <div className="space-y-3">
+                <Alert className="border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100">
+                  <AlertTitle>{PHASE_META.approved.label}</AlertTitle>
+                  <AlertDescription>{INSTITUTIONAL_COPY.notOfficialYet}</AlertDescription>
+                </Alert>
+                <PromoteToDomainPanel
+                  status={ingestion.promotionStatus}
+                  importType={importType}
+                  canPromote={ingestion.canPromote}
+                  isPromoting={ingestion.isPromoting}
+                  error={ingestion.promoteError}
+                  result={ingestion.promotionResult}
+                  onPromote={ingestion.promote}
+                />
+              </div>
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">{INSTITUTIONAL_COPY.notOfficialYet}</p>
