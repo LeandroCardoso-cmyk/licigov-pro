@@ -33,7 +33,7 @@ import {
   type CognitiveResponse, type CognitiveExplainability, type CognitiveResponseValidation, type CognitiveResponseType,
 } from "../domain/cognitiveResponse";
 import { getPromptBuilder } from "./cognitive/promptBuilders";
-import { recordCognitiveObservability, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
+import { recordCognitiveObservability, recordCognitiveFailure, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
 import { getRulesForTask } from "../domain/institutionalRules";
 import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
 // RC-5.0 — o engine apenas CONSOME o ContextPackage (tipo puro; nunca acessa o Corpus diretamente).
@@ -288,23 +288,36 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
 
   // Stage: LLM (com timeout + retry controlado — AI-014)
   const startedAt = Date.now();
-  const generated = await resilientAiCall(
-    () => resolution.provider.generate({
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
-      // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
-      maxTokens: input.maxOutputTokens ?? policy.maxContext,
-    }),
-    {
-      provider: resolution.provider.name,
-      model: policy.model,
-      operation: "executeCognitiveTask",
-      correlationId: input.correlationId,
-      task: String(input.task),
-    },
-  );
+  let generated: Awaited<ReturnType<typeof resolution.provider.generate>>;
+  try {
+    generated = await resilientAiCall(
+      () => resolution.provider.generate({
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+        // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
+        maxTokens: input.maxOutputTokens ?? policy.maxContext,
+      }),
+      {
+        provider: resolution.provider.name,
+        model: policy.model,
+        operation: "executeCognitiveTask",
+        correlationId: input.correlationId,
+        task: String(input.task),
+      },
+    );
+  } catch (err) {
+    // PR C — Governança: persiste a FALHA de execução (status + erro estruturado) antes de
+    // propagar. Fire-and-forget; não altera o erro nem o fluxo do caller.
+    recordCognitiveFailure({
+      tenantId: input.tenantId, actorUserId: input.userId, correlationId: input.correlationId,
+      task: input.task, module: input.businessDomain, provider: resolution.provider.name, model: policy.model,
+      processId: input.processId, governedInput: prompt.user, latencyMs: Math.max(0, Date.now() - startedAt),
+      error: { code: (err as { name?: string })?.name || "AI_PROVIDER_ERROR", message: err instanceof Error ? err.message : String(err) },
+    });
+    throw err;
+  }
   const latencyMs = Math.max(0, Date.now() - startedAt);
   push("llm", "applied", `Inferência concluída (${resolution.provider.name}).`);
 
@@ -362,6 +375,14 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   push("structured_output", validation.valid ? "applied" : "skipped", `Structured Output ${validation.valid ? "válido" : "inválido: " + validation.errors.join(", ")}.`);
   push("reasoning", "applied", "Traço de raciocínio registrado.");
   push("explainability", "applied", "Explicabilidade obrigatória montada.");
+  // PR C — Governança: registra a falha de contrato (Structured Output inválido) no ledger
+  // ANTES de propagar. A linha de invariante abaixo é preservada verbatim.
+  if (!validation.valid) recordCognitiveFailure({
+    tenantId: input.tenantId, actorUserId: input.userId, correlationId: input.correlationId,
+    task: input.task, module: input.businessDomain, provider, model,
+    processId: input.processId, governedInput: prompt.user, latencyMs, replayHash,
+    error: { code: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
+  });
   if (!validation.valid) throw new InvalidCognitiveResponse(validation.errors);
 
   // Stage: Result (contexto + observabilidade)

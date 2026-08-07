@@ -21,7 +21,6 @@ import {
   DOCUMENT_EVENT_TYPES,
   type WorkflowAlteradoPayload,
 } from "../domain/documentEvents";
-import { createDomainEvent } from "../domain/events";
 import type { DocumentStatusValue } from "../domain/documentTypes";
 import type { TrpcAuditCtx } from "./activityLogService";
 import type { OrgRole } from "../../drizzle/schema";
@@ -35,6 +34,45 @@ const ORG_ROLE_WEIGHT: Record<OrgRole, number> = {
 function hasMinRole(ctx: TrpcAuditCtx, minRole: OrgRole): boolean {
   const actorRole = ctx.orgMembership?.role ?? "viewer";
   return (ORG_ROLE_WEIGHT[actorRole] ?? 0) >= ORG_ROLE_WEIGHT[minRole];
+}
+
+/**
+ * PR C — Regras institucionais de decisão (segregação de deveres), PURAS e testáveis.
+ * Lança TRPCError acionável quando violadas. Aplicadas a TODA transição de aprovação/decisão
+ * pelo state machine canônico:
+ *   - aprovação exige revisor humano identificado (IA/sistema nunca aprova);
+ *   - reviewer ≠ autor: quem gerou/submeteu o conteúdo (inclusive saída de IA) não pode aprová-lo;
+ *   - rejeição e devolução exigem justificativa não-vazia.
+ */
+export function assertInstitutionalDecisionRules(params: {
+  toState: DocumentStatusValue;
+  actorUserId: number;
+  authorUserId: number | null;
+  reason: string | null;
+}): void {
+  const { toState, actorUserId, authorUserId, reason } = params;
+
+  if (toState === "approved") {
+    if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Aprovação exige um revisor humano identificado — IA/sistema não pode aprovar.",
+      });
+    }
+    if (authorUserId != null && authorUserId === actorUserId) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Segregação de deveres: o autor do documento não pode aprová-lo — a aprovação exige um revisor distinto.",
+      });
+    }
+  }
+
+  if ((toState === "rejected" || toState === "draft") && (!reason || reason.trim().length === 0)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Justificativa obrigatória para rejeição/devolução.",
+    });
+  }
 }
 
 async function getDocumentOrThrow(documentId: number, orgId: number) {
@@ -80,6 +118,14 @@ async function applyTransition(
       message: `Papel insuficiente para esta transição. Requer: ${requiredRole}.`,
     });
   }
+
+  // PR C — Segregação de deveres nas decisões institucionais (regra pura, testável).
+  assertInstitutionalDecisionRules({
+    toState,
+    actorUserId: ctx.user.id,
+    authorUserId: doc.createdBy ?? null,
+    reason,
+  });
 
   await db.update(documents).set({
     documentStatus: toState,

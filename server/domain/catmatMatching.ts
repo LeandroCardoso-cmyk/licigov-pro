@@ -10,6 +10,9 @@ import { createHash } from "crypto";
 
 export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual";
 
+/** Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. */
+export type CATMATSource = "catalogo-interno" | "api-comprasgov" | "sugestao-ia" | "manual" | (string & {});
+
 export interface CATMATMatch {
   readonly id: string;
   readonly itemId: string;
@@ -19,8 +22,43 @@ export interface CATMATMatch {
   readonly score: number;
   readonly rank: number;
   readonly decision: CATMATDecision;
+  /** PR C — proveniência da sugestão (opcional para compat.; sempre setada pelas fábricas). */
+  readonly source?: CATMATSource;
   readonly correlationId: string;
   readonly createdAt: string;
+}
+
+export interface CATMATSafetyAssessment {
+  readonly safe: boolean;
+  readonly reason: "safe_match" | "no_candidates" | "below_threshold" | "threshold_not_configured";
+  readonly best: CATMATMatch | null;
+  readonly minScore: number | null;
+}
+
+/**
+ * Avalia se há correspondência SEGURA — FAIL-CLOSED. Nunca inventa código e NUNCA declara
+ * `safe:true` sem um limiar institucional explicitamente fornecido:
+ *   - sem candidatos            → `no_candidates`;
+ *   - `minScore` não configurado → `threshold_not_configured` (safe:false);
+ *   - melhor score < `minScore` → `below_threshold`;
+ *   - melhor score ≥ `minScore` → `safe_match`.
+ * Não há default arbitrário: o valor institucional do limiar é decisão de negócio (bloco C.2).
+ * A IA/heurística apenas sugere; a decisão final permanece humana.
+ */
+export function assessMatchSafety(
+  matches: readonly CATMATMatch[],
+  minScore?: number | null,
+): CATMATSafetyAssessment {
+  if (matches.length === 0) {
+    return { safe: false, reason: "no_candidates", best: null, minScore: minScore ?? null };
+  }
+  const best = [...matches].sort((a, b) => a.rank - b.rank)[0];
+  // Fail-closed: sem limiar institucional configurado, jamais considera seguro.
+  if (minScore === undefined || minScore === null || !Number.isFinite(minScore)) {
+    return { safe: false, reason: "threshold_not_configured", best, minScore: null };
+  }
+  if (best.score < minScore) return { safe: false, reason: "below_threshold", best, minScore };
+  return { safe: true, reason: "safe_match", best, minScore };
 }
 
 /** Similaridade determinística por interseção de tokens (Dice). */
@@ -41,9 +79,11 @@ export function rankCATMAT(params: {
   itemId: string;
   organizationId: number;
   description: string;
-  candidates: Array<{ code: string; description: string }>;
+  candidates: Array<{ code: string; description: string; source?: CATMATSource }>;
   correlationId: string;
   createdAt?: string;
+  /** Proveniência padrão quando o candidato não declara a sua (auditável). */
+  defaultSource?: CATMATSource;
 }): CATMATMatch[] {
   const scored = params.candidates
     .map(c => ({ ...c, score: scoreMatch(params.description, c.description) }))
@@ -58,6 +98,7 @@ export function rankCATMAT(params: {
     score: c.score,
     rank: i,
     decision: "sugerido" as CATMATDecision,
+    source: c.source ?? params.defaultSource ?? "catalogo-interno",
     correlationId: params.correlationId,
     createdAt: params.createdAt ?? new Date().toISOString(),
   }));
@@ -89,6 +130,7 @@ export function manualMatch(params: {
     score: 1,
     rank: 0,
     decision: "manual",
+    source: "manual",
     correlationId: params.correlationId,
     createdAt: params.createdAt ?? new Date().toISOString(),
   };
