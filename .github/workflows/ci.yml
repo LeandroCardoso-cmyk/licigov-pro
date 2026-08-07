@@ -146,6 +146,10 @@ jobs:
       - name: Smoke — promoção transacional ao domínio (B.2.4)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-promotion-mysql-smoke.test.ts
 
+      # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
+      - name: Smoke — idempotência canônica (PR C)
+        run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.

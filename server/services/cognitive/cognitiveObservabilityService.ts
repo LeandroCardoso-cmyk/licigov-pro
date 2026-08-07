@@ -8,11 +8,51 @@
  * Output. Determinístico e multi-tenant.
  */
 
+import { createHash } from "crypto";
 import type { AIExecutionContext } from "../../domain/aiExecutionContext";
 import { structuredDataSize, responseShapeHash, type CognitiveResponse, type CognitiveResponseValidation, type CognitiveResponseType } from "../../domain/cognitiveResponse";
 import type { CognitiveTaskId } from "../../domain/cognitiveTask";
 import { splitAlternatives, type InstitutionalReasoningPlan } from "../../domain/institutionalReasoning";
 import { persistObservability, recoverObservabilityRow } from "./observabilityRepository";
+
+/** Limite de pré-visualização governada (nunca expõe conteúdo sensível integral). */
+const GOVERNED_PREVIEW_MAX = 280;
+
+function sha256Hex(s: string): string {
+  return createHash("sha256").update(s ?? "").digest("hex");
+}
+
+/** Recorta um texto para pré-visualização governada (auditoria sem exposição integral). */
+function governedPreview(s: string): string {
+  const t = s ?? "";
+  return t.length <= GOVERNED_PREVIEW_MAX ? t : `${t.slice(0, GOVERNED_PREVIEW_MAX)}… [+${t.length - GOVERNED_PREVIEW_MAX} chars]`;
+}
+
+/**
+ * PR C — Registro de GOVERNANÇA de uma execução cognitiva (tenant-aware, auditável).
+ * Persistido junto da observabilidade (mesma linha `cognitive_observability`, campo `payload`),
+ * portanto sem migration. NÃO contém chain-of-thought privada: apenas metadados institucionais,
+ * hashes de integridade e pré-visualização governada (bounded) do insumo/saída.
+ */
+export interface CognitiveGovernanceRecord {
+  readonly actorUserId: string;
+  readonly operation: string;
+  readonly module: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly promptTemplateId: string;
+  readonly promptContractVersion: string;
+  readonly inputHash: string;
+  readonly outputHash: string;
+  readonly inputChars: number;
+  readonly outputChars: number;
+  readonly inputPreview: string;
+  readonly outputPreview: string;
+  readonly processId: string | null;
+  readonly documentRefs: readonly string[];
+  readonly reviewState: "pending_human_review" | "invalid" | "failed";
+  readonly error: { readonly code: string; readonly message: string } | null;
+}
 
 export interface CognitiveObservability {
   readonly correlationId: string;
@@ -43,6 +83,8 @@ export interface CognitiveObservability {
   readonly discardedPaths: readonly string[];
   readonly knowledgeSources: readonly string[];
   readonly groundingUsed: boolean;
+  // PR C — Governança cognitiva (ator, operação, módulo, model, hashes, refs, estado de revisão).
+  readonly governance: CognitiveGovernanceRecord;
 }
 
 const _byCorrelation = new Map<string, CognitiveObservability>();
@@ -61,6 +103,29 @@ export function recordCognitiveObservability(params: {
   const g = context.grounding;
   const dataSize = structuredDataSize(response.structuredData);
   const alt = reasoningPlan ? splitAlternatives(reasoningPlan) : { recommended: "", discarded: [] };
+
+  // PR C — Registro de governança (metadados institucionais + integridade, sem chain-of-thought).
+  const governedInput = context.request.prompt ?? "";
+  const governedOutput = response.content ?? "";
+  const governance: CognitiveGovernanceRecord = {
+    actorUserId: context.request.userId,
+    operation: String(context.request.task),
+    module: context.request.businessDomain ?? "unspecified",
+    provider: context.outcome.provider,
+    model: context.outcome.model,
+    promptTemplateId: `prompt-builder:${String(context.request.task)}`,
+    promptContractVersion: response.contractVersion,
+    inputHash: sha256Hex(governedInput),
+    outputHash: sha256Hex(governedOutput),
+    inputChars: governedInput.length,
+    outputChars: governedOutput.length,
+    inputPreview: governedPreview(governedInput),
+    outputPreview: governedPreview(governedOutput),
+    processId: context.request.processId ?? null,
+    documentRefs: g.documentsUsed,
+    reviewState: validation.valid ? "pending_human_review" : "invalid",
+    error: validation.valid ? null : { code: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
+  };
 
   const obs: CognitiveObservability = {
     correlationId: context.request.correlationId,
@@ -88,6 +153,7 @@ export function recordCognitiveObservability(params: {
     discardedPaths: alt.discarded.map(d => d.alternative),
     knowledgeSources: [...g.documentsUsed, ...g.lawsUsed],
     groundingUsed: g.groundingApplied,
+    governance,
   };
 
   _byCorrelation.set(context.request.correlationId, obs);
@@ -110,6 +176,79 @@ export function recordCognitiveObservability(params: {
   } catch { /* noop */ }
 
   return obs;
+}
+
+/**
+ * PR C — Persiste uma FALHA de execução cognitiva no ledger de governança (status + erro
+ * estruturado), tenant-aware. Fire-and-forget seguro: nunca lança, nunca altera o fluxo do
+ * engine (que continua propagando o erro original). Não há resposta/validação; grava apenas
+ * os metadados institucionais disponíveis antes da resposta + o erro classificado.
+ */
+export function recordCognitiveFailure(params: {
+  tenantId: number;
+  actorUserId: string;
+  correlationId: string;
+  task: CognitiveTaskId;
+  module?: string;
+  provider: string;
+  model: string;
+  processId?: string;
+  governedInput?: string;
+  latencyMs?: number;
+  replayHash?: string;
+  error: { code: string; message: string };
+}): void {
+  const governedInput = params.governedInput ?? "";
+  const governance: CognitiveGovernanceRecord = {
+    actorUserId: params.actorUserId,
+    operation: String(params.task),
+    module: params.module ?? "unspecified",
+    provider: params.provider,
+    model: params.model,
+    promptTemplateId: `prompt-builder:${String(params.task)}`,
+    promptContractVersion: "",
+    inputHash: sha256Hex(governedInput),
+    outputHash: sha256Hex(""),
+    inputChars: governedInput.length,
+    outputChars: 0,
+    inputPreview: governedPreview(governedInput),
+    outputPreview: "",
+    processId: params.processId ?? null,
+    documentRefs: [],
+    reviewState: "failed",
+    error: params.error,
+  };
+  void persistObservability(
+    {
+      correlationId: params.correlationId,
+      task: params.task,
+      executionLog: `task=${String(params.task)} tenant=${params.tenantId} status=failed`,
+      reasoningLog: "",
+      providerLog: `provider=${params.provider} model=${params.model}`,
+      groundingLog: "",
+      ragLog: "",
+      knowledgeGraphLog: "",
+      latencyMs: params.latencyMs ?? 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      finishReason: "other",
+      structuredOutputValid: false,
+      structuredOutputErrors: [params.error.message],
+      responseType: "text",
+      structuredDataPresent: false,
+      structuredDataSize: 0,
+      responseShapeHash: "",
+      contractVersion: "",
+      reasoningPlanId: "",
+      reasoningPlanHash: "",
+      appliedRules: [],
+      alternativePaths: [],
+      discardedPaths: [],
+      knowledgeSources: [],
+      groundingUsed: false,
+      governance,
+    },
+    { tenantId: params.tenantId, replayHash: params.replayHash ?? params.correlationId, provider: params.provider, executionStatus: "failed" },
+  );
 }
 
 /** Recuperação rápida (cache em memória do processo). */

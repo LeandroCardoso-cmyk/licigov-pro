@@ -4465,8 +4465,8 @@
     "semantic_hash": ""
   },
   "server/domain/catmatMatching.ts": {
-    "mtime": 1785862334.769899,
-    "ast_hash": "63f73185ddf9ddd32714636be90edfd2",
+    "mtime": 1786071718.8527656,
+    "ast_hash": "65b6ed357a54031d9e118cb9de7c4fac",
     "semantic_hash": ""
   },
   "server/domain/clauseIntelligence.ts": {
@@ -5700,8 +5700,8 @@
     "semantic_hash": ""
   },
   "server/services/documentWorkflowService.ts": {
-    "mtime": 1785862334.851574,
-    "ast_hash": "cf091b854e6555aa41e2a1242cc720ac",
+    "mtime": 1786072046.2247849,
+    "ast_hash": "233ca6088d5ffa6b00e8dd78c5e544a8",
     "semantic_hash": ""
   },
   "server/services/domainNavigationService.ts": {
@@ -5845,8 +5845,8 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1785862334.955574,
-    "ast_hash": "7ac9ef059319ef7eb6140130c3de9f3b",
+    "mtime": 1786072050.4887853,
+    "ast_hash": "63cb2388442794c5d75cff4d034840c1",
     "semantic_hash": ""
   },
   "server/services/importAnalyticsService.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786044510.6679296,
-    "ast_hash": "c55589bf00ef873f0b6c9829bac1c91a",
+    "mtime": 1786071930.196778,
+    "ast_hash": "da967871851b376ef13495d2c3da2180",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/services/aiExecutionEngine.ts": {
-    "mtime": 1785862334.8413863,
-    "ast_hash": "a23f14f21ed3863a7af28e157d7863fc",
+    "mtime": 1786071586.2727575,
+    "ast_hash": "f7ac66843a9123111f37b02bcc5ceb8c",
     "semantic_hash": ""
   },
   "docs/architecture/KERNEL_INFRASTRUCTURE.md": {
@@ -8625,8 +8625,8 @@
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveObservabilityService.ts": {
-    "mtime": 1785862334.8413863,
-    "ast_hash": "5563e2a298053f11ef038e1276d26f34",
+    "mtime": 1786071458.78475,
+    "ast_hash": "48637a197f8d42b1639b028180f79c89",
     "semantic_hash": ""
   },
   "server/services/cognitive/promptBuilders.ts": {
@@ -10712,6 +10712,21 @@
   "server/services/importPromotionService.ts": {
     "mtime": 1786043967.7919421,
     "ast_hash": "9fe687565fe475e18acefed98697fac8",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/prc-cognitive-governance.test.ts": {
+    "mtime": 1786071850.5887733,
+    "ast_hash": "47b04d5118298ca87975be98a71c4ec8",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts": {
+    "mtime": 1786072055.1127856,
+    "ast_hash": "cf8c2c78a49a6ac4b4134fbb89e5a0b1",
+    "semantic_hash": ""
+  },
+  "docs/architecture/COGNITIVE_GOVERNANCE.md": {
+    "mtime": 1786071978.2967808,
+    "ast_hash": "edc50aea46b49c6b8e0662627e8e0b87",
     "semantic_hash": ""
   }
 }

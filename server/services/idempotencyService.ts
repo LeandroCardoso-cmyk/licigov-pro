@@ -1,5 +1,6 @@
 import { eq, and, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { idempotencyKeys } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
@@ -13,6 +14,55 @@ export type IdempotencyResult =
   | { status: "processing" }
   | { status: "completed"; response: unknown; payloadMismatch: boolean }
   | { status: "failed" };
+
+/**
+ * Detecta violação de UNIQUE (org, user, key) — o índice `idempotency_org_user_key`.
+ * Usada para tornar o caminho "new" atômico sob concorrência: o perdedor de uma
+ * corrida de INSERT relê a linha vencedora em vez de propagar um 500 cru.
+ */
+function isDuplicateEntryError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const code = (err as { code?: string }).code;
+  const causeCode = (err as { cause?: { code?: string } }).cause?.code;
+  return code === "ER_DUP_ENTRY" || causeCode === "ER_DUP_ENTRY";
+}
+
+type IdempotencyRow = typeof idempotencyKeys.$inferSelect;
+
+/**
+ * Avalia uma linha já existente (ou recém-vencedora de corrida) e a converte no
+ * lifecycle público. Expirada (>TTL) é tratada como "new" (permite novo processamento).
+ */
+function evaluateExistingRow(
+  record: IdempotencyRow,
+  payloadHash: string | undefined,
+  ctx: { key: string; userId: number; organizationId: number },
+): IdempotencyResult {
+  if (record.expiresAt < new Date()) {
+    log.info("key_expired_treating_as_new", ctx);
+    return { status: "new" };
+  }
+
+  if (record.status === "completed") {
+    // Payload mudou: o CALLER deve rejeitar como conflito (nunca sobrescrever/repetir
+    // o efeito com dados diferentes sob a mesma chave) — não é replay seguro.
+    const payloadMismatch = !!(
+      payloadHash &&
+      record.requestPayloadHash &&
+      record.requestPayloadHash !== payloadHash
+    );
+    if (payloadMismatch) {
+      log.warn("idempotency_payload_mismatch", ctx);
+    }
+    return { status: "completed", response: record.responsePayload, payloadMismatch };
+  }
+
+  if (record.status === "failed") {
+    return { status: "failed" };
+  }
+
+  return { status: "processing" };
+}
 
 /**
  * Verifica se uma operação já foi processada.
@@ -38,55 +88,44 @@ export async function checkIdempotency(
   const db = await getDb();
   if (!db) return { status: "new" };
 
-  const existing = await db
-    .select()
-    .from(idempotencyKeys)
-    .where(
-      and(
-        eq(idempotencyKeys.organizationId, organizationId),
-        eq(idempotencyKeys.userId, userId),
-        eq(idempotencyKeys.key, key),
-      ),
-    )
-    .limit(1);
+  const ctx = { key, userId, organizationId };
+
+  const whereKey = and(
+    eq(idempotencyKeys.organizationId, organizationId),
+    eq(idempotencyKeys.userId, userId),
+    eq(idempotencyKeys.key, key),
+  );
+
+  const existing = await db.select().from(idempotencyKeys).where(whereKey).limit(1);
 
   if (existing.length === 0) {
+    // Caminho "new" ATÔMICO: tenta reservar a chave; se outra requisição concorrente
+    // venceu a corrida (violação do UNIQUE idempotency_org_user_key), relê a linha
+    // vencedora e devolve o estado real (processing/completed/failed) — nunca propaga
+    // um 500 cru nem cria linha duplicada.
     const expiresAt = new Date(Date.now() + TTL_MS);
-    await db.insert(idempotencyKeys).values({
-      id: nanoid(),
-      organizationId,
-      userId,
-      key,
-      operation,
-      status: "processing",
-      requestPayloadHash: payloadHash ?? null,
-      expiresAt,
-    });
-    return { status: "new" };
-  }
-
-  const record = existing[0];
-
-  if (record.expiresAt < new Date()) {
-    log.info("key_expired_treating_as_new", { key, userId, organizationId });
-    return { status: "new" };
-  }
-
-  if (record.status === "completed") {
-    // Payload mudou: o CALLER deve rejeitar como conflito (nunca sobrescrever/repetir
-    // o efeito com dados diferentes sob a mesma chave) — não é replay seguro.
-    const payloadMismatch = !!(payloadHash && record.requestPayloadHash && record.requestPayloadHash !== payloadHash);
-    if (payloadMismatch) {
-      log.warn("idempotency_payload_mismatch", { key, userId, organizationId });
+    try {
+      await db.insert(idempotencyKeys).values({
+        id: nanoid(),
+        organizationId,
+        userId,
+        key,
+        operation,
+        status: "processing",
+        requestPayloadHash: payloadHash ?? null,
+        expiresAt,
+      });
+      return { status: "new" };
+    } catch (err) {
+      if (!isDuplicateEntryError(err)) throw err;
+      log.info("idempotency_insert_race_reread", ctx);
+      const raced = await db.select().from(idempotencyKeys).where(whereKey).limit(1);
+      if (raced.length === 0) throw err;
+      return evaluateExistingRow(raced[0], payloadHash, ctx);
     }
-    return { status: "completed", response: record.responsePayload, payloadMismatch };
   }
 
-  if (record.status === "failed") {
-    return { status: "failed" };
-  }
-
-  return { status: "processing" };
+  return evaluateExistingRow(existing[0], payloadHash, ctx);
 }
 
 /**
@@ -149,7 +188,52 @@ export async function cleanupExpiredKeys(): Promise<number> {
     .delete(idempotencyKeys)
     .where(lt(idempotencyKeys.expiresAt, new Date()));
 
-  const deleted = (result as any)[0]?.rowsAffected ?? 0;
+  const deleted = (result as unknown as Array<{ rowsAffected?: number }>)[0]?.rowsAffected ?? 0;
   log.info("cleanup_expired", { deletedCount: deleted });
   return deleted;
+}
+
+/**
+ * PR C — Wrapper canônico de idempotência (reutiliza check/save/fail — NÃO é um segundo
+ * mecanismo). Garante, para uma mesma (org,user,key):
+ *   - replay seguro: mesma chave + mesmo payload → devolve o resultado anterior (`replayed:true`);
+ *   - conflito explícito: mesma chave + payload diferente → CONFLICT;
+ *   - operação em andamento (duplicata em voo / corrida) → CONFLICT (o caller reexecuta depois);
+ *   - falha não é cacheada como sucesso (marca `failed`, permite novo retry);
+ *   - nenhuma conclusão parcial é tratada como sucesso (save só após `fn` resolver).
+ * Degrada com segurança sem DB (executa `fn` normalmente).
+ */
+export async function runWithIdempotency<T>(
+  params: { key: string; userId: number; organizationId: number; operation: string; payloadHash?: string },
+  fn: () => Promise<T>,
+): Promise<{ result: T; replayed: boolean }> {
+  const { key, userId, organizationId, operation, payloadHash } = params;
+  const check = await checkIdempotency(key, userId, organizationId, operation, payloadHash);
+
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Idempotency-Key reutilizada com payload diferente — operação recusada.",
+      });
+    }
+    return { result: check.response as T, replayed: true };
+  }
+
+  if (check.status === "processing") {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Operação idêntica já está em processamento para esta chave — aguarde a conclusão.",
+    });
+  }
+
+  // status "new" ou "failed": executa (retry permitido após falha, sem cache de sucesso parcial).
+  try {
+    const result = await fn();
+    await saveIdempotencyResult(key, userId, organizationId, result);
+    return { result, replayed: false };
+  } catch (err) {
+    await failIdempotencyKey(key, userId, organizationId);
+    throw err;
+  }
 }
