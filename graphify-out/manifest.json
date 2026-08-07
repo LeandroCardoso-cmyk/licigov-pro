@@ -4465,8 +4465,8 @@
     "semantic_hash": ""
   },
   "server/domain/catmatMatching.ts": {
-    "mtime": 1786071718.8527656,
-    "ast_hash": "65b6ed357a54031d9e118cb9de7c4fac",
+    "mtime": 1786073077.311178,
+    "ast_hash": "78e4518a34d37c440d932b84350ef3c7",
     "semantic_hash": ""
   },
   "server/domain/clauseIntelligence.ts": {
@@ -10715,8 +10715,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/prc-cognitive-governance.test.ts": {
-    "mtime": 1786071850.5887733,
-    "ast_hash": "47b04d5118298ca87975be98a71c4ec8",
+    "mtime": 1786073098.4911776,
+    "ast_hash": "cff1a9e01efc35665f76c664ccba02eb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts": {
@@ -10725,8 +10725,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/COGNITIVE_GOVERNANCE.md": {
-    "mtime": 1786071978.2967808,
-    "ast_hash": "edc50aea46b49c6b8e0662627e8e0b87",
+    "mtime": 1786073133.5151768,
+    "ast_hash": "57a5d473df447d50ccbc0a8902781e17",
     "semantic_hash": ""
   }
 }

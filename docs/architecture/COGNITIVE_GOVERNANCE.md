@@ -1,8 +1,9 @@
-# Governança Cognitiva e Documental (PR C)
+# Fundação de Governança Cognitiva e Documental (PR C.1)
 
-> Consolida a governança das operações de IA, aprovações institucionais, idempotência e
-> rastreabilidade ponta a ponta. **Aditivo e não-destrutivo**: reutiliza o gateway cognitivo
-> canônico, o serviço único de idempotência e os papéis RBAC já existentes — sem mecanismos paralelos.
+> Estabelece a **fundação** da governança de IA, aprovações, idempotência e rastreabilidade.
+> **Aditivo e não-destrutivo**: reutiliza o gateway cognitivo canônico, o serviço único de
+> idempotência e os papéis RBAC já existentes — sem mecanismos paralelos. Wiring operacional,
+> UI e migração de legados ficam para o bloco **C.2** (§6).
 
 ## 1. Gateway cognitivo canônico
 
@@ -76,22 +77,31 @@ Domínio puro `server/domain/catmatMatching.ts`:
 
 - Sugestões carregam **proveniência** (`source`) e **confiança** (`score`); a IA/heurística **apenas
   sugere** (`decision: "sugerido"`).
-- **`assessMatchSafety`** dá o sinal explícito **"sem correspondência segura"** (`no_candidates` /
-  `below_threshold`) — **nunca fabrica código**; expõe o melhor candidato para revisão humana sem
-  marcá-lo como confirmado.
-- O limiar (`DEFAULT_MIN_SAFE_SCORE`) é **provisório e sobreponível**; o valor institucional definitivo
-  é decisão de negócio (ver §6).
+- **`assessMatchSafety` é FAIL-CLOSED** — dá o sinal explícito **"sem correspondência segura"**
+  (`no_candidates` / `below_threshold` / `threshold_not_configured`) e **nunca declara `safe:true`
+  sem um limiar institucional explicitamente fornecido**. **Não há default arbitrário.** Expõe o melhor
+  candidato para revisão humana sem marcá-lo como confirmado; **nunca fabrica código**.
+- O valor institucional do limiar é **decisão de negócio pendente** (bloco C.2 — ver §6).
 
-## 6. Limitações e responsabilidades humanas / itens deferidos
+## 6. Estado desta fundação (C.1) e próximo bloco (C.2)
 
-A decisão final é sempre **humana**. Itens do escopo original **deferidos** por acionarem condições de
-parada (código é a verdade operacional):
+A decisão final é sempre **humana**. O que **C.1 entrega** e o que **fica pendente**:
 
-- **Migração dos ~7 sites legados de IA para o gateway** (`services/gemini.ts`, `services/ai/suggestions.ts`,
-  4× `invokeLLM`): vários estão em `LEGACY_ACTIVE_MAINTENANCE_ONLY` (pipeline documental **ativo em
-  produção**, política "sem migração, sem remoção"). Migrar = **mudança de produção**.
-- **Reescrever o caminho de aprovação ligado à UI** (`documentsRouter`, legacy-ativo, hoje owner-only):
-  **mudança de produção**. A regra reviewer≠autor foi aplicada no state machine canônico.
-- **Limiar institucional de confiança do CATMAT + validação anti-fabricação contra a API real**
-  (`dadosabertos.compras.gov.br`): **decisão institucional não definida**. A infraestrutura ("sem
-  correspondência segura" + `source`) está pronta para recebê-la.
+**Entregue (C.1):**
+- Ledger de governança cognitiva gravado pelo gateway canônico.
+- Serviço de idempotência **reforçado** (concorrência-safe + `runWithIdempotency`) — porém **ainda não
+  ligado a todas as operações** (hoje só ingestão/promoção o usam).
+- Regras canônicas de **segregação de deveres** implementadas no state machine — porém o **fluxo legado
+  usado pela UI** (`documentsRouter`) **permanece inalterado**.
+- Contrato **seguro e fail-closed** do CATMAT (`source` + "sem correspondência segura") — porém
+  **confirmação operacional/UI e o limiar institucional ficam pendentes**.
+- **Nenhuma chamada legada de IA foi migrada.**
+
+**Próximo bloco — C.2 (não implementado agora):**
+- Wiring de idempotência em **geração, regeneração, exportação, upload, aprovação e CATMAT**.
+- Aprovação **version-aware** no fluxo efetivamente usado pela UI.
+- **UI** de revisão / aprovação / solicitação de ajustes.
+- **Confirmação humana e auditoria** CATMAT/CATSER (quem/quando/processo/item, rejeição/substituição).
+- **Plano supervisionado de migração** das chamadas legadas de IA ao gateway (várias em
+  `LEGACY_ACTIVE_MAINTENANCE_ONLY` = produção ativa) e definição do **limiar institucional** do CATMAT
+  (+ validação anti-fabricação contra `dadosabertos.compras.gov.br`).

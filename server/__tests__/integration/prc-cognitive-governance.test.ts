@@ -22,7 +22,6 @@ import {
   rankCATMAT,
   manualMatch,
   assessMatchSafety,
-  DEFAULT_MIN_SAFE_SCORE,
   type CATMATMatch,
 } from "../../domain/catmatMatching";
 
@@ -132,27 +131,40 @@ describe("PR C — CATMAT/CATSER supervisionado (proveniência + sem correspond�
   });
 
   it("sinaliza 'sem correspondência segura' quando não há candidatos (não fabrica código)", () => {
-    const a = assessMatchSafety([], DEFAULT_MIN_SAFE_SCORE);
+    const a = assessMatchSafety([], 0.3);
     expect(a.safe).toBe(false);
     expect(a.reason).toBe("no_candidates");
     expect(a.best).toBeNull();
   });
 
-  it("sinaliza 'sem correspondência segura' quando o melhor score está abaixo do limiar", () => {
+  it("FAIL-CLOSED: sem limiar institucional configurado, nunca declara seguro", () => {
+    const matches = rank(); // melhor candidato tem score alto (idêntico)
+    const semLimiar = assessMatchSafety(matches);
+    expect(semLimiar.safe).toBe(false);
+    expect(semLimiar.reason).toBe("threshold_not_configured");
+    expect(semLimiar.minScore).toBeNull();
+    // Ainda expõe o melhor candidato para revisão humana, sem confirmá-lo.
+    expect(semLimiar.best).not.toBeNull();
+    expect((semLimiar.best as CATMATMatch).decision).toBe("sugerido");
+    // null explícito também é "não configurado".
+    expect(assessMatchSafety(matches, null).reason).toBe("threshold_not_configured");
+  });
+
+  it("sinaliza 'sem correspondência segura' quando o melhor score está abaixo do limiar explícito", () => {
     const matches = rank({ description: "objeto totalmente distinto sem relação alguma" });
     const a = assessMatchSafety(matches, 0.9);
     expect(a.safe).toBe(false);
     expect(a.reason).toBe("below_threshold");
-    // Ainda expõe o melhor candidato para revisão humana, mas NÃO o marca como confirmado.
     expect(a.best).not.toBeNull();
     expect((a.best as CATMATMatch).decision).toBe("sugerido");
   });
 
-  it("confirma correspondência segura acima do limiar", () => {
+  it("confirma correspondência segura apenas com limiar institucional explícito atendido", () => {
     const matches = rank();
-    const a = assessMatchSafety(matches, DEFAULT_MIN_SAFE_SCORE);
+    const a = assessMatchSafety(matches, 0.3);
     expect(a.safe).toBe(true);
     expect(a.reason).toBe("safe_match");
+    expect(a.minScore).toBe(0.3);
     expect((a.best as CATMATMatch).catmatCode).toBe("111111");
   });
 });

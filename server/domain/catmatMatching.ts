@@ -28,31 +28,35 @@ export interface CATMATMatch {
   readonly createdAt: string;
 }
 
-/**
- * PR C — Limiar mínimo PROVISÓRIO de score para considerar uma correspondência "segura".
- * O valor institucional definitivo é decisão de negócio (ver docs/architecture/COGNITIVE_GOVERNANCE.md);
- * aqui é apenas um default conservador e SEMPRE sobreponível por parâmetro. Nunca fabrica código.
- */
-export const DEFAULT_MIN_SAFE_SCORE = 0.34;
-
 export interface CATMATSafetyAssessment {
   readonly safe: boolean;
-  readonly reason: "safe_match" | "no_candidates" | "below_threshold";
+  readonly reason: "safe_match" | "no_candidates" | "below_threshold" | "threshold_not_configured";
   readonly best: CATMATMatch | null;
-  readonly minScore: number;
+  readonly minScore: number | null;
 }
 
 /**
- * Avalia se há correspondência SEGURA. Nunca inventa código: sem candidatos ou abaixo do
- * limiar → `safe:false` com o motivo explícito ("sem correspondência segura"). A IA/heurística
- * apenas sugere; a decisão final permanece humana.
+ * Avalia se há correspondência SEGURA — FAIL-CLOSED. Nunca inventa código e NUNCA declara
+ * `safe:true` sem um limiar institucional explicitamente fornecido:
+ *   - sem candidatos            → `no_candidates`;
+ *   - `minScore` não configurado → `threshold_not_configured` (safe:false);
+ *   - melhor score < `minScore` → `below_threshold`;
+ *   - melhor score ≥ `minScore` → `safe_match`.
+ * Não há default arbitrário: o valor institucional do limiar é decisão de negócio (bloco C.2).
+ * A IA/heurística apenas sugere; a decisão final permanece humana.
  */
 export function assessMatchSafety(
   matches: readonly CATMATMatch[],
-  minScore: number = DEFAULT_MIN_SAFE_SCORE,
+  minScore?: number | null,
 ): CATMATSafetyAssessment {
-  if (matches.length === 0) return { safe: false, reason: "no_candidates", best: null, minScore };
+  if (matches.length === 0) {
+    return { safe: false, reason: "no_candidates", best: null, minScore: minScore ?? null };
+  }
   const best = [...matches].sort((a, b) => a.rank - b.rank)[0];
+  // Fail-closed: sem limiar institucional configurado, jamais considera seguro.
+  if (minScore === undefined || minScore === null || !Number.isFinite(minScore)) {
+    return { safe: false, reason: "threshold_not_configured", best, minScore: null };
+  }
   if (best.score < minScore) return { safe: false, reason: "below_threshold", best, minScore };
   return { safe: true, reason: "safe_match", best, minScore };
 }
