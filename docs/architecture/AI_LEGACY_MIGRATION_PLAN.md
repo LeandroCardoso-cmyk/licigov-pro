@@ -1,7 +1,7 @@
 # Plano de Migração da IA Legada → Kernel Cognitivo Canônico
 
 > **Status:** PLANO + inventário. **Nenhum cutover, nenhuma remoção, nenhuma reescrita**
-> é executada nesta PR (C.2). Este documento é o mapa auditável para migrações FUTURAS,
+> é executada nesta PR (C.2A). Este documento é o mapa auditável para migrações FUTURAS,
 > cada uma sob autorização própria. A regra de ouro permanece: adicionar/remover um caminho
 > de allowlist é decisão arquitetural explícita — nunca um atalho.
 >
@@ -70,7 +70,7 @@ futura (uma por serviço), não desta PR.
   obrigatórios) e divergência textual dentro de tolerância revisada por humano.
 - Só após o critério, uma flag comuta o tráfego. Rollback = desligar a flag.
 
-## 6. O que esta PR (C.2) NÃO faz
+## 6. O que esta PR (C.2A) NÃO faz
 
 - Não altera `INVOKE_LLM_LEGACY_ALLOWLIST` nem qualquer allowlist de fronteira.
 - Não liga nenhuma função legada a `executeCognitiveTask`.

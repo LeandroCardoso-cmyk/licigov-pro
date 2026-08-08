@@ -1,12 +1,32 @@
-# C.2 — Operacionalização da Governança Cognitiva e Documental (entrega)
+# C.2A — Operacionalização da Governança CATMAT/CATSER Supervisionada (entrega)
 
 > Continuação de C.1 ([`docs/architecture/COGNITIVE_GOVERNANCE.md`](../architecture/COGNITIVE_GOVERNANCE.md))
 > e do handoff C.2 ([`C2_GOVERNANCE_OPERATIONALIZATION_HANDOFF.md`](./C2_GOVERNANCE_OPERATIONALIZATION_HANDOFF.md)).
-> C.1 entregou a FUNDAÇÃO (serviços canônicos). Esta PR C.2 **liga** a governança à operação de
-> CATMAT/CATSER, com idempotência canônica, ledger imutável e infraestrutura de limiar — **sem
-> escolher o valor do limiar** (decisão institucional).
+> C.1 entregou a FUNDAÇÃO (serviços canônicos). Esta PR entrega **C.2A**: **liga** a governança à
+> operação de CATMAT/CATSER, com idempotência canônica, ledger imutável e infraestrutura de limiar —
+> **sem escolher o valor do limiar** (decisão institucional).
+>
+> A operacionalização foi dividida em duas fatias: **C.2A** (CATMAT/CATSER — entregue aqui) e
+> **C.2B** (fluxos documentais — pendente, ver §5). A divisão evita tocar código congelado
+> (`documentsRouter` em `LEGACY_ACTIVE_MAINTENANCE_ONLY`) num único big-bang.
 
-## 1. Escopo entregue nesta PR
+## 0. Status de reclassificação
+
+**C.2A — CONCLUÍDA (nesta PR):**
+- idempotência operacional CATMAT/CATSER;
+- ledger imutável de decisões humanas;
+- threshold versionado / fail-closed (sem valor);
+- lineage / correlation ponta a ponta;
+- migration aditiva `0292`;
+- plano shadow de migração da IA legada.
+
+**C.2B — PENDENTE (não iniciada; PR dedicada, sob autorização):**
+- aprovação version-aware (aprovação vinculada a versão imutável);
+- reconciliação segura com o `documentsRouter` (sem destruir linhagem, sem big-bang);
+- UI institucional de revisão/aprovação (revisar/aprovar/rejeitar/devolver);
+- wiring de idempotência dos fluxos documentais relacionados.
+
+## 1. Escopo entregue nesta PR (C.2A)
 
 ### Bloco A — Idempotência canônica ligada à mutação supervisionada
 - A decisão CATMAT/CATSER passa pelo serviço ÚNICO `runWithIdempotency` (nenhum segundo mecanismo):
@@ -61,12 +81,19 @@ Ver [`docs/architecture/AI_LEGACY_MIGRATION_PLAN.md`](../architecture/AI_LEGACY_
 inventário completo + plano shadow/rollback. **Nenhum cutover, nenhuma remoção, nenhuma alteração de
 allowlist** nesta PR.
 
-## 5. Diferido (não incluído — intersecta código congelado)
-- **Bloco C/D (aprovação version-aware + UI institucional de documentos):** o fluxo de aprovação de
-  DOCUMENTOS vive hoje no `documentsRouter` (congelado `LEGACY_ACTIVE_MAINTENANCE_ONLY`). Reconciliar
-  esse fluxo exige tocar código congelado ou construir o caminho canônico paralelo — decisão de
-  sequência que fica para uma PR dedicada, sob autorização. A base SoD (`assertInstitutionalDecisionRules`,
-  `documentWorkflowService`) já existe e permanece reutilizável.
+## 5. C.2B — Pendente (não iniciada — intersecta código congelado)
+Escopo reservado para uma PR dedicada, **sob autorização** — nada de C.2B é iniciado nesta entrega:
+- **Aprovação version-aware:** aprovação vinculada a uma versão imutável; nova mudança → nova versão
+  → nova revisão; revisor ≠ autor; IA/sistema nunca aprova.
+- **Reconciliação segura com `documentsRouter`:** o fluxo de aprovação de DOCUMENTOS vive hoje no
+  `documentsRouter` (congelado `LEGACY_ACTIVE_MAINTENANCE_ONLY`). Reconciliar exige tocar código
+  congelado ou construir o caminho canônico paralelo — sem big-bang, sem destruir linhagem.
+- **UI institucional de revisão/aprovação:** revisar/aprovar/rejeitar/devolver, "IA sugeriu" vs
+  "Servidor confirmou", estado a partir da persistência após reload.
+- **Wiring de idempotência dos fluxos documentais relacionados** (geração/regeneração/exportação).
+
+A base SoD (`assertInstitutionalDecisionRules`, `documentWorkflowService`) já existe e permanece
+reutilizável para C.2B.
 
 ## 6. ⚠️ DECISÃO INSTITUCIONAL NECESSÁRIA — LIMIAR CATMAT/CATSER
 
