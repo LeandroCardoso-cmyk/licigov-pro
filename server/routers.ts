@@ -65,6 +65,7 @@ import { businessDomainRouter } from "./routers/businessDomainRouter";
 import { moduleLicensingRouter } from "./routers/moduleLicensingRouter";
 import { procurementProcessRouter } from "./routers/procurementProcessRouter";
 import { itemIntelligenceRouter } from "./routers/itemIntelligenceRouter";
+import { documentReviewRouter } from "./routers/documentReviewRouter";
 import { institutionalRequestRouter } from "./routers/institutionalRequestRouter";
 import { legalOpinionWorkspaceRouter } from "./routers/legalOpinionWorkspaceRouter";
 import { directProcurementRouter } from "./routers/directProcurementRouter";
@@ -88,6 +89,7 @@ export const appRouter = router({
   tenantOnboarding: tenantOnboardingRouter,
   processes: processesRouter,
   documents: documentsRouter,
+  documentReview: documentReviewRouter,
   editalParameters: editalParametersRouter,
   activities: activitiesRouter,
   collaboration: collaborationRouter,

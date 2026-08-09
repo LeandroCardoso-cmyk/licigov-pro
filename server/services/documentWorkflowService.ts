@@ -32,7 +32,15 @@ const ORG_ROLE_WEIGHT: Record<OrgRole, number> = {
 };
 
 function hasMinRole(ctx: TrpcAuditCtx, minRole: OrgRole): boolean {
-  const actorRole = ctx.orgMembership?.role ?? "viewer";
+  return orgRoleMeets(ctx.orgMembership?.role, minRole);
+}
+
+/**
+ * PR C.2B — helper canônico de papel (reuso; sem RBAC paralelo): true se `role` satisfaz o
+ * mínimo `minRole` na hierarquia OrgRole (viewer<operator<manager<admin<owner).
+ */
+export function orgRoleMeets(role: OrgRole | null | undefined, minRole: OrgRole): boolean {
+  const actorRole = role ?? "viewer";
   return (ORG_ROLE_WEIGHT[actorRole] ?? 0) >= ORG_ROLE_WEIGHT[minRole];
 }
 

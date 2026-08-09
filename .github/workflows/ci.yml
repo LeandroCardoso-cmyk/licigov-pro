@@ -150,6 +150,10 @@ jobs:
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts
 
+      # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
+      - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
+        run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.

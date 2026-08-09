@@ -5134,6 +5134,40 @@ export type CatmatDecisionRow = typeof catmatDecisionsTable.$inferSelect;
 export type InsertCatmatDecision = typeof catmatDecisionsTable.$inferInsert;
 
 /**
+ * PR C.2B — Ledger IMUTÁVEL (append-only) de decisões institucionais de revisão/aprovação
+ * documental, VERSION-AWARE. Cada decisão humana (enviar p/ revisão · aprovar · rejeitar ·
+ * solicitar ajustes) fixa a VERSÃO do documento sob decisão (`documentId` = linha da versão no
+ * modelo row-per-version, `documentVersion` = número da versão), o estado anterior/posterior, o
+ * ator (revisor/aprovador), a justificativa (obrigatória em rejeição/devolução), correlationId e a
+ * chave de idempotência (tenant-aware). NUNCA é atualizado: a decisão vigente é a última linha.
+ * Aprova-se uma VERSÃO, não o documento abstratamente.
+ */
+export const documentReviewDecisionsTable = mysqlTable("document_review_decisions", {
+  id:              int("id").autoincrement().primaryKey(),
+  organizationId:  int("organizationId").notNull(),
+  processId:       int("processId"),
+  documentId:      int("documentId").notNull(),
+  documentVersion: int("documentVersion").notNull(),
+  // submit_for_review | approve | reject | request_changes
+  action:          varchar("action", { length: 30 }).notNull(),
+  fromState:       varchar("fromState", { length: 20 }).notNull(),
+  toState:         varchar("toState", { length: 20 }).notNull(),
+  actorUserId:     int("actorUserId").notNull(),
+  authorUserId:    int("authorUserId"),
+  justification:   text("justification"),
+  correlationId:   varchar("correlationId", { length: 36 }),
+  idempotencyKey:  varchar("idempotencyKey", { length: 64 }),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  unique("uq_docreview_decision_idem").on(table.organizationId, table.idempotencyKey),
+  index("idx_docreview_decision_doc").on(table.organizationId, table.documentId),
+  index("idx_docreview_decision_process").on(table.organizationId, table.processId),
+]);
+
+export type DocumentReviewDecisionRow = typeof documentReviewDecisionsTable.$inferSelect;
+export type InsertDocumentReviewDecision = typeof documentReviewDecisionsTable.$inferInsert;
+
+/**
  * PR C.2 — CONFIGURAÇÃO INSTITUCIONAL VERSIONADA do limiar de confiança CATMAT/CATSER
  * (fail-closed). Tenant-aware, com ator, vigência, versão e lineage. NENHUM valor é
  * semeado: sem linha ativa, o domínio permanece fail-closed (`threshold_not_configured`).
