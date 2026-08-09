@@ -3636,6 +3636,36 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
       PRIMARY KEY (\`id\`), INDEX \`idx_icm_org\` (\`organization_id\`), INDEX \`idx_icm_item\` (\`item_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
+    // PR C.2 — ledger imutável de decisões humanas sobre CATMAT/CATSER (append-only).
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`catmat_decisions\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT, \`organizationId\` INT NOT NULL,
+      \`processId\` VARCHAR(20) NULL, \`itemId\` VARCHAR(20) NOT NULL,
+      \`decision\` VARCHAR(30) NOT NULL, \`suggestionId\` VARCHAR(20) NULL,
+      \`catmatCode\` VARCHAR(50) NULL, \`catmatDescription\` TEXT NULL,
+      \`source\` VARCHAR(40) NULL, \`score\` DECIMAL(6,5) NULL, \`justification\` TEXT NULL,
+      \`thresholdMinScore\` DECIMAL(6,5) NULL, \`thresholdConfigId\` INT NULL,
+      \`actorUserId\` INT NOT NULL, \`correlationId\` VARCHAR(36) NULL,
+      \`idempotencyKey\` VARCHAR(64) NULL,
+      \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uq_catmat_decision_idem\` (\`organizationId\`, \`idempotencyKey\`),
+      INDEX \`idx_catmat_decision_item\` (\`organizationId\`, \`itemId\`),
+      INDEX \`idx_catmat_decision_process\` (\`organizationId\`, \`processId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+    // PR C.2 — configuração VERSIONADA do limiar CATMAT/CATSER (fail-closed; sem valor semeado).
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`catmat_threshold_config\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT, \`organizationId\` INT NOT NULL,
+      \`minScore\` DECIMAL(6,5) NOT NULL, \`version\` INT NOT NULL DEFAULT 1,
+      \`active\` TINYINT NOT NULL DEFAULT 1, \`reason\` VARCHAR(500) NULL,
+      \`actorUserId\` INT NOT NULL, \`correlationId\` VARCHAR(36) NULL,
+      \`effectiveFrom\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uq_catmat_threshold_active\` (\`organizationId\`, \`active\`, \`version\`),
+      INDEX \`idx_catmat_threshold_org\` (\`organizationId\`, \`active\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_recommendations\` (
       \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
       \`item_id\` VARCHAR(20) NOT NULL, \`rec_type\` VARCHAR(30) NOT NULL DEFAULT 'catmat',

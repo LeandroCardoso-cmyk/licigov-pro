@@ -1956,6 +1956,13 @@
       "when": 1784419200006,
       "tag": "0291_import_session_promotion",
       "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "5",
+      "when": 1784419200007,
+      "tag": "0292_catmat_governance",
+      "breakpoints": true
     }
   ]
 }

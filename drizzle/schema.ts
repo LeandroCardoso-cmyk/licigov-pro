@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, tinyint, smallint, double, datetime, bigint } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, index, tinyint, smallint, double, datetime, bigint } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -5098,6 +5098,66 @@ export const itemCatmatMatchesTable = mysqlTable("item_catmat_matches", {
   correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * PR C.2 — LEDGER IMUTÁVEL (append-only) de decisões humanas sobre sugestões
+ * CATMAT/CATSER. Nunca é atualizado: a decisão vigente de um item é a última linha.
+ * Registra ator, proveniência, score, justificativa, o limiar em vigor no momento,
+ * correlationId e a chave de idempotência (tenant-aware). O código nunca é fabricado.
+ */
+export const catmatDecisionsTable = mysqlTable("catmat_decisions", {
+  id:                int("id").autoincrement().primaryKey(),
+  organizationId:    int("organizationId").notNull(),
+  processId:         varchar("processId", { length: 20 }),
+  itemId:            varchar("itemId", { length: 20 }).notNull(),
+  // confirmado | rejeitado | substituido | sem_correspondencia_segura
+  decision:          varchar("decision", { length: 30 }).notNull(),
+  suggestionId:      varchar("suggestionId", { length: 20 }),
+  catmatCode:        varchar("catmatCode", { length: 50 }),
+  catmatDescription: text("catmatDescription"),
+  source:            varchar("source", { length: 40 }),
+  score:             decimal("score", { precision: 6, scale: 5 }),
+  justification:     text("justification"),
+  thresholdMinScore: decimal("thresholdMinScore", { precision: 6, scale: 5 }),
+  thresholdConfigId: int("thresholdConfigId"),
+  actorUserId:       int("actorUserId").notNull(),
+  correlationId:     varchar("correlationId", { length: 36 }),
+  idempotencyKey:    varchar("idempotencyKey", { length: 64 }),
+  createdAt:         timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  unique("uq_catmat_decision_idem").on(table.organizationId, table.idempotencyKey),
+  index("idx_catmat_decision_item").on(table.organizationId, table.itemId),
+  index("idx_catmat_decision_process").on(table.organizationId, table.processId),
+]);
+
+export type CatmatDecisionRow = typeof catmatDecisionsTable.$inferSelect;
+export type InsertCatmatDecision = typeof catmatDecisionsTable.$inferInsert;
+
+/**
+ * PR C.2 — CONFIGURAÇÃO INSTITUCIONAL VERSIONADA do limiar de confiança CATMAT/CATSER
+ * (fail-closed). Tenant-aware, com ator, vigência, versão e lineage. NENHUM valor é
+ * semeado: sem linha ativa, o domínio permanece fail-closed (`threshold_not_configured`).
+ * O VALOR é decisão institucional humana (definido em runtime por papel autorizado),
+ * nunca escolhido pelo código.
+ */
+export const catmatThresholdConfigTable = mysqlTable("catmat_threshold_config", {
+  id:             int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  minScore:       decimal("minScore", { precision: 6, scale: 5 }).notNull(),
+  version:        int("version").notNull().default(1),
+  active:         tinyint("active").notNull().default(1),
+  reason:         varchar("reason", { length: 500 }),
+  actorUserId:    int("actorUserId").notNull(),
+  correlationId:  varchar("correlationId", { length: 36 }),
+  effectiveFrom:  timestamp("effectiveFrom").defaultNow().notNull(),
+  createdAt:      timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  unique("uq_catmat_threshold_active").on(table.organizationId, table.active, table.version),
+  index("idx_catmat_threshold_org").on(table.organizationId, table.active),
+]);
+
+export type CatmatThresholdConfigRow = typeof catmatThresholdConfigTable.$inferSelect;
+export type InsertCatmatThresholdConfig = typeof catmatThresholdConfigTable.$inferInsert;
 
 export const itemRecommendationsTable = mysqlTable("item_recommendations", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
