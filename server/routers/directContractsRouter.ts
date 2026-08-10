@@ -14,6 +14,8 @@ import {
 } from "../services/directContractPackage";
 import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
 import { generateAuditReport } from "../services/directContractAuditReport";
+import { runDirectContractShadow } from "../services/directContractShadowService";
+import type { DirectContractDocType } from "../domain/directContractShadow";
 import { tenantProcedure, router } from "../_core/trpc";
 import {
   getLegalArticles,
@@ -24,11 +26,9 @@ import {
   updateDirectContractForOrganization,
   createDirectContractDocument,
   getDirectContractDocuments,
-  updateDirectContractDocument,
   updateDirectContractDocumentForOrganization,
   createQuotation,
   listQuotations,
-  updateQuotation,
   updateQuotationForOrganization,
   listPlatforms,
   getPlatformById,
@@ -44,6 +44,35 @@ import {
   getTopLegalArticlesForOrganization,
   getRecentDirectContractsForOrganization,
 } from "../db";
+
+/**
+ * PR C.3A — dispara a execução SHADOW (canônica) em paralelo à geração LEGADA (efetiva).
+ * Fire-and-forget: NUNCA altera/atrasa a resposta ao usuário; a flag DB tenant-aware controla se roda
+ * (default OFF/fail-closed). Falha do shadow é observável e não derruba o legado.
+ */
+function fireDirectContractShadow(
+  ctx: { organizationId: number; user: { id: number }; correlationId: string },
+  directContract: { id: number; processId: number | null; object: string; justification: string; type: "dispensa" | "inexigibilidade"; legalArticleId: number; value: number },
+  docType: DirectContractDocType,
+  legacyContent: string | null,
+): void {
+  void runDirectContractShadow({
+    organizationId: ctx.organizationId,
+    actorUserId: ctx.user.id,
+    correlationId: ctx.correlationId,
+    docType,
+    directContract: {
+      id: directContract.id,
+      processId: directContract.processId,
+      object: directContract.object,
+      value: directContract.value,
+      justification: directContract.justification,
+      type: directContract.type,
+      legalArticleId: directContract.legalArticleId,
+    },
+    legacyContent,
+  }).catch(() => { /* shadow nunca derruba o legado */ });
+}
 
 /**
  * Router para gerenciar contratações diretas (dispensas e inexigibilidades)
@@ -167,7 +196,7 @@ export const directContractsRouter = router({
         
         // Validar limite de valor conforme fundamentação legal
         const legalBasis = article.article.includes('75, I') ? 'art75_i_a' : 'art75_ii_outros';
-        const valueValidation = validateDispensaValue(input.value, legalBasis as any);
+        const valueValidation = validateDispensaValue(input.value, legalBasis as "art75_i_a" | "art75_ii_outros");
         
         if (!valueValidation.isValid) {
           throw new TRPCError({
@@ -548,7 +577,8 @@ export const directContractsRouter = router({
           version: 1,
           status: "draft",
         });
-        
+
+        fireDirectContractShadow(ctx, directContract, "termo_dispensa", content);
         return { documentId: document?.id, content };
       }),
     
@@ -589,7 +619,8 @@ export const directContractsRouter = router({
           version: 1,
           status: "draft",
         });
-        
+
+        fireDirectContractShadow(ctx, directContract, "termo_inexigibilidade", content);
         return { documentId: document?.id, content };
       }),
     
@@ -630,7 +661,8 @@ export const directContractsRouter = router({
           version: 1,
           status: "draft",
         });
-        
+
+        fireDirectContractShadow(ctx, directContract, "minuta_contrato", content);
         return { documentId: document?.id, content };
       }),
     
@@ -687,7 +719,8 @@ export const directContractsRouter = router({
           version: 1,
           status: "draft",
         });
-        
+
+        fireDirectContractShadow(ctx, directContract, "planilha_cotacao", content);
         return { documentId: document?.id, content };
       }),
     
@@ -745,7 +778,8 @@ export const directContractsRouter = router({
           version: 1,
           status: "draft",
         });
-        
+
+        fireDirectContractShadow(ctx, directContract, "mapa_comparativo", content);
         return { documentId: document?.id, content };
       }),
   }),
