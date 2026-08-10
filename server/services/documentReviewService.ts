@@ -66,7 +66,13 @@ export interface DocumentReviewResult {
 
 function payloadHashOf(p: DocumentReviewParams, version: number): string {
   return createHash("sha256")
-    .update(JSON.stringify({ d: p.documentId, v: version, to: ACTION_TO_STATE[p.action], r: (p.reason ?? "").trim() }))
+    .update(JSON.stringify({
+      d: p.documentId,
+      v: version,
+      a: p.action,                       // ação explícita no hash (identidade determinística do payload)
+      to: ACTION_TO_STATE[p.action],
+      r: (p.reason ?? "").trim(),
+    }))
     .digest("hex");
 }
 
@@ -79,50 +85,29 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
   const proc = await getProcessByIdForOrganization(document.processId, p.organizationId);
   if (!proc) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado para este documento." });
 
-  const fromState = document.documentStatus as DocumentStatusValue;
-  const version = document.version;
+  // A VERSÃO observada pelo chamador entra na identidade determinística do payload (replay-safe).
+  // Nenhuma ação bumpa `documents.version`, então o replay da MESMA ação relê a mesma versão → mesmo hash.
+  const observedVersion = document.version;
+  const processId = document.processId;
 
-  // Version-aware: a decisão é sobre a VERSÃO observada.
-  if (p.expectedVersion != null && p.expectedVersion !== version) {
-    throw new TRPCError({
-      code: "CONFLICT",
-      message: `Versão desatualizada: esperado v${p.expectedVersion}, atual v${version}. Recarregue e revise a versão vigente.`,
-    });
-  }
-
-  if (!isValidTransition(fromState, toState)) {
-    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Transição inválida: ${fromState} → ${toState}.` });
-  }
-
-  // RBAC canônico (sem paralelo): papel mínimo por estado-alvo.
-  const minRole = (WORKFLOW_ROLE_REQUIREMENTS[toState] ?? "manager") as OrgRole;
-  if (!orgRoleMeets(p.actorRole, minRole)) {
-    throw new TRPCError({ code: "FORBIDDEN", message: `Papel insuficiente para esta ação — requer no mínimo "${minRole}".` });
-  }
-
-  // Segregação de deveres institucional.
-  assertInstitutionalDecisionRules({
-    toState,
-    actorUserId: p.actorUserId,
-    authorUserId: document.createdBy ?? null,
-    reason: p.reason ?? null,
-  });
-
+  // Idempotência PRIMEIRO: um replay válido (mesma chave + mesmo payload) resolve o resultado
+  // persistido ANTES de qualquer validação dependente do estado mutável. As validações de
+  // versão/transição/RBAC/SoD só rodam na execução NOVA, sob SELECT … FOR UPDATE.
   const { result, replayed } = await runWithIdempotency(
     {
       key: p.idempotencyKey,
       userId: p.actorUserId,
       organizationId: p.organizationId,
       operation: "document.review.decision",
-      payloadHash: payloadHashOf(p, version),
+      payloadHash: payloadHashOf(p, observedVersion),
     },
     async (): Promise<DocumentReviewResult> => {
       const db = await getDb();
       if (!db) {
-        return { replayed: false, status: toState, fromState, documentId: p.documentId, documentVersion: version, decisionId: null };
+        return { replayed: false, status: toState, fromState: toState, documentId: p.documentId, documentVersion: observedVersion, decisionId: null };
       }
       // Transação única: estado + ledger, sem gravação parcial. FOR UPDATE serializa decisões
-      // concorrentes sobre o mesmo documento e revalida estado/versão sob lock.
+      // concorrentes e garante que TODAS as validações dependentes de estado usem a linha bloqueada.
       return db.transaction(async (tx): Promise<DocumentReviewResult> => {
         const locked = await tx
           .select()
@@ -131,11 +116,35 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
           .for("update");
         const cur = locked[0];
         if (!cur) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
-        if (cur.version !== version) throw new TRPCError({ code: "CONFLICT", message: "Versão alterada durante a decisão." });
-        if ((cur.documentStatus as DocumentStatusValue) !== fromState) {
-          throw new TRPCError({ code: "CONFLICT", message: "Estado alterado durante a decisão." });
-        }
 
+        const fromState = cur.documentStatus as DocumentStatusValue;
+        const version = cur.version;
+
+        // 1) Version-aware: a decisão é sobre a VERSÃO observada (sob lock).
+        if (p.expectedVersion != null && p.expectedVersion !== version) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Versão desatualizada: esperado v${p.expectedVersion}, atual v${version}. Recarregue e revise a versão vigente.`,
+          });
+        }
+        // 2) Transição canônica (fromState REAL, derivado sob lock).
+        if (!isValidTransition(fromState, toState)) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Transição inválida: ${fromState} → ${toState}.` });
+        }
+        // 3) RBAC canônico (papel mínimo por estado-alvo).
+        const minRole = (WORKFLOW_ROLE_REQUIREMENTS[toState] ?? "manager") as OrgRole;
+        if (!orgRoleMeets(p.actorRole, minRole)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `Papel insuficiente para esta ação — requer no mínimo "${minRole}".` });
+        }
+        // 4) Segregação de deveres institucional (autor real da versão bloqueada).
+        assertInstitutionalDecisionRules({
+          toState,
+          actorUserId: p.actorUserId,
+          authorUserId: cur.createdBy ?? null,
+          reason: p.reason ?? null,
+        });
+
+        // 5) Estado + ledger, atomicamente.
         await tx
           .update(documents)
           .set({
@@ -149,14 +158,14 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
           .insert(documentReviewDecisionsTable)
           .values({
             organizationId: p.organizationId,
-            processId: document.processId,
+            processId,
             documentId: p.documentId,
             documentVersion: version,
             action: p.action,
             fromState,
             toState,
             actorUserId: p.actorUserId,
-            authorUserId: document.createdBy ?? null,
+            authorUserId: cur.createdBy ?? null,
             justification: (p.reason ?? "").trim() || null,
             correlationId: p.correlationId,
             idempotencyKey: p.idempotencyKey,
@@ -169,13 +178,13 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
   );
 
   const finalResult: DocumentReviewResult =
-    result ?? { replayed, status: toState, fromState, documentId: p.documentId, documentVersion: version, decisionId: null };
+    result ?? { replayed, status: toState, fromState: toState, documentId: p.documentId, documentVersion: observedVersion, decisionId: null };
 
   // Narrativa/auditoria aplicada UMA vez (nunca em replay) → timeline/evento único.
   if (!replayed) {
     await logActivity({
       organizationId: p.organizationId,
-      processId: document.processId,
+      processId,
       userId: p.actorUserId,
       actorName: p.actorName ?? undefined,
       actorEmail: p.actorEmail ?? undefined,
@@ -187,9 +196,9 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
       entityId: p.documentId,
       correlationId: p.correlationId,
       requestId: p.requestId,
-      details: { fromState, toState, version, reason: (p.reason ?? "").trim() || undefined },
+      details: { fromState: finalResult.fromState, toState, version: finalResult.documentVersion, reason: (p.reason ?? "").trim() || undefined },
     });
-    log.info("document_review_decision", { documentId: p.documentId, fromState, toState, organizationId: p.organizationId });
+    log.info("document_review_decision", { documentId: p.documentId, fromState: finalResult.fromState, toState, organizationId: p.organizationId });
   }
 
   return { ...finalResult, replayed };

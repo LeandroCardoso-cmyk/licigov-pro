@@ -1,16 +1,16 @@
-# Graph Report - licigov-pro  (2026-08-09)
+# Graph Report - licigov-pro  (2026-08-10)
 
 ## Corpus Check
-- 2120 files · ~2,686,273 words
+- 2120 files · ~2,686,356 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 15093 nodes · 30640 edges · 906 communities (741 shown, 165 thin omitted)
+- 15093 nodes · 30640 edges · 907 communities (742 shown, 165 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 112 edges (avg confidence: 0.74)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `aaf57fa1`
+- Built from commit: `dae58a36`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -55,7 +55,7 @@
 - DirectProcurementHome.tsx
 - webhookRouter.ts
 - contextAssembly.ts
-- OperationalDashboardPage.tsx
+- catalogSearchEngine.ts
 - sprint295-pre-itemtr.test.ts
 - sprint43-legal-ai.test.ts
 - 📊 Análise Comparativa: Sistema Moreira Sales vs LiciGov Pro
@@ -771,10 +771,10 @@
 - Padrões Principais
 - embla-carousel-react
 - CopilotReasoningPanel.tsx
-- BusinessDomainCode
+- businessDomain.ts
 - helmet
 - html2canvas
-- 🎯 Critérios de Sucesso
+- 📊 Estimativa de Custos (IA)
 - reviewWorkspaceRouter.ts
 - Funcionalidades Avançadas
 - ProcessOverview.tsx
@@ -839,9 +839,9 @@
 - 📚 Expansão do Sistema RAG
 - rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts
 - Fase 6 - Aplicar Personalização e Downloads
-- 🔧 Correções e Melhorias
+- Fase 15 - Melhorias Finais da Interface Administrativa
 - run.sh
-- @aws-sdk/client-s3
+- Fase 15 - Dashboard de Analytics
 - busboy
 - docx
 - archiver
@@ -904,6 +904,7 @@
 - @typescript-eslint/parser
 - vite
 - vitest
+- @aws-sdk/s3-request-presigner
 - Melhorias e Otimizações
 - rc-legal-sec-001-legal-opinions-freeze.test.ts
 - Institutional Ontology Validation (RC-4.3.1)
@@ -939,7 +940,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (906 total, 165 thin omitted)
+## Communities (907 total, 165 thin omitted)
 
 ### Community 0 - "schema.ts"
 Cohesion: 0.01
@@ -970,8 +971,8 @@ Cohesion: 0.06
 Nodes (58): BlendedResult, buildConsensus(), CandidateConsensus, computeBlendedScore(), ConfidenceBreakdown, ConsensusWeights, DEFAULT_WEIGHTS, getRejectionReason() (+50 more)
 
 ### Community 7 - "cn"
-Cohesion: 0.02
-Nodes (226): AIChatBox(), AIChatBoxProps, Message, CandidateCardProps, sourceLabels, CandidateComparisonViewProps, CandidateData, MEDALS (+218 more)
+Cohesion: 0.01
+Nodes (242): AIChatBox(), AIChatBoxProps, Message, CandidateCardProps, sourceLabels, CandidateComparisonViewProps, CandidateData, MEDALS (+234 more)
 
 ### Community 8 - "institutionalRequests.ts"
 Cohesion: 0.06
@@ -1002,8 +1003,8 @@ Cohesion: 0.09
 Nodes (41): ALL_LEGAL_CONCEPT_IDS, conceptsByCategory(), getLegalConcept(), LEGAL_CONCEPTS, LegalConcept, LegalConceptCategory, LegalConceptId, ALL_LEGAL_RELATIONSHIP_KINDS (+33 more)
 
 ### Community 15 - "sprint32-production-hardening.test.ts"
-Cohesion: 0.04
-Nodes (71): CatalogEntryType, ingestCatalog(), ingestSeedCatalog(), normalizeCatalogEntry(), CacheConfig, CacheEntry, CacheMetrics, CacheService (+63 more)
+Cohesion: 0.05
+Nodes (53): CacheConfig, CacheEntry, CacheMetrics, CacheService, createCacheService(), DEFAULT_CONFIG, AuditCategory, AuditEvent (+45 more)
 
 ### Community 16 - "ingestionRouter.ts"
 Cohesion: 0.03
@@ -1051,7 +1052,7 @@ Nodes (70): buildEvidenceGraph(), computeGroundingScore(), createGroundingSessio
 
 ### Community 27 - "LiciGov Pro - TODO"
 Cohesion: 0.04
-Nodes (55): Auditoria e Logs, Auto-save no Editor, Backend de Comentários, Backend (Implementado), Colaboração em Processos, Configurações de Cabeçalho e Rodapé, Correção de Bugs Críticos, Correções de TypeScript Realizadas (+47 more)
+Nodes (51): Auditoria e Logs, Auto-save no Editor, Backend de Comentários, Backend (Implementado), Cache de Embeddings, Colaboração em Processos, Configurações de Cabeçalho e Rodapé, Correção de Bugs Críticos (+43 more)
 
 ### Community 28 - "sprint35-pilot-execution.test.ts"
 Cohesion: 0.05
@@ -1101,9 +1102,9 @@ Nodes (25): deliveryStore, endpointStore, getDeliveries(), getEndpoints(), saveD
 Cohesion: 0.05
 Nodes (65): addFragmentToLayer(), assembleContext(), assembleRAGContext(), compressRAGContext(), ContextAssembly, ContextFragment, ContextLayer, ContextPriority (+57 more)
 
-### Community 40 - "OperationalDashboardPage.tsx"
-Cohesion: 0.08
-Nodes (23): ConfidenceDataPoint, ConfidenceDriftChart(), ConfidenceDriftChartProps, KPIWidget(), KPIWidgetProps, OperationalDashboardPageProps, msToReadable(), ReviewProductivityWidget() (+15 more)
+### Community 40 - "catalogSearchEngine.ts"
+Cohesion: 0.19
+Nodes (24): createSearchEntry(), isFuzzyMatch(), levenshtein(), scoreAgainstEntry(), SemanticSearchEntry, STOPWORDS_PT, tokenize(), TokenMatchResult (+16 more)
 
 ### Community 41 - "sprint295-pre-itemtr.test.ts"
 Cohesion: 0.10
@@ -1142,8 +1143,8 @@ Cohesion: 0.11
 Nodes (33): ActionClassification, assessHallucinationRisk(), BLOCKED_ACTIONS, buildRollbackPlan(), classifyAction(), HallucinationRisk, HIGH_RISK_ACTIONS, isActionBlocked() (+25 more)
 
 ### Community 50 - "catalogIntegrationService.ts"
-Cohesion: 0.07
-Nodes (52): addToHistory(), CacheMetadata, CatalogSnapshot, CatalogSyncHistory, CatalogType, computeChecksum(), createSnapshot(), IntegrityMetadata (+44 more)
+Cohesion: 0.06
+Nodes (46): addToHistory(), CacheMetadata, CatalogSnapshot, CatalogSyncHistory, CatalogType, computeChecksum(), createSnapshot(), IntegrityMetadata (+38 more)
 
 ### Community 51 - "documentEngineService.ts"
 Cohesion: 0.05
@@ -1766,8 +1767,8 @@ Cohesion: 0.19
 Nodes (15): ChunkStrategy, createSemanticChunk(), getChunkLineage(), isChunkDuplicate(), SemanticChunk, sha256(), SourceType, _chunks (+7 more)
 
 ### Community 206 - "sprint501-business-domains.test.ts"
-Cohesion: 0.14
-Nodes (32): code(), upsertBusinessDomain(), upsertKernelService(), upsertModuleDependency(), BASE_KERNEL, BUSINESS_DOMAIN_DEFINITIONS, BusinessDomain, BusinessDomainCategory (+24 more)
+Cohesion: 0.18
+Nodes (24): code(), upsertBusinessDomain(), upsertKernelService(), upsertModuleDependency(), createBusinessDomain(), getBusinessDomainDefinition(), listBusinessDomains(), ALL_KERNEL_SERVICE_IDS (+16 more)
 
 ### Community 207 - "ThemeContext.tsx"
 Cohesion: 0.25
@@ -2363,7 +2364,7 @@ Nodes (9): 1. **Tipos de Contratação Direta**, 2. **Geração Automática de D
 
 ### Community 357 - "📋 Plano de Implementação: RAG + Melhorias LiciGov Pro"
 Cohesion: 0.22
-Nodes (8): ✅ Entrega Final, 📊 Estimativa de Custos (IA), Indexação Inicial (uma vez), Matching CATMAT (1000 processos, 20 itens cada), 🎯 Objetivo Geral, 📋 Plano de Implementação: RAG + Melhorias LiciGov Pro, 📊 Resumo Executivo, Uso Mensal (1000 processos)
+Nodes (8): 🎯 Critérios de Sucesso, ✅ Entrega Final, Funcionalidade Mínima Aceitável, 🎯 Objetivo Geral, Performance, 📋 Plano de Implementação: RAG + Melhorias LiciGov Pro, Qualidade Esperada, 📊 Resumo Executivo
 
 ### Community 358 - "Institutional Bootstrap Framework (RC-X.2)"
 Cohesion: 0.22
@@ -3491,7 +3492,7 @@ Nodes (3): LiciGov Pro · Piloto Moreira Sales · 2026-07-22, Matriz de Prontid�
 
 ### Community 693 - "lib/trpc.ts"
 Cohesion: 0.02
-Nodes (79): BusinessDomainCode, DomainWorkspaceLauncherProps, LicensedModulesPanel(), Plan, planBadgeClasses(), LicensingDashboard(), planBadgeClasses(), BusinessDomainCode (+71 more)
+Nodes (86): BusinessDomainCode, DomainWorkspaceLauncherProps, LicensedModulesPanel(), Plan, planBadgeClasses(), LicensingDashboard(), planBadgeClasses(), BusinessDomainCode (+78 more)
 
 ### Community 694 - "departmentOperation.ts"
 Cohesion: 0.15
@@ -3697,13 +3698,13 @@ Nodes (7): Commits, Drizzle ORM, Engineering Standards, Padrões Principais, Tes
 Cohesion: 0.40
 Nodes (5): CopilotReasoningPanel(), CopilotReasoningPanelProps, STEP_LABEL, toSteps(), TraceStep
 
-### Community 762 - "BusinessDomainCode"
-Cohesion: 0.32
-Nodes (7): AssembledProcess, assembleProcess(), ProcessDefinition, ProcessStepDefinition, recommendSteps(), validateProcessDefinition(), BusinessDomainCode
+### Community 762 - "businessDomain.ts"
+Cohesion: 0.16
+Nodes (15): AssembledProcess, assembleProcess(), ProcessDefinition, ProcessStepDefinition, recommendSteps(), validateProcessDefinition(), BASE_KERNEL, BUSINESS_DOMAIN_DEFINITIONS (+7 more)
 
-### Community 766 - "🎯 Critérios de Sucesso"
+### Community 766 - "📊 Estimativa de Custos (IA)"
 Cohesion: 0.50
-Nodes (4): 🎯 Critérios de Sucesso, Funcionalidade Mínima Aceitável, Performance, Qualidade Esperada
+Nodes (4): 📊 Estimativa de Custos (IA), Indexação Inicial (uma vez), Matching CATMAT (1000 processos, 20 itens cada), Uso Mensal (1000 processos)
 
 ### Community 767 - "reviewWorkspaceRouter.ts"
 Cohesion: 0.29
@@ -3723,7 +3724,7 @@ Nodes (5): brl(), ITEM_STATUS_CLASSES, ProcurementItemPanel(), ProcurementItemPa
 
 ### Community 772 - "dependencies"
 Cohesion: 0.10
-Nodes (21): @aws-sdk/lib-storage, @aws-sdk/s3-request-presigner, clsx, cmdk, @dnd-kit/core, dependencies, @aws-sdk/lib-storage, @aws-sdk/s3-request-presigner (+13 more)
+Nodes (21): @aws-sdk/client-s3, @aws-sdk/lib-storage, clsx, cmdk, @dnd-kit/core, dependencies, @aws-sdk/client-s3, @aws-sdk/lib-storage (+13 more)
 
 ### Community 776 - "Decisões Arquiteturais Chave"
 Cohesion: 0.29
@@ -3825,9 +3826,13 @@ Nodes (3): Documentos para Indexação no RAG, 📚 Expansão do Sistema RAG, Su
 Cohesion: 0.67
 Nodes (3): Fase 6 - Aplicar Personalização e Downloads, Implementação de Downloads, Integração de Cabeçalho/Rodapé nos Documentos
 
-### Community 833 - "🔧 Correções e Melhorias"
+### Community 833 - "Fase 15 - Melhorias Finais da Interface Administrativa"
+Cohesion: 0.50
+Nodes (4): Fase 15 - Melhorias Finais da Interface Administrativa, getPlatformInstructions Dinâmico, Preview de Mudanças, Reordenação de Passos
+
+### Community 835 - "Fase 15 - Dashboard de Analytics"
 Cohesion: 0.67
-Nodes (3): Cache de Embeddings, 🔧 Correções e Melhorias, Formato de Embeddings no RAG
+Nodes (3): Fase 15 - Dashboard de Analytics, Interface de Analytics, Métricas de Backend
 
 ### Community 861 - "contractValidationExample.ts"
 Cohesion: 0.36
@@ -3873,7 +3878,7 @@ Nodes (4): Badge de Plataforma no Dashboard, Exportação de Checklist em PDF, F
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `dependencies` connect `dependencies` to `documentsRouter.ts`, `react`, `_core/index.ts`, `exceljs`, `framer-motion`, `axios`, `embla-carousel-react`, `helmet`, `html2canvas`, `class-variance-authority`, `marked`, `date-fns`, `bcrypt`, `pdf-parse`, `cookie`, `@radix-ui/react-context-menu`, `package.json`, `stripe`, `@trpc/client`, `@dnd-kit/utilities`, `tailwind-merge`, `input-otp`, `jspdf`, `nanoid`, `@radix-ui/react-collapsible`, `resend`, `@radix-ui/react-dropdown-menu`, `@tiptap/starter-kit`, `superjson`, `@radix-ui/react-menubar`, `@trpc/server`, `@radix-ui/react-progress`, `@radix-ui/react-select`, `@radix-ui/react-aspect-ratio`, `react-dom`, `@tiptap/react`, `@trpc/react-query`, `wouter`, `diff-match-patch`, `@aws-sdk/client-s3`, `busboy`, `docx`, `archiver`, `@dnd-kit/sortable`, `mammoth`, `next-themes`, `dotenv`, `@radix-ui/react-scroll-area`, `drizzle-orm`, `@radix-ui/react-switch`, `@radix-ui/react-tabs`, `@radix-ui/react-radio-group`, `jose`, `sonner`, `@radix-ui/react-slot`, `react-resizable-panels`, `lucide-react`, `tailwindcss-animate`, `mysql2`, `openai`, `xlsx`, `zod`, `pdfkit`, `@radix-ui/react-accordion`, `@radix-ui/react-alert-dialog`, `@radix-ui/react-avatar`, `@radix-ui/react-checkbox`, `@radix-ui/react-dialog`, `@radix-ui/react-navigation-menu`, `@radix-ui/react-popover`, `@radix-ui/react-separator`, `@radix-ui/react-toggle`, `@radix-ui/react-toggle-group`, `react-day-picker`, `react-hook-form`, `recharts`, `streamdown`, `@tiptap/extension-placeholder`, `@types/pdfkit`, `use-debounce`, `vaul`?**
+- **Why does `dependencies` connect `dependencies` to `documentsRouter.ts`, `react`, `_core/index.ts`, `exceljs`, `framer-motion`, `axios`, `embla-carousel-react`, `helmet`, `html2canvas`, `class-variance-authority`, `marked`, `date-fns`, `bcrypt`, `pdf-parse`, `cookie`, `@radix-ui/react-context-menu`, `package.json`, `stripe`, `@trpc/client`, `@dnd-kit/utilities`, `tailwind-merge`, `input-otp`, `jspdf`, `nanoid`, `@radix-ui/react-collapsible`, `resend`, `@radix-ui/react-dropdown-menu`, `@tiptap/starter-kit`, `superjson`, `@radix-ui/react-menubar`, `@trpc/server`, `@radix-ui/react-progress`, `@radix-ui/react-select`, `@radix-ui/react-aspect-ratio`, `react-dom`, `@tiptap/react`, `@trpc/react-query`, `wouter`, `diff-match-patch`, `busboy`, `docx`, `archiver`, `@dnd-kit/sortable`, `mammoth`, `next-themes`, `dotenv`, `@radix-ui/react-scroll-area`, `drizzle-orm`, `@radix-ui/react-switch`, `@radix-ui/react-tabs`, `@radix-ui/react-radio-group`, `jose`, `sonner`, `@radix-ui/react-slot`, `react-resizable-panels`, `lucide-react`, `tailwindcss-animate`, `mysql2`, `openai`, `xlsx`, `zod`, `pdfkit`, `@radix-ui/react-accordion`, `@radix-ui/react-alert-dialog`, `@radix-ui/react-avatar`, `@radix-ui/react-checkbox`, `@radix-ui/react-dialog`, `@radix-ui/react-navigation-menu`, `@radix-ui/react-popover`, `@radix-ui/react-separator`, `@radix-ui/react-toggle`, `@radix-ui/react-toggle-group`, `react-day-picker`, `react-hook-form`, `recharts`, `streamdown`, `@tiptap/extension-placeholder`, `@types/pdfkit`, `use-debounce`, `vaul`, `@aws-sdk/s3-request-presigner`?**
   _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **Why does `getDb()` connect `getDb` to `schema.ts`, `documentService.ts`, `institutionalRequests.ts`, `sprint25-hardening.test.ts`, `legalOpinionWorkspaceService.ts`, `moduleFeatureFlagService.ts`, `ingestionRouter.ts`, `directContracts.ts`, `routers.ts`, `sprint50-workspace.test.ts`, `operationRecordRouter.ts`, `contractService.ts`, `workspaceRiskService.ts`, `db/catmatGovernance.ts`, `workspaceTaskService.ts`, `institutionalConsultationService.ts`, `db/businessDomains.ts`, `aiUsageTracker.ts`, `tasks.ts`, `knowledgeGraph.ts`, `taskRouter.ts`, `documentsRouter.ts`, `authRouter.ts`, `invitationService.ts`, `documentEngineService.ts`, `departmentOperation.ts`, `legalOpinions.ts`, `directProcurementService.ts`, `copilotRouter.ts`, `sprint5y-legal-opinion.test.ts`, `institutionalRetrievalService.ts`, `directProcurementRouter.ts`, `organizations.ts`, `embeddings.ts`, `importQueueService.ts`, `emailDispatcher.ts`, `sprint501-business-domains.test.ts`, `operationRecordService.ts`, `featureFlagService.ts`, `departmentOperationService.ts`, `procurement.ts`, `contracts.ts`, `contractsRouter.ts`, `_core/index.ts`, `productionMonitoringService.ts`, `institutionalConsultations.ts`, `businessDomainRouter.ts`?**
   _High betweenness centrality (0.042) - this node is a cross-community bridge._
