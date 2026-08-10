@@ -3666,6 +3666,20 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
       INDEX \`idx_catmat_threshold_org\` (\`organizationId\`, \`active\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
+    // PR C.2B — ledger imutável de decisões de revisão/aprovação documental (version-aware, append-only).
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`document_review_decisions\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT, \`organizationId\` INT NOT NULL,
+      \`processId\` INT NULL, \`documentId\` INT NOT NULL, \`documentVersion\` INT NOT NULL,
+      \`action\` VARCHAR(30) NOT NULL, \`fromState\` VARCHAR(20) NOT NULL, \`toState\` VARCHAR(20) NOT NULL,
+      \`actorUserId\` INT NOT NULL, \`authorUserId\` INT NULL, \`justification\` TEXT NULL,
+      \`correlationId\` VARCHAR(36) NULL, \`idempotencyKey\` VARCHAR(64) NULL,
+      \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uq_docreview_decision_idem\` (\`organizationId\`, \`idempotencyKey\`),
+      INDEX \`idx_docreview_decision_doc\` (\`organizationId\`, \`documentId\`),
+      INDEX \`idx_docreview_decision_process\` (\`organizationId\`, \`processId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`item_recommendations\` (
       \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
       \`item_id\` VARCHAR(20) NOT NULL, \`rec_type\` VARCHAR(30) NOT NULL DEFAULT 'catmat',

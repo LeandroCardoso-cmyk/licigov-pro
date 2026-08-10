@@ -53,7 +53,16 @@ const trpcClient = trpc.createClient({
       // organização sintética padrão (id 1) para admins de plataforma.
       headers() {
         const selected = localStorage.getItem(SELECTED_ORGANIZATION_ID_STORAGE_KEY);
-        return selected ? { "x-organization-id": selected } : {};
+        // PR C.2B — correlationId ponta a ponta: cliente → tRPC → serviço → persistência/auditoria.
+        // Gerado por request quando o browser suporta crypto.randomUUID; o backend também gera se ausente.
+        const headers: Record<string, string> = {};
+        if (selected) headers["x-organization-id"] = selected;
+        try {
+          if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+            headers["x-correlation-id"] = crypto.randomUUID();
+          }
+        } catch { /* sem correlationId no cliente: backend gera */ }
+        return headers;
       },
       fetch(input, init) {
         return globalThis.fetch(input, {

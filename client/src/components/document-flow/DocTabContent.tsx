@@ -121,7 +121,7 @@ export function DocTabContent({ docType, status, doc, processId, isOwner = false
 
   // Document exists
   if (doc) {
-    const docStatus = (doc as any).documentStatus ?? "draft";
+    const docStatus = doc.documentStatus ?? "draft";
     return (
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-border flex-wrap">
@@ -132,7 +132,9 @@ export function DocTabContent({ docType, status, doc, processId, isOwner = false
             </span>
             <DocumentApprovalPanel
               documentId={doc.id}
+              documentVersion={doc.version}
               documentStatus={docStatus}
+              authorUserId={doc.createdBy ?? null}
               onStatusChange={() => actions.onTabChange(docType)}
             />
             <StageAssignmentPanel processId={processId} docType={docType} isOwner={isOwner} />

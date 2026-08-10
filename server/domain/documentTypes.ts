@@ -42,7 +42,7 @@ export type DocumentStatusValue =
 /** Mapa oficial de transições permitidas no workflow documental */
 export const WORKFLOW_TRANSITIONS: Record<DocumentStatusValue, DocumentStatusValue[]> = {
   draft:     ["in_review", "archived"],
-  in_review: ["approved", "rejected"],
+  in_review: ["approved", "rejected", "draft"],  // draft = devolução p/ ajustes (PR C.2B)
   approved:  ["archived"],
   rejected:  ["draft", "archived"],
   archived:  [],  // estado terminal
