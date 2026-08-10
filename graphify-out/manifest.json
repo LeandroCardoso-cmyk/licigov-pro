@@ -5115,8 +5115,8 @@
     "semantic_hash": ""
   },
   "server/routers/directContractsRouter.ts": {
-    "mtime": 1785862334.823574,
-    "ast_hash": "6d10ad43fefe1384ab0bba021b2d62de",
+    "mtime": 1786383715.3345504,
+    "ast_hash": "b60e588d4a799674b5b015ae33d40f3d",
     "semantic_hash": ""
   },
   "server/routers/documentSettingsRouter.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786314991.9835396,
-    "ast_hash": "c5ebc0ddceca583acec3d79de7432061",
+    "mtime": 1786383881.8345466,
+    "ast_hash": "59f359d99716449eb622b9017def8b87",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -10755,8 +10755,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/AI_LEGACY_MIGRATION_PLAN.md": {
-    "mtime": 1786313828.9314706,
-    "ast_hash": "6fc0952487ab7c5a9566f65e338311ee",
+    "mtime": 1786384068.0625424,
+    "ast_hash": "8ddaede35b1a63f26844795a6ca259b1",
     "semantic_hash": ""
   },
   "docs/handoffs/C2_GOVERNANCE_OPERATIONALIZATION_DELIVERY.md": {
@@ -10812,6 +10812,31 @@
   "docs/handoffs/C2B_VERSION_AWARE_APPROVAL_DELIVERY.md": {
     "mtime": 1786315031.835542,
     "ast_hash": "e242e2588ea6683bd789c81ca1ccd6d1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-contract-shadow-mysql-smoke.test.ts": {
+    "mtime": 1786383871.026547,
+    "ast_hash": "f468ccf8eb7ccc387e105024e533eefd",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-contract-shadow.test.ts": {
+    "mtime": 1786383817.4305482,
+    "ast_hash": "0349170e99ff4236eae92b748cfa0481",
+    "semantic_hash": ""
+  },
+  "server/domain/directContractShadow.ts": {
+    "mtime": 1786383439.6265569,
+    "ast_hash": "c2a883803cb422241dc25a18879433b7",
+    "semantic_hash": ""
+  },
+  "server/services/directContractShadowService.ts": {
+    "mtime": 1786383513.3905551,
+    "ast_hash": "311bf25ff829b0704745c0e6014915ef",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md": {
+    "mtime": 1786384055.7785428,
+    "ast_hash": "67c5f588ec0925178f38e5f91f48b89e",
     "semantic_hash": ""
   }
 }

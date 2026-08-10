@@ -70,6 +70,19 @@ futura (uma por serviço), não desta PR.
   obrigatórios) e divergência textual dentro de tolerância revisada por humano.
 - Só após o critério, uma flag comuta o tráfego. Rollback = desligar a flag.
 
+## 5.1 Estado de execução — C.3A (shadow de `directContractDocuments`)
+
+**Implementado (PR C.3A) — SHADOW apenas, sem cutover.** O item §4.1 tem agora a infraestrutura de
+shadow construída: `directContractsRouter.generate.*` dispara, fire-and-forget, o
+`directContractShadowService` → `executeCognitiveTask({task:"DIRECT_PROCUREMENT_REASONING"})`, atrás da
+flag DB tenant-aware **`FF_DIRECT_CONTRACT_SHADOW`** (default OFF/fail-closed). Comparação estrutural
+determinística (`compareDirectContractShadow`, classes `EQUIVALENT_STRUCTURE`/`STRUCTURAL_DIVERGENCE`/
+`MISSING_REQUIRED_FIELD`/`CANONICAL_ERROR`/`LEGACY_ERROR`/`NOT_COMPARABLE`), idempotência via
+`runWithIdempotency`, observabilidade reusando `cognitive_observability` (sem chain-of-thought/conteúdo
+integral). **Legado permanece EFFECTIVE**; allowlists e `invokeLLM` intactos; nenhuma migration.
+Detalhes e procedimento de homologação: [`../handoffs/C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md`](../handoffs/C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md).
+**Cutover NÃO realizado** — depende de dados reais de staging (critério/flag de cutover futuros).
+
 ## 6. O que esta PR (C.2A) NÃO faz
 
 - Não altera `INVOKE_LLM_LEGACY_ALLOWLIST` nem qualquer allowlist de fronteira.
