@@ -323,6 +323,29 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     "Campos da ingestão canônica (drizzle/0288).",
   );
 
+  // C.3A-OPS.2 — Auditoria governada de feature flags grava em activity_logs DENTRO da mesma
+  // transação do UPSERT (atômico). O campo crítico é `processId` NULLABLE: logs organization-level
+  // (ex.: feature flag) não têm processo. A nulabilidade é reconciliada pela migration FORMAL
+  // drizzle/0294 (necessária porque a 0041 é pulada em bancos db:push baseline-stampados). Aqui
+  // apenas VERIFICAMOS a forma — sem mutar (migration corrige; bootstrap verifica). Divergência de
+  // tipo/tamanho/nulabilidade nos campos usados pelo INSERT falha o boot em staging/produção.
+  await assertColumnsPresent(
+    "activity_logs",
+    [
+      { name: "processId",      dataType: "int",                   nullable: true },
+      { name: "organizationId", dataType: "int",                   nullable: true },
+      { name: "userId",         dataType: "int",                   nullable: false },
+      { name: "action",         dataType: "varchar",               nullable: false },
+      { name: "entityType",     dataType: "varchar", charLen: 50,  nullable: true },
+      { name: "entityId",       dataType: "int",                   nullable: true },
+      { name: "correlationId",  dataType: "varchar", charLen: 36,  nullable: true },
+      { name: "requestId",      dataType: "varchar", charLen: 36,  nullable: true },
+      { name: "sourceContext",  dataType: "enum",                  nullable: false },
+      { name: "details",        dataType: "text",                  nullable: true },
+    ],
+    "Campos da auditoria governada de activity_logs (drizzle/0294 reconcilia processId nullable).",
+  );
+
   // Sprint 2.8 — Import Staging Items table
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS \`import_staging_items\` (

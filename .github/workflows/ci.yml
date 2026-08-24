@@ -163,6 +163,11 @@ jobs:
       - name: Smoke — controle de feature flags (C.3A-OPS)
         run: pnpm exec vitest run server/__tests__/integration/feature-flag-admin-mysql-smoke.test.ts
 
+      # C.3A-OPS.2 — reconciliação de activity_logs.processId (drift db:push baseline-stampado):
+      # banco novo/legado/reconciliado, preservação de dados, INSERT de auditoria org-level, idempotência.
+      - name: Smoke — reconciliação de activity_logs (C.3A-OPS.2)
+        run: pnpm exec vitest run server/__tests__/integration/activity-logs-reconciliation-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.
