@@ -3855,8 +3855,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1786314379.305564,
-    "ast_hash": "1a165c3d7f984b3d6b18e6b2e7807e34",
+    "mtime": 1787580745.543322,
+    "ast_hash": "c4e42e551315e3338e071baad60b9b74",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -4205,8 +4205,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1786314394.035504,
-    "ast_hash": "9fd173e4a0cb3db1339b86a8397ff183",
+    "mtime": 1787580807.6199749,
+    "ast_hash": "99ddf304135a723bd0c3c2fbdf42be67",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787534371.5173738,
-    "ast_hash": "f69a14dc09309e4e24e649931fd5f2a9",
+    "mtime": 1787580940.8719828,
+    "ast_hash": "d697cc974940f4aa62aced2a8f33228f",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -10882,6 +10882,16 @@
   "client/src/lib/featureFlags/shadowFlagSurface.ts": {
     "mtime": 1787573129.8858447,
     "ast_hash": "3b1bc721994ac1a5ee8ca49ba6533824",
+    "semantic_hash": ""
+  },
+  "drizzle/0294_activity_logs_governance_reconciliation.sql": {
+    "mtime": 1787580732.0679703,
+    "ast_hash": "4e357e01028a6c18c9f83f4984896aa3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/activity-logs-reconciliation-mysql-smoke.test.ts": {
+    "mtime": 1787581063.9015713,
+    "ast_hash": "485993d42434fd2c576b17d2a388fb02",
     "semantic_hash": ""
   }
 }
