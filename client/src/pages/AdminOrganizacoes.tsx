@@ -11,10 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Building2, Loader2 } from "lucide-react";
+import { Building2, Loader2, Flag } from "lucide-react";
 import { translateAuthError } from "@/utils/authErrorMessages";
 import { SELECTED_ORGANIZATION_ID_STORAGE_KEY } from "@/const";
 import { slugify } from "@/utils/slugify";
+import { FeatureFlagShadowDialog } from "@/components/admin/FeatureFlagShadowDialog";
 
 const ESFERA_LABELS: Record<string, string> = {
   federal: "Federal",
@@ -42,6 +43,7 @@ export default function AdminOrganizacoes() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ organizationName: string; alreadyExisted: boolean } | null>(null);
+  const [flagOrg, setFlagOrg] = useState<{ id: number; nome: string } | null>(null);
 
   const orgsQuery = trpc.organizations.adminList.useQuery(undefined, { enabled: user?.role === "admin" });
 
@@ -232,6 +234,10 @@ export default function AdminOrganizacoes() {
                         <Badge variant={org.ativo ? "default" : "outline"}>{org.ativo ? "Ativa" : "Inativa"}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => setFlagOrg({ id: org.id, nome: org.nome })}>
+                          <Flag className="h-4 w-4 mr-1" />
+                          Feature flags
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleManageUsers(org.id)}>
                           Gerenciar usuários
                         </Button>
@@ -244,6 +250,13 @@ export default function AdminOrganizacoes() {
           </CardContent>
         </Card>
       </div>
+
+      <FeatureFlagShadowDialog
+        open={flagOrg !== null}
+        onOpenChange={(o) => { if (!o) setFlagOrg(null); }}
+        organizationId={flagOrg?.id ?? null}
+        organizationName={flagOrg?.nome ?? ""}
+      />
     </div>
   );
 }

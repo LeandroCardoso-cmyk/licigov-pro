@@ -10120,8 +10120,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/AdminOrganizacoes.tsx": {
-    "mtime": 1785862333.9150336,
-    "ast_hash": "71222cd7c5876ceacd6b956b2698b41c",
+    "mtime": 1787573226.2898505,
+    "ast_hash": "21a7ed5f3d166473632845ee23cd6365",
     "semantic_hash": ""
   },
   "client/src/pages/Usuarios.tsx": {
@@ -10840,8 +10840,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/feature-flag-admin.test.ts": {
-    "mtime": 1787534491.1653714,
-    "ast_hash": "8a4b1b0079b42e576327a6115904a679",
+    "mtime": 1787573316.9658558,
+    "ast_hash": "225eb010be2eaa391b41c0d72affb18f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/feature-flag-admin-mysql-smoke.test.ts": {
@@ -10855,13 +10855,33 @@
     "semantic_hash": ""
   },
   "server/services/featureFlagAdminService.ts": {
-    "mtime": 1787534244.7453766,
-    "ast_hash": "02aad1e23bd3708521334795252bb36f",
+    "mtime": 1787573100.841843,
+    "ast_hash": "f47e623c149e1e951f79389333b1d2d6",
     "semantic_hash": ""
   },
   "docs/handoffs/C3A_OPS_FEATURE_FLAG_CONTROL_DELIVERY.md": {
     "mtime": 1787534736.9813662,
     "ast_hash": "d0d9ba03329f1cd3507d1757ce38bd17",
+    "semantic_hash": ""
+  },
+  "client/src/components/admin/FeatureFlagShadowDialog.tsx": {
+    "mtime": 1787573206.3338492,
+    "ast_hash": "2214ac923259bed386e070cdc428f4b3",
+    "semantic_hash": ""
+  },
+  "client/src/lib/featureFlags/shadowFlagSurface.guard.test.ts": {
+    "mtime": 1787573423.3218622,
+    "ast_hash": "cec4013cdeadf5aaf231631fd90c8dc6",
+    "semantic_hash": ""
+  },
+  "client/src/lib/featureFlags/shadowFlagSurface.test.ts": {
+    "mtime": 1787573282.1218538,
+    "ast_hash": "9007c188fb7b11d4ddd2a1bc56bba0a3",
+    "semantic_hash": ""
+  },
+  "client/src/lib/featureFlags/shadowFlagSurface.ts": {
+    "mtime": 1787573129.8858447,
+    "ast_hash": "3b1bc721994ac1a5ee8ca49ba6533824",
     "semantic_hash": ""
   }
 }

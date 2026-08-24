@@ -71,6 +71,14 @@ describe("C.3A-OPS — leitura fail-closed sem DB", () => {
       expect(["tenant", "global", "default"]).toContain(view.origin);
     }
   });
+
+  it("C.3A-OPS.1: getTenantFlag retorna environment + writeAllowed (fonte canônica do backend)", async () => {
+    const view = await resolveTenantFlag(FF_DIRECT_CONTRACT_SHADOW, 999);
+    expect(["development", "staging", "production"]).toContain(view.environment);
+    expect(typeof view.writeAllowed).toBe("boolean");
+    // writeAllowed espelha !IS_PRODUCTION — no ambiente de teste (development), escrita é permitida.
+    expect(view.writeAllowed).toBe(view.environment !== "production");
+  });
 });
 
 describe("C.3A-OPS — guarda de ambiente (ESCRITA bloqueada em produção)", () => {

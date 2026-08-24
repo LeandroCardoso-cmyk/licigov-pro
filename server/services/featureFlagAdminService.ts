@@ -27,7 +27,7 @@ import { activityLogs, featureFlags, tenantFeatureFlags } from "../../drizzle/sc
 import { getOrganizationById } from "../db/organizations";
 import { runWithIdempotency } from "./idempotencyService";
 import { invalidateFlagCache } from "./featureFlagService";
-import { IS_PRODUCTION } from "../config/env";
+import { APP_ENV, IS_PRODUCTION, type AppEnv } from "../config/env";
 import { FF_DIRECT_CONTRACT_SHADOW } from "./directContractShadowService";
 import { serviceLogger } from "./observabilityService";
 
@@ -73,7 +73,14 @@ export interface TenantFlagView {
   effectiveValue: boolean;
   /** De onde o valor efetivo veio. */
   origin: FlagOrigin;
+  /** Ambiente CANÔNICO do backend (APP_ENV) — a UI nunca decide isso pelo hostname. */
+  environment: AppEnv;
+  /** Se o backend permitiria uma ESCRITA neste ambiente (bloqueada em produção). Fonte: IS_PRODUCTION. */
+  writeAllowed: boolean;
 }
+
+/** Núcleo da resolução (sem os metadados de ambiente, anexados pelo wrapper público). */
+type TenantFlagCore = Omit<TenantFlagView, "environment" | "writeAllowed">;
 
 /** É a mesma detecção de kill-switch de `featureFlagService` — mantida em sincronia. */
 function isKillSwitch(flagName: string): boolean {
@@ -89,6 +96,16 @@ export async function resolveTenantFlag(
   flagName: string,
   organizationId: number,
 ): Promise<TenantFlagView> {
+  // Aditivo/não-quebra-contrato: anexa o ambiente CANÔNICO do backend e a permissão de escrita
+  // (defesa em profundidade — a UI recebe a autoridade do backend, não infere pelo hostname).
+  const core = await resolveTenantFlagCore(flagName, organizationId);
+  return { ...core, environment: APP_ENV, writeAllowed: !IS_PRODUCTION };
+}
+
+async function resolveTenantFlagCore(
+  flagName: string,
+  organizationId: number,
+): Promise<TenantFlagCore> {
   assertGovernable(flagName);
 
   const db = await getDb();
