@@ -4990,8 +4990,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1786314631.4155183,
-    "ast_hash": "3b185d4e10ec2bd812304d028119f276",
+    "mtime": 1787534269.589376,
+    "ast_hash": "b37d14fcfe5874b4305db04b21dab769",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786383881.8345466,
-    "ast_hash": "59f359d99716449eb622b9017def8b87",
+    "mtime": 1787534371.5173738,
+    "ast_hash": "f69a14dc09309e4e24e649931fd5f2a9",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -10837,6 +10837,31 @@
   "docs/handoffs/C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md": {
     "mtime": 1786384055.7785428,
     "ast_hash": "67c5f588ec0925178f38e5f91f48b89e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/feature-flag-admin.test.ts": {
+    "mtime": 1787534491.1653714,
+    "ast_hash": "8a4b1b0079b42e576327a6115904a679",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/feature-flag-admin-mysql-smoke.test.ts": {
+    "mtime": 1787534363.961374,
+    "ast_hash": "a0d39ce5e47f531b4c02d7968d1faf3b",
+    "semantic_hash": ""
+  },
+  "server/routers/featureFlagAdminRouter.ts": {
+    "mtime": 1787534263.229376,
+    "ast_hash": "5dc8031932fe043705419b12e5724daf",
+    "semantic_hash": ""
+  },
+  "server/services/featureFlagAdminService.ts": {
+    "mtime": 1787534244.7453766,
+    "ast_hash": "02aad1e23bd3708521334795252bb36f",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C3A_OPS_FEATURE_FLAG_CONTROL_DELIVERY.md": {
+    "mtime": 1787534736.9813662,
+    "ast_hash": "d0d9ba03329f1cd3507d1757ce38bd17",
     "semantic_hash": ""
   }
 }
