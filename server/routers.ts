@@ -78,6 +78,7 @@ import { institutionalConsultationRouter } from "./routers/institutionalConsulta
 import { passwordResetRouter } from "./routers/passwordResetRouter";
 import { invitationsRouter } from "./routers/invitationsRouter";
 import { tenantOnboardingRouter } from "./routers/tenantOnboardingRouter";
+import { featureFlagAdminRouter } from "./routers/featureFlagAdminRouter";
 
 export const appRouter = router({
   organizations: organizationsRouter,
@@ -159,6 +160,7 @@ export const appRouter = router({
   documentEngine: documentEngineRouter,
   institutionalConsultation: institutionalConsultationRouter,
   ingestion: ingestionRouter,
+  featureFlagAdmin: featureFlagAdminRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -158,6 +158,11 @@ jobs:
       - name: Smoke — shadow Contratação Direta (PR C.3A)
         run: pnpm exec vitest run server/__tests__/integration/direct-contract-shadow-mysql-smoke.test.ts
 
+      # C.3A-OPS — controle institucional de feature flags (read/write, auditoria atômica, replay,
+      # conflito, cache, multi-tenant, guarda de org).
+      - name: Smoke — controle de feature flags (C.3A-OPS)
+        run: pnpm exec vitest run server/__tests__/integration/feature-flag-admin-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.
