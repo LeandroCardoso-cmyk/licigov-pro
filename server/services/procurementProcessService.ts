@@ -172,6 +172,7 @@ export async function generateDFDDraft(params: {
         kind: "dfd", title: `DFD — ${params.object}`,
         content: buildDFDDraft(params.object),
         sources: ["estrutura:art_12_par_1_lei_14133"],
+        authorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
       return {
@@ -276,6 +277,7 @@ export async function generateDocument(params: {
         title: `${params.kind.toUpperCase()} — ${params.object}`,
         content,
         sources: [`itens_aprovados:${approved.length}`, `copilotos:${orchestration.selectedCopilots.join(",")}`],
+        authorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
 
@@ -334,6 +336,7 @@ export async function generateNotice(params: {
     form: params.form,
     platform: params.form === "eletronico" ? (params.platform ?? null) : null,
     legalJustification,
+    authorUserId: params.actorUserId,
     correlationId: params.correlationId,
   });
   const validation = validateEdital(doc);

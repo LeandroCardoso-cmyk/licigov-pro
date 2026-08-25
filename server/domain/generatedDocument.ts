@@ -92,6 +92,8 @@ export interface GeneratedDocument {
   readonly form: EditalForm | null;
   readonly platform: EditalPlatform | null;
   readonly legalJustification: string;
+  /** C.4B.1 — autor do rascunho (quem gerou/originou). Base da segregação de deveres na emissão. */
+  readonly authorUserId: number | null;
   readonly correlationId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -108,6 +110,7 @@ export function createGeneratedDocument(params: {
   form?: EditalForm | null;
   platform?: EditalPlatform | null;
   legalJustification?: string;
+  authorUserId?: number | null;
   correlationId: string;
   createdAt?: string;
 }): GeneratedDocument {
@@ -128,6 +131,7 @@ export function createGeneratedDocument(params: {
     form: params.form ?? null,
     platform: params.platform ?? null,
     legalJustification: params.legalJustification ?? "",
+    authorUserId: params.authorUserId ?? null,
     correlationId: params.correlationId,
     createdAt: ts,
     updatedAt: ts,

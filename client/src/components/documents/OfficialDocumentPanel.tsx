@@ -18,6 +18,12 @@ export interface OfficialDocumentPanelProps {
   businessDomain: "processo_licitatorio" | "contratacao_direta" | "parecer_juridico" | "contratos";
   origin: string;
   title?: string;
+  /**
+   * C.4B.1 — quando definido (ex.: "emitido"), a EXPORTAÇÃO oficial só é oferecida/permitida para
+   * versões neste status; as demais (ex.: snapshot "gerado") ficam visíveis mas sem exportar como
+   * oficial. O backend também recusa (defesa em profundidade). Omitido → comportamento inalterado.
+   */
+  requireStatusForExport?: "emitido";
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -28,7 +34,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   contrato: "Contrato", aditivo: "Termo Aditivo", apostilamento: "Apostilamento", rescisao: "Rescisão", outro: "Documento",
 };
 
-export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais" }: OfficialDocumentPanelProps) {
+export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais", requireStatusForExport }: OfficialDocumentPanelProps) {
   const enabled = origin.trim().length > 0;
   const { data, isLoading } = trpc.documentEngine.list.useQuery({ businessDomain, origin }, { enabled });
   const [previewId, setPreviewId] = React.useState<string>("");
@@ -82,9 +88,15 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button type="button" onClick={() => setPreviewId(previewId === d.id ? "" : d.id)} className={btn}>Preview</button>
-                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "docx" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "docx") ? "…" : "DOCX"}</button>
-                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "pdf") ? "…" : "PDF"}</button>
-                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", inline: true })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "print") ? "…" : "Imprimir"}</button>
+                  {requireStatusForExport && d.status !== requireStatusForExport ? (
+                    <span className="text-[11px] text-muted-foreground">exportar só quando emitido</span>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "docx", requireStatus: requireStatusForExport })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "docx") ? "…" : "DOCX"}</button>
+                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", requireStatus: requireStatusForExport })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "pdf") ? "…" : "PDF"}</button>
+                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", inline: true, requireStatus: requireStatusForExport })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "print") ? "…" : "Imprimir"}</button>
+                    </>
+                  )}
                 </div>
               </div>
               {previewId === d.id && (

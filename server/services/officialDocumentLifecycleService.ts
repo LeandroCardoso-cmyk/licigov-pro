@@ -66,8 +66,14 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
     origin: params.origin, title: params.title, content: params.content, version, metadata: params.metadata,
     author: params.author, status: params.status, correlationId: params.correlationId,
   });
+  // C.4B.1 — evento sensível ao status: uma versão "emitido" é uma EMISSÃO oficial governada,
+  // não um snapshot técnico "gerado". A distinção fica fiel na timeline documental (append-only).
+  const eventTypeFor = (doc: OfficialDocument, version: number) =>
+    doc.status === "emitido" ? "documento_emitido" : (version === 1 ? "documento_criado" : "nova_versao");
   const summaryFor = (doc: OfficialDocument, version: number) =>
-    `${version === 1 ? "Documento" : `Versão ${version} do documento`} "${doc.title}" (${doc.documentType}) gerado(a) pelo Document Engine.`;
+    doc.status === "emitido"
+      ? `Versão ${version} do documento "${doc.title}" (${doc.documentType}) EMITIDA (oficial) pelo Document Engine.`
+      : `${version === 1 ? "Documento" : `Versão ${version} do documento`} "${doc.title}" (${doc.documentType}) gerado(a) pelo Document Engine.`;
 
   const db = await getDb();
 
@@ -93,7 +99,7 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
       const version = ((await countVersions(lineageId, params.organizationId, tx)) || (previous ? previous.version : 0)) + 1;
       const doc = makeDoc(version);
       await insertOfficialDocument(doc, tx);
-      await recordDocEvent(doc, version === 1 ? "documento_criado" : "nova_versao", summaryFor(doc, version), tx);
+      await recordDocEvent(doc, eventTypeFor(doc, version), summaryFor(doc, version), tx);
       return doc;
     } finally {
       await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);

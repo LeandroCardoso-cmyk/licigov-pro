@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
+import OfficialPromotionSection from "./OfficialPromotionSection";
 
 /**
  * TRWorkspace — REAL (wired to tRPC).
@@ -75,6 +76,9 @@ export default function TRWorkspace({ processId = "" }: TRWorkspaceProps) {
           </div>
         </div>
       )}
+
+      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
+      <OfficialPromotionSection processId={processId} kind="tr" />
     </div>
   );
 }

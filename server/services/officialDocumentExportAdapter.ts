@@ -57,12 +57,25 @@ export async function exportOfficialDocument(params: {
   format: OfficialFormat;
   /** "inline" para impressão (visualizar no navegador), "attachment" para baixar. */
   disposition?: "attachment" | "inline";
+  /**
+   * C.4B.1 — quando informado, a exportação SÓ é permitida se o status do documento oficial for
+   * exatamente este (ex.: "emitido"). Usado pela superfície do /processos para NUNCA exportar um
+   * snapshot "gerado" como documento oficial. Sem este parâmetro, o comportamento é inalterado
+   * (Contratos/Contratação Direta/Parecer seguem exportando qualquer versão oficial).
+   */
+  requireStatus?: string;
   correlationId?: string;
 }): Promise<{ url: string; format: OfficialFormat; fileName: string }> {
   // Fail-closed + tenant-scoped: getOfficialDocument filtra por organização.
   const doc = await getOfficialDocument(params.documentId, params.organizationId);
   if (!doc || !doc.content.trim()) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+  }
+  if (params.requireStatus && doc.status !== params.requireStatus) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Apenas documentos oficiais no status "${params.requireStatus}" podem ser exportados como oficiais (atual: "${doc.status}").`,
+    });
   }
   const org = await getOrganizationById(params.organizationId);
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();
