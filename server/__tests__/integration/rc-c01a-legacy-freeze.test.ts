@@ -70,13 +70,13 @@ const GEMINI_IMPORTERS_BASELINE: readonly string[] = [
 // canônico (ver LEGACY_INVENTORY.md) — se um dia for, remova daqui igual ao resto.
 const LEGACY_DOC_TYPES_BASELINE = ["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"] as const;
 
-// Rotas legadas de Licitação → componente. Nenhuma OUTRA rota pode montar estes
-// componentes (isso seria "nova rota apontando para página legada").
-const LEGACY_PROCESS_ROUTES_BASELINE: Record<string, string> = {
-  "/processos": "Dashboard",
-  "/processo/:id": "ProcessDetails",
-  "/novo-processo": "NewProcess",
-};
+// Rotas do Processo Licitatório. RECONCILIADO (Architecture — Reconcile Procurement Legacy
+// Boundaries): /processos monta o CANÔNICO ProcessoLicitatorio; /novo-processo e /processo/:id
+// são REDIRECTS para /processos. As páginas LEGADAS (Dashboard/ProcessDetails/NewProcess) NÃO
+// são entrada oficial — NENHUMA rota as monta. Adicionar rota que monte qualquer uma quebra o CI.
+const PROCESS_ROUTES_BASELINE = ["/processos", "/processo/:id", "/novo-processo"] as const;
+const CANONICAL_PROCESS_MOUNT = { route: "/processos", component: "ProcessoLicitatorio" } as const;
+const LEGACY_PROCESS_PAGES_UNMOUNTED = ["Dashboard", "ProcessDetails", "NewProcess"] as const;
 
 describe("RC-C0.1A — Congelamento do legado documental (Licitação)", () => {
   // ── 1. novo consumidor de trpc.documents.* ──────────────────────────────────
@@ -124,22 +124,36 @@ describe("RC-C0.1A — Congelamento do legado documental (Licitação)", () => {
     expect(typesSrc).toContain(`export const DOC_ORDER: DocType[] = [${LEGACY_DOC_TYPES_BASELINE.map(t => `"${t}"`).join(", ")}];`);
   });
 
-  // ── 6. nova rota apontando para página de Processo Licitatório legada ───────
-  it("apenas as rotas congeladas montam Dashboard/ProcessDetails/NewProcess (nenhuma rota nova)", () => {
+  // ── 6. /processos monta o canônico; páginas legadas fora de rota (reconciliado) ──
+  it("/processos monta ProcessoLicitatorio; Dashboard/ProcessDetails/NewProcess não são entrada oficial", () => {
     const appSrc = read("client/src/App.tsx");
-    for (const route of Object.keys(LEGACY_PROCESS_ROUTES_BASELINE)) {
+    // As rotas continuam existindo (redirects preservam compatibilidade de URL).
+    for (const route of PROCESS_ROUTES_BASELINE) {
       expect(appSrc, `rota ${route} deveria continuar existindo em App.tsx`).toContain(route);
     }
-    // Cada componente legado só pode ser referenciado (word-boundary, para não
-    // colidir com nomes parecidos como ModuleSelectionDashboard/DashboardLayout)
-    // em contextos de montagem de rota: component={X}, withAuthenticatedShell(X),
-    // ou como wrapper const que alimenta uma dessas duas formas.
-    for (const component of Object.values(LEGACY_PROCESS_ROUTES_BASELINE)) {
-      const wordBoundary = new RegExp(`\\b${component}\\b`); // sem flag "g": .test() reutilizado por linha
-      const mountLines = appSrc.split("\n").filter(l =>
-        wordBoundary.test(l) && (l.includes("component={") || l.includes("withAuthenticatedShell(") || l.includes("component:"))
-      );
-      expect(mountLines.length, `${component} deveria ser montado por no máximo 1 caminho de rota (via wrapper ou direto), achou ${mountLines.length}: ${mountLines.join(" | ")}`).toBeLessThanOrEqual(1);
+    const isMountLine = (l: string, comp: string) =>
+      new RegExp(`\\b${comp}\\b`).test(l) &&
+      (l.includes("component={") || l.includes("withAuthenticatedShell(") || l.includes("component:"));
+    // /processos monta EXATAMENTE o canônico (via wrapper ou direto) — 1 caminho de montagem.
+    const canonicalMounts = appSrc.split("\n").filter(l => isMountLine(l, CANONICAL_PROCESS_MOUNT.component));
+    expect(canonicalMounts.length, `${CANONICAL_PROCESS_MOUNT.component} deveria ser montado por exatamente 1 caminho de rota`).toBe(1);
+    // As páginas LEGADAS não podem ser montadas por NENHUMA rota (0) — não são entrada oficial.
+    for (const page of LEGACY_PROCESS_PAGES_UNMOUNTED) {
+      const mountLines = appSrc.split("\n").filter(l => isMountLine(l, page));
+      expect(mountLines.length, `${page} é legado fora da navegação oficial — nenhuma rota deveria montá-lo, achou: ${mountLines.join(" | ")}`).toBe(0);
+    }
+  });
+
+  // ── 6b. workspaces canônicos consomem procurementProcess.* (não a geração legada) ──
+  it("os workspaces canônicos (DFD/ETP/TR/Edital) chamam trpc.procurementProcess.* e não documents.generate*", () => {
+    const workspaces: Record<string, string> = {
+      DFDWorkspace: "generateDFD", ETPWorkspace: "generateETP",
+      TRWorkspace: "generateTR", EditalWorkspace: "generateNotice",
+    };
+    for (const [comp, gen] of Object.entries(workspaces)) {
+      const src = read(`client/src/components/procurement/${comp}.tsx`);
+      expect(src, `${comp} deveria chamar trpc.procurementProcess.${gen}`).toContain(`procurementProcess.${gen}`);
+      expect(src, `${comp} não deveria chamar a geração legada documents.generate*`).not.toMatch(/trpc\.documents\.generate/);
     }
   });
 
