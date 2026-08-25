@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787580940.8719828,
-    "ast_hash": "d697cc974940f4aa62aced2a8f33228f",
+    "mtime": 1787622609.828526,
+    "ast_hash": "a7dd51eabc2b02416e0c743a9b3df5ab",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -7955,8 +7955,8 @@
     "semantic_hash": ""
   },
   "server/db/directProcurement.ts": {
-    "mtime": 1785862334.7561064,
-    "ast_hash": "d0d77431fea5e94fa773be2327ea4495",
+    "mtime": 1787622440.520531,
+    "ast_hash": "77fc19a2d54e06a508ec4bd9d8610ce5",
     "semantic_hash": ""
   },
   "server/domain/directProcurementJustifications.ts": {
@@ -10892,6 +10892,16 @@
   "server/__tests__/integration/activity-logs-reconciliation-mysql-smoke.test.ts": {
     "mtime": 1787581063.9015713,
     "ast_hash": "485993d42434fd2c576b17d2a388fb02",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-procurement-datetime-mysql-smoke.test.ts": {
+    "mtime": 1787622602.3085263,
+    "ast_hash": "d0d39951aa28fe62f7598da0b4e4c8cb",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C3A_OPS3_DIRECT_PROCUREMENT_DATETIME.md": {
+    "mtime": 1787622799.6765203,
+    "ast_hash": "0c3eb2aa0fc928979887220e78507d07",
     "semantic_hash": ""
   }
 }
