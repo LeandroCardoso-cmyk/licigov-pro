@@ -29,6 +29,12 @@ import type { CATMATMatch } from "../domain/catmatMatching";
 import type { ItemRecommendation, ItemRisk } from "../domain/itemRecommendation";
 import type { GeneratedDocument } from "../domain/generatedDocument";
 
+// C.4A — executor aceita a conexão (db) ou uma transação (tx), permitindo compor a persistência
+// documental atomicamente (insertGeneratedDocument + official + timeline + idempotency numa única tx).
+// Quando ausente, usa getDb() — assinatura compatível com todos os callers existentes.
+type ProcDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type ProcurementExecutor = ProcDb | Parameters<Parameters<ProcDb["transaction"]>[0]>[0];
+
 function parseArr<T>(raw: string | null): T[] {
   if (!raw) return [];
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p as T[] : []; } catch { return []; }
@@ -265,8 +271,8 @@ export async function listItemHistory(processId: string, orgId: number): Promise
 
 export async function recordProcessEvent(params: {
   organizationId: number; processId: string; eventType: string; actor: string; summary: string; refId?: string; correlationId: string;
-}): Promise<void> {
-  const db = await getDb();
+}, executor?: ProcurementExecutor): Promise<void> {
+  const db = executor ?? await getDb();
   if (!db) return;
   const existing = await db.select({ id: processTimelineTable.id }).from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, params.processId), eq(processTimelineTable.organizationId, params.organizationId)));
@@ -290,8 +296,8 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
 
 // ─── Generated documents ─────────────────────────────────────────────────────
 
-export async function insertGeneratedDocument(d: GeneratedDocument): Promise<GeneratedDocument | null> {
-  const db = await getDb();
+export async function insertGeneratedDocument(d: GeneratedDocument, executor?: ProcurementExecutor): Promise<GeneratedDocument | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(generatedDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,

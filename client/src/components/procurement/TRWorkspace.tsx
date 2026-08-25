@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 
 /**
  * TRWorkspace — REAL (wired to tRPC).
@@ -15,12 +16,13 @@ export type TRWorkspaceProps = {
 export default function TRWorkspace({ processId = "" }: TRWorkspaceProps) {
   const [object, setObject] = useState("");
 
-  const generateTR = trpc.procurementProcess.generateTR.useMutation();
+  const { key: trKey, rotate: rotateTrKey } = useIdempotencyKey();
+  const generateTR = trpc.procurementProcess.generateTR.useMutation({ onSuccess: () => rotateTrKey() });
   const draft = generateTR.data?.document;
 
   const handleGenerate = () => {
     if (!processId || !object.trim()) return;
-    generateTR.mutate({ processId, object: object.trim() });
+    generateTR.mutate({ processId, object: object.trim(), idempotencyKey: trKey });
   };
 
   return (

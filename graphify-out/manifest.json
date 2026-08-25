@@ -1350,18 +1350,18 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1785985311.8767667,
-    "ast_hash": "746231397e45c53e1898ffae04e6dc88",
+    "mtime": 1787668159.6795983,
+    "ast_hash": "cdb6e9daa055e28c2b857e1bb8a93830",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1785985318.8967664,
-    "ast_hash": "829bd5235519e84445ff65b6946bb0df",
+    "mtime": 1787668177.4915993,
+    "ast_hash": "d46f4d2447d09aa28a37680721f379f9",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "5201cc9969021fadedcb3d13c7cf45a8",
+    "mtime": 1787668209.1196012,
+    "ast_hash": "584b90cbce22f28843c41ce89fe01f89",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
@@ -1395,8 +1395,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "4df994af907f0c848863a85db0d02656",
+    "mtime": 1787668190.8676002,
+    "ast_hash": "13344693ec6f731eb8ec986d3cd45808",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -4100,8 +4100,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint51-procurement.test.ts": {
-    "mtime": 1785862334.739574,
-    "ast_hash": "c83b2b62a0f0039f0063e9c1e3a3b051",
+    "mtime": 1787668268.9916048,
+    "ast_hash": "e3c69917cd1a9ca8f052531abfae4280",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1785862334.759574,
-    "ast_hash": "c642561a06028cf0e948feada310ff55",
+    "mtime": 1787667830.9195788,
+    "ast_hash": "9752a57a31e7f93eb8ede9a36ea4e2f9",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1785862334.827574,
-    "ast_hash": "3b225af0155c86bd89fea625805216b3",
+    "mtime": 1787668061.8075924,
+    "ast_hash": "db23cc5dd270ae33813762b4cf8736dd",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -5845,8 +5845,8 @@
     "semantic_hash": ""
   },
   "server/services/idempotencyService.ts": {
-    "mtime": 1786072050.4887853,
-    "ast_hash": "63cb2388442794c5d75cff4d034840c1",
+    "mtime": 1787667808.3275774,
+    "ast_hash": "b2666f30df5b063b5de11c0805ea8ff9",
     "semantic_hash": ""
   },
   "server/services/importAnalyticsService.ts": {
@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1785862334.975574,
-    "ast_hash": "caace0e9e8f37e41207007f1d4622b9b",
+    "mtime": 1787676609.0229378,
+    "ast_hash": "a8bb2d26f03d91e0f78c60affa2773eb",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787622609.828526,
-    "ast_hash": "a7dd51eabc2b02416e0c743a9b3df5ab",
+    "mtime": 1787669239.0236623,
+    "ast_hash": "19e8ffa60fd1f17d7a09c3b5b480796f",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -8495,8 +8495,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/LEGACY_INVENTORY.md": {
-    "mtime": 1785862334.223574,
-    "ast_hash": "8665d1782c4721589ae731edc829562e",
+    "mtime": 1787661035.002171,
+    "ast_hash": "0a00ecbddf9d9be6036abd17cdcc1de7",
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
@@ -8520,8 +8520,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1785862334.759574,
-    "ast_hash": "7da758a05d7b15f458617a2f49b79767",
+    "mtime": 1787679616.2541952,
+    "ast_hash": "eadbb0cc5aad70deddb67f7aa0585567",
     "semantic_hash": ""
   },
   "server/domain/officialDocument.ts": {
@@ -8535,8 +8535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1785862334.847574,
-    "ast_hash": "8ef6cadc63280fb1763e8368d903d723",
+    "mtime": 1787667872.6515813,
+    "ast_hash": "5692638799a56e46218780febaaf297d",
     "semantic_hash": ""
   },
   "docs/architecture/DOCUMENT_ENGINE_OFFICIAL.md": {
@@ -8590,8 +8590,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1785862334.972107,
-    "ast_hash": "01c0ef98bfce969a0afa52c43b1e2470",
+    "mtime": 1787667855.92758,
+    "ast_hash": "0ef87d4a60d75a8edfbedf97e55f1117",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
@@ -8600,8 +8600,8 @@
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1785862334.817345,
-    "ast_hash": "ef259b420b26b85cc192cc35c9997757",
+    "mtime": 1787660863.550175,
+    "ast_hash": "d3549c76176f54791e4ce1e9b216953c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc40-cognitive-foundation.test.ts": {
@@ -9725,8 +9725,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-c01a-legacy-freeze.test.ts": {
-    "mtime": 1785862334.715574,
-    "ast_hash": "d54e02a38492ef81fe5d48cf697767dd",
+    "mtime": 1787660937.734173,
+    "ast_hash": "ba83d164dbb94cb372ef7c31a6f6213f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts": {
@@ -10250,8 +10250,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
-    "mtime": 1785862334.711574,
-    "ast_hash": "4982e4ccaa6e5ecf3c30e795b030def3",
+    "mtime": 1787676534.0629406,
+    "ast_hash": "f9e33c2a87887edcccf16883a35a03fe",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-process.test.ts": {
@@ -10260,8 +10260,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-dfd.test.ts": {
-    "mtime": 1785862334.711574,
-    "ast_hash": "1315dbd17e623262eb640c70a96c442f",
+    "mtime": 1787669378.2956707,
+    "ast_hash": "129331c375aa7121e12ae16f7e9cd64c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-export-service.test.ts": {
@@ -10755,8 +10755,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/AI_LEGACY_MIGRATION_PLAN.md": {
-    "mtime": 1786384068.0625424,
-    "ast_hash": "8ddaede35b1a63f26844795a6ca259b1",
+    "mtime": 1787661050.8501706,
+    "ast_hash": "9fca8f4a9a493adf3c26e60d8a931e0a",
     "semantic_hash": ""
   },
   "docs/handoffs/C2_GOVERNANCE_OPERATIONALIZATION_DELIVERY.md": {
@@ -10902,6 +10902,31 @@
   "docs/handoffs/C3A_OPS3_DIRECT_PROCUREMENT_DATETIME.md": {
     "mtime": 1787622799.6765203,
     "ast_hash": "0c3eb2aa0fc928979887220e78507d07",
+    "semantic_hash": ""
+  },
+  "client/src/hooks/useIdempotencyKey.ts": {
+    "mtime": 1787668130.6675966,
+    "ast_hash": "43b5aa49cd382da058c74d5aae1a1e4e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4a-replay-safe-generation-mysql-smoke.test.ts": {
+    "mtime": 1787679651.778195,
+    "ast_hash": "85ca90144cd625e230334257c46d0737",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
+    "mtime": 1787676632.042937,
+    "ast_hash": "d9d43e7e8d629932d5a8b23262e96cd2",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C3A_FINAL_RECLASSIFICATION_AND_CLOSURE.md": {
+    "mtime": 1787625983.0756218,
+    "ast_hash": "a91a9dded4d01eadceba32c4948ccba4",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C4A_REPLAY_SAFE_CANONICAL_DOCUMENT_GENERATION.md": {
+    "mtime": 1787679729.4821937,
+    "ast_hash": "ac1e3b2ae5037d9c39eaab94759e3a3a",
     "semantic_hash": ""
   }
 }

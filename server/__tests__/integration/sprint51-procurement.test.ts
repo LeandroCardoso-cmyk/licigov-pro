@@ -298,9 +298,9 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
 
   describe("procurementProcessService", () => {
     it("generateDocument (ETP) usa multi-copilot grounding-only e exige revisão", async () => {
-      const doc = await generateDocument({
+      const { document: doc } = await generateDocument({
         organizationId: ORG_ID, processId: PID, kind: "etp", object: "Material de escritório",
-        correlationId: CORR, invoke: async () => "",
+        correlationId: CORR, invoke: async () => "", idempotencyKey: "t-sprint51-etp", actorUserId: 1,
       });
       expect(doc.kind).toBe("etp");
       expect(doc.content).toContain("Revisão obrigatória");
@@ -309,6 +309,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
     it("generateNotice presencial gera justificativa legal automática", async () => {
       const { document, validation } = await generateNotice({
         organizationId: ORG_ID, processId: PID, object: "Obra", modality: "concorrencia", form: "presencial", correlationId: CORR,
+        idempotencyKey: "t-sprint51-edital-presencial", actorUserId: 1,
       });
       expect(validation.valid).toBe(true);
       expect(document.legalJustification).toContain("14.133");
@@ -317,6 +318,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
     it("generateNotice eletronico sem plataforma é inválido", async () => {
       const { validation } = await generateNotice({
         organizationId: ORG_ID, processId: PID, object: "Compra", modality: "pregao", form: "eletronico", correlationId: CORR,
+        idempotencyKey: "t-sprint51-edital-invalido", actorUserId: 1,
       });
       expect(validation.valid).toBe(false);
     });
@@ -324,6 +326,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
     it("generateNotice eletronico com plataforma é válido", async () => {
       const { validation, document } = await generateNotice({
         organizationId: ORG_ID, processId: PID, object: "Compra", modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: CORR,
+        idempotencyKey: "t-sprint51-edital-valido", actorUserId: 1,
       });
       expect(validation.valid).toBe(true);
       expect(document.platform).toBe("compras_gov");

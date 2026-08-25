@@ -143,8 +143,10 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     await insertProcess(process);
 
     // Criar DFD do zero → documento canônico kind "dfd", rascunho.
-    const created = await generateDFDDraft({
+    // C.4A: idempotencyKey + actorUserId são obrigatórios (contrato replay-safe).
+    const { document: created } = await generateDFDDraft({
       organizationId: ORG_A, processId: process.id, object: process.object, correlationId: "smoke-dfd",
+      idempotencyKey: "smoke-dfd-400-2026", actorUserId: 1,
     });
     expect(created.kind).toBe("dfd");
     expect(created.status).toBe("rascunho");

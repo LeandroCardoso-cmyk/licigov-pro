@@ -58,7 +58,7 @@ export interface CreateDocumentParams {
  * NOVA versão na mesma linhagem. Calcula hash (replayHash), persiste metadados e
  * registra a timeline. Não gera binário nem toca no Storage.
  */
-export async function createDocument(params: CreateDocumentParams): Promise<OfficialDocument> {
+export async function createDocument(params: CreateDocumentParams, executor?: OfficialDocsExecutor): Promise<OfficialDocument> {
   const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType, origin: params.origin });
 
   const makeDoc = (version: number): OfficialDocument => createOfficialDocument({
@@ -72,19 +72,21 @@ export async function createDocument(params: CreateDocumentParams): Promise<Offi
   const db = await getDb();
 
   // Degradação graciosa sem DB (comportamento anterior preservado): computa e devolve sem persistir.
-  if (!db) {
+  if (!db && !executor) {
     const previous = await getLatestByLineage(lineageId, params.organizationId);
     const version = ((await countVersions(lineageId, params.organizationId)) || (previous ? previous.version : 0)) + 1;
     return makeDoc(version);
   }
 
   // PR D / DATA-012 — ATOMICIDADE: cálculo de versão + inserção do documento oficial + evento de
-  // timeline numa ÚNICA transação (rollback = nada persistido). A numeração é serializada por
-  // linhagem com um lock nomeado (GET_LOCK) — evita colisão de versão e perda silenciosa de evento
-  // por corrida, INCLUSIVE na 1ª versão, sem exigir migration. O lock é liberado sempre (finally),
-  // pois locks nomeados não são desfeitos por rollback.
+  // timeline. A numeração é serializada por linhagem com um lock nomeado (GET_LOCK) — evita colisão de
+  // versão e perda silenciosa de evento por corrida, INCLUSIVE na 1ª versão. O lock é liberado sempre
+  // (finally), pois locks nomeados não são desfeitos por rollback.
   const lockKey = `odoc:${params.organizationId}:${lineageId}`.slice(0, 60);
-  return db.transaction(async (tx) => {
+  // C.4A — o corpo roda sobre o executor recebido (transação EXTERNA compartilhada com a persistência
+  // do generated_document + idempotency) ou, quando ausente, numa transação PRÓPRIA. GET_LOCK exige a
+  // MESMA conexão do início ao fim: por isso o caso sem executor abre a própria tx (nunca a pool crua).
+  const persist = async (tx: OfficialDocsExecutor): Promise<OfficialDocument> => {
     await tx.execute(sql`SELECT GET_LOCK(${lockKey}, 10)`);
     try {
       const previous = await getLatestByLineage(lineageId, params.organizationId, tx);
@@ -96,7 +98,10 @@ export async function createDocument(params: CreateDocumentParams): Promise<Offi
     } finally {
       await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);
     }
-  });
+  };
+
+  if (executor) return persist(executor);        // transação externa (commit atômico do chamador)
+  return db!.transaction(async (tx) => persist(tx)); // transação própria (comportamento anterior)
 }
 
 // ─── Armazenamento do artefato renderizado ────────────────────────────────────

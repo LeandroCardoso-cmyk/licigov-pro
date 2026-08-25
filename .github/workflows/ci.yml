@@ -150,6 +150,12 @@ jobs:
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts
 
+      # C.4A — geração documental canônica replay-safe em MODO ESTRITO: commit atômico
+      # (generated + official + timeline + evento + idempotency COMPLETED numa única transação),
+      # rollback total em falha (após generated / após official), concorrência, replay e multi-tenant.
+      - name: Smoke — geração canônica replay-safe estrito (C.4A)
+        run: pnpm exec vitest run server/__tests__/integration/c4a-replay-safe-generation-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

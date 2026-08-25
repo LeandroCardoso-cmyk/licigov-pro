@@ -221,13 +221,13 @@ export const procurementProcessRouter = router({
    * persiste como documento canônico (kind "dfd", rascunho). Idempotente.
    */
   generateDFD: tenantProcedure
-    .input(z.object({ processId: z.string().min(1) }))
+    .input(z.object({ processId: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const document = await generateDFDDraft({
+      const { document } = await generateDFDDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        correlationId: ctx.correlationId,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
       });
       return { document };
     }),
@@ -246,13 +246,13 @@ export const procurementProcessRouter = router({
     }),
 
   generateETP: tenantProcedure
-    .input(z.object({ processId: z.string().min(1), object: z.string().min(1) }))
+    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const document = await generateDocument({
+      const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "etp", object: input.object,
-        correlationId: ctx.correlationId,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
       });
       return { document };
     }),
@@ -323,11 +323,11 @@ export const procurementProcessRouter = router({
     }),
 
   generateTR: tenantProcedure
-    .input(z.object({ processId: z.string().min(1), object: z.string().min(1) }))
+    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const document = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId });
+      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id });
       return { document };
     }),
 
@@ -335,6 +335,7 @@ export const procurementProcessRouter = router({
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
       modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
+      idempotencyKey: z.string().trim().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -342,6 +343,7 @@ export const procurementProcessRouter = router({
       const result = await generateNotice({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform, correlationId: ctx.correlationId,
+        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
       });
       if (!result.validation.valid) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });

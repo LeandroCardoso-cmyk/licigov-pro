@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * PR B (homologação) — "Criar DFD do zero" no fluxo canônico.
  *
@@ -10,6 +11,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../db/procurement");
+// C.4A — a persistência documental agora ocorre numa transação (getDb().transaction).
+// Sem DATABASE_URL, getDb() real devolve null e a persistência (mockada em db/procurement)
+// seria pulada; fornecemos um db transacional fake (persistência presente) e neutralizamos a
+// idempotência aqui — a lógica replay/CONFLICT tem cobertura dedicada no teste unitário C.4A.
+vi.mock("../../db/connection", () => ({
+  getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => unknown) => cb({}) })),
+}));
+vi.mock("../../services/idempotencyService", () => ({
+  checkIdempotency: vi.fn(async () => ({ status: "new" })),
+  saveIdempotencyResult: vi.fn(async () => undefined),
+  failIdempotencyKey: vi.fn(async () => undefined),
+}));
 vi.mock("../../services/tenantService", () => ({
   resolveTenantForUser: vi.fn().mockResolvedValue({
     organizationId: 1,
@@ -41,7 +54,7 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
 
   it("generateDFD cria rascunho estruturado kind 'dfd' status 'rascunho'", async () => {
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
-    const { document } = await caller.generateDFD({ processId: PID });
+    const { document } = await caller.generateDFD({ processId: PID, idempotencyKey: "dfd-key-1" });
 
     expect(document.kind).toBe("dfd");
     expect(document.status).toBe("rascunho");
@@ -56,14 +69,14 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
 
   it("id determinístico por (processo, kind) → retry NÃO duplica", async () => {
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
-    const a = await caller.generateDFD({ processId: PID });
-    const b = await caller.generateDFD({ processId: PID });
+    const a = await caller.generateDFD({ processId: PID, idempotencyKey: "dfd-key-a" });
+    const b = await caller.generateDFD({ processId: PID, idempotencyKey: "dfd-key-b" });
     expect(a.document.id).toBe(b.document.id);
   });
 
   it("saveDFD atualiza o conteúdo do rascunho (mesmo documento)", async () => {
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
-    const created = await caller.generateDFD({ processId: PID });
+    const created = await caller.generateDFD({ processId: PID, idempotencyKey: "dfd-key-save" });
     const edited = "# DFD editado pelo servidor\nConteúdo revisado.";
     const { document } = await caller.saveDFD({ processId: PID, content: edited });
 
@@ -85,7 +98,7 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
   it("cross-tenant / processo inexistente → NOT_FOUND, sem gravar", async () => {
     vi.mocked(procDb.getProcess).mockResolvedValue(null as any);
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
-    await expect(caller.generateDFD({ processId: "outro" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(caller.generateDFD({ processId: "outro", idempotencyKey: "dfd-key-x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(caller.saveDFD({ processId: "outro", content: "x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
   });
