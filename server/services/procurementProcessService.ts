@@ -38,10 +38,45 @@ const DOMAIN = "processo_licitatorio" as const;
 // "official commitado + idempotency failed". A cognição (rede/modelo) roda SEMPRE FORA da transação.
 const GENERATE_OP = "procurement.document.generate";
 
+/**
+ * Assinatura determinística de UM item aprovado — apenas campos do domínio atual
+ * (`listIntelligentItems`) que podem influenciar a geração do ETP/TR. NÃO existe CATSER no
+ * domínio de itens inteligentes hoje (só CATMAT), então não é fabricado aqui.
+ */
+export type ApprovedItemSignature = {
+  id: string;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  averagePrice?: number;
+  suggestedCATMAT?: string | null;
+  status?: string;
+};
+
+/**
+ * Snapshot determinístico e ORDENADO dos itens aprovados: não hasheia só IDs, mas os campos
+ * relevantes (descrição, quantidade, unidade, preço médio, CATMAT sugerido, status). Ordena por
+ * id para independer da ordem de leitura. Assim, alterar um campo relevante de um item muda o
+ * payloadHash (→ CONFLICT quando aplicável), enquanto a mera reordenação dos mesmos itens não muda.
+ */
+function approvedItemsSignature(items: ApprovedItemSignature[]): Array<Record<string, unknown>> {
+  return items
+    .map((i) => ({
+      id: i.id,
+      d: (i.description ?? "").trim(),
+      q: i.quantity ?? null,
+      u: (i.unit ?? "").trim(),
+      pr: i.averagePrice ?? null,
+      cm: i.suggestedCATMAT ?? null,
+      st: i.status ?? null,
+    }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** Hash determinístico do payload lógico (sem correlationId/timestamps/aleatórios). Coleções ordenadas. */
 export function generatePayloadHash(p: {
   organizationId: number; processId: string; kind: DocumentKind; object: string;
-  approvedItemIds?: string[]; modality?: string; form?: string; platform?: string | null;
+  approvedItems?: ApprovedItemSignature[]; modality?: string; form?: string; platform?: string | null;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -50,7 +85,7 @@ export function generatePayloadHash(p: {
       p: p.processId,
       k: p.kind,
       obj: (p.object ?? "").trim(),
-      items: (p.approvedItemIds ?? []).slice().sort(),
+      items: approvedItemsSignature(p.approvedItems ?? []),
       m: p.modality ?? null,
       f: p.form ?? null,
       pl: p.platform ?? null,
@@ -197,9 +232,11 @@ export async function generateDocument(params: {
   const items = await listIntelligentItems(params.processId, params.organizationId);
   const approved = items.filter(i => i.status === "aprovado");
 
+  // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
+  // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT.
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
-    object: params.object, approvedItemIds: approved.map(i => i.id),
+    object: params.object, approvedItems: approved,
   });
 
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(

@@ -86,10 +86,37 @@ describe("C.4A — generatePayloadHash (determinístico)", () => {
     expect(a).toBe(b);
   });
 
-  it("independe da ORDEM dos itens aprovados (coleção ordenada internamente)", () => {
-    const a = generatePayloadHash({ organizationId: ORG, processId: PID, kind: "tr", object: "X", approvedItemIds: ["i3", "i1", "i2"] });
-    const b = generatePayloadHash({ organizationId: ORG, processId: PID, kind: "tr", object: "X", approvedItemIds: ["i1", "i2", "i3"] });
+  it("independe da ORDEM dos mesmos itens aprovados (assinatura ordenada internamente)", () => {
+    const items = [
+      { id: "i1", description: "Papel A4", quantity: 100, unit: "resma", suggestedCATMAT: "12345", status: "aprovado" },
+      { id: "i2", description: "Caneta azul", quantity: 50, unit: "un", suggestedCATMAT: "67890", status: "aprovado" },
+      { id: "i3", description: "Grampeador", quantity: 10, unit: "un", suggestedCATMAT: null, status: "aprovado" },
+    ];
+    const reversed = [...items].reverse();
+    const a = generatePayloadHash({ organizationId: ORG, processId: PID, kind: "tr", object: "X", approvedItems: items });
+    const b = generatePayloadHash({ organizationId: ORG, processId: PID, kind: "tr", object: "X", approvedItems: reversed });
     expect(a).toBe(b);
+  });
+
+  it("muda quando um CAMPO RELEVANTE de um item aprovado muda (não é só id)", () => {
+    const base = [
+      { id: "i1", description: "Papel A4", quantity: 100, unit: "resma", averagePrice: 25.5, suggestedCATMAT: "12345", status: "aprovado" },
+      { id: "i2", description: "Caneta azul", quantity: 50, unit: "un", averagePrice: 1.2, suggestedCATMAT: "67890", status: "aprovado" },
+    ];
+    const h = (items: typeof base) => generatePayloadHash({ organizationId: ORG, processId: PID, kind: "tr", object: "X", approvedItems: items });
+    const baseHash = h(base);
+
+    // Mesmos ids, mas cada alteração de campo relevante deve mudar o hash.
+    expect(h([{ ...base[0], description: "Papel A4 90g" }, base[1]])).not.toBe(baseHash); // descrição
+    expect(h([{ ...base[0], quantity: 200 }, base[1]])).not.toBe(baseHash);               // quantidade
+    expect(h([{ ...base[0], unit: "pacote" }, base[1]])).not.toBe(baseHash);              // unidade
+    expect(h([{ ...base[0], averagePrice: 30 }, base[1]])).not.toBe(baseHash);            // preço médio
+    expect(h([{ ...base[0], suggestedCATMAT: "99999" }, base[1]])).not.toBe(baseHash);    // CATMAT sugerido
+    expect(h([{ ...base[0], status: "rejeitado" }, base[1]])).not.toBe(baseHash);         // status
+    // Item a mais também muda (conjunto diferente de itens aprovados).
+    expect(h([...base, { id: "i3", description: "Extra", quantity: 1, unit: "un", averagePrice: 0, suggestedCATMAT: null, status: "aprovado" }])).not.toBe(baseHash);
+    // Mesmos itens (cópia) → mesmo hash (idempotente).
+    expect(h([{ ...base[0] }, { ...base[1] }])).toBe(baseHash);
   });
 
   it("muda quando um campo lógico muda (objeto, kind, itens, modalidade/forma/plataforma)", () => {

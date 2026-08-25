@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1787668807.9036367,
-    "ast_hash": "264cf646909895e41369cdfcf6aff3d5",
+    "mtime": 1787676609.0229378,
+    "ast_hash": "a8bb2d26f03d91e0f78c60affa2773eb",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -10250,8 +10250,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
-    "mtime": 1785862334.711574,
-    "ast_hash": "4982e4ccaa6e5ecf3c30e795b030def3",
+    "mtime": 1787676534.0629406,
+    "ast_hash": "f9e33c2a87887edcccf16883a35a03fe",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-process.test.ts": {
@@ -10915,8 +10915,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
-    "mtime": 1787669373.5036705,
-    "ast_hash": "4d4cc0cc3f89b50af49fea5d000abdda",
+    "mtime": 1787676632.042937,
+    "ast_hash": "d9d43e7e8d629932d5a8b23262e96cd2",
     "semantic_hash": ""
   },
   "docs/handoffs/C3A_FINAL_RECLASSIFICATION_AND_CLOSURE.md": {
@@ -10925,8 +10925,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/C4A_REPLAY_SAFE_CANONICAL_DOCUMENT_GENERATION.md": {
-    "mtime": 1787669292.3516655,
-    "ast_hash": "c61c59ae83ea1d2b7494ce37732396fd",
+    "mtime": 1787676659.666936,
+    "ast_hash": "811e123dea8f083f48f33c1ee74fe935",
     "semantic_hash": ""
   }
 }

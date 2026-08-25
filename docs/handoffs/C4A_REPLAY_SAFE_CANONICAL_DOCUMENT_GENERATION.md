@@ -29,10 +29,14 @@ TanStack Query **reutiliza as variables da mutation** → mesma chave. Uma nova 
 não o `disabled` visual.
 
 ### 2.2 `payloadHash` determinístico (`generatePayloadHash`)
-`sha256` sobre `{ op, organizationId, processId, kind, object, itens aprovados ORDENADOS,
-modality, form, platform }`. **Exclui** `correlationId`, timestamps e aleatórios. Mesmo pedido lógico
-→ mesmo hash; **mesma chave + payload diferente → `CONFLICT`** (nunca sobrescreve efeito com dados
-diferentes). Coleções são ordenadas internamente (independe da ordem dos itens).
+`sha256` sobre `{ op, organizationId, processId, kind, object, assinatura dos itens aprovados,
+modality, form, platform }`. **Exclui** `correlationId`, timestamps e aleatórios. A **assinatura dos
+itens aprovados** não é só a lista de IDs: é um snapshot determinístico dos **campos relevantes** de
+cada item (`description`, `quantity`, `unit`, `averagePrice`, `suggestedCATMAT`, `status` — os campos
+reais de `listIntelligentItems`; **não** há CATSER no domínio de itens hoje), **ordenado por id**.
+Assim, mesma request lógica + mesmos itens → mesmo hash (independe da ordem de leitura); **alterar um
+campo relevante de um item aprovado muda o hash** e, sob a mesma chave, resulta em **`CONFLICT`**
+(nunca sobrescreve efeito com dados diferentes).
 
 ### 2.3 Cognição FORA da transação
 A parte cognitiva/de rede (`orchestrateMultiCopilot` no ETP/TR; deterministic no DFD/Edital) roda no
