@@ -64,10 +64,16 @@ export async function promoteOfficialDocument(params: {
   idempotencyKey: string;
   correlationId: string;
   reason?: string | null;
-  expectedContentHash?: string | null;
+  /** C.4B.1 — OBRIGATÓRIO: hash do conteúdo que o humano revisou/confirmou (integridade da emissão). */
+  expectedContentHash: string;
 }): Promise<PromoteOfficialResult> {
   if (!PROMOTABLE_KINDS.includes(params.kind)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Emissão oficial não se aplica a "${params.kind}" nesta fase.` });
+  }
+
+  // GUARD (integridade) — a confirmação do conteúdo revisado é obrigatória para emitir.
+  if (!params.expectedContentHash || !params.expectedContentHash.trim()) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Confirmação de conteúdo obrigatória: informe o hash da versão revisada antes de emitir." });
   }
 
   // Carregamento FORA da transação (sem rede/modelo aqui — determinístico).
@@ -75,10 +81,19 @@ export async function promoteOfficialDocument(params: {
   if (!draft || !draft.content.trim()) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente ou vazio — nada a emitir." });
   }
+
+  // GUARD (SoD fail-closed) — sem autoria rastreável não é possível provar revisor ≠ autor: recusa.
+  if (draft.authorUserId == null) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "O rascunho não possui autoria institucional rastreável — regenere/reestabeleça a autoria antes da emissão oficial.",
+    });
+  }
+
   const contentHash = draftContentHash(draft.content);
 
-  // Concorrência otimista: o emissor deve promover a versão que revisou.
-  if (params.expectedContentHash && params.expectedContentHash !== contentHash) {
+  // Concorrência otimista: o emissor deve promover EXATAMENTE a versão que revisou.
+  if (params.expectedContentHash !== contentHash) {
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde a revisão — recarregue e revise a versão vigente antes de emitir." });
   }
 
@@ -113,13 +128,9 @@ export async function promoteOfficialDocument(params: {
 
     const db = await getDb();
     if (!db) {
-      // Sem DB: degrada sem persistir (computa a versão oficial sem gravar) — coerente com C.4A.
-      const official = await createDocument({
-        organizationId: params.organizationId, businessDomain: BUSINESS_DOMAIN, documentType: params.kind,
-        origin: params.processId, title: draft.title, content: draft.content, author: String(params.actorUserId),
-        status: "emitido", correlationId: params.correlationId,
-      });
-      return { officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash }, promoted: true, replayed: false };
+      // GUARD (fail-closed) — a emissão CRIA autoridade institucional persistida e auditável. Sem
+      // persistência, NADA pode ser considerado emitido: falha explicitamente (nunca promoted=true).
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — emissão oficial recusada (nenhuma versão emitida)." });
     }
 
     let result!: PromoteOfficialResult;

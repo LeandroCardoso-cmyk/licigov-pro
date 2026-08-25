@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * C.4B.1 — Gate de EXPORTAÇÃO OFICIAL por status (requireStatus). Render/storage mockados.
- *
- * Prova, determinístico e sem S3:
- *   - requireStatus "emitido" + status "gerado" → FORBIDDEN, sem renderizar/exportar (cenário 10);
- *   - requireStatus "emitido" + status "emitido" → passa o gate e delega ao núcleo de exportação (11);
- *   - sem requireStatus → comportamento inalterado (exporta qualquer status oficial — outros domínios).
+ * C.4B.1 — Gate de EXPORTAÇÃO OFICIAL DERIVADO NO SERVIDOR pelo businessDomain (não confia no cliente).
+ * Render/storage mockados. Prova, determinístico e sem S3:
+ *   - processo_licitatorio + status "gerado" → FORBIDDEN, sem renderizar/exportar, MESMO em chamada
+ *     direta ao endpoint (sem qualquer parâmetro do cliente) — cenário 10;
+ *   - processo_licitatorio + status "emitido" → passa o gate e delega ao núcleo de exportação (11);
+ *   - outros domínios (contratos) → exportam qualquer status oficial (comportamento inalterado).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -39,25 +39,23 @@ function mkDoc(over: Record<string, unknown> = {}) {
 describe("C.4B.1 — gate de export oficial (requireStatus)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("10) status 'gerado' + requireStatus 'emitido' → FORBIDDEN, sem exportar", async () => {
-    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ status: "gerado" }) as any);
+  it("10) processo_licitatorio + 'gerado' → FORBIDDEN mesmo em chamada direta (sem params do cliente)", async () => {
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "processo_licitatorio", status: "gerado" }) as any);
     await expect(exportOfficialDocument({
-      organizationId: 1, userId: 7, documentId: "off1", format: "pdf", requireStatus: "emitido",
+      organizationId: 1, userId: 7, documentId: "off1", format: "pdf",
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(exportDocument).not.toHaveBeenCalled();
   });
 
-  it("11) status 'emitido' + requireStatus 'emitido' → passa o gate e exporta", async () => {
-    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ status: "emitido" }) as any);
-    const r = await exportOfficialDocument({
-      organizationId: 1, userId: 7, documentId: "off1", format: "pdf", requireStatus: "emitido",
-    });
+  it("11) processo_licitatorio + 'emitido' → passa o gate e exporta", async () => {
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "processo_licitatorio", status: "emitido" }) as any);
+    const r = await exportOfficialDocument({ organizationId: 1, userId: 7, documentId: "off1", format: "pdf" });
     expect(r.url).toBe("https://s3/signed");
     expect(exportDocument).toHaveBeenCalledTimes(1);
   });
 
-  it("sem requireStatus → exporta qualquer status oficial (outros domínios inalterados)", async () => {
-    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ status: "gerado" }) as any);
+  it("outros domínios (contratos) → exportam qualquer status oficial (inalterado)", async () => {
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "contratos", status: "gerado" }) as any);
     const r = await exportOfficialDocument({ organizationId: 1, userId: 7, documentId: "off1", format: "pdf" });
     expect(r.url).toBe("https://s3/signed");
     expect(exportDocument).toHaveBeenCalledTimes(1);

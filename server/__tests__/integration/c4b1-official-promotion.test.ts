@@ -62,6 +62,7 @@ function base(overrides: Record<string, unknown> = {}) {
     organizationId: ORG, processId: PID, kind: "etp" as const,
     actorUserId: 7, actorRole: "manager" as const,
     idempotencyKey: "emit-key-1", correlationId: "corr-1",
+    expectedContentHash: draftContentHash(DRAFT.content), // C.4B.1 — hash obrigatório da versão revisada
     ...overrides,
   };
 }
@@ -173,5 +174,38 @@ describe("C.4B.1 — integridade / escopo", () => {
   it("DFD está fora do escopo de emissão (BAD_REQUEST)", async () => {
     await expect(promoteOfficialDocument(base({ kind: "dfd" as never }))).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(getGeneratedDocumentByKind).not.toHaveBeenCalled();
+  });
+});
+
+describe("C.4B.1 — hardening de governança (fail-closed)", () => {
+  it("expectedContentHash AUSENTE → PRECONDITION_FAILED (confirmação obrigatória)", async () => {
+    await expect(promoteOfficialDocument(base({ expectedContentHash: "" }))).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(getGeneratedDocumentByKind).not.toHaveBeenCalled();
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it("expectedContentHash correto → emite; divergente → CONFLICT (concorrência otimista)", async () => {
+    checkIdempotency.mockResolvedValue({ status: "new" });
+    const ok = await promoteOfficialDocument(base({ expectedContentHash: draftContentHash(DRAFT.content) }));
+    expect(ok.promoted).toBe(true);
+    vi.clearAllMocks(); effectOrder.length = 0;
+    getGeneratedDocumentByKind.mockResolvedValue({ ...DRAFT });
+    await expect(promoteOfficialDocument(base({ expectedContentHash: "outro-hash" }))).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("autoria desconhecida (authorUserId null) → PRECONDITION_FAILED, nenhuma versão emitida", async () => {
+    getGeneratedDocumentByKind.mockResolvedValue({ ...DRAFT, authorUserId: null });
+    await expect(promoteOfficialDocument(base())).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(checkIdempotency).not.toHaveBeenCalled();
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it("sem DB (persistência indisponível) → recusa fail-closed, nunca promoted", async () => {
+    const conn = await import("../../db/connection");
+    (conn.getDb as any).mockResolvedValueOnce(null);
+    checkIdempotency.mockResolvedValue({ status: "new" });
+    await expect(promoteOfficialDocument(base())).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(createDocument).not.toHaveBeenCalled();
+    expect(failIdempotencyKey).toHaveBeenCalledTimes(1); // sem efeito; chave liberada para retry
   });
 });

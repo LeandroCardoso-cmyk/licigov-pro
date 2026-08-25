@@ -50,6 +50,17 @@ function metaString(m: Record<string, unknown> | undefined, keys: string[]): str
   return undefined;
 }
 
+/**
+ * C.4B.1 — POLICY de exportação oficial DERIVADA NO SERVIDOR pelo businessDomain do próprio documento
+ * (nunca controlada pelo cliente). Para o Processo Licitatório, apenas a versão `emitido` (autoridade
+ * institucional) pode sair pelo pipeline oficial — um snapshot `gerado` NUNCA é exportável como oficial,
+ * mesmo com chamada direta ao endpoint. Domínios ausentes deste mapa preservam o comportamento atual
+ * (Contratos/Contratação Direta/Parecer exportam qualquer versão oficial).
+ */
+const OFFICIAL_EXPORT_REQUIRED_STATUS: Record<string, string | undefined> = {
+  processo_licitatorio: "emitido",
+};
+
 export async function exportOfficialDocument(params: {
   organizationId: number;
   userId: number;
@@ -57,13 +68,6 @@ export async function exportOfficialDocument(params: {
   format: OfficialFormat;
   /** "inline" para impressão (visualizar no navegador), "attachment" para baixar. */
   disposition?: "attachment" | "inline";
-  /**
-   * C.4B.1 — quando informado, a exportação SÓ é permitida se o status do documento oficial for
-   * exatamente este (ex.: "emitido"). Usado pela superfície do /processos para NUNCA exportar um
-   * snapshot "gerado" como documento oficial. Sem este parâmetro, o comportamento é inalterado
-   * (Contratos/Contratação Direta/Parecer seguem exportando qualquer versão oficial).
-   */
-  requireStatus?: string;
   correlationId?: string;
 }): Promise<{ url: string; format: OfficialFormat; fileName: string }> {
   // Fail-closed + tenant-scoped: getOfficialDocument filtra por organização.
@@ -71,10 +75,12 @@ export async function exportOfficialDocument(params: {
   if (!doc || !doc.content.trim()) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
   }
-  if (params.requireStatus && doc.status !== params.requireStatus) {
+  // Gate SERVER-OWNED por domínio (não confia no cliente): status exigido é derivado do documento.
+  const requiredStatus = OFFICIAL_EXPORT_REQUIRED_STATUS[doc.businessDomain];
+  if (requiredStatus && doc.status !== requiredStatus) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: `Apenas documentos oficiais no status "${params.requireStatus}" podem ser exportados como oficiais (atual: "${doc.status}").`,
+      message: `Somente a versão oficial "${requiredStatus}" pode ser exportada como documento oficial (atual: "${doc.status}").`,
     });
   }
   const org = await getOrganizationById(params.organizationId);

@@ -108,19 +108,15 @@ export const documentEngineRouter = router({
       format: z.enum(FORMATS),
       /** true → URL inline (visualizar/imprimir); default false (baixar). */
       inline: z.boolean().optional(),
-      /**
-       * C.4B.1 — exige que o documento oficial esteja neste status para exportar como oficial (ex.:
-       * "emitido"). A superfície do /processos passa "emitido" para nunca exportar um snapshot "gerado".
-       * Omitido → comportamento inalterado para os demais domínios.
-       */
-      requireStatus: z.enum(["gerado", "revisado", "emitido"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      // C.4B.1 — a policy de status oficial é DERIVADA NO SERVIDOR pelo businessDomain do documento
+      // (ver exportOfficialDocument): o cliente NÃO controla o gate. processo_licitatorio só exporta
+      // 'emitido'; demais domínios inalterados.
       return exportOfficialDocument({
         organizationId: ctx.organizationId!, userId: ctx.user.id,
         documentId: input.documentId, format: input.format,
         disposition: input.inline ? "inline" : "attachment",
-        requireStatus: input.requireStatus,
         correlationId: ctx.correlationId,
       });
     }),

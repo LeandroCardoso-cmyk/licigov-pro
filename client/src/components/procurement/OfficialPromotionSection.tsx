@@ -45,18 +45,21 @@ export default function OfficialPromotionSection({ processId = "", kind }: Offic
 
   const s = summary.data;
   const draftExists = s?.draft.exists ?? false;
+  const draftHash = s?.draft.contentHash ?? null;
   const latest = s?.latestOfficial ?? null;
   const diverged = s?.diverged ?? false;
   const neverEmitted = s?.neverEmitted ?? false;
+  // A emissão exige o hash da versão revisada (integridade); só habilita quando conhecido.
+  const canEmit = draftExists && !!draftHash;
 
   const doEmit = () => {
-    if (!processId) return;
+    if (!processId || !draftHash) return;
     promote.mutate({
       processId,
       kind,
       idempotencyKey: emitKey,
-      // Concorrência otimista: emite exatamente a versão que o operador revisou.
-      expectedContentHash: s?.draft.contentHash ?? undefined,
+      // Concorrência otimista: emite exatamente a versão que o operador revisou (hash obrigatório).
+      expectedContentHash: draftHash,
     });
   };
 
@@ -101,7 +104,7 @@ export default function OfficialPromotionSection({ processId = "", kind }: Offic
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              disabled={!draftExists || promote.isPending}
+              disabled={!canEmit || promote.isPending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               Emitir documento oficial

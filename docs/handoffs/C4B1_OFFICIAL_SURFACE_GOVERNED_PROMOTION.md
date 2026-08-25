@@ -49,14 +49,26 @@ author_user_id, previous_status, next_status ('emitido'), reason, correlation_id
 created_at` · `UNIQUE(organization_id, idempotency_key)`. Além disso, a emissão registra um evento
 `documento_emitido` na `official_document_timeline`. **Sem chain-of-thought.**
 
-## 4. Export (duas ações distintas)
+## 4. Export (duas ações distintas) — gate SERVER-OWNED
 
 - **"Exportar rascunho"** → `generated_documents`, marca `RASCUNHO`, **comportamento inalterado**.
 - **"Baixar/Emitir documento oficial"** → `official_documents`, **somente `emitido`**, versão específica
   imutável, via o pipeline institucional existente (`OfficialDocumentPanel` → `documentEngine.export
-  Institutional`). Gate `requireStatus: "emitido"` no adapter (`exportOfficialDocument`) — **nunca
-  exporta `gerado` como oficial**. Outros domínios (Contratos/Contratação Direta/Parecer) não passam
-  `requireStatus` → **inalterados**.
+  Institutional`). O gate é **DERIVADO NO SERVIDOR** pelo `businessDomain` do próprio documento
+  (`OFFICIAL_EXPORT_REQUIRED_STATUS[processo_licitatorio] = "emitido"`) — **o cliente NÃO controla**: uma
+  chamada direta ao endpoint, sem qualquer parâmetro, ainda recusa (`FORBIDDEN`) um snapshot `gerado`.
+  Outros domínios (Contratos/Contratação Direta/Parecer) não estão no mapa → **inalterados**.
+
+## 4.1 Hardening de governança (fail-closed)
+
+- **Export server-owned** (acima): sem `requireStatus` client-controlled.
+- **Sem DB / persistência indisponível** → `INTERNAL_SERVER_ERROR`; **nunca** `promoted=true` (a emissão
+  cria autoridade persistida/auditável — degradar sem gravar é inaceitável).
+- **Autoria desconhecida** (`generated_documents.author_user_id = NULL`, rascunhos históricos) →
+  `PRECONDITION_FAILED`: sem autor rastreável não se prova revisor ≠ autor. **Não** inventa autor,
+  **não** faz backfill, **não** atribui o emissor como autor.
+- **`expectedContentHash` OBRIGATÓRIO** (router + service): ausente → `PRECONDITION_FAILED`; divergente →
+  `CONFLICT`. Garante que o conteúdo emitido é exatamente o que o humano revisou.
 
 ## 5. UI (ETP/TR/Edital)
 

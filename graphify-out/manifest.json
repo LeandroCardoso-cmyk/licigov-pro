@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1787683863.9494977,
-    "ast_hash": "055d1cac2e2cf74c8b390f3d9a4a2b71",
+    "mtime": 1787687886.933446,
+    "ast_hash": "e01f5898a60b38cbde8946486df37e03",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -8500,8 +8500,8 @@
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
-    "mtime": 1787683994.101496,
-    "ast_hash": "bb77fc182e515cfd93a7683780af5051",
+    "mtime": 1787687808.0134413,
+    "ast_hash": "29a03bc71dc99da74f3f63ec38d923c6",
     "semantic_hash": ""
   },
   "drizzle/0280_official_documents.sql": {
@@ -8530,8 +8530,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
-    "mtime": 1787683873.3414977,
-    "ast_hash": "c219a18629dfcfa4151ef4bfc11beb94",
+    "mtime": 1787687785.9214401,
+    "ast_hash": "eb9f5bc100568cc571f43334112a0239",
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
@@ -10305,8 +10305,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentExportAdapter.ts": {
-    "mtime": 1787683844.2854981,
-    "ast_hash": "196ff6c2bb8208f5df7aa33c97140dcc",
+    "mtime": 1787687774.1854393,
+    "ast_hash": "fc90d8ecd19b22271dfdcfbc625e1452",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-resilience.test.ts": {
@@ -10930,8 +10930,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1787684028.5934956,
-    "ast_hash": "77b4fce346456b35852280882e8b90b2",
+    "mtime": 1787687903.101447,
+    "ast_hash": "04c2d6a77358a62f2e8714e92f64a9f8",
     "semantic_hash": ""
   },
   "drizzle/0295_c4b1_official_promotion.sql": {
@@ -10940,18 +10940,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-export-gate.test.ts": {
-    "mtime": 1787684451.27749,
-    "ast_hash": "619c7644068865bcbbfb247ff8a79e2c",
+    "mtime": 1787688043.8334553,
+    "ast_hash": "9b52d88254209a9d8eb25b993dd2b9a0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion-mysql-smoke.test.ts": {
-    "mtime": 1787684430.4214902,
-    "ast_hash": "a81e535497f597ceef374d4128d8f38d",
+    "mtime": 1787688206.877465,
+    "ast_hash": "b8a1a1079321cb5568d392baa344649a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
-    "mtime": 1787685074.4254816,
-    "ast_hash": "127ad87e800a7bc97cdb68ec6bf18970",
+    "mtime": 1787688009.7974534,
+    "ast_hash": "08b0e5fddb66cb3f8e20f9bb2438c223",
     "semantic_hash": ""
   },
   "server/db/officialDocumentPromotions.ts": {
@@ -10960,13 +10960,13 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1787684723.6054862,
-    "ast_hash": "24329bb0c67ab9052d69034a8b104a16",
+    "mtime": 1787687876.5574455,
+    "ast_hash": "3f984ee4b52355869b603c377e3590c2",
     "semantic_hash": ""
   },
   "docs/handoffs/C4B1_OFFICIAL_SURFACE_GOVERNED_PROMOTION.md": {
-    "mtime": 1787685056.7534819,
-    "ast_hash": "9ebe6b369207ae497e1568a9438b4be3",
+    "mtime": 1787688279.5214694,
+    "ast_hash": "b30ba20c9dbd97f71295f444897f9bdf",
     "semantic_hash": ""
   }
 }

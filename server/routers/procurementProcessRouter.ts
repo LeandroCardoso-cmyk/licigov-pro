@@ -374,8 +374,8 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1),
       kind: z.enum(["etp", "tr", "edital"]),
       idempotencyKey: z.string().trim().min(1),
-      /** Hash do rascunho que o emissor revisou (concorrência otimista); opcional. */
-      expectedContentHash: z.string().trim().min(1).optional(),
+      /** OBRIGATÓRIO — hash do rascunho que o emissor revisou/confirmou (integridade da emissão). */
+      expectedContentHash: z.string().trim().min(1),
       reason: z.string().trim().min(1).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -385,7 +385,7 @@ export const procurementProcessRouter = router({
         organizationId: orgId, processId: input.processId, kind: input.kind,
         actorUserId: ctx.user.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
-        expectedContentHash: input.expectedContentHash ?? null, reason: input.reason ?? null,
+        expectedContentHash: input.expectedContentHash, reason: input.reason ?? null,
       });
     }),
 
