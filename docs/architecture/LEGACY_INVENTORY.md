@@ -136,8 +136,15 @@ testes de `analytics.getOverview`) + `contracts-legacy-full-isolation-mysql-smok
 - **Frontend:** `client/src/pages/{DirectContracts,NewDirectContract,DirectContractDetails,DirectContractsAnalytics}.tsx`
 - **Rotas (compat):** `/direct-contracts`, `/direct-contracts/new`, `/direct-contracts/:id`, `/direct-contracts/analytics`
 - **Backend (não remover):** `server/routers/directContractsRouter.ts`, `server/db/directContracts.ts`,
-  `server/services/{directContractDocuments,directContractPackage,directContractAuditReport}.ts`
+  `server/services/{directContractDocuments,directContractPackage,directContractAuditReport,legalFrameworkAssistant}.ts`
 - **Tabelas:** `direct_contracts` (preservar).
+- **IA:** `directContractDocuments`/`legalFrameworkAssistant` usam `invokeLLM` legado (resultado efetivo
+  **apenas** neste fluxo compat). O fluxo oficial `/contratacao-direta` **não** os usa — já roda no Kernel
+  (`orchestrateMultiCopilot`).
+- **C.3A shadow (`FF_DIRECT_CONTRACT_SHADOW`, OFF):** existe **apenas como observabilidade de legado** —
+  reclassificado em C.3A-CLOSE (classificação C). **Não** é migração de tráfego e **não** habilita cutover.
+  Retirada futura é **governada** (auditoria de callers + ausência de uso operacional); **não remover ainda**.
+  Ver `AI_LEGACY_MIGRATION_PLAN.md` §5.2 e `handoffs/C3A_FINAL_RECLASSIFICATION_AND_CLOSURE.md`.
 
 ### LegalOpinions  → substituído por **Legal Opinion Workspace** (`/parecer`)
 - **Classe:** 3 (remover após RC-5)
