@@ -2,6 +2,7 @@ import { useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -23,12 +24,13 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
   const [object, setObject] = useState("");
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
 
-  const generateETP = trpc.procurementProcess.generateETP.useMutation();
+  const { key: etpKey, rotate: rotateEtpKey } = useIdempotencyKey();
+  const generateETP = trpc.procurementProcess.generateETP.useMutation({ onSuccess: () => rotateEtpKey() });
   const draft = generateETP.data?.document;
 
   const handleGenerate = () => {
     if (!processId || !object.trim()) return;
-    generateETP.mutate({ processId, object: object.trim() });
+    generateETP.mutate({ processId, object: object.trim(), idempotencyKey: etpKey });
   };
 
   return (

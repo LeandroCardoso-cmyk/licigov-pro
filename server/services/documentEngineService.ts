@@ -23,6 +23,7 @@ import {
 } from "./documentConverter";
 // Ciclo de vida documental (versão, timeline, hash, storage, signed URL).
 import { createDocument, storeRenderedArtifact, type StoredArtifact } from "./officialDocumentLifecycleService";
+import type { OfficialDocsExecutor } from "../db/officialDocuments";
 import {
   officialFilename,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
@@ -51,9 +52,9 @@ export interface GenerateOfficialDocumentParams {
  * Kernel e delega TODO o ciclo de vida (versão/timeline/hash/persistência) ao
  * OfficialDocumentLifecycleService.
  */
-export async function generateOfficialDocument(params: GenerateOfficialDocumentParams): Promise<OfficialDocument> {
+export async function generateOfficialDocument(params: GenerateOfficialDocumentParams, executor?: OfficialDocsExecutor): Promise<OfficialDocument> {
   assertKernelAccess(params.businessDomain, "document_engine");
-  return createDocument(params);
+  return createDocument(params, executor);
 }
 
 /** Artefato renderizado devolvido pelo Document Engine (metadados de storage vindos do Lifecycle). */

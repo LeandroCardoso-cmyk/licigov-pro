@@ -29,6 +29,12 @@ function isDuplicateEntryError(err: unknown): boolean {
 
 type IdempotencyRow = typeof idempotencyKeys.$inferSelect;
 
+// C.4A — executor aceita a conexão (db) ou uma transação (tx), permitindo marcar a chave como
+// COMPLETED atomicamente junto do commit documental (ver procurementProcessService). Quando ausente,
+// usa getDb() (comportamento anterior, sem quebra de assinatura para callers existentes).
+type IdemDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type IdempotencyExecutor = IdemDb | Parameters<Parameters<IdemDb["transaction"]>[0]>[0];
+
 /**
  * Avalia uma linha já existente (ou recém-vencedora de corrida) e a converte no
  * lifecycle público. Expirada (>TTL) é tratada como "new" (permite novo processamento).
@@ -137,8 +143,9 @@ export async function saveIdempotencyResult(
   userId: number,
   organizationId: number,
   response: unknown,
+  executor?: IdempotencyExecutor,
 ): Promise<void> {
-  const db = await getDb();
+  const db = executor ?? await getDb();
   if (!db) return;
 
   await db

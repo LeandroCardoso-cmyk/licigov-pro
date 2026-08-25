@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 
 /**
  * EditalWorkspace — REAL (wired to tRPC).
@@ -60,7 +61,8 @@ export default function EditalWorkspace({
   const [form, setForm] = useState<Form>("eletronico");
   const [platform, setPlatform] = useState<Platform>("compras_gov");
 
-  const generateNotice = trpc.procurementProcess.generateNotice.useMutation();
+  const { key: editalKey, rotate: rotateEditalKey } = useIdempotencyKey();
+  const generateNotice = trpc.procurementProcess.generateNotice.useMutation({ onSuccess: () => rotateEditalKey() });
   const draft = generateNotice.data?.document;
 
   const handleGenerate = () => {
@@ -71,6 +73,7 @@ export default function EditalWorkspace({
       modality,
       form,
       platform: form === "eletronico" ? platform : undefined,
+      idempotencyKey: editalKey,
     });
   };
 

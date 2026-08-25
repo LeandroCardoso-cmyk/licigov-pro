@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 
 /**
@@ -33,6 +34,7 @@ export type DFDWorkspaceProps = {
 export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
+  const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
   const [source, setSource] = useState<DFDSource>("pdf");
   const [draft, setDraft] = useState("");
   const loadedFor = useRef<string | null>(null);
@@ -58,7 +60,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
     utils.procurementProcess.loadProcess.invalidate({ processId }); // reflete na Visão Geral
   };
 
-  const generateDFD = trpc.procurementProcess.generateDFD.useMutation({ onSuccess: invalidate });
+  const generateDFD = trpc.procurementProcess.generateDFD.useMutation({ onSuccess: () => { invalidate(); rotateDfdKey(); } });
   const saveDFD = trpc.procurementProcess.saveDFD.useMutation({ onSuccess: invalidate });
   const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
 
@@ -98,7 +100,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
             </p>
             <button
               type="button"
-              onClick={() => processId && generateDFD.mutate({ processId })}
+              onClick={() => processId && generateDFD.mutate({ processId, idempotencyKey: dfdKey })}
               disabled={!processId || generateDFD.isPending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
