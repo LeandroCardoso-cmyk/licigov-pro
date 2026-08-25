@@ -168,6 +168,11 @@ jobs:
       - name: Smoke — reconciliação de activity_logs (C.3A-OPS.2)
         run: pnpm exec vitest run server/__tests__/integration/activity-logs-reconciliation-mysql-smoke.test.ts
 
+      # C.3A-OPS.3 — DATETIME da Contratação Direta em MODO ESTRITO (ISO T/Z → DATETIME(3)):
+      # controle prova a rejeição do ISO cru; writer real corrigido persiste + round-trip + upsert + irmão.
+      - name: Smoke — DATETIME Contratação Direta estrito (C.3A-OPS.3)
+        run: pnpm exec vitest run server/__tests__/integration/direct-procurement-datetime-mysql-smoke.test.ts
+
       # PR B.2.1 — reconciliação da migration 0288 (banco novo/transitório/parcial, tipo incompatível,
       # índice, linhas históricas, journal único, isolamento). Roda por ÚLTIMO: recria import_sessions
       # em formatos mínimos/parciais para exercitar o drift e nenhum step depende dessa tabela depois.

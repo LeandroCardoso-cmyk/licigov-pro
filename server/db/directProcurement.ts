@@ -23,11 +23,19 @@ import { DIRECT_DOMAIN_COPILOTS, defaultFlags } from "../domain/directProcuremen
 import type { DirectProcurementProcedure, ProposalCollection, ProposalDocument } from "../domain/directProcurementProcedure";
 import type { ContractJustification, PriceJustification, RequiredDocument, Ratification, GeneratedPublication } from "../domain/directProcurementJustifications";
 import type { CopilotType } from "../domain/institutionalCopilot";
+import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 
 function parseArr<T>(raw: string | null): T[] {
   if (!raw) return [];
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p as T[] : []; } catch { return []; }
 }
+
+// C.3A-OPS.3 — Coerção canônica de DATETIME (mesmo mecanismo de server/db/procurement.ts). O domínio
+// produz timestamps via `new Date().toISOString()` (com separador `T` e sufixo `Z`), que colunas MySQL
+// `DATETIME(3)` em modo estrito rejeitam ("Incorrect datetime value"). `toDb` normaliza na ESCRITA;
+// `fromDb` volta a ISO na LEITURA (round-trip determinístico). NÃO cria helper paralelo.
+const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
+const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
@@ -39,10 +47,10 @@ export async function insertDirectProcurementWorkspace(ws: DirectProcurementWork
     procurementType: ws.procurementType, procedureType: ws.procedureType, legalBasis: ws.legalBasis,
     startOption: ws.startOption, currentStage: ws.currentStage, status: ws.status, responsibleUser: ws.responsibleUser,
     participants: JSON.stringify(ws.participants), activeCopilots: JSON.stringify(ws.activeCopilots),
-    flags: JSON.stringify(ws.flags), correlationId: ws.correlationId, createdAt: ws.createdAt, updatedAt: ws.updatedAt,
+    flags: JSON.stringify(ws.flags), correlationId: ws.correlationId, createdAt: toDb(ws.createdAt), updatedAt: toDb(ws.updatedAt),
   }).onDuplicateKeyUpdate({ set: {
     procurementType: ws.procurementType, procedureType: ws.procedureType, legalBasis: ws.legalBasis,
-    currentStage: ws.currentStage, status: ws.status, flags: JSON.stringify(ws.flags), updatedAt: ws.updatedAt,
+    currentStage: ws.currentStage, status: ws.status, flags: JSON.stringify(ws.flags), updatedAt: toDb(ws.updatedAt),
   } });
   return ws;
 }
@@ -65,7 +73,7 @@ export async function getDirectProcurementWorkspace(id: string, orgId: number): 
     currentStage: r.currentStage as DirectProcurementStage, status: r.status as DirectProcurementStatus,
     responsibleUser: r.responsibleUser, participants: parseArr<number>(r.participants),
     activeCopilots: (parseArr<CopilotType>(r.activeCopilots).length ? parseArr<CopilotType>(r.activeCopilots) : DIRECT_DOMAIN_COPILOTS),
-    flags, correlationId: r.correlationId, createdAt: r.createdAt, updatedAt: r.updatedAt,
+    flags, correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
   };
 }
 
@@ -75,13 +83,13 @@ export async function listDirectProcurementWorkspaces(orgId: number, limit = 50)
   const rows = await db.select().from(directProcurementWorkspacesTable)
     .where(eq(directProcurementWorkspacesTable.organizationId, orgId))
     .orderBy(desc(directProcurementWorkspacesTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", procurementType: r.procurementType, procedureType: r.procedureType, currentStage: r.currentStage, status: r.status, updatedAt: r.updatedAt }));
+  return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", procurementType: r.procurementType, procedureType: r.procedureType, currentStage: r.currentStage, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
 
 export async function updateDirectProcurementStage(id: string, orgId: number, stage: string, status: string, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(directProcurementWorkspacesTable).set({ currentStage: stage, status, updatedAt })
+  await db.update(directProcurementWorkspacesTable).set({ currentStage: stage, status, updatedAt: toDb(updatedAt) })
     .where(and(eq(directProcurementWorkspacesTable.id, id), eq(directProcurementWorkspacesTable.organizationId, orgId)));
   return true;
 }
@@ -93,7 +101,7 @@ export async function insertDirectProcedure(p: DirectProcurementProcedure): Prom
   if (!db) return null;
   await db.insert(directProcurementProceduresTable).values({
     id: p.id, organizationId: p.organizationId, workspaceId: p.workspaceId, procedureType: p.procedureType,
-    platform: p.platform, receiptMethod: p.receiptMethod, instructions: p.instructions, correlationId: p.correlationId, createdAt: p.createdAt,
+    platform: p.platform, receiptMethod: p.receiptMethod, instructions: p.instructions, correlationId: p.correlationId, createdAt: toDb(p.createdAt),
   }).onDuplicateKeyUpdate({ set: { procedureType: p.procedureType, platform: p.platform, receiptMethod: p.receiptMethod, instructions: p.instructions } });
   return p;
 }
@@ -116,7 +124,7 @@ export async function insertProposalCollection(p: ProposalCollection): Promise<P
   await db.insert(proposalCollectionsTable).values({
     id: p.id, organizationId: p.organizationId, workspaceId: p.workspaceId, supplierName: p.supplierName,
     supplierDocument: p.supplierDocument, proposalValue: String(p.proposalValue), protocol: p.protocol,
-    receivedVia: p.receivedVia, correlationId: p.correlationId, createdAt: p.createdAt,
+    receivedVia: p.receivedVia, correlationId: p.correlationId, createdAt: toDb(p.createdAt),
   }).onDuplicateKeyUpdate({ set: { proposalValue: String(p.proposalValue), protocol: p.protocol } });
   return p;
 }
@@ -134,7 +142,7 @@ export async function insertProposalDocument(d: ProposalDocument): Promise<Propo
   if (!db) return null;
   await db.insert(proposalDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, proposalId: d.proposalId, workspaceId: d.workspaceId,
-    kind: d.kind, title: d.title, documentReference: d.documentReference, correlationId: d.correlationId, createdAt: d.createdAt,
+    kind: d.kind, title: d.title, documentReference: d.documentReference, correlationId: d.correlationId, createdAt: toDb(d.createdAt),
   }).onDuplicateKeyUpdate({ set: { title: d.title } });
   return d;
 }
@@ -155,10 +163,10 @@ export async function upsertContractJustification(j: ContractJustification): Pro
   await db.insert(contractJustificationsTable).values({
     id: j.id, organizationId: j.organizationId, workspaceId: j.workspaceId, need: j.need, publicInterest: j.publicInterest,
     motivation: j.motivation, legalFoundation: j.legalFoundation, benefits: j.benefits, alternatives: j.alternatives,
-    correlationId: j.correlationId, createdAt: j.createdAt, updatedAt: j.updatedAt,
+    correlationId: j.correlationId, createdAt: toDb(j.createdAt), updatedAt: toDb(j.updatedAt),
   }).onDuplicateKeyUpdate({ set: {
     need: j.need, publicInterest: j.publicInterest, motivation: j.motivation, legalFoundation: j.legalFoundation,
-    benefits: j.benefits, alternatives: j.alternatives, updatedAt: j.updatedAt,
+    benefits: j.benefits, alternatives: j.alternatives, updatedAt: toDb(j.updatedAt),
   } });
   return j;
 }
@@ -170,7 +178,7 @@ export async function getContractJustification(workspaceId: string, orgId: numbe
     .where(and(eq(contractJustificationsTable.workspaceId, workspaceId), eq(contractJustificationsTable.organizationId, orgId))).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, organizationId: r.organizationId, workspaceId: r.workspaceId, need: r.need ?? "", publicInterest: r.publicInterest ?? "", motivation: r.motivation ?? "", legalFoundation: r.legalFoundation ?? "", benefits: r.benefits ?? "", alternatives: r.alternatives ?? "", correlationId: r.correlationId, createdAt: r.createdAt, updatedAt: r.updatedAt };
+  return { id: r.id, organizationId: r.organizationId, workspaceId: r.workspaceId, need: r.need ?? "", publicInterest: r.publicInterest ?? "", motivation: r.motivation ?? "", legalFoundation: r.legalFoundation ?? "", benefits: r.benefits ?? "", alternatives: r.alternatives ?? "", correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt) };
 }
 
 // ─── Price justification ─────────────────────────────────────────────────────
@@ -181,7 +189,7 @@ export async function upsertPriceJustification(j: PriceJustification): Promise<P
   await db.insert(priceJustificationsTable).values({
     id: j.id, organizationId: j.organizationId, workspaceId: j.workspaceId, source: j.source, justification: j.justification,
     referenceValue: String(j.referenceValue), researchId: j.researchId, documentReferences: JSON.stringify(j.documentReferences),
-    correlationId: j.correlationId, createdAt: j.createdAt,
+    correlationId: j.correlationId, createdAt: toDb(j.createdAt),
   }).onDuplicateKeyUpdate({ set: { source: j.source, justification: j.justification, referenceValue: String(j.referenceValue), researchId: j.researchId, documentReferences: JSON.stringify(j.documentReferences) } });
   return j;
 }
@@ -231,7 +239,7 @@ export async function insertRatification(r: Ratification): Promise<Ratification 
   if (!db) return null;
   await db.insert(ratificationsTable).values({
     id: r.id, organizationId: r.organizationId, workspaceId: r.workspaceId, responsible: r.responsible,
-    decision: r.decision, justification: r.justification, evidence: JSON.stringify(r.evidence), correlationId: r.correlationId, ratifiedAt: r.ratifiedAt,
+    decision: r.decision, justification: r.justification, evidence: JSON.stringify(r.evidence), correlationId: r.correlationId, ratifiedAt: toDb(r.ratifiedAt),
   }).onDuplicateKeyUpdate({ set: { decision: r.decision, justification: r.justification, evidence: JSON.stringify(r.evidence) } });
   return r;
 }
@@ -243,7 +251,7 @@ export async function getRatification(workspaceId: string, orgId: number): Promi
     .where(and(eq(ratificationsTable.workspaceId, workspaceId), eq(ratificationsTable.organizationId, orgId))).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, responsible: r.responsible, decision: r.decision, justification: r.justification ?? "", evidence: parseArr<string>(r.evidence), ratifiedAt: r.ratifiedAt };
+  return { id: r.id, responsible: r.responsible, decision: r.decision, justification: r.justification ?? "", evidence: parseArr<string>(r.evidence), ratifiedAt: fromDb(r.ratifiedAt) };
 }
 
 // ─── Publications ────────────────────────────────────────────────────────────
@@ -253,7 +261,7 @@ export async function insertGeneratedPublication(p: GeneratedPublication): Promi
   if (!db) return null;
   await db.insert(generatedPublicationsTable).values({
     id: p.id, organizationId: p.organizationId, workspaceId: p.workspaceId, kind: p.kind, title: p.title,
-    content: p.content, correlationId: p.correlationId, createdAt: p.createdAt,
+    content: p.content, correlationId: p.correlationId, createdAt: toDb(p.createdAt),
   }).onDuplicateKeyUpdate({ set: { content: p.content, title: p.title } });
   return p;
 }
@@ -263,5 +271,5 @@ export async function listGeneratedPublications(workspaceId: string, orgId: numb
   if (!db) return [];
   const rows = await db.select().from(generatedPublicationsTable)
     .where(and(eq(generatedPublicationsTable.workspaceId, workspaceId), eq(generatedPublicationsTable.organizationId, orgId)));
-  return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, createdAt: r.createdAt }));
+  return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, createdAt: fromDb(r.createdAt) }));
 }
