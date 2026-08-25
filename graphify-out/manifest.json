@@ -8520,8 +8520,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1785862334.759574,
-    "ast_hash": "7da758a05d7b15f458617a2f49b79767",
+    "mtime": 1787679616.2541952,
+    "ast_hash": "eadbb0cc5aad70deddb67f7aa0585567",
     "semantic_hash": ""
   },
   "server/domain/officialDocument.ts": {
@@ -10910,8 +10910,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation-mysql-smoke.test.ts": {
-    "mtime": 1787669153.3116574,
-    "ast_hash": "bd69c84fe5dba3968f40af48d0f3dc3a",
+    "mtime": 1787679651.778195,
+    "ast_hash": "85ca90144cd625e230334257c46d0737",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
@@ -10925,8 +10925,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/C4A_REPLAY_SAFE_CANONICAL_DOCUMENT_GENERATION.md": {
-    "mtime": 1787676659.666936,
-    "ast_hash": "811e123dea8f083f48f33c1ee74fe935",
+    "mtime": 1787679729.4821937,
+    "ast_hash": "ac1e3b2ae5037d9c39eaab94759e3a3a",
     "semantic_hash": ""
   }
 }

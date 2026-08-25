@@ -62,6 +62,15 @@ O ciclo oficial preserva **GET_LOCK por linhagem + cálculo de versão serializa
 atômicos**: com executor externo usa a transação recebida; sem executor, abre a própria transação
 (comportamento anterior). Sem DB, degrada graciosamente (sem persistir, sem idempotência).
 
+### 2.5.1 Correção de fronteira: DATETIME do documento oficial (modo estrito)
+O smoke estrito de C.4A revelou um bug latente: `insertOfficialDocument` gravava `createdAt`/`updatedAt`
+ISO (`…T…Z`, de `new Date().toISOString()`) **direto** em colunas `DATETIME(3)`, sem a normalização que
+`db/procurement` já aplicava (`toDbDatetime`). Sob `STRICT_TRANS_TABLES` (staging/produção) o MySQL
+rejeita o literal ISO ("Incorrect datetime value"), derrubando a transação atômica da geração canônica.
+Correção mínima e simétrica ao restante do projeto: `toDb()` na escrita do documento oficial
+(`server/db/officialDocuments.ts`). Regressão coberta pelo smoke estrito (assert de `created_at`
+normalizado, sem `T`/`Z`).
+
 ### 2.6 Correspondência de linhagem (`canonicalDocumentIdentity`) — SEM nova coluna
 Helper **puro e testável** que formaliza `(org + processId + kind)` → id do `generated_document` →
 `lineageId` do `official_document`, **reutilizando as mesmas primitivas** do pipeline

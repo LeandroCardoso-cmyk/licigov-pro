@@ -99,6 +99,16 @@ async function idemStatus(org: number, key: string): Promise<string | null> {
   return rows.length ? String((rows[0] as any).status) : null;
 }
 
+/** created_at bruto do official_document (para regressão de DATETIME em modo estrito). */
+async function officialCreatedAtRaw(org: number, processId: string, kind: string): Promise<string | null> {
+  const { lineageId } = canonicalDocumentIdentity({ organizationId: org, processId, kind: kind as any });
+  const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+    "SELECT created_at AS c FROM official_documents WHERE tenant_id = ? AND lineage_id = ? LIMIT 1",
+    [org, lineageId],
+  );
+  return rows.length ? String((rows[0] as any).c) : null;
+}
+
 async function cleanup() {
   for (const org of [ORG, ORG2]) {
     await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [org]).catch(() => {});
@@ -136,6 +146,13 @@ describe.skipIf(!DB)("C.4A — Replay-Safe Canonical Generation (MySQL estrito)"
     expect(await countGenerated(ORG, pid, "etp")).toBe(1);
     expect(await countOfficialVersions(ORG, pid, "etp")).toBe(1);
     expect(await idemStatus(ORG, "c4a-key-1")).toBe("completed");
+    // Regressão DATETIME (modo estrito): o official_document persiste com created_at normalizado
+    // (formato MySQL "AAAA-MM-DD HH:MM:SS.mmm"), nunca o ISO cru com "T"/"Z" — que seria rejeitado
+    // sob STRICT_TRANS_TABLES e derrubaria a transação atômica da geração canônica.
+    const createdAt = await officialCreatedAtRaw(ORG, pid, "etp");
+    expect(createdAt).toBeTruthy();
+    expect(createdAt).not.toMatch(/[TZ]/);
+    expect(createdAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
   }, 60_000);
 
   it("2) mesma chave (replay) → continua 1/1, SEM evento duplicado", async () => {

@@ -8,8 +8,16 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getDb } from "./connection";
+import { toDbDatetime } from "./institutionalConsultations";
 import { officialDocumentsTable, officialDocumentTimelineTable } from "../../drizzle/schema";
 import type { OfficialDocument, DocumentBusinessDomain, OfficialDocumentType, OfficialDocumentStatus } from "../domain/officialDocument";
+
+// Conversão de data na FRONTEIRA DO BANCO (mesma convenção de db/procurement e das consultas
+// institucionais): o domínio produz timestamps ISO (`new Date().toISOString()`, com `T`/`Z`) que
+// colunas MySQL `DATETIME(3)` em MODO ESTRITO rejeitam ("Incorrect datetime value"). `toDb` normaliza
+// na escrita. Sem isso, o INSERT do documento oficial falhava sob STRICT_TRANS_TABLES (staging/prod),
+// derrubando a transação atômica da geração canônica (C.4A).
+const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
 
 // PR D — executor aceita a conexão (db) ou uma transação (tx), permitindo compor estas operações
 // atomicamente (ver officialDocumentLifecycleService.createDocument). Quando ausente, usa getDb().
@@ -38,8 +46,8 @@ export async function insertOfficialDocument(doc: OfficialDocument, executor?: O
     content: doc.content, metadata: JSON.stringify(doc.metadata), author: doc.author, lineageId: doc.lineageId,
     correlationId: doc.correlationId, replayHash: doc.replayHash,
     storageKey: doc.storageKey, mimeType: doc.mimeType, size: doc.size, hash: doc.hash,
-    createdAt: doc.createdAt, updatedAt: doc.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { content: doc.content, status: doc.status, metadata: JSON.stringify(doc.metadata), updatedAt: doc.updatedAt } });
+    createdAt: toDb(doc.createdAt), updatedAt: toDb(doc.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { content: doc.content, status: doc.status, metadata: JSON.stringify(doc.metadata), updatedAt: toDb(doc.updatedAt) } });
   return doc;
 }
 
