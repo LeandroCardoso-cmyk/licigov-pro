@@ -30,9 +30,13 @@
 | `server/services/legalOpinionService.ts` | `legalOpinionsRouter.ts` | Consumidor **congelado** (`LEGACY_ACTIVE_MAINTENANCE_ONLY`) | `LEGAL_ANALYSIS` / reasoning | Média — legado ativo em `/parecer-juridico/*` (compat) |
 | `server/services/examples/legalValidationExample.ts` | — (exemplo) | Disposição `remocao_futura` | — | Baixa — remover em limpeza, não migrar |
 
-**Também no pipeline documental legado ativo** (via `AI_SDK_ALLOWLIST` + `LEGACY_ACTIVE_MAINTENANCE_ONLY`):
-`server/services/gemini.ts` (geração de DFD/ETP/TR/Edital via `documentsRouter`). Congelado — sem
-migração nesta fase.
+**`server/services/gemini.ts`** (via `AI_SDK_ALLOWLIST` + `LEGACY_ACTIVE_MAINTENANCE_ONLY`):
+**RECONCILIADO (Architecture — Reconcile Procurement Legacy Boundaries).** A geração de DFD/ETP/TR/Edital
+do fluxo oficial **NÃO** passa mais por `gemini.ts`/`documentsRouter` — passa pelo canônico
+`/processos` → `procurementProcess.*` (ETP/TR via Kernel; DFD determinístico; Edital via Document Engine).
+A geração cognitiva `documentsRouter.generate*` → `gemini.ts` está **órfã da navegação oficial** →
+**LEGACY-COMPAT / RETIRADA FUTURA GOVERNADA**, não alvo de migração de tráfego. **Não há shadow/cutover
+necessário** enquanto não houver tráfego institucional real a migrar. Sem migração/remoção nesta fase.
 
 ### Tabelas órfãs detectadas (não migrar; candidatas a limpeza futura)
 

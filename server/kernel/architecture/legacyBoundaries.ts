@@ -116,12 +116,17 @@ export const DOCUMENT_RENDERERS: readonly string[] = [
   "server/services/documentRenderService.ts",   // LEGACY (órfão)
 ];
 
-// ─── Pipeline de Licitação / Geração Documental (RC-C0.1A) ────────────────────
-// Descoberto na auditoria arquitetural da Sprint C0 (2026-07-20): caso especial em
-// que o LEGADO é o sistema ativo em produção/staging e o CANÔNICO ainda não está
-// ligado ao frontend. Ver docs/architecture/LEGACY_INVENTORY.md, seção "Licitação
-// / Processo Licitatório / Geração Documental". Congelado em MAINTENANCE_ONLY na
-// Sprint C0.1A — sem migração, sem remoção.
+// ─── Pipeline de Licitação / Geração Documental (RC-C0.1A → reconciliado) ─────
+// RC-C0.1A (2026-07-20) registrou o LEGADO como ativo e o CANÔNICO como não-ligado.
+// RECONCILIAÇÃO ARQUITETURAL (Architecture — Reconcile Procurement Legacy Boundaries):
+// o call graph atual mostra o CANÔNICO JÁ LIGADO — /processos → ProcessoLicitatorio →
+// procurementProcess.* (ETP/TR via Kernel/orchestrateMultiCopilot; DFD determinístico;
+// Edital via Document Engine). A geração COGNITIVA legada (documentsRouter.generate* →
+// gemini.ts) NÃO tem entrada pela navegação oficial. MAINTENANCE_ONLY é mantido para as
+// responsabilidades legadas NÃO-cognitivas ainda consumidas (version history/approval em
+// documentsRouter; CRUD de itens em processesRouter) e para as páginas fora de rota
+// (Dashboard/ProcessDetails/NewProcess), até retirada GOVERNADA procedure-by-procedure.
+// Sem migração de tráfego, sem shadow, sem remoção nesta PR.
 export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
   "server/routers/documentsRouter.ts",
   "server/routers/processesRouter.ts",
@@ -143,18 +148,14 @@ export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
   "server/db/legalOpinions.ts",
 ];
 
-export const CANONICAL_NOT_YET_WIRED: readonly string[] = [
-  "server/routers/procurementProcessRouter.ts",
-  "server/services/procurementProcessService.ts",
-  "server/services/workspaceOrchestratorService.ts",
-  "server/services/documentEngineService.ts",
-  "server/services/officialDocumentLifecycleService.ts",
-  "client/src/components/procurement/ProcessoLicitatorioHome.tsx",
-  "client/src/components/procurement/DFDWorkspace.tsx",
-  "client/src/components/procurement/ETPWorkspace.tsx",
-  "client/src/components/procurement/TRWorkspace.tsx",
-  "client/src/components/procurement/EditalWorkspace.tsx",
-];
+// RECONCILIADO (Architecture — Reconcile Procurement Legacy Boundaries): os componentes antes
+// listados aqui já possuem caller vivo confirmado — /processos → ProcessoLicitatorio → workspaces
+// → procurementProcess.* → procurementProcessService → workspaceOrchestratorService /
+// documentEngineService → officialDocumentLifecycleService. Portanto o conjunto está VAZIO.
+// A constante permanece como MECANISMO DE GUARDA arquitetural (consumida por rc352/rc-c01a):
+// reintroduzir um path aqui exige evidência de que o canônico correspondente ainda NÃO foi
+// alcançado pelo frontend — nunca um atalho.
+export const CANONICAL_NOT_YET_WIRED: readonly string[] = [];
 
 // ─── Classificação oficial das fronteiras (RC-4.2.1) ──────────────────────────
 // Cada item recebe uma disposição institucional. NENHUMA remoção nesta RC.
@@ -195,25 +196,21 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_EXPORTERS", disposition: "mantem", note: "Router legado de documentos." },
   // executeAITask — aposentado
   { path: "server/services/aiExecutionEngine.ts", allowlist: "EXECUTE_AI_TASK_ALLOWLIST", disposition: "mantem", note: "Definição; executeAITask aposentado (0 callers)." },
-  // ─── RC-C0.1A — Licitação / Geração Documental ────────────────────────────
-  // Legado ATIVO em produção/staging (não órfão) — congelado em MAINTENANCE_ONLY.
-  { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Único caminho hoje para gerar DFD/ETP/TR/Edital/Ata/Parecer. Sem novos tipos documentais, sem novos consumidores." },
-  { path: "server/routers/processesRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Criação/leitura de processo licitatório legado. Alimenta documentsRouter." },
-  { path: "server/services/gemini.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Já classificado migracao_futura em AI_SDK_ALLOWLIST; aqui registrado também como parte do pipeline documental ativo — ver LEGACY_INVENTORY.md." },
-  { path: "client/src/pages/Dashboard.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /processos, no menu principal como \"Processo Licitatório\" — não é tela de compatibilidade, é a tela ativa." },
-  { path: "client/src/pages/ProcessDetails.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /processo/:id — botão \"Gerar com IA\" chama documentsRouter.generateDocument." },
-  { path: "client/src/pages/NewProcess.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Rota /novo-processo — cria processo via processesRouter.create." },
-  // Canônico correto arquiteturalmente, mas órfão do frontend — não é legado.
-  { path: "server/routers/procurementProcessRouter.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "tenantProcedure, sem consumidor de frontend registrado em App.tsx." },
-  { path: "server/services/procurementProcessService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Também em BUSINESS_DOMAIN_SERVICES (não cruza fronteiras do Kernel) — aqui registrado quanto a NÃO estar alcançado pelo frontend." },
-  { path: "server/services/workspaceOrchestratorService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "orchestrateMultiCopilot — grounding/copilots do pipeline canônico." },
-  { path: "server/services/documentEngineService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "generateOfficialDocument — porta oficial de geração, sem consumidor via /processos." },
-  { path: "server/services/officialDocumentLifecycleService.ts", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Versionamento append-only (official_documents) — não recebe tráfego do fluxo de Licitação hoje." },
-  { path: "client/src/components/procurement/ProcessoLicitatorioHome.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Nenhuma rota em App.tsx monta este componente." },
-  { path: "client/src/components/procurement/DFDWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Só importa (importDFD) — não gera DFD por IA. Órfão do frontend." },
-  { path: "client/src/components/procurement/ETPWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de ETP\" (procurementProcess.generateETP) — órfão do frontend." },
-  { path: "client/src/components/procurement/TRWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar rascunho de TR\" (procurementProcess.generateTR) — órfão do frontend." },
-  { path: "client/src/components/procurement/EditalWorkspace.tsx", allowlist: "CANONICAL_NOT_YET_WIRED", disposition: "canonico_nao_ligado", note: "Botão \"Gerar edital\" (procurementProcess.generateNotice) — órfão do frontend." },
+  // ─── RC-C0.1A → RECONCILIADO (Architecture — Reconcile Procurement Legacy Boundaries) ──
+  // O canônico do Processo Licitatório JÁ ESTÁ LIGADO (/processos → ProcessoLicitatorio →
+  // procurementProcess.*). MAINTENANCE_ONLY permanece para as responsabilidades legadas
+  // NÃO-cognitivas ainda vivas e para as páginas fora de rota — retirada GOVERNADA futura.
+  { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "NÃO é mais o caminho de geração de DFD/ETP/TR/Edital (isso é procurementProcess.* / Kernel). A geração cognitiva (generateDocument/generateNext → gemini) está órfã (sem caller na navegação oficial). Mantém procedures NÃO-cognitivas VIVAS (version history/approval/upload/download — ver DOCUMENTS_CONSUMERS_BASELINE). Retirada procedure-by-procedure, caller-aware." },
+  { path: "server/routers/processesRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "A criação/geração legada de processo saiu da navegação (Dashboard/NewProcess fora de rota). Mantém CRUD de ITENS VIVO no fluxo canônico (CatmatSuggestions/TRItems/ImportItems/EditItem → trpc.processes.*). NÃO declarar órfão por atacado." },
+  { path: "server/services/gemini.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Geração cognitiva legacy-compat (AI SDK), alcançada só por documentsRouter.generate* — SEM caller na navegação oficial. NÃO é alvo de shadow/cutover (não há tráfego institucional a migrar)." },
+  { path: "client/src/pages/Dashboard.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "FORA do roteamento oficial: /processos monta ProcessoLicitatorio, não Dashboard. Legado sem rota ativa — preservado por compatibilidade, retirada governada." },
+  { path: "client/src/pages/ProcessDetails.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "FORA do roteamento oficial (/processo/:id redireciona a /processos). Único caller de useProcessDocuments (documents.generateDocument) — geração cognitiva sem entrada oficial." },
+  { path: "client/src/pages/NewProcess.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "FORA do roteamento oficial (/novo-processo redireciona a /processos)." },
+  // Pipeline canônico do Processo Licitatório — RECONCILIADO: JÁ LIGADO ao frontend
+  // (/processos → ProcessoLicitatorio → procurementProcess.* → procurementProcessService →
+  // workspaceOrchestratorService/documentEngineService → officialDocumentLifecycleService).
+  // Deixou de ser "canonico_nao_ligado"; procurementProcessService segue em
+  // BUSINESS_DOMAIN_SERVICES (domínio canônico). CANONICAL_NOT_YET_WIRED agora está vazio.
   // ─── RC-C0.1A.1 — Contratos legado: isolamento completo, ainda MAINTENANCE_ONLY ──
   { path: "server/routers/contractsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "23/23 procedures em tenantProcedure (auditoria completa RC-C0.1A.1) — ainda ativo em /contracts/* (compat). Ver LEGACY_INVENTORY.md § Contracts." },
   { path: "server/db/contracts.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Repository org-scoped (RC-C0.1A.1); getContractById (sem filtro) ficou órfã após RC-LEGAL-SEC-001 remover seu último consumidor (legalOpinionsRouter.ts) — mantida por cautela, não removida nesta sprint." },
