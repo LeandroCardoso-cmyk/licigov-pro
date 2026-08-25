@@ -99,14 +99,19 @@ async function idemStatus(org: number, key: string): Promise<string | null> {
   return rows.length ? String((rows[0] as any).status) : null;
 }
 
-/** created_at bruto do official_document (para regressão de DATETIME em modo estrito). */
+/**
+ * Representação SQL (TEXTO) de created_at do official_document — para a regressão de DATETIME em modo
+ * estrito. Usa CAST(... AS CHAR) para provar o formato REALMENTE persistido pelo MySQL
+ * ("AAAA-MM-DD HH:MM:SS[.mmm]"), sem depender do driver: o mysql2 devolveria DATETIME como Date JS e
+ * String(Date) produziria "Tue ... Time)" (com 'T'), um falso negativo alheio ao valor no banco.
+ */
 async function officialCreatedAtRaw(org: number, processId: string, kind: string): Promise<string | null> {
   const { lineageId } = canonicalDocumentIdentity({ organizationId: org, processId, kind: kind as any });
   const [rows] = await conn.execute<mysql.RowDataPacket[]>(
-    "SELECT created_at AS c FROM official_documents WHERE tenant_id = ? AND lineage_id = ? LIMIT 1",
+    "SELECT CAST(created_at AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND lineage_id = ? LIMIT 1",
     [org, lineageId],
   );
-  return rows.length ? String((rows[0] as any).c) : null;
+  return rows.length && (rows[0] as any).c != null ? String((rows[0] as any).c) : null;
 }
 
 async function cleanup() {
