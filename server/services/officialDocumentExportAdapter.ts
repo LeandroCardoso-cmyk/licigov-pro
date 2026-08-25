@@ -50,6 +50,17 @@ function metaString(m: Record<string, unknown> | undefined, keys: string[]): str
   return undefined;
 }
 
+/**
+ * C.4B.1 — POLICY de exportação oficial DERIVADA NO SERVIDOR pelo businessDomain do próprio documento
+ * (nunca controlada pelo cliente). Para o Processo Licitatório, apenas a versão `emitido` (autoridade
+ * institucional) pode sair pelo pipeline oficial — um snapshot `gerado` NUNCA é exportável como oficial,
+ * mesmo com chamada direta ao endpoint. Domínios ausentes deste mapa preservam o comportamento atual
+ * (Contratos/Contratação Direta/Parecer exportam qualquer versão oficial).
+ */
+const OFFICIAL_EXPORT_REQUIRED_STATUS: Record<string, string | undefined> = {
+  processo_licitatorio: "emitido",
+};
+
 export async function exportOfficialDocument(params: {
   organizationId: number;
   userId: number;
@@ -63,6 +74,14 @@ export async function exportOfficialDocument(params: {
   const doc = await getOfficialDocument(params.documentId, params.organizationId);
   if (!doc || !doc.content.trim()) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+  }
+  // Gate SERVER-OWNED por domínio (não confia no cliente): status exigido é derivado do documento.
+  const requiredStatus = OFFICIAL_EXPORT_REQUIRED_STATUS[doc.businessDomain];
+  if (requiredStatus && doc.status !== requiredStatus) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Somente a versão oficial "${requiredStatus}" pode ser exportada como documento oficial (atual: "${doc.status}").`,
+    });
   }
   const org = await getOrganizationById(params.organizationId);
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();

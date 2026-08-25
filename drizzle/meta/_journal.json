@@ -1977,6 +1977,13 @@
       "when": 1784419200009,
       "tag": "0294_activity_logs_governance_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "5",
+      "when": 1784419200010,
+      "tag": "0295_c4b1_official_promotion",
+      "breakpoints": true
     }
   ]
 }

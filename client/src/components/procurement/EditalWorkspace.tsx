@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
+import OfficialPromotionSection from "./OfficialPromotionSection";
 
 /**
  * EditalWorkspace — REAL (wired to tRPC).
@@ -186,6 +187,9 @@ export default function EditalWorkspace({
           </div>
         </div>
       )}
+
+      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
+      <OfficialPromotionSection processId={processId} kind="edital" />
     </div>
   );
 }

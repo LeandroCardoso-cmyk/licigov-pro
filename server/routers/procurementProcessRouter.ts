@@ -19,6 +19,7 @@ import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "..
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
+import { promoteOfficialDocument, getOfficialPromotionSummary } from "../services/documentPromotionService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
@@ -349,6 +350,43 @@ export const procurementProcessRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
       }
       return { document: result.document };
+    }),
+
+  /**
+   * C.4B.1 — Resumo da autoridade oficial de um documento (ETP/TR/Edital): hash do rascunho atual
+   * × última versão OFICIAL emitida. Permite à UI mostrar a versão emitida e sinalizar divergência.
+   */
+  officialSummary: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), kind: z.enum(["etp", "tr", "edital"]) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getOfficialPromotionSummary({ organizationId: orgId, processId: input.processId, kind: input.kind });
+    }),
+
+  /**
+   * C.4B.1 — "Emitir documento oficial": promove o conteúdo ATUAL do rascunho (ETP/TR/Edital) a uma
+   * versão IMUTÁVEL `emitido` em official_documents. Decisão HUMANA governada (papel mínimo, revisor ≠
+   * autor), integridade por hash, replay-safe idempotente e commit atômico. NÃO se aplica ao DFD.
+   */
+  promoteOfficial: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1),
+      kind: z.enum(["etp", "tr", "edital"]),
+      idempotencyKey: z.string().trim().min(1),
+      /** OBRIGATÓRIO — hash do rascunho que o emissor revisou/confirmou (integridade da emissão). */
+      expectedContentHash: z.string().trim().min(1),
+      reason: z.string().trim().min(1).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return promoteOfficialDocument({
+        organizationId: orgId, processId: input.processId, kind: input.kind,
+        actorUserId: ctx.user.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+        expectedContentHash: input.expectedContentHash, reason: input.reason ?? null,
+      });
     }),
 
   issueProcess: tenantProcedure

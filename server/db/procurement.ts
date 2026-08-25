@@ -302,9 +302,9 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
   await db.insert(generatedDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,
     content: d.content, status: d.status, sources: JSON.stringify(d.sources), modality: d.modality,
-    form: d.form, platform: d.platform, legalJustification: d.legalJustification,
+    form: d.form, platform: d.platform, legalJustification: d.legalJustification, authorUserId: d.authorUserId,
     correlationId: d.correlationId, createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: toDb(d.updatedAt) } });
+  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, authorUserId: d.authorUserId, updatedAt: toDb(d.updatedAt) } });
   return d;
 }
 
@@ -319,7 +319,7 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
 /** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
 export async function getGeneratedDocumentByKind(
   processId: string, orgId: number, kind: string,
-): Promise<{ id: string; kind: string; title: string; content: string; status: string; updatedAt: string } | null> {
+): Promise<{ id: string; kind: string; title: string; content: string; status: string; authorUserId: number | null; updatedAt: string } | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(generatedDocumentsTable)
@@ -330,5 +330,5 @@ export async function getGeneratedDocumentByKind(
     )).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status, updatedAt: fromDb(r.updatedAt) };
+  return { id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status, authorUserId: r.authorUserId ?? null, updatedAt: fromDb(r.updatedAt) };
 }

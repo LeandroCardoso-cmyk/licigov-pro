@@ -5260,6 +5260,10 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   form:              varchar("form", { length: 20 }),
   platform:          varchar("platform", { length: 40 }),
   legalJustification: text("legal_justification"),
+  // C.4B.1 — autor do rascunho (quem gerou/originou o conteúdo). Aditivo/nullable: rascunhos
+  // anteriores à migração ficam sem autor conhecido. Base para a segregação de deveres na
+  // promoção (revisor/emissor ≠ autor) e para a auditoria da emissão oficial.
+  authorUserId:      int("author_user_id"),
   correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:         datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
@@ -5814,6 +5818,40 @@ export const officialDocumentTimelineTable = mysqlTable("official_document_timel
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * C.4B.1 — Ledger IMUTÁVEL (append-only) das EMISSÕES OFICIAIS governadas do Processo Licitatório.
+ * Prova institucional da decisão humana de promover um rascunho (`generated_documents`) a versão
+ * oficial `emitido` em `official_documents`. NÃO reutiliza `document_review_decisions` (acoplado à
+ * tabela legada `documents` / IDs int). Chaves canônicas string (processId/officialDocumentId/lineageId).
+ * `authorUserId` = autor do rascunho; `actorUserId` = revisor/emissor (segregação de deveres). Idempotente
+ * por (organizationId, idempotencyKey). Nunca atualizado após inserido.
+ */
+export const officialDocumentPromotionsTable = mysqlTable("official_document_promotions", {
+  id:                 int("id").autoincrement().primaryKey(),
+  organizationId:     int("organization_id").notNull(),
+  processId:          varchar("process_id", { length: 20 }).notNull(),
+  officialDocumentId: varchar("official_document_id", { length: 20 }).notNull(),
+  lineageId:          varchar("lineage_id", { length: 20 }).notNull(),
+  documentKind:       varchar("document_kind", { length: 20 }).notNull(),
+  version:            int("version").notNull(),
+  contentHash:        varchar("content_hash", { length: 64 }).notNull(),
+  actorUserId:        int("actor_user_id").notNull(),
+  authorUserId:       int("author_user_id"),
+  previousStatus:     varchar("previous_status", { length: 20 }).notNull().default(""),
+  nextStatus:         varchar("next_status", { length: 20 }).notNull().default("emitido"),
+  reason:             text("reason"),
+  correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
+  idempotencyKey:     varchar("idempotency_key", { length: 64 }).notNull(),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_official_promotion_idem").on(table.organizationId, table.idempotencyKey),
+  index("idx_official_promotion_lineage").on(table.organizationId, table.lineageId),
+  index("idx_official_promotion_process_kind").on(table.organizationId, table.processId, table.documentKind),
+]);
+
+export type OfficialDocumentPromotionRow = typeof officialDocumentPromotionsTable.$inferSelect;
+export type InsertOfficialDocumentPromotion = typeof officialDocumentPromotionsTable.$inferInsert;
 
 // ─── RC-4.2.1 — Cognitive Observability (persistente) ─────────────────────────
 // Persistência da observabilidade cognitiva: recuperação posterior por correlationId,

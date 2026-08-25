@@ -3,6 +3,7 @@ import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
+import OfficialPromotionSection from "./OfficialPromotionSection";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -105,6 +106,9 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
           </div>
         </div>
       )}
+
+      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
+      <OfficialPromotionSection processId={processId} kind="etp" />
     </div>
   );
 }

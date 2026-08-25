@@ -156,6 +156,13 @@ jobs:
       - name: Smoke — geração canônica replay-safe estrito (C.4A)
         run: pnpm exec vitest run server/__tests__/integration/c4a-replay-safe-generation-mysql-smoke.test.ts
 
+      # C.4B.1 — EMISSÃO OFICIAL governada em MODO ESTRITO: SoD (autor não emite), ator humano,
+      # promoção válida (1 versão emitida + ledger), replay/CONFLICT, concorrência (uma emissão),
+      # imutabilidade após edição do rascunho, nova versão após alteração, isolamento multi-tenant,
+      # gate de export (rejeita 'gerado'), DFD fora do escopo.
+      - name: Smoke — emissão oficial governada estrito (C.4B.1)
+        run: pnpm exec vitest run server/__tests__/integration/c4b1-official-promotion-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

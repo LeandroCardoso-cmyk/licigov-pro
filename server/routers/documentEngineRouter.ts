@@ -110,6 +110,9 @@ export const documentEngineRouter = router({
       inline: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      // C.4B.1 — a policy de status oficial é DERIVADA NO SERVIDOR pelo businessDomain do documento
+      // (ver exportOfficialDocument): o cliente NÃO controla o gate. processo_licitatorio só exporta
+      // 'emitido'; demais domínios inalterados.
       return exportOfficialDocument({
         organizationId: ctx.organizationId!, userId: ctx.user.id,
         documentId: input.documentId, format: input.format,

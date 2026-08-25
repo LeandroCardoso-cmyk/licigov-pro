@@ -4125,6 +4125,25 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     await addColumnIfMissing("official_documents", "size_bytes",   "INT NOT NULL DEFAULT 0");
     await addColumnIfMissing("official_documents", "content_hash", "VARCHAR(64) NOT NULL DEFAULT ''");
 
+    // C.4B.1 — ledger imutável de EMISSÃO OFICIAL governada (promoção rascunho → official emitido).
+    // Convergência defensiva (a criação formal é a migration 0295). Chaves canônicas string.
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`official_document_promotions\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`official_document_id\` VARCHAR(20) NOT NULL,
+      \`lineage_id\` VARCHAR(20) NOT NULL, \`document_kind\` VARCHAR(20) NOT NULL,
+      \`version\` INT NOT NULL, \`content_hash\` VARCHAR(64) NOT NULL,
+      \`actor_user_id\` INT NOT NULL, \`author_user_id\` INT NULL,
+      \`previous_status\` VARCHAR(20) NOT NULL DEFAULT '', \`next_status\` VARCHAR(20) NOT NULL DEFAULT 'emitido',
+      \`reason\` TEXT NULL, \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`idempotency_key\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), UNIQUE KEY \`uq_official_promotion_idem\` (\`organization_id\`, \`idempotency_key\`),
+      INDEX \`idx_official_promotion_lineage\` (\`organization_id\`, \`lineage_id\`),
+      INDEX \`idx_official_promotion_process_kind\` (\`organization_id\`, \`process_id\`, \`document_kind\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    // C.4B.1 — autor do rascunho canônico (base da segregação de deveres na emissão oficial).
+    await addColumnIfMissing("generated_documents", "author_user_id", "INT NULL");
+
     // RC-4.2.1 — Cognitive Observability persistente (recuperável por correlationId).
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`cognitive_observability\` (
       \`id\` VARCHAR(20) NOT NULL, \`tenant_id\` INT NOT NULL,
