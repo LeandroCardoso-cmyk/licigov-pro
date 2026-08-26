@@ -8,13 +8,14 @@ import OfficialPromotionSection from "./OfficialPromotionSection";
 /**
  * ETPWorkspace — REAL (wired to tRPC).
  *
- * UX: o operador informa o objeto e o sistema GERA um rascunho a partir do processo.
- * Toda saída de IA é editável, revisável e validada por humano — daí o banner.
+ * UX: o operador informa o objeto e o sistema GERA um rascunho a partir do processo. O rascunho é
+ * PERSISTIDO em generated_documents (C.4A) e carregado de forma RELOAD-SAFE pela query canônica
+ * `reviewableDraft` (C.4B.2) — o conteúdo reaparece após recarregar a página. A saída de IA é revisável
+ * e validada por humano antes de virar autoridade institucional via emissão governada (C.4B.1).
  *
  * B.2.2 — ações distintas: "Gerar ETP a partir do processo" (existente) e "Importar ETP existente"
- * (ingestão canônica supervisionada, capability-aware). NÃO há geração jurídica autônoma nem
- * promoção ao domínio. Observação: não existe contrato de backend para "criar ETP manualmente"
- * nem persistência de ETP (apenas generateETP) — registrado para B.2.3/B.2.4, sem fabricar aqui.
+ * (ingestão canônica supervisionada, capability-aware). Edição humana do conteúdo do ETP ainda não
+ * existe (evolução C.4B.3); esta fase entrega leitura persistente + revisão pré-emissão, sem editor.
  */
 
 export type ETPWorkspaceProps = {
@@ -24,10 +25,20 @@ export type ETPWorkspaceProps = {
 export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
   const [object, setObject] = useState("");
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
+  const utils = trpc.useUtils();
 
   const { key: etpKey, rotate: rotateEtpKey } = useIdempotencyKey();
-  const generateETP = trpc.procurementProcess.generateETP.useMutation({ onSuccess: () => rotateEtpKey() });
-  const draft = generateETP.data?.document;
+  // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
+    { processId, kind: "etp" }, { enabled: !!processId },
+  );
+  const generateETP = trpc.procurementProcess.generateETP.useMutation({
+    onSuccess: () => {
+      rotateEtpKey();
+      if (processId) utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "etp" });
+    },
+  });
+  const draft = reviewable.data?.draft ?? null;
 
   const handleGenerate = () => {
     if (!processId || !object.trim()) return;
@@ -107,8 +118,8 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
         </div>
       )}
 
-      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
-      <OfficialPromotionSection processId={processId} kind="etp" />
+      {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
+      <OfficialPromotionSection processId={processId} kind="etp" reviewSnapshot={reviewable.data?.draft ?? null} />
     </div>
   );
 }

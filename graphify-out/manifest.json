@@ -1355,13 +1355,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1787684043.2374954,
-    "ast_hash": "dcd61193f73d28461e43016d0ec55f86",
+    "mtime": 1787706087.203435,
+    "ast_hash": "9ab992d130aab36b4004fc36895b794c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1787684064.229495,
-    "ast_hash": "4280c35cffd5a4318fd71813ec628c2c",
+    "mtime": 1787706128.663434,
+    "ast_hash": "8cf736aee8144f943d6dc9f9e266456b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
@@ -1395,8 +1395,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1787684054.1654952,
-    "ast_hash": "ee648c2f664d5fcb90a72d35b54ac49e",
+    "mtime": 1787706103.9354346,
+    "ast_hash": "efcd1a17b4cd4018a6c60ff28e1ce67b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1787687886.933446,
-    "ast_hash": "e01f5898a60b38cbde8946486df37e03",
+    "mtime": 1787705914.447439,
+    "ast_hash": "1c4177f99c1aa8d29947c2cacb08cef9",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787685014.7334824,
-    "ast_hash": "14ae9db41396ab59f5fe4326a84c0f17",
+    "mtime": 1787706483.399426,
+    "ast_hash": "b6f693b4ae502bfbff1d6a84a6fb2a33",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -10930,8 +10930,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1787687903.101447,
-    "ast_hash": "04c2d6a77358a62f2e8714e92f64a9f8",
+    "mtime": 1787706036.8514361,
+    "ast_hash": "85ad42b710ca3083c48718c9f0d82fa3",
     "semantic_hash": ""
   },
   "drizzle/0295_c4b1_official_promotion.sql": {
@@ -10967,6 +10967,21 @@
   "docs/handoffs/C4B1_OFFICIAL_SURFACE_GOVERNED_PROMOTION.md": {
     "mtime": 1787688279.5214694,
     "ast_hash": "b30ba20c9dbd97f71295f444897f9bdf",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts": {
+    "mtime": 1787706415.8554275,
+    "ast_hash": "a3668c7b7aeec72788c7b73bb6d83011",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4b2-reviewable-draft.test.ts": {
+    "mtime": 1787706224.383432,
+    "ast_hash": "78fea6cb7636e8e65718bdc94dbfa324",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C4B2_CANONICAL_DRAFT_REVIEWABLE_READ.md": {
+    "mtime": 1787706532.3034248,
+    "ast_hash": "247c99c268f9e2b9d7cebc38e306e591",
     "semantic_hash": ""
   }
 }

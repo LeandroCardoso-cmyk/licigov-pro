@@ -61,10 +61,20 @@ export default function EditalWorkspace({
   const [modality, setModality] = useState<Modality>("pregao");
   const [form, setForm] = useState<Form>("eletronico");
   const [platform, setPlatform] = useState<Platform>("compras_gov");
+  const utils = trpc.useUtils();
 
   const { key: editalKey, rotate: rotateEditalKey } = useIdempotencyKey();
-  const generateNotice = trpc.procurementProcess.generateNotice.useMutation({ onSuccess: () => rotateEditalKey() });
-  const draft = generateNotice.data?.document;
+  // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
+    { processId, kind: "edital" }, { enabled: !!processId },
+  );
+  const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
+    onSuccess: () => {
+      rotateEditalKey();
+      if (processId) utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
+    },
+  });
+  const draft = reviewable.data?.draft ?? null;
 
   const handleGenerate = () => {
     if (!processId || !object.trim()) return;
@@ -188,8 +198,8 @@ export default function EditalWorkspace({
         </div>
       )}
 
-      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
-      <OfficialPromotionSection processId={processId} kind="edital" />
+      {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
+      <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} />
     </div>
   );
 }

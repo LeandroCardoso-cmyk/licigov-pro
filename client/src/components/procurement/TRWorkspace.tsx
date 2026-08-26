@@ -16,10 +16,20 @@ export type TRWorkspaceProps = {
 
 export default function TRWorkspace({ processId = "" }: TRWorkspaceProps) {
   const [object, setObject] = useState("");
+  const utils = trpc.useUtils();
 
   const { key: trKey, rotate: rotateTrKey } = useIdempotencyKey();
-  const generateTR = trpc.procurementProcess.generateTR.useMutation({ onSuccess: () => rotateTrKey() });
-  const draft = generateTR.data?.document;
+  // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
+    { processId, kind: "tr" }, { enabled: !!processId },
+  );
+  const generateTR = trpc.procurementProcess.generateTR.useMutation({
+    onSuccess: () => {
+      rotateTrKey();
+      if (processId) utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "tr" });
+    },
+  });
+  const draft = reviewable.data?.draft ?? null;
 
   const handleGenerate = () => {
     if (!processId || !object.trim()) return;
@@ -77,8 +87,8 @@ export default function TRWorkspace({ processId = "" }: TRWorkspaceProps) {
         </div>
       )}
 
-      {/* C.4B.1 — autoridade oficial: emissão governada + versões oficiais + export oficial. */}
-      <OfficialPromotionSection processId={processId} kind="tr" />
+      {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
+      <OfficialPromotionSection processId={processId} kind="tr" reviewSnapshot={reviewable.data?.draft ?? null} />
     </div>
   );
 }
