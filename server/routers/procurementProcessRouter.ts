@@ -19,7 +19,7 @@ import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "..
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
-import { promoteOfficialDocument, getOfficialPromotionSummary } from "../services/documentPromotionService";
+import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
@@ -350,6 +350,28 @@ export const procurementProcessRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
       }
       return { document: result.document };
+    }),
+
+  /**
+   * C.4B.2 — Leitura canônica RELOAD-SAFE do rascunho revisável (ETP/TR/Edital): retorna o conteúdo
+   * EXATO persistido em generated_documents + o hash calculado pela MESMA primitive da promoção
+   * (draftContentHash). É o "review snapshot" apresentado ao humano; o hash aqui retornado é o mesmo
+   * enviado como expectedContentHash na emissão — o backend da promoção reconsulta e compara
+   * (fail-closed → CONFLICT se o rascunho mudou). Tenant-scoped (organizationId nunca vem do cliente).
+   */
+  reviewableDraft: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), kind: z.enum(["etp", "tr", "edital"]) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const doc = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
+      if (!doc || !doc.content.trim()) return { draft: null };
+      return {
+        draft: {
+          id: doc.id, kind: doc.kind, title: doc.title, content: doc.content,
+          status: doc.status, contentHash: draftContentHash(doc.content), updatedAt: doc.updatedAt,
+        },
+      };
     }),
 
   /**

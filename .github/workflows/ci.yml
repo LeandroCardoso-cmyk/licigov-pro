@@ -163,6 +163,12 @@ jobs:
       - name: Smoke — emissão oficial governada estrito (C.4B.1)
         run: pnpm exec vitest run server/__tests__/integration/c4b1-official-promotion-mysql-smoke.test.ts
 
+      # C.4B.2 — LEITURA CANÔNICA reload-safe do rascunho revisável (reviewableDraft): conteúdo
+      # persistido lido byte-a-byte + hash = draftContentHash (mesma primitive da emissão), vínculo
+      # conteúdo↔hash = expectedContentHash da promoção, rascunho ausente → null, isolamento multi-tenant.
+      - name: Smoke — leitura canônica do rascunho revisável estrito (C.4B.2)
+        run: pnpm exec vitest run server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts
