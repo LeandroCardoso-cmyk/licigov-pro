@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
+import { confirmationInvalidated, pinReviewSnapshot, type ReviewSnapshotIdentity } from "./reviewSnapshotPin";
 
 /**
  * C.4B.1/C.4B.2 — OfficialPromotionSection (ETP/TR/Edital).
@@ -40,8 +41,12 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
   const utils = trpc.useUtils();
   const enabled = processId.trim().length > 0;
   const { key: emitKey, rotate: rotateEmitKey } = useIdempotencyKey();
-  const [confirming, setConfirming] = useState(false);
+  // Identidade PINADA do snapshot no momento da confirmação (null = não confirmando). O contrato exige
+  // que o hash emitido seja o hash REVISADO/CONFIRMADO — nunca o do estado mutável no clique final.
+  const [confirmPin, setConfirmPin] = useState<ReviewSnapshotIdentity | null>(null);
   const [staleNotice, setStaleNotice] = useState(false);
+  // Rascunho mudou ENQUANTO confirmando → confirmação cancelada; exige nova revisão antes de emitir.
+  const [pinInvalidated, setPinInvalidated] = useState(false);
 
   const summary = trpc.procurementProcess.officialSummary.useQuery({ processId, kind }, { enabled });
 
@@ -54,15 +59,16 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
   const promote = trpc.procurementProcess.promoteOfficial.useMutation({
     onSuccess: () => {
       rotateEmitKey();
-      setConfirming(false);
+      setConfirmPin(null);
       setStaleNotice(false);
+      setPinInvalidated(false);
       if (processId) {
         invalidateReview();
         utils.documentEngine.list.invalidate({ businessDomain: "processo_licitatorio", origin: processId });
       }
     },
     onError: (e) => {
-      setConfirming(false);
+      setConfirmPin(null);
       // Fail-closed: se o rascunho mudou desde a revisão (CONFLICT), NÃO auto-emite — recarrega o
       // conteúdo/hash vigente e exige nova revisão/confirmação.
       if (e.data?.code === "CONFLICT") {
@@ -71,6 +77,16 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
       }
     },
   });
+
+  // PIN: se o rascunho MUDAR enquanto a confirmação está pinada (hash vigente ≠ hash confirmado, ou o
+  // snapshot sumiu), cancela automaticamente a confirmação e exige nova revisão — nunca auto-confirma a
+  // nova versão. O clique final ("Confirmar") também usa o hash PINADO, não o mutável.
+  useEffect(() => {
+    if (confirmPin && confirmationInvalidated(confirmPin, reviewSnapshot ?? null)) {
+      setConfirmPin(null);
+      setPinInvalidated(true);
+    }
+  }, [confirmPin, reviewSnapshot]);
 
   if (!enabled) return null;
 
@@ -82,17 +98,36 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
   // A emissão SÓ é possível com um review snapshot carregado (conteúdo visível + hash) — nunca apenas
   // pelo hash do officialSummary sem o conteúdo correspondente à vista do humano.
   const hasReview = !!reviewSnapshot && reviewSnapshot.content.trim().length > 0 && reviewSnapshot.contentHash.length > 0;
+  const confirming = confirmPin !== null;
   const canEmit = hasReview && !promote.isPending;
 
+  // "Emitir documento oficial": entra em confirmação PINANDO a identidade do snapshot revisado agora.
+  const startConfirm = () => {
+    const pin = pinReviewSnapshot(reviewSnapshot);
+    if (!pin) return;
+    setStaleNotice(false);
+    setPinInvalidated(false);
+    setConfirmPin(pin);
+  };
+
+  const cancelConfirm = () => setConfirmPin(null);
+
   const doEmit = () => {
-    if (!processId || !reviewSnapshot || !hasReview) return;
+    if (!processId || !confirmPin) return;
+    // Se o rascunho mudou entre "Emitir" e "Confirmar", NÃO emite — invalida a confirmação pinada e
+    // exige nova revisão (defesa no clique, além do efeito reativo).
+    if (confirmationInvalidated(confirmPin, reviewSnapshot ?? null)) {
+      setConfirmPin(null);
+      setPinInvalidated(true);
+      return;
+    }
     setStaleNotice(false);
     promote.mutate({
       processId,
       kind,
       idempotencyKey: emitKey,
-      // Vincula a emissão AO HASH DO CONTEÚDO EXIBIDO (review snapshot). O backend reconsulta e compara.
-      expectedContentHash: reviewSnapshot.contentHash,
+      // Vincula a emissão AO HASH PINADO na confirmação (conteúdo revisado) — nunca o estado mutável.
+      expectedContentHash: confirmPin.contentHash,
     });
   };
 
@@ -137,6 +172,11 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
             novamente e confirme para emitir a versão vigente.
           </div>
         )}
+        {pinInvalidated && (
+          <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            O rascunho mudou desde a revisão. Revise novamente antes de emitir.
+          </div>
+        )}
 
         {/* C.4B.2 — REVIEW PRÉ-EMISSÃO: o conteúdo EXATO que será emitido, à vista do aprovador. */}
         {hasReview ? (
@@ -159,7 +199,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
           {!confirming ? (
             <button
               type="button"
-              onClick={() => setConfirming(true)}
+              onClick={startConfirm}
               disabled={!canEmit}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
@@ -178,7 +218,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
               </button>
               <button
                 type="button"
-                onClick={() => setConfirming(false)}
+                onClick={cancelConfirm}
                 disabled={promote.isPending}
                 className="rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
               >

@@ -10930,8 +10930,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1787706036.8514361,
-    "ast_hash": "85ad42b710ca3083c48718c9f0d82fa3",
+    "mtime": 1787756810.391872,
+    "ast_hash": "eba8f50c587b6612c272138cd5659988",
     "semantic_hash": ""
   },
   "drizzle/0295_c4b1_official_promotion.sql": {
@@ -10982,6 +10982,16 @@
   "docs/handoffs/C4B2_CANONICAL_DRAFT_REVIEWABLE_READ.md": {
     "mtime": 1787706532.3034248,
     "ast_hash": "247c99c268f9e2b9d7cebc38e306e591",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/reviewSnapshotPin.test.ts": {
+    "mtime": 1787756839.9158733,
+    "ast_hash": "24031b1f5b04fcc13d4837535d0b4356",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/reviewSnapshotPin.ts": {
+    "mtime": 1787756737.2478688,
+    "ast_hash": "be9c94aa4a9ca9c9e83fd2122f038d59",
     "semantic_hash": ""
   }
 }
