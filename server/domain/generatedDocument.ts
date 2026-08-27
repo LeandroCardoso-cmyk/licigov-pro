@@ -13,6 +13,15 @@ export type DocumentKind = "dfd" | "etp" | "tr" | "edital";
 export type DocumentStatus = "rascunho" | "em_revisao" | "aprovado";
 
 /**
+ * Hash determinístico do CONTEÚDO do rascunho — primitive ÚNICA de integridade compartilhada por toda
+ * a superfície (C.4B.1 emissão, C.4B.2 review/pin, C.4B.3A edição/proveniência). Vive no domínio para
+ * evitar duplicação do algoritmo e ciclos de import entre db/ e services/.
+ */
+export function draftContentHash(content: string): string {
+  return createHash("sha256").update(content ?? "").digest("hex");
+}
+
+/**
  * DFD — Documento de Formalização da Demanda (art. 12, §1º da Lei 14.133/2021).
  *
  * "Criar DFD do zero": produz um RASCUNHO ESTRUTURADO e editável (não é uma
@@ -94,6 +103,9 @@ export interface GeneratedDocument {
   readonly legalJustification: string;
   /** C.4B.1 — autor do rascunho (quem gerou/originou). Base da segregação de deveres na emissão. */
   readonly authorUserId: number | null;
+  /** C.4B.3A — último humano responsável por alteração material do conteúdo atual (edição/regeneração). */
+  readonly lastSubstantiveActorUserId: number | null;
+  readonly lastSubstantiveAt: string | null;
   readonly correlationId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -111,6 +123,8 @@ export function createGeneratedDocument(params: {
   platform?: EditalPlatform | null;
   legalJustification?: string;
   authorUserId?: number | null;
+  lastSubstantiveActorUserId?: number | null;
+  lastSubstantiveAt?: string | null;
   correlationId: string;
   createdAt?: string;
 }): GeneratedDocument {
@@ -132,6 +146,8 @@ export function createGeneratedDocument(params: {
     platform: params.platform ?? null,
     legalJustification: params.legalJustification ?? "",
     authorUserId: params.authorUserId ?? null,
+    lastSubstantiveActorUserId: params.lastSubstantiveActorUserId ?? null,
+    lastSubstantiveAt: params.lastSubstantiveAt ?? null,
     correlationId: params.correlationId,
     createdAt: ts,
     updatedAt: ts,

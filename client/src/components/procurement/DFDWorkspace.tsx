@@ -35,8 +35,10 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
+  const { key: saveKey, rotate: rotateSaveKey } = useIdempotencyKey();
   const [source, setSource] = useState<DFDSource>("pdf");
   const [draft, setDraft] = useState("");
+  const [saveConflict, setSaveConflict] = useState(false);
   const loadedFor = useRef<string | null>(null);
 
   const { data, isLoading } = trpc.procurementProcess.loadDFD.useQuery(
@@ -61,7 +63,19 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
   };
 
   const generateDFD = trpc.procurementProcess.generateDFD.useMutation({ onSuccess: () => { invalidate(); rotateDfdKey(); } });
-  const saveDFD = trpc.procurementProcess.saveDFD.useMutation({ onSuccess: invalidate });
+  const saveDFD = trpc.procurementProcess.saveDFD.useMutation({
+    onSuccess: () => { setSaveConflict(false); rotateSaveKey(); invalidate(); },
+    onError: (e) => {
+      rotateSaveKey();
+      // C.4B.3A — concorrência otimista: se o rascunho mudou desde o carregamento (CONFLICT), NÃO
+      // sobrescreve — recarrega o conteúdo vigente e sinaliza para o usuário revisar de novo.
+      if (e.data?.code === "CONFLICT") {
+        setSaveConflict(true);
+        loadedFor.current = null; // força re-sincronizar o editor com o conteúdo recarregado
+        invalidate();
+      }
+    },
+  });
   const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
 
   const state = doc ? (STATUS_LABELS[doc.status] ?? doc.status) : "Inexistente";
@@ -182,19 +196,24 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
               className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </label>
+          {saveConflict && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+              O rascunho mudou desde o carregamento. O conteúdo foi recarregado — revise novamente antes de salvar.
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => processId && saveDFD.mutate({ processId, content: draft })}
+              onClick={() => processId && doc && saveDFD.mutate({ processId, content: draft, expectedContentHash: doc.contentHash, idempotencyKey: saveKey })}
               disabled={!processId || !draft.trim() || saveDFD.isPending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               {saveDFD.isPending ? "Salvando..." : "Salvar rascunho"}
             </button>
-            {saveDFD.isSuccess && (
+            {saveDFD.isSuccess && !saveConflict && (
               <span className="text-sm text-green-600 dark:text-green-400">Rascunho salvo.</span>
             )}
-            {saveDFD.isError && (
+            {saveDFD.isError && saveDFD.error?.data?.code !== "CONFLICT" && (
               <span className="text-sm text-destructive">
                 {saveDFD.error?.message || "Falha ao salvar o rascunho."}
               </span>

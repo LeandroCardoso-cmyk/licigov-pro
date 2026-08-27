@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
   createProcurementWorkspace,
   advanceStage,
@@ -214,7 +214,8 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       const document = await getGeneratedDocumentByKind(input.processId, orgId, "dfd");
-      return { document };
+      // C.4B.3A — expõe o contentHash para a edição governada (expectedContentHash na gravação).
+      return { document: document ? { ...document, contentHash: draftContentHash(document.content) } : null };
     }),
 
   /**
@@ -233,15 +234,25 @@ export const procurementProcessRouter = router({
       return { document };
     }),
 
-  /** Salva a edição do rascunho de DFD (supervisão humana; mantém status rascunho). */
-  saveDFD: tenantProcedure
-    .input(z.object({ processId: z.string().min(1), content: z.string().min(1) }))
+  /**
+   * C.4B.3A — Salva a edição MANUAL do rascunho de DFD como WRITE GOVERNADO: papel mínimo `operator`,
+   * ator humano e organização SEMPRE do ctx, concorrência otimista (expectedContentHash) e idempotência
+   * obrigatórias. Preserva o originador, registra o último ator substantivo e faz append no ledger.
+   */
+  saveDFD: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      content: z.string().min(1),
+      expectedContentHash: z.string().trim().min(1),
+      idempotencyKey: z.string().trim().min(1),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const document = await saveDFDDraft({
+      const { document } = await saveDFDDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        content: input.content, correlationId: ctx.correlationId,
+        content: input.content, actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
       });
       return { document };
     }),
@@ -370,6 +381,8 @@ export const procurementProcessRouter = router({
         draft: {
           id: doc.id, kind: doc.kind, title: doc.title, content: doc.content,
           status: doc.status, contentHash: draftContentHash(doc.content), updatedAt: doc.updatedAt,
+          // C.4B.3A — proveniência (aditivo, mínimo): originador estável + último ator substantivo.
+          authorUserId: doc.authorUserId, lastSubstantiveActorUserId: doc.lastSubstantiveActorUserId,
         },
       };
     }),

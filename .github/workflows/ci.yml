@@ -169,6 +169,13 @@ jobs:
       - name: Smoke — leitura canônica do rascunho revisável estrito (C.4B.2)
         run: pnpm exec vitest run server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts
 
+      # C.4B.3A — FUNDAÇÃO DE PROVENIÊNCIA do rascunho + SoD estendida em MODO ESTRITO: originador estável
+      # (author preservado em regeneração/edição), último ator substantivo, ledger append-only com
+      # previous_content, concorrência otimista sob lock (CONFLICT), idempotência do save, SoD de 3 atores
+      # (originador e último editor não emitem), author NULL histórico permanece NULL, isolamento tenant.
+      - name: Smoke — proveniência do rascunho + SoD estendida estrito (C.4B.3A)
+        run: pnpm exec vitest run server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

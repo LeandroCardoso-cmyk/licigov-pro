@@ -18,6 +18,7 @@ import {
   buildDFDDraft,
   createGeneratedDocument,
   defaultPresencialJustification,
+  draftContentHash,
   validateEdital,
   type GeneratedDocument,
   type DocumentKind,
@@ -27,7 +28,10 @@ import {
 } from "../domain/generatedDocument";
 import { computeLineageId } from "../domain/officialDocument";
 import { getDb } from "../db/connection";
-import { insertGeneratedDocument, recordProcessEvent, listIntelligentItems, type ProcurementExecutor } from "../db/procurement";
+import {
+  recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
+  getGeneratedDocumentByKind, type ProcurementExecutor,
+} from "../db/procurement";
 
 const DOMAIN = "processo_licitatorio" as const;
 
@@ -173,12 +177,19 @@ export async function generateDFDDraft(params: {
         content: buildDFDDraft(params.object),
         sources: ["estrutura:art_12_par_1_lei_14133"],
         authorUserId: params.actorUserId,
+        lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
       return {
         response: doc,
         persist: async (tx) => {
-          await insertGeneratedDocument(doc, tx);
+          // Criação canônica com proveniência (author = originador; último ator substantivo = criador).
+          await applyDraftContentMutationTx(tx, {
+            organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+            actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
+            expectedContentHash: null, idempotencyKey: params.idempotencyKey,
+            correlationId: params.correlationId, allowCreate: true,
+          });
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "change",
             actor: "sistema", summary: "DFD criado (rascunho estruturado).", refId: doc.id,
@@ -191,24 +202,66 @@ export async function generateDFDDraft(params: {
   return { document: result, replayed };
 }
 
-/** Salva a edição do rascunho de DFD (mantém status rascunho; atualiza conteúdo). */
+// C.4B.3A — operação de EDIÇÃO MANUAL governada do DFD (write com proveniência).
+const DFD_SAVE_OP = "procurement.dfd.save";
+
+/**
+ * C.4B.3A — Salva a edição MANUAL do rascunho de DFD como WRITE GOVERNADO (prova da fundação de
+ * proveniência): ator humano do ctx, concorrência otimista (expectedContentHash revalidado sob lock),
+ * PRESERVAÇÃO do originador (`author_user_id`), registro do último ator substantivo, ledger append-only
+ * (`operation = dfd_manual_edit`) e timeline com o USUÁRIO real — tudo em UMA transação. Idempotente
+ * (mesma chave+payload → replay sem novo ledger). DFD permanece fora do lifecycle de emissão.
+ */
 export async function saveDFDDraft(params: {
-  organizationId: number; processId: string; object: string; content: string; correlationId: string;
-}): Promise<GeneratedDocument> {
+  organizationId: number; processId: string; object: string; content: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  const payloadHash = createHash("sha256").update(JSON.stringify({
+    op: DFD_SAVE_OP, o: params.organizationId, p: params.processId, k: "dfd",
+    exp: params.expectedContentHash, h: draftContentHash(params.content),
+  })).digest("hex");
+
   const doc = createGeneratedDocument({
     processId: params.processId, organizationId: params.organizationId,
     kind: "dfd", title: `DFD — ${params.object}`,
-    content: params.content,
-    sources: ["edicao_manual"],
+    content: params.content, sources: ["edicao_manual"],
     correlationId: params.correlationId,
   });
-  await insertGeneratedDocument(doc); // onDuplicateKeyUpdate → atualiza conteúdo do mesmo documento
-  await recordProcessEvent({
-    organizationId: params.organizationId, processId: params.processId, eventType: "change",
-    actor: String(params.organizationId), summary: "DFD salvo (rascunho).", refId: doc.id,
-    correlationId: params.correlationId,
-  });
-  return doc;
+
+  const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, DFD_SAVE_OP, payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key reutilizada com conteúdo diferente — edição recusada." });
+    }
+    const cached = (typeof check.response === "string" ? JSON.parse(check.response) : check.response) as GeneratedDocument;
+    return { document: cached, replayed: true };
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: "Uma edição idêntica já está em processamento para esta chave — aguarde a conclusão." });
+  }
+
+  try {
+    const db = await getDb();
+    if (!db) return { document: doc, replayed: false }; // sem DB: degrada sem persistir (nem idempotência)
+    await db.transaction(async (tx) => {
+      await applyDraftContentMutationTx(tx, {
+        organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+        actorUserId: params.actorUserId, doc, operation: "dfd_manual_edit",
+        expectedContentHash: params.expectedContentHash, idempotencyKey: params.idempotencyKey,
+        correlationId: params.correlationId, allowCreate: false,
+      });
+      await recordProcessEvent({
+        organizationId: params.organizationId, processId: params.processId, eventType: "change",
+        actor: String(params.actorUserId), summary: "DFD salvo (rascunho).", refId: doc.id,
+        correlationId: params.correlationId,
+      }, tx);
+      await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, doc, tx);
+    });
+    return { document: doc, replayed: false };
+  } catch (err) {
+    await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId);
+    throw err;
+  }
 }
 
 /**
@@ -244,6 +297,12 @@ export async function generateDocument(params: {
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
     (raw) => raw as GeneratedDocument,
     async () => {
+      // C.4B.3A — captura o estado de PARTIDA ANTES da cognição (regeneração). Se o rascunho mudar
+      // enquanto a IA executa, a revalidação sob lock na persistência recusa (CONFLICT) e NÃO
+      // sobrescreve a alteração concorrente. 1ª geração: não há rascunho → startingHash null.
+      const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
+      const startingHash = before ? draftContentHash(before.content) : null;
+
       const request = params.kind === "tr"
         ? `Elaborar Termo de Referência para "${params.object}" com base em ${approved.length} item(ns) inteligente(s) aprovado(s), CATMAT, especificações e histórico.`
         : `Elaborar Estudo Técnico Preliminar (ETP) para "${params.object}" com fundamentação da necessidade, alternativas e riscos.`;
@@ -278,13 +337,21 @@ export async function generateDocument(params: {
         content,
         sources: [`itens_aprovados:${approved.length}`, `copilotos:${orchestration.selectedCopilots.join(",")}`],
         authorUserId: params.actorUserId,
+        lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
 
       return {
         response: doc,
         persist: async (tx) => {
-          await insertGeneratedDocument(doc, tx);
+          // C.4B.3A — mutação governada: cria (author = originador) ou regenera (preserva originador,
+          // último ator substantivo = solicitante, ledger ai_regenerate) com revalidação sob lock.
+          await applyDraftContentMutationTx(tx, {
+            organizationId: params.organizationId, processId: params.processId, kind: params.kind,
+            actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
+            expectedContentHash: startingHash, idempotencyKey: params.idempotencyKey,
+            correlationId: params.correlationId, allowCreate: true,
+          });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
           await generateOfficialDocument({
             organizationId: params.organizationId, businessDomain: DOMAIN, documentType: params.kind,
@@ -337,6 +404,7 @@ export async function generateNotice(params: {
     platform: params.form === "eletronico" ? (params.platform ?? null) : null,
     legalJustification,
     authorUserId: params.actorUserId,
+    lastSubstantiveActorUserId: params.actorUserId,
     correlationId: params.correlationId,
   });
   const validation = validateEdital(doc);
@@ -344,6 +412,10 @@ export async function generateNotice(params: {
   if (!validation.valid) {
     return { document: doc, validation, replayed: false };
   }
+
+  // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
+  const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  const startingHashEdital = beforeEdital ? draftContentHash(beforeEdital.content) : null;
 
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: "edital",
@@ -356,7 +428,12 @@ export async function generateNotice(params: {
     async () => ({
       response: { document: doc, validation },
       persist: async (tx) => {
-        await insertGeneratedDocument(doc, tx);
+        await applyDraftContentMutationTx(tx, {
+          organizationId: params.organizationId, processId: params.processId, kind: "edital",
+          actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
+          expectedContentHash: startingHashEdital, idempotencyKey: params.idempotencyKey,
+          correlationId: params.correlationId, allowCreate: true,
+        });
         // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
         await generateOfficialDocument({
           organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "edital",

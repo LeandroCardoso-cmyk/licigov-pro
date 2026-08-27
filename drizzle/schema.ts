@@ -5264,10 +5264,47 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   // anteriores à migração ficam sem autor conhecido. Base para a segregação de deveres na
   // promoção (revisor/emissor ≠ autor) e para a auditoria da emissão oficial.
   authorUserId:      int("author_user_id"),
+  // C.4B.3A — último HUMANO responsável por uma alteração MATERIAL do conteúdo atual (edição manual ou
+  // regeneração por IA solicitada por humano). Base, junto do originador (`authorUserId`), da segregação
+  // de deveres na emissão (emissor ≠ originador E emissor ≠ último ator substantivo). Nullable.
+  lastSubstantiveActorUserId: int("last_substantive_actor_user_id"),
+  lastSubstantiveAt:          datetime("last_substantive_at", { mode: "string", fsp: 3 }),
   correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:         datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * C.4B.3A — Ledger IMUTÁVEL (append-only) das ALTERAÇÕES MATERIAIS do rascunho canônico
+ * (`generated_documents`): edição manual humana, regeneração por IA solicitada por humano e edição
+ * manual de DFD. Prova de proveniência: quem alterou, de qual conteúdo para qual conteúdo. Guarda o
+ * CONTEÚDO ANTERIOR (`previous_content`) — o hash sozinho não permite reconstrução/diff forense; o
+ * novo conteúdo é a working copy vigente e será o `previous_content` da próxima alteração. NÃO acopla à
+ * tabela legada `documents` (IDs int) — chaves canônicas string. Idempotente por (organization_id,
+ * idempotency_key). NUNCA atualizado após inserido. NÃO persiste chain-of-thought.
+ */
+export const generatedDocumentEditsTable = mysqlTable("generated_document_edits", {
+  id:                  int("id").autoincrement().primaryKey(),
+  organizationId:      int("organization_id").notNull(),
+  processId:           varchar("process_id", { length: 20 }).notNull(),
+  generatedDocumentId: varchar("generated_document_id", { length: 20 }).notNull(),
+  kind:                varchar("kind", { length: 20 }).notNull(),
+  actorUserId:         int("actor_user_id").notNull(),
+  previousContentHash: varchar("previous_content_hash", { length: 64 }).notNull().default(""),
+  newContentHash:      varchar("new_content_hash", { length: 64 }).notNull(),
+  previousContent:     longtext("previous_content"),
+  operation:           varchar("operation", { length: 30 }).notNull(),
+  reason:              text("reason"),
+  correlationId:       varchar("correlation_id", { length: 64 }).notNull().default(""),
+  idempotencyKey:      varchar("idempotency_key", { length: 64 }).notNull(),
+  createdAt:           datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_generated_document_edits_idem").on(table.organizationId, table.idempotencyKey),
+  index("idx_generated_document_edits_scope").on(table.organizationId, table.processId, table.kind, table.createdAt),
+]);
+
+export type GeneratedDocumentEditRow = typeof generatedDocumentEditsTable.$inferSelect;
+export type InsertGeneratedDocumentEdit = typeof generatedDocumentEditsTable.$inferInsert;
 
 // ─── Kernel — Institutional Request Engine ───────────────────────────────────
 

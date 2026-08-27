@@ -8,6 +8,7 @@
 
 import { and, asc, desc, eq } from "drizzle-orm";
 import { createHash } from "crypto";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 import {
@@ -21,7 +22,9 @@ import {
   itemHistoryTable,
   processTimelineTable,
   generatedDocumentsTable,
+  generatedDocumentEditsTable,
 } from "../../drizzle/schema";
+import { draftContentHash } from "../domain/generatedDocument";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
 import type { PriceResearchWorkspace, PriceResearchItem } from "../domain/priceResearch";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
@@ -299,13 +302,116 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
 export async function insertGeneratedDocument(d: GeneratedDocument, executor?: ProcurementExecutor): Promise<GeneratedDocument | null> {
   const db = executor ?? await getDb();
   if (!db) return null;
+  // C.4B.3A — `author_user_id` é o ORIGINADOR ESTÁVEL: gravado só no INSERT (criação), NUNCA
+  // sobrescrito no update. O update preserva a autoria original e apenas atualiza conteúdo/status
+  // (a proveniência da alteração material — último ator + ledger — é responsabilidade de
+  // applyDraftContentMutationTx, não deste upsert de baixo nível).
   await db.insert(generatedDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,
     content: d.content, status: d.status, sources: JSON.stringify(d.sources), modality: d.modality,
     form: d.form, platform: d.platform, legalJustification: d.legalJustification, authorUserId: d.authorUserId,
+    lastSubstantiveActorUserId: d.lastSubstantiveActorUserId, lastSubstantiveAt: d.lastSubstantiveAt ? toDb(d.lastSubstantiveAt) : null,
     correlationId: d.correlationId, createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, authorUserId: d.authorUserId, updatedAt: toDb(d.updatedAt) } });
+  }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: toDb(d.updatedAt) } });
   return d;
+}
+
+export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_manual_edit";
+
+export interface DraftMutationInput {
+  organizationId: number;
+  processId: string;
+  kind: string;
+  actorUserId: number;
+  /** Conteúdo/estado alvo. Em criação, é o documento completo (author = actor). Em atualização, o
+   *  conteúdo é aplicado e o originador é PRESERVADO (o author do `doc` é ignorado). */
+  doc: GeneratedDocument;
+  operation: DraftEditOperation;
+  /** Concorrência otimista: hash do conteúdo que o ator partiu. Quando informado e não-vazio, é
+   *  revalidado SOB LOCK; divergência → CONFLICT (não sobrescreve alteração concorrente). */
+  expectedContentHash?: string | null;
+  idempotencyKey: string;
+  correlationId: string;
+  reason?: string | null;
+  /** Gerações criam o rascunho se ausente; edições humanas (save) exigem que ele já exista. */
+  allowCreate: boolean;
+}
+
+export interface DraftMutationResult { created: boolean; changed: boolean; }
+
+/**
+ * C.4B.3A — Mutação governada do conteúdo do rascunho DENTRO de uma transação:
+ *   1. SELECT ... FOR UPDATE (lock de linha) tenant-scoped por (org, process, kind);
+ *   2. revalida expectedContentHash SOB LOCK (stale → CONFLICT — protege edição concorrente);
+ *   3. no-op determinístico quando o hash não muda (sem ledger, sem alterar último ator);
+ *   4. quando muda: atualiza conteúdo, PRESERVA `author_user_id`, define último ator substantivo,
+ *      e faz APPEND no ledger imutável `generated_document_edits` (com previous_content + hashes);
+ *   5. criação (allowCreate) quando o rascunho ainda não existe (author = actor, sem ledger).
+ * Nenhum partial commit: chamada dentro da transação do caller.
+ */
+export async function applyDraftContentMutationTx(
+  tx: ProcurementExecutor,
+  input: DraftMutationInput,
+): Promise<DraftMutationResult> {
+  const { organizationId, processId, kind, actorUserId, doc, expectedContentHash } = input;
+  const rows = await tx.select().from(generatedDocumentsTable)
+    .where(and(
+      eq(generatedDocumentsTable.processId, processId),
+      eq(generatedDocumentsTable.organizationId, organizationId),
+      eq(generatedDocumentsTable.kind, kind),
+    )).for("update").limit(1);
+
+  const now = new Date().toISOString();
+  const newHash = draftContentHash(doc.content);
+
+  if (rows.length === 0) {
+    if (!input.allowCreate) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente — nada a alterar." });
+    }
+    if (expectedContentHash && expectedContentHash.trim()) {
+      // O ator partiu de um conteúdo que não existe mais/nunca existiu neste tenant → estado divergente.
+      throw new TRPCError({ code: "CONFLICT", message: "O rascunho não corresponde ao estado esperado — recarregue antes de continuar." });
+    }
+    await insertGeneratedDocument({
+      ...doc, authorUserId: actorUserId, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
+      createdAt: doc.createdAt || now, updatedAt: now,
+    }, tx);
+    return { created: true, changed: true };
+  }
+
+  const existing = rows[0];
+  const currentContent = existing.content ?? "";
+  const currentHash = draftContentHash(currentContent);
+
+  // Concorrência otimista revalidada SOB LOCK (não substituível pela verificação fora da transação).
+  if (expectedContentHash != null && expectedContentHash.trim() !== "" && expectedContentHash !== currentHash) {
+    throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de salvar." });
+  }
+
+  // No-op determinístico: mesmo conteúdo em bytes → não muda último ator nem cria ledger.
+  if (newHash === currentHash) {
+    return { created: false, changed: false };
+  }
+
+  // Alteração MATERIAL: atualiza conteúdo, PRESERVA o originador, marca último ator substantivo.
+  await tx.update(generatedDocumentsTable).set({
+    title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
+    modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
+    lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now),
+  }).where(and(
+    eq(generatedDocumentsTable.id, existing.id),
+    eq(generatedDocumentsTable.organizationId, organizationId),
+  ));
+
+  await tx.insert(generatedDocumentEditsTable).values({
+    organizationId, processId, generatedDocumentId: existing.id, kind,
+    actorUserId, previousContentHash: currentHash, newContentHash: newHash,
+    previousContent: currentContent, operation: input.operation,
+    reason: input.reason ?? null, correlationId: input.correlationId,
+    idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
+  });
+
+  return { created: false, changed: true };
 }
 
 export async function listGeneratedDocuments(processId: string, orgId: number): Promise<Array<{ id: string; kind: string; title: string; status: string }>> {
@@ -319,7 +425,7 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
 /** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
 export async function getGeneratedDocumentByKind(
   processId: string, orgId: number, kind: string,
-): Promise<{ id: string; kind: string; title: string; content: string; status: string; authorUserId: number | null; updatedAt: string } | null> {
+): Promise<{ id: string; kind: string; title: string; content: string; status: string; authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string } | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(generatedDocumentsTable)
@@ -330,5 +436,9 @@ export async function getGeneratedDocumentByKind(
     )).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status, authorUserId: r.authorUserId ?? null, updatedAt: fromDb(r.updatedAt) };
+  return {
+    id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status,
+    authorUserId: r.authorUserId ?? null, lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
+    updatedAt: fromDb(r.updatedAt),
+  };
 }
