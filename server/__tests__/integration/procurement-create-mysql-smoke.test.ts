@@ -18,6 +18,7 @@ import {
   getGeneratedDocumentByKind, listGeneratedDocuments,
 } from "../../db/procurement";
 import { generateDFDDraft, saveDFDDraft } from "../../services/procurementProcessService";
+import { draftContentHash } from "../../domain/generatedDocument";
 
 const DB = process.env.DATABASE_URL;
 
@@ -158,10 +159,13 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     const docs = await listGeneratedDocuments(process.id, ORG_A);
     expect(docs.some(d => d.kind === "dfd")).toBe(true);
 
-    // Salvar edição → atualiza o MESMO documento (sem duplicar).
+    // Salvar edição → atualiza o MESMO documento (sem duplicar). C.4B.3A: write governado
+    // (actorUserId + expectedContentHash + idempotencyKey obrigatórios).
     await saveDFDDraft({
       organizationId: ORG_A, processId: process.id, object: process.object,
-      content: "# DFD revisado\nConteúdo editado pelo servidor.", correlationId: "smoke-dfd",
+      content: "# DFD revisado\nConteúdo editado pelo servidor.", actorUserId: 2,
+      expectedContentHash: draftContentHash(loaded!.content), idempotencyKey: "smoke-dfd-save-400-2026",
+      correlationId: "smoke-dfd",
     });
     const afterSave = await listGeneratedDocuments(process.id, ORG_A).then(ds => ds.filter(d => d.kind === "dfd"));
     expect(afterSave.length).toBe(1); // retry/edição não duplica
