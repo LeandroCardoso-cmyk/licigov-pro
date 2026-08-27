@@ -4,6 +4,7 @@ import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabili
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import DraftEditor from "./DraftEditor";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -106,14 +107,13 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
       {draft && (
         <div className="mt-6">
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Este é um rascunho gerado por
-            IA. Revise e valide antes de utilizar.
+            <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
+            emissão oficial exige revisão de um terceiro (segregação de deveres).
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
-            <pre className="whitespace-pre-wrap font-sans text-sm text-foreground">
-              {draft.content}
-            </pre>
+            {/* C.4B.3B — edição humana governada do rascunho persistido. */}
+            <DraftEditor processId={processId} kind="etp" content={draft.content} contentHash={draft.contentHash} />
           </div>
         </div>
       )}

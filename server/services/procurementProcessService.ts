@@ -30,7 +30,7 @@ import { computeLineageId } from "../domain/officialDocument";
 import { getDb } from "../db/connection";
 import {
   recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
-  getGeneratedDocumentByKind, type ProcurementExecutor,
+  getGeneratedDocumentByKind, type ProcurementExecutor, type DraftEditOperation,
 } from "../db/procurement";
 
 const DOMAIN = "processo_licitatorio" as const;
@@ -215,33 +215,37 @@ export async function generateDFDDraft(params: {
   return { document: result, replayed };
 }
 
-// C.4B.3A — operação de EDIÇÃO MANUAL governada do DFD (write com proveniência).
-const DFD_SAVE_OP = "procurement.dfd.save";
+// C.4B.3A/C.4B.3B — operações de EDIÇÃO governada (idempotency op por tipo de write).
+const DFD_SAVE_OP = "procurement.dfd.save";       // edição manual do DFD (C.4B.3A)
+const DRAFT_EDIT_OP = "procurement.draft.edit";   // edição humana de ETP/TR/Edital (C.4B.3B)
 
 /**
- * C.4B.3A — Salva a edição MANUAL do rascunho de DFD como WRITE GOVERNADO (prova da fundação de
- * proveniência): ator humano do ctx, concorrência otimista (expectedContentHash revalidado sob lock),
- * PRESERVAÇÃO do originador (`author_user_id`), registro do último ator substantivo, ledger append-only
- * (`operation = dfd_manual_edit`) e timeline com o USUÁRIO real — tudo em UMA transação. Idempotente
- * (mesma chave+payload → replay sem novo ledger). DFD permanece fora do lifecycle de emissão.
+ * C.4B.3A/C.4B.3B — Runner ÚNICO de WRITE GOVERNADO de conteúdo do rascunho (DFD save + human edit de
+ * ETP/TR/Edital compartilham o MESMO contrato institucional, sem duplicação):
+ *   - ator humano/organização SEMPRE do ctx (nunca do cliente); concorrência otimista
+ *     (expectedContentHash revalidado SOB LOCK via applyDraftContentMutationTx);
+ *   - PRESERVA o originador (author_user_id) e a correlação de ORIGEM; último ator substantivo e ledger
+ *     append-only só em mudança MATERIAL (no-op = sem ledger/last actor);
+ *   - FAIL-CLOSED sem DB (nunca sucesso simulado); idempotência (replay/CONFLICT) reusando o serviço;
+ *   - retorna o SNAPSHOT CANÔNICO persistido (resposta = cache da idempotência = estado de generated_documents).
  */
-export async function saveDFDDraft(params: {
-  organizationId: number; processId: string; object: string; content: string;
+async function runGovernedDraftEdit(p: {
+  op: string; operation: DraftEditOperation; timelineSummary: string;
+  organizationId: number; processId: string; kind: DocumentKind;
+  title: string; sources: string[]; content: string;
   actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   const payloadHash = createHash("sha256").update(JSON.stringify({
-    op: DFD_SAVE_OP, o: params.organizationId, p: params.processId, k: "dfd",
-    exp: params.expectedContentHash, h: draftContentHash(params.content),
+    op: p.op, o: p.organizationId, pr: p.processId, k: p.kind,
+    exp: p.expectedContentHash, h: draftContentHash(p.content),
   })).digest("hex");
 
   const doc = createGeneratedDocument({
-    processId: params.processId, organizationId: params.organizationId,
-    kind: "dfd", title: `DFD — ${params.object}`,
-    content: params.content, sources: ["edicao_manual"],
-    correlationId: params.correlationId,
+    processId: p.processId, organizationId: p.organizationId, kind: p.kind,
+    title: p.title, content: p.content, sources: p.sources, correlationId: p.correlationId,
   });
 
-  const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, DFD_SAVE_OP, payloadHash);
+  const check = await checkIdempotency(p.idempotencyKey, p.actorUserId, p.organizationId, p.op, payloadHash);
   if (check.status === "completed") {
     if (check.payloadMismatch) {
       throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key reutilizada com conteúdo diferente — edição recusada." });
@@ -252,38 +256,78 @@ export async function saveDFDDraft(params: {
     throw new TRPCError({ code: "CONFLICT", message: "Uma edição idêntica já está em processamento para esta chave — aguarde a conclusão." });
   }
 
-  // C.4B.3A (Blocker 1) — write GOVERNADO é fail-closed: sem persistência não há save/ledger/provenance
-  // /idempotência; NUNCA retornar sucesso simulado. Recusa explícita.
+  // Fail-closed: sem persistência não há save/ledger/proveniência/idempotência — NUNCA sucesso simulado.
   const db = await getDb();
   if (!db) {
-    await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId).catch(() => {});
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — edição do DFD recusada (nada salvo)." });
+    await failIdempotencyKey(p.idempotencyKey, p.actorUserId, p.organizationId).catch(() => {});
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — edição recusada (nada salvo)." });
   }
 
   try {
-    // Edição humana exige rascunho EXISTENTE cujo hash corresponda ao carregado (estado de partida).
-    const expectedState = { type: "present" as const, contentHash: params.expectedContentHash };
-    let persisted: GeneratedDocument = doc;
+    // Edição exige rascunho EXISTENTE cujo hash corresponda ao carregado (estado de partida sob lock).
+    const expectedState = { type: "present" as const, contentHash: p.expectedContentHash };
+    let persisted!: GeneratedDocument;
     await db.transaction(async (tx) => {
       const { document } = await applyDraftContentMutationTx(tx, {
-        organizationId: params.organizationId, processId: params.processId, kind: "dfd",
-        actorUserId: params.actorUserId, doc, operation: "dfd_manual_edit",
-        expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+        organizationId: p.organizationId, processId: p.processId, kind: p.kind,
+        actorUserId: p.actorUserId, doc, operation: p.operation,
+        expectedState, idempotencyKey: p.idempotencyKey, correlationId: p.correlationId,
       });
       persisted = document;
       await recordProcessEvent({
-        organizationId: params.organizationId, processId: params.processId, eventType: "change",
-        actor: String(params.actorUserId), summary: "DFD salvo (rascunho).", refId: doc.id,
-        correlationId: params.correlationId,
+        organizationId: p.organizationId, processId: p.processId, eventType: "change",
+        actor: String(p.actorUserId), summary: p.timelineSummary, refId: doc.id, correlationId: p.correlationId,
       }, tx);
       // Cacheia o SNAPSHOT CANÔNICO (originador preservado) — resposta = cache = estado persistido.
-      await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, persisted, tx);
+      await saveIdempotencyResult(p.idempotencyKey, p.actorUserId, p.organizationId, persisted, tx);
     });
     return { document: persisted, replayed: false };
   } catch (err) {
-    await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId);
+    await failIdempotencyKey(p.idempotencyKey, p.actorUserId, p.organizationId);
     throw err;
   }
+}
+
+/**
+ * C.4B.3A — Edição MANUAL governada do rascunho de DFD (operation = dfd_manual_edit). DFD permanece
+ * fora do lifecycle de emissão. Fino wrapper sobre o runner governado comum.
+ */
+export async function saveDFDDraft(params: {
+  organizationId: number; processId: string; object: string; content: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  return runGovernedDraftEdit({
+    op: DFD_SAVE_OP, operation: "dfd_manual_edit", timelineSummary: "DFD salvo (rascunho).",
+    organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+    title: `DFD — ${params.object}`, sources: ["edicao_manual"], content: params.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+  });
+}
+
+/**
+ * C.4B.3B — Edição HUMANA governada do rascunho canônico de ETP/TR/Edital (operation = human_edit).
+ * MESMO contrato institucional do saveDFD (via runner comum): concorrência otimista sob lock, originador
+ * preservado, último ator substantivo, ledger com previousContent, idempotência, fail-closed, snapshot
+ * canônico. NÃO emite/aprova — apenas atualiza o working draft; a emissão governada (C.4B.1) segue
+ * intacta e a SoD (C.4B.3A) usa o lastSubstantiveActor atualizado. Rascunho ausente → NOT_FOUND.
+ */
+export async function saveReviewableDraft(params: {
+  organizationId: number; processId: string; kind: "etp" | "tr" | "edital"; content: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  // Carrega o draft canônico (existência + título PRESERVADO). Nunca cria por esta via.
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
+  if (!existing) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente — gere o documento antes de editar." });
+  }
+  return runGovernedDraftEdit({
+    op: DRAFT_EDIT_OP, operation: "human_edit", timelineSummary: `${params.kind.toUpperCase()} editado (rascunho).`,
+    organizationId: params.organizationId, processId: params.processId, kind: params.kind,
+    title: existing.title, sources: ["edicao_humana"], content: params.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+  });
 }
 
 /**

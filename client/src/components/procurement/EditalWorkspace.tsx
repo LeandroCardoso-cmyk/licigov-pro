@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import DraftEditor from "./DraftEditor";
 
 /**
  * EditalWorkspace — REAL (wired to tRPC).
@@ -186,14 +187,13 @@ export default function EditalWorkspace({
       {draft && (
         <div className="mt-6">
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Edital gerado pelo sistema.
-            Revise antes de publicar.
+            <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
+            emissão oficial exige revisão de um terceiro (SoD).
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
-            <pre className="whitespace-pre-wrap font-sans text-sm text-foreground">
-              {draft.content}
-            </pre>
+            {/* C.4B.3B — edição humana governada do rascunho persistido. */}
+            <DraftEditor processId={processId} kind="edital" content={draft.content} contentHash={draft.contentHash} />
           </div>
         </div>
       )}
