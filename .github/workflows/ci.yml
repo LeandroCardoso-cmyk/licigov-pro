@@ -176,6 +176,13 @@ jobs:
       - name: Smoke — proveniência do rascunho + SoD estendida estrito (C.4B.3A)
         run: pnpm exec vitest run server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts
 
+      # C.4B.3B — EDIÇÃO HUMANA GOVERNADA de ETP/TR/Edital em MODO ESTRITO: originador preservado, editor
+      # = último ator substantivo, ledger human_edit (previous_content + hashes + correlações), no-op,
+      # concorrência otimista (CONFLICT), idempotência (replay/CONFLICT), SoD de 3 atores, author NULL
+      # permanece NULL, isolamento multi-tenant.
+      - name: Smoke — edição humana governada estrito (C.4B.3B)
+        run: pnpm exec vitest run server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

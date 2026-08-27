@@ -1355,13 +1355,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1787706087.203435,
-    "ast_hash": "9ab992d130aab36b4004fc36895b794c",
+    "mtime": 1787854549.2411323,
+    "ast_hash": "26f733d8eaf4256b0f6959a249279098",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1787706128.663434,
-    "ast_hash": "8cf736aee8144f943d6dc9f9e266456b",
+    "mtime": 1787854575.6651316,
+    "ast_hash": "61809b50a2e2eb3817c916db804f2b2a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
@@ -1395,8 +1395,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1787706103.9354346,
-    "ast_hash": "efcd1a17b4cd4018a6c60ff28e1ce67b",
+    "mtime": 1787854563.485132,
+    "ast_hash": "6ac69d2f6ead5bb635bee3ec0035272a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1787838655.6580524,
-    "ast_hash": "e93f629c8a75eef25170589a097432fb",
+    "mtime": 1787857610.1759288,
+    "ast_hash": "ed5327ef5b76371a255380057656e440",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1787832367.148509,
-    "ast_hash": "0a07b6fbfa4751d3e210684942c6a46a",
+    "mtime": 1787854413.0171354,
+    "ast_hash": "255854836451d91df5ab552656f0faf0",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1787838664.0340528,
-    "ast_hash": "d152f0ac0b59fe8ee27b3e823694e8d0",
+    "mtime": 1787857622.0519297,
+    "ast_hash": "8c12cb8323ef494debc41dab0bb112b2",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787832700.0245016,
-    "ast_hash": "6f2773330cb309b1167057925f09552d",
+    "mtime": 1787854805.5571263,
+    "ast_hash": "5a332eaa1090de3e8148832c8c69aecc",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -11027,6 +11027,26 @@
   "server/__tests__/integration/c4b3a-savedfd-failclosed.test.ts": {
     "mtime": 1787837792.0008824,
     "ast_hash": "b7394a0262413e5e15f3e47514400a32",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/DraftEditor.tsx": {
+    "mtime": 1787854534.0291326,
+    "ast_hash": "77d56c35e715eb92b0de06e2d289a7f1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts": {
+    "mtime": 1787857712.199935,
+    "ast_hash": "5c3d30925e3fdcc18ee9941ed653a8f1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4b3b-save-reviewable-draft.test.ts": {
+    "mtime": 1787854645.44513,
+    "ast_hash": "2553985f86c1224512dc8147e228b2c9",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/C4B3B_GOVERNED_HUMAN_EDITING.md": {
+    "mtime": 1787854858.409125,
+    "ast_hash": "a60ca63051880f8cbfc68655b3af6c71",
     "semantic_hash": ""
   }
 }

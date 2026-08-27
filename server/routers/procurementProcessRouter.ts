@@ -18,7 +18,7 @@ import {
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
-import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { enrichItem } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
@@ -385,6 +385,31 @@ export const procurementProcessRouter = router({
           authorUserId: doc.authorUserId, lastSubstantiveActorUserId: doc.lastSubstantiveActorUserId,
         },
       };
+    }),
+
+  /**
+   * C.4B.3B — Edição HUMANA governada do rascunho canônico de ETP/TR/Edital: papel mínimo `operator`,
+   * ator/organização SEMPRE do ctx, concorrência otimista (expectedContentHash) + idempotência
+   * obrigatórias. Preserva o originador, registra o último ator substantivo, ledger `human_edit`.
+   * NÃO emite/aprova — apenas atualiza o working draft (a emissão governada C.4B.1 segue intacta).
+   */
+  saveReviewableDraft: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      kind: z.enum(["etp", "tr", "edital"]),
+      content: z.string().min(1),
+      expectedContentHash: z.string().trim().min(1),
+      idempotencyKey: z.string().trim().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const { document } = await saveReviewableDraft({
+        organizationId: orgId, processId: input.processId, kind: input.kind, content: input.content,
+        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+      });
+      return { document };
     }),
 
   /**

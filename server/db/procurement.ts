@@ -428,12 +428,21 @@ export async function applyDraftContentMutationTx(
     return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
   }
 
-  // Alteração MATERIAL: atualiza conteúdo, PRESERVA o originador, marca último ator substantivo.
-  await tx.update(generatedDocumentsTable).set({
-    title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
-    modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
-    lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now),
-  }).where(and(
+  // C.4B.3B — EDIÇÃO HUMANA (human_edit) é CONTENT-ONLY: o usuário editou apenas o conteúdo, então
+  // toda a demais metadata da LINHA BLOQUEADA (title/status/sources/modality/form/platform/
+  // legalJustification/author/correlation/createdAt) é PRESERVADA; altera-se só content + último ator +
+  // updatedAt. Regeneração/DFD-save (ai_regenerate/dfd_regenerate/dfd_manual_edit) mantêm a semântica
+  // anterior (reconstroem o doc). Em ambos o originador é preservado.
+  const contentOnly = input.operation === "human_edit";
+  await tx.update(generatedDocumentsTable).set(
+    contentOnly
+      ? { content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
+      : {
+          title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
+          modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
+          lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now),
+        },
+  ).where(and(
     eq(generatedDocumentsTable.id, existing.id),
     eq(generatedDocumentsTable.organizationId, organizationId),
   ));
@@ -446,16 +455,16 @@ export async function applyDraftContentMutationTx(
     idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
   });
 
-  // Snapshot CANÔNICO: reflete EXATAMENTE o que ficou persistido. O UPDATE não altera
-  // `correlation_id` (correlação da ORIGEM/criação do rascunho — a correlação de CADA alteração vive em
-  // generated_document_edits.correlation_id), nem o originador (author preservado). Por isso o snapshot
-  // usa os valores PERSISTIDOS de correlationId/authorUserId/createdAt, não os do `doc` da operação.
-  const document: GeneratedDocument = {
-    ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
-    lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
-    correlationId: existing.correlationId,
-    createdAt: fromDb(existing.createdAt), updatedAt: now,
-  };
+  // Snapshot CANÔNICO: reflete EXATAMENTE o que ficou persistido.
+  //  - human_edit (content-only): tudo da LINHA existente, alterando só content/último ator/updatedAt;
+  //  - demais: o `doc` da operação + originador/correlation/createdAt PERSISTIDOS (não os do `doc`).
+  const document: GeneratedDocument = contentOnly
+    ? { ...rowToGeneratedDocument(existing), content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now, updatedAt: now }
+    : {
+        ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
+        lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
+        correlationId: existing.correlationId, createdAt: fromDb(existing.createdAt), updatedAt: now,
+      };
   return { created: false, changed: true, document };
 }
 
