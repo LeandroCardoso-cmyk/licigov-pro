@@ -3,6 +3,7 @@ import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
+import { shouldRotateSaveKeyOnError } from "./saveKeyPolicy";
 
 /**
  * DFDWorkspace — REAL (wired to tRPC).
@@ -66,9 +67,11 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
   const saveDFD = trpc.procurementProcess.saveDFD.useMutation({
     onSuccess: () => { setSaveConflict(false); rotateSaveKey(); invalidate(); },
     onError: (e) => {
-      rotateSaveKey();
-      // C.4B.3A — concorrência otimista: se o rascunho mudou desde o carregamento (CONFLICT), NÃO
-      // sobrescreve — recarrega o conteúdo vigente e sinaliza para o usuário revisar de novo.
+      // C.4B.3A (Blocker 5) — rotaciona a chave SOMENTE em CONFLICT (o estado revisado expirou); em
+      // erro transitório (rede/INTERNAL) MANTÉM a chave para retry seguro/idempotente.
+      if (shouldRotateSaveKeyOnError(e.data?.code)) rotateSaveKey();
+      // Concorrência otimista: se o rascunho mudou desde o carregamento (CONFLICT), NÃO sobrescreve —
+      // recarrega o conteúdo vigente e sinaliza para o usuário revisar de novo.
       if (e.data?.code === "CONFLICT") {
         setSaveConflict(true);
         loadedFor.current = null; // força re-sincronizar o editor com o conteúdo recarregado

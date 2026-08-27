@@ -22,7 +22,9 @@ import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, saveDFDDraft, generateDFDDraft } from "../../services/procurementProcessService";
 import { promoteOfficialDocument } from "../../services/documentPromotionService";
-import { draftContentHash } from "../../domain/generatedDocument";
+import { draftContentHash, createGeneratedDocument } from "../../domain/generatedDocument";
+import { applyDraftContentMutationTx } from "../../db/procurement";
+import { getDb } from "../../db/connection";
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -243,5 +245,64 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
     await seedEtp(ORG2, pid, "Objeto tenantB", A);
     expect(await draftRow(ORG, pid)).toBeNull();               // ORG não vê o rascunho de ORG2
     expect((await draftRow(ORG2, pid))!.author).toBe(A);        // ORG2 (dono) vê o seu
+  }, 60_000);
+
+  it("12) response/replay = estado persistido (Blocker 2): regeneração devolve originador PRESERVADO", async () => {
+    const pid = "c4b3a-resp";
+    const first = await seedEtp(ORG, pid, "Objeto resp", A);
+    expect(first.document.authorUserId).toBe(A);
+    expect(first.document.lastSubstantiveActorUserId).toBe(A);
+
+    // Regeneração por B: a RESPOSTA reflete o estado persistido — originador A, último ator B.
+    const regen = await seedEtp(ORG, pid, "Objeto resp v2 (B)", B);
+    expect(regen.replayed).toBe(false);
+    expect(regen.document.authorUserId).toBe(A);                 // originador PRESERVADO na resposta
+    expect(regen.document.lastSubstantiveActorUserId).toBe(B);
+
+    // Replay (mesma chave/mesmo input/mesmo estado) → resposta cacheada = mesmo estado (author A).
+    const replay = await seedEtp(ORG, pid, "Objeto resp v2 (B)", B);
+    expect(replay.replayed).toBe(true);
+    expect(replay.document.authorUserId).toBe(A);
+    expect(replay.document.lastSubstantiveActorUserId).toBe(B);
+
+    // DFD save: resposta de proveniência = estado persistido (originador preservado).
+    const dpid = "c4b3a-resp-dfd";
+    await generateDFDDraft({ organizationId: ORG, processId: dpid, object: "DFD resp", correlationId: "c4b3a-smoke", idempotencyKey: `dfd-gen-${dpid}`, actorUserId: A });
+    const before = await draftRow(ORG, dpid, "dfd");
+    const saved = await saveDFDDraft({
+      organizationId: ORG, processId: dpid, object: "DFD resp", content: "# DFD editado resp\nx",
+      actorUserId: B, expectedContentHash: draftContentHash(before!.content), idempotencyKey: `dfd-save-${dpid}`, correlationId: "c4b3a-smoke",
+    });
+    expect(saved.document.authorUserId).toBe(A);                 // originador preservado na resposta do save
+    expect(saved.document.lastSubstantiveActorUserId).toBe(B);
+  }, 120_000);
+
+  it("13) ausência esperada é concorrência (Blocker 4): estado present já criado → CONFLICT, sem overwrite", async () => {
+    const pid = "c4b3a-absent";
+    // B "vence" a criação real (originador = B).
+    await seedEtp(ORG, pid, "Objeto vencedor B", B);
+    const winner = await draftRow(ORG, pid);
+    const editsBefore = (await edits(ORG, pid)).length;
+
+    // A tenta persistir uma 1ª geração que começou ASSUMINDO AUSÊNCIA, mas o rascunho já existe → CONFLICT.
+    const db = await getDb();
+    const doc = createGeneratedDocument({
+      organizationId: ORG, processId: pid, kind: "etp", title: "ETP — A perdedor",
+      content: "conteúdo do A (não deve sobrescrever)", authorUserId: A, lastSubstantiveActorUserId: A,
+      correlationId: "c4b3a-smoke",
+    });
+    await expect(db!.transaction(async (tx) => {
+      await applyDraftContentMutationTx(tx, {
+        organizationId: ORG, processId: pid, kind: "etp", actorUserId: A, doc,
+        operation: "ai_regenerate", expectedState: { type: "absent" },
+        idempotencyKey: `absent-race-${pid}`, correlationId: "c4b3a-smoke",
+      });
+    })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // O vencedor B permanece intacto; nenhuma linha de ledger de A.
+    const after = await draftRow(ORG, pid);
+    expect(after!.author).toBe(B);
+    expect(after!.content).toBe(winner!.content);
+    expect((await edits(ORG, pid)).length).toBe(editsBefore);
   }, 60_000);
 });

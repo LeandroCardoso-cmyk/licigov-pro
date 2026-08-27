@@ -318,42 +318,68 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 
 export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_manual_edit";
 
+/**
+ * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):
+ *   - `absent`  → o ator começou sem rascunho (1ª geração). Se sob lock já existir → CONFLICT
+ *     (não converte silenciosamente uma 1ª geração concorrente em regeneração; o originador vencedor
+ *     permanece);
+ *   - `present` → o ator começou de um conteúdo cujo hash é `contentHash`; se o hash vigente sob lock
+ *     divergir → CONFLICT (não sobrescreve alteração concorrente).
+ */
+export type DraftExpectedState = { type: "absent" } | { type: "present"; contentHash: string };
+
 export interface DraftMutationInput {
   organizationId: number;
   processId: string;
   kind: string;
   actorUserId: number;
-  /** Conteúdo/estado alvo. Em criação, é o documento completo (author = actor). Em atualização, o
+  /** Conteúdo/estado alvo. Em criação é o documento completo (author = actor). Em atualização o
    *  conteúdo é aplicado e o originador é PRESERVADO (o author do `doc` é ignorado). */
   doc: GeneratedDocument;
   operation: DraftEditOperation;
-  /** Concorrência otimista: hash do conteúdo que o ator partiu. Quando informado e não-vazio, é
-   *  revalidado SOB LOCK; divergência → CONFLICT (não sobrescreve alteração concorrente). */
-  expectedContentHash?: string | null;
+  /** Estado de partida capturado no início do attempt, revalidado SOB LOCK. */
+  expectedState: DraftExpectedState;
   idempotencyKey: string;
   correlationId: string;
   reason?: string | null;
-  /** Gerações criam o rascunho se ausente; edições humanas (save) exigem que ele já exista. */
-  allowCreate: boolean;
 }
 
-export interface DraftMutationResult { created: boolean; changed: boolean; }
+/** Resultado + SNAPSHOT CANÔNICO persistido (Blocker 2): a resposta cacheável reflete EXATAMENTE o
+ *  estado de generated_documents após a operação — originador preservado, último ator conforme no-op. */
+export interface DraftMutationResult { created: boolean; changed: boolean; document: GeneratedDocument; }
+
+type GeneratedDocRow = typeof generatedDocumentsTable.$inferSelect;
+
+/** Mapeia a LINHA persistida (sob lock) para o snapshot canônico de domínio. */
+function rowToGeneratedDocument(r: GeneratedDocRow): GeneratedDocument {
+  return {
+    id: r.id, processId: r.processId, organizationId: r.organizationId, kind: r.kind as GeneratedDocument["kind"],
+    title: r.title, content: r.content ?? "", status: r.status as GeneratedDocument["status"],
+    sources: parseArr<string>(r.sources), modality: r.modality as GeneratedDocument["modality"],
+    form: r.form as GeneratedDocument["form"], platform: r.platform as GeneratedDocument["platform"],
+    legalJustification: r.legalJustification ?? "", authorUserId: r.authorUserId ?? null,
+    lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
+    lastSubstantiveAt: r.lastSubstantiveAt ? fromDb(r.lastSubstantiveAt) : null,
+    correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
+  };
+}
 
 /**
  * C.4B.3A — Mutação governada do conteúdo do rascunho DENTRO de uma transação:
  *   1. SELECT ... FOR UPDATE (lock de linha) tenant-scoped por (org, process, kind);
- *   2. revalida expectedContentHash SOB LOCK (stale → CONFLICT — protege edição concorrente);
+ *   2. revalida o estado de partida (`expectedState`) SOB LOCK — ausência-esperada-mas-presente,
+ *      presença-esperada-mas-ausente, ou hash divergente → CONFLICT (sem overwrite, sem ledger errado);
  *   3. no-op determinístico quando o hash não muda (sem ledger, sem alterar último ator);
  *   4. quando muda: atualiza conteúdo, PRESERVA `author_user_id`, define último ator substantivo,
  *      e faz APPEND no ledger imutável `generated_document_edits` (com previous_content + hashes);
- *   5. criação (allowCreate) quando o rascunho ainda não existe (author = actor, sem ledger).
- * Nenhum partial commit: chamada dentro da transação do caller.
+ *   5. criação quando `expectedState.type === "absent"` e o rascunho ainda não existe (author = actor).
+ * Retorna o SNAPSHOT CANÔNICO persistido. Nenhum partial commit: chamada dentro da transação do caller.
  */
 export async function applyDraftContentMutationTx(
   tx: ProcurementExecutor,
   input: DraftMutationInput,
 ): Promise<DraftMutationResult> {
-  const { organizationId, processId, kind, actorUserId, doc, expectedContentHash } = input;
+  const { organizationId, processId, kind, actorUserId, doc, expectedState } = input;
   const rows = await tx.select().from(generatedDocumentsTable)
     .where(and(
       eq(generatedDocumentsTable.processId, processId),
@@ -365,32 +391,36 @@ export async function applyDraftContentMutationTx(
   const newHash = draftContentHash(doc.content);
 
   if (rows.length === 0) {
-    if (!input.allowCreate) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente — nada a alterar." });
+    // Esperava conteúdo existente (edição/regeneração), mas não há → estado divergente.
+    if (expectedState.type === "present") {
+      throw new TRPCError({ code: "CONFLICT", message: "O rascunho esperado não existe mais — recarregue antes de continuar." });
     }
-    if (expectedContentHash && expectedContentHash.trim()) {
-      // O ator partiu de um conteúdo que não existe mais/nunca existiu neste tenant → estado divergente.
-      throw new TRPCError({ code: "CONFLICT", message: "O rascunho não corresponde ao estado esperado — recarregue antes de continuar." });
-    }
-    await insertGeneratedDocument({
-      ...doc, authorUserId: actorUserId, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
-      createdAt: doc.createdAt || now, updatedAt: now,
-    }, tx);
-    return { created: true, changed: true };
+    // expectedState absent + ausência real → criação (author = originador; último ator = criador).
+    const created: GeneratedDocument = {
+      ...doc, authorUserId: actorUserId, lastSubstantiveActorUserId: actorUserId,
+      lastSubstantiveAt: now, createdAt: doc.createdAt || now, updatedAt: now,
+    };
+    await insertGeneratedDocument(created, tx);
+    return { created: true, changed: true, document: created };
   }
 
   const existing = rows[0];
   const currentContent = existing.content ?? "";
   const currentHash = draftContentHash(currentContent);
 
+  // Ausência-esperada-mas-presente: 1ª geração concorrente já criou o rascunho → CONFLICT (o originador
+  // vencedor permanece; não converte silenciosamente em regeneração/overwrite).
+  if (expectedState.type === "absent") {
+    throw new TRPCError({ code: "CONFLICT", message: "O rascunho já foi criado por outra operação — recarregue antes de continuar." });
+  }
   // Concorrência otimista revalidada SOB LOCK (não substituível pela verificação fora da transação).
-  if (expectedContentHash != null && expectedContentHash.trim() !== "" && expectedContentHash !== currentHash) {
+  if (expectedState.contentHash !== currentHash) {
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de salvar." });
   }
 
-  // No-op determinístico: mesmo conteúdo em bytes → não muda último ator nem cria ledger.
+  // No-op determinístico: mesmo conteúdo em bytes → não muda último ator nem cria ledger. Snapshot = atual.
   if (newHash === currentHash) {
-    return { created: false, changed: false };
+    return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
   }
 
   // Alteração MATERIAL: atualiza conteúdo, PRESERVA o originador, marca último ator substantivo.
@@ -411,7 +441,14 @@ export async function applyDraftContentMutationTx(
     idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
   });
 
-  return { created: false, changed: true };
+  // Snapshot CANÔNICO: originador PRESERVADO (existing.authorUserId, pode ser null histórico),
+  // último ator = actor, conteúdo novo. Reflete exatamente o que ficou persistido.
+  const document: GeneratedDocument = {
+    ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
+    lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
+    createdAt: fromDb(existing.createdAt), updatedAt: now,
+  };
+  return { created: false, changed: true, document };
 }
 
 export async function listGeneratedDocuments(processId: string, orgId: number): Promise<Array<{ id: string; kind: string; title: string; status: string }>> {

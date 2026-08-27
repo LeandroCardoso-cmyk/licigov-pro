@@ -48,7 +48,8 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     vi.clearAllMocks();
     vi.mocked(procDb.getProcess).mockResolvedValue(mockProcess as any);
     // C.4B.3A — a persistência do rascunho passou pelo primitive governado (proveniência + ledger).
-    vi.mocked(procDb.applyDraftContentMutationTx).mockResolvedValue({ created: true, changed: true } as any);
+    // Ecoa o doc recebido como snapshot canônico (resposta = estado persistido).
+    vi.mocked(procDb.applyDraftContentMutationTx).mockImplementation(async (_tx: any, input: any) => ({ created: true, changed: true, document: input.doc }));
     vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null as any);
   });
@@ -65,7 +66,8 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     // Persistiu via o primitive governado (tx, input.doc) + registrou evento.
     expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(1);
     expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc.kind).toBe("dfd");
-    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].allowCreate).toBe(true);
+    // 1ª criação: estado de partida = ausência esperada (sentinel explícito, sem null ambíguo).
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].expectedState.type).toBe("absent");
     expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);
   });
 
@@ -87,11 +89,11 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     expect(document.id).toBe(created.document.id); // mesmo documento (id determinístico)
     expect(document.content).toBe(edited);
     expect(document.kind).toBe("dfd");
-    // Salvou via o primitive governado: exige rascunho existente (allowCreate=false), operação de edição.
+    // Salvou via o primitive governado: exige rascunho existente (expectedState present), edição manual.
     const saveCall = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)!;
-    expect(saveCall[1].allowCreate).toBe(false);
+    expect(saveCall[1].expectedState.type).toBe("present");
+    expect(saveCall[1].expectedState.contentHash).toBe("a".repeat(64));
     expect(saveCall[1].operation).toBe("dfd_manual_edit");
-    expect(saveCall[1].expectedContentHash).toBe("a".repeat(64));
   });
 
   it("loadDFD retorna o rascunho persistido (ou null)", async () => {

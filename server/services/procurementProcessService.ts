@@ -126,7 +126,9 @@ export function canonicalDocumentIdentity(p: {
 async function runReplaySafeGeneration<T>(
   ctx: { organizationId: number; actorUserId: number; idempotencyKey: string; payloadHash: string },
   reviveCached: (raw: unknown) => T,
-  produce: () => Promise<{ persist: (tx: ProcurementExecutor) => Promise<void>; response: T }>,
+  // C.4B.3A — `persist` retorna o SNAPSHOT CANÔNICO persistido (usado como resposta E cache da
+  // idempotência, na MESMA transação). `response` é apenas o fallback de degradação sem DB.
+  produce: () => Promise<{ persist: (tx: ProcurementExecutor) => Promise<T>; response: T }>,
 ): Promise<{ result: T; replayed: boolean }> {
   const check = await checkIdempotency(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId, GENERATE_OP, ctx.payloadHash);
   if (check.status === "completed") {
@@ -143,15 +145,22 @@ async function runReplaySafeGeneration<T>(
     const { persist, response } = await produce();
     const db = await getDb();
     if (!db) return { result: response, replayed: false }; // sem DB: degrada sem persistir (nem idempotência)
+    let result: T = response;
     await db.transaction(async (tx) => {
-      await persist(tx);
-      await saveIdempotencyResult(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId, response, tx);
+      result = await persist(tx); // snapshot canônico persistido
+      await saveIdempotencyResult(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId, result, tx);
     });
-    return { result: response, replayed: false };
+    return { result, replayed: false };
   } catch (err) {
     await failIdempotencyKey(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId);
     throw err;
   }
+}
+
+/** Normaliza a resposta cacheada da idempotência: objeto no MySQL 8 (JSON nativo), string no MariaDB
+ *  (JSON = LONGTEXT). Garante que o replay reproduza o snapshot canônico em ambos. */
+function reviveIdempotent<T>(raw: unknown): T {
+  return (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
 }
 
 /**
@@ -169,8 +178,11 @@ export async function generateDFDDraft(params: {
   const payloadHash = generatePayloadHash({ organizationId: params.organizationId, processId: params.processId, kind: "dfd", object: params.object });
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
-    (raw) => raw as GeneratedDocument,
+    reviveIdempotent,
     async () => {
+      // Estado de partida (sentinel explícito de ausência) revalidado sob lock na persistência.
+      const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+      const expectedState = before ? { type: "present" as const, contentHash: draftContentHash(before.content) } : { type: "absent" as const };
       const doc = createGeneratedDocument({
         processId: params.processId, organizationId: params.organizationId,
         kind: "dfd", title: `DFD — ${params.object}`,
@@ -184,17 +196,17 @@ export async function generateDFDDraft(params: {
         response: doc,
         persist: async (tx) => {
           // Criação canônica com proveniência (author = originador; último ator substantivo = criador).
-          await applyDraftContentMutationTx(tx, {
+          const { document } = await applyDraftContentMutationTx(tx, {
             organizationId: params.organizationId, processId: params.processId, kind: "dfd",
             actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
-            expectedContentHash: null, idempotencyKey: params.idempotencyKey,
-            correlationId: params.correlationId, allowCreate: true,
+            expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
           });
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "change",
             actor: "sistema", summary: "DFD criado (rascunho estruturado).", refId: doc.id,
             correlationId: params.correlationId,
           }, tx);
+          return document;
         },
       };
     },
@@ -233,31 +245,40 @@ export async function saveDFDDraft(params: {
     if (check.payloadMismatch) {
       throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key reutilizada com conteúdo diferente — edição recusada." });
     }
-    const cached = (typeof check.response === "string" ? JSON.parse(check.response) : check.response) as GeneratedDocument;
-    return { document: cached, replayed: true };
+    return { document: reviveIdempotent<GeneratedDocument>(check.response), replayed: true };
   }
   if (check.status === "processing") {
     throw new TRPCError({ code: "CONFLICT", message: "Uma edição idêntica já está em processamento para esta chave — aguarde a conclusão." });
   }
 
+  // C.4B.3A (Blocker 1) — write GOVERNADO é fail-closed: sem persistência não há save/ledger/provenance
+  // /idempotência; NUNCA retornar sucesso simulado. Recusa explícita.
+  const db = await getDb();
+  if (!db) {
+    await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId).catch(() => {});
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — edição do DFD recusada (nada salvo)." });
+  }
+
   try {
-    const db = await getDb();
-    if (!db) return { document: doc, replayed: false }; // sem DB: degrada sem persistir (nem idempotência)
+    // Edição humana exige rascunho EXISTENTE cujo hash corresponda ao carregado (estado de partida).
+    const expectedState = { type: "present" as const, contentHash: params.expectedContentHash };
+    let persisted: GeneratedDocument = doc;
     await db.transaction(async (tx) => {
-      await applyDraftContentMutationTx(tx, {
+      const { document } = await applyDraftContentMutationTx(tx, {
         organizationId: params.organizationId, processId: params.processId, kind: "dfd",
         actorUserId: params.actorUserId, doc, operation: "dfd_manual_edit",
-        expectedContentHash: params.expectedContentHash, idempotencyKey: params.idempotencyKey,
-        correlationId: params.correlationId, allowCreate: false,
+        expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
       });
+      persisted = document;
       await recordProcessEvent({
         organizationId: params.organizationId, processId: params.processId, eventType: "change",
         actor: String(params.actorUserId), summary: "DFD salvo (rascunho).", refId: doc.id,
         correlationId: params.correlationId,
       }, tx);
-      await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, doc, tx);
+      // Cacheia o SNAPSHOT CANÔNICO (originador preservado) — resposta = cache = estado persistido.
+      await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, persisted, tx);
     });
-    return { document: doc, replayed: false };
+    return { document: persisted, replayed: false };
   } catch (err) {
     await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId);
     throw err;
@@ -295,13 +316,13 @@ export async function generateDocument(params: {
 
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
-    (raw) => raw as GeneratedDocument,
+    reviveIdempotent,
     async () => {
-      // C.4B.3A — captura o estado de PARTIDA ANTES da cognição (regeneração). Se o rascunho mudar
-      // enquanto a IA executa, a revalidação sob lock na persistência recusa (CONFLICT) e NÃO
-      // sobrescreve a alteração concorrente. 1ª geração: não há rascunho → startingHash null.
+      // C.4B.3A — captura o estado de PARTIDA ANTES da cognição (sentinel de ausência explícito). Se o
+      // rascunho mudar enquanto a IA executa, a revalidação sob lock na persistência recusa (CONFLICT)
+      // e NÃO sobrescreve a alteração concorrente. 1ª geração: ausência esperada.
       const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
-      const startingHash = before ? draftContentHash(before.content) : null;
+      const expectedState = before ? { type: "present" as const, contentHash: draftContentHash(before.content) } : { type: "absent" as const };
 
       const request = params.kind === "tr"
         ? `Elaborar Termo de Referência para "${params.object}" com base em ${approved.length} item(ns) inteligente(s) aprovado(s), CATMAT, especificações e histórico.`
@@ -346,11 +367,10 @@ export async function generateDocument(params: {
         persist: async (tx) => {
           // C.4B.3A — mutação governada: cria (author = originador) ou regenera (preserva originador,
           // último ator substantivo = solicitante, ledger ai_regenerate) com revalidação sob lock.
-          await applyDraftContentMutationTx(tx, {
+          const { document } = await applyDraftContentMutationTx(tx, {
             organizationId: params.organizationId, processId: params.processId, kind: params.kind,
             actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
-            expectedContentHash: startingHash, idempotencyKey: params.idempotencyKey,
-            correlationId: params.correlationId, allowCreate: true,
+            expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
           });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
           await generateOfficialDocument({
@@ -363,6 +383,7 @@ export async function generateDocument(params: {
             actor: "multi_copilot", summary: `${params.kind.toUpperCase()} gerado (rascunho) a partir de ${approved.length} item(ns).`,
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
+          return document; // snapshot canônico (originador preservado em regeneração)
         },
       };
     },
@@ -415,7 +436,9 @@ export async function generateNotice(params: {
 
   // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
   const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
-  const startingHashEdital = beforeEdital ? draftContentHash(beforeEdital.content) : null;
+  const expectedStateEdital = beforeEdital
+    ? { type: "present" as const, contentHash: draftContentHash(beforeEdital.content) }
+    : { type: "absent" as const };
 
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: "edital",
@@ -424,15 +447,15 @@ export async function generateNotice(params: {
 
   const { result, replayed } = await runReplaySafeGeneration<{ document: GeneratedDocument; validation: { valid: boolean; violations: string[] } }>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
-    (raw) => raw as { document: GeneratedDocument; validation: { valid: boolean; violations: string[] } },
+    reviveIdempotent,
     async () => ({
       response: { document: doc, validation },
       persist: async (tx) => {
-        await applyDraftContentMutationTx(tx, {
+        const { document } = await applyDraftContentMutationTx(tx, {
           organizationId: params.organizationId, processId: params.processId, kind: "edital",
           actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
-          expectedContentHash: startingHashEdital, idempotencyKey: params.idempotencyKey,
-          correlationId: params.correlationId, allowCreate: true,
+          expectedState: expectedStateEdital, idempotencyKey: params.idempotencyKey,
+          correlationId: params.correlationId,
         });
         // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
         await generateOfficialDocument({
@@ -445,6 +468,7 @@ export async function generateNotice(params: {
           actor: "sistema", summary: `Edital gerado: ${params.modality}/${params.form}.`, refId: doc.id,
           correlationId: params.correlationId,
         }, tx);
+        return { document, validation }; // snapshot canônico + validação
       },
     }),
   );

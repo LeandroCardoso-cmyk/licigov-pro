@@ -33,9 +33,10 @@ vi.mock("../../db/connection", () => ({
 
 vi.mock("../../db/procurement", () => ({
   // C.4B.3A — a geração passou a persistir via o primitive governado (proveniência + ledger); o
-  // efeito "generated" e a atomicidade (mesmo tx) continuam sendo o contrato observado aqui.
-  applyDraftContentMutationTx: vi.fn(async () => { effectOrder.push("generated"); return { created: true, changed: true }; }),
-  getGeneratedDocumentByKind: vi.fn(async () => null), // sem rascunho anterior → 1ª geração (startingHash null)
+  // efeito "generated" e a atomicidade (mesmo tx) continuam sendo o contrato observado aqui. Retorna o
+  // SNAPSHOT CANÔNICO (ecoa o doc recebido) — a resposta/replay refletem o estado persistido.
+  applyDraftContentMutationTx: vi.fn(async (_tx: unknown, input: { doc: unknown }) => { effectOrder.push("generated"); return { created: true, changed: true, document: input.doc }; }),
+  getGeneratedDocumentByKind: vi.fn(async () => null), // sem rascunho anterior → 1ª geração (estado ausente)
   recordProcessEvent: vi.fn(async () => { effectOrder.push("event"); }),
   listIntelligentItems: vi.fn(async () => []),
 }));

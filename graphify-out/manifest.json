@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1787832253.5965116,
-    "ast_hash": "efc93cd7961e4e9611b9ca5938ac3968",
+    "mtime": 1787837563.5928688,
+    "ast_hash": "24d341694a61191816e992d891ebb502",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1787831986.048518,
-    "ast_hash": "984e676ccc234dcdb116bc28b48c9876",
+    "mtime": 1787837413.9928598,
+    "ast_hash": "04f8c4cd27e865be20fffb6f6dc71935",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1787832148.660514,
-    "ast_hash": "d593296764be77f0370b253ca66c7196",
+    "mtime": 1787837532.0448668,
+    "ast_hash": "5584236fee3eca6044bb8a65b657510a",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -10260,8 +10260,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-dfd.test.ts": {
-    "mtime": 1787832529.8565054,
-    "ast_hash": "6bc35e513c3ddb2168727149426ad9b9",
+    "mtime": 1787837596.3888707,
+    "ast_hash": "b926ad75e6f0c78ee855f005e9d86188",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-export-service.test.ts": {
@@ -10915,8 +10915,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
-    "mtime": 1787832479.1427505,
-    "ast_hash": "23bf20d0b1b5e9d1b309ed031a0e7c2f",
+    "mtime": 1787837787.536882,
+    "ast_hash": "11b11246953da1f855828898addc4207",
     "semantic_hash": ""
   },
   "docs/handoffs/C3A_FINAL_RECLASSIFICATION_AND_CLOSURE.md": {
@@ -11000,8 +11000,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts": {
-    "mtime": 1787832670.592502,
-    "ast_hash": "708841d42997cc7f4e95050a920ab1b3",
+    "mtime": 1787837697.2608767,
+    "ast_hash": "1e4957700d370e8072283581dc048749",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-sod-provenance.test.ts": {
@@ -11012,6 +11012,21 @@
   "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md": {
     "mtime": 1787832746.7725005,
     "ast_hash": "94c674de7321d0a9279be007edff4a42",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/saveKeyPolicy.test.ts": {
+    "mtime": 1787837549.1728678,
+    "ast_hash": "b177f13a0ef4794bb778cf9078a8380e",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/saveKeyPolicy.ts": {
+    "mtime": 1787837541.8128674,
+    "ast_hash": "e9ffb5bc047fd3ba064a7da5242379c3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/c4b3a-savedfd-failclosed.test.ts": {
+    "mtime": 1787837792.0008824,
+    "ast_hash": "b7394a0262413e5e15f3e47514400a32",
     "semantic_hash": ""
   }
 }
