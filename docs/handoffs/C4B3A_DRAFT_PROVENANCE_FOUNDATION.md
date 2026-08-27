@@ -38,7 +38,17 @@ new_content_hash, previous_content (LONGTEXT), operation, reason?, correlation_i
 created_at }`. Unique `(organization_id, idempotency_key)`; índice
 `(organization_id, process_id, kind, created_at)`.
 
-`operation ∈ { human_edit, ai_regenerate, dfd_manual_edit }`.
+`operation ∈ { ai_regenerate, dfd_regenerate, dfd_manual_edit, human_edit }`:
+- **`ai_regenerate`** — ETP/TR/Edital gerados/regenerados por IA (Kernel/copilotos);
+- **`dfd_regenerate`** — regeneração DETERMINÍSTICA (template, sem IA) do DFD "criar do zero" (o ledger
+  institucional nunca registra uma operação não-IA como IA);
+- **`dfd_manual_edit`** — edição humana manual do DFD (`saveDFD` governado);
+- **`human_edit`** — reservado para o editor humano de ETP/TR/Edital (C.4B.3B).
+
+**Snapshot canônico = estado persistido:** a resposta devolvida (e cacheada na idempotency key, na mesma
+transação) reflete EXATAMENTE a linha de `generated_documents` após a operação — originador preservado, e
+`correlation_id` = correlação da ORIGEM/criação do rascunho (a correlação de cada alteração vive em
+`generated_document_edits.correlation_id`). O `UPDATE` material não altera `correlation_id` da linha.
 
 **`previous_content` é deliberado:** o hash sozinho não permite reconstrução/diff forense. O **novo**
 conteúdo é a working copy vigente e será o `previous_content` da próxima alteração — a cadeia

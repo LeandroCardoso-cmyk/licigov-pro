@@ -316,7 +316,12 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
   return d;
 }
 
-export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_manual_edit";
+// C.4B.3A — operações materiais registradas no ledger:
+//   ai_regenerate   = ETP/TR/Edital gerados/regenerados por IA (Kernel/copilotos);
+//   dfd_regenerate  = regeneração DETERMINÍSTICA (template, sem IA) do DFD "criar do zero";
+//   dfd_manual_edit = edição humana manual do DFD (saveDFD governado);
+//   human_edit      = reservado para o editor humano de ETP/TR/Edital (C.4B.3B).
+export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):
@@ -441,11 +446,14 @@ export async function applyDraftContentMutationTx(
     idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
   });
 
-  // Snapshot CANÔNICO: originador PRESERVADO (existing.authorUserId, pode ser null histórico),
-  // último ator = actor, conteúdo novo. Reflete exatamente o que ficou persistido.
+  // Snapshot CANÔNICO: reflete EXATAMENTE o que ficou persistido. O UPDATE não altera
+  // `correlation_id` (correlação da ORIGEM/criação do rascunho — a correlação de CADA alteração vive em
+  // generated_document_edits.correlation_id), nem o originador (author preservado). Por isso o snapshot
+  // usa os valores PERSISTIDOS de correlationId/authorUserId/createdAt, não os do `doc` da operação.
   const document: GeneratedDocument = {
     ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
     lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,
+    correlationId: existing.correlationId,
     createdAt: fromDb(existing.createdAt), updatedAt: now,
   };
   return { created: false, changed: true, document };

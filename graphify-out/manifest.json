@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1787837413.9928598,
-    "ast_hash": "04f8c4cd27e865be20fffb6f6dc71935",
+    "mtime": 1787838655.6580524,
+    "ast_hash": "e93f629c8a75eef25170589a097432fb",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -6040,8 +6040,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1787837532.0448668,
-    "ast_hash": "5584236fee3eca6044bb8a65b657510a",
+    "mtime": 1787838664.0340528,
+    "ast_hash": "d152f0ac0b59fe8ee27b3e823694e8d0",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -11000,8 +11000,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts": {
-    "mtime": 1787837697.2608767,
-    "ast_hash": "1e4957700d370e8072283581dc048749",
+    "mtime": 1787838687.6900544,
+    "ast_hash": "59e76a7d3fd9faf38a03bc4db47e4ddf",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-sod-provenance.test.ts": {
@@ -11010,8 +11010,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md": {
-    "mtime": 1787832746.7725005,
-    "ast_hash": "94c674de7321d0a9279be007edff4a42",
+    "mtime": 1787838780.0140598,
+    "ast_hash": "fcea846041f275e02fb3e64afeb13e48",
     "semantic_hash": ""
   },
   "client/src/components/procurement/saveKeyPolicy.test.ts": {

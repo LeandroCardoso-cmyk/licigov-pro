@@ -305,4 +305,49 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
     expect(after!.content).toBe(winner!.content);
     expect((await edits(ORG, pid)).length).toBe(editsBefore);
   }, 60_000);
+
+  it("14) correlationId canônico: generated_documents = correlação da ORIGEM; ledger = correlação da EDIÇÃO", async () => {
+    const pid = "c4b3a-corr";
+    await generateDFDDraft({ organizationId: ORG, processId: pid, object: "DFD corr", correlationId: "origin-corr", idempotencyKey: `dfd-gen-${pid}`, actorUserId: A });
+    const before = await draftRow(ORG, pid, "dfd");
+
+    const args = {
+      organizationId: ORG, processId: pid, object: "DFD corr", content: "# DFD editado corr\nx",
+      actorUserId: B, expectedContentHash: draftContentHash(before!.content), idempotencyKey: `dfd-save-${pid}`, correlationId: "edit-corr",
+    };
+    const saved = await saveDFDDraft(args);
+    const replay = await saveDFDDraft(args); // mesma chave/payload → replay
+
+    // generated_documents preserva a correlação da ORIGEM/criação.
+    const [gd] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT correlation_id AS c FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'dfd' LIMIT 1", [ORG, pid],
+    );
+    expect(String((gd[0] as any).c)).toBe("origin-corr");
+    // response/replay = estado persistido → correlação de origem.
+    expect(saved.document.correlationId).toBe("origin-corr");
+    expect(replay.replayed).toBe(true);
+    expect(replay.document.correlationId).toBe("origin-corr");
+    // O ledger da alteração guarda a correlação da EDIÇÃO.
+    const [ed] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT correlation_id AS c FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND kind = 'dfd' ORDER BY id DESC LIMIT 1", [ORG, pid],
+    );
+    expect(String((ed[0] as any).c)).toBe("edit-corr");
+  }, 60_000);
+
+  it("15) regeneração de DFD é determinística (não-IA): ledger operation = 'dfd_regenerate', nunca 'ai_regenerate'", async () => {
+    const pid = "c4b3a-dfdregen";
+    await generateDFDDraft({ organizationId: ORG, processId: pid, object: "DFD objeto X", correlationId: "c4b3a-smoke", idempotencyKey: `dfd-gen-${pid}`, actorUserId: A });
+    // Regeneração MATERIAL (objeto diferente → template diferente) por B.
+    await generateDFDDraft({ organizationId: ORG, processId: pid, object: "DFD objeto Y COMPLETAMENTE diferente", correlationId: "c4b3a-smoke", idempotencyKey: `dfd-regen-${pid}`, actorUserId: B });
+
+    const row = await draftRow(ORG, pid, "dfd");
+    expect(row!.author).toBe(A);              // originador preservado
+    expect(row!.lastSubstantive).toBe(B);     // solicitante da regeneração
+
+    const led = await edits(ORG, pid, "dfd");
+    expect(led.length).toBe(1);
+    expect(led[0].op).toBe("dfd_regenerate");  // determinístico, NÃO ai_regenerate
+    expect(led[0].op).not.toBe("ai_regenerate");
+    expect(led[0].actor).toBe(B);
+  }, 60_000);
 });

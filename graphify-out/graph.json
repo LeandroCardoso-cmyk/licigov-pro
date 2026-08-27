@@ -8477,8 +8477,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "processcard.tsx"
     },
     {
@@ -8488,8 +8488,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_status_labels",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "status_labels"
     },
     {
@@ -8499,8 +8499,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_status_colors",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "status_colors"
     },
     {
@@ -8510,8 +8510,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_process",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "process"
     },
     {
@@ -8521,8 +8521,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_props",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "props"
     },
     {
@@ -8532,8 +8532,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_formatdate",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "formatdate()"
     },
     {
@@ -8543,8 +8543,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "client_src_components_dashboard_processcard_processcard",
-      "community": 7,
-      "community_name": "cn",
+      "community": 9,
+      "community_name": "lib/trpc.ts",
       "norm_label": "processcard()"
     },
     {
@@ -30235,8 +30235,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_pages_bemvindo_bemvindo",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "bemvindo()"
     },
     {
@@ -31522,8 +31522,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "client_src_pages_usuarios_formatdate",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "formatdate()"
     },
     {
@@ -31533,8 +31533,8 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "client_src_pages_usuarios_usuarios",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "usuarios()"
     },
     {
@@ -32017,8 +32017,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_test",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "orgrolelabels.test.ts"
     },
     {
@@ -32028,8 +32028,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "orgrolelabels.ts"
     },
     {
@@ -32039,8 +32039,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_orgrolekey",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "orgrolekey"
     },
     {
@@ -32050,8 +32050,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_org_role_labels",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "org_role_labels"
     },
     {
@@ -32061,8 +32061,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_org_role_labels_short",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "org_role_labels_short"
     },
     {
@@ -32072,8 +32072,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_orgrolelabel",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "orgrolelabel()"
     },
     {
@@ -32083,8 +32083,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "client_src_utils_orgrolelabels_orgrolelabelshort",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "orgrolelabelshort()"
     },
     {
@@ -32160,8 +32160,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate_test",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "welcomegate.test.ts"
     },
     {
@@ -32171,8 +32171,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate_test_fakestorage",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "fakestorage()"
     },
     {
@@ -32182,8 +32182,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "welcomegate.ts"
     },
     {
@@ -32193,8 +32193,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate_welcome_seen_key",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "welcome_seen_key"
     },
     {
@@ -32204,8 +32204,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate_hasseenwelcome",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "hasseenwelcome()"
     },
     {
@@ -32215,8 +32215,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "client_src_utils_welcomegate_markwelcomeseen",
-      "community": 860,
-      "community_name": "useOrgRole.ts",
+      "community": 1,
+      "community_name": "App.tsx",
       "norm_label": "markwelcomeseen()"
     },
     {
@@ -33822,7 +33822,7 @@
       "_origin": "ast",
       "id": "drizzle_schema_contracts",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contracts"
     },
     {
@@ -33954,7 +33954,7 @@
       "_origin": "ast",
       "id": "drizzle_schema_contractauditlogs",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractauditlogs"
     },
     {
@@ -34217,8 +34217,8 @@
       "source_location": "L1584",
       "_origin": "ast",
       "id": "drizzle_schema_idempotencykeys",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idempotencykeys"
     },
     {
@@ -38639,8 +38639,8 @@
       "source_location": "L5867",
       "_origin": "ast",
       "id": "drizzle_schema_officialdocumentpromotionstable",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialdocumentpromotionstable"
     },
     {
@@ -39915,8 +39915,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "package_dependencies_archiver",
-      "community": 772,
-      "community_name": "dependencies",
+      "community": 801,
+      "community_name": "archiver",
       "norm_label": "archiver"
     },
     {
@@ -39926,8 +39926,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "archiver",
-      "community": 772,
-      "community_name": "dependencies",
+      "community": 801,
+      "community_name": "archiver",
       "norm_label": "archiver"
     },
     {
@@ -39981,8 +39981,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "package_dependencies_busboy",
-      "community": 836,
-      "community_name": "busboy",
+      "community": 772,
+      "community_name": "dependencies",
       "norm_label": "busboy"
     },
     {
@@ -39992,8 +39992,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "busboy",
-      "community": 836,
-      "community_name": "busboy",
+      "community": 772,
+      "community_name": "dependencies",
       "norm_label": "busboy"
     },
     {
@@ -43015,7 +43015,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4a-replay-safe-generation-mysql-smoke.test.ts"
     },
     {
@@ -43026,7 +43026,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_inject",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "inject"
     },
     {
@@ -43037,7 +43037,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_genetp",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "genetp()"
     },
     {
@@ -43048,7 +43048,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_countgenerated",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countgenerated()"
     },
     {
@@ -43059,7 +43059,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_countofficialversions",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countofficialversions()"
     },
     {
@@ -43070,7 +43070,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_countprocessevents",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countprocessevents()"
     },
     {
@@ -43081,7 +43081,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_idemstatus",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idemstatus()"
     },
     {
@@ -43092,7 +43092,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_officialcreatedatraw",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialcreatedatraw()"
     },
     {
@@ -43103,7 +43103,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_mysql_smoke_test_cleanup",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -43114,7 +43114,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4a-replay-safe-generation.test.ts"
     },
     {
@@ -43125,7 +43125,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test_effectorder",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "effectorder"
     },
     {
@@ -43136,7 +43136,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test_faketx",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "faketx"
     },
     {
@@ -43147,7 +43147,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test_checkidempotency",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "checkidempotency"
     },
     {
@@ -43158,7 +43158,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test_saveidempotencyresult",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "saveidempotencyresult"
     },
     {
@@ -43169,7 +43169,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4a_replay_safe_generation_test_failidempotencykey",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "failidempotencykey"
     },
     {
@@ -43202,7 +43202,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b1-official-promotion-mysql-smoke.test.ts"
     },
     {
@@ -43213,7 +43213,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_seeddraft",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "seeddraft()"
     },
     {
@@ -43224,7 +43224,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_emitinput",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "emitinput()"
     },
     {
@@ -43235,7 +43235,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_currentdrafthash",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "currentdrafthash()"
     },
     {
@@ -43246,7 +43246,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_emit",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "emit()"
     },
     {
@@ -43257,7 +43257,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_countemitido",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countemitido()"
     },
     {
@@ -43268,7 +43268,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_countledger",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countledger()"
     },
     {
@@ -43279,7 +43279,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_officialidbystatus",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialidbystatus()"
     },
     {
@@ -43290,7 +43290,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_emitidocontent",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "emitidocontent()"
     },
     {
@@ -43301,7 +43301,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_mysql_smoke_test_cleanup",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -43311,8 +43311,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b1-official-promotion.test.ts"
     },
     {
@@ -43322,8 +43322,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_effectorder",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "effectorder"
     },
     {
@@ -43333,8 +43333,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_faketx",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "faketx"
     },
     {
@@ -43344,8 +43344,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_createdocument",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "createdocument"
     },
     {
@@ -43355,8 +43355,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_getgenerateddocumentbykind",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getgenerateddocumentbykind"
     },
     {
@@ -43366,8 +43366,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_insertofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "insertofficialpromotion"
     },
     {
@@ -43377,8 +43377,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_getlatestofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getlatestofficialpromotion"
     },
     {
@@ -43388,8 +43388,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_checkidempotency",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "checkidempotency"
     },
     {
@@ -43399,8 +43399,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_saveidempotencyresult",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "saveidempotencyresult"
     },
     {
@@ -43410,8 +43410,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_failidempotencykey",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "failidempotencykey"
     },
     {
@@ -43421,8 +43421,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_draft",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "draft"
     },
     {
@@ -43432,8 +43432,8 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "server_tests_integration_c4b1_official_promotion_test_base",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "base()"
     },
     {
@@ -43444,7 +43444,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b2_reviewable_draft_mysql_smoke_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b2-reviewable-draft-mysql-smoke.test.ts"
     },
     {
@@ -43455,7 +43455,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b2_reviewable_draft_mysql_smoke_test_seedetportr",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "seedetportr()"
     },
     {
@@ -43466,7 +43466,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b2_reviewable_draft_mysql_smoke_test_seededital",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "seededital()"
     },
     {
@@ -43477,7 +43477,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b2_reviewable_draft_mysql_smoke_test_cleanup",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -43521,7 +43521,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b3a-draft-provenance-mysql-smoke.test.ts"
     },
     {
@@ -43532,7 +43532,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test_seedetp",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "seedetp()"
     },
     {
@@ -43543,7 +43543,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test_draftrow",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "draftrow()"
     },
     {
@@ -43554,7 +43554,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test_edits",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "edits()"
     },
     {
@@ -43565,7 +43565,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test_emitinput",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "emitinput()"
     },
     {
@@ -43576,7 +43576,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_draft_provenance_mysql_smoke_test_cleanup",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -43587,7 +43587,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_savedfd_failclosed_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b3a-savedfd-failclosed.test.ts"
     },
     {
@@ -43597,8 +43597,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "c4b3a-sod-provenance.test.ts"
     },
     {
@@ -43608,8 +43608,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_faketx",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "faketx"
     },
     {
@@ -43619,8 +43619,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_createdocument",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "createdocument"
     },
     {
@@ -43630,8 +43630,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_getgenerateddocumentbykind",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getgenerateddocumentbykind"
     },
     {
@@ -43641,8 +43641,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_insertofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "insertofficialpromotion"
     },
     {
@@ -43652,8 +43652,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_getlatestofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getlatestofficialpromotion"
     },
     {
@@ -43663,8 +43663,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_checkidempotency",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "checkidempotency"
     },
     {
@@ -43674,8 +43674,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_saveidempotencyresult",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "saveidempotencyresult"
     },
     {
@@ -43685,8 +43685,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_failidempotencykey",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "failidempotencykey"
     },
     {
@@ -43696,8 +43696,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_draft",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "draft"
     },
     {
@@ -43707,8 +43707,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "server_tests_integration_c4b3a_sod_provenance_test_base",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "base()"
     },
     {
@@ -46490,8 +46490,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_prc_idempotency_mysql_smoke_test",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "prc-idempotency-mysql-smoke.test.ts"
     },
     {
@@ -46501,8 +46501,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "server_tests_integration_prc_idempotency_mysql_smoke_test_cleanup",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -46512,8 +46512,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "server_tests_integration_prc_idempotency_mysql_smoke_test_countrows",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "countrows()"
     },
     {
@@ -46546,7 +46546,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_procurement_create_mysql_smoke_test",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "procurement-create-mysql-smoke.test.ts"
     },
     {
@@ -46557,7 +46557,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_procurement_create_mysql_smoke_test_cleanup",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -48767,8 +48767,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "server_tests_integration_sprint30_itemtr_catmat_test_makeprovenance",
-      "community": 50,
-      "community_name": "sprint30-itemtr-catmat.test.ts",
+      "community": 16,
+      "community_name": "itemTR.ts",
       "norm_label": "makeprovenance()"
     },
     {
@@ -48778,8 +48778,8 @@
       "source_location": "L153",
       "_origin": "ast",
       "id": "server_tests_integration_sprint30_itemtr_catmat_test_makeactor",
-      "community": 50,
-      "community_name": "sprint30-itemtr-catmat.test.ts",
+      "community": 16,
+      "community_name": "itemTR.ts",
       "norm_label": "makeactor()"
     },
     {
@@ -48789,8 +48789,8 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "server_tests_integration_sprint30_itemtr_catmat_test_makeitem",
-      "community": 50,
-      "community_name": "sprint30-itemtr-catmat.test.ts",
+      "community": 16,
+      "community_name": "itemTR.ts",
       "norm_label": "makeitem()"
     },
     {
@@ -48800,8 +48800,8 @@
       "source_location": "L179",
       "_origin": "ast",
       "id": "server_tests_integration_sprint30_itemtr_catmat_test_makecandidatefor",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 16,
+      "community_name": "itemTR.ts",
       "norm_label": "makecandidatefor()"
     },
     {
@@ -48833,8 +48833,8 @@
       "source_location": "L328",
       "_origin": "ast",
       "id": "server_tests_integration_sprint30_itemtr_catmat_test_awaiting",
-      "community": 50,
-      "community_name": "sprint30-itemtr-catmat.test.ts",
+      "community": 16,
+      "community_name": "itemTR.ts",
       "norm_label": "awaiting()"
     },
     {
@@ -50318,8 +50318,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_core_ai_provideradapter_norealaiprovidererror",
-      "community": 107,
-      "community_name": "providerAdapter.ts",
+      "community": 46,
+      "community_name": "aiResilience.ts",
       "norm_label": "norealaiprovidererror"
     },
     {
@@ -50329,8 +50329,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "server_core_ai_provideradapter_norealaiprovidererror_constructor",
-      "community": 107,
-      "community_name": "providerAdapter.ts",
+      "community": 46,
+      "community_name": "aiResilience.ts",
       "norm_label": ".constructor()"
     },
     {
@@ -51286,8 +51286,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_core_notification",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "notification.ts"
     },
     {
@@ -51297,8 +51297,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "server_core_notification_notificationpayload",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "notificationpayload"
     },
     {
@@ -51308,8 +51308,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "server_core_notification_validate",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "validate()"
     },
     {
@@ -51319,8 +51319,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_core_notification_notifyowner",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "notifyowner()"
     },
     {
@@ -51517,8 +51517,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_core_systemrouter",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "systemrouter.ts"
     },
     {
@@ -51528,8 +51528,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_core_systemrouter_required_env_keys",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "required_env_keys"
     },
     {
@@ -51561,8 +51561,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_core_systemrouter_checkai",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "checkai()"
     },
     {
@@ -51572,8 +51572,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "server_core_systemrouter_checkenv",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "checkenv()"
     },
     {
@@ -51583,8 +51583,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "server_core_systemrouter_systemrouter",
-      "community": 18,
-      "community_name": "routers.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "systemrouter"
     },
     {
@@ -56852,8 +56852,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialdocumentpromotions.ts"
     },
     {
@@ -56863,8 +56863,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions_promodb",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promodb"
     },
     {
@@ -56874,8 +56874,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions_promotionexecutor",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promotionexecutor"
     },
     {
@@ -56885,8 +56885,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions_officialpromotionrecord",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialpromotionrecord"
     },
     {
@@ -56896,8 +56896,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions_insertofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "insertofficialpromotion()"
     },
     {
@@ -56907,8 +56907,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "server_db_officialdocumentpromotions_getlatestofficialpromotion",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getlatestofficialpromotion()"
     },
     {
@@ -57931,7 +57931,7 @@
       "_origin": "ast",
       "id": "server_db_procurement_procurementexecutor",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "procurementexecutor"
     },
     {
@@ -57974,8 +57974,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "server_db_procurement_insertprocess",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "insertprocess()"
     },
     {
@@ -58063,7 +58063,7 @@
       "_origin": "ast",
       "id": "server_db_procurement_listintelligentitems",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "listintelligentitems()"
     },
     {
@@ -58213,7 +58213,7 @@
       "label": "DraftEditOperation",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L319",
+      "source_location": "L324",
       "_origin": "ast",
       "id": "server_db_procurement_drafteditoperation",
       "community": 696,
@@ -58224,7 +58224,7 @@
       "label": "DraftExpectedState",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L329",
+      "source_location": "L334",
       "_origin": "ast",
       "id": "server_db_procurement_draftexpectedstate",
       "community": 696,
@@ -58235,7 +58235,7 @@
       "label": "DraftMutationInput",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L331",
+      "source_location": "L336",
       "_origin": "ast",
       "id": "server_db_procurement_draftmutationinput",
       "community": 696,
@@ -58246,7 +58246,7 @@
       "label": "DraftMutationResult",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L349",
+      "source_location": "L354",
       "_origin": "ast",
       "id": "server_db_procurement_draftmutationresult",
       "community": 696,
@@ -58257,7 +58257,7 @@
       "label": "GeneratedDocRow",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L351",
+      "source_location": "L356",
       "_origin": "ast",
       "id": "server_db_procurement_generateddocrow",
       "community": 696,
@@ -58268,7 +58268,7 @@
       "label": "rowToGeneratedDocument()",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L354",
+      "source_location": "L359",
       "_origin": "ast",
       "id": "server_db_procurement_rowtogenerateddocument",
       "community": 696,
@@ -58279,33 +58279,33 @@
       "label": "applyDraftContentMutationTx()",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L378",
+      "source_location": "L383",
       "_origin": "ast",
       "id": "server_db_procurement_applydraftcontentmutationtx",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "applydraftcontentmutationtx()"
     },
     {
       "label": "listGeneratedDocuments()",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L454",
+      "source_location": "L462",
       "_origin": "ast",
       "id": "server_db_procurement_listgenerateddocuments",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "listgenerateddocuments()"
     },
     {
       "label": "getGeneratedDocumentByKind()",
       "file_type": "code",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L463",
+      "source_location": "L471",
       "_origin": "ast",
       "id": "server_db_procurement_getgenerateddocumentbykind",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getgenerateddocumentbykind()"
     },
     {
@@ -58634,8 +58634,8 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "server_db_tasks_listtasksfororganization",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "listtasksfororganization()"
     },
     {
@@ -62935,8 +62935,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_canonicalunits",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "canonicalunits.ts"
     },
     {
@@ -62946,8 +62946,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_unitcategory",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "unitcategory"
     },
     {
@@ -62957,8 +62957,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_unitentry",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "unitentry"
     },
     {
@@ -62968,8 +62968,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_unitnormalizationresult",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "unitnormalizationresult"
     },
     {
@@ -62979,8 +62979,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_registry",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "registry"
     },
     {
@@ -62990,8 +62990,8 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_alias_map",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "alias_map"
     },
     {
@@ -63001,8 +63001,8 @@
       "source_location": "L202",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_normalizeunit",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "normalizeunit()"
     },
     {
@@ -63012,8 +63012,8 @@
       "source_location": "L240",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_getunitentry",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "getunitentry()"
     },
     {
@@ -63023,8 +63023,8 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_listcanonicalunits",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "listcanonicalunits()"
     },
     {
@@ -63034,8 +63034,8 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "server_domain_canonicalunits_listunitsbycategory",
-      "community": 54,
-      "community_name": "sprint29-semantic-review.test.ts",
+      "community": 760,
+      "community_name": "canonicalUnits.ts",
       "norm_label": "listunitsbycategory()"
     },
     {
@@ -63584,8 +63584,8 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "server_domain_clauseintelligence_evaluateconditionalclause",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "evaluateconditionalclause()"
     },
     {
@@ -64783,8 +64783,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "server_domain_contextassembly_estimatetokens",
-      "community": 39,
-      "community_name": "contextAssembly.ts",
+      "community": 179,
+      "community_name": "semanticCompressionService.ts",
       "norm_label": "estimatetokens()"
     },
     {
@@ -67720,8 +67720,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_dfdstate",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "dfdstate.ts"
     },
     {
@@ -67731,8 +67731,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_domain_dfdstate_dfdstatus",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "dfdstatus"
     },
     {
@@ -67742,8 +67742,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_domain_dfdstate_dfdsource",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "dfdsource"
     },
     {
@@ -67753,8 +67753,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "server_domain_dfdstate_dfdstate",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "dfdstate"
     },
     {
@@ -67764,8 +67764,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "server_domain_dfdstate_dfd_transitions",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "dfd_transitions"
     },
     {
@@ -67775,8 +67775,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "server_domain_dfdstate_createdfdstate",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "createdfdstate()"
     },
     {
@@ -67786,8 +67786,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "server_domain_dfdstate_cantransitiondfd",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "cantransitiondfd()"
     },
     {
@@ -67797,8 +67797,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "server_domain_dfdstate_transitiondfd",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "transitiondfd()"
     },
     {
@@ -67808,8 +67808,8 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "server_domain_dfdstate_importdfd",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "importdfd()"
     },
     {
@@ -67819,8 +67819,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "server_domain_dfdstate_isdfdready",
-      "community": 61,
-      "community_name": "dfdState.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "isdfdready()"
     },
     {
@@ -71527,7 +71527,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "generateddocument.ts"
     },
     {
@@ -71538,7 +71538,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_documentkind",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "documentkind"
     },
     {
@@ -71549,7 +71549,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_documentstatus",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "documentstatus"
     },
     {
@@ -71560,7 +71560,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_draftcontenthash",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "draftcontenthash()"
     },
     {
@@ -71571,7 +71571,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_builddfddraft",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "builddfddraft()"
     },
     {
@@ -71582,7 +71582,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_editalmodality",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "editalmodality"
     },
     {
@@ -71593,7 +71593,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_editalform",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "editalform"
     },
     {
@@ -71604,7 +71604,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_editalplatform",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "editalplatform"
     },
     {
@@ -71626,7 +71626,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_creategenerateddocument",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "creategenerateddocument()"
     },
     {
@@ -71636,8 +71636,8 @@
       "source_location": "L157",
       "_origin": "ast",
       "id": "server_domain_generateddocument_approvedocument",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "approvedocument()"
     },
     {
@@ -71648,7 +71648,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_validateedital",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "validateedital()"
     },
     {
@@ -71659,7 +71659,7 @@
       "_origin": "ast",
       "id": "server_domain_generateddocument_defaultpresencialjustification",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "defaultpresencialjustification()"
     },
     {
@@ -81888,8 +81888,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection",
-      "community": 830,
-      "community_name": "legalKnowledge/knowledgeProjection.ts",
+      "community": 20,
+      "community_name": "rc45-legal-knowledge-foundation.test.ts",
       "norm_label": "legalknowledge/knowledgeprojection.ts"
     },
     {
@@ -81899,8 +81899,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgenode",
-      "community": 830,
-      "community_name": "legalKnowledge/knowledgeProjection.ts",
+      "community": 20,
+      "community_name": "rc45-legal-knowledge-foundation.test.ts",
       "norm_label": "legalknowledgenode"
     },
     {
@@ -81910,8 +81910,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgeedge",
-      "community": 830,
-      "community_name": "legalKnowledge/knowledgeProjection.ts",
+      "community": 20,
+      "community_name": "rc45-legal-knowledge-foundation.test.ts",
       "norm_label": "legalknowledgeedge"
     },
     {
@@ -81921,8 +81921,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_legalknowledgeprojection",
-      "community": 830,
-      "community_name": "legalKnowledge/knowledgeProjection.ts",
+      "community": 20,
+      "community_name": "rc45-legal-knowledge-foundation.test.ts",
       "norm_label": "legalknowledgeprojection"
     },
     {
@@ -81932,8 +81932,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_domain_legalknowledge_knowledgeprojection_projectlegalknowledge",
-      "community": 830,
-      "community_name": "legalKnowledge/knowledgeProjection.ts",
+      "community": 20,
+      "community_name": "rc45-legal-knowledge-foundation.test.ts",
       "norm_label": "projectlegalknowledge()"
     },
     {
@@ -86882,8 +86882,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_procurementprocess",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "procurementprocess.ts"
     },
     {
@@ -86893,8 +86893,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_processstage",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "processstage"
     },
     {
@@ -86904,8 +86904,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_processstatus",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "processstatus"
     },
     {
@@ -86915,8 +86915,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_startoption",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "startoption"
     },
     {
@@ -86926,8 +86926,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_procurementworkspace",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "procurementworkspace"
     },
     {
@@ -86937,8 +86937,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_stage_order",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "stage_order"
     },
     {
@@ -86948,8 +86948,8 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_domain_copilots",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "domain_copilots"
     },
     {
@@ -86959,8 +86959,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_createprocurementworkspace",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "createprocurementworkspace()"
     },
     {
@@ -86970,8 +86970,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_nextstage",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "nextstage()"
     },
     {
@@ -86981,8 +86981,8 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_advancestage",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "advancestage()"
     },
     {
@@ -86992,8 +86992,8 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_setstage",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "setstage()"
     },
     {
@@ -87003,8 +87003,8 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_isstagemandatory",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "isstagemandatory()"
     },
     {
@@ -87014,8 +87014,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "server_domain_procurementprocess_usesdfd",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "usesdfd()"
     },
     {
@@ -89896,8 +89896,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_trcomposition",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trcomposition.ts"
     },
     {
@@ -89929,8 +89929,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "server_domain_trcomposition_trconditionalblock",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trconditionalblock"
     },
     {
@@ -89940,8 +89940,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "server_domain_trcomposition_trsection",
-      "community": 15,
-      "community_name": "sprint32-production-hardening.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trsection"
     },
     {
@@ -89951,8 +89951,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "server_domain_trcomposition_trcompositionaction",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trcompositionaction"
     },
     {
@@ -89962,8 +89962,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "server_domain_trcomposition_trcompositionrule",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trcompositionrule"
     },
     {
@@ -89984,8 +89984,8 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "server_domain_trcomposition_evaluatecondition",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "evaluatecondition()"
     },
     {
@@ -89995,8 +89995,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "server_domain_trcomposition_substitutetemplate",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "substitutetemplate()"
     },
     {
@@ -90006,8 +90006,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "server_domain_trcomposition_resolveclauses",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "resolveclauses()"
     },
     {
@@ -90017,8 +90017,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "server_domain_trcomposition_buildtroutline",
-      "community": 41,
-      "community_name": "sprint295-pre-itemtr.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "buildtroutline()"
     },
     {
@@ -92900,7 +92900,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractsrouter.ts"
     },
     {
@@ -92911,7 +92911,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter_log",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "log"
     },
     {
@@ -92922,7 +92922,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter_opctx",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "opctx"
     },
     {
@@ -92933,7 +92933,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter_audited",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "audited()"
     },
     {
@@ -92944,7 +92944,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter_requirecontractfororg",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "requirecontractfororg()"
     },
     {
@@ -92955,7 +92955,7 @@
       "_origin": "ast",
       "id": "server_routers_contractsrouter_contractsrouter",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractsrouter"
     },
     {
@@ -94758,8 +94758,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "procurementprocessrouter.ts"
     },
     {
@@ -94769,8 +94769,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_log",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "log"
     },
     {
@@ -94780,8 +94780,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_start_options",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "start_options"
     },
     {
@@ -94791,8 +94791,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_stages",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "stages"
     },
     {
@@ -94802,8 +94802,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_modalities",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "modalities"
     },
     {
@@ -94813,8 +94813,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_forms",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "forms"
     },
     {
@@ -94824,8 +94824,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_platforms",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "platforms"
     },
     {
@@ -94846,8 +94846,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_doc_titles",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "doc_titles"
     },
     {
@@ -94857,8 +94857,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_status_labels",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "status_labels"
     },
     {
@@ -94868,8 +94868,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_routers_procurementprocessrouter_status_slugs",
-      "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community": 696,
+      "community_name": "procurement.ts",
       "norm_label": "status_slugs"
     },
     {
@@ -95231,8 +95231,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_taskrouter",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "taskrouter.ts"
     },
     {
@@ -95242,8 +95242,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "server_routers_taskrouter_authzlog",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "authzlog"
     },
     {
@@ -95253,8 +95253,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_routers_taskrouter_taskrouter",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "taskrouter"
     },
     {
@@ -95308,8 +95308,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_routers_trcompositionrouter",
-      "community": 16,
-      "community_name": "itemTR.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trcompositionrouter.ts"
     },
     {
@@ -95330,8 +95330,8 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "server_routers_trcompositionrouter_statusstore",
-      "community": 16,
-      "community_name": "itemTR.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "statusstore"
     },
     {
@@ -95341,8 +95341,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "server_routers_trcompositionrouter_statuskey",
-      "community": 16,
-      "community_name": "itemTR.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "statuskey()"
     },
     {
@@ -95352,8 +95352,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "server_routers_trcompositionrouter_trcompositionrouter",
-      "community": 16,
-      "community_name": "itemTR.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trcompositionrouter"
     },
     {
@@ -99882,7 +99882,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractdocuments.ts"
     },
     {
@@ -99893,7 +99893,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_contractdata",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractdata"
     },
     {
@@ -99904,7 +99904,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_amendmentdata",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "amendmentdata"
     },
     {
@@ -99915,7 +99915,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_apostilledata",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "apostilledata"
     },
     {
@@ -99926,7 +99926,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_rescissiondata",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "rescissiondata"
     },
     {
@@ -99937,7 +99937,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_formatcurrency",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "formatcurrency()"
     },
     {
@@ -99948,7 +99948,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_formatdateextensive",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "formatdateextensive()"
     },
     {
@@ -99959,7 +99959,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_formatdateshort",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "formatdateshort()"
     },
     {
@@ -99970,7 +99970,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_generatecontractminuta",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generatecontractminuta()"
     },
     {
@@ -99981,7 +99981,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_generateamendmentterm",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generateamendmentterm()"
     },
     {
@@ -99992,7 +99992,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_generateapostilleterm",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generateapostilleterm()"
     },
     {
@@ -100003,7 +100003,7 @@
       "_origin": "ast",
       "id": "server_services_contractdocuments_generaterescissionterm",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generaterescissionterm()"
     },
     {
@@ -100014,7 +100014,7 @@
       "_origin": "ast",
       "id": "server_services_contractnotifications",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractnotifications.ts"
     },
     {
@@ -100025,7 +100025,7 @@
       "_origin": "ast",
       "id": "server_services_contractnotifications_checkcontractexpirationsfororganization",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "checkcontractexpirationsfororganization()"
     },
     {
@@ -100036,7 +100036,7 @@
       "_origin": "ast",
       "id": "server_services_contractnotifications_getexpirationsummaryfororganization",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "getexpirationsummaryfororganization()"
     },
     {
@@ -100124,7 +100124,7 @@
       "_origin": "ast",
       "id": "server_services_contractreports",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "contractreports.ts"
     },
     {
@@ -100135,7 +100135,7 @@
       "_origin": "ast",
       "id": "server_services_contractreports_generatealertsexcelreportfororganization",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generatealertsexcelreportfororganization()"
     },
     {
@@ -100146,7 +100146,7 @@
       "_origin": "ast",
       "id": "server_services_contractreports_generateauditexcelreportfororganization",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generateauditexcelreportfororganization()"
     },
     {
@@ -100157,7 +100157,7 @@
       "_origin": "ast",
       "id": "server_services_contractreports_generatealertspdfcontent",
       "community": 105,
-      "community_name": "taskRouter.ts",
+      "community_name": "contractsRouter.ts",
       "norm_label": "generatealertspdfcontent()"
     },
     {
@@ -103742,8 +103742,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "documentpromotionservice.ts"
     },
     {
@@ -103753,8 +103753,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_business_domain",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "business_domain"
     },
     {
@@ -103764,8 +103764,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_promotablekind",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promotablekind"
     },
     {
@@ -103775,8 +103775,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_promotable_kinds",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promotable_kinds"
     },
     {
@@ -103786,8 +103786,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_payloadhashof",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "payloadhashof()"
     },
     {
@@ -103797,8 +103797,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_promoteofficialresult",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promoteofficialresult"
     },
     {
@@ -103808,8 +103808,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_promoteofficialdocument",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "promoteofficialdocument()"
     },
     {
@@ -103819,8 +103819,8 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_officialpromotionsummary",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "officialpromotionsummary"
     },
     {
@@ -103831,7 +103831,7 @@
       "_origin": "ast",
       "id": "server_services_documentpromotionservice_getofficialpromotionsummary",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "getofficialpromotionsummary()"
     },
     {
@@ -108758,8 +108758,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_idempotencyservice",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idempotencyservice.ts"
     },
     {
@@ -108769,8 +108769,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_log",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "log"
     },
     {
@@ -108780,8 +108780,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_idempotencyresult",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idempotencyresult"
     },
     {
@@ -108791,8 +108791,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_isduplicateentryerror",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "isduplicateentryerror()"
     },
     {
@@ -108802,8 +108802,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_idempotencyrow",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idempotencyrow"
     },
     {
@@ -108813,8 +108813,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_idemdb",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idemdb"
     },
     {
@@ -108824,8 +108824,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_idempotencyexecutor",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "idempotencyexecutor"
     },
     {
@@ -108835,8 +108835,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_evaluateexistingrow",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "evaluateexistingrow()"
     },
     {
@@ -108846,8 +108846,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_checkidempotency",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "checkidempotency()"
     },
     {
@@ -108857,8 +108857,8 @@
       "source_location": "L141",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_saveidempotencyresult",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "saveidempotencyresult()"
     },
     {
@@ -108868,8 +108868,8 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_failidempotencykey",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "failidempotencykey()"
     },
     {
@@ -108879,8 +108879,8 @@
       "source_location": "L190",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_cleanupexpiredkeys",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "cleanupexpiredkeys()"
     },
     {
@@ -108890,8 +108890,8 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "server_services_idempotencyservice_runwithidempotency",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "runwithidempotency()"
     },
     {
@@ -112025,8 +112025,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "knowledgeobservabilityservice.ts"
     },
     {
@@ -112036,8 +112036,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_knowledgeeventtype",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "knowledgeeventtype"
     },
     {
@@ -112047,8 +112047,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_knowledgeevent",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "knowledgeevent"
     },
     {
@@ -112058,8 +112058,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_bycorrelation",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "_bycorrelation"
     },
     {
@@ -112069,8 +112069,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_recordknowledgeevent",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "recordknowledgeevent()"
     },
     {
@@ -112080,8 +112080,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_getknowledgeevents",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "getknowledgeevents()"
     },
     {
@@ -112091,8 +112091,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "server_services_knowledge_knowledgeobservabilityservice_clearknowledgeevents",
-      "community": 20,
-      "community_name": "rc45-legal-knowledge-foundation.test.ts",
+      "community": 774,
+      "community_name": "knowledgeObservabilityService.ts",
       "norm_label": "clearknowledgeevents()"
     },
     {
@@ -114137,8 +114137,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "server_services_officialexportengine_exportrequest",
-      "community": 15,
-      "community_name": "sprint32-production-hardening.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "exportrequest"
     },
     {
@@ -116327,7 +116327,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "procurementprocessservice.ts"
     },
     {
@@ -116338,7 +116338,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_domain",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "domain"
     },
     {
@@ -116349,7 +116349,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_approveditemsignature",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "approveditemsignature"
     },
     {
@@ -116360,7 +116360,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_approveditemssignature",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "approveditemssignature()"
     },
     {
@@ -116371,7 +116371,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_generatepayloadhash",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "generatepayloadhash()"
     },
     {
@@ -116382,7 +116382,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_canonicaldocumentidentity",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "canonicaldocumentidentity()"
     },
     {
@@ -116392,8 +116392,8 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_runreplaysafegeneration",
-      "community": 776,
-      "community_name": "documentPromotionService.ts",
+      "community": 133,
+      "community_name": "procurementProcessService.ts",
       "norm_label": "runreplaysafegeneration()"
     },
     {
@@ -116404,7 +116404,7 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_reviveidempotent",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "reviveidempotent()"
     },
     {
@@ -116415,40 +116415,40 @@
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_generatedfddraft",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "generatedfddraft()"
     },
     {
       "label": "saveDFDDraft()",
       "file_type": "code",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L227",
+      "source_location": "L228",
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_savedfddraft",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "savedfddraft()"
     },
     {
       "label": "generateDocument()",
       "file_type": "code",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L293",
+      "source_location": "L294",
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_generatedocument",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "generatedocument()"
     },
     {
       "label": "generateNotice()",
       "file_type": "code",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L398",
+      "source_location": "L399",
       "_origin": "ast",
       "id": "server_services_procurementprocessservice_generatenotice",
       "community": 133,
-      "community_name": "procurementProcessRouter.ts",
+      "community_name": "procurementProcessService.ts",
       "norm_label": "generatenotice()"
     },
     {
@@ -121672,8 +121672,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_tasknotifications",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "tasknotifications.ts"
     },
     {
@@ -121683,8 +121683,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "server_services_tasknotifications_checktaskdeadlines",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "checktaskdeadlines()"
     },
     {
@@ -121694,8 +121694,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_services_tasknotifications_gettaskdeadlinesummary",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "gettaskdeadlinesummary()"
     },
     {
@@ -121705,8 +121705,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_services_taskreports",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "taskreports.ts"
     },
     {
@@ -121716,8 +121716,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "server_services_taskreports_generatetasksexcelreport",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "generatetasksexcelreport()"
     },
     {
@@ -121727,8 +121727,8 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "server_services_taskreports_generatetaskspdfcontent",
-      "community": 105,
-      "community_name": "taskRouter.ts",
+      "community": 61,
+      "community_name": "systemRouter.ts",
       "norm_label": "generatetaskspdfcontent()"
     },
     {
@@ -122310,8 +122310,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "server_services_trintelligenceengine_trintelligenceinput",
-      "community": 16,
-      "community_name": "itemTR.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trintelligenceinput"
     },
     {
@@ -122332,8 +122332,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "server_services_trintelligenceengine_trintelligenceresult",
-      "community": 15,
-      "community_name": "sprint32-production-hardening.test.ts",
+      "community": 55,
+      "community_name": "clauseIntelligence.ts",
       "norm_label": "trintelligenceresult"
     },
     {
@@ -152279,7 +152279,7 @@
       "label": "5. Contrato transacional (`applyDraftContentMutationTx`)",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L47",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_5_contrato_transacional_applydraftcontentmutationtx",
       "community": 720,
@@ -152290,7 +152290,7 @@
       "label": "6. Regenera\u00e7\u00e3o por IA \u2014 proveni\u00eancia + concorr\u00eancia",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L59",
+      "source_location": "L69",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_6_regenera\u00e7\u00e3o_por_ia_proveni\u00eancia_concorr\u00eancia",
       "community": 720,
@@ -152301,7 +152301,7 @@
       "label": "7. SoD estendida da emiss\u00e3o",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L77",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_7_sod_estendida_da_emiss\u00e3o",
       "community": 720,
@@ -152312,7 +152312,7 @@
       "label": "8. DFD \u2014 prova da funda\u00e7\u00e3o (sem promo\u00e7\u00e3o)",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L91",
+      "source_location": "L101",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_8_dfd_prova_da_funda\u00e7\u00e3o_sem_promo\u00e7\u00e3o",
       "community": 720,
@@ -152323,7 +152323,7 @@
       "label": "9. Author NULL hist\u00f3rico \u2014 pol\u00edtica fail-closed",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L100",
+      "source_location": "L110",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_9_author_null_hist\u00f3rico_pol\u00edtica_fail_closed",
       "community": 720,
@@ -152334,7 +152334,7 @@
       "label": "10. Leitura revis\u00e1vel",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L107",
+      "source_location": "L117",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_10_leitura_revis\u00e1vel",
       "community": 720,
@@ -152345,7 +152345,7 @@
       "label": "11. Migration",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L113",
+      "source_location": "L123",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_11_migration",
       "community": 720,
@@ -152356,7 +152356,7 @@
       "label": "12. O que fica para C.4B.3B",
       "file_type": "document",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L121",
+      "source_location": "L131",
       "_origin": "ast",
       "id": "docs_handoffs_c4b3a_draft_provenance_foundation_12_o_que_fica_para_c_4b_3b",
       "community": 720,
@@ -165515,8 +165515,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "sprints_sprint_2_readme",
-      "community": 224,
-      "community_name": "Entregas",
+      "community": 516,
+      "community_name": "sprints/README.md",
       "norm_label": "sprint-2/readme.md"
     },
     {
@@ -166406,8 +166406,8 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "todo_fase_6_aplicar_personaliza\u00e7\u00e3o_e_downloads",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 786,
+      "community_name": "Fase 6 - Aplicar Personaliza\u00e7\u00e3o e Downloads",
       "norm_label": "fase 6 - aplicar personalizacao e downloads"
     },
     {
@@ -166417,8 +166417,8 @@
       "source_location": "L216",
       "_origin": "ast",
       "id": "todo_integra\u00e7\u00e3o_de_cabe\u00e7alho_rodap\u00e9_nos_documentos",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 786,
+      "community_name": "Fase 6 - Aplicar Personaliza\u00e7\u00e3o e Downloads",
       "norm_label": "integracao de cabecalho/rodape nos documentos"
     },
     {
@@ -166428,8 +166428,8 @@
       "source_location": "L225",
       "_origin": "ast",
       "id": "todo_implementa\u00e7\u00e3o_de_downloads",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 786,
+      "community_name": "Fase 6 - Aplicar Personaliza\u00e7\u00e3o e Downloads",
       "norm_label": "implementacao de downloads"
     },
     {
@@ -166571,8 +166571,8 @@
       "source_location": "L307",
       "_origin": "ast",
       "id": "todo_fase_12_hist\u00f3rico_de_vers\u00f5es",
-      "community": 854,
-      "community_name": "Fase 12 - Hist\u00f3rico de Vers\u00f5es",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 12 - historico de versoes"
     },
     {
@@ -166582,8 +166582,8 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "todo_visualiza\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 854,
-      "community_name": "Fase 12 - Hist\u00f3rico de Vers\u00f5es",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "visualizacao de versoes"
     },
     {
@@ -166593,8 +166593,8 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "todo_restaura\u00e7\u00e3o_de_vers\u00f5es",
-      "community": 854,
-      "community_name": "Fase 12 - Hist\u00f3rico de Vers\u00f5es",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "restauracao de versoes"
     },
     {
@@ -166626,8 +166626,8 @@
       "source_location": "L337",
       "_origin": "ast",
       "id": "todo_fase_14_sistema_de_coment\u00e1rios",
-      "community": 851,
-      "community_name": "Fase 14 - Sistema de Coment\u00e1rios",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 14 - sistema de comentarios"
     },
     {
@@ -166637,8 +166637,8 @@
       "source_location": "L339",
       "_origin": "ast",
       "id": "todo_backend_de_coment\u00e1rios",
-      "community": 851,
-      "community_name": "Fase 14 - Sistema de Coment\u00e1rios",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "backend de comentarios"
     },
     {
@@ -166648,8 +166648,8 @@
       "source_location": "L348",
       "_origin": "ast",
       "id": "todo_interface_de_coment\u00e1rios",
-      "community": 851,
-      "community_name": "Fase 14 - Sistema de Coment\u00e1rios",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "interface de comentarios"
     },
     {
@@ -166659,8 +166659,8 @@
       "source_location": "L358",
       "_origin": "ast",
       "id": "todo_fase_15_dashboard_de_analytics",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 785,
+      "community_name": "Fase 15 - Dashboard de Analytics",
       "norm_label": "fase 15 - dashboard de analytics"
     },
     {
@@ -166670,8 +166670,8 @@
       "source_location": "L360",
       "_origin": "ast",
       "id": "todo_m\u00e9tricas_de_backend",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 785,
+      "community_name": "Fase 15 - Dashboard de Analytics",
       "norm_label": "metricas de backend"
     },
     {
@@ -166681,8 +166681,8 @@
       "source_location": "L368",
       "_origin": "ast",
       "id": "todo_interface_de_analytics",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 785,
+      "community_name": "Fase 15 - Dashboard de Analytics",
       "norm_label": "interface de analytics"
     },
     {
@@ -166692,8 +166692,8 @@
       "source_location": "L378",
       "_origin": "ast",
       "id": "todo_fase_16_conformidade_lgpd",
-      "community": 847,
-      "community_name": "Fase 16 - Conformidade LGPD",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 16 - conformidade lgpd"
     },
     {
@@ -166703,8 +166703,8 @@
       "source_location": "L380",
       "_origin": "ast",
       "id": "todo_termos_e_consentimento",
-      "community": 847,
-      "community_name": "Fase 16 - Conformidade LGPD",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "termos e consentimento"
     },
     {
@@ -166714,8 +166714,8 @@
       "source_location": "L389",
       "_origin": "ast",
       "id": "todo_direito_ao_esquecimento",
-      "community": 847,
-      "community_name": "Fase 16 - Conformidade LGPD",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "direito ao esquecimento"
     },
     {
@@ -166725,8 +166725,8 @@
       "source_location": "L397",
       "_origin": "ast",
       "id": "todo_portabilidade_de_dados",
-      "community": 847,
-      "community_name": "Fase 16 - Conformidade LGPD",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "portabilidade de dados"
     },
     {
@@ -166736,8 +166736,8 @@
       "source_location": "L403",
       "_origin": "ast",
       "id": "todo_fase_17_sistema_de_administra\u00e7\u00e3o",
-      "community": 824,
-      "community_name": "Fase 17 - Sistema de Administra\u00e7\u00e3o",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "fase 17 - sistema de administracao"
     },
     {
@@ -166747,8 +166747,8 @@
       "source_location": "L405",
       "_origin": "ast",
       "id": "todo_gerenciamento_de_usu\u00e1rios",
-      "community": 824,
-      "community_name": "Fase 17 - Sistema de Administra\u00e7\u00e3o",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "gerenciamento de usuarios"
     },
     {
@@ -166758,8 +166758,8 @@
       "source_location": "L414",
       "_origin": "ast",
       "id": "todo_auditoria_e_logs",
-      "community": 824,
-      "community_name": "Fase 17 - Sistema de Administra\u00e7\u00e3o",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "auditoria e logs"
     },
     {
@@ -168122,8 +168122,8 @@
       "source_location": "L1279",
       "_origin": "ast",
       "id": "todo_melhorias_de_ui_e_dashboard_nova_implementa\u00e7\u00e3o",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 776,
+      "community_name": "\ud83c\udfa8 Melhorias de UI e Dashboard (Nova Implementa\u00e7\u00e3o)",
       "norm_label": "\ud83c\udfa8 melhorias de ui e dashboard (nova implementacao)"
     },
     {
@@ -168133,8 +168133,8 @@
       "source_location": "L1281",
       "_origin": "ast",
       "id": "todo_ui_de_sugest\u00f5es_catmat",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 776,
+      "community_name": "\ud83c\udfa8 Melhorias de UI e Dashboard (Nova Implementa\u00e7\u00e3o)",
       "norm_label": "ui de sugestoes catmat"
     },
     {
@@ -168144,8 +168144,8 @@
       "source_location": "L1289",
       "_origin": "ast",
       "id": "todo_edi\u00e7\u00e3o_inline_de_itens",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 776,
+      "community_name": "\ud83c\udfa8 Melhorias de UI e Dashboard (Nova Implementa\u00e7\u00e3o)",
       "norm_label": "edicao inline de itens"
     },
     {
@@ -168155,8 +168155,8 @@
       "source_location": "L1297",
       "_origin": "ast",
       "id": "todo_dashboard_de_custos_de_ia_admin_implementa\u00e7\u00e3o_completa",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 776,
+      "community_name": "\ud83c\udfa8 Melhorias de UI e Dashboard (Nova Implementa\u00e7\u00e3o)",
       "norm_label": "dashboard de custos de ia (admin - implementacao completa)"
     },
     {
@@ -168166,8 +168166,8 @@
       "source_location": "L1315",
       "_origin": "ast",
       "id": "todo_expans\u00e3o_do_sistema_rag",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 783,
+      "community_name": "\ud83d\udcda Expans\u00e3o do Sistema RAG",
       "norm_label": "\ud83d\udcda expansao do sistema rag"
     },
     {
@@ -168177,8 +168177,8 @@
       "source_location": "L1317",
       "_origin": "ast",
       "id": "todo_suporte_a_m\u00faltiplos_documentos",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 783,
+      "community_name": "\ud83d\udcda Expans\u00e3o do Sistema RAG",
       "norm_label": "suporte a multiplos documentos"
     },
     {
@@ -168188,8 +168188,8 @@
       "source_location": "L1324",
       "_origin": "ast",
       "id": "todo_documentos_para_indexa\u00e7\u00e3o_no_rag",
-      "community": 27,
-      "community_name": "LiciGov Pro - TODO",
+      "community": 783,
+      "community_name": "\ud83d\udcda Expans\u00e3o do Sistema RAG",
       "norm_label": "documentos para indexacao no rag"
     },
     {
@@ -168199,8 +168199,8 @@
       "source_location": "L1333",
       "_origin": "ast",
       "id": "todo_corre\u00e7\u00f5es_e_melhorias",
-      "community": 853,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "\ud83d\udd27 correcoes e melhorias"
     },
     {
@@ -168210,8 +168210,8 @@
       "source_location": "L1335",
       "_origin": "ast",
       "id": "todo_formato_de_embeddings_no_rag",
-      "community": 853,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "formato de embeddings no rag"
     },
     {
@@ -168221,8 +168221,8 @@
       "source_location": "L1341",
       "_origin": "ast",
       "id": "todo_cache_de_embeddings",
-      "community": 853,
-      "community_name": "\ud83d\udd27 Corre\u00e7\u00f5es e Melhorias",
+      "community": 27,
+      "community_name": "LiciGov Pro - TODO",
       "norm_label": "cache de embeddings"
     },
     {
@@ -336985,7 +336985,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/db/procurement.ts",
-      "source_location": "L466",
+      "source_location": "L474",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_getgenerateddocumentbykind",
@@ -337129,7 +337129,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/db/procurement.ts",
-      "source_location": "L455",
+      "source_location": "L463",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_listgenerateddocuments",
@@ -339565,7 +339565,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L256",
+      "source_location": "L257",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -352125,7 +352125,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L378",
+      "source_location": "L383",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352136,7 +352136,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L319",
+      "source_location": "L324",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352147,7 +352147,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L329",
+      "source_location": "L334",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352158,7 +352158,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L331",
+      "source_location": "L336",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352169,7 +352169,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L349",
+      "source_location": "L354",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352191,7 +352191,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L351",
+      "source_location": "L356",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352202,7 +352202,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L463",
+      "source_location": "L471",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352334,7 +352334,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L454",
+      "source_location": "L462",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352455,7 +352455,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L354",
+      "source_location": "L359",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement",
@@ -352895,7 +352895,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/db/procurement.ts",
-      "source_location": "L383",
+      "source_location": "L388",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -352942,7 +352942,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L358",
+      "source_location": "L363",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_rowtogenerateddocument",
@@ -352954,7 +352954,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L430",
+      "source_location": "L435",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -353098,7 +353098,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L449",
+      "source_location": "L457",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -353110,7 +353110,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L479",
+      "source_location": "L487",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_getgenerateddocumentbykind",
@@ -353170,7 +353170,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L362",
+      "source_location": "L367",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_rowtogenerateddocument",
@@ -353471,7 +353471,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L307",
+      "source_location": "L308",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -354023,7 +354023,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L204",
+      "source_location": "L205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedfddraft",
@@ -354035,7 +354035,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L381",
+      "source_location": "L382",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -354047,7 +354047,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L466",
+      "source_location": "L467",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -354059,7 +354059,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L273",
+      "source_location": "L274",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -354106,7 +354106,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L403",
+      "source_location": "L408",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -354118,7 +354118,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L338",
+      "source_location": "L343",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_draftmutationinput",
@@ -354130,7 +354130,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L349",
+      "source_location": "L354",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_draftmutationresult",
@@ -354142,7 +354142,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/db/procurement.ts",
-      "source_location": "L423",
+      "source_location": "L428",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -354155,7 +354155,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/db/procurement.ts",
-      "source_location": "L391",
+      "source_location": "L396",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_db_procurement_applydraftcontentmutationtx",
@@ -354179,7 +354179,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L199",
+      "source_location": "L200",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedfddraft",
@@ -354191,7 +354191,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L370",
+      "source_location": "L371",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -354203,7 +354203,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L454",
+      "source_location": "L455",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -354215,7 +354215,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L267",
+      "source_location": "L268",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -354311,7 +354311,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L324",
+      "source_location": "L325",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -354323,7 +354323,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L438",
+      "source_location": "L439",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -384884,7 +384884,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L325",
+      "source_location": "L326",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -384896,7 +384896,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L440",
+      "source_location": "L441",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -384908,7 +384908,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L233",
+      "source_location": "L234",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -385028,7 +385028,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L353",
+      "source_location": "L354",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -385040,7 +385040,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L416",
+      "source_location": "L417",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -385052,7 +385052,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L236",
+      "source_location": "L237",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -385076,7 +385076,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L431",
+      "source_location": "L432",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -385100,7 +385100,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L412",
+      "source_location": "L413",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -455588,7 +455588,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L376",
+      "source_location": "L377",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -455600,7 +455600,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L461",
+      "source_location": "L462",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -465364,7 +465364,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L243",
+      "source_location": "L244",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -465412,7 +465412,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L279",
+      "source_location": "L280",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -465460,7 +465460,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L258",
+      "source_location": "L259",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -470844,7 +470844,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L304",
+      "source_location": "L305",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -470856,7 +470856,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L409",
+      "source_location": "L410",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -476962,7 +476962,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L293",
+      "source_location": "L294",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice",
@@ -476973,7 +476973,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L398",
+      "source_location": "L399",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice",
@@ -477017,7 +477017,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L227",
+      "source_location": "L228",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice",
@@ -477077,7 +477077,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L312",
+      "source_location": "L313",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -477089,7 +477089,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L443",
+      "source_location": "L444",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -477113,7 +477113,7 @@
       "context": "argument",
       "confidence": "INFERRED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L319",
+      "source_location": "L320",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -477125,7 +477125,7 @@
       "context": "argument",
       "confidence": "INFERRED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L450",
+      "source_location": "L451",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatenotice",
@@ -477137,7 +477137,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L248",
+      "source_location": "L249",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_savedfddraft",
@@ -477150,7 +477150,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/procurementProcessService.ts",
-      "source_location": "L332",
+      "source_location": "L333",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_procurementprocessservice_generatedocument",
@@ -515818,7 +515818,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L107",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515829,7 +515829,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L113",
+      "source_location": "L123",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515840,7 +515840,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L121",
+      "source_location": "L131",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515895,7 +515895,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L47",
+      "source_location": "L57",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515906,7 +515906,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L59",
+      "source_location": "L69",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515917,7 +515917,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L77",
+      "source_location": "L87",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515928,7 +515928,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L91",
+      "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -515939,7 +515939,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/C4B3A_DRAFT_PROVENANCE_FOUNDATION.md",
-      "source_location": "L100",
+      "source_location": "L110",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_c4b3a_draft_provenance_foundation_c_4b_3a_draft_provenance_foundation_sod_hardening",
@@ -532041,5 +532041,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "eaddad8caab9d2a14873898b554701031fe14a55"
+  "built_at_commit": "3a4a7684fb4c60bd551aa2c4f2286f06db311c9c"
 }

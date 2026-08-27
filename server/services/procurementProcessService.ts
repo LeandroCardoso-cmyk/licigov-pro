@@ -195,10 +195,11 @@ export async function generateDFDDraft(params: {
       return {
         response: doc,
         persist: async (tx) => {
-          // Criação canônica com proveniência (author = originador; último ator substantivo = criador).
+          // Criação/regeneração DETERMINÍSTICA do DFD (template, SEM IA) — proveniência: author =
+          // originador; último ator substantivo = solicitante. Ledger dfd_regenerate (nunca ai_*).
           const { document } = await applyDraftContentMutationTx(tx, {
             organizationId: params.organizationId, processId: params.processId, kind: "dfd",
-            actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
+            actorUserId: params.actorUserId, doc, operation: "dfd_regenerate",
             expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
           });
           await recordProcessEvent({
