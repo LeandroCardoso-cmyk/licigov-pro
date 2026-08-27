@@ -60,6 +60,13 @@ async function edits(org: number, pid: string, kind: string) {
   );
   return rows.map((r: any) => ({ actor: r.actor as number, ph: String(r.ph), nh: String(r.nh), pc: r.pc == null ? null : String(r.pc), op: String(r.op), corr: String(r.corr) }));
 }
+async function timelineCount(org: number, pid: string, needle: string): Promise<number> {
+  const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE ?",
+    [org, pid, `%${needle}%`],
+  );
+  return Number((rows[0] as any).n);
+}
 function editArgs(org: number, pid: string, kind: "etp" | "tr" | "edital", content: string, actor: number, expectedContentHash: string, key: string, correlationId = "c4b3b-edit") {
   return { organizationId: org, processId: pid, kind, content, actorUserId: actor, expectedContentHash, idempotencyKey: key, correlationId };
 }
@@ -216,5 +223,88 @@ describe.skipIf(!DB)("C.4B.3B — edição humana governada (MySQL estrito)", ()
     await expect(saveReviewableDraft(editArgs(ORG, pid, "etp", "invasao", B, draftContentHash(b!.content), `edit-x-${pid}`)))
       .rejects.toMatchObject({ code: "NOT_FOUND" });
     expect((await draftRow(ORG2, pid, "etp"))!.content).toBe(b!.content); // rascunho de B intacto
+  }, 60_000);
+
+  it("10) human_edit é CONTENT-ONLY: editar Edital só muda content — metadata preservada (draft/response/replay)", async () => {
+    const pid = "c4b3b-content-only";
+    await seedEdital(ORG, pid, "Objeto Edital CO", A);
+    const [m0] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT title, status, CAST(sources AS CHAR) AS s, modality, form, platform, CAST(legal_justification AS CHAR) AS lj, correlation_id AS corr, author_user_id AS a FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital' LIMIT 1", [ORG, pid],
+    );
+    const meta0 = m0[0] as any;
+    const before = await draftRow(ORG, pid, "edital");
+
+    const edited = "# Edital EDITADO só no conteúdo\nrevisado por humano.";
+    const res = await saveReviewableDraft(editArgs(ORG, pid, "edital", edited, B, draftContentHash(before!.content), `edit-${pid}`));
+
+    const [m1] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT title, status, CAST(sources AS CHAR) AS s, modality, form, platform, CAST(legal_justification AS CHAR) AS lj, correlation_id AS corr, author_user_id AS a, CAST(content AS CHAR) AS c FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital' LIMIT 1", [ORG, pid],
+    );
+    const meta1 = m1[0] as any;
+    // Metadata NÃO editada permanece EXATA.
+    expect(meta1.title).toBe(meta0.title);
+    expect(meta1.status).toBe(meta0.status);
+    expect(String(meta1.s)).toBe(String(meta0.s));           // sources
+    expect(meta1.modality).toBe(meta0.modality);
+    expect(meta1.form).toBe(meta0.form);
+    expect(meta1.platform).toBe(meta0.platform);
+    expect(String(meta1.lj)).toBe(String(meta0.lj));         // legal_justification
+    expect(meta1.corr).toBe(meta0.corr);                     // correlação da origem
+    expect(meta1.a).toBe(meta0.a);                           // originador
+    expect(String(meta1.c)).toBe(edited);                    // só o content mudou
+
+    // Response e replay refletem a metadata preservada + conteúdo novo.
+    expect(res.document.title).toBe(String(meta0.title));
+    expect(res.document.modality).toBe(meta0.modality);
+    expect(res.document.form).toBe(meta0.form);
+    expect(res.document.platform).toBe(meta0.platform);
+    expect(res.document.authorUserId).toBe(A);
+    expect(res.document.content).toBe(edited);
+    const replay = await saveReviewableDraft(editArgs(ORG, pid, "edital", edited, B, draftContentHash(before!.content), `edit-${pid}`));
+    expect(replay.replayed).toBe(true);
+    expect(replay.document.title).toBe(String(meta0.title));
+    expect(replay.document.modality).toBe(meta0.modality);
+    expect(replay.document.authorUserId).toBe(A);
+    expect(replay.document.content).toBe(edited);
+  }, 120_000);
+
+  it("11) ETP/TR não perdem sources ao editar o conteúdo (content-only)", async () => {
+    for (const kind of ["etp", "tr"] as const) {
+      const pid = `c4b3b-src-${kind}`;
+      if (kind === "etp") await seedEtp(ORG, pid, "Objeto src", A); else await seedTr(ORG, pid, "Objeto src", A);
+      const [s0] = await conn.execute<mysql.RowDataPacket[]>(
+        "SELECT CAST(sources AS CHAR) AS s FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = ? LIMIT 1", [ORG, pid, kind],
+      );
+      const before = await draftRow(ORG, pid, kind);
+      await saveReviewableDraft(editArgs(ORG, pid, kind, `# ${kind} editado\nx`, B, draftContentHash(before!.content), `edit-src-${kind}`));
+      const [s1] = await conn.execute<mysql.RowDataPacket[]>(
+        "SELECT CAST(sources AS CHAR) AS s FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = ? LIMIT 1", [ORG, pid, kind],
+      );
+      expect(String((s1[0] as any).s)).toBe(String((s0[0] as any).s)); // sources preservadas
+    }
+  }, 120_000);
+
+  it("12) no-op: conteúdo idêntico → sem ledger, sem mudar último ator, SEM evento de timeline 'editado', replay seguro", async () => {
+    const pid = "c4b3b-noop-tl";
+    await seedEtp(ORG, pid, "Objeto noop tl", A);
+    const before = await draftRow(ORG, pid, "etp");
+    const tlBefore = await timelineCount(ORG, pid, "editado");
+    const editsBefore = (await edits(ORG, pid, "etp")).length;
+
+    const res = await saveReviewableDraft(editArgs(ORG, pid, "etp", before!.content, B, draftContentHash(before!.content), `noop-${pid}`));
+    expect(res.replayed).toBe(false);
+    expect(res.document.authorUserId).toBe(A);
+    expect(res.document.lastSubstantiveActorUserId).toBe(A);   // no-op não muda último ator
+
+    const row = await draftRow(ORG, pid, "etp");
+    expect(row!.lastSubstantive).toBe(A);
+    expect((await edits(ORG, pid, "etp")).length).toBe(editsBefore);           // sem ledger
+    expect(await timelineCount(ORG, pid, "editado")).toBe(tlBefore);           // sem timeline "editado"
+
+    // Replay seguro (mesma chave+payload).
+    const replay = await saveReviewableDraft(editArgs(ORG, pid, "etp", before!.content, B, draftContentHash(before!.content), `noop-${pid}`));
+    expect(replay.replayed).toBe(true);
+    expect((await edits(ORG, pid, "etp")).length).toBe(editsBefore);
+    expect(await timelineCount(ORG, pid, "editado")).toBe(tlBefore);
   }, 60_000);
 });

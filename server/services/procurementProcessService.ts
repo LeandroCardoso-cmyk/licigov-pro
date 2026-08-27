@@ -268,16 +268,20 @@ async function runGovernedDraftEdit(p: {
     const expectedState = { type: "present" as const, contentHash: p.expectedContentHash };
     let persisted!: GeneratedDocument;
     await db.transaction(async (tx) => {
-      const { document } = await applyDraftContentMutationTx(tx, {
+      const { changed, document } = await applyDraftContentMutationTx(tx, {
         organizationId: p.organizationId, processId: p.processId, kind: p.kind,
         actorUserId: p.actorUserId, doc, operation: p.operation,
         expectedState, idempotencyKey: p.idempotencyKey, correlationId: p.correlationId,
       });
       persisted = document;
-      await recordProcessEvent({
-        organizationId: p.organizationId, processId: p.processId, eventType: "change",
-        actor: String(p.actorUserId), summary: p.timelineSummary, refId: doc.id, correlationId: p.correlationId,
-      }, tx);
+      // NO-OP (changed=false): sem ledger/último-ator (garantido pelo primitive) E sem timeline de
+      // edição — não fabrica proveniência falsa. A idempotência conclui e o snapshot canônico é retornado.
+      if (changed) {
+        await recordProcessEvent({
+          organizationId: p.organizationId, processId: p.processId, eventType: "change",
+          actor: String(p.actorUserId), summary: p.timelineSummary, refId: doc.id, correlationId: p.correlationId,
+        }, tx);
+      }
       // Cacheia o SNAPSHOT CANÔNICO (originador preservado) — resposta = cache = estado persistido.
       await saveIdempotencyResult(p.idempotencyKey, p.actorUserId, p.organizationId, persisted, tx);
     });
