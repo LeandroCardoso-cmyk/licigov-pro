@@ -23,6 +23,7 @@ import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/offic
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
+import { draftContentHash } from "../domain/generatedDocument";
 import type { OrgRole } from "../../drizzle/schema";
 
 const PROMOTE_OP = "procurement.document.promote";
@@ -33,10 +34,9 @@ const MIN_EMIT_ROLE: OrgRole = "manager";
 export type PromotableKind = "etp" | "tr" | "edital";
 const PROMOTABLE_KINDS: readonly PromotableKind[] = ["etp", "tr", "edital"];
 
-/** Hash determinístico do conteúdo do rascunho (integridade da versão emitida). */
-export function draftContentHash(content: string): string {
-  return createHash("sha256").update(content ?? "").digest("hex");
-}
+/** Hash determinístico do conteúdo do rascunho (integridade da versão emitida) — primitive ÚNICA,
+ *  definida no domínio e re-exportada aqui para compatibilidade dos imports existentes. */
+export { draftContentHash };
 
 function payloadHashOf(p: { organizationId: number; processId: string; kind: string; contentHash: string }): string {
   return createHash("sha256")
@@ -126,6 +126,16 @@ export async function promoteOfficialDocument(params: {
       reason: params.reason ?? null,
     });
 
+    // C.4B.3A — SoD estendida (guard de domínio, fail-closed, sem bypass): o ÚLTIMO ator substantivo do
+    // rascunho (quem fez a última alteração material — edição/regeneração) também NÃO pode emitir. Não
+    // altera o helper legacy global (documents int); é específico do Processo Licitatório.
+    if (draft.lastSubstantiveActorUserId != null && draft.lastSubstantiveActorUserId === params.actorUserId) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Segregação de deveres: o último editor substantivo do rascunho não pode emiti-lo — a emissão exige um terceiro revisor.",
+      });
+    }
+
     const db = await getDb();
     if (!db) {
       // GUARD (fail-closed) — a emissão CRIA autoridade institucional persistida e auditável. Sem
@@ -143,6 +153,8 @@ export async function promoteOfficialDocument(params: {
         metadata: {
           promotedFromDraftId: draft.id, contentHash,
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
+          // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
+          lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
           reason: params.reason ?? null,
         },
       }, tx);

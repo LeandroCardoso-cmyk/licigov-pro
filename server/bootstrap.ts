@@ -4143,6 +4143,21 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     // C.4B.1 — autor do rascunho canônico (base da segregação de deveres na emissão oficial).
     await addColumnIfMissing("generated_documents", "author_user_id", "INT NULL");
+    // C.4B.3A — proveniência da edição: último ator substantivo + quando (SoD estendida da emissão).
+    await addColumnIfMissing("generated_documents", "last_substantive_actor_user_id", "INT NULL");
+    await addColumnIfMissing("generated_documents", "last_substantive_at", "DATETIME(3) NULL");
+    // C.4B.3A — ledger imutável de alteração material do rascunho (a criação formal é a migration 0296).
+    await connection.execute(`CREATE TABLE IF NOT EXISTS \`generated_document_edits\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT, \`organization_id\` INT NOT NULL,
+      \`process_id\` VARCHAR(20) NOT NULL, \`generated_document_id\` VARCHAR(20) NOT NULL,
+      \`kind\` VARCHAR(20) NOT NULL, \`actor_user_id\` INT NOT NULL,
+      \`previous_content_hash\` VARCHAR(64) NOT NULL DEFAULT '', \`new_content_hash\` VARCHAR(64) NOT NULL,
+      \`previous_content\` LONGTEXT NULL, \`operation\` VARCHAR(30) NOT NULL, \`reason\` TEXT NULL,
+      \`correlation_id\` VARCHAR(64) NOT NULL DEFAULT '', \`idempotency_key\` VARCHAR(64) NOT NULL,
+      \`created_at\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`), UNIQUE KEY \`uq_generated_document_edits_idem\` (\`organization_id\`, \`idempotency_key\`),
+      INDEX \`idx_generated_document_edits_scope\` (\`organization_id\`, \`process_id\`, \`kind\`, \`created_at\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
     // RC-4.2.1 — Cognitive Observability persistente (recuperável por correlationId).
     await connection.execute(`CREATE TABLE IF NOT EXISTS \`cognitive_observability\` (

@@ -47,7 +47,9 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(procDb.getProcess).mockResolvedValue(mockProcess as any);
-    vi.mocked(procDb.insertGeneratedDocument).mockResolvedValue(null as any);
+    // C.4B.3A — a persistência do rascunho passou pelo primitive governado (proveniência + ledger).
+    // Ecoa o doc recebido como snapshot canônico (resposta = estado persistido).
+    vi.mocked(procDb.applyDraftContentMutationTx).mockImplementation(async (_tx: any, input: any) => ({ created: true, changed: true, document: input.doc }));
     vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null as any);
   });
@@ -61,9 +63,11 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     expect(document.processId).toBe(PID);
     expect(document.content).toContain("Documento de Formalização da Demanda");
     expect(document.content).toContain("Aquisição de Equipamentos de Informática");
-    // Persistiu como documento canônico + registrou evento.
-    expect(procDb.insertGeneratedDocument).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(procDb.insertGeneratedDocument).mock.calls[0][0].kind).toBe("dfd");
+    // Persistiu via o primitive governado (tx, input.doc) + registrou evento.
+    expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc.kind).toBe("dfd");
+    // 1ª criação: estado de partida = ausência esperada (sentinel explícito, sem null ambíguo).
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].expectedState.type).toBe("absent");
     expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);
   });
 
@@ -74,15 +78,22 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     expect(a.document.id).toBe(b.document.id);
   });
 
-  it("saveDFD atualiza o conteúdo do rascunho (mesmo documento)", async () => {
+  it("saveDFD (write governado) atualiza o conteúdo do rascunho (mesmo documento)", async () => {
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     const created = await caller.generateDFD({ processId: PID, idempotencyKey: "dfd-key-save" });
     const edited = "# DFD editado pelo servidor\nConteúdo revisado.";
-    const { document } = await caller.saveDFD({ processId: PID, content: edited });
+    const { document } = await caller.saveDFD({
+      processId: PID, content: edited, expectedContentHash: "a".repeat(64), idempotencyKey: "dfd-save-key",
+    });
 
-    expect(document.id).toBe(created.document.id); // mesmo documento
+    expect(document.id).toBe(created.document.id); // mesmo documento (id determinístico)
     expect(document.content).toBe(edited);
     expect(document.kind).toBe("dfd");
+    // Salvou via o primitive governado: exige rascunho existente (expectedState present), edição manual.
+    const saveCall = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)!;
+    expect(saveCall[1].expectedState.type).toBe("present");
+    expect(saveCall[1].expectedState.contentHash).toBe("a".repeat(64));
+    expect(saveCall[1].operation).toBe("dfd_manual_edit");
   });
 
   it("loadDFD retorna o rascunho persistido (ou null)", async () => {
@@ -99,8 +110,8 @@ describe("procurementProcess — Criar DFD do zero (PR B)", () => {
     vi.mocked(procDb.getProcess).mockResolvedValue(null as any);
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     await expect(caller.generateDFD({ processId: "outro", idempotencyKey: "dfd-key-x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(caller.saveDFD({ processId: "outro", content: "x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
+    await expect(caller.saveDFD({ processId: "outro", content: "x", expectedContentHash: "a".repeat(64), idempotencyKey: "k" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
   it("exige autenticação (UNAUTHORIZED)", async () => {

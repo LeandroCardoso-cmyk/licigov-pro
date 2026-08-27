@@ -32,7 +32,11 @@ vi.mock("../../db/connection", () => ({
 }));
 
 vi.mock("../../db/procurement", () => ({
-  insertGeneratedDocument: vi.fn(async () => { effectOrder.push("generated"); }),
+  // C.4B.3A — a geração passou a persistir via o primitive governado (proveniência + ledger); o
+  // efeito "generated" e a atomicidade (mesmo tx) continuam sendo o contrato observado aqui. Retorna o
+  // SNAPSHOT CANÔNICO (ecoa o doc recebido) — a resposta/replay refletem o estado persistido.
+  applyDraftContentMutationTx: vi.fn(async (_tx: unknown, input: { doc: unknown }) => { effectOrder.push("generated"); return { created: true, changed: true, document: input.doc }; }),
+  getGeneratedDocumentByKind: vi.fn(async () => null), // sem rascunho anterior → 1ª geração (estado ausente)
   recordProcessEvent: vi.fn(async () => { effectOrder.push("event"); }),
   listIntelligentItems: vi.fn(async () => []),
 }));
@@ -167,8 +171,9 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     expect(document.kind).toBe("etp");
     // Cognição fora da transação, ANTES da persistência; save da idempotência POR ÚLTIMO, junto do commit.
     expect(effectOrder).toEqual(["cognition", "generated", "official", "event", "idempotency-save"]);
-    // Persistência recebe o MESMO executor (transação externa) — commit atômico.
-    expect(vi.mocked(procDb.insertGeneratedDocument).mock.calls[0][1]).toBe(fakeTx);
+    // Persistência recebe o MESMO executor (transação externa) — commit atômico. O primitive governado
+    // recebe o tx como PRIMEIRO argumento (applyDraftContentMutationTx(tx, input)).
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][0]).toBe(fakeTx);
     expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][1]).toBe(fakeTx);
     expect(vi.mocked(docEngine.generateOfficialDocument).mock.calls[0][1]).toBe(fakeTx);
     expect(saveIdempotencyResult.mock.calls[0][4]).toBe(fakeTx);
@@ -183,7 +188,7 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     expect(replayed).toBe(true);
     expect(document).toEqual(cached);
     expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
-    expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
     expect(docEngine.generateOfficialDocument).not.toHaveBeenCalled();
     expect(saveIdempotencyResult).not.toHaveBeenCalled();
     expect(effectOrder).toEqual([]);
@@ -193,14 +198,14 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     checkIdempotency.mockResolvedValue({ status: "completed", payloadMismatch: true, response: null });
     await expect(call()).rejects.toMatchObject({ code: "CONFLICT" });
     expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
-    expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
   it("status processing (em voo) → CONFLICT, sem cognição nem persistência", async () => {
     checkIdempotency.mockResolvedValue({ status: "processing" });
     await expect(call()).rejects.toMatchObject({ code: "CONFLICT" });
     expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
-    expect(procDb.insertGeneratedDocument).not.toHaveBeenCalled();
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
   it("status failed → executa novamente (retry permitido após falha anterior)", async () => {
@@ -208,12 +213,12 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     const { replayed } = await call();
     expect(replayed).toBe(false);
     expect(orchestrator.orchestrateMultiCopilot).toHaveBeenCalledTimes(1);
-    expect(procDb.insertGeneratedDocument).toHaveBeenCalledTimes(1);
+    expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(1);
   });
 
   it("erro na persistência → marca a chave como failed (retry futuro) e propaga o erro", async () => {
     checkIdempotency.mockResolvedValue({ status: "new" });
-    vi.mocked(procDb.insertGeneratedDocument).mockRejectedValueOnce(new Error("db down"));
+    vi.mocked(procDb.applyDraftContentMutationTx).mockRejectedValueOnce(new Error("db down"));
     await expect(call()).rejects.toThrow(/db down/);
     expect(failIdempotencyKey).toHaveBeenCalledTimes(1);
     expect(saveIdempotencyResult).not.toHaveBeenCalled();
