@@ -28,10 +28,23 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
   const utils = trpc.useUtils();
   const [method, setMethod] = React.useState<"manual" | "icp_brasil" | "gov_br" | "certificado_a1">("manual");
 
+  // idempotencyKey por TENTATIVA LÓGICA de assinatura: preservada em erro transitório/outcome
+  // desconhecido (o retry reusa a mesma key → o serviço converge para a MESMA versão emitida, sem
+  // duplicar); rotacionada em sucesso ou erro determinístico (CONFLICT/validação = nova tentativa).
+  const signKeyRef = React.useRef<string>("");
+  const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
+  const ensureSignKey = () => { if (!signKeyRef.current) signKeyRef.current = genKey(); return signKeyRef.current; };
+
   const sign = trpc.legalOpinionWorkspace.signOpinion.useMutation({
     onSuccess: () => {
+      signKeyRef.current = ""; // sucesso rotaciona
       void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId });
       onSigned?.(workspaceId);
+    },
+    onError: (err) => {
+      const code = err.data?.code;
+      const transient = !code || code === "INTERNAL_SERVER_ERROR" || code === "TIMEOUT";
+      if (!transient) signKeyRef.current = ""; // erro determinístico ⇒ próxima é nova tentativa
     },
   });
   const ret = trpc.legalOpinionWorkspace.returnOpinion.useMutation({
@@ -76,7 +89,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
         <button
           type="button"
           disabled={sign.isPending || signed}
-          onClick={() => sign.mutate({ workspaceId, method })}
+          onClick={() => sign.mutate({ workspaceId, method, idempotencyKey: ensureSignKey() })}
           className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
         >
           {signed ? "Parecer assinado" : sign.isPending ? "Assinando…" : "Assinar parecer"}

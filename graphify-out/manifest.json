@@ -1390,8 +1390,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "0a0345c593adae75a5c0efceb96b8987",
+    "mtime": 1787924354.8191035,
+    "ast_hash": "9d3844bbded042ef343e490c166ae1b7",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
@@ -7755,8 +7755,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/SignaturePanel.tsx": {
-    "mtime": 1785862333.8584535,
-    "ast_hash": "7ffa7325a91104cdcb9e344eae9d23da",
+    "mtime": 1787924384.7551053,
+    "ast_hash": "4da4a601214f99a18c9d23666e9c42ce",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/TimelinePanel.tsx": {
@@ -7825,8 +7825,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionWorkspaceRouter.ts": {
-    "mtime": 1785862334.827574,
-    "ast_hash": "cfcefd7d5bc8f7d25626621d2a7b5f4a",
+    "mtime": 1787924158.6110919,
+    "ast_hash": "4cb17b0feeddaad7659257312c318efe",
     "semantic_hash": ""
   },
   "server/services/legalOpinionObservabilityService.ts": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "2ac30042421b30cd8f50054f0e27a8a6",
+    "mtime": 1787924148.4990911,
+    "ast_hash": "4dafbfa24a5a62a52fa45bf1a8496457",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -7985,8 +7985,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "841777c7cc8f0397cbf603941a44f631",
+    "mtime": 1787924031.5390842,
+    "ast_hash": "4250b12dcea4adf1e0297d8fed51f02b",
     "semantic_hash": ""
   },
   "docs/business-domains/direct-procurement/architecture.md": {
@@ -11050,8 +11050,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1787920467.4460993,
-    "ast_hash": "8cd19f4a49145b5ade4bbbbdff3cb960",
+    "mtime": 1787924598.579118,
+    "ast_hash": "a9064b2d8140bdde626996c05e71245a",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/catmatKeyPolicy.test.ts": {
+    "mtime": 1787924265.1710982,
+    "ast_hash": "0d86be1a7c9d75e214faaf7fe3f64c82",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/catmatKeyPolicy.ts": {
+    "mtime": 1787924248.7470973,
+    "ast_hash": "5ce9e2304c355762699a9a943c2f491b",
     "semantic_hash": ""
   }
 }

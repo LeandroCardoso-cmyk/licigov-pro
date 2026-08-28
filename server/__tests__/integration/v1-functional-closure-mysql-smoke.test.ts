@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations } from "../../bootstrap";
+import { runMigrations, ensureSchema } from "../../bootstrap";
 import { createLegalOpinionWorkspace, transitionLegalStage } from "../../domain/legalOpinionWorkspace";
 import { insertLegalOpinionWorkspace } from "../../db/legalOpinionWorkspace";
 import { createOpinionDraft, updateOpinionDraft, signOpinion } from "../../services/legalOpinionWorkspaceService";
@@ -92,6 +92,9 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
+    // Espelha o BOOT real (migrate + ensureSchema): o safety net adiciona colunas de drift não
+    // journaladas (ex.: contract_ws_documents.metadata, contract_addenda.request_origin).
+    await ensureSchema(conn);
     await conn.query(`SET GLOBAL sql_mode = '${STRICT}'`).catch(() => {});
     await conn.query(`SET SESSION sql_mode = '${STRICT}'`);
     for (const [id, slug] of [[ORG, "v1-org"], [ORG2, "v1-org-2"]] as const) {
@@ -163,6 +166,54 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     expect((await docsByOrigin(ORG2, "parecer_juridico", ws.id)).length).toBe(0);
   }, 120_000);
 
+  it("A4) assinatura REPLAY-SAFE/CONVERGENTE: repetir o comando não cria nova versão emitido", async () => {
+    const ws = await seedOpinionWorkspace(ORG, "v1-req-a4", "PROC-A4");
+    await createOpinionDraft({
+      workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
+      report: "R4", foundation: "F4", conclusion: "C4", conclusionType: "favoravel", correlationId: "v1-closure",
+    });
+    const r1 = await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a4-0001", correlationId: "v1-closure" });
+    expect(r1.replayed).toBe(false);
+    expect(r1.workspace.currentStage).toBe("SIGNED");
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
+
+    // Mesmo comando/key (retry de outcome desconhecido) → reconverge, NÃO cria nova versão.
+    const r2 = await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a4-0001", correlationId: "v1-closure" });
+    expect(r2.replayed).toBe(true);
+    expect(r2.workspace.currentStage).toBe("SIGNED");
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
+  }, 120_000);
+
+  it("A5) reparo de materialização parcial: emitido ausente é remateralizado UMA vez", async () => {
+    const ws = await seedOpinionWorkspace(ORG, "v1-req-a5", "PROC-A5");
+    await createOpinionDraft({
+      workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
+      report: "R5", foundation: "F5", conclusion: "C5", conclusionType: "favoravel", correlationId: "v1-closure",
+    });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a5-0001", correlationId: "v1-closure" });
+    // Simula falha parcial: o draft ficou assinado, mas a versão emitido não persistiu.
+    await conn.execute("DELETE FROM official_documents WHERE tenant_id = ? AND status = 'emitido' AND origin = ?", [ORG, ws.id]);
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(0);
+
+    const r = await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a5-0001", correlationId: "v1-closure" });
+    expect(r.replayed).toBe(true);
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
+  }, 120_000);
+
+  it("A6) parâmetros incompatíveis com a assinatura existente → CONFLICT", async () => {
+    const ws = await seedOpinionWorkspace(ORG, "v1-req-a6", "PROC-A6");
+    await createOpinionDraft({
+      workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
+      report: "R6", foundation: "F6", conclusion: "C6", conclusionType: "favoravel", correlationId: "v1-closure",
+    });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", correlationId: "v1-closure" });
+    // Outro signer (id distinto) tenta assinar o mesmo parecer já assinado → recusa fail-closed.
+    const OTHER_SIGNER = 9;
+    await expect(signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: OTHER_SIGNER, method: "manual", correlationId: "v1-closure" }))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
+  }, 120_000);
+
   // ─── B. CONTRATAÇÃO DIRETA ──────────────────────────────────────────────────
 
   async function seedDirect(org: number, processNumber: string) {
@@ -200,6 +251,25 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     const full = await getOfficialDocument(ratDoc!.id, ORG);
     expect(full!.content).toContain("Ratifico a contratação direta por dispensa, art. 75.");
     expect(full!.content).toContain("ratificado");
+  }, 120_000);
+
+  it("B3) FAIL-CLOSED: publicar SEM ratificação registrada → bloqueado, nenhum doc ratificacao", async () => {
+    const ws = await seedDirect(ORG, "DIR-B3");
+    await expect(generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);
+  }, 120_000);
+
+  it("B4) FAIL-CLOSED: decisão 'nao_ratificado' → bloqueado, nenhum doc ratificacao", async () => {
+    const ws = await seedDirect(ORG, "DIR-B4");
+    const rat = createRatification({
+      organizationId: ORG, workspaceId: ws.id, responsible: USER, decision: "nao_ratificado",
+      justification: "Contratação não ratificada.", correlationId: "v1-closure",
+    });
+    await insertRatification(rat);
+    await expect(generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);
   }, 120_000);
 
   // ─── D. CONTRATOS / ADITIVOS ────────────────────────────────────────────────

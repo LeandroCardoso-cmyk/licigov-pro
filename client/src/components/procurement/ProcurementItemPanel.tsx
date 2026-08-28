@@ -1,5 +1,9 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import {
+  catmatPayloadFingerprint, isRetryableCatmatError, selectCatmatKey,
+  type CatmatDecisionPayload, type CatmatKeyState,
+} from "./catmatKeyPolicy";
 
 /**
  * ProcurementItemPanel — REAL (wired to tRPC).
@@ -66,25 +70,26 @@ export default function ProcurementItemPanel({
 
   // C — decisão CATMAT/CATSER pelo CONTRATO GOVERNADO (`itemIntelligence.decidirCATMAT`): decisão
   // humana + immutable ledger + threshold institucional + idempotência/replay + tenant isolation.
-  // Cada clique é uma TENTATIVA LÓGICA nova (idempotencyKey fresco); um erro transitório pode ser
-  // reenviado com a mesma chave sem duplicar (garantido pelo backend). Nunca fabrica CATMAT: o código
-  // vem de uma sugestão existente ou de input humano explícito. A aprovação final do item é humana.
+  // A justificativa é OBRIGATÓRIA (domínio) em rejeitar/substituir/sem_correspondencia_segura; apenas
+  // confirmar dispensa. A idempotencyKey segue a política pura `catmatKeyPolicy`: um erro transitório
+  // com o MESMO payload reusa a key (replay-safe, sem 2ª entrada no ledger); mudança de payload ou
+  // sucesso rotaciona. Nunca fabrica CATMAT: o código vem de sugestão existente ou input humano.
   const [decisionMsg, setDecisionMsg] = React.useState<string>("");
   const [thresholdBlocked, setThresholdBlocked] = React.useState<boolean>(false);
   const [manualCode, setManualCode] = React.useState<string>("");
   const [manualDesc, setManualDesc] = React.useState<string>("");
-  const pendingKey = React.useRef<string>("");
+  const [justification, setJustification] = React.useState<string>("");
+  const keyStateRef = React.useRef<CatmatKeyState | null>(null);
+  const lastRetryableRef = React.useRef<boolean>(false);
 
-  const newIdempotencyKey = () => {
-    const k = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
-    pendingKey.current = k;
-    return k;
-  };
+  const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
 
   const decidirCATMAT = trpc.itemIntelligence.decidirCATMAT.useMutation({
     onSuccess: (res) => {
-      pendingKey.current = "";
+      keyStateRef.current = null; // sucesso rotaciona a tentativa lógica
+      lastRetryableRef.current = false;
       setThresholdBlocked(false);
+      setJustification("");
       const d = res.decision;
       setDecisionMsg(
         res.replayed
@@ -94,6 +99,8 @@ export default function ProcurementItemPanel({
       invalidate();
     },
     onError: (err) => {
+      // Outcome transitório (rede/INTERNAL) ⇒ o próximo retry do MESMO payload reusa a key.
+      lastRetryableRef.current = isRetryableCatmatError(err.data?.code);
       const msg = err.message ?? "Falha ao registrar a decisão.";
       const isThreshold = /limiar|threshold|configurad/i.test(msg);
       setThresholdBlocked(isThreshold);
@@ -112,16 +119,32 @@ export default function ProcurementItemPanel({
     catmatDescription?: string;
   }) => {
     if (!item) return;
+    const just = justification.trim();
+    // Espelha a regra do domínio (fail-closed também na UI): só confirmar dispensa justificativa.
+    if (opts.decision !== "confirmado" && just.length === 0) {
+      setDecisionMsg("Justificativa obrigatória para rejeitar, substituir ou declarar sem correspondência segura.");
+      return;
+    }
+    const payload: CatmatDecisionPayload = {
+      itemId: item.id, decision: opts.decision, suggestionId: opts.suggestionId,
+      catmatCode: opts.catmatCode, justification: opts.decision === "confirmado" ? undefined : just,
+    };
+    const fp = catmatPayloadFingerprint(payload);
+    const st = selectCatmatKey(keyStateRef.current, fp, lastRetryableRef.current, genKey);
+    keyStateRef.current = st;
+    lastRetryableRef.current = false;
     setDecisionMsg("");
     decidirCATMAT.mutate({
       itemId: item.id,
       decision: opts.decision,
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: st.key,
       suggestionId: opts.suggestionId,
       catmatCode: opts.catmatCode,
       catmatDescription: opts.catmatDescription,
+      justification: payload.justification,
     });
   };
+  const justificationMissing = justification.trim().length === 0;
 
   const approveItem = trpc.procurementProcess.approveItem.useMutation({
     onSuccess: invalidate,
@@ -240,6 +263,21 @@ export default function ProcurementItemPanel({
                 </div>
               </div>
             )}
+            {/* Justificativa humana — OBRIGATÓRIA para rejeitar / substituir / sem correspondência segura
+                (o domínio exige; confirmar dispensa). */}
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Justificativa (obrigatória para rejeitar/substituir/sem correspondência)
+              </label>
+              <textarea
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                rows={2}
+                placeholder="Fundamente a decisão do servidor…"
+                className="w-full rounded border border-gray-200 px-2 py-1 text-xs"
+              />
+            </div>
+
             {/* Candidatos CATMAT com score/rank/decisão */}
             {data.catmat.length > 0 && (
               <ul className="mt-3 space-y-2">
@@ -277,7 +315,8 @@ export default function ProcurementItemPanel({
                       <button
                         type="button"
                         onClick={() => decide({ decision: "rejeitado", suggestionId: c.id })}
-                        disabled={decidirCATMAT.isPending}
+                        disabled={decidirCATMAT.isPending || justificationMissing}
+                        title={justificationMissing ? "Informe a justificativa para rejeitar" : undefined}
                         className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                       >
                         Rejeitar
@@ -318,7 +357,8 @@ export default function ProcurementItemPanel({
                         catmatDescription: manualDesc.trim() || undefined,
                       })
                     }
-                    disabled={decidirCATMAT.isPending || manualCode.trim().length === 0}
+                    disabled={decidirCATMAT.isPending || manualCode.trim().length === 0 || justificationMissing}
+                    title={justificationMissing ? "Informe a justificativa para substituir" : undefined}
                     className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
                   >
                     Substituir
@@ -326,7 +366,8 @@ export default function ProcurementItemPanel({
                   <button
                     type="button"
                     onClick={() => decide({ decision: "sem_correspondencia_segura" })}
-                    disabled={decidirCATMAT.isPending}
+                    disabled={decidirCATMAT.isPending || justificationMissing}
+                    title={justificationMissing ? "Informe a justificativa" : undefined}
                     className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Sem correspondência segura

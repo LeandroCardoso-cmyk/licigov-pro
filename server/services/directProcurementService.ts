@@ -10,6 +10,7 @@
  * pode ser rejeitada. Nenhuma funcionalidade de Future Evolution é implementada.
  */
 
+import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
@@ -255,13 +256,29 @@ export async function generatePublications(params: {
   assertKernelAccess(DOMAIN, "document_engine");
   const procedure = await getDirectProcedure(ws.id, params.organizationId);
 
+  // V1 hardening — FAIL-CLOSED antes de publicar a Ratificação: exige decisão HUMANA real
+  // `ratificado` persistida. Sem ratificação, ou com `nao_ratificado`, nunca se materializa um
+  // `official_documents.documentType = ratificacao` (o Termo de Ratificação é ato institucional,
+  // jamais texto de preenchimento). O caller não avança para PUBLICATION porque este erro propaga.
+  const ratification = await getRatification(ws.id, params.organizationId);
+  if (!ratification) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Publicação bloqueada: a Ratificação ainda não foi registrada pela autoridade competente.",
+    });
+  }
+  if (ratification.decision !== "ratificado") {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `Publicação bloqueada: a decisão registrada é "${ratification.decision}". Somente uma ratificação "ratificado" permite publicar.`,
+    });
+  }
+
   const kinds: PublicationKind[] = ["aviso", "ratificacao", "extrato_contrato"];
   if (procedure?.procedureType === "presencial") kinds.push("instrucoes", "cronograma");
 
-  // V1 — a Ratificação materializa a DECISÃO REAL persistida (autoridade responsável, decisão,
-  // justificativa e evidências) + referências às justificativas de contratação e de preço já
-  // registradas. Sem workflow novo: apenas reflete o que o servidor decidiu.
-  const ratification = await getRatification(ws.id, params.organizationId);
+  // A Ratificação materializa a DECISÃO REAL persistida (autoridade responsável, decisão, justificativa
+  // e evidências) + referências às justificativas de contratação e de preço já registradas.
   const contractJustification = await getContractJustification(ws.id, params.organizationId);
   const priceJustification = await getPriceJustification(ws.id, params.organizationId);
 
