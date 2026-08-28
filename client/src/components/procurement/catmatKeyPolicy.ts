@@ -43,13 +43,34 @@ export function catmatPayloadFingerprint(p: CatmatDecisionPayload): string {
 }
 
 /**
- * Códigos de erro que constituem OUTCOME DESCONHECIDO/transitório — o commit no servidor pode ter
- * ocorrido, então o retry precisa reusar a mesma key (replay-safe). Erros determinísticos de negócio
- * (validação, conflito, permissão, não encontrado) NÃO reusam: a próxima é uma nova tentativa lógica.
+ * CONFLICT de "operação idêntica já está EM PROCESSAMENTO para esta chave" (duplicata em voo, emitido
+ * pelo `runWithIdempotency` canônico): NÃO é um conflito determinístico — o outcome ainda não concluiu,
+ * então o retry deve PRESERVAR a MESMA key (mesma tentativa lógica). Distingue-se do CONFLICT por payload
+ * divergente/negócio pela mensagem do servidor (contrato server-side inalterado).
  */
-export function isRetryableCatmatError(code: string | null | undefined): boolean {
+export function isProcessingConflict(code: string | null | undefined, message?: string | null): boolean {
+  return code === "CONFLICT" && /em processamento|processing/i.test(message ?? "");
+}
+
+/**
+ * Deve-se PRESERVAR a idempotencyKey (retry da MESMA tentativa lógica)? Sim para outcome
+ * desconhecido/transitório (rede sem código, INTERNAL_SERVER_ERROR, TIMEOUT) e para o CONFLICT de
+ * "processing" (duplicata em voo). Para payload mismatch e demais conflitos determinísticos → NÃO
+ * (rotaciona: a próxima é uma nova tentativa lógica). Regra compartilhada por Parecer e CATMAT.
+ */
+export function shouldPreserveIdempotencyKey(code: string | null | undefined, message?: string | null): boolean {
   if (!code) return true; // erro de rede sem código tRPC ⇒ outcome desconhecido
-  return code === "INTERNAL_SERVER_ERROR" || code === "TIMEOUT";
+  if (code === "INTERNAL_SERVER_ERROR" || code === "TIMEOUT") return true;
+  return isProcessingConflict(code, message);
+}
+
+/**
+ * Códigos/mensagens que constituem OUTCOME DESCONHECIDO/em-voo — o retry reusa a mesma key (replay-safe).
+ * Erros determinísticos de negócio (validação, conflito por payload, permissão, não encontrado) NÃO
+ * reusam: a próxima é uma nova tentativa lógica. Delega para `shouldPreserveIdempotencyKey`.
+ */
+export function isRetryableCatmatError(code: string | null | undefined, message?: string | null): boolean {
+  return shouldPreserveIdempotencyKey(code, message);
 }
 
 /**

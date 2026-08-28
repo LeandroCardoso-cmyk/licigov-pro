@@ -1390,8 +1390,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1787926691.9236155,
-    "ast_hash": "c6fb2a60bb6f8123edd65b6229a6797f",
+    "mtime": 1787928841.3396578,
+    "ast_hash": "a306c4340493aaa4585911012de3c78c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
@@ -7755,8 +7755,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/SignaturePanel.tsx": {
-    "mtime": 1787924384.7551053,
-    "ast_hash": "4da4a601214f99a18c9d23666e9c42ce",
+    "mtime": 1787928853.5596585,
+    "ast_hash": "1beca032956a5ffb33db20af9c3204c5",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/TimelinePanel.tsx": {
@@ -11055,13 +11055,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/catmatKeyPolicy.test.ts": {
-    "mtime": 1787926961.2236314,
-    "ast_hash": "18849dcf10316539f21c934dea44abb7",
+    "mtime": 1787928874.8156598,
+    "ast_hash": "1aca0091e5369c0d5f8ff4f2af34b566",
     "semantic_hash": ""
   },
   "client/src/components/procurement/catmatKeyPolicy.ts": {
-    "mtime": 1787926685.435615,
-    "ast_hash": "0f24d718b969595ed95fc35c5dffc5d7",
+    "mtime": 1787928834.5156574,
+    "ast_hash": "c88741776901320553482dd141ed589e",
     "semantic_hash": ""
   }
 }

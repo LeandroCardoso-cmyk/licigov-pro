@@ -99,8 +99,9 @@ export default function ProcurementItemPanel({
       invalidate();
     },
     onError: (err) => {
-      // Outcome transitório (rede/INTERNAL) ⇒ o próximo retry do MESMO payload reusa a key.
-      lastRetryableRef.current = isRetryableCatmatError(err.data?.code);
+      // Outcome transitório (rede/INTERNAL/TIMEOUT) ou CONFLICT de "processing" (duplicata em voo) ⇒ o
+      // próximo retry do MESMO payload reusa a key. CONFLICT por payload/negócio rotaciona.
+      lastRetryableRef.current = isRetryableCatmatError(err.data?.code, err.message);
       const msg = err.message ?? "Falha ao registrar a decisão.";
       const isThreshold = /limiar|threshold|configurad/i.test(msg);
       setThresholdBlocked(isThreshold);

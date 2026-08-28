@@ -1,8 +1,54 @@
 import { describe, it, expect } from "vitest";
 import {
   catmatPayloadFingerprint, isRetryableCatmatError, selectCatmatKey,
+  isProcessingConflict, shouldPreserveIdempotencyKey,
   type CatmatDecisionPayload, type CatmatKeyState,
 } from "./catmatKeyPolicy";
+
+const PROCESSING_MSG = "Operação idêntica já está em processamento para esta chave — aguarde a conclusão.";
+const PAYLOAD_MISMATCH_MSG = "Idempotency-Key reutilizada com payload diferente — operação recusada.";
+
+describe("shouldPreserveIdempotencyKey — processing vs conflito determinístico", () => {
+  it("CONFLICT de 'processing' (duplicata em voo) → PRESERVA a key", () => {
+    expect(isProcessingConflict("CONFLICT", PROCESSING_MSG)).toBe(true);
+    expect(shouldPreserveIdempotencyKey("CONFLICT", PROCESSING_MSG)).toBe(true);
+  });
+
+  it("CONFLICT por payload mismatch → NÃO preserva (rotaciona)", () => {
+    expect(isProcessingConflict("CONFLICT", PAYLOAD_MISMATCH_MSG)).toBe(false);
+    expect(shouldPreserveIdempotencyKey("CONFLICT", PAYLOAD_MISMATCH_MSG)).toBe(false);
+  });
+
+  it("CONFLICT de negócio (ex.: parecer já assinado) → NÃO preserva", () => {
+    expect(shouldPreserveIdempotencyKey("CONFLICT", "Parecer já assinado com responsável/método distintos; nova assinatura recusada.")).toBe(false);
+  });
+
+  it("INTERNAL_SERVER_ERROR / TIMEOUT / rede (sem código) → PRESERVA", () => {
+    expect(shouldPreserveIdempotencyKey("INTERNAL_SERVER_ERROR")).toBe(true);
+    expect(shouldPreserveIdempotencyKey("TIMEOUT")).toBe(true);
+    expect(shouldPreserveIdempotencyKey(undefined)).toBe(true);
+    expect(shouldPreserveIdempotencyKey(null)).toBe(true);
+  });
+
+  it("erros determinísticos (BAD_REQUEST/FORBIDDEN/PRECONDITION_FAILED/NOT_FOUND) → NÃO preservam", () => {
+    for (const c of ["BAD_REQUEST", "FORBIDDEN", "PRECONDITION_FAILED", "NOT_FOUND"]) {
+      expect(shouldPreserveIdempotencyKey(c)).toBe(false);
+    }
+  });
+
+  it("integra com selectCatmatKey: processing-CONFLICT + mesmo payload → MESMA key; payload-mismatch → nova", () => {
+    let n = 0; const gen = () => `k${++n}`;
+    const p: CatmatDecisionPayload = { itemId: "i1", decision: "rejeitado", suggestionId: "s1", justification: "x" };
+    const fp = catmatPayloadFingerprint(p);
+    const first = selectCatmatKey(null, fp, false, gen);
+    // processing CONFLICT → retryable=true → mesma key
+    const retryProcessing = selectCatmatKey(first, fp, isRetryableCatmatError("CONFLICT", PROCESSING_MSG), gen);
+    expect(retryProcessing.key).toBe(first.key);
+    // payload mismatch CONFLICT → retryable=false → nova key
+    const afterMismatch = selectCatmatKey(first, fp, isRetryableCatmatError("CONFLICT", PAYLOAD_MISMATCH_MSG), gen);
+    expect(afterMismatch.key).not.toBe(first.key);
+  });
+});
 
 describe("catmatKeyPolicy — idempotency key por tentativa lógica", () => {
   let n = 0;

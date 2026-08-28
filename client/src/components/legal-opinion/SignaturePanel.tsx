@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { shouldPreserveIdempotencyKey } from "../procurement/catmatKeyPolicy";
 
 /**
  * SignaturePanel — REAL (tRPC).
@@ -42,9 +43,9 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
       onSigned?.(workspaceId);
     },
     onError: (err) => {
-      const code = err.data?.code;
-      const transient = !code || code === "INTERNAL_SERVER_ERROR" || code === "TIMEOUT";
-      if (!transient) signKeyRef.current = ""; // erro determinístico ⇒ próxima é nova tentativa
+      // Preserva a key em outcome desconhecido/transitório E no CONFLICT de "processing" (duplicata em
+      // voo); rotaciona em payload mismatch / conflito determinístico (nova tentativa lógica).
+      if (!shouldPreserveIdempotencyKey(err.data?.code, err.message)) signKeyRef.current = "";
     },
   });
   const ret = trpc.legalOpinionWorkspace.returnOpinion.useMutation({
