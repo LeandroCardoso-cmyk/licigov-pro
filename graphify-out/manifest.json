@@ -1365,8 +1365,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
-    "mtime": 1785862333.8705091,
-    "ast_hash": "4147f5b4d057b3ab5550681b221ea904",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "2b138f57b0e4e92da6fbdd3d3860a4b5",
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
@@ -4670,8 +4670,8 @@
     "semantic_hash": ""
   },
   "server/domain/intelligentItem.ts": {
-    "mtime": 1785862334.7947338,
-    "ast_hash": "bec62175d9aa82f61bd1c22cd63ba130",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "e1854311d2068197b135c69817162440",
     "semantic_hash": ""
   },
   "server/domain/itemRecommendation.ts": {
@@ -5165,8 +5165,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1786313829.0114706,
-    "ast_hash": "3ef85f27388b6f7bfc07894437c12a54",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "086260f04fb8cd353514fd61e212538e",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1787854413.0171354,
-    "ast_hash": "255854836451d91df5ab552656f0faf0",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "d5a77e04e9f3b5b35c2beb071b2087fe",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -8085,8 +8085,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1785862333.823977,
-    "ast_hash": "f44636176a822a95435af439ea155db1",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "3e4914514179c54119a78e6b6c72fd4e",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -8350,8 +8350,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5op-department-operation.test.ts": {
-    "mtime": 1785862334.739574,
-    "ast_hash": "119bc53006c2da392784e0de4347cfc4",
+    "mtime": 1787942488.5418096,
+    "ast_hash": "773b382e2566aa4988d4625620b0abfd",
     "semantic_hash": ""
   },
   "server/db/departmentOperation.ts": {
@@ -11062,6 +11062,36 @@
   "client/src/components/procurement/catmatKeyPolicy.ts": {
     "mtime": 1787928834.5156574,
     "ast_hash": "c88741776901320553482dd141ed589e",
+    "semantic_hash": ""
+  },
+  "client/src/components/contract-workspace/contractErrorPolicy.test.ts": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "4e2624aaa3ddcca1cff91b35260b716c",
+    "semantic_hash": ""
+  },
+  "client/src/components/contract-workspace/contractErrorPolicy.ts": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "bfb719d30d523c4ab5298fc99aa81b33",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/CatmatThresholdConfig.tsx": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "2854883fe68e7ffcdf8171d80e63f27e",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/catmatThresholdPolicy.test.ts": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "606e53af829f8214042cf69585c91f26",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/catmatThresholdPolicy.ts": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "3ba4c2af39bf434e6f8644c5c84a4dae",
+    "semantic_hash": ""
+  },
+  "server/__tests__/intelligentItemTransition.test.ts": {
+    "mtime": 1787942488.5520241,
+    "ast_hash": "f0b6bdbf8c028c6a3636c5816602ec91",
     "semantic_hash": ""
   }
 }

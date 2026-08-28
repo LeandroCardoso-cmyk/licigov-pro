@@ -46,6 +46,29 @@ const ITEM_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   rejeitado: ["em_analise"],
 };
 
+/**
+ * Erro DETERMINÍSTICO de transição de estado do Item Inteligente (ex.: aprovar item já
+ * aprovado, clique duplicado, estado desatualizado). É um erro de domínio ESPERADO — não
+ * uma falha inesperada — e por isso deve virar um 4xx tipado no router (CONFLICT), nunca um
+ * 500. Carrega os estados envolvidos para observabilidade e para uma mensagem institucional.
+ */
+export class ItemTransitionError extends Error {
+  readonly code = "ITEM_TRANSITION_INVALID" as const;
+  constructor(
+    readonly from: ItemStatus,
+    readonly to: ItemStatus,
+    message?: string,
+  ) {
+    super(message ?? `Não é possível levar o item do estado "${from}" para "${to}".`);
+    this.name = "ItemTransitionError";
+  }
+}
+
+/** True para o erro determinístico de transição de item (mapeável a CONFLICT no router). */
+export function isItemTransitionError(err: unknown): err is ItemTransitionError {
+  return err instanceof ItemTransitionError;
+}
+
 export function createIntelligentItem(params: {
   processId: string;
   organizationId: number;
@@ -96,14 +119,14 @@ export function canTransitionItem(from: ItemStatus, to: ItemStatus): boolean {
 
 export function approveItem(item: IntelligentProcurementItem, userId: number, at?: string): IntelligentProcurementItem {
   if (!canTransitionItem(item.status, "aprovado")) {
-    throw new Error(`Não é possível aprovar item no estado ${item.status}`);
+    throw new ItemTransitionError(item.status, "aprovado", `Não é possível aprovar um item no estado "${item.status}".`);
   }
   return { ...item, status: "aprovado", approvedBy: userId, updatedAt: at ?? new Date().toISOString() };
 }
 
 export function rejectItem(item: IntelligentProcurementItem, at?: string): IntelligentProcurementItem {
   if (!canTransitionItem(item.status, "rejeitado")) {
-    throw new Error(`Não é possível rejeitar item no estado ${item.status}`);
+    throw new ItemTransitionError(item.status, "rejeitado", `Não é possível rejeitar um item no estado "${item.status}".`);
   }
   return { ...item, status: "rejeitado", updatedAt: at ?? new Date().toISOString() };
 }

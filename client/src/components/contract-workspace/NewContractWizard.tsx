@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { friendlyContractError, isRawValidationLeak } from "./contractErrorPolicy";
 
 /**
  * NewContractWizard — REAL (tRPC).
@@ -45,6 +46,14 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   // reenvio de rede/duplo clique); reset após sucesso ou ao trocar de origem/forma.
   const [idempotencyKey, setIdempotencyKey] = React.useState(() => crypto.randomUUID());
 
+  // F7a — seleção institucional do processo canônico (reusa a listagem canônica
+  // `procurementProcess.listProcesses`, tenant-scoped) em vez de exigir o id interno opaco.
+  const processesQuery = trpc.procurementProcess.listProcesses.useQuery(
+    { limit: 100 },
+    { enabled: origin === "processo_licitatorio", refetchOnWindowFocus: false },
+  );
+  const processes = processesQuery.data?.processes ?? [];
+
   const onOk = (contractId: string) => {
     void utils.contractWorkspace.listContracts.invalidate();
     setIdempotencyKey(crypto.randomUUID()); // próxima criação usa uma chave nova
@@ -56,7 +65,15 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   const importExt = trpc.contractWorkspace.importExternalContract.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
 
   const busy = fromProc.isPending || fromDirect.isPending || createManual.isPending || importExt.isPending;
-  const err = fromProc.error?.message ?? fromDirect.error?.message ?? createManual.error?.message ?? importExt.error?.message;
+  const rawErr = fromProc.error ?? fromDirect.error ?? createManual.error ?? importExt.error ?? null;
+  // F7b — nunca exibir o corpo técnico/Zod; mapeamos para uma mensagem institucional e
+  // preservamos o detalhe técnico apenas em observabilidade (console).
+  React.useEffect(() => {
+    if (isRawValidationLeak(rawErr)) {
+      console.error("[NewContractWizard] validação recusada", { code: rawErr?.data?.code, detail: rawErr?.message });
+    }
+  }, [rawErr]);
+  const err = friendlyContractError(rawErr);
   const conflictExistingId = createManual.error?.data?.code === "CONFLICT" ? parseConflictExistingId(createManual.error.message) : null;
 
   const submit = (e: React.FormEvent) => {
@@ -90,7 +107,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {ORIGINS.map(([v, label]) => (
-          <button key={v} type="button" onClick={() => setOrigin(v)}
+          <button key={v} type="button" onClick={() => { setOrigin(v); setOriginId(""); }}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${origin === v ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{label}</button>
         ))}
       </div>
@@ -99,9 +116,30 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         <input value={contractNumber} onChange={(e) => setContractNumber(e.target.value)} placeholder="CT-2026/001" className={inputCls} />
       </label>
 
-      {(origin === "processo_licitatorio" || origin === "contratacao_direta") && (
+      {origin === "processo_licitatorio" && (
         <label className="block text-xs font-medium text-foreground">
-          {origin === "processo_licitatorio" ? "ID do Processo Licitatório" : "ID da Contratação Direta"}
+          Processo Licitatório
+          <select value={originId} onChange={(e) => setOriginId(e.target.value)} className={inputCls} disabled={processesQuery.isLoading}>
+            <option value="">{processesQuery.isLoading ? "Carregando processos…" : "Selecione o processo…"}</option>
+            {processes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.processNumber} — {p.object || "(sem objeto)"}
+                {p.modality ? ` · ${p.modality}` : ""}
+                {p.status ? ` · ${p.status}` : ""}
+              </option>
+            ))}
+          </select>
+          {!processesQuery.isLoading && processes.length === 0 && (
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              Nenhum processo licitatório disponível neste órgão. Crie o processo antes de derivar o contrato.
+            </span>
+          )}
+        </label>
+      )}
+
+      {origin === "contratacao_direta" && (
+        <label className="block text-xs font-medium text-foreground">
+          ID da Contratação Direta
           <input value={originId} onChange={(e) => setOriginId(e.target.value)} placeholder="id de origem" className={inputCls} />
         </label>
       )}
@@ -151,7 +189,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         </div>
       )}
 
-      <button type="submit" disabled={busy} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={busy || ((origin === "processo_licitatorio" || origin === "contratacao_direta") && !originId)} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
         {busy ? "Processando…" : origin === "externo" ? "Reconstruir contrato (assistido)" : origin === "avulso" ? "Criar contrato" : "Gerar contrato"}
       </button>
     </form>

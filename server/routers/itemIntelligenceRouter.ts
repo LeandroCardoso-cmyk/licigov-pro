@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { getItemPanel, catmatCandidates } from "../services/itemIntelligenceService";
 import { rankCATMAT, manualMatch } from "../domain/catmatMatching";
-import { approveItem as approveItemDomain } from "../domain/intelligentItem";
+import { approveItem as approveItemDomain, isItemTransitionError } from "../domain/intelligentItem";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
 import { decideCatmat, type AvailableSuggestion } from "../services/catmatGovernanceService";
 import {
@@ -135,7 +135,15 @@ export const itemIntelligenceRouter = router({
       const orgId = ctx.organizationId!;
       const item = await getIntelligentItem(input.itemId, orgId);
       if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const approved = approveItemDomain(item, ctx.user.id);
+      // Convergência idempotente (clique duplicado) → sucesso; transição inválida → CONFLICT tipado (não 500).
+      if (item.status === "aprovado") return { success: true, itemId: item.id, status: "aprovado" as const };
+      let approved;
+      try {
+        approved = approveItemDomain(item, ctx.user.id);
+      } catch (err) {
+        if (isItemTransitionError(err)) throw new TRPCError({ code: "CONFLICT", message: err.message });
+        throw err;
+      }
       await updateItemStatus(item.id, orgId, "aprovado", ctx.user.id, approved.updatedAt);
       await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "approval", actor: String(ctx.user.id), summary: `Item aprovado (painel): ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
       return { success: true, itemId: item.id, status: "aprovado" as const };

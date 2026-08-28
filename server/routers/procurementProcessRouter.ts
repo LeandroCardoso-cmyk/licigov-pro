@@ -17,7 +17,7 @@ import {
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
+import { approveItem as approveItemDomain, rejectItem as rejectItemDomain, isItemTransitionError } from "../domain/intelligentItem";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { enrichItem } from "../services/itemIntelligenceService";
@@ -316,7 +316,16 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       const item = await getIntelligentItem(input.itemId, orgId);
       if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const approved = approveItemDomain(item, ctx.user.id);
+      // Convergência idempotente: item já aprovado (ex.: clique duplicado) → sucesso sem
+      // duplicar efeito nem registrar novo evento; transição realmente inválida → CONFLICT tipado.
+      if (item.status === "aprovado") return { success: true, itemId: item.id, status: "aprovado" as const };
+      let approved;
+      try {
+        approved = approveItemDomain(item, ctx.user.id);
+      } catch (err) {
+        if (isItemTransitionError(err)) throw new TRPCError({ code: "CONFLICT", message: err.message });
+        throw err;
+      }
       await updateItemStatus(item.id, orgId, "aprovado", ctx.user.id, approved.updatedAt);
       await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "approval", actor: String(ctx.user.id), summary: `Item aprovado: ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
       return { success: true, itemId: item.id, status: "aprovado" as const };
@@ -328,7 +337,15 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       const item = await getIntelligentItem(input.itemId, orgId);
       if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const rejected = rejectItemDomain(item);
+      // Convergência idempotente: item já rejeitado → sucesso sem duplicar; transição inválida → CONFLICT.
+      if (item.status === "rejeitado") return { success: true, itemId: item.id, status: "rejeitado" as const };
+      let rejected;
+      try {
+        rejected = rejectItemDomain(item);
+      } catch (err) {
+        if (isItemTransitionError(err)) throw new TRPCError({ code: "CONFLICT", message: err.message });
+        throw err;
+      }
       await updateItemStatus(item.id, orgId, "rejeitado", null, rejected.updatedAt);
       await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user.id), summary: `Item rejeitado: ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
       return { success: true, itemId: item.id, status: "rejeitado" as const };
