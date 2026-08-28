@@ -127,7 +127,8 @@ export default function ProcurementItemPanel({
     }
     const payload: CatmatDecisionPayload = {
       itemId: item.id, decision: opts.decision, suggestionId: opts.suggestionId,
-      catmatCode: opts.catmatCode, justification: opts.decision === "confirmado" ? undefined : just,
+      catmatCode: opts.catmatCode, catmatDescription: opts.catmatDescription,
+      justification: opts.decision === "confirmado" ? undefined : just,
     };
     const fp = catmatPayloadFingerprint(payload);
     const st = selectCatmatKey(keyStateRef.current, fp, lastRetryableRef.current, genKey);

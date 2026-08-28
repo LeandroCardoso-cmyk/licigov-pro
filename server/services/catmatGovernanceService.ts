@@ -65,6 +65,9 @@ function payloadHashOf(p: DecideCatmatParams): string {
     decision: p.decision,
     suggestionId: p.suggestionId ?? null,
     catmatCode: (p.catmatCode ?? "").trim() || null,
+    // A descrição do override manual É dado persistido → participa da identidade do payload: mesma key
+    // com descrição diferente ⇒ payload diferente ⇒ CONFLICT (nunca replay silencioso de descrição antiga).
+    catmatDescription: (p.catmatDescription ?? "").trim() || null,
     justification: (p.justification ?? "").trim() || null,
   });
   return createHash("sha256").update(canonical).digest("hex");
@@ -105,8 +108,16 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
     throw new TRPCError({ code: "BAD_REQUEST", message: `Decisão CATMAT inválida: ${validation.reason}` });
   }
 
-  // Limiar VIGENTE no momento da decisão (fail-closed: pode ser null).
+  // Limiar VIGENTE no momento da decisão. FAIL-CLOSED real: sem limiar institucional configurado, a
+  // decisão governada é RECUSADA antes de qualquer efeito — nenhuma entrada no ledger, nenhum código
+  // fixado no item, nenhum evento de timeline. Nunca inventa default nem auto-configura.
   const threshold = await getActiveCatmatThreshold(params.organizationId);
+  if (!threshold) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Limiar institucional CATMAT/CATSER não configurado. Um gestor deve definir o limiar antes das decisões.",
+    });
+  }
 
   const resolvedDescription =
     params.decision === "confirmado"

@@ -21,6 +21,7 @@ export interface CatmatDecisionPayload {
   readonly decision: "confirmado" | "rejeitado" | "substituido" | "sem_correspondencia_segura";
   readonly suggestionId?: string;
   readonly catmatCode?: string;
+  readonly catmatDescription?: string;
   readonly justification?: string;
 }
 
@@ -36,6 +37,7 @@ export function catmatPayloadFingerprint(p: CatmatDecisionPayload): string {
     p.decision,
     p.suggestionId ?? "",
     (p.catmatCode ?? "").trim(),
+    (p.catmatDescription ?? "").trim(),
     (p.justification ?? "").trim(),
   ].join("|");
 }

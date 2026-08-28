@@ -10,9 +10,11 @@
  * via kernelAccessService. Degrada graciosamente sem DB. Determinístico.
  */
 
+import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
+import { runWithIdempotency } from "./idempotencyService";
 import { computeLineageId } from "../domain/officialDocument";
 import { listVersions, getOfficialDocument } from "../db/officialDocuments";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
@@ -297,19 +299,50 @@ async function materializeSignedParecer(ws: LegalOpinionWorkspace, signed: Legal
   });
 }
 
+/** Executa a lógica CONVERGENTE de assinatura (recovery por estado) — usada DENTRO da idempotência canônica. */
+async function signOpinionConverge(
+  ws: LegalOpinionWorkspace, draft: LegalOpinionDraft, signedBy: number, method: SignatureMethod, correlationId: string,
+): Promise<{ workspace: LegalOpinionWorkspace; draft: LegalOpinionDraft }> {
+  // Caminho CONVERGENTE: o draft já está assinado (retry com chave nova, ou reparo de falha parcial).
+  if (draft.signed) {
+    if ((draft.signedBy != null && draft.signedBy !== signedBy) || (draft.signatureMethod && draft.signatureMethod !== method)) {
+      throw new TRPCError({ code: "CONFLICT", message: "Parecer já assinado com responsável/método distintos; nova assinatura recusada." });
+    }
+    const documentType = parecerDocumentType(draft.opinionType);
+    const expectedContent = buildSignedParecerContent(draft);
+    const hasEmitido = await findEmitidoForContent(ws.organizationId, ws.id, documentType, expectedContent);
+    if (!hasEmitido) await materializeSignedParecer(ws, draft, signedBy, correlationId); // reparo único
+    const moved = await moveWorkspaceToSigned(ws);
+    return { workspace: moved, draft };
+  }
+  // Caminho NORMAL: primeira assinatura.
+  const signed = signLegalOpinionDraft(draft, method, signedBy);
+  await insertLegalOpinionDraft(signed);
+  await materializeSignedParecer(ws, signed, signedBy, correlationId); // única materialização emitido
+  const moved = await moveWorkspaceToSigned(ws);
+  await recordHistory(moved, "signed", String(signedBy), `Parecer assinado (${signed.signatureMethod}).`, signed.id);
+  return { workspace: moved, draft: signed };
+}
+
 /**
- * Assina o parecer (boundary institucional) de forma REENTRANTE / REPLAY-SAFE e CONVERGENTE.
- * `idempotencyKey` acompanha a tentativa lógica humana (a UI o preserva em erro transitório). A
- * convergência é baseada no ESTADO (não em store de chave): uma mesma tentativa de assinatura resulta
- * em exatamente UM draft assinado + UMA versão oficial `emitido` correspondente, com o workspace em
- * SIGNED — retries retornam o mesmo resultado, jamais uma nova versão. A IA nunca assina.
+ * Assina o parecer (boundary institucional) de forma REENTRANTE / REPLAY-SAFE.
+ *
+ * Idempotência CANÔNICA (`runWithIdempotency`, operation `legal_opinion.sign`): mesma key + mesmo
+ * payload → replay do resultado em cache (replayed=true); mesma key + payload diferente → CONFLICT;
+ * mesma key em processamento → CONFLICT; falha → key liberada para retry. O payloadHash vincula
+ * workspace, org, signer, método, tipo, draftId e a versão/hash do draft alvo.
+ *
+ * CONVERGÊNCIA por estado (dentro da operação canônica) é o mecanismo de RECOVERY: draft já assinado
+ * compatível é reusado; a versão `emitido` correspondente é reparada uma única vez se ausente; o
+ * workspace converge para SIGNED; signer/método incompatível → CONFLICT. As duas camadas trabalham
+ * juntas. A IA nunca assina.
  */
 export async function signOpinion(params: {
   workspaceId: string;
   organizationId: number;
   signedBy: number;
   method?: SignatureMethod;
-  idempotencyKey?: string;
+  idempotencyKey: string;
   correlationId: string;
 }): Promise<{ workspace: LegalOpinionWorkspace; draft: LegalOpinionDraft; replayed: boolean }> {
   const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
@@ -318,32 +351,20 @@ export async function signOpinion(params: {
   if (!draft) throw new Error("Não há parecer para assinar.");
   const method = params.method ?? "manual";
 
-  // ── Caminho CONVERGENTE: o draft já está assinado ─────────────────────────────
-  if (draft.signed) {
-    // Parâmetros incompatíveis com a assinatura já existente → fail-closed (nunca reassina por cima).
-    if ((draft.signedBy != null && draft.signedBy !== params.signedBy) || (draft.signatureMethod && draft.signatureMethod !== method)) {
-      throw new TRPCError({ code: "CONFLICT", message: "Parecer já assinado com responsável/método distintos; nova assinatura recusada." });
-    }
-    const documentType = parecerDocumentType(draft.opinionType);
-    const expectedContent = buildSignedParecerContent(draft);
-    // Reparo ÚNICO de materialização parcial: se a versão `emitido` correspondente não existir (falha
-    // após persistir o draft assinado, antes de materializar), materializa uma vez. Se já existir, reusa.
-    const hasEmitido = await findEmitidoForContent(params.organizationId, ws.id, documentType, expectedContent);
-    if (!hasEmitido) {
-      await materializeSignedParecer(ws, draft, params.signedBy, params.correlationId);
-    }
-    const moved = await moveWorkspaceToSigned(ws); // convergência do estágio (idempotente)
-    return { workspace: moved, draft, replayed: true };
-  }
+  const payloadHash = createHash("sha256").update(JSON.stringify({
+    workspaceId: ws.id, organizationId: params.organizationId, signedBy: params.signedBy,
+    signatureMethod: method, opinionType: draft.opinionType,
+    draftId: draft.id, draftVersion: draft.version, contentHash: draftContentHash(draft),
+  })).digest("hex");
 
-  // ── Caminho NORMAL: primeira assinatura ───────────────────────────────────────
-  const signed = signLegalOpinionDraft(draft, method, params.signedBy);
-  await insertLegalOpinionDraft(signed);
-  // Só aqui materializamos a versão OFICIAL (`emitido`) com o conteúdo EXATO assinado.
-  await materializeSignedParecer(ws, signed, params.signedBy, params.correlationId);
-  const moved = await moveWorkspaceToSigned(ws);
-  await recordHistory(moved, "signed", String(params.signedBy), `Parecer assinado (${signed.signatureMethod}).`, signed.id);
-  return { workspace: moved, draft: signed, replayed: false };
+  const { result, replayed } = await runWithIdempotency(
+    { key: params.idempotencyKey, userId: params.signedBy, organizationId: params.organizationId, operation: "legal_opinion.sign", payloadHash },
+    () => signOpinionConverge(ws, draft, params.signedBy, method, params.correlationId),
+  );
+  // O responsePayload cacheado volta como string em MariaDB e como objeto em MySQL 8 — revive para
+  // devolver a MESMA resposta institucional (workspace + draft) em ambos no replay.
+  const revived = (typeof result === "string" ? JSON.parse(result) : result) as { workspace: LegalOpinionWorkspace; draft: LegalOpinionDraft };
+  return { workspace: revived.workspace, draft: revived.draft, replayed };
 }
 
 const CONCLUSION_TO_RESPONSE: Record<LegalOpinionConclusion, "favoravel" | "desfavoravel" | "com_ressalvas"> = {

@@ -125,7 +125,7 @@ export const legalOpinionWorkspaceRouter = router({
 
   /** Assina o parecer (apenas MANUAL implementado nesta fase). */
   signOpinion: tenantProcedure
-    .input(z.object({ workspaceId: z.string().min(1), method: z.enum(SIGNATURE_METHODS).optional(), idempotencyKey: z.string().min(8).max(64).optional() }))
+    .input(z.object({ workspaceId: z.string().min(1), method: z.enum(SIGNATURE_METHODS).optional(), idempotencyKey: z.string().min(8).max(64) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWorkspace(input.workspaceId, orgId);

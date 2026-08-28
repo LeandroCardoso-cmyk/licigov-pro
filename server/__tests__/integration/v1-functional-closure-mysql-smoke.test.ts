@@ -71,6 +71,8 @@ async function cleanup() {
       await conn.execute(`DELETE FROM ${t} WHERE organization_id = ?`, [org]).catch(() => {});
       await conn.execute(`DELETE FROM ${t} WHERE tenant_id = ?`, [org]).catch(() => {});
     }
+    // idempotency_keys usa a coluna camelCase `organizationId` — limpar para não poluir replays entre runs.
+    await conn.execute("DELETE FROM idempotency_keys WHERE organizationId = ?", [org]).catch(() => {});
   }
 }
 
@@ -125,7 +127,7 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
       patch: { report: "Relatório FINAL revisado", foundation: "Fundamentação FINAL", conclusion: "Conclusão FINAL favorável" },
       correlationId: "v1-closure",
     });
-    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", correlationId: "v1-closure" });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-fix-0001", correlationId: "v1-closure" });
 
     const emitidos = (await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido");
     expect(emitidos.length).toBe(1);
@@ -149,7 +151,7 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     // Policy server-owned: rascunho não sai como oficial mesmo por chamada direta ao endpoint.
     expect(await exportBlockedByPolicy(ORG, gerado!.id)).toBe(true);
 
-    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", correlationId: "v1-closure" });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-fix-0002", correlationId: "v1-closure" });
     const emitido = (await docsByOrigin(ORG, "parecer_juridico", ws.id)).find(d => d.status === "emitido");
     expect(emitido).toBeTruthy();
     // A versão assinada/emitido PASSA do gate (a falha remanescente no CI é ambiental — storage — nunca FORBIDDEN).
@@ -162,7 +164,7 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
       workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
       report: "R", foundation: "F", conclusion: "C", conclusionType: "favoravel", correlationId: "v1-closure",
     });
-    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", correlationId: "v1-closure" });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-fix-0003", correlationId: "v1-closure" });
     expect((await docsByOrigin(ORG2, "parecer_juridico", ws.id)).length).toBe(0);
   }, 120_000);
 
@@ -195,8 +197,10 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     await conn.execute("DELETE FROM official_documents WHERE tenant_id = ? AND status = 'emitido' AND origin = ?", [ORG, ws.id]);
     expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(0);
 
-    const r = await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a5-0001", correlationId: "v1-closure" });
-    expect(r.replayed).toBe(true);
+    // NOVA tentativa lógica (key distinta): a idempotência canônica executa a operação, e a convergência
+    // por estado detecta o draft já assinado + a versão emitido ausente e a REPARA uma única vez.
+    const r = await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-a5-0002", correlationId: "v1-closure" });
+    expect(r.replayed).toBe(false);
     expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
   }, 120_000);
 
@@ -206,11 +210,42 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
       workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
       report: "R6", foundation: "F6", conclusion: "C6", conclusionType: "favoravel", correlationId: "v1-closure",
     });
-    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", correlationId: "v1-closure" });
+    await signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: "sign-key-fix-0004", correlationId: "v1-closure" });
     // Outro signer (id distinto) tenta assinar o mesmo parecer já assinado → recusa fail-closed.
     const OTHER_SIGNER = 9;
-    await expect(signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: OTHER_SIGNER, method: "manual", correlationId: "v1-closure" }))
+    await expect(signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: OTHER_SIGNER, method: "manual", idempotencyKey: "sign-key-a6-0001", correlationId: "v1-closure" }))
       .rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
+  }, 120_000);
+
+  it("A7) idempotência CANÔNICA: MESMA key + payload diferente → CONFLICT", async () => {
+    const wsA = await seedOpinionWorkspace(ORG, "v1-req-a7a", "PROC-A7A");
+    const wsB = await seedOpinionWorkspace(ORG, "v1-req-a7b", "PROC-A7B");
+    for (const w of [wsA, wsB]) {
+      await createOpinionDraft({
+        workspaceId: w.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
+        report: "R7", foundation: "F7", conclusion: "C7", conclusionType: "favoravel", correlationId: "v1-closure",
+      });
+    }
+    const KEY = "sign-key-a7-shared";
+    await signOpinion({ workspaceId: wsA.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: KEY, correlationId: "v1-closure" });
+    // Mesma key, payload distinto (outro workspace/draft) → CONFLICT canônico.
+    await expect(signOpinion({ workspaceId: wsB.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: KEY, correlationId: "v1-closure" }))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await docsByOrigin(ORG, "parecer_juridico", wsB.id)).filter(d => d.status === "emitido").length).toBe(0);
+  }, 120_000);
+
+  it("A8) concorrência com a MESMA key → efeito único (uma versão emitido)", async () => {
+    const ws = await seedOpinionWorkspace(ORG, "v1-req-a8", "PROC-A8");
+    await createOpinionDraft({
+      workspaceId: ws.id, organizationId: ORG, author: LAWYER, opinionType: "LEGAL_OPINION_FINAL",
+      report: "R8", foundation: "F8", conclusion: "C8", conclusionType: "favoravel", correlationId: "v1-closure",
+    });
+    const KEY = "sign-key-a8-concurrent";
+    const call = () => signOpinion({ workspaceId: ws.id, organizationId: ORG, signedBy: SIGNER, method: "manual", idempotencyKey: KEY, correlationId: "v1-closure" });
+    const results = await Promise.allSettled([call(), call()]);
+    // Pelo menos uma conclui; nenhuma duplica o efeito.
+    expect(results.some(r => r.status === "fulfilled")).toBe(true);
     expect((await docsByOrigin(ORG, "parecer_juridico", ws.id)).filter(d => d.status === "emitido").length).toBe(1);
   }, 120_000);
 

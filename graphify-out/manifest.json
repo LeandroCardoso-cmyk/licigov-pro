@@ -1390,8 +1390,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1787924354.8191035,
-    "ast_hash": "9d3844bbded042ef343e490c166ae1b7",
+    "mtime": 1787926691.9236155,
+    "ast_hash": "c6fb2a60bb6f8123edd65b6229a6797f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
@@ -7825,8 +7825,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionWorkspaceRouter.ts": {
-    "mtime": 1787924158.6110919,
-    "ast_hash": "4cb17b0feeddaad7659257312c318efe",
+    "mtime": 1787926657.7196133,
+    "ast_hash": "a73646030c529434079914206a9699b9",
     "semantic_hash": ""
   },
   "server/services/legalOpinionObservabilityService.ts": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1787924148.4990911,
-    "ast_hash": "4dafbfa24a5a62a52fa45bf1a8496457",
+    "mtime": 1787927292.8756511,
+    "ast_hash": "e0f7d94bcd3aecb4fc16b132eb999fc1",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -10730,13 +10730,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-decision.test.ts": {
-    "mtime": 1786313829.0114706,
-    "ast_hash": "30f6072149d35aeafe35f8f2b7121eec",
+    "mtime": 1787926915.4196286,
+    "ast_hash": "931723681d010d522d4fdf47555e78b5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-mysql-smoke.test.ts": {
-    "mtime": 1786313829.0114706,
-    "ast_hash": "67bd3bb1d2cb0aecb3fce77bb16321e0",
+    "mtime": 1787926878.9756265,
+    "ast_hash": "810df8ee2841bb5c0d566f62fe0337a0",
     "semantic_hash": ""
   },
   "server/db/catmatGovernance.ts": {
@@ -10750,8 +10750,8 @@
     "semantic_hash": ""
   },
   "server/services/catmatGovernanceService.ts": {
-    "mtime": 1786313829.0114706,
-    "ast_hash": "7460e2955ee13ddb7e22fdd825a4f6e7",
+    "mtime": 1787926673.1636143,
+    "ast_hash": "946741ab54a1f67b8cefced8fb7f0cee",
     "semantic_hash": ""
   },
   "docs/architecture/AI_LEGACY_MIGRATION_PLAN.md": {
@@ -11050,18 +11050,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1787924598.579118,
-    "ast_hash": "a9064b2d8140bdde626996c05e71245a",
+    "mtime": 1787927230.7036474,
+    "ast_hash": "40a3cf74f3511e6338357f8e99dcbafa",
     "semantic_hash": ""
   },
   "client/src/components/procurement/catmatKeyPolicy.test.ts": {
-    "mtime": 1787924265.1710982,
-    "ast_hash": "0d86be1a7c9d75e214faaf7fe3f64c82",
+    "mtime": 1787926961.2236314,
+    "ast_hash": "18849dcf10316539f21c934dea44abb7",
     "semantic_hash": ""
   },
   "client/src/components/procurement/catmatKeyPolicy.ts": {
-    "mtime": 1787924248.7470973,
-    "ast_hash": "5ce9e2304c355762699a9a943c2f491b",
+    "mtime": 1787926685.435615,
+    "ast_hash": "0f24d718b969595ed95fc35c5dffc5d7",
     "semantic_hash": ""
   }
 }

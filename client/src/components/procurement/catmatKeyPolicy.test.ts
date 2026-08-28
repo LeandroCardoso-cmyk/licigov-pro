@@ -46,6 +46,15 @@ describe("catmatKeyPolicy — idempotency key por tentativa lógica", () => {
     expect(afterValidation.key).not.toBe(first.key);
   });
 
+  it("catmatDescription participa do fingerprint: descrição diferente → nova logical attempt", () => {
+    const p1: CatmatDecisionPayload = { itemId: "i1", decision: "substituido", catmatCode: "888", catmatDescription: "desc A", justification: "manual" };
+    const p2: CatmatDecisionPayload = { ...p1, catmatDescription: "desc B" };
+    expect(catmatPayloadFingerprint(p1)).not.toBe(catmatPayloadFingerprint(p2));
+    const first = selectCatmatKey(null, catmatPayloadFingerprint(p1), false, gen);
+    const next = selectCatmatKey(first, catmatPayloadFingerprint(p2), true, gen);
+    expect(next.key).not.toBe(first.key);
+  });
+
   it("sucesso rotaciona: a próxima ação idêntica parte de prev=null → nova key", () => {
     const fp = catmatPayloadFingerprint(base);
     const first = selectCatmatKey(null, fp, false, gen);
