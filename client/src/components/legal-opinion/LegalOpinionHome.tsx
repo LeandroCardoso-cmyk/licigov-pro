@@ -8,6 +8,7 @@ import LegalOpinionViewer from "./LegalOpinionViewer";
 import SignaturePanel from "./SignaturePanel";
 import TimelinePanel from "./TimelinePanel";
 import OpinionHistory from "./OpinionHistory";
+import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 import { stageLabel, STAGE_CLASSES } from "./labels";
 
 /**
@@ -94,6 +95,17 @@ export default function LegalOpinionHome() {
               <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
               {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
               <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
+
+              {/* V1 — superfície de Documentos Oficiais do Parecer. A exportação institucional
+                  (DOCX/PDF) só é oferecida para a versão ASSINADA/emitido (policy server-owned:
+                  parecer_juridico → "emitido"); rascunhos aparecem como histórico/preview mas não
+                  exportam como parecer oficial. */}
+              <OfficialDocumentPanel
+                businessDomain="parecer_juridico"
+                origin={workspaceId}
+                requireStatusForExport="emitido"
+                title="Documentos Oficiais do Parecer (DOCX/PDF)"
+              />
 
               <TimelinePanel timeline={ctx?.timeline ?? []} />
               <OpinionHistory history={ctx?.history ?? []} versions={ctx?.versions ?? []} />

@@ -1,13 +1,18 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import {
+  catmatPayloadFingerprint, isRetryableCatmatError, selectCatmatKey,
+  type CatmatDecisionPayload, type CatmatKeyState,
+} from "./catmatKeyPolicy";
 
 /**
  * ProcurementItemPanel — REAL (wired to tRPC).
  *
  * UX: painel lateral de INTELIGÊNCIA de um item. A experiência é de REVISÃO:
  * o servidor já decidiu o CATMAT e produziu recomendações; cada recomendação
- * SEMPRE mostra reasoning, explainability, provenance e confidence. O operador
- * apenas aceita/rejeita CATMAT e aprova o item. Nunca há grande formulário.
+ * SEMPRE mostra reasoning, explainability, provenance e confidence. A decisão de
+ * CATMAT/CATSER passa pelo contrato GOVERNADO (`decidirCATMAT`: ledger imutável,
+ * threshold institucional, idempotência) e a aprovação final do item é humana.
  */
 
 const brl = (v: number) =>
@@ -62,12 +67,87 @@ export default function ProcurementItemPanel({
   const invalidate = () => {
     if (itemId) utils.itemIntelligence.getItem.invalidate({ itemId });
   };
-  const acceptCATMAT = trpc.itemIntelligence.acceptCATMAT.useMutation({
-    onSuccess: invalidate,
+
+  // C — decisão CATMAT/CATSER pelo CONTRATO GOVERNADO (`itemIntelligence.decidirCATMAT`): decisão
+  // humana + immutable ledger + threshold institucional + idempotência/replay + tenant isolation.
+  // A justificativa é OBRIGATÓRIA (domínio) em rejeitar/substituir/sem_correspondencia_segura; apenas
+  // confirmar dispensa. A idempotencyKey segue a política pura `catmatKeyPolicy`: um erro transitório
+  // com o MESMO payload reusa a key (replay-safe, sem 2ª entrada no ledger); mudança de payload ou
+  // sucesso rotaciona. Nunca fabrica CATMAT: o código vem de sugestão existente ou input humano.
+  const [decisionMsg, setDecisionMsg] = React.useState<string>("");
+  const [thresholdBlocked, setThresholdBlocked] = React.useState<boolean>(false);
+  const [manualCode, setManualCode] = React.useState<string>("");
+  const [manualDesc, setManualDesc] = React.useState<string>("");
+  const [justification, setJustification] = React.useState<string>("");
+  const keyStateRef = React.useRef<CatmatKeyState | null>(null);
+  const lastRetryableRef = React.useRef<boolean>(false);
+
+  const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
+
+  const decidirCATMAT = trpc.itemIntelligence.decidirCATMAT.useMutation({
+    onSuccess: (res) => {
+      keyStateRef.current = null; // sucesso rotaciona a tentativa lógica
+      lastRetryableRef.current = false;
+      setThresholdBlocked(false);
+      setJustification("");
+      const d = res.decision;
+      setDecisionMsg(
+        res.replayed
+          ? "Decisão já registrada (replay idempotente)."
+          : `Decisão registrada: ${d.decision}${d.catmatCode ? ` (${d.catmatCode})` : ""}.`,
+      );
+      invalidate();
+    },
+    onError: (err) => {
+      // Outcome transitório (rede/INTERNAL/TIMEOUT) ou CONFLICT de "processing" (duplicata em voo) ⇒ o
+      // próximo retry do MESMO payload reusa a key. CONFLICT por payload/negócio rotaciona.
+      lastRetryableRef.current = isRetryableCatmatError(err.data?.code, err.message);
+      const msg = err.message ?? "Falha ao registrar a decisão.";
+      const isThreshold = /limiar|threshold|configurad/i.test(msg);
+      setThresholdBlocked(isThreshold);
+      setDecisionMsg(
+        isThreshold
+          ? "Limiar institucional (threshold) não configurado. Um gestor precisa configurá-lo antes de decisões seguras de CATMAT/CATSER."
+          : msg,
+      );
+    },
   });
-  const rejectCATMAT = trpc.itemIntelligence.rejectCATMAT.useMutation({
-    onSuccess: invalidate,
-  });
+
+  const decide = (opts: {
+    decision: "confirmado" | "substituido" | "rejeitado" | "sem_correspondencia_segura";
+    suggestionId?: string;
+    catmatCode?: string;
+    catmatDescription?: string;
+  }) => {
+    if (!item) return;
+    const just = justification.trim();
+    // Espelha a regra do domínio (fail-closed também na UI): só confirmar dispensa justificativa.
+    if (opts.decision !== "confirmado" && just.length === 0) {
+      setDecisionMsg("Justificativa obrigatória para rejeitar, substituir ou declarar sem correspondência segura.");
+      return;
+    }
+    const payload: CatmatDecisionPayload = {
+      itemId: item.id, decision: opts.decision, suggestionId: opts.suggestionId,
+      catmatCode: opts.catmatCode, catmatDescription: opts.catmatDescription,
+      justification: opts.decision === "confirmado" ? undefined : just,
+    };
+    const fp = catmatPayloadFingerprint(payload);
+    const st = selectCatmatKey(keyStateRef.current, fp, lastRetryableRef.current, genKey);
+    keyStateRef.current = st;
+    lastRetryableRef.current = false;
+    setDecisionMsg("");
+    decidirCATMAT.mutate({
+      itemId: item.id,
+      decision: opts.decision,
+      idempotencyKey: st.key,
+      suggestionId: opts.suggestionId,
+      catmatCode: opts.catmatCode,
+      catmatDescription: opts.catmatDescription,
+      justification: payload.justification,
+    });
+  };
+  const justificationMissing = justification.trim().length === 0;
+
   const approveItem = trpc.procurementProcess.approveItem.useMutation({
     onSuccess: invalidate,
   });
@@ -185,6 +265,21 @@ export default function ProcurementItemPanel({
                 </div>
               </div>
             )}
+            {/* Justificativa humana — OBRIGATÓRIA para rejeitar / substituir / sem correspondência segura
+                (o domínio exige; confirmar dispensa). */}
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Justificativa (obrigatória para rejeitar/substituir/sem correspondência)
+              </label>
+              <textarea
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                rows={2}
+                placeholder="Fundamente a decisão do servidor…"
+                className="w-full rounded border border-gray-200 px-2 py-1 text-xs"
+              />
+            </div>
+
             {/* Candidatos CATMAT com score/rank/decisão */}
             {data.catmat.length > 0 && (
               <ul className="mt-3 space-y-2">
@@ -207,21 +302,23 @@ export default function ProcurementItemPanel({
                       <button
                         type="button"
                         onClick={() =>
-                          acceptCATMAT.mutate({
-                            itemId: item.id,
-                            matchId: c.id,
+                          decide({
+                            decision: "confirmado",
+                            suggestionId: c.id,
                             catmatCode: c.catmatCode,
+                            catmatDescription: c.catmatDescription,
                           })
                         }
-                        disabled={acceptCATMAT.isPending}
+                        disabled={decidirCATMAT.isPending}
                         className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
                       >
-                        Aceitar CATMAT
+                        Confirmar
                       </button>
                       <button
                         type="button"
-                        onClick={() => rejectCATMAT.mutate({ matchId: c.id })}
-                        disabled={rejectCATMAT.isPending}
+                        onClick={() => decide({ decision: "rejeitado", suggestionId: c.id })}
+                        disabled={decidirCATMAT.isPending || justificationMissing}
+                        title={justificationMissing ? "Informe a justificativa para rejeitar" : undefined}
                         className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                       >
                         Rejeitar
@@ -230,6 +327,65 @@ export default function ProcurementItemPanel({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {/* Substituição manual (decisão governada = substituido) — código explícito do servidor */}
+            <div className="mt-3 rounded-md border border-gray-100 p-2">
+              <p className="mb-1 text-xs font-medium text-gray-500">
+                Substituir por código manual
+              </p>
+              <div className="flex flex-col gap-1">
+                <input
+                  type="text"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  placeholder="Código CATMAT/CATSER"
+                  className="rounded border border-gray-200 px-2 py-1 font-mono text-xs"
+                />
+                <input
+                  type="text"
+                  value={manualDesc}
+                  onChange={(e) => setManualDesc(e.target.value)}
+                  placeholder="Descrição (opcional)"
+                  className="rounded border border-gray-200 px-2 py-1 text-xs"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      decide({
+                        decision: "substituido",
+                        catmatCode: manualCode.trim(),
+                        catmatDescription: manualDesc.trim() || undefined,
+                      })
+                    }
+                    disabled={decidirCATMAT.isPending || manualCode.trim().length === 0 || justificationMissing}
+                    title={justificationMissing ? "Informe a justificativa para substituir" : undefined}
+                    className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Substituir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => decide({ decision: "sem_correspondencia_segura" })}
+                    disabled={decidirCATMAT.isPending || justificationMissing}
+                    title={justificationMissing ? "Informe a justificativa" : undefined}
+                    className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Sem correspondência segura
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {decisionMsg && (
+              <p
+                className={`mt-2 text-xs ${
+                  thresholdBlocked ? "text-orange-700" : "text-gray-500"
+                }`}
+              >
+                {decisionMsg}
+              </p>
             )}
           </Block>
 

@@ -10,6 +10,7 @@
  * pode ser rejeitada. Nenhuma funcionalidade de Future Evolution é implementada.
  */
 
+import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
@@ -29,6 +30,7 @@ import {
 import {
   getDirectProcurementWorkspace, upsertContractJustification, upsertPriceJustification,
   insertGeneratedPublication, insertRequiredDocument, listRequiredDocuments, getDirectProcedure,
+  getRatification, getContractJustification, getPriceJustification,
 } from "../db/directProcurement";
 
 const DOMAIN = "contratacao_direta" as const;
@@ -146,6 +148,20 @@ export async function generatePriceJustification(params: {
     documentReferences: params.documentReferences, correlationId: params.correlationId,
   });
   const priceJustification = await upsertPriceJustification(draft);
+
+  // V1 — projeta a justificativa de PREÇO no Document Engine (pipeline ÚNICO), fiel aos dados
+  // EFETIVAMENTE persistidos (fonte, valor de referência, texto). Não cria decisão jurídica autônoma
+  // nem inventa informação ausente — apenas materializa o que o servidor registrou.
+  const sourceLabel = draft.source === "pesquisa" ? "Pesquisa de Preços"
+    : draft.source === "documento" ? "Documento de referência" : "Registro do servidor";
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_preco",
+    origin: ws.id, title: `Justificativa de Preço — ${ws.processNumber}`,
+    content: `# Justificativa de Preço\nProcesso: ${ws.processNumber} · Objeto: ${ws.object}\nFonte: ${sourceLabel}\nValor de referência: R$ ${draft.referenceValue.toFixed(2)}\n\n## Fundamentação\n${draft.justification || "—"}\n\n> Documento gerado a partir dos dados persistidos. Revisão obrigatória pelo servidor competente.`,
+    author: "sistema", correlationId: params.correlationId,
+    metadata: { source: draft.source, referenceValue: draft.referenceValue, researchId: draft.researchId || null },
+  });
+
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "change",
     actor: "sistema", summary: `Justificativa do preço registrada (${params.source}).`, refId: draft.id, correlationId: params.correlationId,
@@ -240,15 +256,42 @@ export async function generatePublications(params: {
   assertKernelAccess(DOMAIN, "document_engine");
   const procedure = await getDirectProcedure(ws.id, params.organizationId);
 
+  // V1 hardening — FAIL-CLOSED antes de publicar a Ratificação: exige decisão HUMANA real
+  // `ratificado` persistida. Sem ratificação, ou com `nao_ratificado`, nunca se materializa um
+  // `official_documents.documentType = ratificacao` (o Termo de Ratificação é ato institucional,
+  // jamais texto de preenchimento). O caller não avança para PUBLICATION porque este erro propaga.
+  const ratification = await getRatification(ws.id, params.organizationId);
+  if (!ratification) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Publicação bloqueada: a Ratificação ainda não foi registrada pela autoridade competente.",
+    });
+  }
+  if (ratification.decision !== "ratificado") {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `Publicação bloqueada: a decisão registrada é "${ratification.decision}". Somente uma ratificação "ratificado" permite publicar.`,
+    });
+  }
+
   const kinds: PublicationKind[] = ["aviso", "ratificacao", "extrato_contrato"];
   if (procedure?.procedureType === "presencial") kinds.push("instrucoes", "cronograma");
 
+  // A Ratificação materializa a DECISÃO REAL persistida (autoridade responsável, decisão, justificativa
+  // e evidências) + referências às justificativas de contratação e de preço já registradas.
+  const contractJustification = await getContractJustification(ws.id, params.organizationId);
+  const priceJustification = await getPriceJustification(ws.id, params.organizationId);
+
   const out: Array<{ id: string; kind: string; title: string }> = [];
   for (const kind of kinds) {
+    const genericContent = `# ${titleForKind(kind)}\nProcesso: ${ws.processNumber} · Modalidade: ${ws.procurementType} · Fundamento: ${ws.legalBasis || "—"}\nProcedimento: ${procedure?.procedureType ?? "indefinido"}${procedure?.platform ? ` · Plataforma: ${procedure.platform}` : ""}\n\n> Documento gerado a partir do fluxo. Revisão obrigatória pelo servidor competente.`;
+    const content = kind === "ratificacao"
+      ? buildRatificationContent(ws, ratification, contractJustification, priceJustification)
+      : genericContent;
     const pub = createGeneratedPublication({
       organizationId: params.organizationId, workspaceId: ws.id, kind,
       title: `${titleForKind(kind)} — ${ws.processNumber}`,
-      content: `# ${titleForKind(kind)}\nProcesso: ${ws.processNumber} · Modalidade: ${ws.procurementType} · Fundamento: ${ws.legalBasis || "—"}\nProcedimento: ${procedure?.procedureType ?? "indefinido"}${procedure?.platform ? ` · Plataforma: ${procedure.platform}` : ""}\n\n> Documento gerado a partir do fluxo. Revisão obrigatória pelo servidor competente.`,
+      content,
       correlationId: params.correlationId,
     });
     await insertGeneratedPublication(pub);
@@ -266,6 +309,49 @@ export async function generatePublications(params: {
     actor: "sistema", summary: `Publicações geradas: ${out.map(o => o.kind).join(", ")}.`, refId: ws.id, correlationId: params.correlationId,
   });
   return out;
+}
+
+/**
+ * Materializa o Termo de Ratificação a partir da DECISÃO e justificativas REAIS persistidas pelo
+ * servidor (nunca texto genérico quando há decisão registrada). Não cria decisão jurídica autônoma
+ * nem inventa informação ausente: quando algo ainda não foi registrado, sinaliza a pendência.
+ */
+function buildRatificationContent(
+  ws: { processNumber: string; procurementType: string; legalBasis: string | null; object: string },
+  ratification: { responsible: number; decision: string; justification: string; evidence: string[]; ratifiedAt: string } | null,
+  contractJustification: { need: string; legalFoundation: string } | null,
+  priceJustification: { source: string; referenceValue: number; justification: string } | null,
+): string {
+  const lines: string[] = [
+    `# Termo de Ratificação`,
+    `Processo: ${ws.processNumber} · Modalidade: ${ws.procurementType} · Fundamento: ${ws.legalBasis || "—"}`,
+    `Objeto: ${ws.object}`,
+    ``,
+  ];
+  if (ratification) {
+    lines.push(
+      `## Decisão`,
+      `Autoridade responsável (id): ${ratification.responsible}`,
+      `Decisão: ${ratification.decision}`,
+      `Ratificado em: ${ratification.ratifiedAt}`,
+      ``,
+      `## Justificativa da Ratificação`,
+      ratification.justification || "—",
+    );
+    if (ratification.evidence.length > 0) {
+      lines.push(``, `## Evidências`, ...ratification.evidence.map(e => `- ${e}`));
+    }
+  } else {
+    lines.push(`> Ratificação ainda não registrada pela autoridade competente.`);
+  }
+  if (contractJustification) {
+    lines.push(``, `## Fundamentação da Contratação`, `Necessidade: ${contractJustification.need}`, `Fundamento legal: ${contractJustification.legalFoundation}`);
+  }
+  if (priceJustification) {
+    lines.push(``, `## Justificativa de Preço`, `Fonte: ${priceJustification.source} · Valor de referência: R$ ${priceJustification.referenceValue.toFixed(2)}`, priceJustification.justification || "—");
+  }
+  lines.push(``, `> Documento gerado a partir dos dados persistidos. Revisão obrigatória pelo servidor competente.`);
+  return lines.join("\n");
 }
 
 function titleForKind(kind: PublicationKind): string {

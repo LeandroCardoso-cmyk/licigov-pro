@@ -15,8 +15,8 @@ import {
 } from "../../drizzle/schema";
 import type { ContractWorkspace, ContractOriginType, ContractStatus } from "../domain/contractWorkspace";
 import type {
-  ContractAddendum, AddendumType, AddendumStatus, ContractApostille, ApostilleKind,
-  ContractOccurrence, ContractGeneratedDocument, ContractDocumentKind, MinutaMetadata,
+  ContractAddendum, ContractApostille,
+  ContractOccurrence, ContractGeneratedDocument, MinutaMetadata,
 } from "../domain/contractInstruments";
 import type { ImportedContract, ImportedContractSource, ReconstructedContractFields } from "../domain/contractReconstruction";
 
@@ -130,7 +130,7 @@ export async function insertContractWsDocument(d: ContractGeneratedDocument): Pr
   if (!db) return null;
   await db.insert(contractWsDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, contractId: d.contractId, kind: d.kind, title: d.title,
-    content: d.content, refId: d.refId, metadata: JSON.stringify(d.metadata), correlationId: d.correlationId, createdAt: d.createdAt,
+    content: d.content, refId: d.refId, metadata: JSON.stringify(d.metadata), correlationId: d.correlationId, createdAt: toDbDatetime(d.createdAt),
   }).onDuplicateKeyUpdate({ set: { content: d.content, title: d.title, metadata: JSON.stringify(d.metadata) } });
   return d;
 }
@@ -165,8 +165,8 @@ export async function insertContractAddendum(a: ContractAddendum): Promise<Contr
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, addendumType: a.addendumType, sequence: a.sequence,
     justification: a.justification, newValue: String(a.newValue), newTerm: a.newTerm, status: a.status, requestOrigin: a.requestOrigin,
     documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, correlationId: a.correlationId,
-    createdAt: a.createdAt, updatedAt: a.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: a.updatedAt } });
+    createdAt: toDbDatetime(a.createdAt), updatedAt: toDbDatetime(a.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: toDbDatetime(a.updatedAt) } });
   return a;
 }
 
@@ -195,7 +195,7 @@ export async function insertContractApostille(a: ContractApostille): Promise<Con
   await db.insert(contractWsApostillesTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, kind: a.kind, sequence: a.sequence,
     description: a.description, newValue: String(a.newValue), newManager: a.newManager, newInspector: a.newInspector,
-    documentReference: a.documentReference, correlationId: a.correlationId, createdAt: a.createdAt,
+    documentReference: a.documentReference, correlationId: a.correlationId, createdAt: toDbDatetime(a.createdAt),
   }).onDuplicateKeyUpdate({ set: { description: a.description, documentReference: a.documentReference } });
   return a;
 }

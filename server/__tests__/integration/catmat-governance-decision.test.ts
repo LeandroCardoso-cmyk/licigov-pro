@@ -91,7 +91,7 @@ describe("PR C.2 — invariantes da decisão CATMAT/CATSER (domínio puro)", () 
   });
 });
 
-describe("PR C.2 — decideCatmat (serviço, sem DB: valida e degrada com segurança)", () => {
+describe("PR C.2 / V1 — decideCatmat (serviço, sem DB): valida e FAIL-CLOSED por limiar", () => {
   const base = {
     organizationId: 77001,
     actorUserId: 7,
@@ -101,52 +101,45 @@ describe("PR C.2 — decideCatmat (serviço, sem DB: valida e degrada com segura
     suggestions: SUGGESTIONS,
   };
 
-  it("confirmar uma sugestão real resolve código, descrição, score e proveniência", async () => {
-    const { decision } = await decideCatmat({
-      ...base, idempotencyKey: "idem-confirm-1", decision: "confirmado", suggestionId: "s1",
-    });
-    expect(decision.decision).toBe("confirmado");
-    expect(decision.catmatCode).toBe("111111");
-    expect(decision.catmatDescription).toBe("caneta esferográfica azul");
-    expect(decision.score).toBe(0.92);
-    expect(decision.source).toBe("catalogo-interno");
-    expect(decision.actorUserId).toBe(7);
-  });
+  // As validações do domínio (fail-closed de payload) ocorrem ANTES do gate de limiar → BAD_REQUEST.
 
-  it("confirmar código inexistente (fabricado) é recusado com BAD_REQUEST", async () => {
+  it("confirmar código inexistente (fabricado) é recusado com BAD_REQUEST (antes do gate de limiar)", async () => {
     await expect(
       decideCatmat({ ...base, idempotencyKey: "idem-forge", decision: "confirmado", catmatCode: "999999" }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("rejeitar sem justificativa é recusado; com justificativa não fixa código", async () => {
+  it("rejeitar sem justificativa é recusado com BAD_REQUEST (antes do gate de limiar)", async () => {
     await expect(
       decideCatmat({ ...base, idempotencyKey: "idem-rej-bad", decision: "rejeitado" }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-
-    const { decision } = await decideCatmat({
-      ...base, idempotencyKey: "idem-rej-ok", decision: "rejeitado", suggestionId: "s2", justification: "irrelevante ao objeto",
-    });
-    expect(decision.decision).toBe("rejeitado");
-    expect(decision.catmatCode).toBeNull();
-    expect(decision.source).toBeNull();
   });
 
-  it("substituir fixa o código manual informado pelo servidor", async () => {
-    const { decision } = await decideCatmat({
-      ...base, idempotencyKey: "idem-sub", decision: "substituido", catmatCode: "888888",
-      catmatDescription: "código do catálogo oficial", justification: "correção manual",
-    });
-    expect(decision.decision).toBe("substituido");
-    expect(decision.catmatCode).toBe("888888");
-    expect(decision.source).toBe("manual");
+  // Sem DB não há limiar institucional ativo → FAIL-CLOSED real: mesmo decisões válidas são RECUSADAS
+  // com PRECONDITION_FAILED antes de qualquer efeito (a resolução por limiar exige DB; a persistência e
+  // as 4 decisões funcionais são cobertas pelo smoke MySQL com limiar configurado).
+
+  it("confirmar válido sem limiar (no-DB) → PRECONDITION_FAILED (fail-closed)", async () => {
+    await expect(
+      decideCatmat({ ...base, idempotencyKey: "idem-confirm-1", decision: "confirmado", suggestionId: "s1" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
-  it("sem-correspondência-segura registra a decisão fail-closed sem código", async () => {
-    const { decision } = await decideCatmat({
-      ...base, idempotencyKey: "idem-none", decision: "sem_correspondencia_segura", justification: "nenhum adequado",
-    });
-    expect(decision.decision).toBe("sem_correspondencia_segura");
-    expect(decision.catmatCode).toBeNull();
+  it("rejeitar válido sem limiar (no-DB) → PRECONDITION_FAILED", async () => {
+    await expect(
+      decideCatmat({ ...base, idempotencyKey: "idem-rej-ok", decision: "rejeitado", suggestionId: "s2", justification: "irrelevante ao objeto" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+
+  it("substituir válido sem limiar (no-DB) → PRECONDITION_FAILED", async () => {
+    await expect(
+      decideCatmat({ ...base, idempotencyKey: "idem-sub", decision: "substituido", catmatCode: "888888", catmatDescription: "código do catálogo oficial", justification: "correção manual" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+
+  it("sem-correspondência-segura válido sem limiar (no-DB) → PRECONDITION_FAILED", async () => {
+    await expect(
+      decideCatmat({ ...base, idempotencyKey: "idem-none", decision: "sem_correspondencia_segura", justification: "nenhum adequado" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 });

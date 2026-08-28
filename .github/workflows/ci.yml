@@ -212,6 +212,12 @@ jobs:
       - name: Smoke — reconciliação da 0288 (campos canônicos de ingestão)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-0288-reconciliation-mysql-smoke.test.ts
 
+      # V1 — Functional Closure: Parecer assinado→emitido (conteúdo exato + gate de policy), Contratação
+      # Direta (justificativa de preço + ratificação real projetadas), Contrato/Aditivo materializados e
+      # liberados para export. Prova também a correção do DATETIME estrito em legal_opinion/contract writers.
+      - name: Smoke — V1 Functional Closure (Parecer/Direta/Contrato estrito)
+        run: pnpm exec vitest run server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

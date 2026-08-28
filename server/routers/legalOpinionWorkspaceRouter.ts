@@ -125,17 +125,19 @@ export const legalOpinionWorkspaceRouter = router({
 
   /** Assina o parecer (apenas MANUAL implementado nesta fase). */
   signOpinion: tenantProcedure
-    .input(z.object({ workspaceId: z.string().min(1), method: z.enum(SIGNATURE_METHODS).optional() }))
+    .input(z.object({ workspaceId: z.string().min(1), method: z.enum(SIGNATURE_METHODS).optional(), idempotencyKey: z.string().min(8).max(64) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWorkspace(input.workspaceId, orgId);
       try {
         const result = await signOpinion({
           workspaceId: input.workspaceId, organizationId: orgId, signedBy: ctx.user.id,
-          method: input.method, correlationId: ctx.correlationId,
+          method: input.method, idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
         });
         return result;
       } catch (e) {
+        // Preserva códigos institucionais (CONFLICT etc.); só o inesperado vira BAD_REQUEST.
+        if (e instanceof TRPCError) throw e;
         throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha ao assinar." });
       }
     }),
