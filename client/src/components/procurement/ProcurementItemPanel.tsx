@@ -6,8 +6,9 @@ import { trpc } from "../../lib/trpc";
  *
  * UX: painel lateral de INTELIGÊNCIA de um item. A experiência é de REVISÃO:
  * o servidor já decidiu o CATMAT e produziu recomendações; cada recomendação
- * SEMPRE mostra reasoning, explainability, provenance e confidence. O operador
- * apenas aceita/rejeita CATMAT e aprova o item. Nunca há grande formulário.
+ * SEMPRE mostra reasoning, explainability, provenance e confidence. A decisão de
+ * CATMAT/CATSER passa pelo contrato GOVERNADO (`decidirCATMAT`: ledger imutável,
+ * threshold institucional, idempotência) e a aprovação final do item é humana.
  */
 
 const brl = (v: number) =>
@@ -62,12 +63,66 @@ export default function ProcurementItemPanel({
   const invalidate = () => {
     if (itemId) utils.itemIntelligence.getItem.invalidate({ itemId });
   };
-  const acceptCATMAT = trpc.itemIntelligence.acceptCATMAT.useMutation({
-    onSuccess: invalidate,
+
+  // C — decisão CATMAT/CATSER pelo CONTRATO GOVERNADO (`itemIntelligence.decidirCATMAT`): decisão
+  // humana + immutable ledger + threshold institucional + idempotência/replay + tenant isolation.
+  // Cada clique é uma TENTATIVA LÓGICA nova (idempotencyKey fresco); um erro transitório pode ser
+  // reenviado com a mesma chave sem duplicar (garantido pelo backend). Nunca fabrica CATMAT: o código
+  // vem de uma sugestão existente ou de input humano explícito. A aprovação final do item é humana.
+  const [decisionMsg, setDecisionMsg] = React.useState<string>("");
+  const [thresholdBlocked, setThresholdBlocked] = React.useState<boolean>(false);
+  const [manualCode, setManualCode] = React.useState<string>("");
+  const [manualDesc, setManualDesc] = React.useState<string>("");
+  const pendingKey = React.useRef<string>("");
+
+  const newIdempotencyKey = () => {
+    const k = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
+    pendingKey.current = k;
+    return k;
+  };
+
+  const decidirCATMAT = trpc.itemIntelligence.decidirCATMAT.useMutation({
+    onSuccess: (res) => {
+      pendingKey.current = "";
+      setThresholdBlocked(false);
+      const d = res.decision;
+      setDecisionMsg(
+        res.replayed
+          ? "Decisão já registrada (replay idempotente)."
+          : `Decisão registrada: ${d.decision}${d.catmatCode ? ` (${d.catmatCode})` : ""}.`,
+      );
+      invalidate();
+    },
+    onError: (err) => {
+      const msg = err.message ?? "Falha ao registrar a decisão.";
+      const isThreshold = /limiar|threshold|configurad/i.test(msg);
+      setThresholdBlocked(isThreshold);
+      setDecisionMsg(
+        isThreshold
+          ? "Limiar institucional (threshold) não configurado. Um gestor precisa configurá-lo antes de decisões seguras de CATMAT/CATSER."
+          : msg,
+      );
+    },
   });
-  const rejectCATMAT = trpc.itemIntelligence.rejectCATMAT.useMutation({
-    onSuccess: invalidate,
-  });
+
+  const decide = (opts: {
+    decision: "confirmado" | "substituido" | "rejeitado" | "sem_correspondencia_segura";
+    suggestionId?: string;
+    catmatCode?: string;
+    catmatDescription?: string;
+  }) => {
+    if (!item) return;
+    setDecisionMsg("");
+    decidirCATMAT.mutate({
+      itemId: item.id,
+      decision: opts.decision,
+      idempotencyKey: newIdempotencyKey(),
+      suggestionId: opts.suggestionId,
+      catmatCode: opts.catmatCode,
+      catmatDescription: opts.catmatDescription,
+    });
+  };
+
   const approveItem = trpc.procurementProcess.approveItem.useMutation({
     onSuccess: invalidate,
   });
@@ -207,21 +262,22 @@ export default function ProcurementItemPanel({
                       <button
                         type="button"
                         onClick={() =>
-                          acceptCATMAT.mutate({
-                            itemId: item.id,
-                            matchId: c.id,
+                          decide({
+                            decision: "confirmado",
+                            suggestionId: c.id,
                             catmatCode: c.catmatCode,
+                            catmatDescription: c.catmatDescription,
                           })
                         }
-                        disabled={acceptCATMAT.isPending}
+                        disabled={decidirCATMAT.isPending}
                         className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
                       >
-                        Aceitar CATMAT
+                        Confirmar
                       </button>
                       <button
                         type="button"
-                        onClick={() => rejectCATMAT.mutate({ matchId: c.id })}
-                        disabled={rejectCATMAT.isPending}
+                        onClick={() => decide({ decision: "rejeitado", suggestionId: c.id })}
+                        disabled={decidirCATMAT.isPending}
                         className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                       >
                         Rejeitar
@@ -230,6 +286,63 @@ export default function ProcurementItemPanel({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {/* Substituição manual (decisão governada = substituido) — código explícito do servidor */}
+            <div className="mt-3 rounded-md border border-gray-100 p-2">
+              <p className="mb-1 text-xs font-medium text-gray-500">
+                Substituir por código manual
+              </p>
+              <div className="flex flex-col gap-1">
+                <input
+                  type="text"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  placeholder="Código CATMAT/CATSER"
+                  className="rounded border border-gray-200 px-2 py-1 font-mono text-xs"
+                />
+                <input
+                  type="text"
+                  value={manualDesc}
+                  onChange={(e) => setManualDesc(e.target.value)}
+                  placeholder="Descrição (opcional)"
+                  className="rounded border border-gray-200 px-2 py-1 text-xs"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      decide({
+                        decision: "substituido",
+                        catmatCode: manualCode.trim(),
+                        catmatDescription: manualDesc.trim() || undefined,
+                      })
+                    }
+                    disabled={decidirCATMAT.isPending || manualCode.trim().length === 0}
+                    className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Substituir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => decide({ decision: "sem_correspondencia_segura" })}
+                    disabled={decidirCATMAT.isPending}
+                    className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Sem correspondência segura
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {decisionMsg && (
+              <p
+                className={`mt-2 text-xs ${
+                  thresholdBlocked ? "text-orange-700" : "text-gray-500"
+                }`}
+              >
+                {decisionMsg}
+              </p>
             )}
           </Block>
 

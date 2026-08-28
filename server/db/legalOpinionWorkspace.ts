@@ -10,6 +10,11 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getDb } from "./connection";
+import { toDbDatetime } from "./institutionalConsultations";
+
+// STRICT_TRANS_TABLES: colunas DATETIME(3) exigem 'YYYY-MM-DD HH:MM:SS.sss' (nunca ISO 'T…Z'). Converte
+// ISO→DATETIME antes de gravar (mesmo padrão de db/procurement, db/officialDocuments, db/directProcurement).
+const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
 import {
   legalOpinionWorkspacesTable,
   legalOpinionDraftsTable,
@@ -40,8 +45,8 @@ export async function insertLegalOpinionWorkspace(ws: LegalOpinionWorkspace): Pr
     id: ws.id, organizationId: ws.organizationId, requestId: ws.requestId, sourceDomain: ws.sourceDomain,
     referenceProcessId: ws.referenceProcessId, requestType: ws.requestType, currentStage: ws.currentStage,
     status: ws.status, assignedLawyer: ws.assignedLawyer, responsibleSector: ws.responsibleSector,
-    priority: ws.priority, correlationId: ws.correlationId, createdAt: ws.createdAt, updatedAt: ws.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { currentStage: ws.currentStage, status: ws.status, assignedLawyer: ws.assignedLawyer, updatedAt: ws.updatedAt } });
+    priority: ws.priority, correlationId: ws.correlationId, createdAt: toDb(ws.createdAt), updatedAt: toDb(ws.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { currentStage: ws.currentStage, status: ws.status, assignedLawyer: ws.assignedLawyer, updatedAt: toDb(ws.updatedAt) } });
   return ws;
 }
 
@@ -69,7 +74,7 @@ export async function updateLegalOpinionWorkspaceStage(
 ): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(legalOpinionWorkspacesTable).set({ currentStage: stage, status, assignedLawyer, updatedAt })
+  await db.update(legalOpinionWorkspacesTable).set({ currentStage: stage, status, assignedLawyer, updatedAt: toDb(updatedAt) })
     .where(and(eq(legalOpinionWorkspacesTable.id, id), eq(legalOpinionWorkspacesTable.organizationId, orgId)));
   return true;
 }
@@ -114,13 +119,13 @@ export async function insertLegalOpinionDraft(d: LegalOpinionDraft): Promise<Leg
     reservations: JSON.stringify(d.reservations), attachments: JSON.stringify(d.attachments),
     status: d.status, version: d.version, signed: d.signed ? 1 : 0, signatureMethod: d.signatureMethod,
     signedBy: d.signedBy, signedAt: d.signedAt, author: d.author, correlationId: d.correlationId,
-    createdAt: d.createdAt, updatedAt: d.updatedAt,
+    createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
   }).onDuplicateKeyUpdate({ set: {
     report: d.report, foundation: d.foundation, conclusion: d.conclusion, conclusionType: d.conclusionType,
     recommendations: JSON.stringify(d.recommendations), reservations: JSON.stringify(d.reservations),
     attachments: JSON.stringify(d.attachments), status: d.status, version: d.version,
     signed: d.signed ? 1 : 0, signatureMethod: d.signatureMethod, signedBy: d.signedBy, signedAt: d.signedAt,
-    updatedAt: d.updatedAt,
+    updatedAt: toDb(d.updatedAt),
   } });
   return d;
 }
@@ -230,7 +235,7 @@ export async function insertLawyerAssignment(a: LawyerAssignment): Promise<Lawye
   if (!db) return null;
   await db.insert(lawyerAssignmentsTable).values({
     id: a.id, organizationId: a.organizationId, workspaceId: a.workspaceId, requestId: a.requestId,
-    lawyerId: a.lawyerId, sector: a.sector, priority: a.priority, correlationId: a.correlationId, assignedAt: a.assignedAt,
+    lawyerId: a.lawyerId, sector: a.sector, priority: a.priority, correlationId: a.correlationId, assignedAt: toDb(a.assignedAt),
   }).onDuplicateKeyUpdate({ set: { lawyerId: a.lawyerId, sector: a.sector, priority: a.priority } });
   return a;
 }

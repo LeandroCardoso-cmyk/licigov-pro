@@ -55,10 +55,16 @@ function metaString(m: Record<string, unknown> | undefined, keys: string[]): str
  * (nunca controlada pelo cliente). Para o Processo Licitatório, apenas a versão `emitido` (autoridade
  * institucional) pode sair pelo pipeline oficial — um snapshot `gerado` NUNCA é exportável como oficial,
  * mesmo com chamada direta ao endpoint. Domínios ausentes deste mapa preservam o comportamento atual
- * (Contratos/Contratação Direta/Parecer exportam qualquer versão oficial).
+ * (Contratos/Contratação Direta exportam qualquer versão oficial).
+ *
+ * V1 — Parecer Jurídico entra no mesmo gate: o boundary institucional é a ASSINATURA humana, então
+ * apenas a versão `emitido` (materializada em `signOpinion` com o conteúdo EXATO assinado) pode sair
+ * pelo pipeline oficial. Um rascunho `gerado` do parecer NUNCA exporta como oficial, mesmo por chamada
+ * direta ao endpoint.
  */
 const OFFICIAL_EXPORT_REQUIRED_STATUS: Record<string, string | undefined> = {
   processo_licitatorio: "emitido",
+  parecer_juridico: "emitido",
 };
 
 export async function exportOfficialDocument(params: {

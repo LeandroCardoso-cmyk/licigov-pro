@@ -255,6 +255,24 @@ export async function signOpinion(params: {
   const signed = signLegalOpinionDraft(draft, params.method ?? "manual", params.signedBy);
   await insertLegalOpinionDraft(signed);
 
+  // V1 — o boundary institucional do Parecer é a ASSINATURA. Só aqui materializamos a versão OFICIAL
+  // (`emitido`) no Document Engine, com o conteúdo EXATO assinado (relatório + fundamentação + conclusão).
+  // Nunca é gerada nova versão oficial a cada edição (updateOpinionDraft não projeta). A IA nunca assina.
+  // A policy server-owned (parecer_juridico → "emitido") garante que só esta versão exporta como oficial.
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: "parecer_juridico",
+    documentType: signed.opinionType === "LEGAL_OPINION_FINAL" ? "parecer_final" : "parecer_inicial",
+    origin: ws.id, title: `Parecer — ${ws.referenceProcessId || ws.id}`,
+    content: `# Parecer Jurídico\n\n## Relatório\n${signed.report}\n\n## Fundamentação\n${signed.foundation}\n\n## Conclusão\n${signed.conclusion}`,
+    author: String(params.signedBy), status: "emitido", correlationId: params.correlationId,
+    metadata: {
+      draftId: signed.id, draftVersion: signed.version, contentHash: draftContentHash(signed),
+      signed: true, signedBy: params.signedBy, signatureMethod: signed.signatureMethod,
+      requestId: ws.requestId, referenceProcessId: ws.referenceProcessId,
+      opinionType: signed.opinionType, conclusionType: signed.conclusionType,
+    },
+  });
+
   // Caminha até SIGNED por transições válidas (DRAFT → REVIEW → SIGNED).
   let moved = ws;
   if (moved.currentStage === "DRAFT") {
