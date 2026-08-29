@@ -17,17 +17,16 @@ import {
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { approveItem as approveItemDomain, rejectItem as rejectItemDomain } from "../domain/intelligentItem";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
-import { enrichItem } from "../services/itemIntelligenceService";
+import { enrichItem, applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import { getOrganizationById } from "../db/organizations";
 import {
   insertProcess, getProcess, listProcesses, updateProcessStage,
-  insertResearch, insertResearchItem, listIntelligentItems, getIntelligentItem,
-  updateItemStatus, recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
+  insertResearch, insertResearchItem, listIntelligentItems,
+  recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
   getGeneratedDocumentByKind,
 } from "../db/procurement";
 
@@ -314,24 +313,25 @@ export const procurementProcessRouter = router({
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const item = await getIntelligentItem(input.itemId, orgId);
-      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const approved = approveItemDomain(item, ctx.user.id);
-      await updateItemStatus(item.id, orgId, "aprovado", ctx.user.id, approved.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "approval", actor: String(ctx.user.id), summary: `Item aprovado: ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
-      return { success: true, itemId: item.id, status: "aprovado" as const };
+      // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
+      // requisição aplica a transição e registra um evento; duplo clique converge sem novo efeito.
+      return applyGovernedItemTransition({
+        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user.id,
+        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "approval",
+        summary: (d) => `Item aprovado: ${d}.`,
+      });
     }),
 
   rejectItem: tenantProcedure
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const item = await getIntelligentItem(input.itemId, orgId);
-      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const rejected = rejectItemDomain(item);
-      await updateItemStatus(item.id, orgId, "rejeitado", null, rejected.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user.id), summary: `Item rejeitado: ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
-      return { success: true, itemId: item.id, status: "rejeitado" as const };
+      // Transição atômica (compare-and-set) — segura sob concorrência.
+      return applyGovernedItemTransition({
+        itemId: input.itemId, orgId, target: "rejeitado", approvedBy: null,
+        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "decision",
+        summary: (d) => `Item rejeitado: ${d}.`,
+      });
     }),
 
   generateTR: tenantProcedure

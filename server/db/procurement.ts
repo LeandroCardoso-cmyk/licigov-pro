@@ -6,7 +6,7 @@
  * Padrão getDb(): degrada graciosamente sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
@@ -181,6 +181,32 @@ export async function updateItemStatus(id: string, orgId: number, status: ItemSt
   await db.update(intelligentItemsTable).set({ status, approvedBy, updatedAt: toDb(updatedAt) })
     .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId)));
   return true;
+}
+
+/**
+ * Transição ATÔMICA de status do item (compare-and-set). Aplica `toStatus` apenas se o
+ * status atual estiver em `fromStatuses` — na MESMA sentença SQL:
+ *   UPDATE intelligent_items SET status = ? … WHERE id = ? AND organization_id = ? AND status IN (…)
+ * Retorna `applied=true` somente quando ESTA escrita venceu a transição (linha efetivamente
+ * alterada). Sob concorrência, apenas UMA requisição obtém `applied=true`; as demais recebem
+ * `false` (0 linhas afetadas) e devem reconsultar o item. Tenant-scoped por `organization_id`.
+ */
+export async function transitionItemStatusCAS(params: {
+  id: string; orgId: number; fromStatuses: ItemStatus[]; toStatus: ItemStatus;
+  approvedBy: number | null; updatedAt: string;
+}, executor?: ProcurementExecutor): Promise<{ applied: boolean }> {
+  const db = executor ?? await getDb();
+  if (!db) return { applied: false };
+  if (params.fromStatuses.length === 0) return { applied: false };
+  const result = await db.update(intelligentItemsTable)
+    .set({ status: params.toStatus, approvedBy: params.approvedBy, updatedAt: toDb(params.updatedAt) })
+    .where(and(
+      eq(intelligentItemsTable.id, params.id),
+      eq(intelligentItemsTable.organizationId, params.orgId),
+      inArray(intelligentItemsTable.status, params.fromStatuses),
+    ));
+  const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
+  return { applied: affected > 0 };
 }
 
 export async function updateItemCatmat(id: string, orgId: number, catmat: string, updatedAt: string): Promise<boolean> {

@@ -6,10 +6,9 @@ import {
   OPERATION_RECORD_TYPES, LEGACY_IMPORT_DISCLAIMER,
 } from "../../domain/operationRecord";
 import {
-  createOperationalEvent, createExpirationEvents, subtractDays,
+  createExpirationEvents, subtractDays,
   EXPIRATION_ALERT_OFFSETS, WORKFLOW_ONLY,
 } from "../../domain/operationalEvent";
-import { createOperationalMilestone } from "../../domain/operationalMilestone";
 import {
   createOperationalTimelineEntry, appendOperationalTimeline, operationalTimelineSnapshot,
 } from "../../domain/operationalTimeline";
@@ -143,6 +142,31 @@ describe("FASE 5 — Business Domain 5: Centro de Operações", () => {
       expect(ind.contractsExpiring).toBe(4);
       expect(ind.legalOpinionsAwaiting).toBe(3);
       expect(Object.keys(ind)).not.toContain("valor");
+    });
+
+    // F6 (homologação V1) — regressão pinando os ESTADOS CANÔNICOS reais observados: um
+    // processo recém-criado nasce `rascunho`/`NEW_PROCESS` e um contrato recém-criado nasce
+    // `minuta`. Ambos DEVEM contar como ativos na Central (fonte canônica). A observação de
+    // "Processos ativos: 0" na homologação foi um snapshot anterior à criação do processo.
+    it("F6: processo canônico rascunho e contrato minuta contam como ATIVOS (critério canônico)", () => {
+      const ind = computeIndicators({
+        processes: [{ status: "rascunho", currentStage: "NEW_PROCESS" }],
+        directProcurements: [],
+        contracts: [{ status: "minuta" }],
+        legalOpinionsPending: 0, institutionalRequestsPending: 0, addendaCount: 0, contractsExpiringSoon: 0, pendingTasks: 0,
+      });
+      expect(ind.activeProcesses).toBe(1);
+      expect(ind.concludedProcesses).toBe(0);
+      expect(ind.activeContracts).toBe(1); // minuta NÃO é concluído (encerrado/arquivado/rescindido)
+    });
+
+    it("F6: apenas contratos realmente concluídos saem da contagem de ativos", () => {
+      const ind = computeIndicators({
+        processes: [], directProcurements: [],
+        contracts: [{ status: "minuta" }, { status: "vigente" }, { status: "encerrado" }, { status: "arquivado" }, { status: "rescindido" }],
+        legalOpinionsPending: 0, institutionalRequestsPending: 0, addendaCount: 0, contractsExpiringSoon: 0, pendingTasks: 0,
+      });
+      expect(ind.activeContracts).toBe(2); // minuta + vigente; encerrado/arquivado/rescindido = concluídos
     });
 
     it("situationColor segue a prioridade (atrasado > concluído > futuro > andamento > não iniciado)", () => {

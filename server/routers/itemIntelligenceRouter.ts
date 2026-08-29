@@ -7,9 +7,8 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
-import { getItemPanel, catmatCandidates } from "../services/itemIntelligenceService";
+import { getItemPanel, catmatCandidates, applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import { rankCATMAT, manualMatch } from "../domain/catmatMatching";
-import { approveItem as approveItemDomain } from "../domain/intelligentItem";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
 import { decideCatmat, type AvailableSuggestion } from "../services/catmatGovernanceService";
 import {
@@ -17,7 +16,7 @@ import {
 } from "../db/catmatGovernance";
 import {
   getIntelligentItem, listItemHistory, listCatmatMatches, updateMatchDecision,
-  updateItemCatmat, listRecommendations, insertCatmatMatch, updateItemStatus, recordProcessEvent,
+  updateItemCatmat, listRecommendations, insertCatmatMatch, recordProcessEvent,
 } from "../db/procurement";
 
 /**
@@ -133,12 +132,13 @@ export const itemIntelligenceRouter = router({
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const item = await getIntelligentItem(input.itemId, orgId);
-      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-      const approved = approveItemDomain(item, ctx.user.id);
-      await updateItemStatus(item.id, orgId, "aprovado", ctx.user.id, approved.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "approval", actor: String(ctx.user.id), summary: `Item aprovado (painel): ${item.description}.`, refId: item.id, correlationId: ctx.correlationId });
-      return { success: true, itemId: item.id, status: "aprovado" as const };
+      // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
+      // requisição aplica e registra um evento; duplo clique converge sem novo efeito.
+      return applyGovernedItemTransition({
+        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user.id,
+        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "approval",
+        summary: (d) => `Item aprovado (painel): ${d}.`,
+      });
     }),
 
   // ─── PR C.2 — CATMAT/CATSER operacional supervisionado ─────────────────────

@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import CatmatThresholdConfig from "./CatmatThresholdConfig";
 
 /**
  * ItemIntelligenceWorkspace — REAL (wired to tRPC). *** NÚCLEO DO DOMÍNIO ***
@@ -69,6 +70,8 @@ export default function ItemIntelligenceWorkspace({
         Valide as recomendações do sistema. O servidor decide o CATMAT; você
         aprova ou rejeita cada item.
       </p>
+
+      {processId && <CatmatThresholdConfig />}
 
       {!processId ? (
         <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
