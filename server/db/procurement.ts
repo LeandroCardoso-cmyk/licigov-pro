@@ -194,8 +194,8 @@ export async function updateItemStatus(id: string, orgId: number, status: ItemSt
 export async function transitionItemStatusCAS(params: {
   id: string; orgId: number; fromStatuses: ItemStatus[]; toStatus: ItemStatus;
   approvedBy: number | null; updatedAt: string;
-}): Promise<{ applied: boolean }> {
-  const db = await getDb();
+}, executor?: ProcurementExecutor): Promise<{ applied: boolean }> {
+  const db = executor ?? await getDb();
   if (!db) return { applied: false };
   if (params.fromStatuses.length === 0) return { applied: false };
   const result = await db.update(intelligentItemsTable)

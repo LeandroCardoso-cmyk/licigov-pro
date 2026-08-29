@@ -9,6 +9,7 @@
 
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
+import { getDb } from "../db/connection";
 import { assertKernelAccess } from "./kernelAccessService";
 import { searchKnowledgeNodes } from "../db/knowledgeGraph";
 import type { PriceResearchItem } from "../domain/priceResearch";
@@ -50,13 +51,16 @@ const DOMAIN = "processo_licitatorio" as const;
  * timeline determinística):
  *
  *  - item já no estado-alvo (clique duplicado/replay) → sucesso, SEM novo evento;
- *  - esta requisição VENCEU a transição (1 linha afetada) → aplica e registra EXATAMENTE UM evento;
- *  - perdeu a corrida (0 linhas): reconsulta — se já está no alvo → converge (sucesso, SEM evento);
- *    se em estado incompatível → TRPCError CONFLICT;
+ *  - esta requisição VENCEU a transição (1 linha afetada) → aplica o CAS e registra EXATAMENTE UM
+ *    evento NA MESMA TRANSAÇÃO MySQL (atômico: ou ambos comitam, ou ambos sofrem rollback);
+ *  - perdeu a corrida (0 linhas): reconsulta FORA da transação — se já está no alvo → converge
+ *    (sucesso, SEM evento); se em estado incompatível → TRPCError CONFLICT;
  *  - item inexistente → TRPCError NOT_FOUND; falhas inesperadas continuam propagando.
  *
- * `recordProcessEvent` só é chamado quando ESTA requisição efetivamente aplicou a transição.
- * Tenant isolation preservado (todas as operações escopadas por `orgId`).
+ * A atomicidade CAS+evento impede commit parcial (estado mudado sem o evento institucional
+ * correspondente), preservando auditabilidade e replay safety mesmo em falha do registro do evento.
+ * `recordProcessEvent` só é chamado quando ESTA requisição venceu a transição. Tenant isolation
+ * preservado (todas as operações escopadas por `orgId`).
  */
 export async function applyGovernedItemTransition(params: {
   itemId: string;
@@ -74,22 +78,30 @@ export async function applyGovernedItemTransition(params: {
   // Convergência idempotente: já no estado-alvo (replay/duplo clique) — sem novo efeito nem evento.
   if (item.status === target) return { success: true, itemId: item.id, status: target };
 
-  const { applied } = await transitionItemStatusCAS({
-    id: item.id, orgId, fromStatuses: itemTransitionSources(target), toStatus: target,
-    approvedBy: params.approvedBy, updatedAt: new Date().toISOString(),
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+
+  // CAS vencedor + evento na MESMA transação: se o registro do evento falhar, o CAS sofre ROLLBACK
+  // junto (sem estado alterado e sem evento ausente). O CAS perdedor não registra evento e a
+  // transação comita sem mudanças.
+  const applied = await db.transaction(async (tx) => {
+    const res = await transitionItemStatusCAS({
+      id: item.id, orgId, fromStatuses: itemTransitionSources(target), toStatus: target,
+      approvedBy: params.approvedBy, updatedAt: new Date().toISOString(),
+    }, tx);
+    if (res.applied) {
+      await recordProcessEvent({
+        organizationId: orgId, processId: item.processId, eventType: params.eventType,
+        actor: String(params.actorUserId), summary: params.summary(item.description),
+        refId: item.id, correlationId: params.correlationId,
+      }, tx);
+    }
+    return res.applied;
   });
 
-  if (applied) {
-    // Esta requisição venceu a transição → registra EXATAMENTE UM evento.
-    await recordProcessEvent({
-      organizationId: orgId, processId: item.processId, eventType: params.eventType,
-      actor: String(params.actorUserId), summary: params.summary(item.description),
-      refId: item.id, correlationId: params.correlationId,
-    });
-    return { success: true, itemId: item.id, status: target };
-  }
+  if (applied) return { success: true, itemId: item.id, status: target };
 
-  // Perdeu a corrida (0 linhas afetadas): reconsulta a fronteira de persistência.
+  // Perdeu a corrida (0 linhas afetadas): reconsulta a fronteira de persistência, fora da transação.
   const fresh = await getIntelligentItem(item.id, orgId);
   if (!fresh) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
   if (fresh.status === target) return { success: true, itemId: fresh.id, status: target }; // convergiu, sem evento

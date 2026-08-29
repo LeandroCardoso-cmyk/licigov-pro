@@ -7,7 +7,8 @@
  *  - duas aprovações SIMULTÂNEAS do mesmo item pendente: nenhuma 500; estado final `aprovado`;
  *    EXATAMENTE UMA transição efetiva (um vencedor no CAS) e EXATAMENTE UM evento na timeline;
  *  - duas rejeições SIMULTÂNEAS: estado final `rejeitado`; exatamente um evento;
- *  - estado incompatível → TRPCError CONFLICT (sem novo efeito nem evento).
+ *  - estado incompatível → TRPCError CONFLICT (sem novo efeito nem evento);
+ *  - ATOMICIDADE CAS+evento: falha no registro do evento faz ROLLBACK do CAS (sem commit parcial).
  *
  * NÃO reimplementa a lógica do router — exercita as funções reais que tocam o banco.
  * Só roda com DATABASE_URL (CI com MySQL efêmero); PULADO sem banco.
@@ -142,6 +143,38 @@ describe.skipIf(!DB)("F2 — transição de item concorrência-segura (MySQL rea
     await approve(); // segunda vez (replay) — não deve registrar novo evento
     const timeline = await listProcessTimeline("proc-idem", ORG);
     expect(timeline.filter((e) => e.eventType === "approval").length).toBe(1);
+  }, 60_000);
+
+  it("ATOMICIDADE: falha no registro do evento faz ROLLBACK do CAS (sem commit parcial)", async () => {
+    const item = await seedPendingItem("proc-rollback");
+    // Falha controlada REAL do evento dentro da transação: um eventType acima do limite da coluna
+    // `process_timeline.event_type` (VARCHAR 40) faz o INSERT do evento falhar sob MySQL estrito →
+    // a transação inteira (CAS + evento) sofre rollback. Sem framework de injeção; caminho de produção.
+    const eventTypeLongoDemais = "e".repeat(60);
+    await expect(
+      applyGovernedItemTransition({
+        itemId: item.id, orgId: ORG, target: "aprovado", approvedBy: USER,
+        actorUserId: USER, correlationId: "corr-rollback", eventType: eventTypeLongoDemais,
+        summary: (d) => `Item aprovado: ${d}.`,
+      }),
+    ).rejects.toBeTruthy(); // falha inesperada de persistência propaga
+
+    // O CAS foi revertido: o item permanece no estado anterior e NÃO há evento órfão.
+    const afterFail = await getIntelligentItem(item.id, ORG);
+    expect(afterFail?.status).toBe("pendente");
+    expect((await listProcessTimeline("proc-rollback", ORG)).length).toBe(0);
+
+    // Nova tentativa VÁLIDA aplica normalmente: estado → aprovado, exatamente um evento.
+    const ok = await applyGovernedItemTransition({
+      itemId: item.id, orgId: ORG, target: "aprovado", approvedBy: USER,
+      actorUserId: USER, correlationId: "corr-rollback-2", eventType: "approval",
+      summary: (d) => `Item aprovado: ${d}.`,
+    });
+    expect(ok.status).toBe("aprovado");
+    const fresh = await getIntelligentItem(item.id, ORG);
+    expect(fresh?.status).toBe("aprovado");
+    const approvals = (await listProcessTimeline("proc-rollback", ORG)).filter((e) => e.eventType === "approval" && e.refId === item.id);
+    expect(approvals.length).toBe(1);
   }, 60_000);
 
   it("isolamento multi-tenant: CAS de outro tenant não afeta o item", async () => {
