@@ -117,6 +117,15 @@ export function canTransitionItem(from: ItemStatus, to: ItemStatus): boolean {
   return ITEM_TRANSITIONS[from].includes(to);
 }
 
+/**
+ * Estados de ORIGEM a partir dos quais `to` é uma transição válida. Usado para o
+ * compare-and-set atômico no banco (UPDATE … WHERE status IN (<origens>)), garantindo
+ * que apenas UMA requisição concorrente aplique a transição e registre o evento.
+ */
+export function itemTransitionSources(to: ItemStatus): ItemStatus[] {
+  return (Object.keys(ITEM_TRANSITIONS) as ItemStatus[]).filter((from) => canTransitionItem(from, to));
+}
+
 export function approveItem(item: IntelligentProcurementItem, userId: number, at?: string): IntelligentProcurementItem {
   if (!canTransitionItem(item.status, "aprovado")) {
     throw new ItemTransitionError(item.status, "aprovado", `Não é possível aprovar um item no estado "${item.status}".`);

@@ -1,17 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { TRPCError } from "@trpc/server";
 import {
-  createIntelligentItem, approveItem, rejectItem, canTransitionItem,
-  ItemTransitionError, isItemTransitionError, type IntelligentProcurementItem,
+  createIntelligentItem, approveItem, rejectItem, canTransitionItem, itemTransitionSources,
+  ItemTransitionError, isItemTransitionError, type IntelligentProcurementItem, type ItemStatus,
 } from "../domain/intelligentItem";
 
 /**
- * F2 (homologação V1) — Fronteira de erro das transições de Item Inteligente.
+ * F2 (homologação V1) — Regras DETERMINÍSTICAS de transição de Item Inteligente (camada de domínio).
  *
- * Uma transição inválida (aprovar item já aprovado/rejeitado, estado desatualizado, clique
- * duplicado) DEVE lançar um erro de domínio DETERMINÍSTICO e TIPADO (`ItemTransitionError`),
- * nunca um `Error` genérico que o tRPC serializaria como INTERNAL_SERVER_ERROR (500). O router
- * mapeia esse erro para `CONFLICT` (4xx tratável) — pinado aqui pela conversão explícita.
+ * Uma transição inválida (aprovar item já aprovado/rejeitado, estado desatualizado) é um erro de
+ * domínio ESPERADO e TIPADO (`ItemTransitionError`), nunca um `Error` genérico que viraria 500.
+ * A produção NÃO usa mais o mutator na borda: a escrita é um compare-and-set atômico no banco cujas
+ * ORIGENS válidas vêm de `itemTransitionSources` (testado aqui). A concorrência-segurança real
+ * (single-winner, exatamente um evento, CONFLICT em estado incompatível) é coberta pelo smoke MySQL
+ * `item-transition-concurrency-mysql-smoke.test.ts`.
  */
 function baseItem(overrides?: Partial<IntelligentProcurementItem>): IntelligentProcurementItem {
   const it = createIntelligentItem({
@@ -55,18 +56,15 @@ describe("F2 — transições de Item Inteligente (erro tipado, nunca 500)", () 
     expect(() => approveItem(baseItem({ status: "rejeitado" }), 7)).toThrow(ItemTransitionError);
   });
 
-  it("o router converte ItemTransitionError em TRPCError CONFLICT (4xx, não 500)", () => {
-    // Replica o mapeamento do router: catch(isItemTransitionError) → CONFLICT.
-    const mapToTrpc = (fn: () => unknown): TRPCError => {
-      try { fn(); throw new Error("não lançou"); }
-      catch (err) {
-        if (isItemTransitionError(err)) return new TRPCError({ code: "CONFLICT", message: err.message });
-        throw err;
-      }
-    };
-    const trpcErr = mapToTrpc(() => approveItem(baseItem({ status: "aprovado" }), 7));
-    expect(trpcErr).toBeInstanceOf(TRPCError);
-    expect(trpcErr.code).toBe("CONFLICT");
-    expect(trpcErr.code).not.toBe("INTERNAL_SERVER_ERROR");
+  it("itemTransitionSources deriva as ORIGENS válidas do compare-and-set (consumidor de produção)", () => {
+    // A escrita real (CAS no banco) aplica a transição apenas se o status atual estiver nestas origens.
+    const approveSources = itemTransitionSources("aprovado").sort();
+    const rejectSources = itemTransitionSources("rejeitado").sort();
+    expect(approveSources).toEqual(["em_analise", "pendente"]);
+    expect(rejectSources).toEqual(["em_analise", "pendente"]);
+    // Coerência com canTransitionItem: toda origem listada é uma transição válida; o alvo nunca é origem.
+    for (const s of approveSources) expect(canTransitionItem(s as ItemStatus, "aprovado")).toBe(true);
+    expect(approveSources).not.toContain("aprovado");
+    expect(rejectSources).not.toContain("rejeitado");
   });
 });

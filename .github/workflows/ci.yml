@@ -126,6 +126,10 @@ jobs:
       - name: Smoke — concorrência e rollback do versionamento (DATA-012)
         run: pnpm exec vitest run server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts
 
+      # F2 (homologação V1) — transição de Item concorrência-segura (compare-and-set atômico).
+      - name: Smoke — transição de Item concorrência-segura (F2 CAS)
+        run: pnpm exec vitest run server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts
+
       # ISOLAMENTO multi-tenant / RBAC — G7 exige que o isolamento não regrida no gate de CI.
       - name: Smoke — isolamento multi-tenant / RBAC (test:smoke:security)
         run: pnpm test:smoke:security

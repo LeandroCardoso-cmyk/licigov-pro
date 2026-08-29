@@ -8,13 +8,16 @@
  */
 
 import { createHash } from "crypto";
+import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { searchKnowledgeNodes } from "../db/knowledgeGraph";
 import type { PriceResearchItem } from "../domain/priceResearch";
 import { averageValue } from "../domain/priceResearch";
 import {
   createIntelligentItem,
+  itemTransitionSources,
   type IntelligentProcurementItem,
+  type ItemStatus,
 } from "../domain/intelligentItem";
 import { rankCATMAT, suggestedAndAlternatives, type CATMATMatch } from "../domain/catmatMatching";
 import {
@@ -30,6 +33,8 @@ import {
   insertItemRecommendation,
   insertItemRisk,
   getIntelligentItem,
+  transitionItemStatusCAS,
+  recordProcessEvent,
   listCatmatMatches,
   listRecommendations,
   listItemRisks,
@@ -37,6 +42,59 @@ import {
 } from "../db/procurement";
 
 const DOMAIN = "processo_licitatorio" as const;
+
+/**
+ * Transição GOVERNADA e CONCORRÊNCIA-SEGURA do status de um Item Inteligente
+ * (aprovar/rejeitar). Usa compare-and-set atômico no banco — a fronteira real de
+ * concorrência — em vez de ler-e-depois-escrever. Contrato (replay-safe, auditável,
+ * timeline determinística):
+ *
+ *  - item já no estado-alvo (clique duplicado/replay) → sucesso, SEM novo evento;
+ *  - esta requisição VENCEU a transição (1 linha afetada) → aplica e registra EXATAMENTE UM evento;
+ *  - perdeu a corrida (0 linhas): reconsulta — se já está no alvo → converge (sucesso, SEM evento);
+ *    se em estado incompatível → TRPCError CONFLICT;
+ *  - item inexistente → TRPCError NOT_FOUND; falhas inesperadas continuam propagando.
+ *
+ * `recordProcessEvent` só é chamado quando ESTA requisição efetivamente aplicou a transição.
+ * Tenant isolation preservado (todas as operações escopadas por `orgId`).
+ */
+export async function applyGovernedItemTransition(params: {
+  itemId: string;
+  orgId: number;
+  target: ItemStatus;
+  approvedBy: number | null;
+  actorUserId: number;
+  correlationId: string;
+  eventType: string;
+  summary: (description: string) => string;
+}): Promise<{ success: true; itemId: string; status: ItemStatus }> {
+  const { itemId, orgId, target } = params;
+  const item = await getIntelligentItem(itemId, orgId);
+  if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+  // Convergência idempotente: já no estado-alvo (replay/duplo clique) — sem novo efeito nem evento.
+  if (item.status === target) return { success: true, itemId: item.id, status: target };
+
+  const { applied } = await transitionItemStatusCAS({
+    id: item.id, orgId, fromStatuses: itemTransitionSources(target), toStatus: target,
+    approvedBy: params.approvedBy, updatedAt: new Date().toISOString(),
+  });
+
+  if (applied) {
+    // Esta requisição venceu a transição → registra EXATAMENTE UM evento.
+    await recordProcessEvent({
+      organizationId: orgId, processId: item.processId, eventType: params.eventType,
+      actor: String(params.actorUserId), summary: params.summary(item.description),
+      refId: item.id, correlationId: params.correlationId,
+    });
+    return { success: true, itemId: item.id, status: target };
+  }
+
+  // Perdeu a corrida (0 linhas afetadas): reconsulta a fronteira de persistência.
+  const fresh = await getIntelligentItem(item.id, orgId);
+  if (!fresh) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+  if (fresh.status === target) return { success: true, itemId: fresh.id, status: target }; // convergiu, sem evento
+  throw new TRPCError({ code: "CONFLICT", message: `Não é possível levar o item do estado "${fresh.status}" para "${target}".` });
+}
 
 /**
  * Gera candidatos CATMAT determinísticos para a descrição (stub — integração real

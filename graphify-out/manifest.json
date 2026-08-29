@@ -4355,8 +4355,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1787857610.1759288,
-    "ast_hash": "ed5327ef5b76371a255380057656e440",
+    "mtime": 1787944406.6834583,
+    "ast_hash": "8c79a02859638449879c35f6ad8507f7",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -4670,8 +4670,8 @@
     "semantic_hash": ""
   },
   "server/domain/intelligentItem.ts": {
-    "mtime": 1787942488.5418096,
-    "ast_hash": "e1854311d2068197b135c69817162440",
+    "mtime": 1787944390.0714574,
+    "ast_hash": "ccf9e6f5d1e7cc07919029fdb16d7c96",
     "semantic_hash": ""
   },
   "server/domain/itemRecommendation.ts": {
@@ -5165,8 +5165,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1787942488.5418096,
-    "ast_hash": "086260f04fb8cd353514fd61e212538e",
+    "mtime": 1787944599.8234696,
+    "ast_hash": "a23b96e915467debe9ab4de781464847",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -5235,8 +5235,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1787942488.5418096,
-    "ast_hash": "d5a77e04e9f3b5b35c2beb071b2087fe",
+    "mtime": 1787944561.6994674,
+    "ast_hash": "f79c93c73e6414c7674e29f3fc522a28",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -5885,8 +5885,8 @@
     "semantic_hash": ""
   },
   "server/services/itemIntelligenceService.ts": {
-    "mtime": 1785862334.9602134,
-    "ast_hash": "89d2187572112a766f221d4838cffaf6",
+    "mtime": 1787944509.2714643,
+    "ast_hash": "338b190d93517384b7c0886c3b2357ff",
     "semantic_hash": ""
   },
   "server/services/itemMatchingEngine.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "dda008a409d7e546cf293ea8820e513c",
+    "mtime": 1788037285.062587,
+    "ast_hash": "a4e9f072afe3e24c9b2e435328d1915d",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -11090,8 +11090,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
-    "mtime": 1787942488.5520241,
-    "ast_hash": "f0b6bdbf8c028c6a3636c5816602ec91",
+    "mtime": 1788036865.0025966,
+    "ast_hash": "3048b31276660096cd2f690ff14dcc01",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts": {
+    "mtime": 1787944866.1754856,
+    "ast_hash": "09e8d977e3a47fd4d827f2721441b4da",
     "semantic_hash": ""
   }
 }
