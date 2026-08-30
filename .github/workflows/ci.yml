@@ -222,6 +222,19 @@ jobs:
       - name: Smoke — V1 Functional Closure (Parecer/Direta/Contrato estrito)
         run: pnpm exec vitest run server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts
 
+      # B1 (2ª passagem V1) — Institutional Request Engine em MODO ESTRITO: fluxo real Contratação
+      # Direta → Solicitar Parecer Jurídico. Prova round-trip createdAt/updatedAt, assignment, timeline,
+      # response, signedAt, notificação/referência documental, updateStatus e isolamento multi-tenant,
+      # sem "Incorrect datetime value" (ISO cru em datetime(3) corrigido na fronteira de persistência).
+      - name: Smoke — Institutional Request Engine estrito (B1 Contratação Direta → Parecer)
+        run: pnpm exec vitest run server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts
+
+      # Aditivos KPI (2ª passagem V1) — Central conta aditivos REAIS por tenant (fonte canônica
+      # contract_addenda via countContractAddendaByOrg): 0 sem aditivo, contagem correta com múltiplos,
+      # tenant B não altera tenant A, refresh determinístico.
+      - name: Smoke — KPI de aditivos da Central por tenant (Aditivos KPI)
+        run: pnpm exec vitest run server/__tests__/integration/dashboard-addenda-kpi-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

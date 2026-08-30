@@ -4315,8 +4315,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalRequests.ts": {
-    "mtime": 1785862334.7561064,
-    "ast_hash": "16af6499e67926f6d4e213586266c13c",
+    "mtime": 1788083740.6575246,
+    "ast_hash": "34e710e1aee4f62ebe38a6a2eed8aa94",
     "semantic_hash": ""
   },
   "server/db/knowledgeGraph.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788037285.062587,
-    "ast_hash": "a4e9f072afe3e24c9b2e435328d1915d",
+    "mtime": 1788083600.1415277,
+    "ast_hash": "257533b01a5f7e44fe712ae08d694d9e",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -8145,8 +8145,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1787920530.386103,
-    "ast_hash": "3f76605b373df00937849d5ef88325c6",
+    "mtime": 1788048347.318334,
+    "ast_hash": "5de2bcd38e6dd25519c5eaef7b4a4d94",
     "semantic_hash": ""
   },
   "server/domain/contractInstruments.ts": {
@@ -8400,8 +8400,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1785862334.8448458,
-    "ast_hash": "8c6859656b9015684673cabfeabf7454",
+    "mtime": 1788048365.0863335,
+    "ast_hash": "1cca23e304977210b1c79bc0cde9e2d3",
     "semantic_hash": ""
   },
   "server/services/operationRecordService.ts": {
@@ -11097,6 +11097,16 @@
   "server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts": {
     "mtime": 1788038336.706563,
     "ast_hash": "49abedb0fd7a0b665797c7853805b3e1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/dashboard-addenda-kpi-mysql-smoke.test.ts": {
+    "mtime": 1788083580.165528,
+    "ast_hash": "08be4d75e71f0c630ec2b542f82ad2e7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts": {
+    "mtime": 1788083711.4615252,
+    "ast_hash": "a51fd3ada18172c421ab2abeacce62b7",
     "semantic_hash": ""
   }
 }

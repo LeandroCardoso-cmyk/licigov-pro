@@ -15,7 +15,7 @@ import {
 } from "../domain/operationalDashboard";
 import { listProcesses } from "../db/procurement";
 import { listDirectProcurementWorkspaces } from "../db/directProcurement";
-import { listContractWorkspaces } from "../db/contractWorkspace";
+import { listContractWorkspaces, countContractAddendaByOrg } from "../db/contractWorkspace";
 import { listLegalOpinionWorkspaces } from "../db/legalOpinionWorkspace";
 import { listPendingForDomain } from "../db/institutionalRequests";
 import { listOperationalEvents, listOperationalTimeline, listOperationRecords } from "../db/departmentOperation";
@@ -25,14 +25,15 @@ const LEGAL_DOMAIN = "parecer_juridico" as const;
 
 /** Reúne o estado consolidado do departamento (sem duplicar dados dos domínios). */
 async function collect(orgId: number) {
-  const [processes, directs, contracts, legalPending, requestsPending] = await Promise.all([
+  const [processes, directs, contracts, legalPending, requestsPending, addendaCount] = await Promise.all([
     listProcesses(orgId, 200),
     listDirectProcurementWorkspaces(orgId, 200),
     listContractWorkspaces(orgId, 200),
     listLegalOpinionWorkspaces(orgId, { activeOnly: true, limit: 200 }),
     listPendingForDomain(orgId, LEGAL_DOMAIN, 200),
+    countContractAddendaByOrg(orgId),
   ]);
-  return { processes, directs, contracts, legalPending, requestsPending };
+  return { processes, directs, contracts, legalPending, requestsPending, addendaCount };
 }
 
 export interface DepartmentSnapshot {
@@ -44,7 +45,7 @@ export interface DepartmentSnapshot {
 /** ÁREA 1 — Centro de Operações: indicadores + eventos de hoje e futuros. */
 export async function getDashboard(params: { organizationId: number; today: string }): Promise<DepartmentSnapshot> {
   assertKernelAccess(DOMAIN, "observability");
-  const { processes, directs, contracts, legalPending, requestsPending } = await collect(params.organizationId);
+  const { processes, directs, contracts, legalPending, requestsPending, addendaCount } = await collect(params.organizationId);
   const events = await listOperationalEvents(params.organizationId, { limit: 500 });
 
   const contractsExpiringSoon = events.filter(e =>
@@ -53,7 +54,7 @@ export async function getDashboard(params: { organizationId: number; today: stri
   const indicators = computeIndicators({
     processes, directProcurements: directs, contracts,
     legalOpinionsPending: legalPending.length, institutionalRequestsPending: requestsPending.length,
-    addendaCount: 0, contractsExpiringSoon, pendingTasks: 0,
+    addendaCount, contractsExpiringSoon, pendingTasks: 0,
   });
 
   const todayEvents = events.filter(e => e.eventDate === params.today);

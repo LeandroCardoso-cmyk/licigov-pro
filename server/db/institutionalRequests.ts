@@ -8,6 +8,7 @@
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./connection";
+import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 import {
   institutionalRequestsTable,
   institutionalResponsesTable,
@@ -23,10 +24,15 @@ import type { RequestAssignment } from "../domain/requestAssignment";
 import type { RequestNotification } from "../domain/requestNotification";
 import type { DocumentReference } from "../domain/documentReference";
 
-function parseArr<T>(raw: string | null): T[] {
-  if (!raw) return [];
-  try { const p = JSON.parse(raw); return Array.isArray(p) ? p as T[] : []; } catch { return []; }
-}
+/**
+ * Fronteira de persistência de DATETIME (padrão canônico — igual a `procurement.ts`).
+ * O modelo de domínio usa ISO ("…T…Z"); o MySQL em modo estrito rejeita ISO em
+ * colunas `datetime(3)`. Convertemos ISO→DB na escrita e DB→ISO na leitura, sem
+ * alterar o modelo de domínio nem o contrato público (entra/sai ISO).
+ * `signedAt` de `institutional_responses` é VARCHAR(30) e NÃO passa por aqui.
+ */
+const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
+const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Requests ──────────────────────────────────────────────────────────────
 
@@ -38,8 +44,8 @@ export async function insertRequest(r: InstitutionalRequest): Promise<Institutio
     requestType: r.requestType, referenceProcessId: r.referenceProcessId, referenceDocumentId: r.referenceDocumentId,
     title: r.title, description: r.description, priority: r.priority, status: r.status,
     requestedBy: r.requestedBy, assignedTo: r.assignedTo, correlationId: r.correlationId,
-    createdAt: r.createdAt, updatedAt: r.updatedAt,
-  }).onDuplicateKeyUpdate({ set: { status: r.status, assignedTo: r.assignedTo, updatedAt: r.updatedAt } });
+    createdAt: toDb(r.createdAt), updatedAt: toDb(r.updatedAt),
+  }).onDuplicateKeyUpdate({ set: { status: r.status, assignedTo: r.assignedTo, updatedAt: toDb(r.updatedAt) } });
   return r;
 }
 
@@ -50,7 +56,7 @@ function rowToRequest(r: typeof institutionalRequestsTable.$inferSelect): Instit
     referenceProcessId: r.referenceProcessId, referenceDocumentId: r.referenceDocumentId, title: r.title,
     description: r.description ?? "", priority: r.priority as RequestPriority, status: r.status as RequestStatus,
     requestedBy: r.requestedBy, assignedTo: r.assignedTo ?? null, correlationId: r.correlationId,
-    createdAt: r.createdAt, updatedAt: r.updatedAt,
+    createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
   };
 }
 
@@ -65,7 +71,7 @@ export async function getRequest(id: string, orgId: number): Promise<Institution
 export async function updateRequestStatus(id: string, orgId: number, status: string, assignedTo: number | null, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(institutionalRequestsTable).set({ status, assignedTo, updatedAt })
+  await db.update(institutionalRequestsTable).set({ status, assignedTo, updatedAt: toDb(updatedAt) })
     .where(and(eq(institutionalRequestsTable.id, id), eq(institutionalRequestsTable.organizationId, orgId)));
   return true;
 }
@@ -81,7 +87,7 @@ export async function listPendingForDomain(orgId: number, destinationDomain: str
       inArray(institutionalRequestsTable.status, ["PENDING", "RECEIVED", "IN_PROGRESS", "WAITING_INFORMATION"]),
     ))
     .orderBy(desc(institutionalRequestsTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, sourceDomain: r.sourceDomain, requestType: r.requestType, title: r.title, priority: r.priority, status: r.status, createdAt: r.createdAt }));
+  return rows.map(r => ({ id: r.id, sourceDomain: r.sourceDomain, requestType: r.requestType, title: r.title, priority: r.priority, status: r.status, createdAt: fromDb(r.createdAt) }));
 }
 
 /** Solicitações concluídas/devolvidas para um domínio (origem ou destino). */
@@ -96,7 +102,7 @@ export async function listCompletedForDomain(orgId: number, domain: string, asSo
       inArray(institutionalRequestsTable.status, ["COMPLETED", "RETURNED", "ARCHIVED"]),
     ))
     .orderBy(desc(institutionalRequestsTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, requestType: r.requestType, title: r.title, status: r.status, updatedAt: r.updatedAt }));
+  return rows.map(r => ({ id: r.id, requestType: r.requestType, title: r.title, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
 
 /** Solicitações vinculadas a um processo (para o domínio de origem exibir respostas). */
@@ -117,7 +123,7 @@ export async function insertResponse(resp: InstitutionalResponse): Promise<Insti
     id: resp.id, organizationId: resp.organizationId, requestId: resp.requestId, responder: resp.responder,
     responseType: resp.responseType, responseStatus: resp.responseStatus, comments: resp.comments,
     attachedDocuments: JSON.stringify(resp.attachedDocuments), signed: resp.signed ? 1 : 0,
-    signatureMethod: resp.signatureMethod, signedAt: resp.signedAt, correlationId: resp.correlationId, createdAt: resp.createdAt,
+    signatureMethod: resp.signatureMethod, signedAt: resp.signedAt, correlationId: resp.correlationId, createdAt: toDb(resp.createdAt),
   }).onDuplicateKeyUpdate({ set: { responseStatus: resp.responseStatus, signed: resp.signed ? 1 : 0, signatureMethod: resp.signatureMethod, signedAt: resp.signedAt } });
   return resp;
 }
@@ -139,7 +145,7 @@ export async function insertAssignment(a: RequestAssignment): Promise<RequestAss
   if (!db) return null;
   await db.insert(requestAssignmentsTable).values({
     id: a.id, organizationId: a.organizationId, requestId: a.requestId, userId: a.userId,
-    sector: a.sector, queue: a.queue, priority: a.priority, correlationId: a.correlationId, createdAt: a.createdAt,
+    sector: a.sector, queue: a.queue, priority: a.priority, correlationId: a.correlationId, createdAt: toDb(a.createdAt),
   }).onDuplicateKeyUpdate({ set: { userId: a.userId, queue: a.queue, priority: a.priority } });
   return a;
 }
@@ -151,7 +157,7 @@ export async function insertRequestTimelineEntry(e: RequestTimelineEntry): Promi
   if (!db) return null;
   await db.insert(requestTimelinesTable).values({
     id: e.id, organizationId: e.organizationId, requestId: e.requestId, eventOrder: e.order,
-    eventType: e.eventType, actor: e.actor, summary: e.summary, refId: e.refId, correlationId: e.correlationId, createdAt: e.createdAt,
+    eventType: e.eventType, actor: e.actor, summary: e.summary, refId: e.refId, correlationId: e.correlationId, createdAt: toDb(e.createdAt),
   }).onDuplicateKeyUpdate({ set: { summary: e.summary } });
   return e;
 }
@@ -162,7 +168,7 @@ export async function listRequestTimeline(requestId: string, orgId: number): Pro
   const rows = await db.select().from(requestTimelinesTable)
     .where(and(eq(requestTimelinesTable.requestId, requestId), eq(requestTimelinesTable.organizationId, orgId)))
     .orderBy(asc(requestTimelinesTable.eventOrder));
-  return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: r.createdAt }));
+  return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: fromDb(r.createdAt) }));
 }
 
 export async function countTimeline(requestId: string, orgId: number): Promise<number> {
@@ -180,7 +186,7 @@ export async function insertNotification(n: RequestNotification): Promise<Reques
   if (!db) return null;
   await db.insert(requestNotificationsTable).values({
     id: n.id, organizationId: n.organizationId, requestId: n.requestId, recipientUser: n.recipientUser,
-    channel: n.channel, title: n.title, message: n.message, status: n.status, correlationId: n.correlationId, createdAt: n.createdAt,
+    channel: n.channel, title: n.title, message: n.message, status: n.status, correlationId: n.correlationId, createdAt: toDb(n.createdAt),
   }).onDuplicateKeyUpdate({ set: { status: n.status } });
   return n;
 }
@@ -191,7 +197,7 @@ export async function listNotifications(orgId: number, recipientUser: number, li
   const rows = await db.select().from(requestNotificationsTable)
     .where(and(eq(requestNotificationsTable.organizationId, orgId), eq(requestNotificationsTable.recipientUser, recipientUser)))
     .orderBy(desc(requestNotificationsTable.createdAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, requestId: r.requestId, title: r.title, message: r.message ?? "", status: r.status, createdAt: r.createdAt }));
+  return rows.map(r => ({ id: r.id, requestId: r.requestId, title: r.title, message: r.message ?? "", status: r.status, createdAt: fromDb(r.createdAt) }));
 }
 
 // ─── Document references ──────────────────────────────────────────────────────
@@ -202,7 +208,7 @@ export async function insertDocumentReference(ref: DocumentReference): Promise<D
   await db.insert(documentReferencesTable).values({
     id: ref.id, organizationId: ref.organizationId, requestId: ref.requestId, originDomain: ref.originDomain,
     documentId: ref.documentId, version: ref.version, snapshot: ref.snapshot, title: ref.title,
-    correlationId: ref.correlationId, createdAt: ref.createdAt,
+    correlationId: ref.correlationId, createdAt: toDb(ref.createdAt),
   }).onDuplicateKeyUpdate({ set: { snapshot: ref.snapshot } });
   return ref;
 }

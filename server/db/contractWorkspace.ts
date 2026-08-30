@@ -158,6 +158,20 @@ export async function countContractAddenda(contractId: string, orgId: number): P
   return rows.length;
 }
 
+/**
+ * Total de aditivos do tenant (todos os contratos da organização). Mesma fonte
+ * canônica (`contract_addenda`) e mesmo escopo por `organization_id` de
+ * `countContractAddenda` — apenas agregado no nível da organização, para KPIs
+ * operacionais. Não introduz segunda fonte nem cópia auxiliar. Degrada sem DB.
+ */
+export async function countContractAddendaByOrg(orgId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ id: contractAddendaTable.id }).from(contractAddendaTable)
+    .where(eq(contractAddendaTable.organizationId, orgId));
+  return rows.length;
+}
+
 export async function insertContractAddendum(a: ContractAddendum): Promise<ContractAddendum | null> {
   const db = await getDb();
   if (!db) return null;
