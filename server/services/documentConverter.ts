@@ -9,6 +9,8 @@
  * componente pode chamá-lo diretamente (garantido por teste de fronteira).
  * Não conhece storage nem S3 — apenas produz o binário.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// `any` inevitável ao consumir a AST não-tipada do `marked` e as opções do PDFKit.
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from "docx";
@@ -297,6 +299,24 @@ export type DocBlock =
   | { kind: "notice"; runs: InlineRun[] } // blockquote → bloco de aviso destacado
   | { kind: "hr" };
 
+/**
+ * Representação institucional da assinatura de um ato (metadado do documento, NÃO
+ * conteúdo jurídico). Opcional: só documentos com assinatura registrada preenchem.
+ * `manual` NÃO é assinatura digital ICP-Brasil/GOV.BR/A1 — o wording institucional
+ * deixa isso explícito, sem induzir equivalência criptográfica.
+ */
+export interface SignatureMeta {
+  signed: true;
+  /** Nome institucional do signatário (snapshot histórico no momento da emissão). */
+  signerName: string;
+  /** Papel/função institucional disponível no momento da emissão (opcional). */
+  signerRole?: string;
+  /** Rótulo humano do método (ex.: "Manual"). */
+  methodLabel: string;
+  /** Data/hora da assinatura já formatada pt-BR. */
+  signedAtLabel: string;
+}
+
 export interface InstitutionalMeta {
   organizationName?: string;
   documentTitle: string;
@@ -309,6 +329,10 @@ export interface InstitutionalMeta {
   /** Palavra usada no aviso de não-finalizado (default "RASCUNHO"). Documentos
    *  oficiais usam o status real (ex.: "GERADO"/"REVISADO"). */
   draftNoticeLabel?: string;
+  /** Bloco de assinatura institucional (opcional). Presente apenas quando o ato tem
+   *  assinatura registrada — ex.: Parecer Jurídico emitido/assinado. Ausente para os
+   *  demais documentos/domínios, que permanecem inalterados. */
+  signature?: SignatureMeta;
 }
 
 export interface InstitutionalModel {
@@ -370,7 +394,35 @@ export function buildInstitutionalModel(content: string, meta: InstitutionalMeta
         break;
     }
   }
+  // Bloco de ASSINATURA institucional (opcional) — anexado ao FINAL do documento como
+  // blocos comuns (hr + heading + parágrafos), renderizados igualmente por DOCX e PDF.
+  // É representação do ato assinado (metadado), nunca alteração do conteúdo jurídico.
+  if (meta.signature?.signed) {
+    blocks.push(...signatureBlocks(meta.signature));
+  }
   return { meta, blocks };
+}
+
+/** Constrói os blocos do bloco institucional de assinatura (comum aos dois renderers). */
+function signatureBlocks(sig: SignatureMeta): DocBlock[] {
+  const line = (label: string, value: string): DocBlock => ({
+    kind: "paragraph",
+    runs: [{ text: `${label}: `, bold: true }, { text: value }],
+  });
+  const out: DocBlock[] = [
+    { kind: "hr" },
+    { kind: "heading", level: 2, runs: [{ text: "Assinatura" }] },
+    line("Responsável", sig.signerName),
+  ];
+  if (sig.signerRole && sig.signerRole.trim().length > 0) {
+    out.push(line("Função/Papel", sig.signerRole));
+  }
+  out.push(line("Método", sig.methodLabel));
+  out.push(line("Assinado em", sig.signedAtLabel));
+  // Wording institucional NÃO-ICP: deixa claro que é registro manual do sistema, sem
+  // induzir equivalência a ICP-Brasil/GOV.BR/certificado A1/assinatura criptográfica.
+  out.push({ kind: "paragraph", runs: [{ text: "Assinatura registrada no LiciGov Pro — método manual.", italic: true }] });
+  return out;
 }
 
 /** Achata tokens de bloco (ex.: parágrafos dentro de blockquote/list item) em inline. */

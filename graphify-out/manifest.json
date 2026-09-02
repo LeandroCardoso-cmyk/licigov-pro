@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1785862334.847574,
-    "ast_hash": "dc338f32c7d089637de490a5685f1b3c",
+    "mtime": 1788384003.488284,
+    "ast_hash": "73db9080c6965925dd331565df4e9305",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788083600.1415277,
-    "ast_hash": "257533b01a5f7e44fe712ae08d694d9e",
+    "mtime": 1788384397.8643076,
+    "ast_hash": "f50cff5bcd9ce161b70b69ec5eafdc8c",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1787927292.8756511,
-    "ast_hash": "e0f7d94bcd3aecb4fc16b132eb999fc1",
+    "mtime": 1788383861.3682756,
+    "ast_hash": "3a2d9295c32808862a5114bec5d48813",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -10305,8 +10305,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentExportAdapter.ts": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "e93d5fb57019422d8bdc6e0fa04e7f18",
+    "mtime": 1788383902.956278,
+    "ast_hash": "48af6fdb60dc85e719b43fd745112eb4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-resilience.test.ts": {
@@ -11107,6 +11107,16 @@
   "server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts": {
     "mtime": 1788083711.4615252,
     "ast_hash": "a51fd3ada18172c421ab2abeacce62b7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-signature-block.test.ts": {
+    "mtime": 1788384209.2332735,
+    "ast_hash": "aadbdad7af3f5ef7159756ba34950307",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts": {
+    "mtime": 1788384363.9603057,
+    "ast_hash": "15a163ae71e7992bdb220a5632966c92",
     "semantic_hash": ""
   }
 }

@@ -235,6 +235,13 @@ jobs:
       - name: Smoke — KPI de aditivos da Central por tenant (Aditivos KPI)
         run: pnpm exec vitest run server/__tests__/integration/dashboard-addenda-kpi-mysql-smoke.test.ts
 
+      # V1 — SNAPSHOT imutável de assinatura na materialização do Parecer emitido: signerName
+      # (users), signerRole (organization_members), método e signedAt gravados no metadata na
+      # emissão; conteúdo jurídico intacto (assinatura é metadado/representação, não conteúdo);
+      # re-leitura preserva identidade histórica; isolamento multi-tenant do documento oficial.
+      - name: Smoke — snapshot de assinatura do Parecer (metadata emitido)
+        run: pnpm exec vitest run server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

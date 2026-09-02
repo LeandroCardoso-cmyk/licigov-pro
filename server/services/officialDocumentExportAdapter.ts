@@ -50,6 +50,36 @@ function metaString(m: Record<string, unknown> | undefined, keys: string[]): str
   return undefined;
 }
 
+/** Rótulos humanos de método de assinatura. Só `manual` é implementado no V1. */
+const SIGNATURE_METHOD_LABELS: Record<string, string> = { manual: "Manual" };
+
+/**
+ * Reconstrói o bloco de assinatura a partir do SNAPSHOT imutável gravado no metadata da
+ * versão emitida (nunca de lookup mutável posterior). Retorna undefined quando não há
+ * assinatura registrada — assim os demais documentos/domínios ficam inalterados.
+ */
+function signatureFromMeta(m: Record<string, unknown> | undefined): import("./documentConverter").SignatureMeta | undefined {
+  if (!m) return undefined;
+  const snap = m["signatureSnapshot"];
+  if (!snap || typeof snap !== "object") return undefined;
+  const s = snap as Record<string, unknown>;
+  if (s["signed"] !== true) return undefined;
+  const signerName = typeof s["signerName"] === "string" && s["signerName"].trim() ? (s["signerName"] as string).trim() : "";
+  if (!signerName) return undefined;
+  const method = typeof s["signatureMethod"] === "string" ? (s["signatureMethod"] as string) : "manual";
+  const signerRole = typeof s["signerRole"] === "string" ? (s["signerRole"] as string).trim() : "";
+  const signedAtRaw = typeof s["signedAt"] === "string" ? (s["signedAt"] as string) : "";
+  const signedAtDate = signedAtRaw ? new Date(signedAtRaw) : null;
+  const signedAtLabel = signedAtDate && !Number.isNaN(signedAtDate.getTime()) ? formatBrazilianDateTime(signedAtDate) : "—";
+  return {
+    signed: true,
+    signerName,
+    signerRole: signerRole || undefined,
+    methodLabel: SIGNATURE_METHOD_LABELS[method] ?? "Manual",
+    signedAtLabel,
+  };
+}
+
 /**
  * C.4B.1 — POLICY de exportação oficial DERIVADA NO SERVIDOR pelo businessDomain do próprio documento
  * (nunca controlada pelo cliente). Para o Processo Licitatório, apenas a versão `emitido` (autoridade
@@ -120,6 +150,9 @@ export async function exportOfficialDocument(params: {
       draftNoticeLabel: statusLabel,
       version: doc.version,
       exportedAtLabel: formatBrazilianDateTime(new Date()),
+      // Bloco de assinatura institucional a partir do snapshot imutável — presente apenas
+      // quando o ato foi assinado (ex.: Parecer emitido); undefined para os demais.
+      signature: signatureFromMeta(doc.metadata as Record<string, unknown> | undefined),
     },
   });
 
