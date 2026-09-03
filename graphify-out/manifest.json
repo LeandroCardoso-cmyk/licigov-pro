@@ -7755,8 +7755,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/SignaturePanel.tsx": {
-    "mtime": 1787928853.5596585,
-    "ast_hash": "1beca032956a5ffb33db20af9c3204c5",
+    "mtime": 1788448191.3159375,
+    "ast_hash": "b9017f0030fdee293c7972af429d2fe6",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/TimelinePanel.tsx": {
@@ -11117,6 +11117,16 @@
   "server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts": {
     "mtime": 1788441436.132092,
     "ast_hash": "610dbcd77f481605bbf4ca9df87eb5e4",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/opinionMutationSync.test.ts": {
+    "mtime": 1788448249.5879362,
+    "ast_hash": "e224c568f5050066ff711eda114e636b",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/opinionMutationSync.ts": {
+    "mtime": 1788448167.5399382,
+    "ast_hash": "30bbc678a1a635752f2dd466ad18acdc",
     "semantic_hash": ""
   }
 }
