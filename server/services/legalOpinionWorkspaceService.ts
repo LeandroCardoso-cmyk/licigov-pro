@@ -19,6 +19,8 @@ import { computeLineageId } from "../domain/officialDocument";
 import { listVersions, getOfficialDocument } from "../db/officialDocuments";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { receiveRequest as receiveInstitutionalRequest, respondRequest } from "./institutionalRequestService";
+import { getMembership } from "./tenantService";
+import { getUserById } from "../db/users";
 import {
   getRequest, listRequestTimeline, listDocumentReferences,
 } from "../db/institutionalRequests";
@@ -284,6 +286,10 @@ async function findEmitidoForContent(
 
 /** Materializa a versão OFICIAL `emitido` do parecer assinado no Document Engine (pipeline ÚNICO). */
 async function materializeSignedParecer(ws: LegalOpinionWorkspace, signed: LegalOpinionDraft, signedBy: number, correlationId: string): Promise<void> {
+  // SNAPSHOT humano da assinatura no MOMENTO da emissão (identidade histórica imutável):
+  // captura nome institucional e papel/função do signatário agora, para não depender de
+  // lookup mutável posterior ao reconstruir quem assinou. Vira metadado da versão emitida.
+  const signatureSnapshot = await buildSignatureSnapshot(ws.organizationId, signedBy, signed);
   await generateOfficialDocument({
     organizationId: ws.organizationId, businessDomain: "parecer_juridico",
     documentType: parecerDocumentType(signed.opinionType),
@@ -292,11 +298,36 @@ async function materializeSignedParecer(ws: LegalOpinionWorkspace, signed: Legal
     author: String(signedBy), status: "emitido", correlationId,
     metadata: {
       draftId: signed.id, draftVersion: signed.version, contentHash: draftContentHash(signed),
-      signed: true, signedBy, signatureMethod: signed.signatureMethod,
+      signed: true, signedBy, signatureMethod: signed.signatureMethod, signedAt: signed.signedAt,
+      signatureSnapshot,
       requestId: ws.requestId, referenceProcessId: ws.referenceProcessId,
       opinionType: signed.opinionType, conclusionType: signed.conclusionType,
     },
   });
+}
+
+/**
+ * Snapshot institucional imutável da assinatura (congelado na emissão): identidade do
+ * signatário (id + nome), papel/função disponível, método e instante. Preserva a
+ * identidade histórica mesmo que nome/papel do usuário mudem depois. Degrada com campos
+ * vazios sem DB — nunca falha a emissão por ausência de lookup.
+ */
+async function buildSignatureSnapshot(organizationId: number, signedBy: number, signed: LegalOpinionDraft): Promise<{
+  signed: true; signerUserId: number; signerName: string; signerRole: string;
+  signatureMethod: SignatureMethod | null; signedAt: string | null;
+}> {
+  const [user, membership] = await Promise.all([
+    getUserById(signedBy).catch(() => undefined),
+    getMembership(signedBy, organizationId).catch(() => null),
+  ]);
+  return {
+    signed: true,
+    signerUserId: signedBy,
+    signerName: user?.name ?? `Usuário ${signedBy}`,
+    signerRole: membership?.role ?? "",
+    signatureMethod: signed.signatureMethod,
+    signedAt: signed.signedAt,
+  };
 }
 
 /** Executa a lógica CONVERGENTE de assinatura (recovery por estado) — usada DENTRO da idempotência canônica. */

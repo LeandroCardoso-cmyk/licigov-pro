@@ -1,6 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { shouldPreserveIdempotencyKey } from "../procurement/catmatKeyPolicy";
+import { invalidateAfterSign, invalidateAfterReturn, type OpinionQueryInvalidator } from "./opinionMutationSync";
 
 /**
  * SignaturePanel — REAL (tRPC).
@@ -36,22 +37,35 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
   const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
   const ensureSignKey = () => { if (!signKeyRef.current) signKeyRef.current = genKey(); return signKeyRef.current; };
 
+  // Invalidador das fontes canônicas da tela do Parecer (server-authoritative): mapeia o
+  // conjunto puro de sincronização (opinionMutationSync) para as queries tRPC reais. NÃO
+  // executa mutações nem inventa estado — apenas refaz o que o backend já confirmou.
+  const invalidator: OpinionQueryInvalidator = React.useMemo(() => ({
+    loadContext: (id) => { void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId: id }); },
+    listInbox: () => { void utils.legalOpinionWorkspace.listInbox.invalidate(); },
+    lawyerDashboard: () => { void utils.legalOpinionWorkspace.lawyerDashboard.invalidate(); },
+    officialDocuments: (id) => { void utils.documentEngine.list.invalidate({ businessDomain: "parecer_juridico", origin: id }); },
+  }), [utils]);
+
   const sign = trpc.legalOpinionWorkspace.signOpinion.useMutation({
     onSuccess: () => {
       signKeyRef.current = ""; // sucesso rotaciona
-      void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId });
+      // Converge card "Assinado", stage/versões, Documentos Oficiais (v emitido + DOCX/PDF/
+      // Imprimir), Caixa e Painel — SEM F5. (Bug de sincronização da homologação V1.)
+      invalidateAfterSign(invalidator, workspaceId);
       onSigned?.(workspaceId);
     },
     onError: (err) => {
       // Preserva a key em outcome desconhecido/transitório E no CONFLICT de "processing" (duplicata em
       // voo); rotaciona em payload mismatch / conflito determinístico (nova tentativa lógica).
+      // NÃO invalida nada em erro: o estado permanece o do servidor (sem estado falso na UI).
       if (!shouldPreserveIdempotencyKey(err.data?.code, err.message)) signKeyRef.current = "";
     },
   });
   const ret = trpc.legalOpinionWorkspace.returnOpinion.useMutation({
     onSuccess: () => {
-      void utils.legalOpinionWorkspace.listInbox.invalidate();
-      void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId });
+      // O trabalho devolvido some da Caixa ativa e o Painel/contexto convergem — SEM F5.
+      invalidateAfterReturn(invalidator, workspaceId);
       onReturned?.(workspaceId);
     },
   });

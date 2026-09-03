@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1786313829.0074706,
-    "ast_hash": "129ee6d5cdd3bf3299c7a54ebfe70aff",
+    "mtime": 1788441251.8680964,
+    "ast_hash": "42c49d46a49622b941f5e42d5fd3591b",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -4315,8 +4315,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalRequests.ts": {
-    "mtime": 1785862334.7561064,
-    "ast_hash": "16af6499e67926f6d4e213586266c13c",
+    "mtime": 1788083740.6575246,
+    "ast_hash": "34e710e1aee4f62ebe38a6a2eed8aa94",
     "semantic_hash": ""
   },
   "server/db/knowledgeGraph.ts": {
@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1785862334.847574,
-    "ast_hash": "dc338f32c7d089637de490a5685f1b3c",
+    "mtime": 1788384003.488284,
+    "ast_hash": "73db9080c6965925dd331565df4e9305",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -6410,8 +6410,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788037285.062587,
-    "ast_hash": "a4e9f072afe3e24c9b2e435328d1915d",
+    "mtime": 1788384397.8643076,
+    "ast_hash": "f50cff5bcd9ce161b70b69ec5eafdc8c",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -7755,8 +7755,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/SignaturePanel.tsx": {
-    "mtime": 1787928853.5596585,
-    "ast_hash": "1beca032956a5ffb33db20af9c3204c5",
+    "mtime": 1788448191.3159375,
+    "ast_hash": "b9017f0030fdee293c7972af429d2fe6",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/TimelinePanel.tsx": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1787927292.8756511,
-    "ast_hash": "e0f7d94bcd3aecb4fc16b132eb999fc1",
+    "mtime": 1788383861.3682756,
+    "ast_hash": "3a2d9295c32808862a5114bec5d48813",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -8145,8 +8145,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1787920530.386103,
-    "ast_hash": "3f76605b373df00937849d5ef88325c6",
+    "mtime": 1788048347.318334,
+    "ast_hash": "5de2bcd38e6dd25519c5eaef7b4a4d94",
     "semantic_hash": ""
   },
   "server/domain/contractInstruments.ts": {
@@ -8400,8 +8400,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1785862334.8448458,
-    "ast_hash": "8c6859656b9015684673cabfeabf7454",
+    "mtime": 1788048365.0863335,
+    "ast_hash": "1cca23e304977210b1c79bc0cde9e2d3",
     "semantic_hash": ""
   },
   "server/services/operationRecordService.ts": {
@@ -10305,8 +10305,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentExportAdapter.ts": {
-    "mtime": 1787920467.4380991,
-    "ast_hash": "e93d5fb57019422d8bdc6e0fa04e7f18",
+    "mtime": 1788383902.956278,
+    "ast_hash": "48af6fdb60dc85e719b43fd745112eb4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ai-resilience.test.ts": {
@@ -11097,6 +11097,36 @@
   "server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts": {
     "mtime": 1788038336.706563,
     "ast_hash": "49abedb0fd7a0b665797c7853805b3e1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/dashboard-addenda-kpi-mysql-smoke.test.ts": {
+    "mtime": 1788083580.165528,
+    "ast_hash": "08be4d75e71f0c630ec2b542f82ad2e7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts": {
+    "mtime": 1788083711.4615252,
+    "ast_hash": "a51fd3ada18172c421ab2abeacce62b7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-signature-block.test.ts": {
+    "mtime": 1788384209.2332735,
+    "ast_hash": "aadbdad7af3f5ef7159756ba34950307",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts": {
+    "mtime": 1788441436.132092,
+    "ast_hash": "610dbcd77f481605bbf4ca9df87eb5e4",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/opinionMutationSync.test.ts": {
+    "mtime": 1788448249.5879362,
+    "ast_hash": "e224c568f5050066ff711eda114e636b",
+    "semantic_hash": ""
+  },
+  "client/src/components/legal-opinion/opinionMutationSync.ts": {
+    "mtime": 1788448167.5399382,
+    "ast_hash": "30bbc678a1a635752f2dd466ad18acdc",
     "semantic_hash": ""
   }
 }
