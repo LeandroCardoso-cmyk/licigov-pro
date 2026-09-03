@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1786313829.0074706,
-    "ast_hash": "129ee6d5cdd3bf3299c7a54ebfe70aff",
+    "mtime": 1788441251.8680964,
+    "ast_hash": "42c49d46a49622b941f5e42d5fd3591b",
     "semantic_hash": ""
   },
   "scripts/generate-recovery-plan-pdf.ts": {
@@ -11115,8 +11115,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts": {
-    "mtime": 1788384363.9603057,
-    "ast_hash": "15a163ae71e7992bdb220a5632966c92",
+    "mtime": 1788441436.132092,
+    "ast_hash": "610dbcd77f481605bbf4ca9df87eb5e4",
     "semantic_hash": ""
   }
 }

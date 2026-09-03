@@ -60,13 +60,15 @@ async function cleanup() {
   }
 }
 
+const RUN = Date.now().toString(36); // token único por execução (robusto a re-runs)
 let seq = 0;
 /** Executa o fluxo real até a assinatura e devolve o official emitido do parecer. */
 async function signParecerAndGetOfficial(org: number) {
-  const uniq = `sig${org}-${++seq}`;
+  const uniq = `${org}-${RUN}-${++seq}`;
+  const procId = `p-${RUN}-${org % 10}${seq}`.slice(0, 20); // reference_process_id é VARCHAR(20)
   const { request } = await requestInstitutionalReview({
     organizationId: org, sourceDomain: "contratacao_direta", destinationDomain: "parecer_juridico",
-    requestType: "LEGAL_OPINION_INITIAL", referenceProcessId: `proc-${uniq}`, title: "Parecer p/ assinatura",
+    requestType: "LEGAL_OPINION_INITIAL", referenceProcessId: procId, title: "Parecer p/ assinatura",
     priority: "alta", requestedBy: REQUESTER, correlationId: `corr-${uniq}`,
   });
   const ws = await openWorkspaceFromRequest({ requestId: request.id, organizationId: org, lawyerId: SIGNER, correlationId: `corr-${uniq}` });
