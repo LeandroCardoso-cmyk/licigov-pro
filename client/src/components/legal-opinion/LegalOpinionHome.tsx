@@ -27,7 +27,14 @@ export default function LegalOpinionHome() {
   const [workspaceId, setWorkspaceId] = React.useState<string>("");
 
   const enabled = workspaceId.trim().length > 0;
+  // Conteúdo OPERACIONAL (documentos, timeline, rascunho) — leitura de banco, abre rápido.
   const { data: ctx, isLoading } = trpc.legalOpinionWorkspace.loadContext.useQuery(
+    { workspaceId },
+    { enabled },
+  );
+  // Reasoning & Explainability (APOIO) — Copiloto Jurídico (Kernel → RAG/LLM). Consulta
+  // SEPARADA e progressiva: nunca bloqueia a abertura do workspace nem o trabalho humano.
+  const { data: reasoning, isFetching: reasoningLoading } = trpc.legalOpinionWorkspace.loadReasoning.useQuery(
     { workspaceId },
     { enabled },
   );
@@ -84,12 +91,13 @@ export default function LegalOpinionHome() {
 
               <RequestContextPanel
                 documents={ctx?.documents ?? []}
-                reasoning={ctx?.reasoning}
-                explainability={ctx?.explainability}
-                risks={ctx?.risks ?? []}
-                recommendations={ctx?.recommendations ?? []}
+                reasoning={reasoning?.reasoning}
+                explainability={reasoning?.explainability}
+                risks={reasoning?.risks ?? []}
+                recommendations={reasoning?.recommendations ?? []}
                 snapshots={ctx?.snapshots ?? []}
-                confidence={ctx?.confidence ?? 0}
+                confidence={reasoning?.confidence ?? 0}
+                reasoningLoading={reasoningLoading && !reasoning}
               />
 
               <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />

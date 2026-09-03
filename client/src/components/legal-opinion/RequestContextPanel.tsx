@@ -7,6 +7,11 @@ import { domainLabel } from "./labels";
  * Exibe o contexto carregado AUTOMATICAMENTE ao abrir a solicitação: documentos
  * referenciados (nunca cópia), reasoning, explainability, riscos, recomendações e
  * snapshots. Toda recomendação é revisável — nunca vira parecer automaticamente.
+ *
+ * O CONTEÚDO OPERACIONAL (documentos, snapshots) vem de `loadContext` e aparece
+ * imediatamente. O Reasoning & Explainability (apoio) chega SEPARADO, de forma
+ * progressiva (`reasoningLoading`): enquanto o Copiloto Jurídico processa, só o
+ * bloco de reasoning mostra skeleton — a abertura do workspace nunca é bloqueada.
  */
 
 export interface DocumentRef {
@@ -26,11 +31,15 @@ export interface RequestContextPanelProps {
   recommendations?: readonly string[];
   snapshots?: readonly string[];
   confidence?: number;
+  /** Skeleton do conteúdo operacional inteiro (documentos ainda carregando). */
   loading?: boolean;
+  /** Reasoning (apoio) ainda em processamento no Copiloto — só o bloco de reasoning fica em skeleton. */
+  reasoningLoading?: boolean;
 }
 
 export default function RequestContextPanel({
-  documents = [], reasoning, explainability = "", risks = [], recommendations = [], snapshots = [], confidence = 0, loading = false,
+  documents = [], reasoning, explainability = "", risks = [], recommendations = [], snapshots = [], confidence = 0,
+  loading = false, reasoningLoading = false,
 }: RequestContextPanelProps) {
   if (loading) {
     return (
@@ -65,25 +74,44 @@ export default function RequestContextPanel({
       <section className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-indigo-900">Reasoning &amp; Explainability</h3>
-          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
-            confiança {Math.round(confidence * 100)}%
-          </span>
+          {reasoningLoading ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-500 ring-1 ring-inset ring-indigo-200">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" /> processando…
+            </span>
+          ) : (
+            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+              confiança {Math.round(confidence * 100)}%
+            </span>
+          )}
         </div>
-        <p className="text-sm text-gray-800">{reasoning?.summary || "Sem reasoning gerado."}</p>
-        {explainability && <p className="mt-2 text-xs text-gray-600">{explainability}</p>}
-        <p className="mt-2 text-[11px] italic text-indigo-700">Recomendação revisável — nunca emite parecer automaticamente.</p>
+        {reasoningLoading ? (
+          <div className="animate-pulse space-y-2">
+            <div className="h-4 w-3/4 rounded bg-indigo-100" />
+            <div className="h-3 w-1/2 rounded bg-indigo-100/70" />
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-gray-800">{reasoning?.summary || "Sem reasoning gerado."}</p>
+            {explainability && <p className="mt-2 text-xs text-gray-600">{explainability}</p>}
+          </>
+        )}
+        <p className="mt-2 text-[11px] italic text-indigo-700">Apoio à decisão — carregado à parte, revisável, nunca emite parecer automaticamente.</p>
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <section className="rounded-lg border border-gray-200 bg-white p-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Riscos</h4>
-          {risks.length === 0 ? <p className="text-xs text-gray-400">Nenhum.</p> : (
+          {reasoningLoading ? (
+            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+          ) : risks.length === 0 ? <p className="text-xs text-gray-400">Nenhum.</p> : (
             <ul className="space-y-1 text-sm text-gray-700">{risks.map((r, i) => <li key={i}>• {r}</li>)}</ul>
           )}
         </section>
         <section className="rounded-lg border border-gray-200 bg-white p-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Recomendações</h4>
-          {recommendations.length === 0 ? <p className="text-xs text-gray-400">Nenhuma.</p> : (
+          {reasoningLoading ? (
+            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+          ) : recommendations.length === 0 ? <p className="text-xs text-gray-400">Nenhuma.</p> : (
             <ul className="space-y-1 text-sm text-gray-700">{recommendations.map((r, i) => <li key={i}>• {r}</li>)}</ul>
           )}
         </section>
