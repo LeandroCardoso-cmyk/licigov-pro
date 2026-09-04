@@ -25,17 +25,17 @@ const STAGE_LABELS: Record<string, string> = {
 
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
   rascunho: "bg-muted text-foreground",
-  em_andamento: "bg-blue-100 text-blue-700",
-  em_revisao: "bg-amber-100 text-amber-700",
-  emitido: "bg-green-100 text-green-700",
+  em_andamento: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  em_revisao: "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300",
+  emitido: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
   arquivado: "bg-muted text-muted-foreground",
 };
 
 const ITEM_STATUS_META: { key: string; label: string; className: string }[] = [
   { key: "pendente", label: "Pendentes", className: "bg-muted text-foreground" },
-  { key: "em_analise", label: "Em análise", className: "bg-blue-100 text-blue-700" },
-  { key: "aprovado", label: "Aprovados", className: "bg-green-100 text-green-700" },
-  { key: "rejeitado", label: "Rejeitados", className: "bg-red-100 text-red-700" },
+  { key: "em_analise", label: "Em análise", className: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300" },
+  { key: "aprovado", label: "Aprovados", className: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300" },
+  { key: "rejeitado", label: "Rejeitados", className: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300" },
 ];
 
 export type ProcessOverviewProps = {
@@ -115,7 +115,7 @@ export default function ProcessOverview({
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-md bg-indigo-50 px-2 py-1 text-indigo-700">
+          <span className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-1 text-indigo-700 dark:text-indigo-300">
             Etapa: {STAGE_LABELS[process.currentStage] ?? process.currentStage}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">

@@ -43,7 +43,7 @@ export default function DocumentsWorkspace({ contractId, documents = [] }: Docum
         ))}
       </div>
 
-      {generate.isError && <p className="text-xs text-red-600">{generate.error.message}</p>}
+      {generate.isError && <p className="text-xs text-red-600 dark:text-red-400">{generate.error.message}</p>}
       {(rec || generate.isPending) && <CopilotPanel recommendation={rec} busy={generate.isPending} />}
 
       {documents.length > 0 && (

@@ -22,9 +22,9 @@ export default function DirectProcurementOverview({ onOpen }: DirectProcurementO
 
   const kpis = [
     { label: "Total", value: workspaces.length, className: "text-foreground" },
-    { label: "Dispensa", value: dispensa, className: "text-indigo-700" },
-    { label: "Inexigibilidade", value: inexigibilidade, className: "text-purple-700" },
-    { label: "Concluídos", value: concluded, className: "text-green-700" },
+    { label: "Dispensa", value: dispensa, className: "text-indigo-700 dark:text-indigo-300" },
+    { label: "Inexigibilidade", value: inexigibilidade, className: "text-purple-700 dark:text-purple-300" },
+    { label: "Concluídos", value: concluded, className: "text-green-700 dark:text-green-300" },
   ];
 
   return (

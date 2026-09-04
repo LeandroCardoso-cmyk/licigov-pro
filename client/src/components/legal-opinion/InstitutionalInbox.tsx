@@ -39,7 +39,7 @@ export default function InstitutionalInbox({ onOpenWorkspace }: InstitutionalInb
         <div className="rounded-lg bg-card/60 p-3">
           <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-foreground">
             Pendências
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-700">{isLoading ? "…" : requests.length}</span>
+            <span className="rounded-full bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-300">{isLoading ? "…" : requests.length}</span>
           </h3>
           <div className="space-y-3">
             {isLoading ? (

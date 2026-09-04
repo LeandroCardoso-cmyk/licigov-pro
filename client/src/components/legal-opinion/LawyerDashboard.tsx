@@ -22,9 +22,9 @@ export default function LawyerDashboard({ onOpenWorkspace }: LawyerDashboardProp
   const active = workspaces.filter((w) => !["RETURNED", "ARCHIVED"].includes(w.currentStage)).length;
 
   const kpis = [
-    { label: "Atribuídos", value: assignments.length, className: "text-indigo-700" },
-    { label: "Em andamento", value: active, className: "text-blue-700" },
-    { label: "Emitidos", value: emitted, className: "text-green-700" },
+    { label: "Atribuídos", value: assignments.length, className: "text-indigo-700 dark:text-indigo-300" },
+    { label: "Em andamento", value: active, className: "text-blue-700 dark:text-blue-300" },
+    { label: "Emitidos", value: emitted, className: "text-green-700 dark:text-green-300" },
   ];
 
   return (

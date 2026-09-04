@@ -37,7 +37,7 @@ export default function PublicationWorkspace({ workspaceId, publications = [] }:
         </button>
       </div>
 
-      {publish.isError && <p className="text-xs text-red-600">{publish.error.message}</p>}
+      {publish.isError && <p className="text-xs text-red-600 dark:text-red-400">{publish.error.message}</p>}
 
       {publications.length === 0 ? (
         <p className="text-xs text-muted-foreground">Gere os documentos de publicação conforme a modalidade e o procedimento.</p>

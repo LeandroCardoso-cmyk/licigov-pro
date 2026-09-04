@@ -41,7 +41,7 @@ export default function TimelinePanel({ timeline = MOCK }: TimelinePanelProps) {
             <li key={ev.id} className="relative">
               <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-indigo-500" />
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-indigo-700">{ev.eventType}</span>
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">{ev.eventType}</span>
                 <span className="text-[11px] text-muted-foreground">{formatDateTime(ev.createdAt)}</span>
               </div>
               <p className="text-sm text-foreground">{ev.summary}</p>

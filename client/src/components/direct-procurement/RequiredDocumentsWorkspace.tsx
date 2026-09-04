@@ -49,8 +49,8 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
                   {DOC_STATUS_LABELS[d.status] ?? d.status}
                 </span>
                 <div className="flex gap-1">
-                  <button type="button" onClick={() => setStatus(d.id, "anexado")} className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-200">Anexar</button>
-                  <button type="button" onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800 hover:bg-green-200">Validar</button>
+                  <button type="button" onClick={() => setStatus(d.id, "anexado")} className="rounded bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-200">Anexar</button>
+                  <button type="button" onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 dark:bg-green-900 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:text-green-200 hover:bg-green-200">Validar</button>
                   <button type="button" onClick={() => setStatus(d.id, "pendente")} className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted">Pendenciar</button>
                 </div>
               </div>

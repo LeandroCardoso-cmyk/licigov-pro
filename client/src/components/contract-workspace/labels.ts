@@ -19,12 +19,12 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const STATUS_CLASSES: Record<string, string> = {
-  minuta: "bg-amber-100 text-amber-800 ring-amber-500/20",
-  vigente: "bg-green-100 text-green-800 ring-green-500/20",
-  aditado: "bg-blue-100 text-blue-800 ring-blue-500/20",
-  apostilado: "bg-indigo-100 text-indigo-800 ring-indigo-500/20",
+  minuta: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 ring-amber-500/20",
+  vigente: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
+  aditado: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 ring-blue-500/20",
+  apostilado: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 ring-indigo-500/20",
   encerrado: "bg-muted text-muted-foreground ring-gray-500/20",
-  rescindido: "bg-red-100 text-red-700 ring-red-500/20",
+  rescindido: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 ring-red-500/20",
   arquivado: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 

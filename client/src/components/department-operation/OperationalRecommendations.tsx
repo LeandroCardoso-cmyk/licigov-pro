@@ -13,8 +13,8 @@ const KIND_LABELS: Record<string, string> = {
   priorizacao: "Priorização", gargalo: "Gargalo", risco: "Risco", sobrecarga: "Sobrecarga", vencimento: "Vencimento",
 };
 const KIND_CLASSES: Record<string, string> = {
-  priorizacao: "bg-indigo-100 text-indigo-800", gargalo: "bg-amber-100 text-amber-800",
-  risco: "bg-red-100 text-red-700", sobrecarga: "bg-orange-100 text-orange-800", vencimento: "bg-purple-100 text-purple-800",
+  priorizacao: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200", gargalo: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200",
+  risco: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300", sobrecarga: "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200", vencimento: "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200",
 };
 
 export default function OperationalRecommendations() {
@@ -31,10 +31,10 @@ export default function OperationalRecommendations() {
       ) : (
         <ul className="space-y-3">
           {recs.map((r, i) => (
-            <li key={i} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+            <li key={i} className="rounded-lg border border-indigo-100 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/40 p-3">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${KIND_CLASSES[r.kind] ?? "bg-muted text-foreground"}`}>{KIND_LABELS[r.kind] ?? r.kind}</span>
-                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-indigo-700 ring-1 ring-inset ring-indigo-200">confiança {Math.round(r.confidence * 100)}% · impacto {r.impact}</span>
+                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800">confiança {Math.round(r.confidence * 100)}% · impacto {r.impact}</span>
               </div>
               <p className="text-sm font-medium text-foreground">{r.title}</p>
               <p className="text-xs text-muted-foreground">{r.reasoning}</p>
@@ -44,7 +44,7 @@ export default function OperationalRecommendations() {
                   {r.alternatives.map((a, j) => <span key={j} className="rounded-md bg-card px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-border">{a}</span>)}
                 </div>
               )}
-              <p className="mt-1 text-[11px] italic text-indigo-700">Recomendação — o servidor sempre decide.</p>
+              <p className="mt-1 text-[11px] italic text-indigo-700 dark:text-indigo-300">Recomendação — o servidor sempre decide.</p>
             </li>
           ))}
         </ul>

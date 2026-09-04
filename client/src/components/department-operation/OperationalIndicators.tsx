@@ -10,14 +10,14 @@ import { trpc } from "../../lib/trpc";
 export interface OperationalIndicatorsProps { compact?: boolean }
 
 const CARDS: Array<{ key: string; label: string; className: string }> = [
-  { key: "activeProcesses", label: "Processos ativos", className: "text-indigo-700" },
-  { key: "concludedProcesses", label: "Concluídos", className: "text-green-700" },
-  { key: "legalOpinionsAwaiting", label: "Pareceres aguardando", className: "text-yellow-700" },
-  { key: "activeContracts", label: "Contratos ativos", className: "text-blue-700" },
-  { key: "contractsExpiring", label: "Contratos vencendo", className: "text-red-700" },
-  { key: "addenda", label: "Aditivos", className: "text-purple-700" },
-  { key: "pendingTasks", label: "Tarefas pendentes", className: "text-amber-700" },
-  { key: "pendingRequests", label: "Solicitações pendentes", className: "text-teal-700" },
+  { key: "activeProcesses", label: "Processos ativos", className: "text-indigo-700 dark:text-indigo-300" },
+  { key: "concludedProcesses", label: "Concluídos", className: "text-green-700 dark:text-green-300" },
+  { key: "legalOpinionsAwaiting", label: "Pareceres aguardando", className: "text-yellow-700 dark:text-yellow-300" },
+  { key: "activeContracts", label: "Contratos ativos", className: "text-blue-700 dark:text-blue-300" },
+  { key: "contractsExpiring", label: "Contratos vencendo", className: "text-red-700 dark:text-red-300" },
+  { key: "addenda", label: "Aditivos", className: "text-purple-700 dark:text-purple-300" },
+  { key: "pendingTasks", label: "Tarefas pendentes", className: "text-amber-700 dark:text-amber-300" },
+  { key: "pendingRequests", label: "Solicitações pendentes", className: "text-teal-700 dark:text-teal-300" },
 ];
 
 export default function OperationalIndicators({ compact = false }: OperationalIndicatorsProps) {

@@ -18,8 +18,8 @@ export default function ContractOverview({ onOpen }: ContractOverviewProps) {
 
   const kpis = [
     { label: "Total", value: contracts.length, className: "text-foreground" },
-    { label: "Vigentes", value: vigentes, className: "text-green-700" },
-    { label: "Externos", value: externos, className: "text-indigo-700" },
+    { label: "Vigentes", value: vigentes, className: "text-green-700 dark:text-green-300" },
+    { label: "Externos", value: externos, className: "text-indigo-700 dark:text-indigo-300" },
   ];
 
   return (

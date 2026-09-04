@@ -19,17 +19,17 @@ const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const SEVERITY_CLASSES: Record<string, string> = {
-  baixo: "bg-green-100 text-green-700",
-  medio: "bg-yellow-100 text-yellow-800",
-  alto: "bg-orange-100 text-orange-700",
-  critico: "bg-red-100 text-red-700",
+  baixo: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+  medio: "bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200",
+  alto: "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300",
+  critico: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 const ITEM_STATUS_CLASSES: Record<string, string> = {
   pendente: "bg-muted text-foreground",
-  em_analise: "bg-blue-100 text-blue-700",
-  aprovado: "bg-green-100 text-green-700",
-  rejeitado: "bg-red-100 text-red-700",
+  em_analise: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  aprovado: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+  rejeitado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 function Block({
@@ -244,9 +244,9 @@ export default function ProcurementItemPanel({
 
           {/* 3. CATMAT sugerido + alternativas (servidor decide) */}
           <Block title="CATMAT (decisão do servidor)">
-            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-              <p className="text-xs text-indigo-600">Sugerido</p>
-              <p className="font-mono text-sm font-semibold text-indigo-900">
+            <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 p-3">
+              <p className="text-xs text-indigo-600 dark:text-indigo-400">Sugerido</p>
+              <p className="font-mono text-sm font-semibold text-indigo-900 dark:text-indigo-200">
                 {item.suggestedCATMAT ?? "—"}
               </p>
             </div>
@@ -319,7 +319,7 @@ export default function ProcurementItemPanel({
                         onClick={() => decide({ decision: "rejeitado", suggestionId: c.id })}
                         disabled={decidirCATMAT.isPending || justificationMissing}
                         title={justificationMissing ? "Informe a justificativa para rejeitar" : undefined}
-                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
                       >
                         Rejeitar
                       </button>
@@ -381,7 +381,7 @@ export default function ProcurementItemPanel({
             {decisionMsg && (
               <p
                 className={`mt-2 text-xs ${
-                  thresholdBlocked ? "text-orange-700" : "text-muted-foreground"
+                  thresholdBlocked ? "text-orange-700 dark:text-orange-300" : "text-muted-foreground"
                 }`}
               >
                 {decisionMsg}
@@ -479,7 +479,7 @@ export default function ProcurementItemPanel({
                       <span className="font-medium text-foreground">
                         {r.type}
                       </span>
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                      <span className="rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-blue-700 dark:text-blue-300">
                         confiança {Math.round(r.confidence * 100)}%
                       </span>
                     </div>

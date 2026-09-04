@@ -20,9 +20,9 @@ const ITEM_STATUS_LABELS: Record<string, string> = {
 
 const ITEM_STATUS_CLASSES: Record<string, string> = {
   pendente: "bg-muted text-foreground",
-  em_analise: "bg-blue-100 text-blue-700",
-  aprovado: "bg-green-100 text-green-700",
-  rejeitado: "bg-red-100 text-red-700",
+  em_analise: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  aprovado: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+  rejeitado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 const brl = (v: number) =>
@@ -108,7 +108,7 @@ export default function ItemIntelligenceWorkspace({
                     <button
                       type="button"
                       onClick={() => onOpenItem?.(it.id)}
-                      className="text-left font-medium text-blue-700 hover:underline"
+                      className="text-left font-medium text-blue-700 dark:text-blue-300 hover:underline"
                     >
                       {it.description}
                     </button>
@@ -119,7 +119,7 @@ export default function ItemIntelligenceWorkspace({
                     {brl(it.averagePrice)}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+                    <span className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 text-xs text-indigo-700 dark:text-indigo-300">
                       {it.suggestedCATMAT ?? "—"}
                     </span>
                   </td>
@@ -147,7 +147,7 @@ export default function ItemIntelligenceWorkspace({
                         type="button"
                         onClick={() => rejectItem.mutate({ itemId: it.id })}
                         disabled={rejectItem.isPending}
-                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 disabled:opacity-50"
+                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
                       >
                         Rejeitar
                       </button>

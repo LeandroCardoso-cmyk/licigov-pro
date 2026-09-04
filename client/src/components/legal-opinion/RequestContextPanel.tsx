@@ -60,7 +60,7 @@ export default function RequestContextPanel({
     <div className="space-y-4">
       <section className="rounded-lg border border-border bg-card p-4">
         <h3 className="mb-1 text-sm font-semibold text-foreground">Documentos referenciados</h3>
-        <p className="mb-3 text-xs text-amber-600">Por referência — sem cópia. Permanecem no domínio de origem.</p>
+        <p className="mb-3 text-xs text-amber-600 dark:text-amber-400">Por referência — sem cópia. Permanecem no domínio de origem.</p>
         {documents.length === 0 ? (
           <p className="text-xs text-muted-foreground">Nenhum documento referenciado.</p>
         ) : (
@@ -78,19 +78,19 @@ export default function RequestContextPanel({
         )}
       </section>
 
-      <section className={`rounded-lg border p-4 ${reasoningError ? "border-amber-200 bg-amber-50/50" : "border-indigo-100 bg-indigo-50/40"}`}>
+      <section className={`rounded-lg border p-4 ${reasoningError ? "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50" : "border-indigo-100 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/40"}`}>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className={`text-sm font-semibold ${reasoningError ? "text-amber-900" : "text-indigo-900"}`}>Reasoning &amp; Explainability</h3>
+          <h3 className={`text-sm font-semibold ${reasoningError ? "text-amber-900 dark:text-amber-200" : "text-indigo-900 dark:text-indigo-200"}`}>Reasoning &amp; Explainability</h3>
           {reasoningError ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-200 dark:ring-amber-800">
               apoio indisponível
             </span>
           ) : reasoningLoading ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-500 ring-1 ring-inset ring-indigo-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-500 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" /> processando…
             </span>
           ) : (
-            <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+            <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800">
               confiança {Math.round(confidence * 100)}%
             </span>
           )}
@@ -99,14 +99,14 @@ export default function RequestContextPanel({
           // FALHA/indisponibilidade do apoio cognitivo — NUNCA apresentada como resultado
           // vazio válido. O conteúdo operacional acima permanece plenamente utilizável.
           <div className="space-y-2">
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
               Apoio cognitivo temporariamente indisponível. O conteúdo operacional permanece disponível.
             </p>
             {onRetryReasoning && (
               <button
                 type="button"
                 onClick={onRetryReasoning}
-                className="inline-flex items-center rounded-md border border-amber-300 bg-card px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                className="inline-flex items-center rounded-md border border-amber-300 bg-card px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-900"
               >
                 Tentar novamente
               </button>
@@ -114,8 +114,8 @@ export default function RequestContextPanel({
           </div>
         ) : reasoningLoading ? (
           <div className="animate-pulse space-y-2">
-            <div className="h-4 w-3/4 rounded bg-indigo-100" />
-            <div className="h-3 w-1/2 rounded bg-indigo-100/70" />
+            <div className="h-4 w-3/4 rounded bg-indigo-100 dark:bg-indigo-900" />
+            <div className="h-3 w-1/2 rounded bg-indigo-100/70 dark:bg-indigo-900/70" />
           </div>
         ) : (
           <>
@@ -124,7 +124,7 @@ export default function RequestContextPanel({
           </>
         )}
         {!reasoningError && (
-          <p className="mt-2 text-[11px] italic text-indigo-700">Apoio à decisão — carregado à parte, revisável, nunca emite parecer automaticamente.</p>
+          <p className="mt-2 text-[11px] italic text-indigo-700 dark:text-indigo-300">Apoio à decisão — carregado à parte, revisável, nunca emite parecer automaticamente.</p>
         )}
       </section>
 
@@ -132,7 +132,7 @@ export default function RequestContextPanel({
         <section className="rounded-lg border border-border bg-card p-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Riscos</h4>
           {reasoningError ? (
-            <p className="text-xs text-amber-600">Indisponível — apoio cognitivo offline.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Indisponível — apoio cognitivo offline.</p>
           ) : reasoningLoading ? (
             <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
           ) : risks.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum.</p> : (
@@ -142,7 +142,7 @@ export default function RequestContextPanel({
         <section className="rounded-lg border border-border bg-card p-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recomendações</h4>
           {reasoningError ? (
-            <p className="text-xs text-amber-600">Indisponível — apoio cognitivo offline.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Indisponível — apoio cognitivo offline.</p>
           ) : reasoningLoading ? (
             <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
           ) : recommendations.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma.</p> : (

@@ -55,7 +55,7 @@ export default function ContractEditor({ contract, onSaved }: ContractEditorProp
           <input value={form.inspector} onChange={(e) => set("inspector", e.target.value)} className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
         </label>
       </div>
-      {save.isSuccess && <p className="text-xs text-green-700">Contrato atualizado.</p>}
+      {save.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Contrato atualizado.</p>}
       <button type="submit" disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
         {save.isPending ? "Salvando…" : "Salvar contrato"}
       </button>

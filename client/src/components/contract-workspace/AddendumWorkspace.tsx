@@ -44,7 +44,7 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
       <form onSubmit={(e) => { e.preventDefault(); if (justification.trim()) create.mutate({ contractId, addendumType, justification, newValue: newValue ? Number(newValue) : undefined, newTerm: newTerm || undefined, requestOrigin }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {TYPES.map((t) => (
-            <button key={t} type="button" onClick={() => setAddendumType(t)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${addendumType === t ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{ADDENDUM_TYPE_LABELS[t]}</button>
+            <button key={t} type="button" onClick={() => setAddendumType(t)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${addendumType === t ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{ADDENDUM_TYPE_LABELS[t]}</button>
           ))}
         </div>
         <label className="block text-xs font-medium text-foreground">Origem da solicitação
@@ -60,7 +60,7 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
         <button type="submit" disabled={create.isPending || !justification.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {create.isPending ? "Gerando…" : "Criar aditivo + minuta"}
         </button>
-        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700">Este aditivo requer parecer jurídico (Adaptive Process Engine).</p>}
+        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine).</p>}
       </form>
 
       {addenda.length > 0 && (

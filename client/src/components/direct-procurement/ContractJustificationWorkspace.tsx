@@ -28,13 +28,13 @@ export default function ContractJustificationWorkspace({ workspaceId }: Contract
         </button>
       </div>
 
-      {generate.isError && <p className="text-xs text-red-600">{generate.error.message}</p>}
+      {generate.isError && <p className="text-xs text-red-600 dark:text-red-400">{generate.error.message}</p>}
 
       {rec && (
-        <div className="rounded-md border border-indigo-100 bg-indigo-50/40 p-3 text-xs">
+        <div className="rounded-md border border-indigo-100 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/40 p-3 text-xs">
           <div className="mb-1 flex items-center justify-between">
-            <span className="font-semibold text-indigo-900">Recomendação (revisável)</span>
-            <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-indigo-700 ring-1 ring-inset ring-indigo-200">confiança {Math.round(rec.confidence * 100)}%</span>
+            <span className="font-semibold text-indigo-900 dark:text-indigo-200">Recomendação (revisável)</span>
+            <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-200 dark:ring-indigo-800">confiança {Math.round(rec.confidence * 100)}%</span>
           </div>
           <p className="text-foreground"><strong>Reasoning:</strong> {rec.reasoning}</p>
           <p className="text-muted-foreground"><strong>Explainability:</strong> {rec.explainability}</p>

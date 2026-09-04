@@ -35,7 +35,7 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
       <form onSubmit={(e) => { e.preventDefault(); create.mutate({ contractId, kind, description: description || undefined, newValue: newValue ? Number(newValue) : undefined, newManager: newManager || undefined, newInspector: newInspector || undefined }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {KINDS.map((k) => (
-            <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${kind === k ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{APOSTILLE_KIND_LABELS[k]}</button>
+            <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${kind === k ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{APOSTILLE_KIND_LABELS[k]}</button>
           ))}
         </div>
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Descrição do apostilamento…" className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />

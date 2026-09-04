@@ -49,7 +49,7 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        {onBack && <button type="button" onClick={onBack} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">← Voltar aos contratos</button>}
+        {onBack && <button type="button" onClick={onBack} className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200">← Voltar aos contratos</button>}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{originLabel(ws.originType)}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_CLASSES[ws.status] ?? STATUS_CLASSES.minuta}`}>{statusLabel(ws.status)}</span>
@@ -77,7 +77,7 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
               className="w-full rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50">
               {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer jurídico"}
             </button>
-            {requestOpinion.data && <p className="mt-1 text-xs text-green-700">Solicitação {requestOpinion.data.requestId.slice(0, 8)}… enviada.</p>}
+            {requestOpinion.data && <p className="mt-1 text-xs text-green-700 dark:text-green-300">Solicitação {requestOpinion.data.requestId.slice(0, 8)}… enviada.</p>}
           </div>
         </div>
       )}

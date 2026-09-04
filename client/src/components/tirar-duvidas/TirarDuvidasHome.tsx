@@ -30,9 +30,9 @@ type ConsultationAnswer = {
 
 const JURIS_LABEL: Record<string, string> = { federal: "Federal", estadual: "Estadual", municipal: "Municipal" };
 const JURIS_BADGE: Record<string, string> = {
-  federal: "bg-blue-50 text-blue-700 border-blue-200",
-  estadual: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  municipal: "bg-amber-50 text-amber-700 border-amber-200",
+  federal: "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  estadual: "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+  municipal: "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800",
 };
 
 export default function TirarDuvidasHome() {
@@ -87,7 +87,7 @@ export default function TirarDuvidasHome() {
           <h2 className="text-sm font-semibold text-foreground">Sugestões de consulta</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {(suggestionsQuery.data?.suggestions ?? []).map((s) => (
-              <button key={s} onClick={() => submit(s)} className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-foreground hover:border-indigo-300 hover:bg-indigo-50">
+              <button key={s} onClick={() => submit(s)} className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-foreground hover:border-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950">
                 {s}
               </button>
             ))}
@@ -102,15 +102,15 @@ export default function TirarDuvidasHome() {
           <ul className="mt-3 divide-y divide-border">
             {historyQuery.data!.entries.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-3 py-2">
-                <button onClick={() => submit(e.question)} className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:text-indigo-700" title={e.question}>
+                <button onClick={() => submit(e.question)} className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:text-indigo-700 dark:hover:text-indigo-300" title={e.question}>
                   {e.question}
                 </button>
                 <span className="shrink-0 text-[11px] text-muted-foreground">{new Date(e.createdAt).toLocaleDateString("pt-BR")}</span>
                 {e.status === "limited"
-                  ? <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">limitada</span>
+                  ? <span className="shrink-0 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">limitada</span>
                   : e.status === "failed"
-                    ? <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">falha</span>
-                    : <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">fundamentada</span>}
+                    ? <span className="shrink-0 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">falha</span>
+                    : <span className="shrink-0 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">fundamentada</span>}
               </li>
             ))}
           </ul>
@@ -120,7 +120,7 @@ export default function TirarDuvidasHome() {
       {ask.isPending && <div className="h-40 animate-pulse rounded-lg bg-muted" />}
 
       {ask.isError && (
-        <div className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+        <div className="rounded-md border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-600 dark:text-red-400">
           {ask.error?.message ?? "Falha na consulta."}
         </div>
       )}
@@ -133,10 +133,10 @@ export default function TirarDuvidasHome() {
             <div className="mb-2 flex items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Resposta</h2>
               {answer.evidenceSufficiency === "fundamentada"
-                ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Fundamentada</span>
+                ? <span className="rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">Fundamentada</span>
                 : answer.evidenceSufficiency === "parcial"
-                  ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">Resposta parcial</span>
-                  : <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">Evidência insuficiente</span>}
+                  ? <span className="rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">Resposta parcial</span>
+                  : <span className="rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-300">Evidência insuficiente</span>}
             </div>
             <div className="prose prose-sm max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground">
               <Streamdown>{answer.answer}</Streamdown>
@@ -145,9 +145,9 @@ export default function TirarDuvidasHome() {
 
           {/* Explainability */}
           {answer.explainabilityLines.length > 0 && (
-            <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-5">
-              <h3 className="text-sm font-semibold text-indigo-900">Esta resposta foi construída utilizando</h3>
-              <ul className="mt-2 space-y-1 text-sm text-indigo-900">
+            <div className="rounded-lg border border-indigo-100 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/50 p-5">
+              <h3 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">Esta resposta foi construída utilizando</h3>
+              <ul className="mt-2 space-y-1 text-sm text-indigo-900 dark:text-indigo-200">
                 {answer.explainabilityLines.map((l) => <li key={l}>{l}</li>)}
               </ul>
             </div>
@@ -178,13 +178,13 @@ export default function TirarDuvidasHome() {
                 className="flex w-full items-center justify-between text-sm font-semibold text-foreground"
               >
                 <span>Trechos utilizados ({answer.passages.length})</span>
-                <span className="text-xs font-normal text-indigo-600 hover:underline">{showPassages ? "ocultar" : "ver trechos"}</span>
+                <span className="text-xs font-normal text-indigo-600 dark:text-indigo-400 hover:underline">{showPassages ? "ocultar" : "ver trechos"}</span>
               </button>
               {showPassages && (
                 <div className="mt-3 space-y-3">
                   {answer.passages.map((p, i) => (
-                    <blockquote key={`${p.documentId}-${p.identifier}-${i}`} className="border-l-2 border-indigo-200 pl-3">
-                      <div className="text-xs font-medium text-indigo-700">{p.identifier}</div>
+                    <blockquote key={`${p.documentId}-${p.identifier}-${i}`} className="border-l-2 border-indigo-200 dark:border-indigo-800 pl-3">
+                      <div className="text-xs font-medium text-indigo-700 dark:text-indigo-300">{p.identifier}</div>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{p.text}</p>
                     </blockquote>
                   ))}
@@ -208,8 +208,8 @@ export default function TirarDuvidasHome() {
             <div className="rounded-lg border border-border bg-muted p-5">
               {answer.limitations.length > 0 && (
                 <div className="mb-2">
-                  <h3 className="text-sm font-semibold text-amber-800">Limitações</h3>
-                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-800">{answer.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
+                  <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200">Limitações</h3>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">{answer.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
                 </div>
               )}
               <h3 className="text-sm font-semibold text-foreground">Observações</h3>
@@ -218,7 +218,7 @@ export default function TirarDuvidasHome() {
             </div>
           )}
 
-          <button onClick={() => { setAnswer(null); setQuestion(""); }} className="text-sm text-indigo-600 hover:underline">Fazer nova consulta</button>
+          <button onClick={() => { setAnswer(null); setQuestion(""); }} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Fazer nova consulta</button>
         </div>
       )}
     </div>

@@ -47,9 +47,9 @@ export default function LegalOpinionViewer({ draft = null }: LegalOpinionViewerP
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">v{draft.version}</span>
           {draft.signed ? (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">Assinado ({draft.signatureMethod})</span>
+            <span className="rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">Assinado ({draft.signatureMethod})</span>
           ) : (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Não assinado</span>
+            <span className="rounded-full bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">Não assinado</span>
           )}
         </div>
       </header>
@@ -59,7 +59,7 @@ export default function LegalOpinionViewer({ draft = null }: LegalOpinionViewerP
       <Section title="Conclusão">
         <p className="whitespace-pre-wrap text-sm text-foreground">{draft.conclusion || "—"}</p>
         {draft.conclusionType && (
-          <span className="mt-1 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+          <span className="mt-1 inline-block rounded-full bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-200">
             {CONCLUSION_LABELS[draft.conclusionType] ?? draft.conclusionType}
           </span>
         )}
