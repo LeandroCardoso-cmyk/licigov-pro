@@ -10,6 +10,7 @@ import TimelinePanel from "./TimelinePanel";
 import OpinionHistory from "./OpinionHistory";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 import { stageLabel, STAGE_CLASSES } from "./labels";
+import { reasoningQueryEnabled, reasoningViewState } from "./legalOpinionQueryOrchestration";
 
 /**
  * LegalOpinionHome — REAL (tRPC).
@@ -33,11 +34,20 @@ export default function LegalOpinionHome() {
     { enabled },
   );
   // Reasoning & Explainability (APOIO) — Copiloto Jurídico (Kernel → RAG/LLM). Consulta
-  // SEPARADA e progressiva: nunca bloqueia a abertura do workspace nem o trabalho humano.
-  const { data: reasoning, isFetching: reasoningLoading } = trpc.legalOpinionWorkspace.loadReasoning.useQuery(
+  // SEPARADA e progressiva. Só habilita APÓS o SUCCESS de loadContext: com o
+  // `httpBatchLink` global, habilitar junto agruparia as duas na MESMA requisição HTTP e a
+  // resposta operacional ficaria refém do LLM. Adiar a habilitação força uma 2ª requisição,
+  // fora do batch inicial — sem tocar no transporte global.
+  const reasoningEnabled = reasoningQueryEnabled({ workspaceSelected: enabled, contextLoaded: Boolean(ctx) });
+  const {
+    data: reasoning, isFetching: reasoningFetching, isError: reasoningIsError, refetch: refetchReasoning,
+  } = trpc.legalOpinionWorkspace.loadReasoning.useQuery(
     { workspaceId },
-    { enabled },
+    { enabled: reasoningEnabled },
   );
+  const reasoningState = reasoningViewState({
+    enabled: reasoningEnabled, isFetching: reasoningFetching, isError: reasoningIsError, hasData: Boolean(reasoning),
+  });
 
   const stage = ctx?.workspace?.currentStage ?? "INBOX";
   const hasDraft = Boolean(ctx?.draft);
@@ -97,7 +107,8 @@ export default function LegalOpinionHome() {
                 recommendations={reasoning?.recommendations ?? []}
                 snapshots={ctx?.snapshots ?? []}
                 confidence={reasoning?.confidence ?? 0}
-                reasoningLoading={reasoningLoading && !reasoning}
+                reasoningState={reasoningState}
+                onRetryReasoning={() => { void refetchReasoning(); }}
               />
 
               <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
