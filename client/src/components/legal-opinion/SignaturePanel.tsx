@@ -71,14 +71,14 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
   });
 
   if (!enabled) {
-    return <div className="rounded-lg border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">Selecione um parecer para assinar.</div>;
+    return <div className="rounded-lg border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">Selecione um parecer para assinar.</div>;
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">Assinatura</h3>
-        <p className="text-xs text-gray-500">Apenas assinatura manual nesta fase. Demais métodos: em preparação.</p>
+        <h3 className="text-sm font-semibold text-foreground">Assinatura</h3>
+        <p className="text-xs text-muted-foreground">Apenas assinatura manual nesta fase. Demais métodos: em preparação.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -89,7 +89,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
             disabled={!m.implemented}
             onClick={() => setMethod(m.value)}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${
-              method === m.value ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-gray-200 text-gray-600"
+              method === m.value ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-border text-muted-foreground"
             } ${!m.implemented ? "cursor-not-allowed opacity-50" : "hover:border-indigo-300"}`}
           >
             {m.label}{!m.implemented ? " (em breve)" : ""}
@@ -118,7 +118,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
           {ret.isPending ? "Devolvendo…" : "Devolver à origem"}
         </button>
       </div>
-      <p className="text-[11px] text-gray-400">A devolução retorna o parecer automaticamente ao domínio solicitante via Institutional Request Engine.</p>
+      <p className="text-[11px] text-muted-foreground">A devolução retorna o parecer automaticamente ao domínio solicitante via Institutional Request Engine.</p>
     </div>
   );
 }

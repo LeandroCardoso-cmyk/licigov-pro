@@ -23,9 +23,9 @@ export const STATUS_CLASSES: Record<string, string> = {
   vigente: "bg-green-100 text-green-800 ring-green-500/20",
   aditado: "bg-blue-100 text-blue-800 ring-blue-500/20",
   apostilado: "bg-indigo-100 text-indigo-800 ring-indigo-500/20",
-  encerrado: "bg-gray-100 text-gray-600 ring-gray-500/20",
+  encerrado: "bg-muted text-muted-foreground ring-gray-500/20",
   rescindido: "bg-red-100 text-red-700 ring-red-500/20",
-  arquivado: "bg-gray-100 text-gray-500 ring-gray-500/20",
+  arquivado: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
 export const DOC_KIND_LABELS: Record<string, string> = {

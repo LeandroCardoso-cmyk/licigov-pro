@@ -50,28 +50,28 @@ export default function RequestContextPanel({
   const reasoningError = reasoningState === "error";
   if (loading) {
     return (
-      <div className="animate-pulse space-y-3 rounded-lg border border-gray-200 bg-white p-4">
-        <div className="h-4 w-1/3 rounded bg-gray-200" />
-        <div className="h-16 w-full rounded bg-gray-100" />
+      <div className="animate-pulse space-y-3 rounded-lg border border-border bg-card p-4">
+        <div className="h-4 w-1/3 rounded bg-muted" />
+        <div className="h-16 w-full rounded bg-muted" />
       </div>
     );
   }
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-900">Documentos referenciados</h3>
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h3 className="mb-1 text-sm font-semibold text-foreground">Documentos referenciados</h3>
         <p className="mb-3 text-xs text-amber-600">Por referência — sem cópia. Permanecem no domínio de origem.</p>
         {documents.length === 0 ? (
-          <p className="text-xs text-gray-400">Nenhum documento referenciado.</p>
+          <p className="text-xs text-muted-foreground">Nenhum documento referenciado.</p>
         ) : (
           <ul className="space-y-2">
             {documents.map((d) => (
-              <li key={d.id} className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+              <li key={d.id} className="flex items-center justify-between rounded-md border border-border bg-muted px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{d.title || d.documentId}</p>
-                  <p className="text-xs text-gray-500">Origem: {domainLabel(d.originDomain)} · v{d.version}</p>
+                  <p className="text-sm font-medium text-foreground">{d.title || d.documentId}</p>
+                  <p className="text-xs text-muted-foreground">Origem: {domainLabel(d.originDomain)} · v{d.version}</p>
                 </div>
-                <span className="font-mono text-[10px] text-gray-400">{d.snapshot.slice(0, 10)}…</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{d.snapshot.slice(0, 10)}…</span>
               </li>
             ))}
           </ul>
@@ -82,15 +82,15 @@ export default function RequestContextPanel({
         <div className="mb-2 flex items-center justify-between">
           <h3 className={`text-sm font-semibold ${reasoningError ? "text-amber-900" : "text-indigo-900"}`}>Reasoning &amp; Explainability</h3>
           {reasoningError ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
               apoio indisponível
             </span>
           ) : reasoningLoading ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-500 ring-1 ring-inset ring-indigo-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-500 ring-1 ring-inset ring-indigo-200">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" /> processando…
             </span>
           ) : (
-            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+            <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
               confiança {Math.round(confidence * 100)}%
             </span>
           )}
@@ -106,7 +106,7 @@ export default function RequestContextPanel({
               <button
                 type="button"
                 onClick={onRetryReasoning}
-                className="inline-flex items-center rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                className="inline-flex items-center rounded-md border border-amber-300 bg-card px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
               >
                 Tentar novamente
               </button>
@@ -119,8 +119,8 @@ export default function RequestContextPanel({
           </div>
         ) : (
           <>
-            <p className="text-sm text-gray-800">{reasoning?.summary || "Sem reasoning gerado."}</p>
-            {explainability && <p className="mt-2 text-xs text-gray-600">{explainability}</p>}
+            <p className="text-sm text-foreground">{reasoning?.summary || "Sem reasoning gerado."}</p>
+            {explainability && <p className="mt-2 text-xs text-muted-foreground">{explainability}</p>}
           </>
         )}
         {!reasoningError && (
@@ -129,30 +129,30 @@ export default function RequestContextPanel({
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Riscos</h4>
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Riscos</h4>
           {reasoningError ? (
             <p className="text-xs text-amber-600">Indisponível — apoio cognitivo offline.</p>
           ) : reasoningLoading ? (
-            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
-          ) : risks.length === 0 ? <p className="text-xs text-gray-400">Nenhum.</p> : (
-            <ul className="space-y-1 text-sm text-gray-700">{risks.map((r, i) => <li key={i}>• {r}</li>)}</ul>
+            <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+          ) : risks.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum.</p> : (
+            <ul className="space-y-1 text-sm text-foreground">{risks.map((r, i) => <li key={i}>• {r}</li>)}</ul>
           )}
         </section>
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Recomendações</h4>
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recomendações</h4>
           {reasoningError ? (
             <p className="text-xs text-amber-600">Indisponível — apoio cognitivo offline.</p>
           ) : reasoningLoading ? (
-            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
-          ) : recommendations.length === 0 ? <p className="text-xs text-gray-400">Nenhuma.</p> : (
-            <ul className="space-y-1 text-sm text-gray-700">{recommendations.map((r, i) => <li key={i}>• {r}</li>)}</ul>
+            <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+          ) : recommendations.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma.</p> : (
+            <ul className="space-y-1 text-sm text-foreground">{recommendations.map((r, i) => <li key={i}>• {r}</li>)}</ul>
           )}
         </section>
       </div>
 
       {snapshots.length > 0 && (
-        <p className="text-[11px] text-gray-400">Snapshots de integridade: {snapshots.length} documento(s) verificável(is).</p>
+        <p className="text-[11px] text-muted-foreground">Snapshots de integridade: {snapshots.length} documento(s) verificável(is).</p>
       )}
     </div>
   );

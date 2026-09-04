@@ -43,7 +43,7 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
   const ws = data?.workspace;
 
   if (isLoading || !ws) {
-    return <div className="h-40 animate-pulse rounded-lg bg-gray-100" />;
+    return <div className="h-40 animate-pulse rounded-lg bg-muted" />;
   }
 
   return (
@@ -51,28 +51,28 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
       <header className="flex flex-wrap items-center justify-between gap-3">
         {onBack && <button type="button" onClick={onBack} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">← Voltar aos contratos</button>}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">{originLabel(ws.originType)}</span>
+          <span className="text-xs text-muted-foreground">{originLabel(ws.originType)}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_CLASSES[ws.status] ?? STATUS_CLASSES.minuta}`}>{statusLabel(ws.status)}</span>
         </div>
       </header>
 
-      <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-900">{ws.contractNumber} — {ws.contractor || "sem contratado"}</h2>
-        <p className="line-clamp-1 text-xs text-gray-500">{ws.object}</p>
+      <div className="rounded-lg border border-border bg-card px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">{ws.contractNumber} — {ws.contractor || "sem contratado"}</h2>
+        <p className="line-clamp-1 text-xs text-muted-foreground">{ws.object}</p>
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
+      <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-0.5 text-xs font-medium">
         {TABS.map((t) => (
-          <button key={t.key} type="button" onClick={() => setTab(t.key)} className={`rounded-md px-3 py-1 transition ${tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>{t.label}</button>
+          <button key={t.key} type="button" onClick={() => setTab(t.key)} className={`rounded-md px-3 py-1 transition ${tab === t.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>{t.label}</button>
         ))}
       </div>
 
       {tab === "contrato" && (
         <div className="space-y-4">
           <ContractEditor contract={ws} />
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h3 className="mb-2 text-sm font-semibold text-gray-900">Parecer Jurídico</h3>
-            <p className="mb-2 text-xs text-gray-400">Solicitado ao Business Domain Parecer Jurídico — sem duplicação.</p>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Parecer Jurídico</h3>
+            <p className="mb-2 text-xs text-muted-foreground">Solicitado ao Business Domain Parecer Jurídico — sem duplicação.</p>
             <button type="button" onClick={() => requestOpinion.mutate({ contractId })} disabled={requestOpinion.isPending}
               className="w-full rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50">
               {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer jurídico"}

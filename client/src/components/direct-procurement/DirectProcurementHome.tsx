@@ -48,12 +48,12 @@ export default function DirectProcurementHome() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Contratação Direta</h1>
-            <p className="text-xs text-gray-500">Dispensa e Inexigibilidade — Workspace próprio, fluxo adaptativo.</p>
+            <h1 className="text-lg font-bold text-foreground">Contratação Direta</h1>
+            <p className="text-xs text-muted-foreground">Dispensa e Inexigibilidade — Workspace próprio, fluxo adaptativo.</p>
           </div>
-          <div className="inline-flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
-            <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Processos</button>
-            <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Novo</button>
+          <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
+            <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Processos</button>
+            <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Novo</button>
           </div>
         </header>
         {view === "new" ? <NewDirectProcurementWizard onCreated={open} /> : <DirectProcurementOverview onOpen={setWorkspaceId} />}
@@ -71,13 +71,13 @@ export default function DirectProcurementHome() {
       </header>
 
       {isLoading || !ws ? (
-        <div className="h-40 animate-pulse rounded-lg bg-gray-100" />
+        <div className="h-40 animate-pulse rounded-lg bg-muted" />
       ) : (
         <>
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">{ws.processNumber} — {PROCUREMENT_TYPE_LABELS[ws.procurementType] ?? ws.procurementType}</h2>
-            <p className="text-xs text-gray-500">{ws.object}</p>
-            <p className="mt-1 text-xs text-gray-400">Fundamento: {ws.legalBasis || "a definir"}</p>
+          <div className="rounded-lg border border-border bg-card px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">{ws.processNumber} — {PROCUREMENT_TYPE_LABELS[ws.procurementType] ?? ws.procurementType}</h2>
+            <p className="text-xs text-muted-foreground">{ws.object}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Fundamento: {ws.legalBasis || "a definir"}</p>
           </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -85,16 +85,16 @@ export default function DirectProcurementHome() {
             <NeedCharacterizationWorkspace workspaceId={ws.id} />
 
             {/* Procedimento (Forma de Condução) */}
-            <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-4">
-              <h3 className="text-sm font-semibold text-gray-900">Forma de Condução</h3>
+            <div className="space-y-2 rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Forma de Condução</h3>
               <div className="flex gap-2">
                 <button type="button" onClick={() => configureProcedure.mutate({ workspaceId: ws.id, procedureType: "eletronico", platform: "compras_gov" })}
-                  className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:border-indigo-300">Eletrônico</button>
+                  className="flex-1 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:border-indigo-300">Eletrônico</button>
                 <button type="button" onClick={() => configureProcedure.mutate({ workspaceId: ws.id, procedureType: "presencial", receiptMethod: "protocolo" })}
-                  className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:border-indigo-300">Presencial</button>
+                  className="flex-1 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:border-indigo-300">Presencial</button>
               </div>
               {data?.procedure && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Atual: {data.procedure.procedureType}
                   {data.procedure.platform ? ` · ${PLATFORM_LABELS[data.procedure.platform] ?? data.procedure.platform}` : ""}
                   {data.procedure.receiptMethod ? ` · ${RECEIPT_LABELS[data.procedure.receiptMethod] ?? data.procedure.receiptMethod}` : ""}
@@ -103,9 +103,9 @@ export default function DirectProcurementHome() {
             </div>
 
             {/* Parecer Jurídico via Institutional Request Engine */}
-            <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-4">
-              <h3 className="text-sm font-semibold text-gray-900">Parecer Jurídico</h3>
-              <p className="text-xs text-gray-400">Solicitado ao Business Domain Parecer Jurídico — sem duplicação.</p>
+            <div className="space-y-2 rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Parecer Jurídico</h3>
+              <p className="text-xs text-muted-foreground">Solicitado ao Business Domain Parecer Jurídico — sem duplicação.</p>
               <button type="button" onClick={() => requestOpinion.mutate({ workspaceId: ws.id })} disabled={requestOpinion.isPending}
                 className="w-full rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50">
                 {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer jurídico"}

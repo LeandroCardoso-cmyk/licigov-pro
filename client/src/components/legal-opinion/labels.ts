@@ -37,7 +37,7 @@ export const STAGE_LABELS: Record<string, string> = {
 };
 
 export const STAGE_CLASSES: Record<string, string> = {
-  INBOX: "bg-gray-100 text-gray-700 ring-gray-500/20",
+  INBOX: "bg-muted text-foreground ring-gray-500/20",
   RECEIVED: "bg-blue-100 text-blue-800 ring-blue-500/20",
   UNDER_ANALYSIS: "bg-indigo-100 text-indigo-800 ring-indigo-500/20",
   WAITING_INFORMATION: "bg-yellow-100 text-yellow-800 ring-yellow-500/20",
@@ -45,7 +45,7 @@ export const STAGE_CLASSES: Record<string, string> = {
   REVIEW: "bg-purple-100 text-purple-800 ring-purple-500/20",
   SIGNED: "bg-green-100 text-green-800 ring-green-500/20",
   RETURNED: "bg-teal-100 text-teal-800 ring-teal-500/20",
-  ARCHIVED: "bg-gray-100 text-gray-500 ring-gray-500/20",
+  ARCHIVED: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
 export const PRIORITY_LABELS: Record<string, string> = {

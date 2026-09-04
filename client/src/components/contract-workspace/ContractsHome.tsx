@@ -33,13 +33,13 @@ export default function ContractsHome() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Contratos e Instrumentos Contratuais</h1>
-          <p className="text-xs text-gray-500">Geração inteligente de documentos contratuais — foco documental, nunca ERP.</p>
+          <h1 className="text-lg font-bold text-foreground">Contratos e Instrumentos Contratuais</h1>
+          <p className="text-xs text-muted-foreground">Geração inteligente de documentos contratuais — foco documental, nunca ERP.</p>
         </div>
-        <div className="inline-flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
-          <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Todos</button>
-          <button type="button" onClick={() => setView("imported")} className={`rounded-md px-3 py-1 transition ${view === "imported" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Importados</button>
-          <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Novo</button>
+        <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
+          <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Todos</button>
+          <button type="button" onClick={() => setView("imported")} className={`rounded-md px-3 py-1 transition ${view === "imported" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Importados</button>
+          <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Novo</button>
         </div>
       </header>
 

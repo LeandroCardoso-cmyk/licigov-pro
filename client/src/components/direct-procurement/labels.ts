@@ -21,7 +21,7 @@ export const STAGE_LABELS: Record<string, string> = {
 };
 
 export const STAGE_CLASSES: Record<string, string> = {
-  NEW: "bg-gray-100 text-gray-700 ring-gray-500/20",
+  NEW: "bg-muted text-foreground ring-gray-500/20",
   DFD: "bg-slate-100 text-slate-700 ring-slate-500/20",
   LEGAL_BASIS: "bg-blue-100 text-blue-800 ring-blue-500/20",
   NEED_CHARACTERIZATION: "bg-blue-100 text-blue-800 ring-blue-500/20",
@@ -35,7 +35,7 @@ export const STAGE_CLASSES: Record<string, string> = {
   RATIFICATION: "bg-teal-100 text-teal-800 ring-teal-500/20",
   PUBLICATION: "bg-green-100 text-green-800 ring-green-500/20",
   CONTRACT: "bg-green-100 text-green-800 ring-green-500/20",
-  ARCHIVED: "bg-gray-100 text-gray-500 ring-gray-500/20",
+  ARCHIVED: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
 export const PROCUREMENT_TYPE_LABELS: Record<string, string> = {

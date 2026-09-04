@@ -56,6 +56,7 @@ import ParecerJuridico from "./pages/ParecerJuridico";
 import ContratosWorkspace from "./pages/ContratosWorkspace";
 import TirarDuvidas from "./pages/TirarDuvidas";
 import CentroOperacoes from "./pages/CentroOperacoes";
+import ExecutiveDashboard from "./pages/ExecutiveDashboard";
 import Register from "./pages/Register";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
@@ -111,7 +112,9 @@ function withAuthenticatedShell(Component: React.ComponentType) {
 
 // Wrapper components para evitar re-criação em cada render
 const DocumentSettingsRoute = () => <AuthenticatedRoute component={DocumentSettings} />;
-const SettingsRoute = () => <AuthenticatedRoute component={Settings} />;
+// V1 UI/UX Stabilization — Configurações é item do menu lateral: renderiza DENTRO do
+// shell (mantém a sidebar, navegação consistente). Antes abria sem shell (sem sidebar).
+const SettingsRoute = withAuthenticatedShell(Settings);
 const AnalyticsRoute = () => <AuthenticatedRoute component={Analytics} />;
 const AdminRoute = () => <AuthenticatedRoute component={Admin} />;
 // const AdminSubscriptionsRoute = () => <AuthenticatedRoute component={AdminSubscriptions} />;
@@ -123,11 +126,13 @@ const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments}
 const TermsOfUseRoute = () => <AuthenticatedRoute component={TermsOfUse} />;
 const PrivacyPolicyRoute = () => <AuthenticatedRoute component={PrivacyPolicy} />;
 // const AuditLogsRoute = () => <AuthenticatedRoute component={AuditLogs} />;
-const TemplatesRoute = () => <AuthenticatedRoute component={Templates} />;
+// V1 UI/UX Stabilization — Templates é item do menu lateral: renderiza DENTRO do shell.
+const TemplatesRoute = withAuthenticatedShell(Templates);
 const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport} />;
 const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
 const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashboard} />;
-const AdminPlatformsRoute = () => <AuthenticatedRoute component={AdminPlatforms} />;
+// V1 UI/UX Stabilization — Plataformas é item do menu lateral: renderiza DENTRO do shell.
+const AdminPlatformsRoute = withAuthenticatedShell(AdminPlatforms);
 const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLogs} />;
 const DirectContractsRoute = () => <AuthenticatedRoute component={DirectContracts} />;
 const NewDirectContractRoute = () => <AuthenticatedRoute component={NewDirectContract} />;
@@ -137,8 +142,14 @@ const LegalOpinionsAnalyticsRoute = () => <AuthenticatedRoute component={LegalOp
 const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
 const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
 // RC-6 — Rotas críticas de homologação renderizadas DENTRO do shell (DashboardLayout).
-// Centro de Operações é a home canônica: /dashboard e /centro-operacoes usam a MESMA
-// implementação (CentroOperacoes → DepartmentOperationHome), sem duplicar lógica/estado.
+// V1 UI/UX Stabilization: /dashboard e /centro-operacoes deixam de ser alias da MESMA
+// tela (a duplicidade confundia a homologação). Agora são destinos DISTINTOS:
+//  - /dashboard        → ExecutiveDashboard: LEITURA executiva (indicadores + próximos
+//                        compromissos + atalhos). Sem abas, sem ação.
+//  - /centro-operacoes → CentroOperacoes → DepartmentOperationHome: WORKSPACE operacional
+//                        (Minha Caixa/pendências, painel, calendário, timeline, registros).
+// Ambos consomem SOMENTE endpoints já existentes (departmentOperation.*) — sem backend novo.
+const DashboardShellRoute = withAuthenticatedShell(ExecutiveDashboard);
 const OperationsHomeShellRoute = withAuthenticatedShell(CentroOperacoes);
 // PR B — /processos serve o fluxo canônico (Processo → DFD → ETP → TR → Edital).
 const ProcessosShellRoute = withAuthenticatedShell(ProcessoLicitatorio);
@@ -153,9 +164,9 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={LandingPage} />
-      {/* RC-6 — Home canônica no shell: Centro de Operações.
-              /dashboard e /centro-operacoes apontam para a MESMA implementação. */}
-      <Route path={"/dashboard"} component={OperationsHomeShellRoute} />
+      {/* V1 UI/UX Stabilization — destinos DISTINTOS (antes eram alias da mesma tela):
+              /dashboard = visão executiva (leitura); /centro-operacoes = workspace de ação. */}
+      <Route path={"/dashboard"} component={DashboardShellRoute} />
       <Route path={"/centro-operacoes"} component={OperationsHomeShellRoute} />
       {/* PR B — Seletor de módulos legado desativado: redireciona à home canônica. */}
       <Route path={"/modulos"} component={() => <Redirect to="/dashboard" replace />} />

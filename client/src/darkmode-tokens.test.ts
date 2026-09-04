@@ -52,6 +52,49 @@ const MIGRATED_FILES = [
   "client/src/components/procurement/EditalWorkspace.tsx",
   // PR B.1 — painel compartilhado de documentos oficiais (DOCX/PDF/Imprimir)
   "client/src/components/documents/OfficialDocumentPanel.tsx",
+  // ── V1 UI/UX Stabilization — telas V1 alcançáveis migradas para tokens semânticos ──
+  // Dashboard executivo (novo) + os três domínios de operador que ainda usavam neutros.
+  "client/src/pages/ExecutiveDashboard.tsx",
+  // Parecer Jurídico (/parecer) — árvore legal-opinion alcançável
+  "client/src/components/legal-opinion/LegalOpinionHome.tsx",
+  "client/src/components/legal-opinion/RequestContextPanel.tsx",
+  "client/src/components/legal-opinion/InstitutionalInbox.tsx",
+  "client/src/components/legal-opinion/LegalOpinionEditor.tsx",
+  "client/src/components/legal-opinion/LegalOpinionViewer.tsx",
+  "client/src/components/legal-opinion/OpinionHistory.tsx",
+  "client/src/components/legal-opinion/LawyerDashboard.tsx",
+  "client/src/components/legal-opinion/SignaturePanel.tsx",
+  "client/src/components/legal-opinion/TimelinePanel.tsx",
+  "client/src/components/legal-opinion/labels.ts",
+  // Contratação Direta (/contratacao-direta) — árvore direct-procurement alcançável
+  "client/src/components/direct-procurement/DirectProcurementHome.tsx",
+  "client/src/components/direct-procurement/DirectProcurementOverview.tsx",
+  "client/src/components/direct-procurement/NewDirectProcurementWizard.tsx",
+  "client/src/components/direct-procurement/LegalBasisWorkspace.tsx",
+  "client/src/components/direct-procurement/NeedCharacterizationWorkspace.tsx",
+  "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx",
+  "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx",
+  "client/src/components/direct-procurement/PriceJustificationWorkspace.tsx",
+  "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx",
+  "client/src/components/direct-procurement/RatificationWorkspace.tsx",
+  "client/src/components/direct-procurement/PublicationWorkspace.tsx",
+  "client/src/components/direct-procurement/TimelinePanel.tsx",
+  "client/src/components/direct-procurement/labels.ts",
+  // Contratos (/contratos) — árvore contract-workspace alcançável
+  "client/src/components/contract-workspace/ContractsHome.tsx",
+  "client/src/components/contract-workspace/ContractOverview.tsx",
+  "client/src/components/contract-workspace/ContractWorkspace.tsx",
+  "client/src/components/contract-workspace/ContractEditor.tsx",
+  "client/src/components/contract-workspace/AddendumWorkspace.tsx",
+  "client/src/components/contract-workspace/ApostilleWorkspace.tsx",
+  "client/src/components/contract-workspace/OccurrenceWorkspace.tsx",
+  "client/src/components/contract-workspace/DocumentsWorkspace.tsx",
+  "client/src/components/contract-workspace/ImportedContracts.tsx",
+  "client/src/components/contract-workspace/CopilotPanel.tsx",
+  "client/src/components/contract-workspace/TimelinePanel.tsx",
+  "client/src/components/contract-workspace/labels.ts",
+  // Processo Licitatório (/processos) — painel de item (drawer) alcançável
+  "client/src/components/procurement/ProcurementItemPanel.tsx",
 ];
 
 describe("Dark mode · tokens semânticos nos componentes autenticados", () => {
