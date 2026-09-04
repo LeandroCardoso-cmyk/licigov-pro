@@ -107,25 +107,36 @@ export interface LegalOpinionContextBundle {
   readonly timeline: Awaited<ReturnType<typeof listRequestTimeline>>;
   readonly history: Awaited<ReturnType<typeof listLegalOpinionHistory>>;
   readonly versions: Awaited<ReturnType<typeof listLegalOpinionVersions>>;
+  readonly snapshots: readonly string[];
+}
+
+/**
+ * Reasoning & Explainability do Parecer — produto do Copiloto Jurídico (Cognitive
+ * Kernel → RAG/Retrieval → LLM). É APOIO à decisão humana, NÃO pré-condição para
+ * abrir o workspace: carregado separadamente do conteúdo operacional (documentos,
+ * rascunho, timeline) para não bloquear o trabalho do Procurador. Sempre revisável,
+ * nunca automático; toda saída passa pela porta do Kernel (kernelAccessService).
+ */
+export interface LegalOpinionReasoningBundle {
   readonly reasoning: { summary: string; inferences: readonly string[] };
   readonly explainability: string;
   readonly risks: readonly string[];
   readonly recommendations: readonly string[];
-  readonly snapshots: readonly string[];
   readonly confidence: number;
 }
 
 /**
- * Carrega automaticamente TODO o contexto da solicitação: documentos
- * referenciados, timeline, histórico, reasoning, explainability, riscos,
- * recomendações e snapshots. Nunca exige upload nem busca manual. O reasoning
- * usa o Copiloto Jurídico via kernelAccessService (revisável, nunca automático).
+ * Carrega o CONTEÚDO OPERACIONAL da solicitação: documentos referenciados,
+ * timeline, histórico, rascunho e versões — tudo derivado do banco (LEITURA, sem
+ * LLM/Kernel cognitivo). É o que o Procurador precisa para começar a trabalhar;
+ * abre rápido e nunca depende de round-trip de IA. Nunca exige upload nem busca
+ * manual. O Reasoning & Explainability (apoio) vem de `loadWorkspaceReasoning`,
+ * carregado em paralelo/progressivamente sem bloquear a abertura do workspace.
  */
 export async function loadWorkspaceContext(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
-  invoke?: (prompt: string) => Promise<string>;
 }): Promise<LegalOpinionContextBundle> {
   const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
 
@@ -139,6 +150,35 @@ export async function loadWorkspaceContext(params: {
   ]);
   const draftVersions = draft ? await listLegalOpinionVersions(draft.id, params.organizationId) : versions;
 
+  const snapshots = documents.map(d => d.snapshot).filter((s): s is string => Boolean(s));
+
+  return {
+    workspace: ws,
+    draft,
+    documents,
+    timeline,
+    history,
+    versions: draftVersions,
+    snapshots,
+  };
+}
+
+/**
+ * Carrega o Reasoning & Explainability (apoio à decisão) via Copiloto Jurídico —
+ * Cognitive Kernel (RAG/Retrieval → LLM), SEMPRE pela porta (kernelAccessService).
+ * Separado de `loadWorkspaceContext` porque é APOIO, não pré-condição para o
+ * trabalho humano: assim o round-trip de IA não bloqueia a abertura do workspace.
+ * Preserva fronteira do Kernel, correlationId, tenant e proveniência da execução.
+ */
+export async function loadWorkspaceReasoning(params: {
+  workspaceId: string;
+  organizationId: number;
+  correlationId: string;
+  invoke?: (prompt: string) => Promise<string>;
+}): Promise<LegalOpinionReasoningBundle> {
+  const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
+  const requestId = ws?.requestId ?? "";
+
   // Reasoning/explainability via Copiloto Jurídico (Kernel, sempre via porta).
   assertKernelAccess(DOMAIN, "institutional_rag");
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
@@ -151,15 +191,7 @@ export async function loadWorkspaceContext(params: {
     invoke: params.invoke,
   });
 
-  const snapshots = documents.map(d => d.snapshot).filter((s): s is string => Boolean(s));
-
   return {
-    workspace: ws,
-    draft,
-    documents,
-    timeline,
-    history,
-    versions: draftVersions,
     reasoning: {
       summary: orchestration.consolidated.summary,
       inferences: orchestration.consolidated.legalBasis,
@@ -167,7 +199,6 @@ export async function loadWorkspaceContext(params: {
     explainability: orchestration.consolidated.suggestions.join(" · "),
     risks: orchestration.consolidated.legalBasis.slice(0, 3),
     recommendations: orchestration.consolidated.suggestions,
-    snapshots,
     confidence: orchestration.consolidated.confidence ?? 0.7,
   };
 }

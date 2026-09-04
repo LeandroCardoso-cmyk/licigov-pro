@@ -15,7 +15,7 @@ import { createLawyerAssignment, prioritizeAssignments } from "../../domain/lawy
 
 // Services
 import {
-  openWorkspaceFromRequest, loadWorkspaceContext, createOpinionDraft,
+  openWorkspaceFromRequest, loadWorkspaceContext, loadWorkspaceReasoning, createOpinionDraft,
   updateOpinionDraft, signOpinion, returnOpinion, archiveWorkspace,
 } from "../../services/legalOpinionWorkspaceService";
 import {
@@ -247,14 +247,28 @@ describe("FASE 5 — Business Domain: Parecer Jurídico", () => {
         .rejects.toThrow("Workspace de parecer não encontrado");
     });
 
-    it("loadWorkspaceContext degrada com contexto vazio + reasoning do copiloto", async () => {
+    it("loadWorkspaceContext degrada com contexto vazio (SÓ conteúdo operacional, sem LLM/Kernel)", async () => {
       const ctx = await loadWorkspaceContext({ workspaceId: "x", organizationId: ORG_ID, correlationId: CORR });
       expect(ctx.workspace).toBeNull();
       expect(ctx.documents).toEqual([]);
       expect(ctx.timeline).toEqual([]);
-      expect(typeof ctx.reasoning.summary).toBe("string");
-      expect(Array.isArray(ctx.recommendations)).toBe(true);
-      expect(ctx.confidence).toBeGreaterThan(0);
+      expect(ctx.history).toEqual([]);
+      expect(ctx.versions).toEqual([]);
+      expect(ctx.snapshots).toEqual([]);
+      // O contexto operacional NÃO carrega Reasoning/Explainability — apoio vem à parte.
+      expect(ctx).not.toHaveProperty("reasoning");
+      expect(ctx).not.toHaveProperty("explainability");
+      expect(ctx).not.toHaveProperty("risks");
+      expect(ctx).not.toHaveProperty("recommendations");
+      expect(ctx).not.toHaveProperty("confidence");
+    });
+
+    it("loadWorkspaceReasoning (apoio) traz reasoning do copiloto — SEPARADO da abertura", async () => {
+      const r = await loadWorkspaceReasoning({ workspaceId: "x", organizationId: ORG_ID, correlationId: CORR });
+      expect(typeof r.reasoning.summary).toBe("string");
+      expect(Array.isArray(r.recommendations)).toBe(true);
+      expect(Array.isArray(r.risks)).toBe(true);
+      expect(r.confidence).toBeGreaterThan(0);
     });
   });
 

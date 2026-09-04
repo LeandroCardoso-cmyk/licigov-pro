@@ -14,7 +14,7 @@ import {
   listLegalOpinionWorkspaces, getLegalOpinionWorkspace, listLawyerAssignments,
 } from "../db/legalOpinionWorkspace";
 import {
-  openWorkspaceFromRequest, loadWorkspaceContext, createOpinionDraft,
+  openWorkspaceFromRequest, loadWorkspaceContext, loadWorkspaceReasoning, createOpinionDraft,
   updateOpinionDraft, signOpinion, returnOpinion, archiveWorkspace,
 } from "../services/legalOpinionWorkspaceService";
 
@@ -63,7 +63,12 @@ export const legalOpinionWorkspaceRouter = router({
       return { workspace };
     }),
 
-  /** Carrega automaticamente todo o contexto (documentos, timeline, reasoning…). */
+  /**
+   * Carrega o CONTEÚDO OPERACIONAL do workspace (documentos, timeline, histórico,
+   * rascunho, versões) — leitura de banco, sem LLM/Kernel cognitivo. Abre rápido:
+   * é o que o Procurador precisa para começar a trabalhar. O Reasoning &
+   * Explainability (apoio) vem separado em `loadReasoning`, sem bloquear a abertura.
+   */
   loadContext: tenantProcedure
     .input(z.object({ workspaceId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
@@ -72,6 +77,21 @@ export const legalOpinionWorkspaceRouter = router({
         workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId,
       });
       return context;
+    }),
+
+  /**
+   * Carrega o Reasoning & Explainability (apoio à decisão) via Copiloto Jurídico
+   * (Cognitive Kernel → RAG/LLM). Consulta SEPARADA do conteúdo operacional: o
+   * round-trip de IA nunca bloqueia a abertura do workspace. Sempre revisável.
+   */
+  loadReasoning: tenantProcedure
+    .input(z.object({ workspaceId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const reasoning = await loadWorkspaceReasoning({
+        workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId,
+      });
+      return reasoning;
     }),
 
   /** Cria o rascunho do parecer (editável, nunca automático). */
