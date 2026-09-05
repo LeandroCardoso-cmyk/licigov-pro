@@ -46,7 +46,7 @@ export default function LegacyImportWizard({ onImported }: LegacyImportWizardPro
           <p className="mt-0.5">{importLegacy.data.disclaimer}</p>
         </div>
       )}
-      <button type="submit" disabled={importLegacy.isPending || !rawText.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={importLegacy.isPending || !rawText.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {importLegacy.isPending ? "Importando…" : "Importar (assistido)"}
       </button>
     </form>

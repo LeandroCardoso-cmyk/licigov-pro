@@ -310,7 +310,7 @@ export default function ProcurementItemPanel({
                           })
                         }
                         disabled={decidirCATMAT.isPending}
-                        className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+                        className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
                         Confirmar
                       </button>
@@ -319,7 +319,7 @@ export default function ProcurementItemPanel({
                         onClick={() => decide({ decision: "rejeitado", suggestionId: c.id })}
                         disabled={decidirCATMAT.isPending || justificationMissing}
                         title={justificationMissing ? "Informe a justificativa para rejeitar" : undefined}
-                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
                         Rejeitar
                       </button>
@@ -361,7 +361,7 @@ export default function ProcurementItemPanel({
                     }
                     disabled={decidirCATMAT.isPending || manualCode.trim().length === 0 || justificationMissing}
                     title={justificationMissing ? "Informe a justificativa para substituir" : undefined}
-                    className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+                    className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                   >
                     Substituir
                   </button>
@@ -370,7 +370,7 @@ export default function ProcurementItemPanel({
                     onClick={() => decide({ decision: "sem_correspondencia_segura" })}
                     disabled={decidirCATMAT.isPending || justificationMissing}
                     title={justificationMissing ? "Informe a justificativa" : undefined}
-                    className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                   >
                     Sem correspondência segura
                   </button>
@@ -510,7 +510,7 @@ export default function ProcurementItemPanel({
               type="button"
               onClick={() => approveItem.mutate({ itemId: item.id })}
               disabled={approveItem.isPending}
-              className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               {approveItem.isPending ? "Aprovando..." : "Aprovar item"}
             </button>

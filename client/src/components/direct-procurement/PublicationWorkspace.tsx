@@ -32,7 +32,7 @@ export default function PublicationWorkspace({ workspaceId, publications = [] }:
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Publicação</h3>
         <button type="button" onClick={() => publish.mutate({ workspaceId })} disabled={publish.isPending}
-          className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50">
+          className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {publish.isPending ? "Gerando…" : "Gerar publicações"}
         </button>
       </div>

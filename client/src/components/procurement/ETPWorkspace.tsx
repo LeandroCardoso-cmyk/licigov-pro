@@ -73,7 +73,7 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
           type="button"
           onClick={handleGenerate}
           disabled={!processId || !object.trim() || generateETP.isPending}
-          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {generateETP.isPending ? "Gerando..." : "Gerar rascunho de ETP"}
         </button>

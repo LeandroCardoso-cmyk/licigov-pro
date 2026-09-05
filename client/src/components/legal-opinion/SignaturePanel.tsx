@@ -90,7 +90,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
             onClick={() => setMethod(m.value)}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${
               method === m.value ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground"
-            } ${!m.implemented ? "cursor-not-allowed opacity-50" : "hover:border-indigo-300"}`}
+            } ${!m.implemented ? "cursor-not-allowed bg-muted text-muted-foreground" : "hover:border-indigo-300"}`}
           >
             {m.label}{!m.implemented ? " (em breve)" : ""}
           </button>
@@ -105,7 +105,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
           type="button"
           disabled={sign.isPending || signed}
           onClick={() => sign.mutate({ workspaceId, method, idempotencyKey: ensureSignKey() })}
-          className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {signed ? "Parecer assinado" : sign.isPending ? "Assinando…" : "Assinar parecer"}
         </button>
@@ -113,7 +113,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
           type="button"
           disabled={ret.isPending || !signed}
           onClick={() => ret.mutate({ workspaceId })}
-          className="flex-1 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50"
+          className="flex-1 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {ret.isPending ? "Devolvendo…" : "Devolver à origem"}
         </button>

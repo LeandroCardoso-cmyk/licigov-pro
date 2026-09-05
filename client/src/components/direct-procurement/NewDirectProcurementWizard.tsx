@@ -92,7 +92,7 @@ export default function NewDirectProcurementWizard({ onCreated }: NewDirectProcu
           {create.isError && <p className="rounded-md border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950 px-3 py-2 text-xs text-red-600 dark:text-red-400">{create.error.message}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={() => setStep(2)} className="flex-1 rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted">Voltar</button>
-            <button type="submit" disabled={!canSubmit || create.isPending} className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            <button type="submit" disabled={!canSubmit || create.isPending} className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
               {create.isPending ? "Criando…" : "Criar processo"}
             </button>
           </div>

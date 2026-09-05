@@ -57,7 +57,7 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
       <input value={currentStage} onChange={(e) => setCurrentStage(e.target.value)} placeholder="Etapa atual (opcional)" className="w-full rounded-md border border-input px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
 
       {create.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Registro criado.</p>}
-      <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {create.isPending ? "Salvando…" : "Criar registro"}
       </button>
     </form>

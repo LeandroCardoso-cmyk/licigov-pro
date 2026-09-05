@@ -32,7 +32,7 @@ export default function NeedCharacterizationWorkspace({ workspaceId, onSaved }: 
           className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
       </label>
       {save.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Necessidade registrada.</p>}
-      <button type="submit" disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {save.isPending ? "Salvando…" : "Salvar caracterização"}
       </button>
     </form>

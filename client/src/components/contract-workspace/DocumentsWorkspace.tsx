@@ -37,7 +37,7 @@ export default function DocumentsWorkspace({ contractId, documents = [] }: Docum
       <div className="flex flex-wrap gap-2">
         {KINDS.map((k) => (
           <button key={k} type="button" onClick={() => generate.mutate({ contractId, kind: k })} disabled={generate.isPending}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:border-indigo-300 disabled:opacity-50">
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:border-indigo-300 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
             Gerar {DOC_KIND_LABELS[k]}
           </button>
         ))}

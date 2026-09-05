@@ -29,7 +29,7 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
         <h3 className="text-sm font-semibold text-foreground">Documentação Obrigatória</h3>
         {documents.length === 0 && (
           <button type="button" onClick={() => mutate.mutate({ workspaceId })} disabled={mutate.isPending}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
             {mutate.isPending ? "Gerando…" : "Gerar checklist"}
           </button>
         )}

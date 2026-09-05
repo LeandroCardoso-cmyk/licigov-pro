@@ -30,7 +30,7 @@ export default function OccurrenceWorkspace({ contractId, occurrences = [] }: Oc
       <form onSubmit={(e) => { e.preventDefault(); if (description.trim()) register.mutate({ contractId, description, notes: notes || undefined }); }} className="space-y-2">
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição da ocorrência" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Observações (opcional)…" className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-        <button type="submit" disabled={register.isPending || !description.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        <button type="submit" disabled={register.isPending || !description.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {register.isPending ? "Registrando…" : "Registrar ocorrência"}
         </button>
       </form>

@@ -64,7 +64,7 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
       : exportDoc.variables?.format === action && !exportDoc.variables?.inline);
 
   const documents = data?.documents ?? [];
-  const btn = "rounded border border-input px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+  const btn = "rounded border border-input px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground";
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">

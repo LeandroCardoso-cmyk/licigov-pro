@@ -74,7 +74,7 @@ export default function TirarDuvidasHome() {
           <button
             onClick={() => submit(question)}
             disabled={ask.isPending || question.trim().length < 3}
-            className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
           >
             {ask.isPending ? "Consultando…" : "Perguntar"}
           </button>

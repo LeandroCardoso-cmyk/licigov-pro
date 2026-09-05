@@ -119,7 +119,7 @@ export default function CatmatThresholdConfig() {
             <button
               type="submit"
               disabled={setThreshold.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               {setThreshold.isPending ? "Salvando…" : configured ? "Atualizar limiar" : "Configurar limiar"}
             </button>

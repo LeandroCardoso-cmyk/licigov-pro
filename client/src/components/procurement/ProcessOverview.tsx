@@ -180,7 +180,7 @@ export default function ProcessOverview({
                             exportDoc.mutate({ processId, kind: d.kind as "dfd" | "etp" | "tr" | "edital", format: fmt })
                           }
                           disabled={exportDoc.isPending}
-                          className="rounded-md border border-input px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                          className="rounded-md border border-input px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                         >
                           {busy(fmt) ? "..." : fmt.toUpperCase()}
                         </button>

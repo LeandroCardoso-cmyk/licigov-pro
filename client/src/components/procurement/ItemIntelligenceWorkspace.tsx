@@ -139,7 +139,7 @@ export default function ItemIntelligenceWorkspace({
                         type="button"
                         onClick={() => approveItem.mutate({ itemId: it.id })}
                         disabled={approveItem.isPending}
-                        className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:opacity-50"
+                        className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
                         Aprovar
                       </button>
@@ -147,7 +147,7 @@ export default function ItemIntelligenceWorkspace({
                         type="button"
                         onClick={() => rejectItem.mutate({ itemId: it.id })}
                         disabled={rejectItem.isPending}
-                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 dark:hover:bg-red-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
                         Rejeitar
                       </button>

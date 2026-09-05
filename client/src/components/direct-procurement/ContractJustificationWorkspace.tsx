@@ -23,7 +23,7 @@ export default function ContractJustificationWorkspace({ workspaceId }: Contract
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Justificativa da Contratação</h3>
         <button type="button" onClick={() => generate.mutate({ workspaceId })} disabled={generate.isPending}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {generate.isPending ? "Gerando…" : "Gerar com copilotos"}
         </button>
       </div>

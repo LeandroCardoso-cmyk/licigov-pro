@@ -41,7 +41,7 @@ export default function ProposalCollectionWorkspace({ workspaceId, proposals = [
         <input value={supplierDocument} onChange={(e) => setSupplierDocument(e.target.value)} placeholder="CNPJ/CPF" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
         <input type="number" step="0.01" value={proposalValue} onChange={(e) => setProposalValue(e.target.value)} placeholder="Valor (R$)" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
         <input value={protocol} onChange={(e) => setProtocol(e.target.value)} placeholder="Protocolo" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-        <button type="submit" disabled={register.isPending || !supplierName.trim()} className="sm:col-span-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        <button type="submit" disabled={register.isPending || !supplierName.trim()} className="sm:col-span-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {register.isPending ? "Registrando…" : "Registrar proposta"}
         </button>
       </form>

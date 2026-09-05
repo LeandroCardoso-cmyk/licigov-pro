@@ -94,7 +94,7 @@ export default function LegalOpinionEditor({ workspaceId = "", hasDraft = false,
       )}
 
       <button type="submit" disabled={busy}
-        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50">
+        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {busy ? "Salvando…" : hasDraft ? "Salvar nova versão" : "Criar parecer"}
       </button>
       <p className="text-[11px] text-muted-foreground">Todo conteúdo é editável e revisável — o sistema nunca emite parecer automaticamente.</p>

@@ -189,7 +189,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         </div>
       )}
 
-      <button type="submit" disabled={busy || ((origin === "processo_licitatorio" || origin === "contratacao_direta") && !originId)} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={busy || ((origin === "processo_licitatorio" || origin === "contratacao_direta") && !originId)} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {busy ? "Processando…" : origin === "externo" ? "Reconstruir contrato (assistido)" : origin === "avulso" ? "Criar contrato" : "Gerar contrato"}
       </button>
     </form>

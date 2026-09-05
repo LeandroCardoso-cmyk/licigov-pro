@@ -43,7 +43,7 @@ export default function LegalBasisWorkspace({ workspaceId, procurementType = "di
       <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} placeholder="Justificativa da escolha do fundamento…"
         className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
       {save.isError && <p className="text-xs text-red-600 dark:text-red-400">{save.error.message}</p>}
-      <button type="submit" disabled={save.isPending || !legalBasis.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={save.isPending || !legalBasis.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {save.isPending ? "Salvando…" : "Salvar fundamento"}
       </button>
     </form>

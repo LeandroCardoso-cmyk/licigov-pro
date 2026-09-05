@@ -40,7 +40,7 @@ export default function PriceJustificationWorkspace({ workspaceId }: PriceJustif
           <textarea value={researchText} onChange={(e) => setResearchText(e.target.value)} rows={3} placeholder="Caneta;100;un;1,50"
             className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
           <button type="button" onClick={() => importResearch.mutate({ workspaceId, source: "colar", text: researchText })} disabled={importResearch.isPending || !researchText.trim()}
-            className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-700 disabled:opacity-50">
+            className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
             {importResearch.isPending ? "Importando…" : "Importar pesquisa"}
           </button>
           {importResearch.data && <p className="text-xs text-green-700 dark:text-green-300">{importResearch.data.itemCount} item(ns) importado(s).</p>}
@@ -57,7 +57,7 @@ export default function PriceJustificationWorkspace({ workspaceId }: PriceJustif
       {save.isError && <p className="text-xs text-red-600 dark:text-red-400">{save.error.message}</p>}
       {save.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Justificativa do preço registrada.</p>}
       <button type="button" onClick={() => save.mutate({ workspaceId, source, justification: justification || undefined, referenceValue: referenceValue ? Number(referenceValue) : undefined, researchId: researchId || undefined })}
-        disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {save.isPending ? "Salvando…" : "Salvar justificativa do preço"}
       </button>
     </div>

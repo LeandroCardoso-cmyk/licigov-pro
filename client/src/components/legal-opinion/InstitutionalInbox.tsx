@@ -59,7 +59,7 @@ export default function InstitutionalInbox({ onOpenWorkspace }: InstitutionalInb
                     {domainLabel(r.sourceDomain)} · {REQUEST_TYPE_LABELS[r.requestType] ?? r.requestType} · {formatDate(r.createdAt)}
                   </p>
                   <button type="button" onClick={() => receive.mutate({ requestId: r.id })} disabled={receive.isPending}
-                    className="w-full rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-50">
+                    className="w-full rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
                     {receive.isPending ? "Abrindo…" : "Receber e abrir trabalho"}
                   </button>
                 </div>

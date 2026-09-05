@@ -59,7 +59,7 @@ export default function TRWorkspace({ processId = "" }: TRWorkspaceProps) {
           type="button"
           onClick={handleGenerate}
           disabled={!processId || !object.trim() || generateTR.isPending}
-          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {generateTR.isPending ? "Gerando..." : "Gerar rascunho de TR"}
         </button>

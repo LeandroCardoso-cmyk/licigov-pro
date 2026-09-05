@@ -42,7 +42,7 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
         {kind === "reajuste" && <input type="number" step="0.01" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Novo valor (R$)" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
         {kind === "gestor" && <input value={newManager} onChange={(e) => setNewManager(e.target.value)} placeholder="Novo gestor" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
         {kind === "fiscal" && <input value={newInspector} onChange={(e) => setNewInspector(e.target.value)} placeholder="Novo fiscal" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
-        <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Registrar apostilamento + minuta"}
         </button>
       </form>
