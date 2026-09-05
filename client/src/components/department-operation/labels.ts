@@ -1,13 +1,18 @@
 /**
  * FASE 5 — Centro de Operações: rótulos e estilos compartilhados (pt-BR).
+ *
+ * V1 Visual Refinement: os status operacionais usam a linguagem CANÔNICA de tons
+ * institucionais (statusStyles) — mesma semântica ⇒ mesma cor em todos os módulos —
+ * preservando o anel sutil de destaque do Centro.
  */
+import { statusTone } from "@/components/ui/statusStyles";
 
 export const SITUATION_CLASSES: Record<string, string> = {
-  verde: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
-  amarelo: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 ring-amber-500/20",
-  azul: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 ring-blue-500/20",
-  vermelho: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 ring-red-500/20",
-  cinza: "bg-muted text-muted-foreground ring-gray-500/20",
+  verde: `${statusTone("success")} ring-green-500/20`,
+  amarelo: `${statusTone("warning")} ring-amber-500/20`,
+  azul: `${statusTone("info")} ring-blue-500/20`,
+  vermelho: `${statusTone("danger")} ring-red-500/20`,
+  cinza: `${statusTone("neutral")} ring-gray-500/20`,
 };
 
 export const SITUATION_LABELS: Record<string, string> = {

@@ -1,10 +1,10 @@
 import React from "react";
 import { useLocation } from "wouter";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PageShell } from "@/components/ui/PageHeader";
 import { trpc } from "@/lib/trpc";
 import OperationalIndicators from "@/components/department-operation/OperationalIndicators";
 import { EVENT_TYPE_LABELS, EVENT_TYPE_CLASSES, formatDate } from "@/components/department-operation/labels";
-import { Gauge, FileText, FileCheck, Scale, ScrollText, HelpCircle, ArrowRight, CalendarClock } from "lucide-react";
+import { LayoutDashboard, Gauge, FileText, FileCheck, Scale, ScrollText, HelpCircle, ArrowRight, CalendarClock } from "lucide-react";
 
 /**
  * Dashboard — visão geral EXECUTIVA do departamento (V1 UI/UX Stabilization).
@@ -81,19 +81,13 @@ export default function ExecutiveDashboard() {
   const [, navigate] = useLocation();
 
   return (
-    <div className="bg-background">
-      <div className="border-b bg-card">
-        <div className="container py-6">
-          <Breadcrumbs items={[{ label: "Dashboard" }]} className="mb-2" />
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Visão geral do departamento — indicadores, próximos compromissos e atalhos.
-            Para agir sobre pendências, use o Centro de Operações.
-          </p>
-        </div>
-      </div>
-
-      <div className="container space-y-8 py-6">
+    <PageShell
+      icon={LayoutDashboard}
+      breadcrumbs={[{ label: "Dashboard" }]}
+      title="Dashboard"
+      description="Visão geral do departamento — indicadores, próximos compromissos e atalhos. Para agir sobre pendências, use o Centro de Operações."
+    >
+      <div className="space-y-8">
         <section>
           <h2 className="mb-3 text-sm font-semibold text-foreground">Situação geral</h2>
           <OperationalIndicators />
@@ -128,6 +122,6 @@ export default function ExecutiveDashboard() {
           </section>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

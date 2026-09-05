@@ -92,21 +92,21 @@
   --background: oklch(0.12 0.01 240);
   --foreground: oklch(0.92 0.01 240); /* #e6edf3 - texto principal */
   
-  /* Cards/Modais - #1a1f26 (superfícies elevadas) */
-  --card: oklch(0.15 0.012 240);
+  /* Cards/Modais - superfícies elevadas (levemente destacadas do fundo p/ hierarquia) */
+  --card: oklch(0.165 0.013 240);
   --card-foreground: oklch(0.92 0.01 240);
-  
-  /* Popovers - mesmo que cards */
-  --popover: oklch(0.15 0.012 240);
+
+  /* Popovers/dropdowns - elevação um pouco maior que cards */
+  --popover: oklch(0.185 0.014 240);
   --popover-foreground: oklch(0.92 0.01 240);
-  
-  /* Hover States - #252b35 (interações) */
-  --secondary: oklch(0.18 0.014 240);
+
+  /* Hover States - interações */
+  --secondary: oklch(0.205 0.015 240);
   --secondary-foreground: oklch(0.92 0.01 240);
-  
+
   /* Muted - fundos sutis */
-  --muted: oklch(0.20 0.015 240);
-  --muted-foreground: oklch(0.60 0.01 240); /* #8b949e - texto secundário */
+  --muted: oklch(0.205 0.015 240);
+  --muted-foreground: oklch(0.65 0.012 240); /* texto secundário — legibilidade elevada */
   
   /* Accent - Azul desaturado #60a5fa (matching landing page) */
   --accent: oklch(0.68 0.14 240);
@@ -120,9 +120,9 @@
   --destructive: oklch(0.65 0.20 25);
   --destructive-foreground: oklch(0.98 0 0);
   
-  /* Borders - #343b47 (divisórios sutis) */
-  --border: oklch(0.24 0.016 240);
-  --input: oklch(0.24 0.016 240);
+  /* Borders - divisórios sutis, porém perceptíveis */
+  --border: oklch(0.26 0.017 240);
+  --input: oklch(0.26 0.017 240);
   
   /* Ring - azul accent para focus */
   --ring: oklch(0.68 0.14 240);
@@ -134,14 +134,14 @@
   --chart-4: oklch(0.44 0.14 210);
   --chart-5: oklch(0.36 0.14 200);
   
-  /* Sidebar - mesma paleta */
-  --sidebar: oklch(0.15 0.012 240);
+  /* Sidebar - mesma paleta institucional */
+  --sidebar: oklch(0.165 0.013 240);
   --sidebar-foreground: oklch(0.92 0.01 240);
   --sidebar-primary: oklch(0.68 0.14 240);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.18 0.014 240);
+  --sidebar-accent: oklch(0.205 0.015 240);
   --sidebar-accent-foreground: oklch(0.92 0.01 240);
-  --sidebar-border: oklch(0.24 0.016 240);
+  --sidebar-border: oklch(0.26 0.017 240);
   --sidebar-ring: oklch(0.68 0.14 240);
 }
 
