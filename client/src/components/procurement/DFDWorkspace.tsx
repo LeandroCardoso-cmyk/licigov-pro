@@ -119,7 +119,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
               type="button"
               onClick={() => processId && generateDFD.mutate({ processId, idempotencyKey: dfdKey })}
               disabled={!processId || generateDFD.isPending}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               {generateDFD.isPending ? "Criando..." : "Criar DFD do zero"}
             </button>
@@ -167,7 +167,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
                   type="button"
                   onClick={() => processId && importDFD.mutate({ processId, source })}
                   disabled={!processId || importDFD.isPending}
-                  className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                 >
                   {importDFD.isPending ? "Importando..." : "Importar DFD"}
                 </button>
@@ -209,7 +209,7 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
               type="button"
               onClick={() => processId && doc && saveDFD.mutate({ processId, content: draft, expectedContentHash: doc.contentHash, idempotencyKey: saveKey })}
               disabled={!processId || !draft.trim() || saveDFD.isPending}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               {saveDFD.isPending ? "Salvando..." : "Salvar rascunho"}
             </button>

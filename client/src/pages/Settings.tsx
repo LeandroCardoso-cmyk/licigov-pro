@@ -5,9 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { APP_LOGO } from "@/const";
 import { useTheme } from "@/contexts/ThemeContext";
-import { ArrowLeft, Loader2, Moon, Save, Sun } from "lucide-react";
+import { Loader2, Moon, Save, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -81,11 +80,6 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8">
-        <Button variant="ghost" onClick={() => setLocation("/")} className="mb-6">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
-
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">Configurações</h1>
@@ -226,7 +220,7 @@ export default function Settings() {
           </Card>
 
           <div className="flex justify-end gap-4">
-            <Button variant="outline" onClick={() => setLocation("/")}>
+            <Button variant="outline" onClick={() => setLocation("/dashboard")}>
               Cancelar
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>

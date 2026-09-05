@@ -201,7 +201,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
               type="button"
               onClick={startConfirm}
               disabled={!canEmit}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               Emitir documento oficial
             </button>
@@ -212,7 +212,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
                 type="button"
                 onClick={doEmit}
                 disabled={promote.isPending}
-                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
               >
                 {promote.isPending ? "Emitindo..." : "Confirmar"}
               </button>
@@ -220,7 +220,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
                 type="button"
                 onClick={cancelConfirm}
                 disabled={promote.isPending}
-                className="rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                className="rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
               >
                 Cancelar
               </button>

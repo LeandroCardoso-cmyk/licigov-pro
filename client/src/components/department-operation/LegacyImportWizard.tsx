@@ -41,12 +41,12 @@ export default function LegacyImportWizard({ onImported }: LegacyImportWizardPro
       <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} rows={5} placeholder="Cole aqui o texto do documento legado…" className="w-full resize-y rounded-md border border-input px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
 
       {importLegacy.data && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           <p className="font-medium">Importado (assistido) — confiança {Math.round(importLegacy.data.confidence * 100)}%.</p>
           <p className="mt-0.5">{importLegacy.data.disclaimer}</p>
         </div>
       )}
-      <button type="submit" disabled={importLegacy.isPending || !rawText.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+      <button type="submit" disabled={importLegacy.isPending || !rawText.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {importLegacy.isPending ? "Importando…" : "Importar (assistido)"}
       </button>
     </form>

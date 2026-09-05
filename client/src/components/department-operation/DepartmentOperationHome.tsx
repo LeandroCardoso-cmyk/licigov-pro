@@ -71,7 +71,7 @@ export default function DepartmentOperationHome({ showPageHeader = true }: Depar
 
   const reportButton = (
     <button type="button" onClick={() => generateReport.mutate({ kind: "operacional" })} disabled={generateReport.isPending}
-      className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50">
+      className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
       {generateReport.isPending ? "Gerando…" : "Baixar relatório operacional"}
     </button>
   );

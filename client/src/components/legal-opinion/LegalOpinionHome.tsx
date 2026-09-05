@@ -1,4 +1,5 @@
 import React from "react";
+import { ArrowLeft } from "lucide-react";
 import { trpc } from "../../lib/trpc";
 import InstitutionalInbox from "./InstitutionalInbox";
 import LawyerDashboard from "./LawyerDashboard";
@@ -57,14 +58,14 @@ export default function LegalOpinionHome() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Parecer Jurídico</h1>
-          <p className="text-xs text-gray-500">Camada institucional operacional do jurídico — trabalho exclusivo na Caixa Institucional.</p>
+          <h1 className="text-lg font-bold text-foreground">Parecer Jurídico</h1>
+          <p className="text-xs text-muted-foreground">Camada institucional operacional do jurídico — trabalho exclusivo na Caixa Institucional.</p>
         </div>
-        <div className="inline-flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
+        <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
           <button type="button" onClick={() => setTab("inbox")}
-            className={`rounded-md px-3 py-1 transition ${tab === "inbox" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Caixa</button>
+            className={`rounded-md px-3 py-1 transition ${tab === "inbox" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Caixa</button>
           <button type="button" onClick={() => setTab("dashboard")}
-            className={`rounded-md px-3 py-1 transition ${tab === "dashboard" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>Painel</button>
+            className={`rounded-md px-3 py-1 transition ${tab === "dashboard" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Painel</button>
         </div>
       </header>
 
@@ -79,20 +80,31 @@ export default function LegalOpinionHome() {
         {/* Coluna direita: trabalho sobre o parecer selecionado */}
         <div className="space-y-5 lg:col-span-3">
           {!enabled ? (
-            <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm text-gray-400">
+            <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
               Selecione uma solicitação na Caixa Institucional para começar.
             </div>
           ) : isLoading ? (
             <div className="space-y-3">
-              <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
-              <div className="h-40 animate-pulse rounded-lg bg-gray-100" />
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
+              <div className="h-40 animate-pulse rounded-lg bg-muted" />
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3">
+              {/* V1 UI/UX Stabilization — afordância explícita de retorno à Caixa: antes só
+                  se saía do trabalho ao concluir a assinatura (onReturned). Limpa o
+                  workspace selecionado sem mutação e sem reload. */}
+              <button
+                type="button"
+                onClick={() => setWorkspaceId("")}
+                className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Voltar à caixa
+              </button>
+
+              <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Trabalho {workspaceId.slice(0, 8)}…</p>
-                  <p className="text-xs text-gray-500">Processo ref.: {ctx?.workspace?.referenceProcessId || "—"}</p>
+                  <p className="text-sm font-semibold text-foreground">Trabalho {workspaceId.slice(0, 8)}…</p>
+                  <p className="text-xs text-muted-foreground">Processo ref.: {ctx?.workspace?.referenceProcessId || "—"}</p>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STAGE_CLASSES[stage] ?? STAGE_CLASSES.INBOX}`}>
                   {stageLabel(stage)}

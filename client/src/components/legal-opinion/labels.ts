@@ -37,15 +37,15 @@ export const STAGE_LABELS: Record<string, string> = {
 };
 
 export const STAGE_CLASSES: Record<string, string> = {
-  INBOX: "bg-gray-100 text-gray-700 ring-gray-500/20",
-  RECEIVED: "bg-blue-100 text-blue-800 ring-blue-500/20",
-  UNDER_ANALYSIS: "bg-indigo-100 text-indigo-800 ring-indigo-500/20",
-  WAITING_INFORMATION: "bg-yellow-100 text-yellow-800 ring-yellow-500/20",
-  DRAFT: "bg-amber-100 text-amber-800 ring-amber-500/20",
-  REVIEW: "bg-purple-100 text-purple-800 ring-purple-500/20",
-  SIGNED: "bg-green-100 text-green-800 ring-green-500/20",
-  RETURNED: "bg-teal-100 text-teal-800 ring-teal-500/20",
-  ARCHIVED: "bg-gray-100 text-gray-500 ring-gray-500/20",
+  INBOX: "bg-muted text-foreground ring-gray-500/20",
+  RECEIVED: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 ring-blue-500/20",
+  UNDER_ANALYSIS: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 ring-indigo-500/20",
+  WAITING_INFORMATION: "bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 ring-yellow-500/20",
+  DRAFT: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 ring-amber-500/20",
+  REVIEW: "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 ring-purple-500/20",
+  SIGNED: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
+  RETURNED: "bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 ring-teal-500/20",
+  ARCHIVED: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
 export const PRIORITY_LABELS: Record<string, string> = {
@@ -53,10 +53,10 @@ export const PRIORITY_LABELS: Record<string, string> = {
 };
 
 export const PRIORITY_CLASSES: Record<string, string> = {
-  baixa: "bg-green-100 text-green-800 ring-green-500/20",
-  media: "bg-blue-100 text-blue-800 ring-blue-500/20",
-  alta: "bg-orange-100 text-orange-800 ring-orange-500/20",
-  urgente: "bg-red-100 text-red-800 ring-red-500/20",
+  baixa: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
+  media: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 ring-blue-500/20",
+  alta: "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 ring-orange-500/20",
+  urgente: "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 ring-red-500/20",
 };
 
 export const CONCLUSION_LABELS: Record<string, string> = {

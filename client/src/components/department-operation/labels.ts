@@ -3,10 +3,10 @@
  */
 
 export const SITUATION_CLASSES: Record<string, string> = {
-  verde: "bg-green-100 text-green-800 ring-green-500/20",
-  amarelo: "bg-amber-100 text-amber-800 ring-amber-500/20",
-  azul: "bg-blue-100 text-blue-800 ring-blue-500/20",
-  vermelho: "bg-red-100 text-red-700 ring-red-500/20",
+  verde: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
+  amarelo: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 ring-amber-500/20",
+  azul: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 ring-blue-500/20",
+  vermelho: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 ring-red-500/20",
   cinza: "bg-muted text-muted-foreground ring-gray-500/20",
 };
 
@@ -32,11 +32,11 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export const EVENT_TYPE_CLASSES: Record<string, string> = {
-  sessao_publica: "bg-indigo-100 text-indigo-800", certame: "bg-indigo-100 text-indigo-800",
-  reuniao: "bg-blue-100 text-blue-800", audiencia: "bg-blue-100 text-blue-800", visita_tecnica: "bg-blue-100 text-blue-800",
-  assinatura: "bg-purple-100 text-purple-800",
-  vencimento_contrato: "bg-red-100 text-red-700", vencimento_aditivo: "bg-red-100 text-red-700", vencimento_ata: "bg-red-100 text-red-700",
-  tarefa: "bg-amber-100 text-amber-800", manual: "bg-muted text-foreground",
+  sessao_publica: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200", certame: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200",
+  reuniao: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200", audiencia: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200", visita_tecnica: "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200",
+  assinatura: "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200",
+  vencimento_contrato: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300", vencimento_aditivo: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300", vencimento_ata: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
+  tarefa: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200", manual: "bg-muted text-foreground",
 };
 
 export const CHANNEL_LABELS: Record<string, string> = {

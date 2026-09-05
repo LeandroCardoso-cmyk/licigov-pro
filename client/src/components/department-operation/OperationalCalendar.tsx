@@ -50,7 +50,7 @@ export default function OperationalCalendar({ onOpenReference }: OperationalCale
               <ul className="space-y-1">
                 {evs.map((e) => (
                   <li key={e.id}>
-                    <button type="button" onClick={() => e.referenceId && onOpenReference?.(e.referenceType, e.referenceId)} className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left hover:border-indigo-200">
+                    <button type="button" onClick={() => e.referenceId && onOpenReference?.(e.referenceType, e.referenceId)} className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left hover:border-indigo-200 dark:hover:border-indigo-800">
                       <span className="line-clamp-1 text-sm text-foreground">{e.title}{e.eventTime ? ` · ${e.eventTime}` : ""}</span>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${EVENT_TYPE_CLASSES[e.eventType] ?? "bg-muted text-foreground"}`}>{EVENT_TYPE_LABELS[e.eventType] ?? e.eventType}</span>
                     </button>

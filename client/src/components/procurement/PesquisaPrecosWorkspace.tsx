@@ -74,7 +74,7 @@ function LegacyPriceResearchPanel({ processId }: { processId: string }) {
         type="button"
         onClick={handleImport}
         disabled={!processId || !text.trim() || importResearch.isPending}
-        className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
       >
         {importResearch.isPending ? "Processando..." : "Importar e gerar Itens Inteligentes"}
       </button>

@@ -29,30 +29,30 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
   });
 
   return (
-    <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-gray-900">Apostilamentos</h3>
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <h3 className="text-sm font-semibold text-foreground">Apostilamentos</h3>
 
       <form onSubmit={(e) => { e.preventDefault(); create.mutate({ contractId, kind, description: description || undefined, newValue: newValue ? Number(newValue) : undefined, newManager: newManager || undefined, newInspector: newInspector || undefined }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {KINDS.map((k) => (
-            <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${kind === k ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-gray-200 text-gray-600 hover:border-indigo-300"}`}>{APOSTILLE_KIND_LABELS[k]}</button>
+            <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${kind === k ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{APOSTILLE_KIND_LABELS[k]}</button>
           ))}
         </div>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Descrição do apostilamento…" className="w-full resize-y rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-        {kind === "reajuste" && <input type="number" step="0.01" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Novo valor (R$)" className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
-        {kind === "gestor" && <input value={newManager} onChange={(e) => setNewManager(e.target.value)} placeholder="Novo gestor" className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
-        {kind === "fiscal" && <input value={newInspector} onChange={(e) => setNewInspector(e.target.value)} placeholder="Novo fiscal" className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
-        <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Descrição do apostilamento…" className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
+        {kind === "reajuste" && <input type="number" step="0.01" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Novo valor (R$)" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
+        {kind === "gestor" && <input value={newManager} onChange={(e) => setNewManager(e.target.value)} placeholder="Novo gestor" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
+        {kind === "fiscal" && <input value={newInspector} onChange={(e) => setNewInspector(e.target.value)} placeholder="Novo fiscal" className="w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
+        <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Registrar apostilamento + minuta"}
         </button>
       </form>
 
       {apostilles.length > 0 && (
-        <ul className="divide-y divide-gray-50">
+        <ul className="divide-y divide-border">
           {apostilles.map((a) => (
             <li key={a.id} className="py-2 text-sm">
-              <p className="font-medium text-gray-800">Apostilamento {a.sequence} — {APOSTILLE_KIND_LABELS[a.kind] ?? a.kind}</p>
-              <p className="line-clamp-1 text-xs text-gray-500">{a.description}</p>
+              <p className="font-medium text-foreground">Apostilamento {a.sequence} — {APOSTILLE_KIND_LABELS[a.kind] ?? a.kind}</p>
+              <p className="line-clamp-1 text-xs text-muted-foreground">{a.description}</p>
             </li>
           ))}
         </ul>

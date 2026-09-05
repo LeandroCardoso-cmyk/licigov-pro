@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Edit, Loader2, Settings, Eye } from "lucide-react";
+import { Edit, Loader2, Settings, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { ChecklistEditorDialog } from "./AdminPlatforms_ChecklistEditor";
@@ -58,9 +58,6 @@ export default function AdminPlatforms() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
               <div>
                 <h1 className="text-2xl font-bold">Gerenciar Plataformas</h1>
                 <p className="text-sm text-muted-foreground">Edite instruções e checklists das plataformas de pregão</p>
