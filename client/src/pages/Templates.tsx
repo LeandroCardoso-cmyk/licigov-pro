@@ -2,23 +2,24 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { Plus, FileText, Loader2 } from "lucide-react";
+import { Plus, FileText, Loader2, LibraryBig } from "lucide-react";
+import { PageShell } from "@/components/ui/PageHeader";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TemplateFormDialog } from "@/components/templates/TemplateFormDialog";
-import { TemplateCard } from "@/components/templates/TemplateCard";
+import { TemplateCard, type Template } from "@/components/templates/TemplateCard";
 
 export default function Templates() {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<any>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
-
   const utils = trpc.useUtils();
   const { data: templates = [], isLoading } = trpc.templates.list.useQuery();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
 
   const deleteMutation = trpc.templates.delete.useMutation({
     onSuccess: () => {
@@ -33,7 +34,7 @@ export default function Templates() {
     onSuccess: () => utils.templates.list.invalidate(),
   });
 
-  const handleEdit = (template: any) => {
+  const handleEdit = (template: Template) => {
     setEditingTemplate(template);
     setDialogOpen(true);
   };
@@ -43,22 +44,22 @@ export default function Templates() {
     setDeleteDialogOpen(true);
   };
 
-  const handleToggleDefault = (template: any) => {
+  const handleToggleDefault = (template: Template) => {
     updateMutation.mutate({ id: template.id, isDefault: template.isDefault === 1 ? false : true });
   };
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Templates de Documentos</h1>
-          <p className="text-muted-foreground mt-1">Crie e gerencie templates reutilizáveis para seus documentos</p>
-        </div>
+    <PageShell
+      icon={LibraryBig}
+      breadcrumbs={[{ label: "Templates" }]}
+      title="Templates de Documentos"
+      description="Crie e gerencie templates reutilizáveis para seus documentos"
+      actions={
         <Button onClick={() => { setEditingTemplate(null); setDialogOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" />Novo Template
         </Button>
-      </div>
-
+      }
+    >
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -76,7 +77,7 @@ export default function Templates() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {templates.map((template: any) => (
+          {templates.map((template) => (
             <TemplateCard
               key={template.id}
               template={template}
@@ -115,6 +116,6 @@ export default function Templates() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

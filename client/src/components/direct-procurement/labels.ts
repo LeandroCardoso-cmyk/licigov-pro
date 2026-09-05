@@ -1,6 +1,7 @@
 /**
  * FASE 5 — Contratação Direta: rótulos e estilos compartilhados (pt-BR).
  */
+import { statusTone } from "@/components/ui/statusStyles";
 
 export const STAGE_LABELS: Record<string, string> = {
   NEW: "Nova",
@@ -70,10 +71,13 @@ export const DOC_STATUS_LABELS: Record<string, string> = {
   validado: "Validado",
 };
 
+// V1 Visual Refinement (passagem 2): status semânticos usam a linguagem CANÔNICA de
+// tons (statusTone) — mesma semântica ⇒ mesma cor entre módulos. As STAGE_CLASSES acima
+// permanecem multi-hue de propósito (identidade de ETAPA do workflow, não status).
 export const DOC_STATUS_CLASSES: Record<string, string> = {
-  pendente: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 ring-red-500/20",
-  anexado: "bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 ring-amber-500/20",
-  validado: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 ring-green-500/20",
+  pendente: `${statusTone("danger")} ring-red-500/20`,
+  anexado: `${statusTone("warning")} ring-amber-500/20`,
+  validado: `${statusTone("success")} ring-green-500/20`,
 };
 
 export function stageLabel(code: string): string {

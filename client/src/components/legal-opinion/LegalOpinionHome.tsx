@@ -12,6 +12,7 @@ import OpinionHistory from "./OpinionHistory";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 import { stageLabel, STAGE_CLASSES } from "./labels";
 import { reasoningQueryEnabled, reasoningViewState } from "./legalOpinionQueryOrchestration";
+import { Section } from "@/components/ui/Section";
 
 /**
  * LegalOpinionHome — REAL (tRPC).
@@ -111,35 +112,50 @@ export default function LegalOpinionHome() {
                 </span>
               </div>
 
-              <RequestContextPanel
-                documents={ctx?.documents ?? []}
-                reasoning={reasoning?.reasoning}
-                explainability={reasoning?.explainability}
-                risks={reasoning?.risks ?? []}
-                recommendations={reasoning?.recommendations ?? []}
-                snapshots={ctx?.snapshots ?? []}
-                confidence={reasoning?.confidence ?? 0}
-                reasoningState={reasoningState}
-                onRetryReasoning={() => { void refetchReasoning(); }}
-              />
+              {/* Agrupamento institucional de NÍVEL 1 (V1 Visual Refinement, passagem 2):
+                  contexto/apoio → elaboração → documentos oficiais → rastreabilidade.
+                  Mesmos componentes/props; só hierarquia de seções. */}
+              <Section title="Contexto e apoio à decisão" description="Documentos referenciados e camada cognitiva supervisionada.">
+                <RequestContextPanel
+                  documents={ctx?.documents ?? []}
+                  reasoning={reasoning?.reasoning}
+                  explainability={reasoning?.explainability}
+                  risks={reasoning?.risks ?? []}
+                  recommendations={reasoning?.recommendations ?? []}
+                  snapshots={ctx?.snapshots ?? []}
+                  confidence={reasoning?.confidence ?? 0}
+                  reasoningState={reasoningState}
+                  onRetryReasoning={() => { void refetchReasoning(); }}
+                />
+              </Section>
 
-              <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
-              {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
-              <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
+              <Section title="Elaboração e assinatura" description="Redija o parecer, revise a versão e assine.">
+                <div className="space-y-5">
+                  <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
+                  {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
+                  <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
+                </div>
+              </Section>
 
               {/* V1 — superfície de Documentos Oficiais do Parecer. A exportação institucional
                   (DOCX/PDF) só é oferecida para a versão ASSINADA/emitido (policy server-owned:
                   parecer_juridico → "emitido"); rascunhos aparecem como histórico/preview mas não
                   exportam como parecer oficial. */}
-              <OfficialDocumentPanel
-                businessDomain="parecer_juridico"
-                origin={workspaceId}
-                requireStatusForExport="emitido"
-                title="Documentos Oficiais do Parecer (DOCX/PDF)"
-              />
+              <Section title="Documentos oficiais" description="Artefatos institucionais do parecer (DOCX/PDF) — só a versão emitida.">
+                <OfficialDocumentPanel
+                  businessDomain="parecer_juridico"
+                  origin={workspaceId}
+                  requireStatusForExport="emitido"
+                  title="Documentos Oficiais do Parecer (DOCX/PDF)"
+                />
+              </Section>
 
-              <TimelinePanel timeline={ctx?.timeline ?? []} />
-              <OpinionHistory history={ctx?.history ?? []} versions={ctx?.versions ?? []} />
+              <Section title="Rastreabilidade" description="Linha do tempo, histórico e versões — auditável.">
+                <div className="space-y-5">
+                  <TimelinePanel timeline={ctx?.timeline ?? []} />
+                  <OpinionHistory history={ctx?.history ?? []} versions={ctx?.versions ?? []} />
+                </div>
+              </Section>
             </>
           )}
         </div>
