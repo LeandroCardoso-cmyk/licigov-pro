@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Inbox } from "lucide-react";
 import { trpc } from "../../lib/trpc";
 import InstitutionalInbox from "./InstitutionalInbox";
 import LawyerDashboard from "./LawyerDashboard";
@@ -12,6 +12,7 @@ import OpinionHistory from "./OpinionHistory";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
 import { stageLabel, STAGE_CLASSES } from "./labels";
 import { reasoningQueryEnabled, reasoningViewState } from "./legalOpinionQueryOrchestration";
+import { Section } from "@/components/ui/Section";
 
 /**
  * LegalOpinionHome — REAL (tRPC).
@@ -56,18 +57,17 @@ export default function LegalOpinionHome() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-foreground">Parecer Jurídico</h1>
-          <p className="text-xs text-muted-foreground">Camada institucional operacional do jurídico — trabalho exclusivo na Caixa Institucional.</p>
-        </div>
+      {/* Micro-Polish: sem título duplicado — a identidade "Parecer Jurídico" já vem do
+          PageHeader canônico. Aqui fica apenas o contexto operacional (alternador Caixa/Painel). */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-medium text-muted-foreground">Alterne entre a Caixa Institucional e o Painel do Procurador.</p>
         <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
           <button type="button" onClick={() => setTab("inbox")}
             className={`rounded-md px-3 py-1 transition ${tab === "inbox" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Caixa</button>
           <button type="button" onClick={() => setTab("dashboard")}
             className={`rounded-md px-3 py-1 transition ${tab === "dashboard" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Painel</button>
         </div>
-      </header>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Coluna esquerda: caixa / painel */}
@@ -80,8 +80,17 @@ export default function LegalOpinionHome() {
         {/* Coluna direita: trabalho sobre o parecer selecionado */}
         <div className="space-y-5 lg:col-span-3">
           {!enabled ? (
-            <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
-              Selecione uma solicitação na Caixa Institucional para começar.
+            /* Micro-Polish: empty state mais integrado (recua com bg-muted/30 + borda
+               tracejada suave, alinhamento vertical e altura moderada) — deixa de ser um
+               bloco oco dominante que competia com a Caixa à esquerda, sem virar card pesado. */
+            <div className="flex min-h-[13rem] flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/30 px-6 py-8 text-center">
+              <span className="mb-3 inline-flex rounded-full bg-muted p-2.5 text-muted-foreground">
+                <Inbox className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-medium text-foreground">Selecione uma solicitação</p>
+              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                Escolha um item na Caixa Institucional ao lado para carregar o contexto e começar a elaborar o parecer.
+              </p>
             </div>
           ) : isLoading ? (
             <div className="space-y-3">
@@ -111,35 +120,50 @@ export default function LegalOpinionHome() {
                 </span>
               </div>
 
-              <RequestContextPanel
-                documents={ctx?.documents ?? []}
-                reasoning={reasoning?.reasoning}
-                explainability={reasoning?.explainability}
-                risks={reasoning?.risks ?? []}
-                recommendations={reasoning?.recommendations ?? []}
-                snapshots={ctx?.snapshots ?? []}
-                confidence={reasoning?.confidence ?? 0}
-                reasoningState={reasoningState}
-                onRetryReasoning={() => { void refetchReasoning(); }}
-              />
+              {/* Agrupamento institucional de NÍVEL 1 (V1 Visual Refinement, passagem 2):
+                  contexto/apoio → elaboração → documentos oficiais → rastreabilidade.
+                  Mesmos componentes/props; só hierarquia de seções. */}
+              <Section title="Contexto e apoio à decisão" description="Documentos referenciados e camada cognitiva supervisionada.">
+                <RequestContextPanel
+                  documents={ctx?.documents ?? []}
+                  reasoning={reasoning?.reasoning}
+                  explainability={reasoning?.explainability}
+                  risks={reasoning?.risks ?? []}
+                  recommendations={reasoning?.recommendations ?? []}
+                  snapshots={ctx?.snapshots ?? []}
+                  confidence={reasoning?.confidence ?? 0}
+                  reasoningState={reasoningState}
+                  onRetryReasoning={() => { void refetchReasoning(); }}
+                />
+              </Section>
 
-              <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
-              {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
-              <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
+              <Section title="Elaboração e assinatura" description="Redija o parecer, revise a versão e assine.">
+                <div className="space-y-5">
+                  <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
+                  {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
+                  <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
+                </div>
+              </Section>
 
               {/* V1 — superfície de Documentos Oficiais do Parecer. A exportação institucional
                   (DOCX/PDF) só é oferecida para a versão ASSINADA/emitido (policy server-owned:
                   parecer_juridico → "emitido"); rascunhos aparecem como histórico/preview mas não
                   exportam como parecer oficial. */}
-              <OfficialDocumentPanel
-                businessDomain="parecer_juridico"
-                origin={workspaceId}
-                requireStatusForExport="emitido"
-                title="Documentos Oficiais do Parecer (DOCX/PDF)"
-              />
+              <Section title="Documentos oficiais" description="Artefatos institucionais do parecer (DOCX/PDF) — só a versão emitida.">
+                <OfficialDocumentPanel
+                  businessDomain="parecer_juridico"
+                  origin={workspaceId}
+                  requireStatusForExport="emitido"
+                  title="Documentos Oficiais do Parecer (DOCX/PDF)"
+                />
+              </Section>
 
-              <TimelinePanel timeline={ctx?.timeline ?? []} />
-              <OpinionHistory history={ctx?.history ?? []} versions={ctx?.versions ?? []} />
+              <Section title="Rastreabilidade" description="Linha do tempo, histórico e versões — auditável.">
+                <div className="space-y-5">
+                  <TimelinePanel timeline={ctx?.timeline ?? []} />
+                  <OpinionHistory history={ctx?.history ?? []} versions={ctx?.versions ?? []} />
+                </div>
+              </Section>
             </>
           )}
         </div>

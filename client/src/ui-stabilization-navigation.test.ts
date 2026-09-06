@@ -73,13 +73,22 @@ describe("V1 UI/UX · afordância de Voltar em workspaces/subfluxos", () => {
     expect(src).toMatch(/onClick=\{\(\)\s*=>\s*setWorkspaceId\(""\)\}/);
   });
 
-  it("Contratação Direta: raiz com BackToDashboard e detalhe com 'Voltar aos processos'", () => {
-    expect(read("client/src/pages/DirectProcurement.tsx")).toMatch(/BackToDashboard/);
+  it("PageHeader canônico provê 'Voltar' (BackToDashboard) quando showBack", () => {
+    // V1 Visual Refinement: as páginas de módulo usam PageShell/PageHeader; a
+    // afordância de voltar é canônica no PageHeader (showBack), não mais inline por página.
+    expect(read("client/src/components/ui/PageHeader.tsx")).toMatch(/BackToDashboard/);
+  });
+
+  it("Contratação Direta: retorno contextual 'Voltar aos processos' sem 'Voltar' genérico redundante", () => {
+    // Final Micro-Polish: a raiz NÃO força `showBack` — o retorno ao dashboard fica no
+    // breadcrumb (Home) e o retorno intra-módulo é o contextual 'Voltar aos processos',
+    // evitando duas afordâncias genéricas de Voltar competindo no detalhe.
+    expect(read("client/src/pages/DirectProcurement.tsx")).not.toMatch(/showBack/);
     expect(read("client/src/components/direct-procurement/DirectProcurementHome.tsx")).toMatch(/Voltar aos processos/);
   });
 
-  it("Contratos: raiz com BackToDashboard e workspace com 'Voltar aos contratos'", () => {
-    expect(read("client/src/pages/ContratosWorkspace.tsx")).toMatch(/BackToDashboard/);
+  it("Contratos: raiz com Voltar (showBack) e workspace com 'Voltar aos contratos'", () => {
+    expect(read("client/src/pages/ContratosWorkspace.tsx")).toMatch(/showBack/);
     expect(read("client/src/components/contract-workspace/ContractWorkspace.tsx")).toMatch(/Voltar aos contratos/);
   });
 

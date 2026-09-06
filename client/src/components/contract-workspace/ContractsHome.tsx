@@ -31,17 +31,16 @@ export default function ContractsHome() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-foreground">Contratos e Instrumentos Contratuais</h1>
-          <p className="text-xs text-muted-foreground">Geração inteligente de documentos contratuais — foco documental, nunca ERP.</p>
-        </div>
+      {/* Micro-Polish: sem título duplicado — "Contratos" já é fornecido pelo PageHeader
+          canônico. Aqui fica apenas o contexto operacional (posicionamento + alternador). */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-medium text-muted-foreground">Gere e gerencie contratos, aditivos, apostilamentos e rescisões — foco documental, nunca ERP.</p>
         <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
           <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Todos</button>
           <button type="button" onClick={() => setView("imported")} className={`rounded-md px-3 py-1 transition ${view === "imported" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Importados</button>
           <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Novo</button>
         </div>
-      </header>
+      </div>
 
       {view === "new" && <NewContractWizard onCreated={open} />}
       {view === "imported" && <ImportedContracts onOpen={open} />}

@@ -10,7 +10,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   edital: "Edital",
 };
 
-interface Template {
+export interface Template {
   id: number;
   name: string;
   description?: string | null;

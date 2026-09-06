@@ -1,6 +1,6 @@
 import React from "react";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { BackToDashboard } from "@/components/BackToDashboard";
+import { HelpCircle } from "lucide-react";
+import { PageShell } from "@/components/ui/PageHeader";
 import TirarDuvidasHome from "@/components/tirar-duvidas/TirarDuvidasHome";
 
 /**
@@ -9,25 +9,14 @@ import TirarDuvidasHome from "@/components/tirar-duvidas/TirarDuvidasHome";
  */
 export default function TirarDuvidas() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="container py-6">
-          <div className="flex items-center gap-4">
-            <BackToDashboard variant="ghost" />
-            <div>
-              <Breadcrumbs items={[{ label: "Tirar Dúvidas" }]} className="mb-2" />
-              <h1 className="text-3xl font-bold">Tirar Dúvidas</h1>
-              <p className="text-muted-foreground mt-1">
-                Faça perguntas sobre licitações públicas e receba orientações fundamentadas na
-                legislação, nos Tribunais de Contas e nas normas do seu município.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="container py-6">
-        <TirarDuvidasHome />
-      </div>
-    </div>
+    <PageShell
+      icon={HelpCircle}
+      breadcrumbs={[{ label: "Tirar Dúvidas" }]}
+      title="Tirar Dúvidas"
+      description="Faça perguntas sobre licitações públicas e receba orientações fundamentadas na legislação, nos Tribunais de Contas e nas normas do seu município."
+      showBack
+    >
+      <TirarDuvidasHome />
+    </PageShell>
   );
 }

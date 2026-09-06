@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,13 +98,12 @@ export default function AdminOrganizacoes() {
 
   return (
     <div className="bg-background">
-      <div className="border-b bg-card">
-        <div className="container py-6">
-          <Breadcrumbs items={[{ label: "Organizações" }]} className="mb-2" />
-          <h1 className="text-3xl font-bold text-foreground">Organizações</h1>
-          <p className="text-muted-foreground mt-1">Onboarding de novos órgãos e visão geral de tenants (admin de plataforma).</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Building2}
+        breadcrumbs={[{ label: "Organizações" }]}
+        title="Organizações"
+        description="Onboarding de novos órgãos e visão geral de tenants (admin de plataforma)."
+      />
 
       <div className="container py-6 space-y-8">
         <Card>
