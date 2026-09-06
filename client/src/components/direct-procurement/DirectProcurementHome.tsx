@@ -47,16 +47,15 @@ export default function DirectProcurementHome() {
   if (!enabled) {
     return (
       <div className="space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Contratação Direta</h1>
-            <p className="text-xs text-muted-foreground">Dispensa e Inexigibilidade — Workspace próprio, fluxo adaptativo.</p>
-          </div>
+        {/* Micro-Polish: sem título duplicado — "Contratação Direta" já vem do PageHeader
+            canônico. Aqui fica só o contexto operacional (posicionamento + alternador). */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-medium text-muted-foreground">Dispensa e Inexigibilidade — workspace próprio, fluxo adaptativo.</p>
           <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
             <button type="button" onClick={() => setView("list")} className={`rounded-md px-3 py-1 transition ${view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Processos</button>
             <button type="button" onClick={() => setView("new")} className={`rounded-md px-3 py-1 transition ${view === "new" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>Novo</button>
           </div>
-        </header>
+        </div>
         {view === "new" ? <NewDirectProcurementWizard onCreated={open} /> : <DirectProcurementOverview onOpen={setWorkspaceId} />}
       </div>
     );

@@ -79,8 +79,11 @@ describe("V1 UI/UX · afordância de Voltar em workspaces/subfluxos", () => {
     expect(read("client/src/components/ui/PageHeader.tsx")).toMatch(/BackToDashboard/);
   });
 
-  it("Contratação Direta: raiz com Voltar (showBack) e detalhe com 'Voltar aos processos'", () => {
-    expect(read("client/src/pages/DirectProcurement.tsx")).toMatch(/showBack/);
+  it("Contratação Direta: retorno contextual 'Voltar aos processos' sem 'Voltar' genérico redundante", () => {
+    // Final Micro-Polish: a raiz NÃO força `showBack` — o retorno ao dashboard fica no
+    // breadcrumb (Home) e o retorno intra-módulo é o contextual 'Voltar aos processos',
+    // evitando duas afordâncias genéricas de Voltar competindo no detalhe.
+    expect(read("client/src/pages/DirectProcurement.tsx")).not.toMatch(/showBack/);
     expect(read("client/src/components/direct-procurement/DirectProcurementHome.tsx")).toMatch(/Voltar aos processos/);
   });
 
