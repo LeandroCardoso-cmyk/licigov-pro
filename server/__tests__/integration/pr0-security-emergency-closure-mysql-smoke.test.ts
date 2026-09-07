@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { resetRateLimit } from "../../services/rateLimiter";
 import { main as bootstrapAdmin, ConfigError } from "../../../scripts/bootstrap-admin";
+import { hashPassword, verifyPassword } from "../../services/passwordSecurity";
 
 const DB = process.env.DATABASE_URL;
 const ORG_A = 950101;
@@ -330,15 +331,21 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
       EMAIL: process.env.ADMIN_BOOTSTRAP_EMAIL,
       PASSWORD: process.env.ADMIN_BOOTSTRAP_PASSWORD,
       NAME: process.env.ADMIN_BOOTSTRAP_NAME,
+      ALLOW_PROMOTE: process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE,
     };
     let bootstrapEmail: string;
+    const extraUserIds: number[] = [];
 
     afterAll(async () => {
       process.env.ADMIN_BOOTSTRAP_CONFIRM = ORIGINAL_ENV.CONFIRM;
       process.env.ADMIN_BOOTSTRAP_EMAIL = ORIGINAL_ENV.EMAIL;
       process.env.ADMIN_BOOTSTRAP_PASSWORD = ORIGINAL_ENV.PASSWORD;
       process.env.ADMIN_BOOTSTRAP_NAME = ORIGINAL_ENV.NAME;
+      process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE = ORIGINAL_ENV.ALLOW_PROMOTE;
       await conn.execute(`DELETE FROM users WHERE email = ?`, [bootstrapEmail]).catch(() => {});
+      if (extraUserIds.length > 0) {
+        await conn.execute(`DELETE FROM users WHERE id IN (${extraUserIds.map(() => "?").join(",")})`, extraUserIds).catch(() => {});
+      }
     });
 
     it("recusa sem ADMIN_BOOTSTRAP_CONFIRM=yes", async () => {
@@ -371,9 +378,10 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
       await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
     });
 
-    it("cria o admin, e reexecutar é idempotente (não duplica nem rebaixa)", async () => {
+    it("cria o admin, e reexecutar quando já é admin permanece idempotente (não duplica nem rebaixa)", async () => {
       bootstrapEmail = `bootstrap-${stamp}@teste.local`;
       process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
+      delete process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE;
       process.env.ADMIN_BOOTSTRAP_EMAIL = bootstrapEmail;
       process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
 
@@ -391,28 +399,91 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
       expect((rows[0] as { cnt: number }).cnt).toBe(1);
     }, 30000);
 
-    it("promove usuário existente não-admin (sem duplicar)", async () => {
-      const existingEmail = `bootstrap-promote-${stamp}@teste.local`;
-      const [r] = await conn.execute<mysql.ResultSetHeader>(
-        `INSERT INTO users (openId, name, email, role) VALUES (?, ?, ?, 'user')`,
-        [`bootstrap-promote-${stamp}`, "Usuário a promover", existingEmail]
-      );
+    // ── promoção de conta EXISTENTE não-admin (correção final) ──────────────────
+    describe("promoção de conta existente não-admin", () => {
+      const OLD_PASSWORD = "SenhaAntigaFraca1!";
+      const NEW_PASSWORD = "Senha-Nova-Forte-456#";
+      let existingEmail: string;
+      let existingUserId: number;
+      let oldPasswordHash: string;
 
-      process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
-      process.env.ADMIN_BOOTSTRAP_EMAIL = existingEmail;
-      process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
+      beforeAll(async () => {
+        existingEmail = `bootstrap-promote-${stamp}@teste.local`;
+        oldPasswordHash = await hashPassword(OLD_PASSWORD);
+        const [r] = await conn.execute<mysql.ResultSetHeader>(
+          `INSERT INTO users (openId, name, email, role, passwordHash, tokenVersion) VALUES (?, ?, ?, 'user', ?, 0)`,
+          [`bootstrap-promote-${stamp}`, "Usuário a promover", existingEmail, oldPasswordHash]
+        );
+        existingUserId = r.insertId;
+        extraUserIds.push(existingUserId);
+      });
 
-      const result = await bootstrapAdmin();
-      expect(result.outcome).toBe("promoted");
-      expect(result.userId).toBe(r.insertId);
+      afterAll(() => {
+        delete process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE;
+      });
 
-      const [rows] = await conn.execute<mysql.RowDataPacket[]>(
-        `SELECT role FROM users WHERE id = ?`,
-        [r.insertId]
-      );
-      expect(rows[0].role).toBe("admin");
+      it("sem ADMIN_BOOTSTRAP_ALLOW_PROMOTE → recusado (ConfigError) e a conta continua 'user'", async () => {
+        process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
+        delete process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE;
+        process.env.ADMIN_BOOTSTRAP_EMAIL = existingEmail;
+        process.env.ADMIN_BOOTSTRAP_PASSWORD = NEW_PASSWORD;
 
-      await conn.execute(`DELETE FROM users WHERE id = ?`, [r.insertId]);
-    }, 30000);
+        await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
+
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+          `SELECT role, passwordHash, tokenVersion FROM users WHERE id = ?`,
+          [existingUserId]
+        );
+        expect(rows[0].role).toBe("user");
+        expect(rows[0].passwordHash).toBe(oldPasswordHash);
+        expect(rows[0].tokenVersion).toBe(0);
+      }, 30000);
+
+      it("com ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes + senha fraca → recusado (ConfigError)", async () => {
+        process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
+        process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE = "yes";
+        process.env.ADMIN_BOOTSTRAP_EMAIL = existingEmail;
+        process.env.ADMIN_BOOTSTRAP_PASSWORD = "fraca123";
+        await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
+
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+          `SELECT role FROM users WHERE id = ?`,
+          [existingUserId]
+        );
+        expect(rows[0].role).toBe("user");
+      }, 30000);
+
+      it("com ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes + senha forte → promovido, senha trocada, sessão revogada", async () => {
+        process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
+        process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE = "yes";
+        process.env.ADMIN_BOOTSTRAP_EMAIL = existingEmail;
+        process.env.ADMIN_BOOTSTRAP_PASSWORD = NEW_PASSWORD;
+
+        const result = await bootstrapAdmin();
+        expect(result.outcome).toBe("promoted");
+        expect(result.userId).toBe(existingUserId);
+
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+          `SELECT role, passwordHash, tokenVersion FROM users WHERE id = ?`,
+          [existingUserId]
+        );
+        const row = rows[0] as { role: string; passwordHash: string; tokenVersion: number };
+
+        // role realmente virou admin.
+        expect(row.role).toBe("admin");
+
+        // promoção altera passwordHash — não é mais o hash antigo.
+        expect(row.passwordHash).not.toBe(oldPasswordHash);
+
+        // nova senha (deliberadamente fornecida) autentica contra o hash gravado.
+        await expect(verifyPassword(NEW_PASSWORD, row.passwordHash)).resolves.toBe(true);
+
+        // a senha antiga (fixture conhecida) deixa de autenticar.
+        await expect(verifyPassword(OLD_PASSWORD, row.passwordHash)).resolves.toBe(false);
+
+        // tokenVersion incrementa — revoga qualquer sessão ativa da conta.
+        expect(row.tokenVersion).toBe(1);
+      }, 30000);
+    });
   });
 });

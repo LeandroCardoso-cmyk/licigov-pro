@@ -253,3 +253,29 @@ describe("PR 0 (correção final) — política de senha do bootstrap-admin.ts",
     expect(stripComments(BOOTSTRAP_ADMIN_CLI)).not.toMatch(/password\.length\s*<\s*(MIN_PASSWORD_LENGTH|8)/);
   });
 });
+
+describe("PR 0 (2ª correção final) — bootstrap-admin.ts: promoção de conta existente exige confirmação explícita", () => {
+  it("promoção de usuário existente não-admin exige ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes (fail-closed)", () => {
+    expect(BOOTSTRAP_ADMIN_CLI).toContain("ADMIN_BOOTSTRAP_ALLOW_PROMOTE");
+    expect(BOOTSTRAP_ADMIN_CLI).toContain("ConfigError");
+  });
+
+  it("promoção deliberada troca o passwordHash e revoga sessões via bumpTokenVersion — não só a role", () => {
+    const promoteBlock = BOOTSTRAP_ADMIN_CLI.slice(
+      BOOTSTRAP_ADMIN_CLI.indexOf("if (isExistingNonAdmin) {"),
+      BOOTSTRAP_ADMIN_CLI.indexOf("} else {")
+    );
+    expect(promoteBlock).toContain("passwordHash");
+    expect(promoteBlock).toContain("bumpTokenVersion");
+    expect(promoteBlock).toMatch(/role:\s*"admin"/);
+  });
+
+  it("já-admin permanece idempotente: o caminho already_admin não entra na transação de escrita", () => {
+    const alreadyAdminBlock = BOOTSTRAP_ADMIN_CLI.slice(
+      BOOTSTRAP_ADMIN_CLI.indexOf('role === "admin") {'),
+      BOOTSTRAP_ADMIN_CLI.indexOf("isExistingNonAdmin")
+    );
+    expect(alreadyAdminBlock).toContain("already_admin");
+    expect(alreadyAdminBlock).not.toContain("db.transaction");
+  });
+});

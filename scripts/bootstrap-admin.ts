@@ -9,7 +9,6 @@
  *
  * Este comando:
  *  - NÃO é executado durante o boot do servidor — só por invocação manual explícita;
- *  - é idempotente — reexecutar com o mesmo e-mail não duplica nem rebaixa o usuário;
  *  - é fail-closed — sem as variáveis obrigatórias, encerra com erro (nenhum default
  *    inseguro, nenhum e-mail hardcoded);
  *  - NÃO associa o admin a nenhuma organização — o admin de plataforma opera
@@ -21,7 +20,19 @@
  *  - registra a própria execução em `audit_logs` (ação `promote_to_admin`) na MESMA
  *    transação da criação/promoção — se a auditoria falhar, tudo reverte (fail-closed).
  *
- * Uso:
+ * Semântica por caminho (correção de segurança — promoção deixou de ser implícita):
+ *  - E-mail inexistente → CRIA um novo usuário admin com a senha fornecida.
+ *  - E-mail já é admin → idempotente: NÃO altera senha, NÃO rebaixa, retorna `already_admin`.
+ *  - E-mail existe e NÃO é admin → NUNCA promove automaticamente (antes: o script só
+ *    alterava `role`, e a senha forte fornecida ao CLI era validada e descartada — uma
+ *    conta legada com senha fraca virava admin de plataforma mantendo essa senha fraca).
+ *    Promover exige a confirmação explícita ADICIONAL `ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes`;
+ *    sem ela, falha com `ConfigError` (fail-closed) e a conta permanece como estava. Com
+ *    ela: a senha fornecida é validada, um novo hash é gravado (substitui o hash antigo,
+ *    possivelmente fraco), `tokenVersion` é incrementado (revoga qualquer sessão ativa
+ *    daquela conta) e `role` vira `admin` — tudo na MESMA transação do audit.
+ *
+ * Uso (criação, ou já-admin idempotente):
  *   ADMIN_BOOTSTRAP_CONFIRM=yes \
  *   ADMIN_BOOTSTRAP_EMAIL=admin@seu-orgao.gov.br \
  *   ADMIN_BOOTSTRAP_PASSWORD="Senha-Forte-123!" \
@@ -29,9 +40,17 @@
  *   DATABASE_URL="mysql://user:senha@host:3306/db" \
  *   tsx scripts/bootstrap-admin.ts
  *
- * `ADMIN_BOOTSTRAP_NAME` é opcional (default "Administrador"). Todas as demais são
- * obrigatórias. `ADMIN_BOOTSTRAP_CONFIRM=yes` existe apenas para que a execução
- * nunca seja acidental (ex.: um script/CI disparando isto sem intenção).
+ * Uso (promover conta EXISTENTE não-admin — exige a confirmação adicional):
+ *   ADMIN_BOOTSTRAP_CONFIRM=yes ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes \
+ *   ADMIN_BOOTSTRAP_EMAIL=usuario-existente@seu-orgao.gov.br \
+ *   ADMIN_BOOTSTRAP_PASSWORD="Senha-Forte-Nova-123!" \
+ *   DATABASE_URL="mysql://user:senha@host:3306/db" \
+ *   tsx scripts/bootstrap-admin.ts
+ *
+ * `ADMIN_BOOTSTRAP_NAME` é opcional (default "Administrador", só usado na criação).
+ * `ADMIN_BOOTSTRAP_ALLOW_PROMOTE` só é necessária ao promover uma conta já existente.
+ * Todas as demais são obrigatórias. `ADMIN_BOOTSTRAP_CONFIRM=yes` existe apenas para
+ * que a execução nunca seja acidental (ex.: um script/CI disparando isto sem intenção).
  *
  * Exit codes (execução direta): 0 = sucesso (criado, promovido, ou já era admin);
  * 1 = configuração inválida/ausente; 2 = erro de execução (banco indisponível etc.).
@@ -47,6 +66,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
 import { users, auditLogs } from "../drizzle/schema";
 import { hashPassword, validatePasswordStrength } from "../server/services/passwordSecurity";
+import { bumpTokenVersion } from "../server/db/users";
 
 export class ConfigError extends Error {}
 
@@ -103,23 +123,44 @@ export async function main(): Promise<BootstrapResult> {
       .limit(1);
 
     if (existing.length > 0 && existing[0].role === "admin") {
+      // Idempotente: NÃO altera senha, NÃO rebaixa — apenas confirma o estado atual.
       console.info(`[bootstrap-admin] Usuário ${email} já é admin de plataforma (id=${existing[0].id}). Nenhuma alteração.`);
       return { outcome: "already_admin", userId: existing[0].id, email };
     }
 
+    // Correção de segurança: uma conta EXISTENTE não-admin nunca é promovida
+    // automaticamente. Sem isso, uma conta legada com senha fraca/desconhecida
+    // virava admin de plataforma mantendo essa senha — a senha forte fornecida ao
+    // CLI era apenas validada e descartada. Promover exige confirmação adicional
+    // e deliberada, distinta de ADMIN_BOOTSTRAP_CONFIRM (que só autoriza o comando
+    // rodar, não autoriza elevar privilégio de uma conta que já existe).
+    const isExistingNonAdmin = existing.length > 0;
+    if (isExistingNonAdmin && process.env.ADMIN_BOOTSTRAP_ALLOW_PROMOTE?.trim().toLowerCase() !== "yes") {
+      throw new ConfigError(
+        `Usuário ${email} já existe e NÃO é admin de plataforma — promoção automática bloqueada. ` +
+        "Defina ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes explicitamente para promover esta conta existente."
+      );
+    }
+
     // Criação/promoção + auditoria são ATÔMICAS: se o registro em `audit_logs` falhar,
-    // a transação inteira reverte — a criação/promoção do admin NUNCA fica sem o rastro
-    // de auditoria correspondente (fail-closed).
+    // a transação inteira reverte (role, passwordHash e tokenVersion incluídos) — a
+    // criação/promoção do admin NUNCA fica sem o rastro de auditoria correspondente
+    // (fail-closed).
     let targetUserId!: number;
     let outcome!: BootstrapOutcome;
 
     await db.transaction(async tx => {
-      if (existing.length > 0) {
+      const passwordHash = await hashPassword(password);
+
+      if (isExistingNonAdmin) {
         targetUserId = existing[0].id;
-        await tx.update(users).set({ role: "admin" }).where(eq(users.id, targetUserId));
+        // Promoção deliberada (ADMIN_BOOTSTRAP_ALLOW_PROMOTE=yes): grava a senha forte
+        // DELIBERADAMENTE fornecida (substitui o hash antigo, possivelmente fraco) e
+        // revoga qualquer sessão ativa dessa conta incrementando `tokenVersion`.
+        await tx.update(users).set({ role: "admin", passwordHash }).where(eq(users.id, targetUserId));
+        await bumpTokenVersion(targetUserId, tx);
         outcome = "promoted";
       } else {
-        const passwordHash = await hashPassword(password);
         const result = await tx.insert(users).values({
           openId: `platform-admin-${Date.now()}`,
           email,
