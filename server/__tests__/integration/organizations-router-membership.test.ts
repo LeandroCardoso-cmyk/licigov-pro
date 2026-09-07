@@ -23,7 +23,19 @@ vi.mock("../../db/organizations", () => ({
   getMembersWithUserInfo: vi.fn(),
   getAllOrganizations: vi.fn(),
 }));
-vi.mock("../../db", () => ({ getUserByEmail: vi.fn() }));
+vi.mock("../../db", () => ({
+  getUserByEmail: vi.fn(),
+  // PR 0 (Security Emergency Closure): resolveTenant (server/_core/trpc.ts) agora valida
+  // a organização do admin de plataforma contra `db.getOrganizationById` e audita o
+  // acesso via `db.createAuditLog` — ambos precisam existir neste mock do barrel `../db`
+  // (que substitui o módulo inteiro), senão toda chamada tenantProcedure/orgRoleProcedure
+  // com ADMIN_USER quebra com "db.getOrganizationById is not a function".
+  getOrganizationById: vi.fn().mockResolvedValue({
+    id: 1, nome: "Org Teste", slug: "org-teste", cnpj: null, esfera: "municipal",
+    uf: "SP", municipio: "SP", ativo: true, createdAt: new Date(), updatedAt: new Date(),
+  }),
+  createAuditLog: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../../services/activityLogService", () => ({ logFromCtx: vi.fn() }));
 
 import {
@@ -54,6 +66,9 @@ function member(userId: number, role: "owner" | "admin" | "manager" | "operator"
 
 function caller() {
   const ctx = makeContext(ADMIN_USER as never);
+  // PR 0 (Security Emergency Closure): resolveTenant não cai mais em org 1 por default —
+  // o admin de plataforma precisa informar X-Organization-Id explicitamente.
+  (ctx.req as { headers: Record<string, string> }).headers["x-organization-id"] = "1";
   return organizationsRouter.createCaller(ctx as never);
 }
 

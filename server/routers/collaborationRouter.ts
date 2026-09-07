@@ -1,4 +1,5 @@
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 
@@ -115,16 +116,39 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  listMembers: protectedProcedure
+  // PR 0 (Security Emergency Closure): `listMembers` era `protectedProcedure` sem
+  // checagem de tenant/autorização — qualquer usuário autenticado podia enumerar
+  // `processId` e obter nome + e-mail de membros de processos de QUALQUER organização.
+  // Corrigido: processo resolvido dentro do tenant do chamador (`getProcessByIdForOrganization`,
+  // já usado como padrão tenant-scoped em `server/db/processes.ts`), e o chamador precisa ter
+  // autorização legítima naquele processo (owner ou membro). Cross-tenant / sem processo /
+  // sem autorização retornam o MESMO `NOT_FOUND` (anti-enumeração, padrão já adotado no projeto).
+  listMembers: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
+      if (!process) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      }
+
+      // Admin de plataforma: o tenant já foi validado deliberadamente por resolveTenant
+      // (organização explícita + existente, ver server/_core/trpc.ts) — a capacidade
+      // institucional cross-tenant se aplica dentro da organização selecionada, sem
+      // exigir também ser o ownerId específico do processo.
+      const isPlatformAdmin = ctx.user.role === "admin";
+      const isOwner = process.ownerId === ctx.user.id;
+      const currentMember = isOwner || isPlatformAdmin ? undefined : await db.getProcessMember(input.processId, ctx.user.id);
+      if (!isOwner && !isPlatformAdmin && !currentMember) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      }
+
       return await db.getProcessMembers(input.processId);
     }),
 
-  checkPermission: protectedProcedure
+  checkPermission: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.processId);
+      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
       if (!process) {
         return { permission: null, isOwner: false };
       }

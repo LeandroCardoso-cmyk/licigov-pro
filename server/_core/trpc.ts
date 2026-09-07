@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import type { OrgRole } from "../../drizzle/schema";
 import { resolveTenantForUser } from "../services/tenantService";
+import * as db from "../db";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -43,20 +44,71 @@ export const adminProcedure = t.procedure.use(
 
 // ─── tenantProcedure ────────────────────────────────────────────────────────
 // Resolve o organizationId + papel do usuário na organização.
-// Admins de plataforma passam via header X-Organization-Id (qualquer org).
+// Admins de plataforma passam via header X-Organization-Id (qualquer org existente,
+// mas SEMPRE explícita e validada — nunca um default silencioso, ver PR 0).
 // Usuários normais: resolvido pelo tenantService (único membership ou header).
 
+/**
+ * PR 0 (Security Emergency Closure) — parser estrito do X-Organization-Id para o
+ * contexto de admin de plataforma. Antes: `orgIdHeader ? parseInt(...) : 1` — sem
+ * o header, o admin caía silenciosamente na organização 1; com um header inválido
+ * (ex.: "abc"), `parseInt` produzia `NaN` e seguia adiante mesmo assim. Nenhum dos
+ * dois casos é aceitável para um acesso cross-tenant institucional: a organização
+ * precisa ser SEMPRE informada e válida. Aceita apenas uma sequência de dígitos
+ * representando um inteiro positivo — rejeita ausência, "abc", "0", negativo,
+ * ponto flutuante e notação científica.
+ */
+function parsePlatformAdminOrganizationId(headerValue: unknown): number | null {
+  if (typeof headerValue !== "string") return null;
+  const trimmed = headerValue.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 const resolveTenant = t.middleware(async opts => {
-  const { ctx, next } = opts;
+  const { ctx, next, path } = opts;
 
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
-  // Admins de plataforma têm acesso irrestrito
+  // Admins de plataforma têm acesso cross-tenant — mas o tenant precisa ser
+  // DELIBERADO: informado explicitamente e validado contra organizações reais.
   if (ctx.user.role === 'admin') {
-    const orgIdHeader = ctx.req.headers['x-organization-id'];
-    const organizationId = orgIdHeader ? parseInt(orgIdHeader as string, 10) : 1;
+    const organizationId = parsePlatformAdminOrganizationId(ctx.req.headers['x-organization-id']);
+
+    if (organizationId === null) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Cabeçalho X-Organization-Id obrigatório e deve ser um inteiro positivo para acesso de administrador de plataforma.",
+      });
+    }
+
+    const organization = await db.getOrganizationById(organizationId);
+    if (!organization) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Organização informada não existe." });
+    }
+
+    // Auditoria obrigatória do acesso cross-tenant do admin de plataforma — nunca
+    // pode quebrar o fluxo administrativo legítimo (falha grava apenas um aviso local).
+    try {
+      await db.createAuditLog({
+        adminId: ctx.user.id,
+        targetUserId: null,
+        action: "other",
+        details: JSON.stringify({
+          event: "platform_admin_tenant_access",
+          organizationId,
+          operation: path,
+          correlationId: ctx.correlationId,
+        }),
+        ipAddress: typeof ctx.req.ip === "string" ? ctx.req.ip : undefined,
+      });
+    } catch (auditError) {
+      console.warn("[trpc] Falha ao registrar auditoria de acesso cross-tenant do admin:", auditError);
+    }
 
     return next({
       ctx: {

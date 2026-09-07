@@ -50,6 +50,11 @@ describe.skipIf(!DB)("RC-SEC-PR-A — RBAC de onboarding.grantDepartmentPermissi
     platformAdmin = await insertUser("platform", "admin");
     noMember = await insertUser("nomember");
 
+    // PR 0 (Security Emergency Closure): resolveTenant agora valida a organização do admin
+    // de plataforma contra `organizations` (fail-closed).
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_A, `Org A ${ORG_A}`, `org-${ORG_A}`]);
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_B, `Org B ${ORG_B}`, `org-${ORG_B}`]);
+
     const member = async (org: number, uid: number, role: string) =>
       conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, 1)`, [org, uid, role]);
     await member(ORG_A, adminA, "admin");
@@ -63,6 +68,7 @@ describe.skipIf(!DB)("RC-SEC-PR-A — RBAC de onboarding.grantDepartmentPermissi
   afterAll(async () => {
     if (conn) {
       await conn.execute(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
+      await conn.execute(`DELETE FROM organizations WHERE id IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM users WHERE id IN (?, ?, ?, ?, ?, ?, ?)`,
         [adminA, operatorA, viewerA, targetA, memberB, platformAdmin, noMember]).catch(() => {});
       await conn.end();
@@ -72,13 +78,16 @@ describe.skipIf(!DB)("RC-SEC-PR-A — RBAC de onboarding.grantDepartmentPermissi
   async function caller(userId: number | null, role: "user" | "admin" = "user", headers: Record<string, string> = {}) {
     const { appRouter } = await import("../../routers");
     return appRouter.createCaller({
-      user: userId == null ? null : { id: userId, role, name: `U${userId}`, email: `u${userId}@teste.local` } as any,
-      req: { headers } as any,
-      res: {} as any,
+      user: userId == null ? null : { id: userId, role, name: `U${userId}`, email: `u${userId}@teste.local` },
+      req: { headers },
+      res: {},
       correlationId: "test-rbac",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
   }
-  const grant = (extra: Partial<typeof grantInput> = {}) => ({ ...grantInput, ...extra });
+  type GrantOverrides = Partial<Omit<typeof grantInput, "scope">> & {
+    scope?: "own" | "department" | "organization" | "global";
+  };
+  const grant = (extra: GrantOverrides = {}) => ({ ...grantInput, ...extra });
 
   // ── Negativos ────────────────────────────────────────────────────────────────
   it("1. anônimo → UNAUTHORIZED", async () => {
@@ -100,7 +109,7 @@ describe.skipIf(!DB)("RC-SEC-PR-A — RBAC de onboarding.grantDepartmentPermissi
 
   it("5. admin de órgão concedendo escopo global → FORBIDDEN", async () => {
     const c = await caller(adminA);
-    await expect(c.onboarding.grantDepartmentPermission(grant({ userId: targetA, scope: "global" as any }))).rejects.toThrow(/global|plataforma/i);
+    await expect(c.onboarding.grantDepartmentPermission(grant({ userId: targetA, scope: "global" }))).rejects.toThrow(/global|plataforma/i);
   }, 30000);
 
   it("6. admin de A concedendo a usuário de B → NOT_FOUND (alvo fora do tenant)", async () => {
@@ -117,14 +126,14 @@ describe.skipIf(!DB)("RC-SEC-PR-A — RBAC de onboarding.grantDepartmentPermissi
   // ── Positivos ────────────────────────────────────────────────────────────────
   it("8. admin de órgão concede permissão institucional na própria org → sucesso", async () => {
     const c = await caller(adminA);
-    const res: any = await c.onboarding.grantDepartmentPermission(grant({ userId: targetA }));
+    const res = await c.onboarding.grantDepartmentPermission(grant({ userId: targetA }));
     expect(res).toBeTruthy();
   }, 30000);
 
   it("9. admin de plataforma concede escopo global → sucesso", async () => {
     // Admin de plataforma opera escopado via header X-Organization-Id.
     const c = await caller(platformAdmin, "admin", { "x-organization-id": String(ORG_A) });
-    const res: any = await c.onboarding.grantDepartmentPermission(grant({ userId: targetA, scope: "global" as any }));
+    const res = await c.onboarding.grantDepartmentPermission(grant({ userId: targetA, scope: "global" }));
     expect(res).toBeTruthy();
   }, 30000);
 });

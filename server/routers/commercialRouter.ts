@@ -1,29 +1,53 @@
 import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
-import { generatePropostaComercial, generateMinutaContrato, generateTermoReferencia } from "../services/proposalGenerator";
-import { generateProposalZip } from "../services/proposalZipGenerator";
+import { validateCNPJ } from "../services/cnpjValidator";
+import { rateLimitMiddleware } from "../services/rateLimiter";
 import { TRPCError } from "@trpc/server";
 
 export const commercialRouter = router({
+  // PR 0 (Security Emergency Closure): fluxo de captação comercial pública da landing
+  // (`/solicitar-proposta`) — permanece PÚBLICO por design (não há tenant nesta etapa).
+  // Endurecido com: rate limit por IP, validação real de CNPJ (dígitos verificadores),
+  // limites de payload nos campos livres, e honeypot anti-bot.
   create: publicProcedure
+    .use(rateLimitMiddleware("commercial"))
     .input(
       z.object({
-        orgaoNome: z.string().min(1),
+        orgaoNome: z.string().min(1).max(200),
         orgaoCnpj: z.string().min(14).max(18),
-        orgaoEndereco: z.string().min(1),
-        orgaoCidade: z.string().min(1),
+        orgaoEndereco: z.string().min(1).max(300),
+        orgaoCidade: z.string().min(1).max(100),
         orgaoEstado: z.string().length(2),
         orgaoCep: z.string().min(8).max(9),
-        responsavelNome: z.string().min(1),
-        responsavelCargo: z.string().optional(),
-        responsavelEmail: z.string().email(),
-        responsavelTelefone: z.string().min(10),
-        planSlug: z.string(),
-        observacoes: z.string().optional(),
+        responsavelNome: z.string().min(1).max(200),
+        responsavelCargo: z.string().max(100).optional(),
+        responsavelEmail: z.string().email().max(255),
+        responsavelTelefone: z.string().min(10).max(20),
+        planSlug: z.string().max(50),
+        observacoes: z.string().max(2000).optional(),
+        // Honeypot anti-bot: campo invisível ao usuário humano no formulário real;
+        // qualquer preenchimento indica submissão automatizada. Sem `.max(0)` aqui de
+        // propósito — a rejeição acontece no corpo da mutation (abaixo), não no schema,
+        // para não dar ao chamador automatizado um erro de validação que ensine o formato
+        // esperado do campo.
+        website: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
+      if (input.website) {
+        // Honeypot preenchido — descarta silenciosamente sem revelar o motivo ao chamador.
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Solicitação inválida." });
+      }
+
+      const cnpjCheck = validateCNPJ(input.orgaoCnpj);
+      if (!cnpjCheck.isValid) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: cnpjCheck.error || "CNPJ inválido",
+        });
+      }
+
       const plan = await db.getSubscriptionPlanBySlug(input.planSlug);
       if (!plan) {
         throw new TRPCError({
@@ -32,42 +56,31 @@ export const commercialRouter = router({
         });
       }
 
+      const { website: _website, ...proposalInput } = input;
+
       const proposalId = await db.createProposalRequest({
-        ...input,
+        ...proposalInput,
         planName: plan.name,
         planPrice: plan.price,
         status: "pending",
       });
 
-      await db.updateProposalRequestStatus(proposalId, "documents_sent");
+      // PR 0: removida a transição fabricada para "documents_sent" — nenhum documento é
+      // enviado neste passo. O status avança para "documents_sent" somente via ação real
+      // de um fluxo autorizado (hoje: `updateStatus`, admin-gated).
 
       return { proposalId };
     }),
 
-  generateDocuments: publicProcedure
-    .input(z.object({ proposalId: z.number() }))
-    .mutation(async ({ input }) => {
-      const proposal = await db.getProposalRequestById(input.proposalId);
-      if (!proposal) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Proposta não encontrada",
-        });
-      }
-
-      const proposalData = {
-        ...proposal,
-        responsavelCargo: proposal.responsavelCargo ?? undefined,
-        observacoes: proposal.observacoes ?? undefined,
-      };
-      
-      // Gerar ZIP com proposta + documentos da empresa
-      const zipBuffer = await generateProposalZip(proposalData);
-
-      return {
-        zip: zipBuffer.toString("base64"),
-      };
-    }),
+  // `generateDocuments` foi removido nesta PR (Security Emergency Closure): era
+  // `publicProcedure`, autorizava só por `proposalId` sequencial e devolvia um ZIP com
+  // documentos empresariais completos (contrato social, certidões etc.) sem nenhum
+  // consumidor funcional legítimo — o frontend chamava `proposals.generateDocuments`,
+  // router inexistente no appRouter (`proposals` nunca foi registrado), logo o download
+  // já era um call morto em runtime. Não foi substituído por outro mecanismo: não há
+  // necessidade legítima comprovada de download externo nesta fase. Se essa necessidade
+  // surgir, o desenho correto é um capability token criptográfico, expirável, escopado e
+  // vinculado à proposta — nunca autorização por ID sequencial.
 
   list: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== "admin") {
@@ -168,7 +181,7 @@ export const commercialRouter = router({
       const endDate = new Date();
       endDate.setFullYear(endDate.getFullYear() + 1);
 
-      const subscriptionResult = await db.createSubscription({
+      await db.createSubscription({
         userId: input.userId,
         planId: plan.id,
         status: "active",
@@ -176,8 +189,6 @@ export const commercialRouter = router({
         currentPeriodEnd: endDate,
         cancelAtPeriodEnd: false,
       });
-
-      const subscriptionId = Number((subscriptionResult as any).insertId);
 
       await db.updateProposalRequestStatus(input.proposalId, "activated");
 

@@ -44,6 +44,12 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
     userB = await insertUser("b");
     userNoOrg = await insertUser("noorg");
 
+    // PR 0 (Security Emergency Closure): resolveTenant agora valida a organização do admin
+    // de plataforma contra `organizations` (fail-closed) — as duas orgs precisam existir de
+    // fato, não só ter membership.
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_A, `Org A ${ORG_A}`, `org-${ORG_A}`]);
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_B, `Org B ${ORG_B}`, `org-${ORG_B}`]);
+
     await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`, [ORG_A, userA]);
     await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`, [ORG_B, userB]);
 
@@ -88,6 +94,7 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
       await conn.execute(`DELETE FROM contract_amendments WHERE contractId IN (?, ?)`, [contractA, contractB]).catch(() => {});
       await conn.execute(`DELETE FROM contracts WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
+      await conn.execute(`DELETE FROM organizations WHERE id IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM users WHERE id IN (?, ?, ?)`, [userA, userB, userNoOrg]).catch(() => {});
       await conn.end();
     }
@@ -232,18 +239,18 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
   async function makeCaller(userId: number, role: "user" | "admin" = "user", headers: Record<string, string> = {}) {
     const { appRouter } = await import("../../routers");
     return appRouter.createCaller({
-      user: { id: userId, role } as any,
-      req: { headers } as any,
-      res: {} as any,
+      user: { id: userId, role },
+      req: { headers },
+      res: {},
       correlationId: "test-full-iso-router",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
   }
 
   it("router: usuário A recebe apenas contratos de A via list; getById cross-tenant retorna null (mesmo comportamento de antes, nunca lançou)", async () => {
     const callerA = await makeCaller(userA);
     const list = await callerA.contracts.list();
-    expect(list.map((c: any) => c.id)).toContain(contractA);
-    expect(list.map((c: any) => c.id)).not.toContain(contractB);
+    expect(list.map((c: { id: number }) => c.id)).toContain(contractA);
+    expect(list.map((c: { id: number }) => c.id)).not.toContain(contractB);
 
     const crossTenant = await callerA.contracts.getById({ id: contractB });
     expect(crossTenant).toBeNull();
@@ -275,16 +282,16 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
   it("router: admin de plataforma opera escopado à organização selecionada via header, não globalmente", async () => {
     const callerAdmin = await makeCaller(userA, "admin", { "x-organization-id": String(ORG_A) });
     const list = await callerAdmin.contracts.list();
-    expect(list.map((c: any) => c.id)).toContain(contractA);
-    expect(list.map((c: any) => c.id)).not.toContain(contractB); // não é visão global
+    expect(list.map((c: { id: number }) => c.id)).toContain(contractA);
+    expect(list.map((c: { id: number }) => c.id)).not.toContain(contractB); // não é visão global
   }, 30_000);
 
   it("router: erro NOT_FOUND não vaza informação (mesma mensagem para contrato inexistente e para contrato de outra organização)", async () => {
     const callerA = await makeCaller(userA);
     let msgCrossTenant = "";
     let msgInexistente = "";
-    try { await callerA.contracts.generation.generateMinuta({ contractId: contractB }); } catch (e: any) { msgCrossTenant = e.message; }
-    try { await callerA.contracts.generation.generateMinuta({ contractId: 999999999 }); } catch (e: any) { msgInexistente = e.message; }
+    try { await callerA.contracts.generation.generateMinuta({ contractId: contractB }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
+    try { await callerA.contracts.generation.generateMinuta({ contractId: 999999999 }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
     expect(msgCrossTenant).not.toBe("");
     expect(msgCrossTenant).toBe(msgInexistente);
   }, 30_000);

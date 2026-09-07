@@ -8,6 +8,7 @@
 
 import { TRPCError } from '@trpc/server';
 import { middleware } from '../_core/trpc';
+import type { TrpcContext } from '../_core/context';
 
 /**
  * Armazenamento em memória para rate limiting.
@@ -31,7 +32,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
  * (`req.ip`, que respeita a configuração `trust proxy` do app) → 'anonymous'.
  * NUNCA usa o header `x-forwarded-for` cru como fonte primária.
  */
-function resolveRateLimitIdentifier(ctx: any): string {
+function resolveRateLimitIdentifier(ctx: Partial<TrpcContext>): string {
   const userId = ctx?.user?.id;
   if (userId != null) return `user:${userId}`;
   const ip = ctx?.req?.ip;
@@ -106,6 +107,14 @@ export const RATE_LIMITS = {
     max: 30,
     message: 'Limite de operações de convite atingido. Tente novamente em 1 hora.',
   },
+
+  // PR 0 (Security Emergency Closure) — captação comercial pública (landing → solicitar
+  // proposta): 5 solicitações por 15 minutos, por IP (rota anônima, sem ctx.user).
+  commercial: {
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Muitas solicitações de proposta. Tente novamente em 15 minutos.',
+  },
 };
 
 /**
@@ -164,9 +173,9 @@ export function rateLimitMiddleware(limitType: keyof typeof RATE_LIMITS) {
       });
     }
 
-    (ctx.res as any)?.setHeader?.('X-RateLimit-Limit', limitConfig.max.toString());
-    (ctx.res as any)?.setHeader?.('X-RateLimit-Remaining', result.remaining.toString());
-    (ctx.res as any)?.setHeader?.('X-RateLimit-Reset', result.resetAt.toString());
+    ctx.res?.setHeader?.('X-RateLimit-Limit', limitConfig.max.toString());
+    ctx.res?.setHeader?.('X-RateLimit-Remaining', result.remaining.toString());
+    ctx.res?.setHeader?.('X-RateLimit-Reset', result.resetAt.toString());
 
     return next();
   });
@@ -188,7 +197,7 @@ export function cleanupExpiredEntries() {
   }
 
   if (cleaned > 0) {
-    console.log(`[Rate Limiter] Limpou ${cleaned} entradas expiradas`);
+    console.info(`[Rate Limiter] Limpou ${cleaned} entradas expiradas`);
   }
 }
 

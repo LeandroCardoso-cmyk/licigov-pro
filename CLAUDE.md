@@ -163,8 +163,8 @@ JWT_SECRET=string-longa-minimo-32-chars
 SESSION_TTL_HOURS=24          # 1..720 (default 24)
 ALLOW_PUBLIC_REGISTRATION=false  # fail-closed; NUNCA true em produção
 ADMIN_PASSWORD=senha-forte    # obrigatória em staging/produção (mín. 8 chars)
-# ADMIN_EMAIL=admin@seu-orgao.gov.br
-# ADMIN_NAME=Administrador
+# Bootstrap do admin de plataforma NÃO roda mais no boot do servidor — é um comando
+# explícito (`pnpm admin:bootstrap`, ver ADMIN_BOOTSTRAP_* em .env.example).
 
 # IA — default Gemini; multi-provider (ver docs/architecture/AI_PROVIDER_CONFIG.md)
 GEMINI_API_KEY=sua-chave-gemini

@@ -1,25 +1,12 @@
 import path from "path";
-import bcrypt from "bcrypt";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
-import { eq, and } from "drizzle-orm";
-import { nanoid } from "nanoid";
-import { users, organizationMembers } from "../drizzle/schema";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
 import { AI_CONFIG, validateAiRuntime } from "./config/ai";
-import { ADMIN_PASSWORD as CONFIGURED_ADMIN_PASSWORD } from "./config/auth";
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    ?? "cardosomsales@gmail.com";
-// RC-SEC-PR-A (CONFIG-005): sem default de produção. A resolução (obrigatória em
-// produção/staging, fixture em dev) vem de config/auth.ts — sem default inseguro.
-const ADMIN_PASSWORD = CONFIGURED_ADMIN_PASSWORD;
-const ADMIN_NAME     = process.env.ADMIN_NAME     ?? "Administrador";
 
 // process.cwd() is always the project root in both Railway and local dev,
 // regardless of how esbuild bundles import.meta.dirname.
@@ -4493,83 +4480,15 @@ export async function ensureSchema(connection: mysql.Connection): Promise<void> 
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 }
 
-// ─── Step 3: seed admin user ──────────────────────────────────────────────────
-
-async function seedAdmin(connection: mysql.Connection): Promise<void> {
-  log("SEED", "Verificando usuário admin...");
-  const db = drizzle(connection);
-
-  const existing = await db
-    .select({ id: users.id, role: users.role })
-    .from(users)
-    .where(eq(users.email, ADMIN_EMAIL))
-    .limit(1);
-
-  if (existing.length > 0) {
-    if (existing[0].role !== "admin") {
-      await db.update(users).set({ role: "admin" }).where(eq(users.email, ADMIN_EMAIL));
-      log("SEED", `✓ Admin promovido: ${ADMIN_EMAIL}`);
-    } else {
-      log("SEED", `✓ Admin já existe: ${ADMIN_EMAIL}`);
-    }
-    return;
-  }
-
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
-  await db.insert(users).values({
-    openId: nanoid(),
-    email: ADMIN_EMAIL,
-    name: ADMIN_NAME,
-    role: "admin",
-    passwordHash,
-    loginMethod: "email",
-    theme: "light",
-  });
-  log("SEED", `✓ Admin criado: ${ADMIN_EMAIL}`);
-}
-
-// ─── Step 4: seed admin membership na org padrão ────────────────────────────
-
-async function seedDefaultOrgMembership(connection: mysql.Connection): Promise<void> {
-  log("SEED", "Verificando membership do admin na org padrão...");
-  const db = drizzle(connection);
-
-  // Verificar se a tabela organizations existe (pode não existir em dev sem migrations)
-  const [tables] = await connection.execute<RowDataPacket[]>(
-    "SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations'"
-  );
-  if ((tables[0] as { cnt: number }).cnt === 0) {
-    log("SEED", "Tabela organizations não existe ainda — pulando seed de membership");
-    return;
-  }
-
-  const adminUsers = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.role, "admin"))
-    .limit(10);
-
-  for (const adminUser of adminUsers) {
-    const existingMembership = await db
-      .select({ id: organizationMembers.id })
-      .from(organizationMembers)
-      .where(and(
-        eq(organizationMembers.organizationId, 1),
-        eq(organizationMembers.userId, adminUser.id),
-      ))
-      .limit(1);
-
-    if (existingMembership.length === 0) {
-      await db.insert(organizationMembers).values({
-        organizationId: 1,
-        userId: adminUser.id,
-        role: "owner",
-        ativo: true,
-      });
-      log("SEED", `✓ Membership owner criado para admin userId=${adminUser.id} na org padrão`);
-    }
-  }
-}
+// ─── PR 0 (Security Emergency Closure) ─────────────────────────────────────────
+// O bootstrap de admin de plataforma NÃO roda mais aqui. Antes, `seedAdmin` criava
+// ou PROMOVIA a `role='admin'` — a CADA boot, em staging/produção — a conta cujo
+// e-mail vinha de `ADMIN_EMAIL` com um default hardcoded para um e-mail pessoal de
+// terceiro; e `seedDefaultOrgMembership` dava a TODO usuário `role='admin'` (não só
+// o recém-criado) membership `owner` automática na organização 1. Quem controlasse
+// esse e-mail (ou recuperasse a senha dele) virava admin de plataforma sem nenhuma
+// ação deliberada. Substituído por um comando explícito e fail-closed —
+// ver `scripts/bootstrap-admin.ts` (não roda no boot normal; invocação manual).
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
@@ -4598,8 +4517,6 @@ export async function bootstrap(): Promise<void> {
   try {
     await runMigrations(connection);
     await ensureSchema(connection);
-    await seedAdmin(connection);
-    await seedDefaultOrgMembership(connection);
   } finally {
     await connection.end();
   }
