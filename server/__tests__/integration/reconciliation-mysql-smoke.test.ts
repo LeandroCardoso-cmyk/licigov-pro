@@ -130,6 +130,17 @@ describe.skipIf(!DB)("Fase B — migration safety (MySQL real)", () => {
       await assertClosed(conn, "clean-install");
       // validateSchema (não-mutável) aprova um banco recém-migrado.
       await expect(validateSchema(conn)).resolves.toBeUndefined();
+
+      // REGRESSÃO (staging real): produção/staging nasceram de db:push com o journal
+      // "baseline-stampado" — o ledger fica ESPARSO (menos linhas que a cadeia) mesmo com o
+      // schema COMPLETO. validateSchema NÃO pode falhar por contagem de ledger: deve aprovar
+      // pela presença das estruturas. Simula esvaziando quase todo o ledger.
+      await conn.query("DELETE FROM `__drizzle_migrations` WHERE id > 5");
+      const [rows] = await conn.query<mysql.RowDataPacket[]>(
+        "SELECT COUNT(*) AS cnt FROM `__drizzle_migrations`",
+      );
+      expect(Number((rows[0] as { cnt: number }).cnt)).toBeLessThan(10); // ledger esparso instalado
+      await expect(validateSchema(conn)).resolves.toBeUndefined(); // schema completo → aprova
     } finally {
       await conn.end();
     }

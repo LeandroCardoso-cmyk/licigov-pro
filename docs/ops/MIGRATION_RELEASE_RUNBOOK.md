@@ -77,10 +77,13 @@ DATABASE_URL=... pnpm db:migrate:release
 
 O boot chama `validateSchema` (`server/bootstrap.ts`), que **não muta** nada:
 
-- confere que o **ledger de migrations** está aplicado (`__drizzle_migrations` ≥ nº de migrations do
-  journal);
+- confere que o schema foi **inicializado por migrations** (a tabela de ledger `__drizzle_migrations`
+  existe). **Não** confere a *contagem* de linhas do ledger: produção/staging deste projeto nasceram
+  de `db:push` com o journal **baseline-stampado** — o ledger é legitimamente esparso (menos linhas
+  que a cadeia) mesmo com o schema completo;
 - confere a presença de **estruturas críticas** (multi-tenant, segurança da PR 0, acesso
-  institucional);
+  institucional, ciclo documental oficial, ingestão canônica) — este é o **sinal principal** de
+  compatibilidade;
 - **desenvolvimento** → apenas **avisa** (um banco local pode legitimamente estar atrás);
 - **staging/produção** → **FAIL-CLOSED**: lança e a aplicação **não sobe** — nunca fica online num
   estado parcialmente compatível.

@@ -1,6 +1,5 @@
 import path from "path";
 import mysql from "mysql2/promise";
-import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import type { RowDataPacket } from "mysql2";
@@ -44,29 +43,25 @@ export async function runMigrations(connection: mysql.Connection): Promise<void>
 //     aplicação não deve ficar online num estado parcialmente compatível;
 //   - desenvolvimento: apenas AVISA (um banco local pode legitimamente estar atrasado).
 
-/** Nº de migrations versionadas esperadas (journal do Drizzle). Lido do disco; tolerante a falha. */
-function expectedMigrationCount(): number | null {
-  try {
-    const journalPath = path.join(process.cwd(), "drizzle", "meta", "_journal.json");
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries?: unknown[] };
-    return Array.isArray(journal.entries) ? journal.entries.length : null;
-  } catch {
-    return null;
-  }
-}
-
-// Estruturas CRÍTICAS (defesa em profundidade). Não é exaustivo — a completude é coberta pelo
-// ledger; aqui garantimos os invariantes de maior valor: multi-tenant, segurança (PR 0) e acesso
-// institucional. A ausência de qualquer um indica um schema quebrado/atrás.
+// Estruturas CRÍTICAS — o SINAL PRINCIPAL de compatibilidade do schema. NÃO usamos a contagem de
+// linhas do ledger de migrations como medida de completude: a produção/staging deste projeto
+// NASCERAM de `db:push` com o journal do Drizzle "baseline-stampado" (o ledger tem MENOS linhas
+// que a cadeia de migrations, embora o schema esteja COMPLETO — ver docs de reconciliação e
+// migrations-chain.test.ts). A verdade confiável é a PRESENÇA das estruturas, aferida aqui.
+// Cobre invariantes de maior valor de TODAS as épocas — multi-tenant, segurança (PR 0), acesso
+// institucional, ciclo documental oficial e ingestão canônica — de modo que um schema quebrado
+// OU significativamente atrás seja detectado sem depender do ledger.
 const CRITICAL_TABLES: readonly string[] = [
   "users", "organizations", "organization_members", "processes", "documents",
   "audit_logs", "activity_logs", "process_members",
   "institutional_invitations", "password_reset_tokens", "email_outbox",
+  "official_documents", "import_sessions",
 ];
 const CRITICAL_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ["users", "passwordHash"], ["users", "tokenVersion"], ["users", "email"],
   ["process_members", "functionalRole"],
   ["processes", "organizationId"], ["documents", "organizationId"], ["activity_logs", "organizationId"],
+  ["import_sessions", "checksum"], ["documents", "documentStatus"],
 ];
 
 export type SchemaValidationLevel = "ok" | "warn" | "fail";
@@ -105,24 +100,15 @@ export async function validateSchema(connection: mysql.Connection): Promise<void
     return (rows[0] as Cnt).cnt > 0;
   }
 
-  // 1) Completude do ledger de migrations. Sem a tabela de ledger, o schema nunca foi
-  //    inicializado por migrations → incompatível. Ledger atrás → migrations pendentes.
+  // 1) O schema precisa ter sido inicializado por migrations: a tabela de ledger do Drizzle
+  //    (__drizzle_migrations) deve existir. NÃO conferimos a CONTAGEM de linhas do ledger — em
+  //    produção/staging (nascidos de db:push, journal baseline-stampado) o ledger é legitimamente
+  //    esparso mesmo com o schema completo. A completude real vem das estruturas críticas (passo 2).
   if (!(await tableExists("__drizzle_migrations"))) {
-    problems.push("tabela de controle de migrations (__drizzle_migrations) ausente — migrations nunca aplicadas");
-  } else {
-    const expected = expectedMigrationCount();
-    const [ledger] = await connection.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) AS cnt FROM __drizzle_migrations",
-    );
-    const applied = (ledger[0] as Cnt).cnt;
-    if (expected !== null && applied < expected) {
-      problems.push(
-        `migrations pendentes: ${applied}/${expected} aplicadas — aplique as migrations (pnpm db:migrate:release) antes de iniciar`,
-      );
-    }
+    problems.push("tabela de controle de migrations (__drizzle_migrations) ausente — schema nunca inicializado por migrations");
   }
 
-  // 2) Estruturas críticas.
+  // 2) Estruturas críticas — sinal principal de compatibilidade.
   for (const t of CRITICAL_TABLES) {
     if (!(await tableExists(t))) problems.push(`tabela crítica ausente: ${t}`);
   }
