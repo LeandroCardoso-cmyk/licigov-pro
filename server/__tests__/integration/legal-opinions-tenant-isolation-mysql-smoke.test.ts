@@ -71,6 +71,11 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     userB = await insertUser("b");
     userNoOrg = await insertUser("noorg");
 
+    // PR 0 (Security Emergency Closure): resolveTenant agora valida a organização do admin
+    // de plataforma contra `organizations` (fail-closed).
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_A, `Org A ${ORG_A}`, `org-${ORG_A}`]);
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_B, `Org B ${ORG_B}`, `org-${ORG_B}`]);
+
     await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`, [ORG_A, userA]);
     await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`, [ORG_B, userB]);
 
@@ -153,6 +158,7 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
       await conn.execute(`DELETE FROM legal_opinions WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM contracts WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
+      await conn.execute(`DELETE FROM organizations WHERE id IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM users WHERE id IN (?, ?, ?)`, [userA, userB, userNoOrg]).catch(() => {});
       await conn.end();
     }
@@ -161,11 +167,11 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
   async function makeCaller(userId: number, role: "user" | "admin" = "user", headers: Record<string, string> = {}) {
     const { appRouter } = await import("../../routers");
     return appRouter.createCaller({
-      user: { id: userId, role, name: `Usuário ${userId}`, email: `u${userId}@teste.local` } as any,
-      req: { headers } as any,
-      res: {} as any,
+      user: { id: userId, role, name: `Usuário ${userId}`, email: `u${userId}@teste.local` },
+      req: { headers },
+      res: {},
       correlationId: "test-legal-iso",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
   }
 
   // ── 1-2. list ────────────────────────────────────────────────────────────────
@@ -174,10 +180,10 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     const callerB = await makeCaller(userB);
     const listA = await callerA.legalOpinions.list();
     const listB = await callerB.legalOpinions.list();
-    expect(listA.map((o: any) => o.id)).toContain(opinionA);
-    expect(listA.map((o: any) => o.id)).not.toContain(opinionB);
-    expect(listB.map((o: any) => o.id)).toContain(opinionB);
-    expect(listB.map((o: any) => o.id)).not.toContain(opinionA);
+    expect(listA.map((o: { id: number }) => o.id)).toContain(opinionA);
+    expect(listA.map((o: { id: number }) => o.id)).not.toContain(opinionB);
+    expect(listB.map((o: { id: number }) => o.id)).toContain(opinionB);
+    expect(listB.map((o: { id: number }) => o.id)).not.toContain(opinionA);
   }, 30_000);
 
   // ── 3-5. getById ─────────────────────────────────────────────────────────────
@@ -267,8 +273,8 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
   it("14. admin de plataforma opera escopado à organização selecionada via header, não globalmente", async () => {
     const callerAdmin = await makeCaller(userA, "admin", { "x-organization-id": String(ORG_A) });
     const list = await callerAdmin.legalOpinions.list();
-    expect(list.map((o: any) => o.id)).toContain(opinionA);
-    expect(list.map((o: any) => o.id)).not.toContain(opinionB);
+    expect(list.map((o: { id: number }) => o.id)).toContain(opinionA);
+    expect(list.map((o: { id: number }) => o.id)).not.toContain(opinionB);
   }, 30_000);
 
   // ── 15. resposta cross-tenant não revela existência ─────────────────────────
@@ -276,8 +282,8 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     const callerA = await makeCaller(userA);
     let msgCrossTenant = "";
     let msgInexistente = "";
-    try { await callerA.legalOpinions.getById({ id: opinionB }); } catch (e: any) { msgCrossTenant = e.message; }
-    try { await callerA.legalOpinions.getById({ id: 999999999 }); } catch (e: any) { msgInexistente = e.message; }
+    try { await callerA.legalOpinions.getById({ id: opinionB }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
+    try { await callerA.legalOpinions.getById({ id: 999999999 }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
     expect(msgCrossTenant).not.toBe("");
     expect(msgCrossTenant).toBe(msgInexistente);
   }, 30_000);
@@ -350,7 +356,7 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     const callerA = await makeCaller(userA);
     let msgCrossTenant = "";
     let msgInexistente = "";
-    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossProcess }); } catch (e: any) { msgCrossTenant = e.message; }
+    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossProcess }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
     // Compara com uma tentativa de gerar parecer de processo com sourceId inexistente, dentro do próprio tenant.
     const disposable = await callerA.legalOpinions.create({
       title: "Descartável (processo inexistente)", sourceType: "other",
@@ -358,7 +364,7 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     });
     // Força sourceType=process/sourceId inexistente via SQL direto (sem passar por create, que já bloquearia).
     await conn.execute(`UPDATE legal_opinions SET sourceType = 'process', sourceId = 999999999 WHERE id = ?`, [disposable.id]);
-    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e: any) { msgInexistente = e.message; }
+    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
     expect(msgCrossTenant).not.toBe("");
     expect(msgCrossTenant).toBe(msgInexistente);
   }, 30_000);
@@ -404,13 +410,13 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     const callerA = await makeCaller(userA);
     let msgCrossTenant = "";
     let msgInexistente = "";
-    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossDirect }); } catch (e: any) { msgCrossTenant = e.message; }
+    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossDirect }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
     const disposable = await callerA.legalOpinions.create({
       title: "Descartável (direta inexistente)", sourceType: "other",
       legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
     });
     await conn.execute(`UPDATE legal_opinions SET sourceType = 'direct_contract', sourceId = 999999999 WHERE id = ?`, [disposable.id]);
-    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e: any) { msgInexistente = e.message; }
+    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
     expect(msgCrossTenant).not.toBe("");
     expect(msgCrossTenant).toBe(msgInexistente);
   }, 30_000);

@@ -1,6 +1,32 @@
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
+import type { TrpcContext } from "../_core/context";
+
+// PR 0 (Security Emergency Closure): boundary tenant-scoped compartilhado por
+// `listMembers` e `getStageAssignments` — resolve o processo dentro da organização do
+// chamador e autoriza owner/membro do processo/admin de plataforma (o tenant do admin
+// já foi validado deliberadamente por `resolveTenant`). Cross-tenant, processo
+// inexistente ou sem autorização retornam o MESMO NOT_FOUND (anti-enumeração).
+async function authorizeProcessAccess(
+  ctx: Pick<TrpcContext, "organizationId" | "user">,
+  processId: number,
+) {
+  const process = await db.getProcessByIdForOrganization(processId, ctx.organizationId!);
+  if (!process) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+  }
+
+  const isPlatformAdmin = ctx.user!.role === "admin";
+  const isOwner = process.ownerId === ctx.user!.id;
+  const currentMember = isOwner || isPlatformAdmin ? undefined : await db.getProcessMember(processId, ctx.user!.id);
+  if (!isOwner && !isPlatformAdmin && !currentMember) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+  }
+
+  return process;
+}
 
 export const collaborationRouter = router({
   addMember: protectedProcedure
@@ -115,16 +141,24 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  listMembers: protectedProcedure
+  // PR 0 (Security Emergency Closure): `listMembers` era `protectedProcedure` sem
+  // checagem de tenant/autorização — qualquer usuário autenticado podia enumerar
+  // `processId` e obter nome + e-mail de membros de processos de QUALQUER organização.
+  // Corrigido: processo resolvido dentro do tenant do chamador (`getProcessByIdForOrganization`,
+  // já usado como padrão tenant-scoped em `server/db/processes.ts`), e o chamador precisa ter
+  // autorização legítima naquele processo (owner ou membro). Cross-tenant / sem processo /
+  // sem autorização retornam o MESMO `NOT_FOUND` (anti-enumeração, padrão já adotado no projeto).
+  listMembers: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await authorizeProcessAccess(ctx, input.processId);
       return await db.getProcessMembers(input.processId);
     }),
 
-  checkPermission: protectedProcedure
+  checkPermission: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const process = await db.getProcessById(input.processId);
+      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
       if (!process) {
         return { permission: null, isOwner: false };
       }
@@ -222,9 +256,10 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  getStageAssignments: protectedProcedure
+  getStageAssignments: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await authorizeProcessAccess(ctx, input.processId);
       return await db.getStageAssignments(input.processId);
     }),
 });

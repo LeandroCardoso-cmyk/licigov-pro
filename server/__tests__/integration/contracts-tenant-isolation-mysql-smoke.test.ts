@@ -38,6 +38,11 @@ describe.skipIf(!DB)("contracts.analytics.getOverview — isolamento multi-tenan
     userB = await insertUser("b");
     userNoOrg = await insertUser("noorg");
 
+    // PR 0 (Security Emergency Closure): resolveTenant agora valida a organização do admin
+    // de plataforma contra `organizations` (fail-closed).
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_A, `Org A ${ORG_A}`, `org-${ORG_A}`]);
+    await conn.execute(`INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1)`, [ORG_B, `Org B ${ORG_B}`, `org-${ORG_B}`]);
+
     await conn.execute(
       `INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`,
       [ORG_A, userA]
@@ -72,6 +77,7 @@ describe.skipIf(!DB)("contracts.analytics.getOverview — isolamento multi-tenan
     if (conn) {
       await conn.execute(`DELETE FROM contracts WHERE organizationId IN (?, ?, ?)`, [ORG_A, ORG_B, ORG_EMPTY]).catch(() => {});
       await conn.execute(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
+      await conn.execute(`DELETE FROM organizations WHERE id IN (?, ?)`, [ORG_A, ORG_B]).catch(() => {});
       await conn.execute(`DELETE FROM users WHERE id IN (?, ?, ?)`, [userA, userB, userNoOrg]).catch(() => {});
       await conn.end();
     }
@@ -118,11 +124,11 @@ describe.skipIf(!DB)("contracts.analytics.getOverview — isolamento multi-tenan
   async function callGetOverview(userId: number, headers: Record<string, string> = {}) {
     const { appRouter } = await import("../../routers");
     const caller = appRouter.createCaller({
-      user: { id: userId, role: "user" } as any,
-      req: { headers } as any,
-      res: {} as any,
+      user: { id: userId, role: "user" },
+      req: { headers },
+      res: {},
       correlationId: "test-tenant-iso",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
     return caller.contracts.analytics.getOverview();
   }
 
@@ -147,11 +153,11 @@ describe.skipIf(!DB)("contracts.analytics.getOverview — isolamento multi-tenan
   it("11. admin de plataforma só enxerga a org selecionada via header (mesmo mecanismo de qualquer tenantProcedure) — não existe rota que devolva visão global neste endpoint", async () => {
     const { appRouter } = await import("../../routers");
     const callerAdmin = appRouter.createCaller({
-      user: { id: userA, role: "admin" } as any,
-      req: { headers: { "x-organization-id": String(ORG_A) } } as any,
-      res: {} as any,
+      user: { id: userA, role: "admin" },
+      req: { headers: { "x-organization-id": String(ORG_A) } },
+      res: {},
       correlationId: "test-tenant-iso-admin",
-    } as any);
+    } as unknown as Parameters<typeof appRouter.createCaller>[0]);
     const result = await callerAdmin.contracts.analytics.getOverview();
     expect(result!.total).toBe(3); // igual ao escopo da ORG_A — não é global (seria 4: 3+1)
   }, 30_000);

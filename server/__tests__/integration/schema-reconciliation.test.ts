@@ -84,12 +84,16 @@ describe("Reconciliação · migration 0285 (tabelas)", () => {
 describe("Reconciliação · bootstrap ensureSchema (colunas)", () => {
   const source = readFileSync(BOOTSTRAP_PATH, "utf8");
 
-  // Corpo de ensureSchema: da assinatura até o marcador do Step 3 (seed admin).
+  // Corpo de ensureSchema: da assinatura até o marcador que vem logo após seu
+  // fechamento. PR 0 (Security Emergency Closure) removeu o antigo seed automático de
+  // admin (marcador anterior: "Step 3: seed admin") — o marcador estável agora é o
+  // comentário que documenta essa remoção, colocado imediatamente após o `}` de
+  // ensureSchema (ver server/bootstrap.ts).
   const start = source.indexOf("export async function ensureSchema");
-  const end = source.indexOf("Step 3: seed admin");
+  const end = source.indexOf("PR 0 (Security Emergency Closure)");
   const body = source.slice(start, end);
 
-  it("ensureSchema existe e o marcador do Step 3 vem depois dele", () => {
+  it("ensureSchema existe e o marcador pós-fechamento vem depois dele", () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
   });

@@ -7,13 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, Download, FileText, FileCheck, Building2 } from "lucide-react";
+import { Loader2, FileCheck, Building2 } from "lucide-react";
 import { APP_TITLE } from "@/const";
 
 export default function SolicitarProposta() {
   const [step, setStep] = useState<"form" | "success">("form");
-  const [proposalId, setProposalId] = useState<number | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const [formData, setFormData] = useState({
     orgaoNome: "",
@@ -28,47 +26,22 @@ export default function SolicitarProposta() {
     responsavelTelefone: "",
     planSlug: "",
     observacoes: "",
+    // Honeypot anti-bot: nunca visível/preenchível por um usuário humano (ver estilo abaixo).
+    website: "",
   });
 
-  const createProposalMutation = (trpc as any).proposals.create.useMutation();
-  const generateDocumentsMutation = (trpc as any).proposals.generateDocuments.useMutation();
+  const createProposalMutation = trpc.commercial.create.useMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const result = await createProposalMutation.mutateAsync(formData);
-      setProposalId(result.proposalId);
+      await createProposalMutation.mutateAsync(formData);
       setStep("success");
-      toast.success("Proposta criada com sucesso!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao criar proposta");
-    }
-  };
-
-  const handleDownloadDocuments = async () => {
-    if (!proposalId) return;
-
-    setIsGenerating(true);
-    try {
-      const docs = await generateDocumentsMutation.mutateAsync({ proposalId });
-
-      // Download ZIP com proposta + documentos da empresa
-      const zipBlob = new Blob(
-        [Uint8Array.from(atob(docs.zip), (c) => c.charCodeAt(0))],
-        { type: "application/zip" }
-      );
-      const zipUrl = URL.createObjectURL(zipBlob);
-      const zipLink = document.createElement("a");
-      zipLink.href = zipUrl;
-      zipLink.download = `Proposta_Comercial_${proposalId}.zip`;
-      zipLink.click();
-
-      toast.success("Proposta e documentos baixados com sucesso!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao gerar documentos");
-    } finally {
-      setIsGenerating(false);
+      toast.success("Solicitação enviada com sucesso!");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao enviar solicitação";
+      toast.error(message);
     }
   };
 
@@ -81,49 +54,17 @@ export default function SolicitarProposta() {
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <FileCheck className="w-8 h-8 text-green-600" />
               </div>
-              <CardTitle className="text-3xl text-green-700">Proposta Criada com Sucesso!</CardTitle>
+              <CardTitle className="text-3xl text-green-700">Solicitação Enviada com Sucesso!</CardTitle>
               <CardDescription className="text-lg mt-2">
-                Sua solicitação foi registrada. Baixe os documentos abaixo para dar continuidade ao processo.
+                Sua solicitação foi registrada. Nossa equipe entrará em contato com a proposta comercial
+                e os próximos passos para o seu órgão.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                  <Download className="w-5 h-5" />
-                  Documentos Disponíveis
-                </h3>
-                <div className="space-y-3">
-                  <Button
-                    onClick={handleDownloadDocuments}
-                    disabled={isGenerating}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Gerando documentos...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4 mr-2" />
-                        Baixar Todos os Documentos
-                      </>
-                    )}
-                  </Button>
-                  <p className="text-sm text-muted-foreground">
-                    • Proposta Comercial (PDF)<br />
-                    • Minuta de Contrato (DOCX)<br />
-                    • Termo de Referência (DOCX)<br />
-                    • Documentos da Empresa (ZIP)
-                  </p>
-                </div>
-              </div>
-
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
                 <h3 className="font-semibold text-lg mb-2">Próximos Passos</h3>
                 <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                  <li>Revise os documentos baixados</li>
+                  <li>Nossa equipe entrará em contato com a proposta comercial personalizada</li>
                   <li>Realize o processo de empenho conforme legislação vigente</li>
                   <li>Após aprovação, entre em contato para ativação da assinatura</li>
                   <li>Aguarde até 48h para liberação do acesso à plataforma</li>
@@ -310,6 +251,20 @@ export default function SolicitarProposta() {
                     rows={4}
                   />
                 </div>
+              </div>
+
+              {/* Honeypot anti-bot: campo invisível a usuários humanos (fora da tela e do
+                  fluxo de tab); bots de preenchimento automático costumam preenchê-lo. */}
+              <div style={{ position: "absolute", left: "-9999px" }} aria-hidden="true">
+                <Label htmlFor="website">Não preencher este campo</Label>
+                <Input
+                  id="website"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                />
               </div>
 
               <div className="flex justify-end gap-4 pt-4">
