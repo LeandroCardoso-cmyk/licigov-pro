@@ -92,14 +92,13 @@ describe("PR 0 — frontend: sem call morto ao router inexistente 'proposals'", 
 });
 
 describe("PR 0 — collaboration: listMembers/checkPermission tenant-scoped", () => {
-  it("usam tenantProcedure e resolvem o processo dentro do tenant do chamador", () => {
+  it("listMembers usa tenantProcedure e delega ao boundary compartilhado authorizeProcessAccess", () => {
     const listMembersBlock = COLLABORATION_ROUTER.slice(
       COLLABORATION_ROUTER.indexOf("listMembers:"),
       COLLABORATION_ROUTER.indexOf("checkPermission:")
     );
     expect(listMembersBlock).toContain("tenantProcedure");
-    expect(listMembersBlock).toContain("getProcessByIdForOrganization");
-    expect(listMembersBlock).toMatch(/ctx\.organizationId/);
+    expect(listMembersBlock).toContain("authorizeProcessAccess");
 
     const checkPermissionBlock = COLLABORATION_ROUTER.slice(
       COLLABORATION_ROUTER.indexOf("checkPermission:"),
@@ -107,15 +106,17 @@ describe("PR 0 — collaboration: listMembers/checkPermission tenant-scoped", ()
     );
     expect(checkPermissionBlock).toContain("tenantProcedure");
     expect(checkPermissionBlock).toContain("getProcessByIdForOrganization");
+    expect(checkPermissionBlock).toMatch(/ctx\.organizationId/);
   });
 
-  it("listMembers exige autorização (owner ou membro) antes de retornar a lista", () => {
-    const listMembersBlock = COLLABORATION_ROUTER.slice(
-      COLLABORATION_ROUTER.indexOf("listMembers:"),
-      COLLABORATION_ROUTER.indexOf("checkPermission:")
+  it("authorizeProcessAccess (usado por listMembers) exige autorização (owner/membro/admin) antes de retornar dados", () => {
+    const helperBlock = COLLABORATION_ROUTER.slice(
+      COLLABORATION_ROUTER.indexOf("async function authorizeProcessAccess"),
+      COLLABORATION_ROUTER.indexOf("export const collaborationRouter")
     );
-    expect(listMembersBlock).toContain("NOT_FOUND");
-    expect(listMembersBlock).toMatch(/isOwner/);
+    expect(helperBlock).toContain("getProcessByIdForOrganization");
+    expect(helperBlock).toContain("NOT_FOUND");
+    expect(helperBlock).toMatch(/isOwner/);
   });
 });
 
@@ -178,5 +179,77 @@ describe("PR 0 — platform admin: sem default de organização 1", () => {
     expect(TRPC_CORE).toContain("platform_admin_tenant_access");
     expect(TRPC_CORE).toContain("createAuditLog");
     expect(TRPC_CORE).toContain("ctx.correlationId");
+  });
+});
+
+// ── Correções finais (rodada 2) ────────────────────────────────────────────────
+
+describe("PR 0 (correção final) — collaboration.getStageAssignments tenant-scoped", () => {
+  it("usa tenantProcedure e o mesmo boundary de autorização de listMembers", () => {
+    const block = COLLABORATION_ROUTER.slice(
+      COLLABORATION_ROUTER.indexOf("getStageAssignments:"),
+      COLLABORATION_ROUTER.length
+    );
+    expect(block).toContain("tenantProcedure");
+    expect(block).toContain("authorizeProcessAccess");
+  });
+
+  it("authorizeProcessAccess resolve o processo pelo tenant e exige owner/membro/admin de plataforma", () => {
+    const helperBlock = COLLABORATION_ROUTER.slice(
+      COLLABORATION_ROUTER.indexOf("async function authorizeProcessAccess"),
+      COLLABORATION_ROUTER.indexOf("export const collaborationRouter")
+    );
+    expect(helperBlock).toContain("getProcessByIdForOrganization");
+    expect(helperBlock).toContain("NOT_FOUND");
+    expect(helperBlock).toMatch(/isOwner/);
+    expect(helperBlock).toMatch(/isPlatformAdmin/);
+  });
+
+  it("não seleciona mais e-mail do responsável (assignedUserEmail) — consumidor só usa o nome", () => {
+    const COLLABORATION_DB = read("server/db/collaboration.ts");
+    const stageAssignmentsStart = COLLABORATION_DB.indexOf("export async function getStageAssignments");
+    const stageAssignmentsBlock = COLLABORATION_DB.slice(
+      stageAssignmentsStart,
+      COLLABORATION_DB.indexOf("export async function getProcessMember(processId: number, userId: number)", stageAssignmentsStart)
+    );
+    expect(stripComments(stageAssignmentsBlock)).not.toContain("assignedUserEmail");
+    expect(stageAssignmentsBlock).toContain("assignedUserName");
+
+    const PANEL = read("client/src/components/document-flow/StageAssignmentPanel.tsx");
+    expect(PANEL).not.toContain("assignedUserEmail");
+  });
+});
+
+describe("PR 0 (correção final) — auditoria privilegiada fail-closed", () => {
+  it("resolveTenant não engole mais a falha de auditoria com console.warn + continuar", () => {
+    const adminBlockStart = TRPC_CORE.indexOf("if (ctx.user.role === 'admin')");
+    const block = TRPC_CORE.slice(
+      adminBlockStart,
+      TRPC_CORE.indexOf("return next({", adminBlockStart)
+    );
+    expect(block).not.toContain("console.warn");
+    // A falha de auditoria precisa propagar como erro (nunca só logar e seguir).
+    expect(block).toMatch(/catch \(auditError\) \{\s*throw/);
+  });
+
+  it("bootstrap-admin.ts grava a criação/promoção e o audit_log na MESMA transação", () => {
+    expect(BOOTSTRAP_ADMIN_CLI).toContain("db.transaction");
+    expect(BOOTSTRAP_ADMIN_CLI).toMatch(/tx\.insert\(auditLogs\)/);
+    expect(BOOTSTRAP_ADMIN_CLI).toMatch(/tx\.insert\(users\)|tx\.update\(users\)/);
+  });
+
+  it("bootstrap-admin.ts não repete o e-mail no details do audit (targetUserId já identifica o alvo)", () => {
+    const auditCallBlock = BOOTSTRAP_ADMIN_CLI.slice(
+      BOOTSTRAP_ADMIN_CLI.indexOf("tx.insert(auditLogs)"),
+      BOOTSTRAP_ADMIN_CLI.indexOf("});", BOOTSTRAP_ADMIN_CLI.indexOf("tx.insert(auditLogs)"))
+    );
+    expect(auditCallBlock).not.toContain("email");
+  });
+});
+
+describe("PR 0 (correção final) — política de senha do bootstrap-admin.ts", () => {
+  it("reutiliza validatePasswordStrength() em vez de checar só o comprimento", () => {
+    expect(BOOTSTRAP_ADMIN_CLI).toContain("validatePasswordStrength");
+    expect(stripComments(BOOTSTRAP_ADMIN_CLI)).not.toMatch(/password\.length\s*<\s*(MIN_PASSWORD_LENGTH|8)/);
   });
 });

@@ -15,12 +15,16 @@
  *  - NÃO associa o admin a nenhuma organização — o admin de plataforma opera
  *    cross-tenant via o cabeçalho `X-Organization-Id` (validado explicitamente em
  *    `server/_core/trpc.ts`), sem precisar de uma linha em `organization_members`;
- *  - registra a própria execução em `audit_logs` (ação `promote_to_admin`).
+ *  - exige a MESMA política de força de senha de qualquer usuário do sistema
+ *    (`validatePasswordStrength` — maiúscula, minúscula, número, caractere especial;
+ *    8+ caracteres sozinhos NÃO bastam);
+ *  - registra a própria execução em `audit_logs` (ação `promote_to_admin`) na MESMA
+ *    transação da criação/promoção — se a auditoria falhar, tudo reverte (fail-closed).
  *
  * Uso:
  *   ADMIN_BOOTSTRAP_CONFIRM=yes \
  *   ADMIN_BOOTSTRAP_EMAIL=admin@seu-orgao.gov.br \
- *   ADMIN_BOOTSTRAP_PASSWORD="senha-forte-min-8-chars" \
+ *   ADMIN_BOOTSTRAP_PASSWORD="Senha-Forte-123!" \
  *   ADMIN_BOOTSTRAP_NAME="Administrador da Plataforma" \
  *   DATABASE_URL="mysql://user:senha@host:3306/db" \
  *   tsx scripts/bootstrap-admin.ts
@@ -41,10 +45,8 @@
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
-import { users } from "../drizzle/schema";
-import { hashPassword } from "../server/services/passwordSecurity";
-
-const MIN_PASSWORD_LENGTH = 8;
+import { users, auditLogs } from "../drizzle/schema";
+import { hashPassword, validatePasswordStrength } from "../server/services/passwordSecurity";
 
 export class ConfigError extends Error {}
 
@@ -69,8 +71,18 @@ export async function main(): Promise<BootstrapResult> {
   }
 
   const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    throw new ConfigError(`ADMIN_BOOTSTRAP_PASSWORD é obrigatória (mínimo ${MIN_PASSWORD_LENGTH} caracteres).`);
+  if (!password) {
+    throw new ConfigError("ADMIN_BOOTSTRAP_PASSWORD é obrigatória.");
+  }
+  // Correção: 8+ caracteres não bastam — reutiliza a MESMA política de força de senha
+  // já aplicada a qualquer usuário do sistema (maiúscula, minúscula, número, caractere
+  // especial). Um admin de plataforma não pode ser criado com senha mais fraca que a
+  // exigida de qualquer outro usuário.
+  const strength = validatePasswordStrength(password);
+  if (!strength.isValid) {
+    throw new ConfigError(
+      `ADMIN_BOOTSTRAP_PASSWORD não atende à política de senha: ${strength.feedback.join(" ")}`
+    );
   }
 
   const name = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || "Administrador";
@@ -90,51 +102,47 @@ export async function main(): Promise<BootstrapResult> {
       .where(eq(users.email, email))
       .limit(1);
 
-    let targetUserId: number;
-    let outcome: BootstrapOutcome;
+    if (existing.length > 0 && existing[0].role === "admin") {
+      console.info(`[bootstrap-admin] Usuário ${email} já é admin de plataforma (id=${existing[0].id}). Nenhuma alteração.`);
+      return { outcome: "already_admin", userId: existing[0].id, email };
+    }
 
-    if (existing.length > 0) {
-      targetUserId = existing[0].id;
-      if (existing[0].role === "admin") {
-        outcome = "already_admin";
-        console.info(`[bootstrap-admin] Usuário ${email} já é admin de plataforma (id=${targetUserId}). Nenhuma alteração.`);
-      } else {
-        await db.update(users).set({ role: "admin" }).where(eq(users.id, targetUserId));
+    // Criação/promoção + auditoria são ATÔMICAS: se o registro em `audit_logs` falhar,
+    // a transação inteira reverte — a criação/promoção do admin NUNCA fica sem o rastro
+    // de auditoria correspondente (fail-closed).
+    let targetUserId!: number;
+    let outcome!: BootstrapOutcome;
+
+    await db.transaction(async tx => {
+      if (existing.length > 0) {
+        targetUserId = existing[0].id;
+        await tx.update(users).set({ role: "admin" }).where(eq(users.id, targetUserId));
         outcome = "promoted";
-        console.info(`[bootstrap-admin] Usuário ${email} (id=${targetUserId}) promovido a admin de plataforma.`);
+      } else {
+        const passwordHash = await hashPassword(password);
+        const result = await tx.insert(users).values({
+          openId: `platform-admin-${Date.now()}`,
+          email,
+          name,
+          role: "admin",
+          passwordHash,
+          loginMethod: "email",
+          theme: "light",
+        });
+        targetUserId = result[0].insertId;
+        outcome = "created";
       }
-    } else {
-      const passwordHash = await hashPassword(password);
-      const result = await db.insert(users).values({
-        openId: `platform-admin-${Date.now()}`,
-        email,
-        name,
-        role: "admin",
-        passwordHash,
-        loginMethod: "email",
-        theme: "light",
+
+      // `targetUserId` já identifica o alvo — não repete o e-mail em `details`.
+      await tx.insert(auditLogs).values({
+        adminId: targetUserId,
+        targetUserId,
+        action: "promote_to_admin",
+        details: JSON.stringify({ event: "platform_admin_bootstrap", outcome, via: "scripts/bootstrap-admin.ts" }),
       });
-      targetUserId = result[0].insertId;
-      outcome = "created";
-      console.info(`[bootstrap-admin] Admin de plataforma criado: ${email} (id=${targetUserId}).`);
-    }
+    });
 
-    // Auditoria da própria execução — nunca deve quebrar o resultado do bootstrap.
-    try {
-      await connection.execute(
-        `INSERT INTO audit_logs (adminId, targetUserId, action, details, createdAt)
-         VALUES (?, ?, 'promote_to_admin', ?, NOW())`,
-        [
-          targetUserId,
-          targetUserId,
-          JSON.stringify({ event: "platform_admin_bootstrap", email, outcome, via: "scripts/bootstrap-admin.ts" }),
-        ]
-      );
-    } catch (auditError) {
-      console.warn("[bootstrap-admin] Aviso: não foi possível gravar audit_logs (bootstrap já concluído):", auditError);
-    }
-
-    console.info(`[bootstrap-admin] Concluído (${outcome}). NÃO foi criada membership de organização — o admin de plataforma opera via X-Organization-Id explícito e validado.`);
+    console.info(`[bootstrap-admin] Concluído (${outcome}, id=${targetUserId}). NÃO foi criada membership de organização — o admin de plataforma opera via X-Organization-Id explícito e validado.`);
 
     return { outcome, userId: targetUserId, email };
   } finally {

@@ -30,6 +30,7 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
 
   let userA: number;
   let userB: number;
+  let userC: number; // membro da ORG_A, sem nenhum vínculo com processA (nem owner, nem membro)
   let adminUserId: number;
   let processA: number;
   let templateA: number;
@@ -65,6 +66,7 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
     }
     userA = await insertUser("a");
     userB = await insertUser("b");
+    userC = await insertUser("c");
     adminUserId = await insertUser("admin", "admin");
 
     await conn.execute(
@@ -74,6 +76,13 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
     await conn.execute(
       `INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`,
       [ORG_B, userB]
+    );
+    // userC: membro da ORG_A (tenant resolve normalmente), mas sem NENHUM vínculo com
+    // processA — nem owner, nem process_members. Distingue "sem acesso ao processo"
+    // (mesmo tenant, sem autorização) de "cross-tenant" (tenant errado).
+    await conn.execute(
+      `INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'viewer', 1)`,
+      [ORG_A, userC]
     );
 
     async function insertProcess(org: number, owner: number): Promise<number> {
@@ -87,6 +96,11 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
     // Processo real na org B — garante que o cross-tenant abaixo não passa trivialmente
     // só porque a org B não tem processo algum.
     await insertProcess(ORG_B, userB);
+
+    await conn.execute(
+      `INSERT INTO stage_assignments (processId, docType, assignedUserId, assignedBy) VALUES (?, 'dfd', ?, ?)`,
+      [processA, userA, userA]
+    );
 
     async function insertTemplate(owner: number): Promise<number> {
       const [r] = await conn.execute<mysql.ResultSetHeader>(
@@ -102,10 +116,11 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
   afterAll(async () => {
     if (conn) {
       const del = async (sql: string, p: unknown[]) => { await conn.execute(sql, p).catch(() => {}); };
+      await del(`DELETE FROM stage_assignments WHERE processId = ?`, [processA]);
       await del(`DELETE FROM document_templates WHERE id IN (?, ?)`, [templateA, templateB]);
       await del(`DELETE FROM processes WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
       await del(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
-      await del(`DELETE FROM users WHERE id IN (?, ?, ?)`, [userA, userB, adminUserId]);
+      await del(`DELETE FROM users WHERE id IN (?, ?, ?, ?)`, [userA, userB, userC, adminUserId]);
       await del(`DELETE FROM proposal_requests WHERE planSlug = ?`, [planSlug]);
       await del(`DELETE FROM subscription_plans WHERE slug = ?`, [planSlug]);
       await del(`DELETE FROM audit_logs WHERE adminId = ?`, [adminUserId]);
@@ -228,6 +243,31 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
     }, 30000);
   });
 
+  // ── collaboration.getStageAssignments (correção final) ─────────────────────────
+  describe("collaboration.getStageAssignments", () => {
+    it("usuário autorizado (owner) → funciona e retorna a atribuição real", async () => {
+      const caller = await makeCaller(userA, "user", { "x-organization-id": String(ORG_A) });
+      const assignments = await caller.collaboration.getStageAssignments({ processId: processA });
+      expect(assignments).toHaveLength(1);
+      expect(assignments[0].docType).toBe("dfd");
+      expect(assignments[0].assignedUserId).toBe(userA);
+    }, 30000);
+
+    it("cross-tenant (usuário da ORG_B) → NOT_FOUND", async () => {
+      const caller = await makeCaller(userB, "user", { "x-organization-id": String(ORG_B) });
+      await expect(caller.collaboration.getStageAssignments({ processId: processA })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    }, 30000);
+
+    it("mesma organização, sem acesso ao processo (nem owner, nem membro) → NOT_FOUND", async () => {
+      const caller = await makeCaller(userC, "user", { "x-organization-id": String(ORG_A) });
+      await expect(caller.collaboration.getStageAssignments({ processId: processA })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    }, 30000);
+  });
+
   // ── templates ─────────────────────────────────────────────────────────────────
   describe("templates.getById", () => {
     it("dono acessa o próprio template", async () => {
@@ -304,14 +344,14 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
     it("recusa sem ADMIN_BOOTSTRAP_CONFIRM=yes", async () => {
       delete process.env.ADMIN_BOOTSTRAP_CONFIRM;
       process.env.ADMIN_BOOTSTRAP_EMAIL = `bootstrap-${stamp}@teste.local`;
-      process.env.ADMIN_BOOTSTRAP_PASSWORD = "senha-forte-teste-123";
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
       await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
     });
 
     it("recusa sem ADMIN_BOOTSTRAP_EMAIL (sem default hardcoded)", async () => {
       process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
       delete process.env.ADMIN_BOOTSTRAP_EMAIL;
-      process.env.ADMIN_BOOTSTRAP_PASSWORD = "senha-forte-teste-123";
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
       await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
     });
 
@@ -322,11 +362,20 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
       await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
     });
 
+    it("recusa senha com 8+ caracteres mas sem complexidade (não basta comprimento)", async () => {
+      process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
+      process.env.ADMIN_BOOTSTRAP_EMAIL = `bootstrap-${stamp}@teste.local`;
+      // 12 caracteres, só minúsculas — passaria no antigo `length >= 8`, mas
+      // `validatePasswordStrength` exige maiúscula/número/caractere especial também.
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = "abcdefghijkl";
+      await expect(bootstrapAdmin()).rejects.toBeInstanceOf(ConfigError);
+    });
+
     it("cria o admin, e reexecutar é idempotente (não duplica nem rebaixa)", async () => {
       bootstrapEmail = `bootstrap-${stamp}@teste.local`;
       process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
       process.env.ADMIN_BOOTSTRAP_EMAIL = bootstrapEmail;
-      process.env.ADMIN_BOOTSTRAP_PASSWORD = "senha-forte-teste-123";
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
 
       const first = await bootstrapAdmin();
       expect(first.outcome).toBe("created");
@@ -351,7 +400,7 @@ describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {
 
       process.env.ADMIN_BOOTSTRAP_CONFIRM = "yes";
       process.env.ADMIN_BOOTSTRAP_EMAIL = existingEmail;
-      process.env.ADMIN_BOOTSTRAP_PASSWORD = "senha-forte-teste-123";
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = "Senha-Forte-Teste-123!";
 
       const result = await bootstrapAdmin();
       expect(result.outcome).toBe("promoted");

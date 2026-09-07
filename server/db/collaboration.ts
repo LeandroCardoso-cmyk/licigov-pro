@@ -123,7 +123,7 @@ export async function updateProcessMemberFunctionalRole(
   if (!db) throw new Error("Database not available");
   await db
     .update(processMembers)
-    .set({ functionalRole: functionalRole as any })
+    .set({ functionalRole })
     .where(and(eq(processMembers.processId, processId), eq(processMembers.userId, userId)));
 }
 
@@ -142,17 +142,23 @@ export async function upsertStageAssignment(assignment: InsertStageAssignment) {
     });
 }
 
-export async function removeStageAssignment(processId: number, docType: string) {
+export async function removeStageAssignment(
+  processId: number,
+  docType: "dfd" | "etp" | "tr" | "edital" | "contrato" | "ata" | "parecer"
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
     .delete(stageAssignments)
-    .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType as any)));
+    .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType)));
 }
 
 export async function getStageAssignments(processId: number) {
   const db = await getDb();
   if (!db) return [];
+  // PR 0 (Security Emergency Closure): não seleciona mais `assignedUserEmail` — o único
+  // consumidor (StageAssignmentPanel.tsx) só usa `assignedUserName`; e-mail não precisa
+  // trafegar por este boundary.
   return await db
     .select({
       id: stageAssignments.id,
@@ -163,7 +169,6 @@ export async function getStageAssignments(processId: number) {
       note: stageAssignments.note,
       createdAt: stageAssignments.createdAt,
       assignedUserName: users.name,
-      assignedUserEmail: users.email,
     })
     .from(stageAssignments)
     .leftJoin(users, eq(stageAssignments.assignedUserId, users.id))

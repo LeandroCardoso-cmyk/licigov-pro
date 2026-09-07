@@ -91,8 +91,9 @@ const resolveTenant = t.middleware(async opts => {
       throw new TRPCError({ code: "NOT_FOUND", message: "Organização informada não existe." });
     }
 
-    // Auditoria obrigatória do acesso cross-tenant do admin de plataforma — nunca
-    // pode quebrar o fluxo administrativo legítimo (falha grava apenas um aviso local).
+    // Auditoria obrigatória do acesso cross-tenant do admin de plataforma — FAIL-CLOSED:
+    // se a auditoria não puder ser persistida, o acesso cross-tenant NÃO prossegue
+    // (nunca "loga um aviso e segue"). O erro propaga e `next()` nunca é chamado.
     try {
       await db.createAuditLog({
         adminId: ctx.user.id,
@@ -107,7 +108,11 @@ const resolveTenant = t.middleware(async opts => {
         ipAddress: typeof ctx.req.ip === "string" ? ctx.req.ip : undefined,
       });
     } catch (auditError) {
-      console.warn("[trpc] Falha ao registrar auditoria de acesso cross-tenant do admin:", auditError);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Falha ao registrar auditoria de acesso administrativo — acesso bloqueado (fail-closed).",
+        cause: auditError instanceof Error ? auditError : undefined,
+      });
     }
 
     return next({
