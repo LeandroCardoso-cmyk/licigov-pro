@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { and, eq } from "drizzle-orm";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { getDb } from "../../db/connection";
 import { createVersion, restoreToVersion } from "../../services/documentVersionService";
 import { documents, documentVersions } from "../../../drizzle/schema";
@@ -35,7 +35,7 @@ describe.skipIf(!DB)("Versionamento — concorrência e rollback (MySQL real)", 
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     const maybe = await getDb();
     if (!maybe) throw new Error("getDb() retornou null com DATABASE_URL definido");
     db = maybe;

@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { createLegalOpinionWorkspace, transitionLegalStage } from "../../domain/legalOpinionWorkspace";
 import { insertLegalOpinionWorkspace } from "../../db/legalOpinionWorkspace";
 import { createOpinionDraft, updateOpinionDraft, signOpinion } from "../../services/legalOpinionWorkspaceService";
@@ -94,9 +94,9 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    // Espelha o BOOT real (migrate + ensureSchema): o safety net adiciona colunas de drift não
+    // Espelha o BOOT real (migrate + validateSchema): o safety net adiciona colunas de drift não
     // journaladas (ex.: contract_ws_documents.metadata, contract_addenda.request_origin).
-    await ensureSchema(conn);
+    await validateSchema(conn);
     await conn.query(`SET GLOBAL sql_mode = '${STRICT}'`).catch(() => {});
     await conn.query(`SET SESSION sql_mode = '${STRICT}'`);
     for (const [id, slug] of [[ORG, "v1-org"], [ORG2, "v1-org-2"]] as const) {

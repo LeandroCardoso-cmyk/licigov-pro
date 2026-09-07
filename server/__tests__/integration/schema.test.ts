@@ -112,7 +112,11 @@ describe("Schema e Migrations — Integração", () => {
     it("a tabela documents define a coluna documentStatus com enum correto", async () => {
       const { documents } = await import("../../../drizzle/schema");
       expect(documents.documentStatus).toBeDefined();
-      const columnDef = (documents.documentStatus as any).config ?? (documents.documentStatus as any)._config;
+      const col = documents.documentStatus as unknown as {
+        config?: { enumValues?: string[] };
+        _config?: { enumValues?: string[] };
+      };
+      const columnDef = col.config ?? col._config;
       if (columnDef?.enumValues) {
         expect(columnDef.enumValues).toEqual(expect.arrayContaining(["draft", "in_review", "approved", "rejected"]));
       }
@@ -144,40 +148,41 @@ describe("Schema e Migrations — Integração", () => {
     });
   });
 
-  // ── Bootstrap ensureSchema ───────────────────────────────────────────────
-  describe("server/bootstrap.ts — ensureSchema() safety net", () => {
-    it("bootstrap.ts existe como arquivo fonte", () => {
-      const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
+  // ── Bootstrap validateSchema (Fase B — RUNTIME & RELEASE SAFETY) ──────────
+  // Antes o boot rodava um RECONCILIADOR (ensureSchema) que mutava o schema em runtime.
+  // A Fase B substituiu isso por um VALIDATOR não-mutável e moveu a diferença de schema
+  // para a migration versionada 0297. Estes testes travam essa arquitetura.
+  describe("server/bootstrap.ts — validateSchema() (não-mutável, fail-closed)", () => {
+    const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
+    const source = fs.readFileSync(bootstrapPath, "utf-8");
+
+    it("bootstrap.ts existe e exporta validateSchema", () => {
       expect(fs.existsSync(bootstrapPath)).toBe(true);
+      expect(source).toContain("export async function validateSchema");
     });
 
-    it("o código-fonte de bootstrap.ts contém guard para 'createdBy'", () => {
-      const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
-      const source = fs.readFileSync(bootstrapPath, "utf-8");
-      expect(source).toContain("createdBy");
+    it("o boot NÃO executa mais DDL mutável (sem ALTER/CREATE/RENAME/addColumnIfMissing)", () => {
+      // Nenhum reconciliador em runtime: o validator só consulta INFORMATION_SCHEMA.
+      expect(source).not.toMatch(/\bALTER TABLE\b/);
+      expect(source).not.toMatch(/\bRENAME COLUMN\b/);
+      expect(source).not.toMatch(/CREATE TABLE IF NOT EXISTS/);
+      expect(source).not.toContain("addColumnIfMissing");
     });
 
-    it("o código-fonte de bootstrap.ts contém guard para 'documentStatus'", () => {
-      const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
-      const source = fs.readFileSync(bootstrapPath, "utf-8");
-      expect(source).toContain("documentStatus");
+    it("validateSchema falha fechada fora de desenvolvimento (throw) e só avisa em dev", () => {
+      expect(source).toContain("APP_CONFIG.isDevelopment");
+      expect(source).toMatch(/throw new Error\(`\[bootstrap\]/);
     });
 
-    it("o ensureSchema cobre as 6 colunas críticas conhecidas", () => {
-      const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
-      const source = fs.readFileSync(bootstrapPath, "utf-8");
-
-      const criticalColumns = ["passwordHash", "sourceType", "s3Key", "fileUrl", "createdBy", "documentStatus"];
-      for (const col of criticalColumns) {
-        expect(source, `Coluna '${col}' ausente no ensureSchema`).toContain(col);
-      }
+    it("valida a completude do ledger de migrations e estruturas críticas de segurança/tenant", () => {
+      expect(source).toContain("__drizzle_migrations");
+      expect(source).toContain("tokenVersion");
+      expect(source).toContain("passwordHash");
+      expect(source).toContain("organizationId");
     });
 
-    it("o ensureSchema usa a função addColumnIfMissing (idempotente)", () => {
-      const bootstrapPath = path.resolve(process.cwd(), "server", "bootstrap.ts");
-      const source = fs.readFileSync(bootstrapPath, "utf-8");
-      expect(source).toContain("addColumnIfMissing");
-      expect(source).toContain("INFORMATION_SCHEMA.COLUMNS");
+    it("o boot aplica migrations sob advisory lock (replay/concorrência-safe)", () => {
+      expect(source).toContain("migrateWithAdvisoryLock");
     });
   });
 });

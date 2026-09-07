@@ -74,20 +74,21 @@ describe("migration 0288 — reconciliadora, aditiva, segura", () => {
   });
 });
 
-describe("ensureSchema — não muta o schema dessas colunas (verifica presença + tipo/nulabilidade)", () => {
-  it("não adiciona mais as colunas de ingestão; usa verificação acionável", () => {
+describe("boot — não muta o schema dessas colunas (Fase B: só migration versionada garante)", () => {
+  it("o boot não adiciona (nem reconcilia) as colunas de ingestão em runtime", () => {
+    // A 0288 (migration versionada, reconciliadora) é a única fonte destas colunas.
     expect(BOOTSTRAP).not.toMatch(/addColumnIfMissing\("import_sessions",\s*"checksum"/);
     expect(BOOTSTRAP).not.toMatch(/addColumnIfMissing\("import_sessions",\s*"processId"/);
     expect(BOOTSTRAP).not.toMatch(/addColumnIfMissing\("import_sessions",\s*"importPurpose"/);
-    expect(BOOTSTRAP).toContain("assertColumnsPresent");
+    // Nenhum reconciliador em runtime: o boot NÃO muta o schema (sem addColumnIfMissing algum).
+    expect(BOOTSTRAP).not.toContain("addColumnIfMissing");
   });
 
-  it("assertColumnsPresent valida também tipo, tamanho e nulabilidade (defesa em profundidade)", () => {
-    // A verificação lê a forma da coluna no INFORMATION_SCHEMA sem mutar o schema.
-    expect(BOOTSTRAP).toMatch(/DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE/);
-    // E o call-site declara a forma esperada dos 3 campos canônicos.
-    expect(BOOTSTRAP).toMatch(/name:\s*"checksum",\s*dataType:\s*"varchar",\s*charLen:\s*64,\s*nullable:\s*true/);
-    expect(BOOTSTRAP).toMatch(/name:\s*"processId",\s*dataType:\s*"int",\s*nullable:\s*true/);
-    expect(BOOTSTRAP).toMatch(/name:\s*"importPurpose",\s*dataType:\s*"varchar",\s*charLen:\s*50,\s*nullable:\s*true/);
+  it("o boot valida (não muta): usa validateSchema e confere o ledger de migrations aplicado", () => {
+    expect(BOOTSTRAP).toContain("export async function validateSchema");
+    // A completude (incluindo as colunas da 0288) é garantida pela checagem do ledger.
+    expect(BOOTSTRAP).toContain("__drizzle_migrations");
+    // E o boot não executa DDL mutável.
+    expect(BOOTSTRAP).not.toMatch(/\bALTER TABLE\b/);
   });
 });

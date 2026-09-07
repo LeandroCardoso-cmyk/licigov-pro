@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { createIntelligentItem, itemTransitionSources } from "../../domain/intelligentItem";
 import {
   insertIntelligentItem, getIntelligentItem, transitionItemStatusCAS, listProcessTimeline,
@@ -50,7 +50,7 @@ describe.skipIf(!DB)("F2 — transição de item concorrência-segura (MySQL rea
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     await cleanup(conn);
   }, 300_000);
 

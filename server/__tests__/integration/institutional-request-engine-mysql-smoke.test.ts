@@ -23,7 +23,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import {
   requestInstitutionalReview,
   receiveRequest,
@@ -87,7 +87,7 @@ describe.skipIf(!DB)("B1 — Institutional Request Engine (MySQL estrito, fluxo 
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     // Modo estrito GLOBAL → o pool getDb() do serviço real herda; SESSION para verificações diretas.
     await conn.query(`SET GLOBAL sql_mode = '${STRICT}'`).catch(() => {});
     await conn.query(`SET SESSION sql_mode = '${STRICT}'`);

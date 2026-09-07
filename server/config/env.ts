@@ -3,6 +3,8 @@
  * Toda leitura de process.env deve passar por este módulo.
  */
 
+import { resolveAiRuntime, requiredCredentialEnvForProvider } from "./ai";
+
 export type AppEnv = "development" | "staging" | "production";
 
 const VALID_ENVS: AppEnv[] = ["development", "staging", "production"];
@@ -38,7 +40,10 @@ export const PRODUCTION_REQUIRED_ENV: ReadonlyArray<{ key: string; hint: string;
   { key: "AWS_SECRET_ACCESS_KEY", hint: "credencial AWS S3 (Storage Service)", productionOnly: true },
   { key: "AWS_S3_REGION",         hint: "região do bucket S3", productionOnly: true },
   { key: "AWS_S3_BUCKET",         hint: "nome do bucket S3", productionOnly: true },
-  // GEMINI_API_KEY é OPCIONAL nesta RC (Provider real ainda não conectado).
+  // ISSUE #159 — A credencial de IA NÃO é uma chave hardcoded aqui: a obrigatoriedade real é do
+  // provider ATIVO e é validada em validateRequiredEnv() (requiredCredentialEnvForProvider). Este
+  // catálogo de diagnóstico foca na infraestrutura (DB/JWT/AWS/e-mail); a credencial do provider
+  // ativo é exigida no boot conforme AI_PROVIDER, não listada duplicada aqui.
   // PR A.1 — e-mail institucional (convites/recuperação de senha). A validação fail-closed
   // real (staging E production) mora em config/email.ts; estas entradas existem para que o
   // diagnóstico (environmentDiagnostic/productionReadinessReport) também as reflita.
@@ -48,10 +53,20 @@ export const PRODUCTION_REQUIRED_ENV: ReadonlyArray<{ key: string; hint: string;
 ];
 
 export function validateRequiredEnv(): void {
+  // ISSUE #159 — Contrato semântico: exigimos a credencial do provider de IA ATIVO (não uma
+  // chave hardcoded). Default AI_PROVIDER=gemini → GEMINI_API_KEY; claude → ANTHROPIC_API_KEY;
+  // openai → OPENAI_API_KEY. Credenciais de providers NÃO ativos não bloqueiam o boot. Assim a
+  // validação (obrigatória) e o diagnóstico (que não hardcoda Gemini) deixam de divergir.
+  const activeProvider = resolveAiRuntime({
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    AI_MODEL: process.env.AI_MODEL,
+  }).provider;
+  const providerCredentialKey = requiredCredentialEnvForProvider(activeProvider);
+
   const required: Array<{ key: string; hint: string; condition?: boolean }> = [
     { key: "DATABASE_URL",   hint: "connection string MySQL (ex: mysql://user:pass@host/db)" },
     { key: "JWT_SECRET",     hint: "segredo JWT — mínimo 32 caracteres" },
-    { key: "GEMINI_API_KEY", hint: "chave da API Google Gemini para geração de documentos" },
+    { key: providerCredentialKey, hint: `credencial do provider de IA ativo (${activeProvider}) para geração de documentos` },
     // RC-4.2.1 — Storage/AWS obrigatório APENAS em produção (nunca fallback silencioso).
     { key: "AWS_ACCESS_KEY_ID",     hint: "credencial AWS S3 (Storage Service)", condition: IS_PRODUCTION },
     { key: "AWS_SECRET_ACCESS_KEY", hint: "credencial AWS S3 (Storage Service)", condition: IS_PRODUCTION },

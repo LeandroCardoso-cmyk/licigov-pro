@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { createContractAddendum } from "../../domain/contractInstruments";
 import { insertContractAddendum } from "../../db/contractWorkspace";
 import { getDashboard } from "../../services/departmentOperationService";
@@ -52,7 +52,7 @@ describe.skipIf(!DB)("Aditivos KPI — Central conta aditivos reais por tenant (
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     await cleanup();
   }, 300_000);
 

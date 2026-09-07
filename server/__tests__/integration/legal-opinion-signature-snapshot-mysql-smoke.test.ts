@@ -18,7 +18,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { requestInstitutionalReview } from "../../services/institutionalRequestService";
 import {
   openWorkspaceFromRequest, createOpinionDraft, signOpinion,
@@ -96,7 +96,7 @@ describe.skipIf(!DB)("V1 — snapshot de assinatura do Parecer (MySQL real)", ()
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     await cleanup();
     await seedUserAndMembership(SIGNER, SIGNER_NAME, ORG, SIGNER_ROLE);
     await seedUserAndMembership(REQUESTER, "Solicitante", ORG, "operator");

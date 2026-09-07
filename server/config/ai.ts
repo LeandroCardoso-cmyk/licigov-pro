@@ -23,6 +23,23 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderName, string> = {
   openai: "gpt-4o-mini",
 };
 
+/**
+ * ISSUE #159 — Contrato de credencial por provider ATIVO. O boot exige a credencial do
+ * provider realmente selecionado (não uma chave hardcoded). Provider não ativo → sua chave
+ * não bloqueia o boot. Hoje só Gemini é operacional; Claude/OpenAI têm a chave mapeada para
+ * quando seus adaptadores forem ativados (não fingimos suporte — apenas declaramos a chave certa).
+ */
+export const CREDENTIAL_ENV_BY_PROVIDER: Record<AIProviderName, string> = {
+  gemini: "GEMINI_API_KEY",
+  claude: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
+/** Nome da variável de ambiente com a credencial exigida pelo provider informado. Puro/testável. */
+export function requiredCredentialEnvForProvider(provider: AIProviderName): string {
+  return CREDENTIAL_ENV_BY_PROVIDER[provider];
+}
+
 /** Resolve provider + modelo primários a partir do ambiente. Puro e determinístico (testável). */
 export function resolveAiRuntime(env: { AI_PROVIDER?: string; AI_MODEL?: string }): {
   provider: AIProviderName;
