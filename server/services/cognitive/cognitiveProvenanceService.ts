@@ -270,7 +270,12 @@ export interface ReplayOriginalLineage {
  * (correlation/actor/task/context atuais + idempotencyKey) e REFERENCIA a execução ORIGINAL
  * (`replayOfExecutionId` + provider/model/outputFingerprint só como lineage factual). O id
  * determinístico incorpora original + chave + correlationId ATUAL: pedidos de replay distintos
- * não colapsam; o mesmo pedido (mesmo correlationId) retried é idempotente. BEST-EFFORT: nunca lança.
+ * não colapsam; o mesmo pedido (mesmo correlationId) retried é idempotente.
+ *
+ * OBRIGATÓRIO (mesma filosofia/erro canônico da proveniência original): em staging/produção, falha
+ * ao persistir o marcador → FAIL-CLOSED (`CognitiveProvenancePersistenceError`). O chamador NÃO pode
+ * entregar o conteúdo replayado como sucesso sem registrar a correlação atual. Dev/test degrada de
+ * forma controlada (retorna null; nunca finge persistência).
  */
 export async function recordReplayMarker(params: {
   organizationId: number;
@@ -287,7 +292,7 @@ export async function recordReplayMarker(params: {
   };
   original: ReplayOriginalLineage;
 }): Promise<ProvenanceEnvelope | null> {
-  try {
+  {
     // executionId do marcador: determinístico por (original, chave, correlationId ATUAL) — pedidos
     // de replay distintos não colapsam; o mesmo correlationId retried é idempotente.
     const markerExecId = createHash("sha256")
@@ -325,11 +330,12 @@ export async function recordReplayMarker(params: {
       actorUserId: params.current.actorUserId ?? null,
       failureMessage: null,
     };
-    await insertCognitiveProvenance(env);
-    return env;
-  } catch (e) {
-    log.error("replay_marker_persist_failed", { correlationId: params.current.correlationId, error: sanitizeFailureMessage(e instanceof Error ? e.message : String(e)) });
-    return null;
+    // OBRIGATÓRIO (mesma filosofia da proveniência original): staging/produção → FAIL-CLOSED se não
+    // persistir; dev → controlado (null). O chamador NÃO entrega o replay como sucesso sem registrar.
+    return persistMandatory(env, undefined, {
+      replayMarker: true, correlationId: params.current.correlationId,
+      replayOfExecutionId: params.original.executionId, organizationId: params.organizationId,
+    });
   }
 }
 

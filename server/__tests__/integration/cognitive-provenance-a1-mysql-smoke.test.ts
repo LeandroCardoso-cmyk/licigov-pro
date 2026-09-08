@@ -25,7 +25,7 @@ import { runMigrations } from "../../bootstrap";
 import { createExecutionContext, type AIExecutionContext } from "../../domain/aiExecutionContext";
 import type { CognitiveResponse } from "../../domain/cognitiveResponse";
 import { provenanceId, evidenceRef, computeEvidenceFingerprint } from "../../domain/cognitiveProvenance";
-import { insertCognitiveProvenance, getProvenanceByExecutionId, linkProvenanceArtifact } from "../../db/cognitiveProvenance";
+import { insertCognitiveProvenance, getProvenanceByExecutionId, getOriginalProvenanceByIdempotencyKey, linkProvenanceArtifact } from "../../db/cognitiveProvenance";
 import { captureCognitiveProvenance, captureCognitiveFailure } from "../../services/cognitive/cognitiveProvenanceService";
 import { executeCognitiveTask } from "../../services/aiExecutionEngine";
 
@@ -145,6 +145,32 @@ describe.skipIf(!DB)("A1 (final) — Cognitive Provenance / Degraded / Replay (M
     ).rejects.toMatchObject({ code: "CONFLICT" });
     const originalsAfterConflict = (await rowsByCorrelation(ORG_A, "corr-orig")).filter((r) => r.isReplay === 0);
     expect(originalsAfterConflict.length).toBe(1); // continua 1 — nenhuma nova execução
+  }, 120_000);
+
+  // ── Lineage de idempotência na ORIGINAL (is_replay=0) ───────────────────────
+  it("IDENTITY: execução keyed persiste idempotency_key na ORIGINAL; getOriginalProvenanceByIdempotencyKey recupera (tenant-scoped); keyless → NULL", async () => {
+    const key = "idem-lineage-1";
+    const base = { task: "PROCUREMENT_REASONING" as any, tenantId: ORG_A, userId: "u-actor", actorUserId: USER, idempotencyKey: key, query: "lineage de idempotência" };
+    await executeCognitiveTask({ ...base, correlationId: "corr-lineage" });
+
+    // A linha ORIGINAL (is_replay=0) da correlação carrega a idempotency_key.
+    const originals = (await rowsByCorrelation(ORG_A, "corr-lineage")).filter((r) => r.isReplay === 0);
+    expect(originals.length).toBe(1);
+    expect(originals[0].idempotencyKey).toBe(key);
+
+    // getOriginalProvenanceByIdempotencyKey volta a funcionar (factual + tenant-scoped).
+    const found = await getOriginalProvenanceByIdempotencyKey(ORG_A, key);
+    expect(found).not.toBeNull();
+    expect(found!.executionId).toBe(originals[0].executionId);
+    expect(found!.isReplay).toBe(0);
+    // Outro tenant NÃO recupera.
+    expect(await getOriginalProvenanceByIdempotencyKey(ORG_B, key)).toBeNull();
+
+    // Execução KEYLESS → original com idempotency_key NULL (nunca fabricada).
+    await executeCognitiveTask({ task: "PROCUREMENT_REASONING" as any, tenantId: ORG_A, userId: "u-actor", query: "sem chave", correlationId: "corr-keyless" });
+    const keyless = (await rowsByCorrelation(ORG_A, "corr-keyless")).filter((r) => r.isReplay === 0);
+    expect(keyless.length).toBe(1);
+    expect(keyless[0].idempotencyKey).toBeNull();
   }, 120_000);
 
   // ── E. Imutabilidade insert-once ────────────────────────────────────────────

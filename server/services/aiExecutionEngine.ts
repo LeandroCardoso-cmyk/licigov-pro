@@ -459,7 +459,7 @@ async function executeCognitiveCore(input: CognitiveTaskInput): Promise<Cognitiv
     await captureCognitiveFailure({
       organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
       task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
-      usesGrounding: g.usesGrounding, usesRAG: g.usesRAG,
+      usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, idempotencyKey: input.idempotencyKey ?? null,
       businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
       actorUserId: input.userId, semanticInput: provenanceSemanticInput, error: err,
     });
@@ -534,7 +534,7 @@ async function executeCognitiveCore(input: CognitiveTaskInput): Promise<Cognitiv
   if (!validation.valid) await captureCognitiveFailure({
     organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
     task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
-    usesGrounding: g.usesGrounding, usesRAG: g.usesRAG,
+    usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, idempotencyKey: input.idempotencyKey ?? null,
     businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
     actorUserId: input.userId, semanticInput: provenanceSemanticInput,
     error: { name: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
@@ -553,6 +553,7 @@ async function executeCognitiveCore(input: CognitiveTaskInput): Promise<Cognitiv
     context, response, query: input.query,
     documentRefs: input.documentRefs ?? [], lawRefs: input.lawRefs ?? [],
     usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, finishReason,
+    idempotencyKey: input.idempotencyKey ?? null, // lineage de idempotência na linha ORIGINAL (is_replay=0)
   });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
