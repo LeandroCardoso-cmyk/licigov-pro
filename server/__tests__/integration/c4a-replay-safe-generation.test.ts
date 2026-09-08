@@ -42,7 +42,12 @@ vi.mock("../../db/procurement", () => ({
 }));
 
 vi.mock("../../services/documentEngineService", () => ({
-  generateOfficialDocument: vi.fn(async () => { effectOrder.push("official"); return { id: "off-1", version: 1 }; }),
+  generateOfficialDocument: vi.fn(async () => { effectOrder.push("official"); return { id: "off-1", version: 1, lineageId: "lin-1" }; }),
+}));
+
+// A1 — o linkage de proveniência → artefato ocorre na MESMA transação. Spy registra o efeito/tx.
+vi.mock("../../db/cognitiveProvenance", () => ({
+  linkProvenanceArtifact: vi.fn(async () => { effectOrder.push("provenance-link"); }),
 }));
 
 vi.mock("../../services/workspaceOrchestratorService", () => ({
@@ -74,6 +79,7 @@ import {
 import * as procDb from "../../db/procurement";
 import * as docEngine from "../../services/documentEngineService";
 import * as orchestrator from "../../services/workspaceOrchestratorService";
+import * as provDb from "../../db/cognitiveProvenance";
 
 const ORG = 42;
 const PID = "proc-2026-0007";
@@ -169,13 +175,16 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
 
     expect(replayed).toBe(false);
     expect(document.kind).toBe("etp");
-    // Cognição fora da transação, ANTES da persistência; save da idempotência POR ÚLTIMO, junto do commit.
-    expect(effectOrder).toEqual(["cognition", "generated", "official", "event", "idempotency-save"]);
+    // Cognição fora da transação, ANTES da persistência; A1 — o linkage de proveniência ocorre na MESMA
+    // transação (após o documento oficial); save da idempotência POR ÚLTIMO, junto do commit.
+    expect(effectOrder).toEqual(["cognition", "generated", "official", "provenance-link", "event", "idempotency-save"]);
     // Persistência recebe o MESMO executor (transação externa) — commit atômico. O primitive governado
     // recebe o tx como PRIMEIRO argumento (applyDraftContentMutationTx(tx, input)).
     expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][0]).toBe(fakeTx);
     expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][1]).toBe(fakeTx);
     expect(vi.mocked(docEngine.generateOfficialDocument).mock.calls[0][1]).toBe(fakeTx);
+    // A1 — o linkage de proveniência recebe o MESMO tx (atomicidade: sem artefato com proveniência perdida).
+    expect(vi.mocked(provDb.linkProvenanceArtifact).mock.calls[0][0]).toBe(fakeTx);
     expect(saveIdempotencyResult.mock.calls[0][4]).toBe(fakeTx);
     expect(failIdempotencyKey).not.toHaveBeenCalled();
   });

@@ -32,6 +32,8 @@ import {
   recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
   getGeneratedDocumentByKind, type ProcurementExecutor, type DraftEditOperation,
 } from "../db/procurement";
+// V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
+import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
 
 const DOMAIN = "processo_licitatorio" as const;
 
@@ -422,11 +424,19 @@ export async function generateDocument(params: {
             expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
           });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
-          await generateOfficialDocument({
+          const official = await generateOfficialDocument({
             organizationId: params.organizationId, businessDomain: DOMAIN, documentType: params.kind,
             origin: params.processId, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
             metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, approvedItems: approved.length },
           }, tx);
+          // A1 — LINKAGE de proveniência cognitiva → artefato de trabalho (generated_document) + documento
+          // oficial materializado + linhagem, na MESMA transação (atomicidade: nunca artefato com
+          // proveniência perdida). Escopado ao tenant e à correlação da geração. Não fabrica nada.
+          await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
+            organizationId: params.organizationId, correlationId: params.correlationId,
+            artifactKind: params.kind, artifactId: document.id,
+            officialDocumentId: official.id, officialLineageId: official.lineageId,
+          });
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
             actor: "multi_copilot", summary: `${params.kind.toUpperCase()} gerado (rascunho) a partir de ${approved.length} item(ns).`,

@@ -34,6 +34,9 @@ import {
 } from "../domain/cognitiveResponse";
 import { getPromptBuilder } from "./cognitive/promptBuilders";
 import { recordCognitiveObservability, recordCognitiveFailure, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
+// V1 PRE-PILOT CLOSURE — Fase A1: captura de proveniência cognitiva (aditiva, fail-safe).
+import { captureCognitiveProvenance, captureCognitiveFailure } from "./cognitive/cognitiveProvenanceService";
+import type { SemanticCognitiveInput } from "../domain/cognitiveProvenance";
 import { getRulesForTask } from "../domain/institutionalRules";
 import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
 // RC-5.0 — o engine apenas CONSOME o ContextPackage (tipo puro; nunca acessa o Corpus diretamente).
@@ -286,6 +289,27 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const resolution = selectProvider(policy.preferredProvider, policy.fallbackProvider);
   push("provider", "applied", `Provider selecionado: ${resolution.selected}${resolution.usedFallback ? " (fallback)" : ""}.`);
 
+  // A1 — identidade determinística da execução (executionId + replayHash) computada ANTES da chamada
+  // ao provider, para que a proveniência da FALHA e do SUCESSO usem os MESMOS identificadores lógicos.
+  const provenanceProvider = resolution.provider.name;
+  const provenanceModel = policy.model;
+  const provenanceRequest: CognitiveRequest = {
+    tenantId: input.tenantId, userId: input.userId, businessDomain: input.businessDomain,
+    workspaceId: input.workspaceId, processId: input.processId, stage: input.stage,
+    task: input.task, prompt: prompt.user, correlationId: input.correlationId,
+  };
+  const provenanceReplayHash = officialReplayHash({
+    request: provenanceRequest, provider: provenanceProvider, model: provenanceModel,
+    grounding: { groundingApplied: g.usesGrounding, ragApplied: g.usesRAG, knowledgeGraphApplied: g.usesKnowledgeGraph },
+  });
+  const provenanceExecutionId = createHash("sha256")
+    .update(`ctx:${input.tenantId}:${input.correlationId}:${provenanceReplayHash}`).digest("hex").slice(0, 20);
+  const provenanceSemanticInput: SemanticCognitiveInput = {
+    tenantId: input.tenantId, task: String(input.task), businessDomain: input.businessDomain,
+    processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+    query: input.query, documentRefs: input.documentRefs, lawRefs: input.lawRefs,
+  };
+
   // Stage: LLM (com timeout + retry controlado — AI-014)
   const startedAt = Date.now();
   let generated: Awaited<ReturnType<typeof resolution.provider.generate>>;
@@ -315,6 +339,14 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
       task: input.task, module: input.businessDomain, provider: resolution.provider.name, model: policy.model,
       processId: input.processId, governedInput: prompt.user, latencyMs: Math.max(0, Date.now() - startedAt),
       error: { code: (err as { name?: string })?.name || "AI_PROVIDER_ERROR", message: err instanceof Error ? err.message : String(err) },
+    });
+    // A1 — proveniência da FALHA (status `failed` + classe de falha governada + mensagem sanitizada).
+    // Preserva a falha original (não altera o erro nem o fluxo). Fail-safe.
+    await captureCognitiveFailure({
+      organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
+      task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
+      businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+      actorUserId: input.userId, semanticInput: provenanceSemanticInput, error: err,
     });
     throw err;
   }
@@ -383,11 +415,28 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
     processId: input.processId, governedInput: prompt.user, latencyMs, replayHash,
     error: { code: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
   });
+  // A1 — proveniência da FALHA de contrato (Structured Output inválido) como `failed` (invalid_input).
+  if (!validation.valid) await captureCognitiveFailure({
+    organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
+    task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
+    businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+    actorUserId: input.userId, semanticInput: provenanceSemanticInput,
+    error: { name: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
+  });
+  // Invariante (preservado verbatim): nenhuma resposta inválida sai do Engine.
   if (!validation.valid) throw new InvalidCognitiveResponse(validation.errors);
 
   // Stage: Result (contexto + observabilidade)
   const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning, finishReason } });
   const observability = recordCognitiveObservability({ context, response, validation, reasoningPlan });
+  // A1 — proveniência do SUCESSO/DEGRADADO (provider/model REAIS, fingerprints, grounding honesto, estado
+  // degradado explícito). Aguardada para garantir persistência ANTES do linkage de artefato (mesma correlação).
+  await captureCognitiveProvenance({
+    context, response, query: input.query,
+    documentRefs: input.documentRefs ?? [], lawRefs: input.lawRefs ?? [],
+    usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, finishReason,
+    evidenceCount: 0, evidenceComplete: false,
+  });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
   return { response, context, observability, validation, reasoningPlan, stages, institutionalContextRef: pkg?.replayHash };

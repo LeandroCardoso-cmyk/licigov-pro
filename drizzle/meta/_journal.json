@@ -1998,6 +1998,13 @@
       "when": 1788805164111,
       "tag": "0297_phase_b_schema_closure",
       "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "5",
+      "when": 1788831712412,
+      "tag": "0298_a1_cognitive_provenance",
+      "breakpoints": true
     }
   ]
 }
