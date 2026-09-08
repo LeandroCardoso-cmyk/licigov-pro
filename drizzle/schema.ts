@@ -5910,6 +5910,62 @@ export const cognitiveObservabilityTable = mysqlTable("cognitive_observability",
   createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
+// ─── V1 PRE-PILOT CLOSURE — Fase A1 — Cognitive Provenance (ledger IMUTÁVEL) ───
+// Proveniência cognitiva canônica: quem iniciou, org (tenant boundary = organization_id),
+// processo/contexto, task cognitiva, versões (task/prompt/orquestrador), provider/model REAIS
+// (nullable — determinístico/legado NÃO fabrica), fingerprints (input/output/evidence), estado
+// de grounding, estado degradado (status + motivo), classe de falha, linkage de replay
+// (idempotency_key/is_replay/replay_of), linhagem de artefato (generated/official), estado de
+// aprovação (human-in-the-loop) e classe de proveniência (provenanced vs legacy_unclassified).
+// Snapshot IMUTÁVEL da execução ORIGINAL (edição humana posterior NÃO reescreve). Sem prompt cru,
+// sem segredos, sem payload gigante. Multi-tenant por organization_id. Idempotente por id determinístico.
+export const cognitiveProvenanceTable = mysqlTable("cognitive_provenance", {
+  id:                   varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  executionId:          varchar("execution_id", { length: 20 }).notNull().default(""),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  task:                 varchar("task", { length: 60 }).notNull().default(""),
+  executionMode:        varchar("execution_mode", { length: 20 }).notNull().default("cognitive"),
+  executionStatus:      varchar("execution_status", { length: 24 }).notNull().default("completed"),
+  degradationReason:    varchar("degradation_reason", { length: 40 }),
+  failureClass:         varchar("failure_class", { length: 40 }),
+  groundingState:       varchar("grounding_state", { length: 24 }).notNull().default("not_applicable"),
+  provenanceClass:      varchar("provenance_class", { length: 24 }).notNull().default("provenanced"),
+  provider:             varchar("provider", { length: 40 }),
+  model:                varchar("model", { length: 80 }),
+  taskVersion:          varchar("task_version", { length: 20 }).notNull().default(""),
+  promptContractVersion: varchar("prompt_contract_version", { length: 40 }).notNull().default(""),
+  orchestratorVersion:  varchar("orchestrator_version", { length: 20 }).notNull().default(""),
+  inputFingerprint:     varchar("input_fingerprint", { length: 64 }).notNull().default(""),
+  outputFingerprint:    varchar("output_fingerprint", { length: 64 }),
+  evidenceFingerprint:  varchar("evidence_fingerprint", { length: 64 }),
+  replayHash:           varchar("replay_hash", { length: 64 }).notNull().default(""),
+  idempotencyKey:       varchar("idempotency_key", { length: 255 }),
+  isReplay:             int("is_replay").notNull().default(0),
+  replayOfExecutionId:  varchar("replay_of_execution_id", { length: 20 }),
+  approvalState:        varchar("approval_state", { length: 40 }).notNull().default("generated"),
+  artifactKind:         varchar("artifact_kind", { length: 20 }),
+  artifactId:           varchar("artifact_id", { length: 20 }),
+  officialDocumentId:   varchar("official_document_id", { length: 20 }),
+  officialLineageId:    varchar("official_lineage_id", { length: 20 }),
+  businessDomain:       varchar("business_domain", { length: 50 }),
+  processId:            varchar("process_id", { length: 20 }),
+  workspaceId:          varchar("workspace_id", { length: 60 }),
+  stage:                varchar("stage", { length: 60 }),
+  actorUserId:          varchar("actor_user_id", { length: 60 }),
+  failureMessage:       varchar("failure_message", { length: 300 }),
+  createdAt:            datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  index("idx_cognitive_provenance_exec").on(table.organizationId, table.executionId),
+  index("idx_cognitive_provenance_corr").on(table.organizationId, table.correlationId),
+  index("idx_cognitive_provenance_idem").on(table.organizationId, table.idempotencyKey),
+  index("idx_cognitive_provenance_artifact").on(table.organizationId, table.artifactKind, table.artifactId),
+  index("idx_cognitive_provenance_created").on(table.organizationId, table.createdAt),
+]);
+
+export type CognitiveProvenanceRow = typeof cognitiveProvenanceTable.$inferSelect;
+export type InsertCognitiveProvenance = typeof cognitiveProvenanceTable.$inferInsert;
+
 // ─── RC-5.1 (correção) — "Tirar Dúvidas" · Persistência institucional ─────────
 // Fonte de verdade das consultas institucionais e das fontes/evidências utilizadas.
 // Multi-tenant (organization_id), auditável, replay-safe. Substitui o histórico em memória.

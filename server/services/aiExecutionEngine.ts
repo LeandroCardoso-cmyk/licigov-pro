@@ -34,6 +34,17 @@ import {
 } from "../domain/cognitiveResponse";
 import { getPromptBuilder } from "./cognitive/promptBuilders";
 import { recordCognitiveObservability, recordCognitiveFailure, type CognitiveObservability } from "./cognitive/cognitiveObservabilityService";
+import { TRPCError } from "@trpc/server";
+// V1 PRE-PILOT CLOSURE — Fase A1: proveniência cognitiva (captura obrigatória + replay no boundary real).
+import {
+  captureCognitiveProvenance, captureCognitiveFailure, recordReplayMarker,
+  COGNITIVE_REPLAY_OP, type ReplayOriginalLineage,
+} from "./cognitive/cognitiveProvenanceService";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
+import {
+  computeInputFingerprint, computeOutputFingerprint, deriveExecutionState,
+  type SemanticCognitiveInput,
+} from "../domain/cognitiveProvenance";
 import { getRulesForTask } from "../domain/institutionalRules";
 import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
 // RC-5.0 — o engine apenas CONSOME o ContextPackage (tipo puro; nunca acessa o Corpus diretamente).
@@ -210,6 +221,15 @@ export interface CognitiveTaskInput {
    * limite de saída — por isso a consulta define este teto explicitamente.
    */
   readonly maxOutputTokens?: number;
+  /**
+   * A1 — Idempotency-Key do PEDIDO (quando o fluxo já possui idempotência). Presente + `actorUserId` →
+   * a execução é governada pelo contrato de replay no boundary real: replay não re-chama o provider;
+   * mesma chave + payload diferente → CONFLICT. NUNCA é fabricada a partir de prompt/replayHash. Fluxos
+   * sem chave (consultas sem side-effect) seguem sem replay de request, mas ainda persistem proveniência.
+   */
+  readonly idempotencyKey?: string;
+  /** A1 — ator (id numérico) do pedido, componente da chave de idempotência (org, actor, key). */
+  readonly actorUserId?: number;
 }
 
 export interface CognitiveExecution {
@@ -221,6 +241,14 @@ export interface CognitiveExecution {
   readonly stages: PipelineStageResult[];
   /** RC-5.0 — referência (replayHash) do ContextPackage consumido, quando fornecido. */
   readonly institutionalContextRef?: string;
+  /** A1 — true quando este resultado veio de um REPLAY (provider NÃO foi chamado nesta requisição). */
+  readonly replayed?: boolean;
+}
+
+/** A1 — snapshot cacheado (idempotência) de uma execução cognitiva: resultado autoritativo + lineage. */
+interface CachedCognitiveExecution {
+  readonly execution: CognitiveExecution;
+  readonly lineage: ReplayOriginalLineage;
 }
 
 /** Confidence determinística (fase de fundação — sem LLM real) derivada do replayHash. */
@@ -230,12 +258,100 @@ function deterministicConfidence(replayHash: string): number {
 }
 
 /**
- * Executa uma Cognitive Task pelo pipeline cognitivo oficial. A decisão de provider
+ * A1 — ENTRYPOINT CANÔNICO da execução cognitiva. Governa o CONTRATO DE REPLAY no boundary REAL:
+ * quando o pedido traz uma Idempotency-Key válida (+ ator), reutiliza o idempotencyService canônico —
+ *   - completed + mesmo payload → REPLAY: NÃO chama o provider; devolve o resultado ORIGINAL
+ *     autoritativo (replayed=true) e registra um marcador do PEDIDO ATUAL referenciando a original;
+ *   - completed + payload diferente → CONFLICT (fail-closed, sem provider);
+ *   - processing → CONFLICT;
+ *   - new/failed → executa a cognição UMA vez (provider ≤ 1x) e cacheia o snapshot autoritativo.
+ * NÃO fabrica chave a partir de prompt/replayHash. Sem chave (consultas sem side-effect) → segue direto
+ * (sem replay de request), mas AINDA persiste proveniência. Não cria um segundo sistema de idempotência.
+ */
+export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<CognitiveExecution> {
+  const key = input.idempotencyKey;
+  const actor = input.actorUserId;
+  if (key && actor !== undefined && actor !== null) {
+    return executeCognitiveWithReplay(input, key, actor);
+  }
+  return executeCognitiveCore(input);
+}
+
+/** Constrói o insumo semântico do pedido (base do input fingerprint / payloadHash do replay). */
+function semanticInputOf(input: CognitiveTaskInput): SemanticCognitiveInput {
+  return {
+    tenantId: input.tenantId, task: String(input.task), businessDomain: input.businessDomain,
+    processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+    query: input.query, documentRefs: input.documentRefs, lawRefs: input.lawRefs,
+  };
+}
+
+/** Normaliza o snapshot cacheado (objeto no MySQL 8 / string no MariaDB). */
+function reviveCachedExecution(raw: unknown): CachedCognitiveExecution {
+  return (typeof raw === "string" ? JSON.parse(raw) : raw) as CachedCognitiveExecution;
+}
+
+/**
+ * A1 — governança de replay no boundary real (reusa checkIdempotency/save/fail canônicos). O provider
+ * é chamado SOMENTE na execução original; o replay devolve o resultado autoritativo original sem
+ * re-chamar o provider e registra o marcador do PEDIDO ATUAL.
+ */
+async function executeCognitiveWithReplay(input: CognitiveTaskInput, key: string, actor: number): Promise<CognitiveExecution> {
+  const payloadHash = computeInputFingerprint(semanticInputOf(input));
+  const check = await checkIdempotency(key, actor, input.tenantId, COGNITIVE_REPLAY_OP, payloadHash);
+
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key cognitiva reutilizada com payload diferente — execução recusada." });
+    }
+    const cached = reviveCachedExecution(check.response);
+    // Marcador do PEDIDO ATUAL (correlation/actor/task/context atuais) referenciando a ORIGINAL.
+    await recordReplayMarker({
+      organizationId: input.tenantId, idempotencyKey: key, inputFingerprint: payloadHash,
+      current: {
+        correlationId: input.correlationId, actorUserId: input.userId, task: String(input.task),
+        businessDomain: input.businessDomain ?? null, processId: input.processId ?? null,
+        workspaceId: input.workspaceId ?? null, stage: input.stage ?? null,
+      },
+      original: cached.lineage,
+    });
+    return { ...cached.execution, replayed: true };
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: "Execução cognitiva idêntica já está em processamento para esta chave — aguarde a conclusão." });
+  }
+
+  // new/failed: executa a cognição UMA vez (provider ≤ 1x) e cacheia o snapshot autoritativo.
+  try {
+    const execution = await executeCognitiveCore(input);
+    const derived = deriveExecutionState({
+      finishReason: execution.context.outcome.finishReason,
+      usesGrounding: execution.context.grounding.groundingApplied,
+      usesRAG: execution.context.grounding.ragApplied,
+      evidenceCount: 0, evidenceComplete: false,
+    });
+    const lineage: ReplayOriginalLineage = {
+      executionId: execution.context.id, replayHash: execution.context.replayHash,
+      provider: execution.context.outcome.provider, model: execution.context.outcome.model,
+      outputFingerprint: computeOutputFingerprint(execution.response.content ?? ""),
+      groundingState: derived.groundingState, executionStatus: derived.status, executionMode: "cognitive",
+    };
+    const snapshot: CachedCognitiveExecution = { execution, lineage };
+    await saveIdempotencyResult(key, actor, input.tenantId, snapshot as unknown as Record<string, unknown>);
+    return execution;
+  } catch (err) {
+    await failIdempotencyKey(key, actor, input.tenantId);
+    throw err;
+  }
+}
+
+/**
+ * Executa uma Cognitive Task pelo pipeline cognitivo oficial (núcleo). A decisão de provider
  * ocorre exclusivamente via política da tarefa + Provider Adapter. Retorna uma
  * CognitiveResponse estruturada (nunca texto solto), o contexto de execução e a
  * observabilidade. Determinístico e replay-safe.
  */
-export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<CognitiveExecution> {
+async function executeCognitiveCore(input: CognitiveTaskInput): Promise<CognitiveExecution> {
   const stages: PipelineStageResult[] = [];
   const push = (stage: PipelineStageName, status: "applied" | "skipped", detail: string) => stages.push({ stage, status, detail });
 
@@ -286,6 +402,27 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
   const resolution = selectProvider(policy.preferredProvider, policy.fallbackProvider);
   push("provider", "applied", `Provider selecionado: ${resolution.selected}${resolution.usedFallback ? " (fallback)" : ""}.`);
 
+  // A1 — identidade determinística da execução (executionId + replayHash) computada ANTES da chamada
+  // ao provider, para que a proveniência da FALHA e do SUCESSO usem os MESMOS identificadores lógicos.
+  const provenanceProvider = resolution.provider.name;
+  const provenanceModel = policy.model;
+  const provenanceRequest: CognitiveRequest = {
+    tenantId: input.tenantId, userId: input.userId, businessDomain: input.businessDomain,
+    workspaceId: input.workspaceId, processId: input.processId, stage: input.stage,
+    task: input.task, prompt: prompt.user, correlationId: input.correlationId,
+  };
+  const provenanceReplayHash = officialReplayHash({
+    request: provenanceRequest, provider: provenanceProvider, model: provenanceModel,
+    grounding: { groundingApplied: g.usesGrounding, ragApplied: g.usesRAG, knowledgeGraphApplied: g.usesKnowledgeGraph },
+  });
+  const provenanceExecutionId = createHash("sha256")
+    .update(`ctx:${input.tenantId}:${input.correlationId}:${provenanceReplayHash}`).digest("hex").slice(0, 20);
+  const provenanceSemanticInput: SemanticCognitiveInput = {
+    tenantId: input.tenantId, task: String(input.task), businessDomain: input.businessDomain,
+    processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+    query: input.query, documentRefs: input.documentRefs, lawRefs: input.lawRefs,
+  };
+
   // Stage: LLM (com timeout + retry controlado — AI-014)
   const startedAt = Date.now();
   let generated: Awaited<ReturnType<typeof resolution.provider.generate>>;
@@ -315,6 +452,16 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
       task: input.task, module: input.businessDomain, provider: resolution.provider.name, model: policy.model,
       processId: input.processId, governedInput: prompt.user, latencyMs: Math.max(0, Date.now() - startedAt),
       error: { code: (err as { name?: string })?.name || "AI_PROVIDER_ERROR", message: err instanceof Error ? err.message : String(err) },
+    });
+    // A1 — proveniência da FALHA (status `failed` + classe de falha governada + mensagem sanitizada).
+    // grounding_state factual (usa o grounding declarado pela task). BEST-EFFORT: preserva a falha
+    // original (não altera o erro nem o fluxo).
+    await captureCognitiveFailure({
+      organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
+      task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
+      usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, idempotencyKey: input.idempotencyKey ?? null,
+      businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+      actorUserId: input.userId, semanticInput: provenanceSemanticInput, error: err,
     });
     throw err;
   }
@@ -383,11 +530,31 @@ export async function executeCognitiveTask(input: CognitiveTaskInput): Promise<C
     processId: input.processId, governedInput: prompt.user, latencyMs, replayHash,
     error: { code: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
   });
+  // A1 — proveniência da FALHA de contrato (Structured Output inválido) como `failed` (invalid_input).
+  if (!validation.valid) await captureCognitiveFailure({
+    organizationId: input.tenantId, executionId: provenanceExecutionId, correlationId: input.correlationId,
+    task: String(input.task), provider: provenanceProvider, model: provenanceModel, replayHash: provenanceReplayHash,
+    usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, idempotencyKey: input.idempotencyKey ?? null,
+    businessDomain: input.businessDomain, processId: input.processId, workspaceId: input.workspaceId, stage: input.stage,
+    actorUserId: input.userId, semanticInput: provenanceSemanticInput,
+    error: { name: "STRUCTURED_OUTPUT_INVALID", message: validation.errors.join("; ") },
+  });
+  // Invariante (preservado verbatim): nenhuma resposta inválida sai do Engine.
   if (!validation.valid) throw new InvalidCognitiveResponse(validation.errors);
 
   // Stage: Result (contexto + observabilidade)
   const context = createExecutionContext({ request, grounding: groundingUsage, outcome: { provider, model, latencyMs, tokens, confidence, reasoning, finishReason } });
   const observability = recordCognitiveObservability({ context, response, validation, reasoningPlan });
+  // A1 — proveniência do SUCESSO/DEGRADADO (provider/model REAIS, fingerprints, grounding honesto, estado
+  // degradado explícito). Aguardada para garantir persistência ANTES do linkage de artefato (mesma correlação).
+  // A1 — sem evidência estruturada REAL nesta fase (A2 preenche via EvidenceRefs); `evidences` omitido →
+  // evidenceFingerprint NULL e grounding_state honesto (ungrounded quando a task exige grounding/RAG).
+  await captureCognitiveProvenance({
+    context, response, query: input.query,
+    documentRefs: input.documentRefs ?? [], lawRefs: input.lawRefs ?? [],
+    usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, finishReason,
+    idempotencyKey: input.idempotencyKey ?? null, // lineage de idempotência na linha ORIGINAL (is_replay=0)
+  });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
   return { response, context, observability, validation, reasoningPlan, stages, institutionalContextRef: pkg?.replayHash };

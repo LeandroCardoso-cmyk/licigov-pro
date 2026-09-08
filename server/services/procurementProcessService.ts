@@ -32,6 +32,8 @@ import {
   recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
   getGeneratedDocumentByKind, type ProcurementExecutor, type DraftEditOperation,
 } from "../db/procurement";
+// V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
+import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
 
 const DOMAIN = "processo_licitatorio" as const;
 
@@ -422,11 +424,28 @@ export async function generateDocument(params: {
             expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
           });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
-          await generateOfficialDocument({
+          const official = await generateOfficialDocument({
             organizationId: params.organizationId, businessDomain: DOMAIN, documentType: params.kind,
             origin: params.processId, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
             metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, approvedItems: approved.length },
           }, tx);
+          // A1 — LINKAGE de proveniência cognitiva → artefato de trabalho (generated_document) + documento
+          // oficial materializado + linhagem, na MESMA transação (atomicidade). Escopado ao tenant e à
+          // correlação. FAIL-CLOSED: quando houve cognição REAL (sem injeção de `invoke`), a proveniência é
+          // OBRIGATÓRIA — se ZERO linhas forem vinculadas (proveniência ausente), aborta a transação; nada é
+          // persistido (generated_document/official_document/idempotency COMPLETED fazem rollback juntos).
+          const { linked } = await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
+            organizationId: params.organizationId, correlationId: params.correlationId,
+            artifactKind: params.kind, artifactId: document.id,
+            officialDocumentId: official.id, officialLineageId: official.lineageId,
+          });
+          const provenanceMandatory = params.invoke === undefined; // cognição real (sem seam determinístico)
+          if (provenanceMandatory && linked === 0) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Proveniência cognitiva obrigatória ausente para esta geração — operação abortada (fail-closed).",
+            });
+          }
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
             actor: "multi_copilot", summary: `${params.kind.toUpperCase()} gerado (rascunho) a partir de ${approved.length} item(ns).`,
