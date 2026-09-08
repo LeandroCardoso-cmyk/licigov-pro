@@ -1,13 +1,14 @@
 import path from "path";
 import mysql from "mysql2/promise";
+import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
-import { AI_CONFIG, validateAiRuntime } from "./config/ai";
-import { migrateWithAdvisoryLock } from "./db/releaseMigrate";
+import { AI_CONFIG, validateAiRuntime, validateAiProviderConfig } from "./config/ai";
 
 // process.cwd() is always the project root in both Railway and local dev,
 // regardless of how esbuild bundles import.meta.dirname.
@@ -36,21 +37,48 @@ export async function runMigrations(connection: mysql.Connection): Promise<void>
 // DDL (ALTER/CREATE/RENAME) a cada boot para "consertar" o banco em runtime. Isso saiu: TODA
 // mudança de schema mora agora em migrations versionadas (a migration 0297 fechou a diferença
 // que só existia no reconciliador — ver drizzle/0297_phase_b_schema_closure.sql). Este passo é
-// um DETECTOR/VALIDATOR, não um reconciliador:
-//   - NÃO executa DDL (nenhum ALTER/CREATE/DROP/RENAME/push/índice) — jamais muta o schema;
-//   - confere que o ledger de migrations está aplicado e que estruturas críticas existem;
-//   - staging/produção: FALHA FECHADA (fail-closed) se o schema estiver incompatível/atrás — a
-//     aplicação não deve ficar online num estado parcialmente compatível;
+// um DETECTOR/VALIDATOR, não um reconciliador, e é a ÚNICA responsabilidade do boot sobre schema
+// (as migrations são aplicadas ANTES, no passo de release — ver bootstrap()):
+//   - NÃO executa DDL (nenhum ALTER/CREATE/DROP/RENAME/push/índice) e NÃO aplica migrations;
+//   - prova que a migration MAIS RECENTE do build está aplicada (ledger canônico do Drizzle);
+//   - confere estruturas críticas como defesa adicional;
+//   - staging/produção: FALHA FECHADA (fail-closed) se o schema estiver incompatível/atrás;
 //   - desenvolvimento: apenas AVISA (um banco local pode legitimamente estar atrasado).
 
-// Estruturas CRÍTICAS — o SINAL PRINCIPAL de compatibilidade do schema. NÃO usamos a contagem de
-// linhas do ledger de migrations como medida de completude: a produção/staging deste projeto
-// NASCERAM de `db:push` com o journal do Drizzle "baseline-stampado" (o ledger tem MENOS linhas
-// que a cadeia de migrations, embora o schema esteja COMPLETO — ver docs de reconciliação e
-// migrations-chain.test.ts). A verdade confiável é a PRESENÇA das estruturas, aferida aqui.
-// Cobre invariantes de maior valor de TODAS as épocas — multi-tenant, segurança (PR 0), acesso
-// institucional, ciclo documental oficial e ingestão canônica — de modo que um schema quebrado
-// OU significativamente atrás seja detectado sem depender do ledger.
+/**
+ * Hash + tag da migration MAIS RECENTE esperada pelo build (a última do journal do Drizzle).
+ * Reutiliza o leitor canônico do Drizzle (readMigrationFiles) — o mesmo `hash` que o migrator
+ * grava em `__drizzle_migrations` ao aplicar. Puro; lê do disco (drizzle/). Tolerante a falha.
+ * O `tag` é apenas diagnóstico. NÃO hardcoda número de migration: acompanha futuras automaticamente.
+ */
+export function expectedLatestMigration(): { hash: string; tag: string } | null {
+  try {
+    const metas = readMigrationFiles({ migrationsFolder: MIGRATIONS_FOLDER });
+    if (metas.length === 0) return null;
+    const latest = metas[metas.length - 1];
+    let tag = "(mais recente)";
+    try {
+      const journal = JSON.parse(
+        readFileSync(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
+      ) as { entries?: Array<{ tag?: string }> };
+      const entries = journal.entries ?? [];
+      const last = entries[entries.length - 1];
+      if (last?.tag) tag = String(last.tag);
+    } catch {
+      /* tag é só diagnóstica — a prova é o hash */
+    }
+    return { hash: latest.hash, tag };
+  } catch {
+    return null;
+  }
+}
+
+// Estruturas CRÍTICAS — DEFESA ADICIONAL sobre a prova da migration mais recente. NÃO usamos a
+// CONTAGEM de linhas do ledger como medida de completude: a produção/staging deste projeto
+// NASCERAM de `db:push` com o journal do Drizzle "baseline-stampado" (o ledger é legitimamente
+// ESPARSO — menos linhas que a cadeia — embora o schema esteja COMPLETO). Cobre invariantes de
+// maior valor de TODAS as épocas — multi-tenant, segurança (PR 0), acesso institucional, ciclo
+// documental oficial e ingestão canônica.
 const CRITICAL_TABLES: readonly string[] = [
   "users", "organizations", "organization_members", "processes", "documents",
   "audit_logs", "activity_logs", "process_members",
@@ -79,7 +107,11 @@ export function decideSchemaValidation(
   return isDevelopment ? "warn" : "fail";
 }
 
-export async function validateSchema(connection: mysql.Connection): Promise<void> {
+/**
+ * DETECÇÃO PURA (sem env, sem lançar) dos problemas de compatibilidade do schema. Separada de
+ * validateSchema para ser testável de forma determinística (não depende de APP_ENV). NÃO muta nada.
+ */
+export async function collectSchemaProblems(connection: mysql.Connection): Promise<string[]> {
   type Cnt = { cnt: number };
   const problems: string[] = [];
 
@@ -100,15 +132,31 @@ export async function validateSchema(connection: mysql.Connection): Promise<void
     return (rows[0] as Cnt).cnt > 0;
   }
 
-  // 1) O schema precisa ter sido inicializado por migrations: a tabela de ledger do Drizzle
-  //    (__drizzle_migrations) deve existir. NÃO conferimos a CONTAGEM de linhas do ledger — em
-  //    produção/staging (nascidos de db:push, journal baseline-stampado) o ledger é legitimamente
-  //    esparso mesmo com o schema completo. A completude real vem das estruturas críticas (passo 2).
+  // 1) A migration MAIS RECENTE do build precisa estar aplicada — provado pelo LEDGER canônico do
+  //    Drizzle (__drizzle_migrations), por HASH. NÃO por contagem de linhas (o journal é
+  //    baseline-stampado; o ledger é legitimamente esparso) e SEM hardcodar número de migration
+  //    (readMigrationFiles acompanha automaticamente a última do build). Detecta migration recente
+  //    ausente mesmo que o restante do schema pareça íntegro.
   if (!(await tableExists("__drizzle_migrations"))) {
     problems.push("tabela de controle de migrations (__drizzle_migrations) ausente — schema nunca inicializado por migrations");
+  } else {
+    const latest = expectedLatestMigration();
+    if (latest === null) {
+      problems.push("não foi possível ler as migrations do build (drizzle/) para validar a versão do schema");
+    } else {
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) AS cnt FROM __drizzle_migrations WHERE hash = ?",
+        [latest.hash],
+      );
+      if ((rows[0] as Cnt).cnt === 0) {
+        problems.push(
+          `migration mais recente não aplicada (${latest.tag}) — aplique o release (pnpm db:migrate:release) antes de iniciar`,
+        );
+      }
+    }
   }
 
-  // 2) Estruturas críticas — sinal principal de compatibilidade.
+  // 2) Estruturas críticas — defesa adicional.
   for (const t of CRITICAL_TABLES) {
     if (!(await tableExists(t))) problems.push(`tabela crítica ausente: ${t}`);
   }
@@ -119,6 +167,11 @@ export async function validateSchema(connection: mysql.Connection): Promise<void
     }
   }
 
+  return problems;
+}
+
+export async function validateSchema(connection: mysql.Connection): Promise<void> {
+  const problems = await collectSchemaProblems(connection);
   const level = decideSchemaValidation(problems, APP_CONFIG.isDevelopment);
   if (level === "ok") {
     log("DB", "✓ Schema validado (ledger aplicado + estruturas críticas presentes) — sem mutação em runtime");
@@ -158,6 +211,9 @@ export async function validateSchema(connection: mysql.Connection): Promise<void
 export async function bootstrap(): Promise<void> {
   // Step 0 — validar variáveis obrigatórias antes de qualquer conexão
   validateRequiredEnv();
+  // Provider cognitivo (#159, fail-closed): AI_PROVIDER desconhecido, ou conhecido mas SEM adapter
+  // operacional (claude/openai hoje), ou operacional SEM sua credencial → falha explícita no boot.
+  validateAiProviderConfig(process.env);
   // Modelo de IA: sem allowlist rígida, mas bloqueia formato inválido/vazio e IDs
   // confirmadamente descontinuados — falha explícita no boot em vez de só na 1ª geração.
   validateAiRuntime({ provider: AI_CONFIG.provider, model: AI_CONFIG.model });
@@ -174,12 +230,11 @@ export async function bootstrap(): Promise<void> {
   const connection = await mysql.createConnection(databaseUrl);
 
   try {
-    // RELEASE / MIGRATION STEP — aplica apenas migrations versionadas, sob advisory lock
-    // (replay/concorrência-safe). Transitório no boot: quando o Railway Pre-Deploy Command
-    // for configurado (Fase X), este passo sai do boot e vira o passo de release externo, e o
-    // boot passa a APENAS validar. Ver docs/ops/MIGRATION_RELEASE_RUNBOOK.md.
-    await migrateWithAdvisoryLock(connection, (m) => log("RELEASE", m));
-    // APPLICATION START — validação NÃO-MUTÁVEL do schema (fail-closed em staging/produção).
+    // APPLICATION START — o boot NÃO aplica migrations (nenhum migrator/DDL). A aplicação das
+    // migrations é o passo de RELEASE, feito ANTES do start (Railway Pre-Deploy Command →
+    // `pnpm db:migrate:release`; ver B-EXT1 no docs/ops/MIGRATION_RELEASE_RUNBOOK.md). Aqui o boot
+    // apenas VALIDA o schema (não-mutável) e falha fechado em staging/produção se estiver
+    // incompatível/atrás — o servidor só inicia após a validação passar.
     await validateSchema(connection);
   } finally {
     await connection.end();

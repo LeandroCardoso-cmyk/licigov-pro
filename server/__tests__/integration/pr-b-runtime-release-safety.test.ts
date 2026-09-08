@@ -31,9 +31,24 @@ describe("Fase B — o boot NÃO executa DDL mutável (validateSchema é detecto
     expect(bootstrap).not.toContain("export async function ensureSchema");
   });
 
-  it("bootstrap.ts exporta validateSchema e aplica migrations sob advisory lock", () => {
+  it("bootstrap.ts exporta validateSchema (o boot valida, não muta)", () => {
     expect(bootstrap).toContain("export async function validateSchema");
-    expect(bootstrap).toContain("migrateWithAdvisoryLock");
+  });
+
+  it("a função bootstrap() NÃO aplica migrations (nenhum migrator/DDL no boot)", () => {
+    // Extrai o corpo da função bootstrap() e prova que ela não invoca migrator algum.
+    const start = bootstrap.indexOf("export async function bootstrap()");
+    expect(start).toBeGreaterThan(-1);
+    const body = bootstrap.slice(start);
+    expect(body).not.toContain("migrateWithAdvisoryLock");
+    expect(body).not.toMatch(/\bmigrate\s*\(/); // sem chamada ao migrator do Drizzle
+    expect(body).not.toContain("runMigrations");
+    // O boot só valida o schema.
+    expect(body).toContain("validateSchema(connection)");
+  });
+
+  it("o boot NÃO importa o runner de release (migrações são o passo de RELEASE, antes do boot)", () => {
+    expect(bootstrap).not.toContain('from "./db/releaseMigrate"');
   });
 });
 
@@ -113,57 +128,56 @@ describe("Fase B — package scripts / CI sem caminho destrutivo", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("Fase B — contrato de credencial por provider ativo (#159)", () => {
-  it("mapeia a credencial correta por provider", async () => {
-    const { requiredCredentialEnvForProvider } = await import("../../config/ai");
+describe("Fase B — contrato de provider fail-closed (#159, sem fingir suporte)", () => {
+  it("mapeia a credencial correta por provider e declara só Gemini operacional", async () => {
+    const { requiredCredentialEnvForProvider, OPERATIONAL_AI_PROVIDERS } = await import("../../config/ai");
     expect(requiredCredentialEnvForProvider("gemini")).toBe("GEMINI_API_KEY");
     expect(requiredCredentialEnvForProvider("claude")).toBe("ANTHROPIC_API_KEY");
     expect(requiredCredentialEnvForProvider("openai")).toBe("OPENAI_API_KEY");
+    // Só Gemini possui adapter operacional hoje.
+    expect(OPERATIONAL_AI_PROVIDERS.has("gemini")).toBe(true);
+    expect(OPERATIONAL_AI_PROVIDERS.has("claude")).toBe(false);
+    expect(OPERATIONAL_AI_PROVIDERS.has("openai")).toBe(false);
   });
 
-  describe("validateRequiredEnv exige a credencial do provider ATIVO", () => {
-    const SNAP: Record<string, string | undefined> = {};
-    const KEYS = ["DATABASE_URL", "JWT_SECRET", "AI_PROVIDER", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
-    beforeEach(() => {
-      for (const k of KEYS) SNAP[k] = process.env[k];
-      process.env.DATABASE_URL = "mysql://u:p@localhost:3306/db";
-      process.env.JWT_SECRET = "x".repeat(40);
-      delete process.env.AI_PROVIDER;
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-    });
-    afterEach(() => {
-      for (const k of KEYS) {
-        if (SNAP[k] === undefined) delete process.env[k];
-        else process.env[k] = SNAP[k];
-      }
+  describe("validateAiProviderConfig é fail-closed", () => {
+    it("provider omitido + Gemini key → PASS (default gemini)", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      expect(validateAiProviderConfig({ GEMINI_API_KEY: "dummy" })).toBe("gemini");
     });
 
-    it("provider ativo (gemini default) SEM credencial → falha", async () => {
-      const { validateRequiredEnv } = await import("../../config/env");
-      expect(() => validateRequiredEnv()).toThrow(/GEMINI_API_KEY/);
+    it("gemini SEM key → FAIL", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      expect(() => validateAiProviderConfig({ AI_PROVIDER: "gemini" })).toThrow(/GEMINI_API_KEY/);
     });
 
-    it("provider ativo (gemini) COM credencial → passa", async () => {
-      process.env.GEMINI_API_KEY = "dummy";
-      const { validateRequiredEnv } = await import("../../config/env");
-      expect(() => validateRequiredEnv()).not.toThrow();
+    it("AI_PROVIDER inválido → FAIL (desconhecido)", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      expect(() => validateAiProviderConfig({ AI_PROVIDER: "xpto", GEMINI_API_KEY: "dummy" })).toThrow(/desconhecido/i);
     });
 
-    it("provider claude ativo: ANTHROPIC exigida; GEMINI ausente NÃO bloqueia", async () => {
-      process.env.AI_PROVIDER = "claude";
-      process.env.ANTHROPIC_API_KEY = "dummy";
-      // GEMINI_API_KEY continua ausente e não deve bloquear (provider não ativo).
-      const { validateRequiredEnv } = await import("../../config/env");
-      expect(() => validateRequiredEnv()).not.toThrow();
+    it("claude COM ANTHROPIC key mas SEM adapter → FAIL (não operacional)", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      expect(() => validateAiProviderConfig({ AI_PROVIDER: "claude", ANTHROPIC_API_KEY: "dummy" })).toThrow(/operacional/i);
     });
 
-    it("provider claude ativo SEM ANTHROPIC → falha mencionando ANTHROPIC_API_KEY", async () => {
-      process.env.AI_PROVIDER = "claude";
-      const { validateRequiredEnv } = await import("../../config/env");
-      expect(() => validateRequiredEnv()).toThrow(/ANTHROPIC_API_KEY/);
+    it("openai COM OPENAI key mas SEM adapter → FAIL (não operacional)", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      expect(() => validateAiProviderConfig({ AI_PROVIDER: "openai", OPENAI_API_KEY: "dummy" })).toThrow(/operacional/i);
     });
+
+    it("credencial de provider inativo NÃO interfere no Gemini", async () => {
+      const { validateAiProviderConfig } = await import("../../config/ai");
+      // ANTHROPIC/OPENAI presentes, mas o provider ativo é gemini (default) com sua key → PASS.
+      expect(
+        validateAiProviderConfig({ GEMINI_API_KEY: "dummy", ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "y" }),
+      ).toBe("gemini");
+    });
+  });
+
+  it("o boot chama validateAiProviderConfig (fail-closed do provider no startup)", () => {
+    const bootstrap = read("server/bootstrap.ts");
+    expect(bootstrap).toContain("validateAiProviderConfig(process.env)");
   });
 });
 

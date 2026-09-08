@@ -73,23 +73,37 @@ DATABASE_URL=... pnpm db:migrate:release
 
 ---
 
+## Arquitetura final (release ↔ application)
+
+```
+Railway Pre-Deploy Command
+  → pnpm db:migrate:release   (aplica migrations sob advisory lock, ANTES do app)
+      → application boot (pnpm start)
+          → validateSchema     (NÃO muta; prova a migration mais recente + estruturas críticas)
+              → servidor pronto
+```
+
+O boot **NÃO aplica migrations** — não há mais "ponte transitória" no startup. As migrations são o
+passo de **RELEASE**, executado antes do start pelo Pre-Deploy Command (ver B-EXT1 abaixo).
+
 ## Comportamento do boot (schema drift)
 
-O boot chama `validateSchema` (`server/bootstrap.ts`), que **não muta** nada:
+O boot chama `validateSchema` (`server/bootstrap.ts`), que **não aplica migrations e não muta** nada:
 
-- confere que o schema foi **inicializado por migrations** (a tabela de ledger `__drizzle_migrations`
-  existe). **Não** confere a *contagem* de linhas do ledger: produção/staging deste projeto nasceram
-  de `db:push` com o journal **baseline-stampado** — o ledger é legitimamente esparso (menos linhas
-  que a cadeia) mesmo com o schema completo;
-- confere a presença de **estruturas críticas** (multi-tenant, segurança da PR 0, acesso
-  institucional, ciclo documental oficial, ingestão canônica) — este é o **sinal principal** de
-  compatibilidade;
+- **prova que a migration MAIS RECENTE do build está aplicada** — pelo LEDGER canônico do Drizzle
+  (`__drizzle_migrations`), por **HASH** (`readMigrationFiles` da própria toolchain). **Não** por
+  *contagem* de linhas (produção/staging nasceram de `db:push`, com o journal **baseline-stampado** —
+  o ledger é legitimamente esparso) e **sem hardcodar** número de migration (acompanha futuras
+  automaticamente). Detecta migration recente ausente mesmo com o restante do schema íntegro;
+- confere a presença de **estruturas críticas** como **defesa adicional** (multi-tenant, segurança
+  da PR 0, acesso institucional, ciclo documental oficial, ingestão canônica);
 - **desenvolvimento** → apenas **avisa** (um banco local pode legitimamente estar atrás);
 - **staging/produção** → **FAIL-CLOSED**: lança e a aplicação **não sobe** — nunca fica online num
   estado parcialmente compatível.
 
-Se o boot falhar por schema incompatível/atrás em staging/produção: rode
-`pnpm db:migrate:release` e reinicie. **Nunca** "conserte" o banco à mão em runtime.
+Se o boot falhar por schema incompatível/atrás em staging/produção: o passo de release
+(`pnpm db:migrate:release`, no Pre-Deploy) não aplicou a migration mais recente — execute-o e
+reinicie. **Nunca** "conserte" o banco à mão em runtime.
 
 ---
 
@@ -161,24 +175,30 @@ scripts/CI, e o contrato de credencial por provider ativo.
 
 ---
 
-## Railway Pre-Deploy — **DEFERIDO PARA A FASE X**
+## B-EXT1 — Railway Migration Pre-Deploy Cutover
 
-O comando de release (`pnpm db:migrate:release`) está pronto para ser configurado como o
-**Pre-Deploy Command** do Railway (ou mecanismo equivalente realmente suportado), de forma que as
-migrations rodem **antes** do start da aplicação, fora do boot.
+O **Pre-Deploy Command** do Railway deixou de ser deferido integralmente à Fase X: ele é uma
+**dependência direta** da Fase B — sem ele não há separação real entre release e application runtime.
+Isso é a alteração formal do plano **`B-EXT1 — Railway Migration Pre-Deploy Cutover`** (não é uma
+nova frente funcional).
 
-Enquanto isso **não** é configurado externamente:
-
-- o boot ainda aplica migrations versionadas como **ponte transitória** (sob o mesmo advisory lock),
-  e depois valida;
-- quando o Pre-Deploy for configurado (Fase X), a aplicação de migrations sai do boot e o boot passa
-  a **apenas validar** (fail-closed).
-
-> **RAILWAY PRE-DEPLOY CONFIGURATION — DEFERRED TO PHASE X.** Esta PR **não** altera configuração
-> externa do Railway (nem região, réplicas, secrets ou produção).
-
-Comando a configurar futuramente no Pre-Deploy:
+**Comando do Pre-Deploy:**
 
 ```bash
 pnpm db:migrate:release
 ```
+
+**Estado nesta rodada:**
+
+- **STAGING — configurado.** O Pre-Deploy Command do serviço `licigov-pro` foi definido **somente no
+  ambiente staging** para `pnpm db:migrate:release`. O boot da aplicação **não** aplica migrations —
+  apenas valida (fail-closed). Sequência comprovada nos logs de staging:
+  Pre-Deploy executa `pnpm db:migrate:release` → advisory lock adquirido → migrations aplicadas/no-op
+  → lock liberado → **só então** a aplicação inicia → boot valida schema (sem migrar) → `Servidor
+  pronto` → 0 crash.
+- **PRODUÇÃO — não configurada nesta rodada.** O Pre-Deploy de produção será configurado com o
+  mesmo comando **ANTES** do merge/deploy da `main` (etapa de merge futura). Esta rodada **não**
+  altera produção.
+
+A **Fase X** continua contendo os demais itens externos: região, réplicas, PITR, backup/offsite,
+alerts e demais configurações institucionais.

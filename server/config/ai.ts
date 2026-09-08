@@ -40,6 +40,52 @@ export function requiredCredentialEnvForProvider(provider: AIProviderName): stri
   return CREDENTIAL_ENV_BY_PROVIDER[provider];
 }
 
+/**
+ * Providers com adapter REALMENTE operacional hoje. Só Gemini possui adapter implementado
+ * (ver server/_core/ai/). Claude/OpenAI têm tipos, catálogo e credential mapping preparados,
+ * mas NÃO são operacionais — quando os adapters existirem, basta adicioná-los a este conjunto.
+ */
+export const OPERATIONAL_AI_PROVIDERS: ReadonlySet<AIProviderName> = new Set<AIProviderName>(["gemini"]);
+
+/** Todos os providers CONHECIDOS (com contrato preparado), operacionais ou não. */
+const KNOWN_AI_PROVIDERS: readonly string[] = ["gemini", "claude", "openai"];
+
+/**
+ * ISSUE #159 (fail-closed) — valida a configuração do provider cognitivo no boot. NÃO finge
+ * suporte a providers inexistentes:
+ *   - AI_PROVIDER ausente → gemini;
+ *   - valor DESCONHECIDO → fail-closed;
+ *   - provider conhecido mas SEM adapter operacional (claude/openai hoje) → fail-closed
+ *     (ter apenas a credencial NÃO habilita o provider);
+ *   - provider operacional SEM a sua credencial → fail-closed;
+ *   - credencial de provider inativo NÃO interfere no provider operacional.
+ * Pura e testável. Lança Error com mensagem objetiva. Retorna o provider operacional validado.
+ */
+export function validateAiProviderConfig(env: Record<string, string | undefined>): AIProviderName {
+  const raw = (env.AI_PROVIDER ?? "gemini").trim().toLowerCase();
+  if (!KNOWN_AI_PROVIDERS.includes(raw)) {
+    throw new Error(
+      `[BOOT] AI_PROVIDER="${raw}" é um provider desconhecido. Válidos: ${KNOWN_AI_PROVIDERS.join(" | ")}.`,
+    );
+  }
+  const provider = raw as AIProviderName;
+  if (!OPERATIONAL_AI_PROVIDERS.has(provider)) {
+    throw new Error(
+      `[BOOT] AI_PROVIDER="${provider}" ainda NÃO é operacional (adapter não implementado). ` +
+        `Providers operacionais hoje: ${[...OPERATIONAL_AI_PROVIDERS].join(", ")}. ` +
+        `Ter apenas a credencial (ex.: ANTHROPIC_API_KEY/OPENAI_API_KEY) não habilita o provider.`,
+    );
+  }
+  const credKey = requiredCredentialEnvForProvider(provider);
+  const credVal = env[credKey];
+  if (!credVal || !credVal.trim()) {
+    throw new Error(
+      `[BOOT] ${credKey} é obrigatória para o provider de IA ativo (${provider}).`,
+    );
+  }
+  return provider;
+}
+
 /** Resolve provider + modelo primários a partir do ambiente. Puro e determinístico (testável). */
 export function resolveAiRuntime(env: { AI_PROVIDER?: string; AI_MODEL?: string }): {
   provider: AIProviderName;
@@ -164,8 +210,14 @@ export const AI_CONFIG = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
 
-  /** True quando a chave do Gemini está presente (semântica histórica preservada). */
-  isConfigured: !!process.env.GEMINI_API_KEY?.trim(),
+  /**
+   * True quando o provider ATIVO é operacional E possui a sua credencial. Não contradiz o
+   * provider realmente operacional (#159): um AI_PROVIDER não-operacional NUNCA reporta "✓"
+   * só por ter a credencial mapeada.
+   */
+  isConfigured:
+    OPERATIONAL_AI_PROVIDERS.has(runtime.provider) &&
+    !!process.env[requiredCredentialEnvForProvider(runtime.provider)]?.trim(),
 
   /** Provider primário ativo (gemini | claude | openai). Default: gemini. */
   provider: runtime.provider,

@@ -174,15 +174,20 @@ describe("Schema e Migrations — Integração", () => {
       expect(source).toMatch(/throw new Error\(`\[bootstrap\]/);
     });
 
-    it("valida a completude do ledger de migrations e estruturas críticas de segurança/tenant", () => {
+    it("prova a migration mais recente pelo ledger e valida estruturas críticas de segurança/tenant", () => {
       expect(source).toContain("__drizzle_migrations");
+      expect(source).toContain("readMigrationFiles"); // prova a última migration por hash (sem contagem/hardcode)
       expect(source).toContain("tokenVersion");
       expect(source).toContain("passwordHash");
       expect(source).toContain("organizationId");
     });
 
-    it("o boot aplica migrations sob advisory lock (replay/concorrência-safe)", () => {
-      expect(source).toContain("migrateWithAdvisoryLock");
+    it("o boot NÃO aplica migrations — só valida (migrações são o passo de RELEASE)", () => {
+      const start = source.indexOf("export async function bootstrap()");
+      const body = source.slice(start);
+      expect(body).not.toContain("migrateWithAdvisoryLock");
+      expect(body).not.toMatch(/\bmigrate\s*\(/);
+      expect(body).toContain("validateSchema(connection)");
     });
   });
 });

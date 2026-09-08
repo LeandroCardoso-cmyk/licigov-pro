@@ -22,7 +22,7 @@ import { is } from "drizzle-orm";
 import { MySqlTable, getTableConfig } from "drizzle-orm/mysql-core";
 import * as schema from "../../../drizzle/schema";
 import { diffSchema } from "../../../scripts/schema-audit-util";
-import { runMigrations, validateSchema } from "../../bootstrap";
+import { runMigrations, validateSchema, collectSchemaProblems, expectedLatestMigration } from "../../bootstrap";
 
 const DB = process.env.DATABASE_URL;
 const DRZ = path.join(process.cwd(), "drizzle");
@@ -123,24 +123,32 @@ describe.skipIf(!DB)("Fase B — migration safety (MySQL real)", () => {
     await admin?.end();
   });
 
-  it("A. CLEAN INSTALL: cadeia completa (inclui 0297) fecha o schema.ts em 0/0/0, sem reconciliação em runtime", async () => {
+  it("A. CLEAN INSTALL + prova da migration MAIS RECENTE (ledger por hash, sem contagem/hardcode)", async () => {
     const conn = await mysql.createConnection(urlFor(DBS.clean));
     try {
-      await runMigrations(conn); // inclui a 0297 via journal — NENHUM ensureSchema/mutação em runtime
+      await runMigrations(conn); // inclui a última migração via journal — NENHUMA mutação em runtime
       await assertClosed(conn, "clean-install");
-      // validateSchema (não-mutável) aprova um banco recém-migrado.
+      // clean install → sem problemas; validateSchema (não-mutável) aprova.
+      expect(await collectSchemaProblems(conn)).toEqual([]);
       await expect(validateSchema(conn)).resolves.toBeUndefined();
 
-      // REGRESSÃO (staging real): produção/staging nasceram de db:push com o journal
-      // "baseline-stampado" — o ledger fica ESPARSO (menos linhas que a cadeia) mesmo com o
-      // schema COMPLETO. validateSchema NÃO pode falhar por contagem de ledger: deve aprovar
-      // pela presença das estruturas. Simula esvaziando quase todo o ledger.
-      await conn.query("DELETE FROM `__drizzle_migrations` WHERE id > 5");
+      const latest = expectedLatestMigration();
+      expect(latest).not.toBeNull();
+
+      // LEDGER ESPARSO (staging/produção nasceram de db:push, journal baseline-stampado) MAS com a
+      // migration MAIS RECENTE presente → PASS. Apaga todo o histórico, mantendo só a linha da latest.
+      await conn.query("DELETE FROM `__drizzle_migrations` WHERE hash <> ?", [latest!.hash]);
       const [rows] = await conn.query<mysql.RowDataPacket[]>(
         "SELECT COUNT(*) AS cnt FROM `__drizzle_migrations`",
       );
-      expect(Number((rows[0] as { cnt: number }).cnt)).toBeLessThan(10); // ledger esparso instalado
-      await expect(validateSchema(conn)).resolves.toBeUndefined(); // schema completo → aprova
+      expect(Number((rows[0] as { cnt: number }).cnt)).toBe(1); // ledger esparso: só a latest
+      expect(await collectSchemaProblems(conn)).toEqual([]); // latest presente → PASS
+
+      // LEDGER ESPARSO + latest AUSENTE, com o SCHEMA estruturalmente ÍNTEGRO → DETECTA problema
+      // (não basta as estruturas críticas; a migration recente precisa constar no ledger).
+      await conn.query("DELETE FROM `__drizzle_migrations` WHERE hash = ?", [latest!.hash]);
+      const problems = await collectSchemaProblems(conn);
+      expect(problems.some((p) => /migration mais recente não aplicada/i.test(p))).toBe(true);
     } finally {
       await conn.end();
     }
