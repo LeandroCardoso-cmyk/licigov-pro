@@ -113,9 +113,20 @@ jobs:
       - name: Instalar dependências (lockfile)
         run: pnpm install --frozen-lockfile
 
-      # A ordem importa: a reconciliação roda PRIMEIRO (aplica a cadeia completa de migrations
-      # num banco zerado — cenário staging — e depois reproduz o drift da produção e o corrige).
-      - name: Smoke — reconciliação de schema (migrations + ensureSchema)
+      # Fase B — RELEASE STEP explícito: aplica a cadeia completa de migrations versionadas no banco
+      # de smoke (sob advisory lock, via db:migrate:release), ANTES de qualquer smoke. Antes, o schema
+      # do banco compartilhado era construído como EFEITO COLATERAL do reconciliador de runtime; agora
+      # é um passo de release explícito — e este passo também prova, num MySQL 8 real, que o runner de
+      # release e a migration de closure 0297 (com stored procedures) aplicam sem erro.
+      - name: Release — aplicar migrations no banco de smoke (db:migrate:release)
+        run: pnpm db:migrate:release
+
+      # Fase B (RUNTIME & RELEASE SAFETY) — MIGRATION SAFETY. Prova a estratégia de migrations que
+      # substituiu o reconciliador de runtime: CLEAN INSTALL (migrate-apenas fecha o schema.ts em
+      # 0/0/0, sem mutação em runtime), UPGRADE (0000..0296 → 0297 converge e preserva dados), REPLAY
+      # (0297 idempotente no banco convergido) e RENAME PRECONDITIONS (matriz de precondição). Usa
+      # bancos dedicados (CREATE/DROP DATABASE) → roda cedo, sem depender de nem sujar os demais smokes.
+      - name: Smoke — migration safety (clean install / upgrade / replay / rename preconditions)
         run: pnpm exec vitest run server/__tests__/integration/reconciliation-mysql-smoke.test.ts
       - name: Smoke — persistência da consulta (regressão de DATETIME)
         run: pnpm exec vitest run server/__tests__/integration/consultation-mysql-smoke.test.ts

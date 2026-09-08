@@ -81,43 +81,65 @@ describe("Reconciliação · migration 0285 (tabelas)", () => {
   });
 });
 
-describe("Reconciliação · bootstrap ensureSchema (colunas)", () => {
-  const source = readFileSync(BOOTSTRAP_PATH, "utf8");
+describe("Reconciliação · colunas migradas para a migration versionada 0297 (Fase B)", () => {
+  // Fase B (RUNTIME & RELEASE SAFETY): as colunas que ANTES só o reconciliador em runtime
+  // (ensureSchema.addColumnIfMissing / renameColumnIfNeeded) fechava passaram a existir na
+  // migration VERSIONADA drizzle/0297_phase_b_schema_closure.sql. Cada coluna do manifesto
+  // aparece lá como CALL licigov_pb_add_col('tabela','coluna',…) OU como alvo de um
+  // CALL licigov_pb_rename_col('tabela',…,'coluna'). O boot NÃO muta mais o schema.
+  const closure = readFileSync(
+    path.join(ROOT, "drizzle", "0297_phase_b_schema_closure.sql"),
+    "utf8",
+  );
+  const bootstrap = readFileSync(BOOTSTRAP_PATH, "utf8");
 
-  // Corpo de ensureSchema: da assinatura até o marcador que vem logo após seu
-  // fechamento. PR 0 (Security Emergency Closure) removeu o antigo seed automático de
-  // admin (marcador anterior: "Step 3: seed admin") — o marcador estável agora é o
-  // comentário que documenta essa remoção, colocado imediatamente após o `}` de
-  // ensureSchema (ver server/bootstrap.ts).
-  const start = source.indexOf("export async function ensureSchema");
-  const end = source.indexOf("PR 0 (Security Emergency Closure)");
-  const body = source.slice(start, end);
-
-  it("ensureSchema existe e o marcador pós-fechamento vem depois dele", () => {
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
+  it("o boot deixou de reconciliar colunas em runtime (sem addColumnIfMissing)", () => {
+    expect(bootstrap).not.toContain("addColumnIfMissing");
+    expect(bootstrap).toContain("export async function validateSchema");
   });
 
-  it.each(Object.entries(MISSING_COLUMNS).flatMap(([table, cols]) => cols.map((c) => [table, c])))(
-    "adiciona %s.%s via addColumnIfMissing DENTRO de ensureSchema",
-    (table, column) => {
-      const call = new RegExp(
-        `addColumnIfMissing\\(\\s*"${table}"\\s*,\\s*"${column}"\\s*,`
-      );
-      expect(body, `Faltou addColumnIfMissing("${table}", "${column}") no corpo de ensureSchema`).toMatch(call);
-    }
-  );
+  // Colunas que ANTES SÓ o reconciliador de runtime fechava (a diferença migrate()-apenas vs
+  // migrate()+ensureSchema, calculada empiricamente). Cada uma agora está na migration 0297,
+  // como ADD ou como alvo de RENAME. (A prova FUNCIONAL de que a cadeia de migrations produz
+  // TODAS as colunas do schema.ts é o cenário CLEAN INSTALL do reconciliation-mysql-smoke,
+  // diffSchema 0/0/0 — os manifestos antigos misturam colunas já criadas por migrations
+  // anteriores, que não precisam da 0297.)
+  const ADDS: ReadonlyArray<readonly [string, string]> = [
+    ["users", "tokenVersion"],
+    ["process_members", "functionalRole"],
+    ["contract_addenda", "request_origin"],
+    ["contract_ws_documents", "metadata"],
+    ["semantic_chunks", "replay_key"],
+    ["legal_reference_nodes", "numero"],
+    ["ontology_taxonomy", "category"],
+    ["extraction_evidence", "provenanceSheet"],
+  ];
+  const RENAMES: ReadonlyArray<readonly [string, string]> = [
+    ["semantic_search_entries", "organizationId"],
+    ["semantic_candidates", "organizationId"],
+    ["parser_capabilities", "parserType"],
+    ["import_review_transitions", "toState"],
+    ["department_permissions", "createdAt"],
+  ];
 
-  it("o bloco de reconciliação está antes do fechamento da função (sem código órfão)", () => {
-    // A última chamada do bloco aparece no corpo extraído, seguida do fechamento da
-    // função ("}" no início de linha) e de NADA executável depois (só o comentário
-    // separador do Step 3) — regressão do bug "código depois do fechamento".
-    const lastCall = body.lastIndexOf('addColumnIfMissing("semantic_search_entries", "catmatClass"');
-    expect(lastCall).toBeGreaterThan(-1);
-    const tail = body.slice(lastCall);
-    const closing = tail.indexOf("\n}");
-    expect(closing, "fechamento da função não encontrado após o bloco").toBeGreaterThan(-1);
-    const afterClosing = tail.slice(closing + 2);
-    expect(afterClosing).not.toMatch(/\bawait\b|\baddColumnIfMissing\b|connection\.execute/);
+  it.each(ADDS)("a coluna reconciliada %s.%s virou ADD na migration 0297", (table, column) => {
+    const asAdd = new RegExp(`licigov_pb_add_col\\(\\s*'${table}'\\s*,\\s*'${column}'\\s*,`);
+    expect(asAdd.test(closure), `Faltou add de ${table}.${column} na 0297`).toBe(true);
+  });
+
+  it.each(RENAMES)("a coluna reconciliada %s.%s virou RENAME (snake→camel) na 0297", (table, column) => {
+    const asRename = new RegExp(
+      `licigov_pb_rename_col\\(\\s*'${table}'\\s*,\\s*'[^']+'\\s*,\\s*'${column}'\\s*\\)`,
+    );
+    expect(asRename.test(closure), `Faltou rename para ${table}.${column} na 0297`).toBe(true);
+  });
+
+  it("a migration 0297 nunca faz DROP nem perda de dados (só ADD/RENAME guardados)", () => {
+    // Preservadora de dados: o corpo executável não contém DROP COLUMN/TABLE nem DELETE/TRUNCATE
+    // (o DROP PROCEDURE dos helpers temporários é legítimo e não toca dados).
+    expect(closure).not.toMatch(/\bDROP\s+COLUMN\b/i);
+    expect(closure).not.toMatch(/\bDROP\s+TABLE\b/i);
+    expect(closure).not.toMatch(/\bTRUNCATE\b/i);
+    expect(closure).not.toMatch(/\bDELETE\s+FROM\b/i);
   });
 });

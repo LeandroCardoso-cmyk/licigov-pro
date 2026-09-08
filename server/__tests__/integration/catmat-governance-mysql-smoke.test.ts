@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { runMigrations, ensureSchema } from "../../bootstrap";
+import { runMigrations, validateSchema } from "../../bootstrap";
 import { decideCatmat, type AvailableSuggestion } from "../../services/catmatGovernanceService";
 import {
   getActiveCatmatThreshold, setCatmatThresholdConfig, listCatmatDecisions, getLatestCatmatDecision,
@@ -55,7 +55,7 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await ensureSchema(conn);
+    await validateSchema(conn);
     await cleanup(conn);
     // ORG_A recebe um limiar ativo (papel autorizado em runtime) — pré-condição das decisões governadas.
     await setCatmatThresholdConfig({ organizationId: ORG_A, minScore: 0.5, reason: "smoke-setup", actorUserId: USER, correlationId: "corr-setup-a" });
