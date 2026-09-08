@@ -1,20 +1,29 @@
 /**
  * V1 PRE-PILOT CLOSURE — Fase A1 — Cognitive Provenance Service.
  *
- * Orquestra a CAPTURA de proveniência (a partir do boundary cognitivo) e o CONTRATO DE
- * REPLAY (reutilizando o idempotencyService canônico — NÃO um segundo mecanismo). Traduz os
- * objetos ricos do engine (AIExecutionContext + CognitiveResponse) no envelope IMUTÁVEL de
- * proveniência e persiste no ledger. Nunca fabrica proveniência; nunca apresenta degradado/
- * não-aterrado como fundamentado; nunca re-chama o provider num replay.
+ * Traduz os objetos ricos do engine (AIExecutionContext + CognitiveResponse) no envelope
+ * IMUTÁVEL de proveniência e persiste no ledger. Contratos do fechamento final A1:
+ *   - Proveniência OBRIGATÓRIA de uma execução NOVA bem-sucedida/degradada: em staging/produção,
+ *     falha de persistência → FAIL-CLOSED (nunca entregar como rastreável; nunca mascarar como
+ *     sucesso; nunca substituir por observability). Dev/test: comportamento controlado (degrada
+ *     sem DB, avisa em falha real) — nunca finge persistência.
+ *   - Falha cognitiva: a captura da proveniência da FALHA é best-effort e NUNCA lança (preserva a
+ *     exceção original da execução); registra tecnicamente a falha de persistência sanitizada.
+ *   - Evidence fingerprint SOMENTE com evidência REAL (EvidenceRef[]); referências declaradas ficam
+ *     no INPUT fingerprint, não viram evidência. Sem evidência real → evidenceFingerprint NULL.
+ *   - grounding_state honesto também na falha (usesGrounding/usesRAG reais).
+ *   - Marcador de REPLAY registra o PEDIDO ATUAL (correlation/actor/task/context atuais) e referencia
+ *     a execução ORIGINAL (lineage factual).
  */
 
 import { createHash } from "crypto";
-import { TRPCError } from "@trpc/server";
+import { APP_CONFIG } from "../../config/app";
+import { serviceLogger } from "../observabilityService";
 import type { AIExecutionContext } from "../../domain/aiExecutionContext";
 import type { CognitiveResponse } from "../../domain/cognitiveResponse";
 import {
   computeInputFingerprint, computeOutputFingerprint, computeEvidenceFingerprint,
-  deriveExecutionState, classifyFailure, provenanceId, evidenceRef,
+  deriveExecutionState, deriveGroundingState, classifyFailure, sanitizeFailureMessage, provenanceId,
   PROVENANCE_ORCHESTRATOR_VERSION,
   type ProvenanceEnvelope, type SemanticCognitiveInput, type EvidenceRef,
   type ExecutionStatus, type GroundingState, type ExecutionMode,
@@ -23,7 +32,8 @@ import {
   insertCognitiveProvenance, getOriginalProvenanceByIdempotencyKey,
   type ProvenanceExecutor,
 } from "../../db/cognitiveProvenance";
-import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../idempotencyService";
+
+const log = serviceLogger("CognitiveProvenance");
 
 /** Operação canônica de idempotência do replay cognitivo (distinta da geração documental). */
 export const COGNITIVE_REPLAY_OP = "cognitive.execute";
@@ -31,11 +41,16 @@ export const COGNITIVE_REPLAY_OP = "cognitive.execute";
 /** Versão da task cognitiva (fase de fundação). Bump deliberado quando a semântica evoluir. */
 export const COGNITIVE_TASK_VERSION = "1";
 
-/** Constrói o conjunto de EvidenceRefs a partir das referências declaradas (contrato A1; A2 preenche o real). */
-function evidenceRefsFromDeclared(documentRefs: readonly string[], lawRefs: readonly string[]): EvidenceRef[] {
-  const docs = documentRefs.map((r) => evidenceRef(r, "", r));
-  const laws = lawRefs.map((r) => evidenceRef("lei", r, r));
-  return [...docs, ...laws];
+/**
+ * Erro canônico (mensagem SANITIZADA) de falha de persistência de proveniência OBRIGATÓRIA. Sinaliza
+ * FAIL-CLOSED: uma execução cognitiva bem-sucedida/degradada NÃO pode ser entregue como rastreável se
+ * a proveniência mandatória não foi persistida (staging/produção). Nunca vaza SQL/segredos.
+ */
+export class CognitiveProvenancePersistenceError extends Error {
+  constructor(message: string) {
+    super(`[cognitive-provenance] proveniência obrigatória não persistida: ${message}`);
+    this.name = "CognitiveProvenancePersistenceError";
+  }
 }
 
 /** Insumo semântico do pedido cognitivo a partir do contexto de execução (exclui correlation/tempo/tokens). */
@@ -54,10 +69,39 @@ export function semanticInputFromContext(context: AIExecutionContext, query: str
 }
 
 /**
- * Captura a proveniência de uma execução cognitiva BEM-SUCEDIDA (ou DEGRADADA). Aditivo e
- * seguro (nunca lança por padrão — a proveniência não pode quebrar o pipeline). O provider/
- * model são os REAIS usados (context.outcome). grounding_state é derivado honestamente
- * (evidenceCount real; referências no prompt NÃO viram "grounded").
+ * Persiste o envelope como proveniência OBRIGATÓRIA (fail-closed fora de dev). Distingue:
+ *   - insert retornou id → OK;
+ *   - insert retornou null (sem DB): dev → OK (degrada honestamente); staging/produção → FAIL-CLOSED;
+ *   - insert lançou (DB presente, falhou): dev → avisa e segue; staging/produção → FAIL-CLOSED.
+ * Nunca mascara como sucesso silencioso. Mensagem sempre sanitizada.
+ */
+async function persistMandatory(env: ProvenanceEnvelope, executor: ProvenanceExecutor | undefined, ctx: Record<string, unknown>): Promise<ProvenanceEnvelope | null> {
+  let persistedId: string | null;
+  try {
+    persistedId = await insertCognitiveProvenance(env, executor);
+  } catch (e) {
+    const msg = sanitizeFailureMessage(e instanceof Error ? e.message : String(e));
+    if (APP_CONFIG.isDevelopment) {
+      log.warn("provenance_persist_failed_dev", { ...ctx, error: msg });
+      return null; // dev: comportamento controlado, nunca finge persistência (retorna null explícito)
+    }
+    log.error("provenance_persist_failed", { ...ctx, error: msg });
+    throw new CognitiveProvenancePersistenceError(msg);
+  }
+  if (persistedId === null && !APP_CONFIG.isDevelopment) {
+    // Sem conexão de banco fora de dev é incompatível com o contrato de rastreabilidade obrigatória.
+    log.error("provenance_persist_no_db", ctx);
+    throw new CognitiveProvenancePersistenceError("sem conexão de banco para persistir a proveniência");
+  }
+  return persistedId === null ? null : env;
+}
+
+/**
+ * Captura a proveniência de uma execução cognitiva BEM-SUCEDIDA (ou DEGRADADA). Provenance OBRIGATÓRIA:
+ * FAIL-CLOSED em staging/produção se a persistência falhar (lança CognitiveProvenancePersistenceError).
+ * O provider/model são os REAIS usados (context.outcome). grounding_state é derivado honestamente: só há
+ * `grounded`/`partially_grounded` com EVIDÊNCIA REAL (EvidenceRef[]); referências declaradas ficam no
+ * INPUT fingerprint. Sem evidência real → evidenceFingerprint NULL.
  */
 export async function captureCognitiveProvenance(params: {
   context: AIExecutionContext;
@@ -68,70 +112,68 @@ export async function captureCognitiveProvenance(params: {
   usesGrounding: boolean;
   usesRAG: boolean;
   finishReason: string;
-  /** Nº de evidências REAIS recuperadas/estruturadas (fase A1: 0 — A2 preenche o retrieval real). */
-  evidenceCount?: number;
+  /** Evidências REAIS recuperadas/estruturadas (A2 preenche). Ausentes → evidenceFingerprint NULL. */
+  evidences?: readonly EvidenceRef[];
   evidenceComplete?: boolean;
   idempotencyKey?: string | null;
   executor?: ProvenanceExecutor;
 }): Promise<ProvenanceEnvelope | null> {
-  try {
-    const { context, response } = params;
-    const evidenceCount = params.evidenceCount ?? 0;
-    const evidenceComplete = params.evidenceComplete ?? false;
-    const { status, degradationReason: reason, groundingState } = deriveExecutionState({
-      finishReason: params.finishReason, usesGrounding: params.usesGrounding, usesRAG: params.usesRAG,
-      evidenceCount, evidenceComplete,
-    });
+  const { context, response } = params;
+  const evidenceCount = params.evidences?.length ?? 0;
+  const evidenceComplete = params.evidenceComplete ?? false;
+  const { status, degradationReason: reason, groundingState } = deriveExecutionState({
+    finishReason: params.finishReason, usesGrounding: params.usesGrounding, usesRAG: params.usesRAG,
+    evidenceCount, evidenceComplete,
+  });
 
-    const semantic = semanticInputFromContext(context, params.query, params.documentRefs, params.lawRefs);
-    const inputFingerprint = computeInputFingerprint(semantic);
-    const outputFingerprint = computeOutputFingerprint(response.content ?? "");
-    const evidenceFingerprint = computeEvidenceFingerprint(evidenceRefsFromDeclared(params.documentRefs, params.lawRefs));
+  const semantic = semanticInputFromContext(context, params.query, params.documentRefs, params.lawRefs);
+  const inputFingerprint = computeInputFingerprint(semantic);
+  const outputFingerprint = computeOutputFingerprint(response.content ?? "");
+  // Evidence fingerprint SOMENTE de evidência REAL — nunca fabricada a partir de referências no prompt.
+  const evidenceFingerprint = evidenceCount > 0 ? computeEvidenceFingerprint(params.evidences ?? []) : null;
 
-    const env: ProvenanceEnvelope = {
-      id: provenanceId({ organizationId: context.request.tenantId, executionId: context.id, replayHash: context.replayHash, isReplay: false }),
-      organizationId: context.request.tenantId,
-      executionId: context.id,
-      correlationId: context.request.correlationId,
-      task: String(context.request.task),
-      executionMode: "cognitive",
-      executionStatus: status,
-      degradationReason: reason,
-      failureClass: null,
-      groundingState,
-      provenanceClass: "provenanced",
-      provider: context.outcome.provider,
-      model: context.outcome.model,
-      taskVersion: COGNITIVE_TASK_VERSION,
-      promptContractVersion: response.contractVersion ?? "",
-      orchestratorVersion: PROVENANCE_ORCHESTRATOR_VERSION,
-      inputFingerprint,
-      outputFingerprint,
-      evidenceFingerprint,
-      replayHash: context.replayHash,
-      idempotencyKey: params.idempotencyKey ?? null,
-      isReplay: false,
-      replayOfExecutionId: null,
-      approvalState: "generated",
-      businessDomain: context.request.businessDomain ?? null,
-      processId: context.request.processId ?? null,
-      workspaceId: context.request.workspaceId ?? null,
-      stage: context.request.stage ?? null,
-      actorUserId: context.request.userId ?? null,
-      failureMessage: null,
-    };
-    await insertCognitiveProvenance(env, params.executor);
-    return env;
-  } catch {
-    // A proveniência é additiva: nunca quebra o pipeline cognitivo na captura de sucesso.
-    return null;
-  }
+  const env: ProvenanceEnvelope = {
+    id: provenanceId({ organizationId: context.request.tenantId, executionId: context.id, replayHash: context.replayHash, isReplay: false }),
+    organizationId: context.request.tenantId,
+    executionId: context.id,
+    correlationId: context.request.correlationId,
+    task: String(context.request.task),
+    executionMode: "cognitive",
+    executionStatus: status,
+    degradationReason: reason,
+    failureClass: null,
+    groundingState,
+    provenanceClass: "provenanced",
+    provider: context.outcome.provider,
+    model: context.outcome.model,
+    taskVersion: COGNITIVE_TASK_VERSION,
+    promptContractVersion: response.contractVersion ?? "",
+    orchestratorVersion: PROVENANCE_ORCHESTRATOR_VERSION,
+    inputFingerprint,
+    outputFingerprint,
+    evidenceFingerprint,
+    replayHash: context.replayHash,
+    idempotencyKey: params.idempotencyKey ?? null,
+    isReplay: false,
+    replayOfExecutionId: null,
+    approvalState: "generated",
+    businessDomain: context.request.businessDomain ?? null,
+    processId: context.request.processId ?? null,
+    workspaceId: context.request.workspaceId ?? null,
+    stage: context.request.stage ?? null,
+    actorUserId: context.request.userId ?? null,
+    failureMessage: null,
+  };
+  return persistMandatory(env, params.executor, {
+    executionId: context.id, correlationId: context.request.correlationId, task: String(context.request.task), organizationId: context.request.tenantId,
+  });
 }
 
 /**
  * Captura a proveniência de uma FALHA de execução cognitiva (status `failed` + classe de falha
- * governada + mensagem SANITIZADA). NÃO fabrica saída/evidência; provider/model são os reais
- * tentados. Falha ≠ confiança 0, falha ≠ sucesso vazio.
+ * governada + mensagem SANITIZADA). BEST-EFFORT: NUNCA lança (preserva a exceção original da
+ * execução) — apenas registra tecnicamente uma falha de persistência sanitizada. grounding_state é
+ * factual (usa usesGrounding/usesRAG): task que exige grounding sem evidência NÃO é `not_applicable`.
  */
 export async function captureCognitiveFailure(params: {
   organizationId: number;
@@ -141,6 +183,9 @@ export async function captureCognitiveFailure(params: {
   provider: string | null;
   model: string | null;
   replayHash: string;
+  usesGrounding: boolean;
+  usesRAG: boolean;
+  evidences?: readonly EvidenceRef[];
   businessDomain?: string;
   processId?: string;
   workspaceId?: string;
@@ -153,6 +198,10 @@ export async function captureCognitiveFailure(params: {
 }): Promise<ProvenanceEnvelope | null> {
   try {
     const { failureClass, message } = classifyFailure(params.error);
+    const groundingState = deriveGroundingState({
+      usesGrounding: params.usesGrounding, usesRAG: params.usesRAG,
+      evidenceCount: params.evidences?.length ?? 0, evidenceComplete: false,
+    });
     const env: ProvenanceEnvelope = {
       id: provenanceId({ organizationId: params.organizationId, executionId: params.executionId, replayHash: params.replayHash, isReplay: false }),
       organizationId: params.organizationId,
@@ -163,7 +212,7 @@ export async function captureCognitiveFailure(params: {
       executionStatus: "failed",
       degradationReason: null,
       failureClass,
-      groundingState: "not_applicable",
+      groundingState,
       provenanceClass: "provenanced",
       provider: params.provider,
       model: params.model,
@@ -185,121 +234,103 @@ export async function captureCognitiveFailure(params: {
       actorUserId: params.actorUserId ?? null,
       failureMessage: message,
     };
-    await insertCognitiveProvenance(env, params.executor);
-    return env;
-  } catch {
+    const persisted = await insertCognitiveProvenance(env, params.executor);
+    if (persisted === null && !APP_CONFIG.isDevelopment) {
+      // Best-effort: NÃO lança (a exceção original da execução deve prevalecer); apenas registra.
+      log.error("failure_provenance_no_db", { executionId: params.executionId, correlationId: params.correlationId });
+    }
+    return persisted === null ? null : env;
+  } catch (e) {
+    // Best-effort: registrar tecnicamente a falha de persistência SEM vazar segredos e SEM lançar
+    // (não pode substituir a exceção original da execução por uma exceção de proveniência).
+    log.error("failure_provenance_persist_failed", {
+      executionId: params.executionId, correlationId: params.correlationId,
+      error: sanitizeFailureMessage(e instanceof Error ? e.message : String(e)),
+    });
     return null;
   }
 }
 
-// ─── Contrato de REPLAY cognitivo (reusa idempotencyService) ──────────────────
+// ─── Marcador de REPLAY (registra o PEDIDO ATUAL, referencia a ORIGINAL) ──────
 
-/** Resultado normalizado de uma execução cognitiva sob o contrato de replay. */
-export interface CognitiveReplayResult {
+/** Lineage FACTUAL da execução ORIGINAL (usado só como referência no marcador de replay). */
+export interface ReplayOriginalLineage {
   readonly executionId: string;
   readonly replayHash: string;
-  readonly correlationId: string;
-  readonly content: string;
   readonly provider: string | null;
   readonly model: string | null;
-  readonly executionStatus: ExecutionStatus | "failed";
-  readonly groundingState: GroundingState;
   readonly outputFingerprint: string | null;
+  readonly groundingState: GroundingState;
+  readonly executionStatus: ExecutionStatus | "failed";
   readonly executionMode: ExecutionMode;
 }
 
-/** Normaliza o snapshot cacheado (objeto no MySQL 8 / string no MariaDB). */
-function reviveSnapshot(raw: unknown): CognitiveReplayResult {
-  return (typeof raw === "string" ? JSON.parse(raw) : raw) as CognitiveReplayResult;
-}
-
 /**
- * Executa uma cognição sob o CONTRATO DE REPLAY, reutilizando o idempotencyService canônico:
- *   - mesma (org, actor, key) + payload semanticamente equivalente → REPLAY SEGURO: NÃO re-chama
- *     o provider, devolve o resultado autoritativo original, registra um marcador de replay que
- *     REFERENCIA a execução original (preserva correlação/linhagem), sem duplicar a proveniência original;
- *   - mesma key + payload DIFERENTE → CONFLICT (fail-closed, sem chamada ao provider);
- *   - operação em andamento (corrida) → CONFLICT;
- *   - `new`/`failed` → executa `exec()` uma vez, captura a proveniência ORIGINAL e cacheia o snapshot.
- * Degrada com segurança sem DB (executa `exec()` normalmente).
- *
- * `exec` deve devolver o resultado normalizado + a proveniência já capturada (ou capturável) da execução.
+ * Registra a proveniência de um REPLAY (is_replay=1). O marcador descreve o PEDIDO ATUAL
+ * (correlation/actor/task/context atuais + idempotencyKey) e REFERENCIA a execução ORIGINAL
+ * (`replayOfExecutionId` + provider/model/outputFingerprint só como lineage factual). O id
+ * determinístico incorpora original + chave + correlationId ATUAL: pedidos de replay distintos
+ * não colapsam; o mesmo pedido (mesmo correlationId) retried é idempotente. BEST-EFFORT: nunca lança.
  */
-export async function runReplaySafeCognition(
-  params: { organizationId: number; actorUserId: number; idempotencyKey: string; input: SemanticCognitiveInput },
-  exec: () => Promise<CognitiveReplayResult>,
-): Promise<{ result: CognitiveReplayResult; replayed: boolean }> {
-  const payloadHash = computeInputFingerprint(params.input);
-  const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, COGNITIVE_REPLAY_OP, payloadHash);
-
-  if (check.status === "completed") {
-    if (check.payloadMismatch) {
-      throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key cognitiva reutilizada com payload diferente — execução recusada." });
-    }
-    // REPLAY SEGURO: não re-chama o provider. Registra o marcador de replay referenciando a original.
-    const original = reviveSnapshot(check.response);
-    await recordReplayMarker(params.organizationId, params.idempotencyKey, original, payloadHash);
-    return { result: { ...original, executionMode: original.executionMode }, replayed: true };
-  }
-
-  if (check.status === "processing") {
-    throw new TRPCError({ code: "CONFLICT", message: "Execução cognitiva idêntica já está em processamento para esta chave — aguarde a conclusão." });
-  }
-
-  // "new"/"failed": executa uma vez (provider chamado no máximo 1x aqui).
+export async function recordReplayMarker(params: {
+  organizationId: number;
+  idempotencyKey: string;
+  inputFingerprint: string;
+  current: {
+    correlationId: string;
+    actorUserId?: string | null;
+    task: string;
+    businessDomain?: string | null;
+    processId?: string | null;
+    workspaceId?: string | null;
+    stage?: string | null;
+  };
+  original: ReplayOriginalLineage;
+}): Promise<ProvenanceEnvelope | null> {
   try {
-    const result = await exec();
-    await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, result);
-    return { result, replayed: false };
-  } catch (err) {
-    await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId);
-    throw err;
-  }
-}
-
-/**
- * Registra a PROVENIÊNCIA de um REPLAY (is_replay=1) referenciando a execução ORIGINAL. Não é
- * duplicata da original: é o registro do PEDIDO de replay (auditável), preservando correlação/
- * linhagem. Idempotente (id determinístico). Nunca lança.
- */
-async function recordReplayMarker(organizationId: number, idempotencyKey: string, original: CognitiveReplayResult, inputFingerprint: string): Promise<void> {
-  try {
-    // executionId do marcador: deriva do original + chave (determinístico, distinto da original).
-    const markerExecId = createHash("sha256").update(`replay:${organizationId}:${original.executionId}:${idempotencyKey}`).digest("hex").slice(0, 20);
+    // executionId do marcador: determinístico por (original, chave, correlationId ATUAL) — pedidos
+    // de replay distintos não colapsam; o mesmo correlationId retried é idempotente.
+    const markerExecId = createHash("sha256")
+      .update(`replay:${params.organizationId}:${params.original.executionId}:${params.idempotencyKey}:${params.current.correlationId}`)
+      .digest("hex").slice(0, 20);
     const env: ProvenanceEnvelope = {
-      id: provenanceId({ organizationId, executionId: markerExecId, replayHash: original.replayHash, isReplay: true }),
-      organizationId,
+      id: provenanceId({ organizationId: params.organizationId, executionId: markerExecId, replayHash: params.original.replayHash, isReplay: true }),
+      organizationId: params.organizationId,
       executionId: markerExecId,
-      correlationId: original.correlationId,
-      task: "",
-      executionMode: original.executionMode,
-      executionStatus: original.executionStatus === "failed" ? "failed" : original.executionStatus,
+      correlationId: params.current.correlationId,
+      task: params.current.task,
+      executionMode: params.original.executionMode,
+      executionStatus: params.original.executionStatus === "failed" ? "failed" : params.original.executionStatus,
       degradationReason: null,
       failureClass: null,
-      groundingState: original.groundingState,
+      groundingState: params.original.groundingState,
       provenanceClass: "provenanced",
-      provider: original.provider,
-      model: original.model,
+      provider: params.original.provider,
+      model: params.original.model,
       taskVersion: COGNITIVE_TASK_VERSION,
       promptContractVersion: "",
       orchestratorVersion: PROVENANCE_ORCHESTRATOR_VERSION,
-      inputFingerprint,
-      outputFingerprint: original.outputFingerprint,
+      inputFingerprint: params.inputFingerprint,
+      outputFingerprint: params.original.outputFingerprint,
       evidenceFingerprint: null,
-      replayHash: original.replayHash,
-      idempotencyKey,
+      replayHash: params.original.replayHash,
+      idempotencyKey: params.idempotencyKey,
       isReplay: true,
-      replayOfExecutionId: original.executionId,
+      replayOfExecutionId: params.original.executionId,
       approvalState: "generated",
-      businessDomain: null,
-      processId: null,
-      workspaceId: null,
-      stage: null,
-      actorUserId: null,
+      businessDomain: params.current.businessDomain ?? null,
+      processId: params.current.processId ?? null,
+      workspaceId: params.current.workspaceId ?? null,
+      stage: params.current.stage ?? null,
+      actorUserId: params.current.actorUserId ?? null,
       failureMessage: null,
     };
     await insertCognitiveProvenance(env);
-  } catch { /* marcador de replay é auditoria; nunca quebra o fluxo */ }
+    return env;
+  } catch (e) {
+    log.error("replay_marker_persist_failed", { correlationId: params.current.correlationId, error: sanitizeFailureMessage(e instanceof Error ? e.message : String(e)) });
+    return null;
+  }
 }
 
 /** Recupera a proveniência ORIGINAL de uma chave (tenant-scoped) — base de auditoria/replay. */

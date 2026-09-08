@@ -45,9 +45,10 @@ vi.mock("../../services/documentEngineService", () => ({
   generateOfficialDocument: vi.fn(async () => { effectOrder.push("official"); return { id: "off-1", version: 1, lineageId: "lin-1" }; }),
 }));
 
-// A1 — o linkage de proveniência → artefato ocorre na MESMA transação. Spy registra o efeito/tx.
+// A1 — o linkage de proveniência → artefato ocorre na MESMA transação. Spy registra o efeito/tx e
+// devolve a contagem de linhas vinculadas (default 1 = proveniência presente; 0 = ausente → fail-closed).
 vi.mock("../../db/cognitiveProvenance", () => ({
-  linkProvenanceArtifact: vi.fn(async () => { effectOrder.push("provenance-link"); }),
+  linkProvenanceArtifact: vi.fn(async () => { effectOrder.push("provenance-link"); return { linked: 1 }; }),
 }));
 
 vi.mock("../../services/workspaceOrchestratorService", () => ({
@@ -187,6 +188,17 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     expect(vi.mocked(provDb.linkProvenanceArtifact).mock.calls[0][0]).toBe(fakeTx);
     expect(saveIdempotencyResult.mock.calls[0][4]).toBe(fakeTx);
     expect(failIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it("A1 — proveniência obrigatória AUSENTE (linked=0) → geração ABORTA e nada é persistido (rollback)", async () => {
+    checkIdempotency.mockResolvedValue({ status: "new" });
+    // Cognição real (sem `invoke`) → proveniência é obrigatória; simula ZERO linhas vinculadas.
+    vi.mocked(provDb.linkProvenanceArtifact).mockResolvedValueOnce({ linked: 0 });
+    await expect(call()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    // Sem sucesso: a chave de idempotência é marcada como failed (retry futuro), nunca COMPLETED.
+    expect(failIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(saveIdempotencyResult).not.toHaveBeenCalled();
+    expect(effectOrder).not.toContain("idempotency-save");
   });
 
   it("status completed + mesmo payload → replay cacheado, SEM reexecutar cognição nem persistir", async () => {

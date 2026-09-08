@@ -7,7 +7,7 @@
  * (id do envelope, sem Date.now). Aceita executor (db|tx) para linkage ATÔMICO.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "./connection";
 import { cognitiveProvenanceTable } from "../../drizzle/schema";
 import type { ProvenanceEnvelope } from "../domain/cognitiveProvenance";
@@ -54,10 +54,11 @@ function envelopeToRow(env: ProvenanceEnvelope): typeof cognitiveProvenanceTable
 }
 
 /**
- * Persiste (ou reafirma, idempotente) o envelope de proveniência. Idempotente por `id`
- * determinístico: re-execuções da MESMA execução lógica não duplicam. NÃO reescreve o
- * fingerprint de saída ORIGINAL nem o input/replay (imutáveis); em duplicata só reafirma
- * o estado de execução/aprovação e o linkage. Retorna o `id` (ou null sem DB).
+ * Persiste o envelope de proveniência com semântica INSERT-ONCE (ledger IMUTÁVEL). Uma colisão do
+ * MESMO `id` determinístico é um NO-OP seguro (`ON DUPLICATE KEY UPDATE id = id`): a execução
+ * ORIGINAL nunca é reescrita — `failed` não vira `completed`, e status/fingerprints/motivo/mensagem
+ * permanecem imutáveis. O linkage de artefato (fatual) é aplicado por `linkProvenanceArtifact`, não
+ * aqui. Retorna o `id` (ou null sem DB). Idempotente: re-execução da MESMA execução lógica não duplica.
  */
 export async function insertCognitiveProvenance(env: ProvenanceEnvelope, executor?: ProvenanceExecutor): Promise<string | null> {
   const db = executor ?? (await getDb());
@@ -66,15 +67,8 @@ export async function insertCognitiveProvenance(env: ProvenanceEnvelope, executo
   await db
     .insert(cognitiveProvenanceTable)
     .values(row)
-    .onDuplicateKeyUpdate({
-      set: {
-        executionStatus: row.executionStatus,
-        degradationReason: row.degradationReason,
-        failureClass: row.failureClass,
-        approvalState: row.approvalState,
-        failureMessage: row.failureMessage,
-      },
-    });
+    // NO-OP em colisão de PK: preserva a linha original intacta (insert-once, ledger imutável).
+    .onDuplicateKeyUpdate({ set: { id: sql`${cognitiveProvenanceTable.id}` } });
   return env.id;
 }
 
@@ -126,10 +120,13 @@ export async function listProvenanceByCorrelation(organizationId: number, correl
 }
 
 /**
- * Vincula a proveniência de um correlationId ao ARTEFATO produzido (generated_document) e,
- * quando materializado, ao documento oficial + linhagem. Escopado ao tenant. Aceita executor
- * (tx) para ocorrer na MESMA transação da persistência do artefato (atomicidade: sem artefato
- * com proveniência perdida). Não fabrica nada: só preenche o linkage factual.
+ * Vincula a proveniência de um correlationId ao ARTEFATO produzido (generated_document) e, quando
+ * materializado, ao documento oficial + linhagem. Escopado ao tenant. Aceita executor (tx) para
+ * ocorrer na MESMA transação da persistência do artefato (atomicidade: sem artefato com proveniência
+ * perdida). Só preenche linkage FACTUAL e SOMENTE em proveniência AINDA NÃO VINCULADA (`artifact_id`
+ * NULL) — nunca sobrescreve silenciosamente um linkage já estabelecido por outro artefato. Retorna a
+ * quantidade de linhas efetivamente vinculadas (`linked`), permitindo ao chamador FAIL-CLOSED quando
+ * a proveniência obrigatória está ausente (linked === 0 → abortar/rollback).
  */
 export async function linkProvenanceArtifact(
   executor: ProvenanceExecutor,
@@ -142,9 +139,9 @@ export async function linkProvenanceArtifact(
     officialLineageId?: string | null;
     approvalState?: string;
   },
-): Promise<void> {
-  if (!p.correlationId) return;
-  await executor
+): Promise<{ linked: number }> {
+  if (!p.correlationId) return { linked: 0 };
+  const result = await executor
     .update(cognitiveProvenanceTable)
     .set({
       artifactKind: p.artifactKind ?? null,
@@ -157,8 +154,12 @@ export async function linkProvenanceArtifact(
       and(
         eq(cognitiveProvenanceTable.organizationId, p.organizationId),
         eq(cognitiveProvenanceTable.correlationId, p.correlationId),
+        // Só vincula proveniência ainda NÃO vinculada — não sobrescreve linkage estabelecido.
+        isNull(cognitiveProvenanceTable.artifactId),
       ),
     );
+  const linked = (result as unknown as Array<{ affectedRows?: number }>)[0]?.affectedRows ?? 0;
+  return { linked };
 }
 
 /** Contagem por tenant (auditoria/testes). */
