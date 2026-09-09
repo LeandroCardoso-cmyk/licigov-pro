@@ -73,6 +73,34 @@ async function runOne(kind: "etp" | "tr"): Promise<Record<string, unknown>> {
 }
 
 /**
+ * HOMOLOGAÇÃO LIVE NO BOOT (staging-only, opt-in por `A2_HOMOLOG_ON_BOOT=1`). Roda ETP+TR com o provider
+ * REAL uma única vez após o boot e imprime UMA linha JSON `[A2-LIVE-HOMOLOG] {...}` no stdout — legível
+ * pelos logs de deploy (mecanismo automatizável quando o egress externo ao serviço é bloqueado). No-op em
+ * produção e quando a flag não está ligada. Best-effort: nunca derruba o processo.
+ */
+export function runA2LiveHomologationOnBoot(): void {
+  if (APP_CONFIG.isProduction) return;
+  if (process.env.A2_HOMOLOG_ON_BOOT !== "1") return;
+  void (async () => {
+    try {
+      await cleanup(TEST_ORG);
+      const etp = await runOne("etp");
+      const tr = await runOne("tr");
+      const ok =
+        etp.singleCognitiveExecution === true && tr.singleCognitiveExecution === true &&
+        etp.artifactLinked === true && tr.artifactLinked === true &&
+        String(etp.executionStatus).startsWith("completed") && String(tr.executionStatus).startsWith("completed") &&
+        etp.correlationPreserved === true && tr.correlationPreserved === true;
+      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok, provider: etp.provider, appEnv: APP_CONFIG.env, etp, tr })}`);
+    } catch (err) {
+      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) })}`);
+    } finally {
+      await cleanup(TEST_ORG).catch(() => {});
+    }
+  })();
+}
+
+/**
  * Registra o endpoint de homologação live (staging-only, token-gated). No-op em produção.
  */
 export function registerA2LiveHomologationRoute(app: Express): void {
