@@ -80,10 +80,24 @@ async function runOne(kind: "etp" | "tr"): Promise<Record<string, unknown>> {
  * pelos logs de deploy (mecanismo automatizável quando o egress externo ao serviço é bloqueado). No-op em
  * produção e quando a flag não está ligada. Best-effort: nunca derruba o processo.
  */
-/** Erro transitório do provider (ex.: 503 "high demand", timeout, unavailable) — elegível a nova rodada. */
-function isTransientProviderError(err: unknown): boolean {
-  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return /\b(503|429|500|502|504)\b|high demand|unavailable|overloaded|timeout|timed out|deadline|resource[_ ]?exhausted|rate limit/.test(msg);
+/**
+ * Erro de COTA/limite (HTTP 429, "Quota exceeded", *PerDayPerProjectPerModel-FreeTier*, resource exhausted,
+ * rate limit): NUNCA re-tentar — re-tentar apenas consome mais cota diária. Classificação explícita para o
+ * smoke não reesgotar a janela do free-tier.
+ */
+function isQuotaOrRateLimitError(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return /\b429\b|quota exceeded|too many requests|resource[_ ]?exhausted|rate limit|generaterequestsper|freetier|free_tier/.test(m);
+}
+
+/**
+ * SÓ 503 "high demand" (e afins não-cota: 500/502/504, unavailable, overloaded, timeout) permite UMA nova
+ * tentativa espaçada. Cota/limite (429) é sempre NÃO-retryable (ver acima).
+ */
+function isRetryableHighDemand(err: unknown): boolean {
+  if (isQuotaOrRateLimitError(err)) return false;
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return /\b(500|502|503|504)\b|high demand|unavailable|overloaded|timeout|timed out|deadline/.test(m);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -91,11 +105,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function runA2LiveHomologationOnBoot(): void {
   if (APP_CONFIG.isProduction) return;
   if (process.env.A2_HOMOLOG_ON_BOOT !== "1") return;
-  // O provider REAL (Gemini) pode responder 503 "high demand" de forma INTERMITENTE. Como o boot roda uma
-  // única vez, tentamos a sequência ETP+TR em várias RODADAS espaçadas — parando na primeira que fecha —
-  // para cobrir uma janela de disponibilidade sem exigir múltiplos deploys manuais. Best-effort, staging-only.
-  const maxRounds = 10;
-  const roundDelayMs = 30_000;
+  // Sob free-tier do Gemini a cota diária é escassa (20 req/dia). Política CONSERVADORA de cota:
+  //   - 429 / cota diária / rate limit  → PARA na hora, NUNCA re-tenta (não queima mais cota);
+  //   - 503 "high demand" (e afins não-cota) → no máximo UMA nova tentativa espaçada;
+  //   - erro determinístico do código → PARA e reporta.
+  // Combine com AI_MAX_ATTEMPTS=1 em staging para que a chamada interna também não re-tente 429.
+  const maxRounds = 2; // 1 tentativa + no máximo 1 nova (exclusiva para 503 high demand).
+  const roundDelayMs = 60_000;
   void (async () => {
     let lastErr: unknown = null;
     for (let round = 1; round <= maxRounds; round++) {
@@ -113,15 +129,17 @@ export function runA2LiveHomologationOnBoot(): void {
         return; // fechou (ok true/false determinístico) — não re-tenta.
       } catch (err) {
         lastErr = err;
-        const transient = isTransientProviderError(err);
-        console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, round, transient, error: err instanceof Error ? err.message : String(err) })}`);
+        const quota = isQuotaOrRateLimitError(err);
+        const retryable = isRetryableHighDemand(err);
+        console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, round, quota, retryable, error: err instanceof Error ? err.message : String(err) })}`);
         await cleanup(TEST_ORG).catch(() => {});
-        if (!transient || round === maxRounds) break; // erro determinístico ou fim das rodadas.
-        await sleep(roundDelayMs); // espaça a próxima rodada para cobrir a intermitência do provider.
+        if (quota) break;                       // COTA DIÁRIA: para imediatamente, sem re-tentar.
+        if (!retryable || round === maxRounds) break; // determinístico ou fim das rodadas.
+        await sleep(roundDelayMs);              // 503 high demand: uma única nova tentativa espaçada.
       }
     }
     const cause = lastErr instanceof Error && lastErr.cause ? String((lastErr.cause as { message?: unknown })?.message ?? lastErr.cause) : undefined;
-    console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, exhausted: true, error: lastErr instanceof Error ? lastErr.message : String(lastErr), cause })}`);
+    console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, exhausted: true, quota: isQuotaOrRateLimitError(lastErr), error: lastErr instanceof Error ? lastErr.message : String(lastErr), cause })}`);
   })();
 }
 
