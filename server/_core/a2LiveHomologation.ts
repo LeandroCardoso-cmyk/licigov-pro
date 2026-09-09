@@ -39,7 +39,9 @@ async function cleanup(org: number): Promise<void> {
 async function runOne(kind: "etp" | "tr"): Promise<Record<string, unknown>> {
   const ts = Date.now();
   const correlationId = `a2-live-${kind}-${ts}`;
-  const processId = `a2-live-${kind}-${ts}`;
+  // `generated_documents.process_id` é varchar(20) no schema — o id do processo tem de caber em 20 chars
+  // (o correlationId, varchar(64), permanece descritivo). base36 do timestamp mantém o valor compacto e único.
+  const processId = `a2${kind}${ts.toString(36)}`; // ex.: "a2etpmlxr8k9" (≤ 20 chars)
   const object = kind === "tr" ? "Serviço de limpeza predial (homologação live)" : "Aquisição de material de escritório (homologação live)";
   // COGNIÇÃO REAL — sem `invoke`: o provider ativo (Gemini em staging) produz o structured output.
   const { document, replayed } = await generateDocument({
@@ -93,7 +95,8 @@ export function runA2LiveHomologationOnBoot(): void {
         etp.correlationPreserved === true && tr.correlationPreserved === true;
       console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok, provider: etp.provider, appEnv: APP_CONFIG.env, etp, tr })}`);
     } catch (err) {
-      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) })}`);
+      const cause = err instanceof Error && err.cause ? String((err.cause as { message?: unknown })?.message ?? err.cause) : undefined;
+      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err), cause })}`);
     } finally {
       await cleanup(TEST_ORG).catch(() => {});
     }
