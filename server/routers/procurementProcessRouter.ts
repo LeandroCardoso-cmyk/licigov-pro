@@ -377,12 +377,22 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       const doc = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
       if (!doc || !doc.content.trim()) return { draft: null };
+      // A2 — explicabilidade MÍNIMA de fundamentação (aditivo): estado factual + nº de evidências reais,
+      // derivados das `sources` persistidas na geração (sem prompt/payload/segredos/raciocínio bruto).
+      const sources = doc.sources ?? [];
+      const groundingSource = sources.find((s) => s.startsWith("grounding:"))?.slice("grounding:".length) ?? null;
+      const evidenceSource = sources.find((s) => s.startsWith("evidencias:"))?.slice("evidencias:".length);
+      const grounding = groundingSource
+        ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0 }
+        : null;
       return {
         draft: {
           id: doc.id, kind: doc.kind, title: doc.title, content: doc.content,
           status: doc.status, contentHash: draftContentHash(doc.content), updatedAt: doc.updatedAt,
           // C.4B.3A — proveniência (aditivo, mínimo): originador estável + último ator substantivo.
           authorUserId: doc.authorUserId, lastSubstantiveActorUserId: doc.lastSubstantiveActorUserId,
+          // A2 — estado de fundamentação (grounded/partially_grounded/ungrounded) + contagem de evidências.
+          grounding,
         },
       };
     }),

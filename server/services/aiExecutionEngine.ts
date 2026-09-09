@@ -43,7 +43,7 @@ import {
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   computeInputFingerprint, computeOutputFingerprint, deriveExecutionState,
-  type SemanticCognitiveInput,
+  type SemanticCognitiveInput, type EvidenceRef,
 } from "../domain/cognitiveProvenance";
 import { getRulesForTask } from "../domain/institutionalRules";
 import { buildReasoningPlan, splitAlternatives, type InstitutionalReasoningPlan } from "../domain/institutionalReasoning";
@@ -230,6 +230,14 @@ export interface CognitiveTaskInput {
   readonly idempotencyKey?: string;
   /** A1 — ator (id numérico) do pedido, componente da chave de idempotência (org, actor, key). */
   readonly actorUserId?: number;
+  /**
+   * A2 — evidências REAIS recuperadas (EvidenceRef[]) para alimentar a proveniência (evidenceFingerprint,
+   * evidenceCount, grounding_state factual). Quando ausentes, a A1 mantém o comportamento honesto
+   * (evidenceFingerprint NULL, ungrounded quando a task exige grounding). NÃO fabricar.
+   */
+  readonly evidences?: readonly EvidenceRef[];
+  /** A2 — cobertura de evidência suficiente (regra determinística do authoring contract). */
+  readonly evidenceComplete?: boolean;
 }
 
 export interface CognitiveExecution {
@@ -328,7 +336,7 @@ async function executeCognitiveWithReplay(input: CognitiveTaskInput, key: string
       finishReason: execution.context.outcome.finishReason,
       usesGrounding: execution.context.grounding.groundingApplied,
       usesRAG: execution.context.grounding.ragApplied,
-      evidenceCount: 0, evidenceComplete: false,
+      evidenceCount: input.evidences?.length ?? 0, evidenceComplete: input.evidenceComplete ?? false,
     });
     const lineage: ReplayOriginalLineage = {
       executionId: execution.context.id, replayHash: execution.context.replayHash,
@@ -554,6 +562,8 @@ async function executeCognitiveCore(input: CognitiveTaskInput): Promise<Cognitiv
     documentRefs: input.documentRefs ?? [], lawRefs: input.lawRefs ?? [],
     usesGrounding: g.usesGrounding, usesRAG: g.usesRAG, finishReason,
     idempotencyKey: input.idempotencyKey ?? null, // lineage de idempotência na linha ORIGINAL (is_replay=0)
+    // A2 — evidências REAIS (quando fornecidas) → evidenceFingerprint/evidenceCount/grounding factual.
+    evidences: input.evidences, evidenceComplete: input.evidenceComplete,
   });
   push("result", "applied", `Resultado consolidado (ctx=${context.id}, replay=${replayHash.slice(0, 8)}).`);
 
