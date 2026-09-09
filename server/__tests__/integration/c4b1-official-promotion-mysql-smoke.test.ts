@@ -25,6 +25,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, canonicalDocumentIdentity } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { promoteOfficialDocument, draftContentHash } from "../../services/documentPromotionService";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
 
@@ -42,7 +43,7 @@ async function seedDraft(org: number, processId: string, object: string) {
   return generateDocument({
     organizationId: org, processId, kind: "etp", object,
     correlationId: "c4b1-smoke", idempotencyKey: `gen-${org}-${processId}-${object}`,
-    actorUserId: AUTHOR, invoke: async () => "",
+    actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("etp"),
   });
 }
 

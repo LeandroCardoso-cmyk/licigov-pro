@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, generateNotice, saveReviewableDraft } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { promoteOfficialDocument } from "../../services/documentPromotionService";
 import { draftContentHash } from "../../domain/generatedDocument";
 
@@ -35,10 +36,10 @@ const C = 7;   // emissor (terceiro manager)
 let conn: mysql.Connection;
 
 async function seedEtp(org: number, pid: string, object: string, actor: number, correlationId = "c4b3b-seed") {
-  return generateDocument({ organizationId: org, processId: pid, kind: "etp", object, correlationId, idempotencyKey: `gen-${org}-${pid}`, actorUserId: actor, invoke: async () => "" });
+  return generateDocument({ organizationId: org, processId: pid, kind: "etp", object, correlationId, idempotencyKey: `gen-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("etp") });
 }
 async function seedTr(org: number, pid: string, object: string, actor: number) {
-  return generateDocument({ organizationId: org, processId: pid, kind: "tr", object, correlationId: "c4b3b-seed", idempotencyKey: `gen-tr-${org}-${pid}`, actorUserId: actor, invoke: async () => "" });
+  return generateDocument({ organizationId: org, processId: pid, kind: "tr", object, correlationId: "c4b3b-seed", idempotencyKey: `gen-tr-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("tr") });
 }
 async function seedEdital(org: number, pid: string, object: string, actor: number) {
   return generateNotice({ organizationId: org, processId: pid, object, modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "c4b3b-seed", idempotencyKey: `gen-ed-${org}-${pid}`, actorUserId: actor });
