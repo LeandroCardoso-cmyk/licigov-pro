@@ -80,26 +80,48 @@ async function runOne(kind: "etp" | "tr"): Promise<Record<string, unknown>> {
  * pelos logs de deploy (mecanismo automatizável quando o egress externo ao serviço é bloqueado). No-op em
  * produção e quando a flag não está ligada. Best-effort: nunca derruba o processo.
  */
+/** Erro transitório do provider (ex.: 503 "high demand", timeout, unavailable) — elegível a nova rodada. */
+function isTransientProviderError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return /\b(503|429|500|502|504)\b|high demand|unavailable|overloaded|timeout|timed out|deadline|resource[_ ]?exhausted|rate limit/.test(msg);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export function runA2LiveHomologationOnBoot(): void {
   if (APP_CONFIG.isProduction) return;
   if (process.env.A2_HOMOLOG_ON_BOOT !== "1") return;
+  // O provider REAL (Gemini) pode responder 503 "high demand" de forma INTERMITENTE. Como o boot roda uma
+  // única vez, tentamos a sequência ETP+TR em várias RODADAS espaçadas — parando na primeira que fecha —
+  // para cobrir uma janela de disponibilidade sem exigir múltiplos deploys manuais. Best-effort, staging-only.
+  const maxRounds = 10;
+  const roundDelayMs = 30_000;
   void (async () => {
-    try {
-      await cleanup(TEST_ORG);
-      const etp = await runOne("etp");
-      const tr = await runOne("tr");
-      const ok =
-        etp.singleCognitiveExecution === true && tr.singleCognitiveExecution === true &&
-        etp.artifactLinked === true && tr.artifactLinked === true &&
-        String(etp.executionStatus).startsWith("completed") && String(tr.executionStatus).startsWith("completed") &&
-        etp.correlationPreserved === true && tr.correlationPreserved === true;
-      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok, provider: etp.provider, appEnv: APP_CONFIG.env, etp, tr })}`);
-    } catch (err) {
-      const cause = err instanceof Error && err.cause ? String((err.cause as { message?: unknown })?.message ?? err.cause) : undefined;
-      console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err), cause })}`);
-    } finally {
-      await cleanup(TEST_ORG).catch(() => {});
+    let lastErr: unknown = null;
+    for (let round = 1; round <= maxRounds; round++) {
+      try {
+        await cleanup(TEST_ORG);
+        const etp = await runOne("etp");
+        const tr = await runOne("tr");
+        const ok =
+          etp.singleCognitiveExecution === true && tr.singleCognitiveExecution === true &&
+          etp.artifactLinked === true && tr.artifactLinked === true &&
+          String(etp.executionStatus).startsWith("completed") && String(tr.executionStatus).startsWith("completed") &&
+          etp.correlationPreserved === true && tr.correlationPreserved === true;
+        console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok, round, provider: etp.provider, appEnv: APP_CONFIG.env, etp, tr })}`);
+        await cleanup(TEST_ORG).catch(() => {});
+        return; // fechou (ok true/false determinístico) — não re-tenta.
+      } catch (err) {
+        lastErr = err;
+        const transient = isTransientProviderError(err);
+        console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, round, transient, error: err instanceof Error ? err.message : String(err) })}`);
+        await cleanup(TEST_ORG).catch(() => {});
+        if (!transient || round === maxRounds) break; // erro determinístico ou fim das rodadas.
+        await sleep(roundDelayMs); // espaça a próxima rodada para cobrir a intermitência do provider.
+      }
     }
+    const cause = lastErr instanceof Error && lastErr.cause ? String((lastErr.cause as { message?: unknown })?.message ?? lastErr.cause) : undefined;
+    console.info(`[A2-LIVE-HOMOLOG] ${JSON.stringify({ ok: false, exhausted: true, error: lastErr instanceof Error ? lastErr.message : String(lastErr), cause })}`);
   })();
 }
 
