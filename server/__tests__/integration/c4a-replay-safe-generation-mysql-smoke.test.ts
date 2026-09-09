@@ -56,6 +56,7 @@ vi.mock("../../db/procurement", async (orig) => {
 });
 
 import { generateDocument, canonicalDocumentIdentity } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 
 let conn: mysql.Connection;
 
@@ -63,7 +64,8 @@ const genETP = (processId: string, key: string, org = ORG) =>
   generateDocument({
     organizationId: org, processId, kind: "etp", object: "Material de escritório",
     correlationId: "c4a-smoke", idempotencyKey: key, actorUserId: USER,
-    invoke: async () => "", // cognição determinística — nunca provider real
+    // A2 (fechamento) — o seam `invoke` fornece o OUTPUT ESTRUTURADO do provider (determinístico, sem rede).
+    invoke: async () => buildMockProviderAuthoring("etp"),
   });
 
 async function countGenerated(org: number, processId: string, kind: string): Promise<number> {

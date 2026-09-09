@@ -238,6 +238,12 @@ export interface CognitiveTaskInput {
   readonly evidences?: readonly EvidenceRef[];
   /** A2 — cobertura de evidência suficiente (regra determinística do authoring contract). */
   readonly evidenceComplete?: boolean;
+  /**
+   * A2 (fechamento) — JSON Schema que o provider DEVE conformar (structured output). Repassado ao
+   * adapter/provider (`responseSchema`). O servidor permanece autoridade sobre keys/required/tamanho e
+   * revalida o output; o provider apenas PREENCHE a estrutura permitida. Opcional (ausência = texto).
+   */
+  readonly responseSchema?: { name: string; schema: Record<string, unknown> };
 }
 
 export interface CognitiveExecution {
@@ -443,6 +449,8 @@ async function executeCognitiveCore(input: CognitiveTaskInput): Promise<Cognitiv
         ],
         // Teto de SAÍDA (custo/tamanho). Default preserva o comportamento anterior (policy.maxContext).
         maxTokens: input.maxOutputTokens ?? policy.maxContext,
+        // A2 (fechamento) — structured output: o provider conforma ao JSON Schema quando fornecido.
+        responseSchema: input.responseSchema,
       }),
       {
         provider: resolution.provider.name,

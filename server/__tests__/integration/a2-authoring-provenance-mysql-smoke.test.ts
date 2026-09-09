@@ -16,6 +16,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument } from "../../services/procurementProcessService";
+import { generateStructuredAuthoring } from "../../services/authoring/structuredAuthoringService";
+import { AuthoringContractError } from "../../domain/authoring/authoringSchema";
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -91,6 +93,22 @@ describe.skipIf(!DB)("A2 — autoria estruturada × proveniência A1 (MySQL real
     expect(r2.replayed).toBe(true);
     const after = (await provRows(ORG, corr)).filter((x) => Number(x.is_replay) === 0).length;
     expect(after).toBe(before); // imutabilidade: nenhuma nova proveniência original
+  }, 120_000);
+
+  it("structured output INVÁLIDO → fail-closed + proveniência FAILED (invalid_input), sem artifact", async () => {
+    const corr = "a2-prov-fail";
+    // Provider retorna seção não-canônica → parseProviderAuthoringOutput lança → autoria fail-closed.
+    await expect(generateStructuredAuthoring({
+      organizationId: ORG, kind: "etp", object: "Falha estruturada", correlationId: corr, actorUserId: USER,
+      invoke: async () => JSON.stringify({ sections: [{ key: "secao_inventada", prose: "x" }] }),
+    })).rejects.toBeInstanceOf(AuthoringContractError);
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT execution_status, failure_class FROM cognitive_provenance WHERE organization_id = ? AND correlation_id = ?",
+      [ORG, corr],
+    );
+    const failed = (rows as any[]).find((r) => String(r.execution_status) === "failed");
+    expect(failed).toBeTruthy();
+    expect(String(failed.failure_class)).toBe("invalid_input");
   }, 120_000);
 
   it("TR: cognição real → proveniência aterrada e artefato vinculado", async () => {

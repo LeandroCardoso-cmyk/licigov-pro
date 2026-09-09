@@ -46,30 +46,30 @@ export interface CanonicalAuthoringSection {
  * cada seção corresponde a um inciso legal existente, não a uma seção fabricada.
  */
 export const ETP_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Object.freeze([
-  { key: "necessidade", title: "Descrição da necessidade da contratação", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, I", required: true },
-  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, III", required: true },
-  { key: "estimativa_quantidades", title: "Estimativa das quantidades", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, IV", required: true },
-  { key: "levantamento_mercado", title: "Levantamento de mercado e justificativa da escolha", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, V", required: true },
-  { key: "estimativa_valor", title: "Estimativa do valor da contratação", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, VI", required: true },
-  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, VII", required: true },
-  { key: "parcelamento", title: "Justificativa do parcelamento ou não", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, VIII", required: false },
-  { key: "resultados_pretendidos", title: "Demonstrativo dos resultados pretendidos", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, IX", required: false },
-  { key: "viabilidade", title: "Posicionamento conclusivo sobre a viabilidade", legalAnchor: "lei-14133-2021:art-18", legalAnchorLabel: "Art. 18, §1º, XIII", required: true },
+  { key: "necessidade", title: "Descrição da necessidade da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-i", legalAnchorLabel: "Art. 18, §1º, I", required: true },
+  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iii", legalAnchorLabel: "Art. 18, §1º, III", required: true },
+  { key: "estimativa_quantidades", title: "Estimativa das quantidades", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iv", legalAnchorLabel: "Art. 18, §1º, IV", required: true },
+  { key: "levantamento_mercado", title: "Levantamento de mercado e justificativa da escolha", legalAnchor: "lei-14133-2021:art-18:par-1:inc-v", legalAnchorLabel: "Art. 18, §1º, V", required: true },
+  { key: "estimativa_valor", title: "Estimativa do valor da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vi", legalAnchorLabel: "Art. 18, §1º, VI", required: true },
+  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vii", legalAnchorLabel: "Art. 18, §1º, VII", required: true },
+  { key: "parcelamento", title: "Justificativa do parcelamento ou não", legalAnchor: "lei-14133-2021:art-18:par-1:inc-viii", legalAnchorLabel: "Art. 18, §1º, VIII", required: false },
+  { key: "resultados_pretendidos", title: "Demonstrativo dos resultados pretendidos", legalAnchor: "lei-14133-2021:art-18:par-1:inc-ix", legalAnchorLabel: "Art. 18, §1º, IX", required: false },
+  { key: "viabilidade", title: "Posicionamento conclusivo sobre a viabilidade", legalAnchor: "lei-14133-2021:art-18:par-1:inc-xiii", legalAnchorLabel: "Art. 18, §1º, XIII", required: true },
 ]);
 
 /**
  * TR — conteúdo do art. 6º, inciso XXIII, da Lei nº 14.133/2021 (alíneas a a j). Enumeração REAL.
  */
 export const TR_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Object.freeze([
-  { key: "objeto", title: "Definição do objeto", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, a", required: true },
-  { key: "fundamentacao", title: "Fundamentação da contratação", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, b", required: true },
-  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, c", required: true },
-  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, d", required: true },
-  { key: "modelo_execucao", title: "Modelo de execução do objeto", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, e", required: true },
-  { key: "modelo_gestao", title: "Modelo de gestão do contrato", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, f", required: false },
-  { key: "medicao_pagamento", title: "Critérios de medição e de pagamento", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, g", required: false },
-  { key: "selecao_fornecedor", title: "Forma e critérios de seleção do fornecedor", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, h", required: true },
-  { key: "estimativa_valor", title: "Estimativas do valor da contratação", legalAnchor: "lei-14133-2021:art-6", legalAnchorLabel: "Art. 6º, XXIII, i", required: true },
+  { key: "objeto", title: "Definição do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-a", legalAnchorLabel: "Art. 6º, XXIII, a", required: true },
+  { key: "fundamentacao", title: "Fundamentação da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-b", legalAnchorLabel: "Art. 6º, XXIII, b", required: true },
+  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-c", legalAnchorLabel: "Art. 6º, XXIII, c", required: true },
+  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-d", legalAnchorLabel: "Art. 6º, XXIII, d", required: true },
+  { key: "modelo_execucao", title: "Modelo de execução do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-e", legalAnchorLabel: "Art. 6º, XXIII, e", required: true },
+  { key: "modelo_gestao", title: "Modelo de gestão do contrato", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-f", legalAnchorLabel: "Art. 6º, XXIII, f", required: false },
+  { key: "medicao_pagamento", title: "Critérios de medição e de pagamento", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-g", legalAnchorLabel: "Art. 6º, XXIII, g", required: false },
+  { key: "selecao_fornecedor", title: "Forma e critérios de seleção do fornecedor", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-h", legalAnchorLabel: "Art. 6º, XXIII, h", required: true },
+  { key: "estimativa_valor", title: "Estimativas do valor da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-i", legalAnchorLabel: "Art. 6º, XXIII, i", required: true },
 ]);
 
 /** Conjunto canônico de seções por tipo de documento (fonte da verdade do contrato). */
@@ -176,4 +176,104 @@ export function validateStructuredAuthoring(candidate: unknown): StructuredAutho
   }
   if (issues.length > 0) throw new AuthoringContractError(issues);
   return Object.freeze(doc);
+}
+
+// ─── Contrato do OUTPUT ESTRUTURADO do PROVIDER (Gap 1) ───────────────────────
+
+/** Referência jurídica declarada PELO PROVIDER (texto livre) — validada depois contra o corpus. */
+export const ProviderLegalRefSchema = z.object({
+  /** Rótulo estrutural citado (ex.: "Art. 18, §1º, IX" | "Art. 6º, XXIII, a"). */
+  identifier: z.string().min(1).max(160),
+  /** Diploma citado em texto (ex.: "Lei nº 14.133/2021"); opcional. */
+  diploma: z.string().max(160).optional(),
+});
+
+/** Preenchimento de UMA seção produzido pelo provider (key restrita às canônicas; prose bounded). */
+export const ProviderSectionFillSchema = z.object({
+  key: z.string().min(1).max(80),
+  prose: z.string().max(AUTHORING_LIMITS.maxProseChars),
+  legalReferences: z.array(ProviderLegalRefSchema).max(AUTHORING_LIMITS.maxReferencesPerSection).optional().default([]),
+  limitations: z.array(z.string().min(1)).max(AUTHORING_LIMITS.maxLimitations).optional().default([]),
+});
+export type ProviderSectionFill = z.infer<typeof ProviderSectionFillSchema>;
+
+/** Envelope estruturado que o PROVIDER deve retornar (uma chamada por documento). */
+export const ProviderAuthoringOutputSchema = z.object({
+  sections: z.array(ProviderSectionFillSchema).min(1).max(AUTHORING_LIMITS.maxSections),
+});
+export type ProviderAuthoringOutput = z.infer<typeof ProviderAuthoringOutputSchema>;
+
+/**
+ * Faz o PARSE GOVERNADO do output estruturado do provider (JSON) e valida contra o contrato + a
+ * autoridade do servidor (keys canônicas do tipo; sem seção desconhecida; sem duplicata). Fail-closed:
+ * JSON inválido, seção desconhecida, duplicada, prose acima do limite ou referência malformada → lança
+ * `AuthoringContractError`. NÃO usa regex frágil — usa JSON.parse + Zod (mecanismo estruturado).
+ */
+export function parseProviderAuthoringOutput(kind: "etp" | "tr", rawText: string): ProviderAuthoringOutput {
+  let json: unknown;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    throw new AuthoringContractError(["output do provider não é JSON estruturado válido"]);
+  }
+  const parsed = ProviderAuthoringOutputSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new AuthoringContractError(parsed.error.issues.map((i) => `provider.${i.path.join(".")}: ${i.message}`));
+  }
+  const allowed = CANONICAL_KEYS[kind];
+  const issues: string[] = [];
+  const seen = new Set<string>();
+  for (const s of parsed.data.sections) {
+    if (!allowed.has(s.key)) issues.push(`provider retornou seção não-canônica "${s.key}" para ${kind}`);
+    if (seen.has(s.key)) issues.push(`provider retornou seção duplicada "${s.key}"`);
+    seen.add(s.key);
+  }
+  // O provider DEVE preencher TODAS as seções obrigatórias (não pode omitir uma exigência legal).
+  for (const canon of canonicalSectionsFor(kind)) {
+    if (canon.required && !seen.has(canon.key)) issues.push(`provider omitiu a seção obrigatória "${canon.key}"`);
+  }
+  if (issues.length > 0) throw new AuthoringContractError(issues);
+  return parsed.data;
+}
+
+/**
+ * Constrói o JSON Schema (responseSchema) que o provider DEVE conformar — restringe `key` ao enum das
+ * seções canônicas do tipo (o provider NÃO pode escolher novas seções). Enviado ao adapter/Kernel.
+ */
+export function buildAuthoringResponseSchema(kind: "etp" | "tr"): { name: string; schema: Record<string, unknown> } {
+  const keys = canonicalSectionsFor(kind).map((s) => s.key);
+  return {
+    name: `authoring_${kind}`,
+    schema: {
+      type: "object",
+      properties: {
+        sections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string", enum: keys },
+              prose: { type: "string" },
+              legalReferences: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { identifier: { type: "string" }, diploma: { type: "string" } },
+                  required: ["identifier"],
+                },
+              },
+              limitations: { type: "array", items: { type: "string" } },
+            },
+            required: ["key", "prose"],
+          },
+        },
+      },
+      required: ["sections"],
+    },
+  };
+}
+
+/** Lista ordenada de keys canônicas do tipo (autoridade do servidor). */
+export function canonicalKeysFor(kind: "etp" | "tr"): string[] {
+  return canonicalSectionsFor(kind).map((s) => s.key);
 }

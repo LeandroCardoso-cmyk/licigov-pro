@@ -14,6 +14,7 @@ import { createGeneratedDocument, validateEdital, defaultPresencialJustification
 // Services
 import { catmatCandidates, suggestSpecifications, enrichItem, getItemPanel } from "../../services/itemIntelligenceService";
 import { generateDocument, generateNotice } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 
 // Persistence
 import { insertProcess, getProcess, listProcesses, listIntelligentItems, recordProcessEvent, listProcessTimeline } from "../../db/procurement";
@@ -300,7 +301,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
     it("generateDocument (ETP) usa autoria estruturada com grounding real e exige revisão", async () => {
       const { document: doc } = await generateDocument({
         organizationId: ORG_ID, processId: PID, kind: "etp", object: "Material de escritório",
-        correlationId: CORR, invoke: async () => "", idempotencyKey: "t-sprint51-etp", actorUserId: 1,
+        correlationId: CORR, invoke: async () => buildMockProviderAuthoring("etp"), idempotencyKey: "t-sprint51-etp", actorUserId: 1,
       });
       expect(doc.kind).toBe("etp");
       // A2 — rascunho estruturado, seções ancoradas na Lei 14.133/2021 e aviso OBRIGATÓRIO de revisão.

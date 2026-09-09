@@ -50,7 +50,9 @@ function statusByNormId(documents: readonly ContextDocument[]): Map<string, stri
 export function evidenceRefsFromContextPackage(pkg: ContextPackage): EvidenceRef[] {
   const status = statusByNormId(pkg.documents);
   return pkg.retrievedPassages
-    .filter((p) => isCurrentStatus(status.get(p.normId) ?? "vigente")) // fonte revogada não vira evidência
+    // Gap 7 — SEM fallback: status ausente/desconhecido NÃO vira evidência (nunca inferido como vigente);
+    // fonte revogada/histórica também é excluída.
+    .filter((p) => status.has(p.normId) && isCurrentStatus(status.get(p.normId)))
     .map((p) => evidenceRef(p.normId, canonicalLocatorId(p.normId, p.identifier), p.text));
 }
 

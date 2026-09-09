@@ -1,42 +1,46 @@
 /**
- * V1 PRE-PILOT CLOSURE — Fase A2 — AUTORIA ESTRUTURADA com GROUNDING REAL (ETP/TR).
+ * V1 PRE-PILOT CLOSURE — Fase A2 (fechamento) — AUTORIA ESTRUTURADA PRODUZIDA PELO PROVIDER.
  *
- * Conecta o pipeline institucional REAL (corpus → retrieval determinístico → ContextPackage) à geração
- * canônica de ETP/TR, produzindo um rascunho ESTRUTURADO, bounded e validável (Zod) e alimentando a
- * proveniência A1 com `EvidenceRef[]` REAIS. Princípios:
+ * Fluxo obrigatório (UMA chamada cognitiva por documento):
+ *   seções canônicas (servidor) → contexto+evidências reais → provider (structured output via
+ *   responseSchema) → parse governado (JSON+Zod) → validação legal/evidência → render.
  *
- *   - A ESTRUTURA (seções canônicas) é determinística e ancorada em exigências legais REAIS da Lei
- *     14.133/2021 — NÃO depende do LLM produzir JSON. O provider apenas ENRIQUECE a prosa revisável.
- *   - O GROUNDING é FACTUAL: só passagens de fontes VIGENTES viram evidência; o estado
- *     grounded/partially_grounded/ungrounded reflete evidência real, não confiança do modelo.
- *   - Referências jurídicas são VALIDADAS contra o corpus ANTES da renderização — artigo inexistente
- *     ou diploma revogado/ausente é rejeitado e registrado como limitação (nunca escolhido em silêncio).
- *   - O material recuperado é inserido no prompt como DADO delimitado (defesa a prompt injection é do
- *     Prompt Builder do Engine); a estrutura de saída é imune a injeção pois não deriva do texto do LLM.
- *   - Estrutura fora do contrato → fail-closed (AuthoringContractError); nada é entregue como
- *     fundamentação plena. Todo rascunho carrega aviso OBRIGATÓRIO de revisão humana.
+ * Autoridade do SERVIDOR (o provider NÃO escolhe seções): keys permitidas, required/optional, tamanho,
+ * quantidade, âncora legal, grounding FACTUAL. O provider apenas PREENCHE campos das seções canônicas.
+ *
+ * Princípios de grounding (fechamento):
+ *   - grounding POR LOCATOR, não por sourceId: evidência de outro artigo não fundamenta a seção; e a
+ *     existência do §/inciso/alínea é comprovada no TEXTO verbatim do artigo (corpus particionado por
+ *     artigo → sub-locators verificados deterministicamente);
+ *   - `evidenceComplete` = cobertura de TODOS os anchors OBRIGATÓRIOS (não confidence, não coverageRatio);
+ *   - qualidade da fonte: âncora legal exige fonte NORMATIVA vigente (manual complementa, não substitui);
+ *   - citação inexistente/revogada NÃO permanece na prosa (removida + limitação; ou fail-closed);
+ *   - structured output inválido → FAIL-CLOSED, proveniência `failed`, nenhum artifact válido.
  */
 
+import { createHash } from "crypto";
 import type { OfficialCorpusBuildResult } from "../officialCorpus/officialCorpusBuilder";
 import type { ContextPackage } from "../../domain/institutionalIntegration/contextPackage";
 import type { EvidenceRef, GroundingState } from "../../domain/cognitiveProvenance";
 import { executeCognitiveTask, type CognitiveExecution } from "../aiExecutionEngine";
 import { resolveInstitutionalContextPackage } from "../institutionalIntegration/institutionalKnowledgeIntegration";
 import { assessGrounding } from "../../domain/institutionalIntegration/evidenceFromContext";
+import { captureCognitiveFailure } from "../cognitive/cognitiveProvenanceService";
 import {
-  canonicalSectionsFor, validateStructuredAuthoring, AUTHORING_CONTRACT_VERSION,
+  canonicalSectionsFor, validateStructuredAuthoring, parseProviderAuthoringOutput, buildAuthoringResponseSchema,
+  AUTHORING_CONTRACT_VERSION, AuthoringContractError,
   type StructuredAuthoring, type AuthoredSection, type AuthoredLegalReference, type CanonicalAuthoringSection,
+  type ProviderSectionFill,
 } from "../../domain/authoring/authoringSchema";
 import {
-  buildCorpusLegalIndex, validateCitedLegalReferences, resolveCanonicalReference, type CorpusLegalIndex,
+  buildCorpusLegalIndex, validateCitedLegalReferences, locatorExistsAndCurrent, sourceKindOf, articleKeyOf,
+  type CorpusLegalIndex,
 } from "./legalReferenceValidationService";
+import { isCurrentStatus } from "../../domain/institutionalIntegration/evidenceFromContext";
 import { getAuthoringCorpus } from "./authoringCorpus";
 
 const DOMAIN = "processo_licitatorio";
 const REVIEW_NOTICE = "Rascunho fundamentado gerado com apoio de IA supervisionada. Revisão OBRIGATÓRIA pelo servidor competente — não constitui documento aprovado nem juízo definitivo de legalidade.";
-
-/** Política determinística de suficiência de evidência (não é confiança de LLM). */
-const GROUNDING_POLICY = { minEvidences: 2, minCoverage: 0.34 } as const;
 
 export interface StructuredAuthoringInput {
   readonly organizationId: number;
@@ -45,9 +49,8 @@ export interface StructuredAuthoringInput {
   readonly correlationId: string;
   readonly actorUserId?: number;
   readonly userContext?: { state?: string | null; municipality?: string | null };
-  /** Override do corpus (fixture de teste). Default: corpus memoizado real. */
   readonly corpus?: OfficialCorpusBuildResult;
-  /** Seam determinístico (testes/legado): fornece a narrativa sem chamar o Engine (sem proveniência). */
+  /** Seam determinístico (testes/legado): fornece o OUTPUT ESTRUTURADO do provider (JSON) sem chamar o Engine. */
   readonly invoke?: (prompt: string) => Promise<string>;
 }
 
@@ -60,9 +63,7 @@ export interface StructuredAuthoringResult {
   readonly evidenceFingerprint: string | null;
   readonly corpusFingerprint: string;
   readonly contextPackage: ContextPackage;
-  /** Execução cognitiva (ausente quando `invoke` foi usado — seam determinístico sem proveniência). */
   readonly execution?: CognitiveExecution;
-  /** Referências citadas na prosa que foram REJEITADAS (inexistentes/incompatíveis). */
   readonly rejectedReferences: readonly { readonly raw: string; readonly reason: string }[];
 }
 
@@ -77,44 +78,93 @@ function retrievalQuery(kind: "etp" | "tr", object: string): string {
     : `Estudo Técnico Preliminar: necessidade, requisitos, levantamento de mercado e viabilidade para "${object}" (Lei 14.133/2021, art. 18).`;
 }
 
-/** Prosa determinística e revisável de uma seção (nunca vazia numa seção obrigatória). */
-function buildSectionProse(section: CanonicalAuthoringSection, object: string, grounded: boolean, narrativePart: string): string {
-  const anchor = `${section.legalAnchorLabel} da Lei nº 14.133/2021`;
-  const base = `Esta seção trata de ${section.title.toLowerCase()} para a contratação de "${object}", em atenção ao ${anchor}.`;
-  const groundingNote = grounded
-    ? " Elementos fundamentados nas fontes normativas vigentes recuperadas do corpus institucional."
-    : " Fundamentação pendente: sem evidência normativa suficiente recuperada para esta seção — complementação obrigatória pelo servidor.";
-  const narrative = narrativePart.trim().length > 0 ? `\n\n${narrativePart.trim()}` : "";
-  return base + groundingNote + narrative;
+/** Segmentos de locator (após o sourceId) da âncora de uma seção. */
+function anchorParts(anchor: string): { sourceId: string; locatorPath: string; article: string } {
+  const segs = anchor.split(":").filter(Boolean);
+  const sourceId = segs[0] ?? "";
+  const rest = segs.slice(1);
+  const artSeg = rest.find((s) => s.startsWith("art-")) ?? "";
+  return { sourceId, locatorPath: rest.join(":"), article: articleKeyOf(artSeg.replace(/^art-/, "")) };
 }
 
-/** Distribui a narrativa cognitiva apenas na 1ª seção obrigatória (mantém as demais determinísticas). */
-function narrativeFor(index: number, narrative: string): string {
-  return index === 0 ? narrative : "";
+/**
+ * GROUNDING POR LOCATOR + qualidade da fonte. Uma seção está aterrada quando:
+ *   - houve evidência REAL recuperada da MESMA fonte e do MESMO artigo da âncora;
+ *   - a fonte é NORMATIVA e vigente (manual/jurisprudencial não fundamenta âncora legal);
+ *   - o sub-locator (§/inciso/alínea) da âncora EXISTE no texto verbatim do artigo (corpus).
+ * Evidência de outro artigo (ex.: art-40) NÃO fundamenta uma âncora em art-18.
+ */
+function buildRetrievedNormativeArticles(pkg: ContextPackage, index: CorpusLegalIndex): Set<string> {
+  const statusByNorm = new Map(pkg.documents.map((d) => [d.normId, d.status]));
+  const set = new Set<string>();
+  for (const p of pkg.retrievedPassages) {
+    const status = statusByNorm.get(p.normId);
+    if (!status || !isCurrentStatus(status)) continue;         // fonte revogada/desconhecida não conta
+    if (sourceKindOf(index, p.normId) !== "normative") continue; // Gap 8: âncora legal exige fonte normativa
+    set.add(`${p.normId}|${articleKeyOf(p.identifier)}`);
+  }
+  return set;
 }
 
-/** Monta as seções estruturadas ancoradas nas exigências legais REAIS + referências validadas. */
-function assembleSections(
-  kind: "etp" | "tr", object: string, index: CorpusLegalIndex, usedSourceIds: ReadonlySet<string>, narrative: string,
-): AuthoredSection[] {
+function sectionGrounded(section: CanonicalAuthoringSection, retrieved: Set<string>, index: CorpusLegalIndex): boolean {
+  const { sourceId, locatorPath, article } = anchorParts(section.legalAnchor);
+  if (!retrieved.has(`${sourceId}|${article}`)) return false;         // evidência do artigo da âncora?
+  return locatorExistsAndCurrent(index, sourceId, locatorPath);       // sub-locator existe no corpus?
+}
+
+export interface SectionCoverageAssessment {
+  readonly groundedByKey: ReadonlyMap<string, boolean>;
+  readonly mandatoryCovered: number;
+  readonly mandatoryTotal: number;
+  readonly evidenceComplete: boolean;
+  readonly groundingState: GroundingState;
+}
+
+/**
+ * Avalia a cobertura de fundamentação POR LOCATOR (Gaps 2/3/4/8) de forma pura e determinística:
+ *   - cada seção é aterrada só se houver evidência normativa vigente do MESMO artigo E o sub-locator
+ *     existir no texto verbatim do artigo;
+ *   - `evidenceComplete` = TODOS os anchors obrigatórios cobertos;
+ *   - groundingState: todos obrigatórios → grounded; algum → partially_grounded; nenhum → ungrounded.
+ */
+export function assessSectionCoverage(kind: "etp" | "tr", pkg: ContextPackage, index: CorpusLegalIndex): SectionCoverageAssessment {
   const canon = canonicalSectionsFor(kind);
-  let requiredSeen = 0;
-  return canon.map((section) => {
-    // Referência canônica validada contra o corpus (só entra se o locator existir e for vigente).
-    const anchorSource = section.legalAnchor.split(":")[0];
-    const articleId = section.legalAnchor.split(":")[1] ?? "";
-    const canonicalRef = resolveCanonicalReference(index, anchorSource, articleId.replace(/^art-/, ""));
-    const legalReferences: AuthoredLegalReference[] = canonicalRef ? [canonicalRef] : [];
-    // Grounded quando a âncora existe no corpus E há evidência recuperada da fonte-âncora.
-    const grounded = canonicalRef !== null && usedSourceIds.has(anchorSource);
-    const narrPart = narrativeFor(requiredSeen, narrative);
-    if (section.required) requiredSeen++;
-    return {
-      key: section.key, title: section.title, legalAnchorLabel: section.legalAnchorLabel,
-      prose: buildSectionProse(section, object, grounded, narrPart),
-      grounded, legalReferences,
-    };
-  });
+  const retrieved = buildRetrievedNormativeArticles(pkg, index);
+  const groundedByKey = new Map<string, boolean>();
+  for (const s of canon) groundedByKey.set(s.key, sectionGrounded(s, retrieved, index));
+  const mandatory = canon.filter((s) => s.required);
+  const mandatoryCovered = mandatory.filter((s) => groundedByKey.get(s.key)).length;
+  const anyGrounded = canon.some((s) => groundedByKey.get(s.key));
+  const evidenceComplete = mandatory.length > 0 && mandatoryCovered === mandatory.length;
+  const groundingState: GroundingState = evidenceComplete ? "grounded" : anyGrounded ? "partially_grounded" : "ungrounded";
+  return { groundedByKey, mandatoryCovered, mandatoryTotal: mandatory.length, evidenceComplete, groundingState };
+}
+
+/** Valida uma referência declarada pelo provider (identifier + diploma) contra o corpus. */
+function validateProviderRef(index: CorpusLegalIndex, fill: ProviderSectionFill): AuthoredLegalReference[] {
+  const out: AuthoredLegalReference[] = [];
+  for (const r of fill.legalReferences ?? []) {
+    const text = `${r.identifier}${r.diploma ? ` ${r.diploma}` : ""}`;
+    const res = validateCitedLegalReferences(index, text);
+    out.push(...res.valid);
+  }
+  return out;
+}
+
+/** Categoriza o motivo de rejeição SEM reproduzir números/dispositivos (Gap 6). */
+function rejectionCategory(reason: string): string {
+  if (/sub-locator/.test(reason)) return "dispositivo (§/inciso/alínea) inexistente";
+  if (/artigo inexistente/.test(reason)) return "artigo inexistente";
+  return "diploma ausente, revogado ou incompatível";
+}
+
+/** Remove citações REJEITADAS da prosa (Gap 6) — a citação falsa não permanece no rascunho. */
+function sanitizeProse(prose: string, rejected: readonly { raw: string }[]): string {
+  let out = prose;
+  for (const r of rejected) {
+    if (r.raw && out.includes(r.raw)) out = out.split(r.raw).join("[referência não verificada removida]");
+  }
+  return out;
 }
 
 /** Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM). */
@@ -143,13 +193,37 @@ function renderMarkdown(doc: StructuredAuthoring): string {
   return lines.join("\n");
 }
 
+/** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
+function authoringQuery(kind: "etp" | "tr", object: string): string {
+  const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
+  return `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
+    `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.`;
+}
+
+/** Registra proveniência FAILED de contrato de autoria (structured output inválido) — best-effort. */
+async function recordAuthoringContractFailure(input: StructuredAuthoringInput, err: unknown): Promise<void> {
+  const replayHash = createHash("sha256").update(`authoring-contract:${input.organizationId}:${input.correlationId}:${input.kind}`).digest("hex").slice(0, 32);
+  const executionId = createHash("sha256").update(`authoring-exec:${input.correlationId}:${replayHash}`).digest("hex").slice(0, 20);
+  try {
+    await captureCognitiveFailure({
+      organizationId: input.organizationId, executionId, correlationId: input.correlationId,
+      task: "GENERATE_DOCUMENT", provider: null, model: null, replayHash,
+      usesGrounding: true, usesRAG: true, businessDomain: DOMAIN,
+      actorUserId: String(input.actorUserId ?? "system"),
+      semanticInput: { tenantId: input.organizationId, task: "GENERATE_DOCUMENT", businessDomain: DOMAIN, query: input.object },
+      error: { name: "STRUCTURED_OUTPUT_INVALID", message: err instanceof Error ? err.message : String(err) },
+    });
+  } catch { /* best-effort: não mascara o fail-closed original */ }
+}
+
 /**
- * Gera a autoria estruturada com grounding REAL. Determinístico dado o mesmo corpus e objeto (a
- * recuperação independe de ordem). Fail-closed: estrutura inválida → AuthoringContractError.
+ * Gera a autoria estruturada com grounding REAL e output produzido pelo PROVIDER. Determinístico dado o
+ * mesmo corpus/objeto. Fail-closed: structured output inválido → AuthoringContractError + proveniência failed.
  */
 export async function generateStructuredAuthoring(input: StructuredAuthoringInput): Promise<StructuredAuthoringResult> {
   const corpus = input.corpus ?? getAuthoringCorpus();
   const index = buildCorpusLegalIndex(corpus);
+  const canon = canonicalSectionsFor(input.kind);
 
   // 1) Recuperação institucional REAL (governada, determinística) → ContextPackage.
   const contextPackage = resolveInstitutionalContextPackage(corpus, {
@@ -158,73 +232,134 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     userContext: input.userContext, enableSourceScopeRouting: true,
   });
 
-  // 2) Grounding FACTUAL a partir das passagens de fontes VIGENTES → EvidenceRef[] reais.
-  const grounding = assessGrounding(contextPackage, GROUNDING_POLICY);
-  const usedSourceIds = new Set(grounding.usedSourceIds);
+  // 2) Evidências REAIS (fontes vigentes) → fingerprint/lineage (A1).
+  const grounding = assessGrounding(contextPackage, { minEvidences: 1, minCoverage: 0 });
 
-  // 3) Cognição: enriquece a prosa. Seam `invoke` (testes/legado) NÃO passa pelo Engine (sem
-  //    proveniência); ausente → Engine canônico com contextPackage + evidences REAIS (proveniência A1).
-  let narrative = "";
+  // 3) GROUNDING POR LOCATOR + cobertura de seções OBRIGATÓRIAS (determinístico, pré-provider).
+  const coverage = assessSectionCoverage(input.kind, contextPackage, index);
+  const groundedByKey = coverage.groundedByKey;
+  const evidenceComplete = coverage.evidenceComplete; // Gap 3
+  const groundingState = coverage.groundingState;
+  const evidenceCount = grounding.evidenceCount;
+  const evidenceFingerprint = grounding.evidenceFingerprint;
+
+  // 4) UMA chamada cognitiva → OUTPUT ESTRUTURADO do provider. Fail-closed em output inválido.
+  const responseSchema = buildAuthoringResponseSchema(input.kind);
+  let rawProviderText = "";
   let execution: CognitiveExecution | undefined;
-  if (input.invoke) {
-    narrative = await input.invoke(retrievalQuery(input.kind, input.object)).catch(() => "");
-  } else {
-    execution = await executeCognitiveTask({
-      task: "PROCUREMENT_REASONING", tenantId: input.organizationId,
-      userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
-      query: retrievalQuery(input.kind, input.object), businessDomain: DOMAIN,
-      contextPackage,
-      documentRefs: contextPackage.documents.map((d) => d.documentId),
-      lawRefs: contextPackage.citations.map((c) => c.reference),
-      // A2 — evidências REAIS → evidenceFingerprint/evidenceCount/grounding factual na proveniência A1.
-      evidences: grounding.evidences, evidenceComplete: grounding.evidenceComplete,
-    });
-    narrative = execution.response.content ?? "";
+  try {
+    if (input.invoke) {
+      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object));
+    } else {
+      execution = await executeCognitiveTask({
+        task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
+        userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
+        query: authoringQuery(input.kind, input.object), businessDomain: DOMAIN,
+        contextPackage,
+        documentRefs: contextPackage.documents.map((d) => d.documentId),
+        lawRefs: contextPackage.citations.map((c) => c.reference),
+        evidences: grounding.evidences, evidenceComplete,
+        responseSchema,
+      });
+      rawProviderText = execution.response.content ?? "";
+    }
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(input, err);
+    throw err;
   }
 
-  // 4) Validação anti-alucinação: referências CITADAS na prosa devem existir no corpus e ser vigentes.
-  const citeCheck = validateCitedLegalReferences(index, narrative);
-  const sanitizedNarrative = citeCheck.rejected.length > 0
-    ? truncate(narrative, 4000) // não propaga citações inventadas como fundamentação; registra limitação
-    : truncate(narrative, 4000);
+  // 5) Parse GOVERNADO do structured output (JSON + Zod + autoridade do servidor). Fail-closed.
+  let providerOutput;
+  try {
+    providerOutput = parseProviderAuthoringOutput(input.kind, rawProviderText);
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(input, err);
+    throw err;
+  }
+  const fillByKey = new Map<string, ProviderSectionFill>(providerOutput.sections.map((s) => [s.key, s]));
 
-  // 5) Seções estruturadas (determinísticas) + referências canônicas validadas + flags de grounding.
-  const sections = assembleSections(input.kind, input.object, index, usedSourceIds, sanitizedNarrative);
-
-  // 6) Limitações honestas (fundamentação parcial/ausente, citações rejeitadas, contradição temporal).
+  // 6) Monta seções (autoridade do servidor: key/title/anchor/grounding) + prosa do provider sanitizada.
+  const rejectedAll: { raw: string; reason: string }[] = [];
   const limitations: string[] = [];
-  if (grounding.groundingState === "ungrounded") {
-    limitations.push("Nenhuma evidência normativa vigente foi recuperada — o rascunho não está fundamentado e exige elaboração pelo servidor.");
-  } else if (grounding.groundingState === "partially_grounded") {
-    limitations.push("Fundamentação parcial: nem todas as seções contam com evidência normativa suficiente.");
-  }
-  for (const r of citeCheck.rejected) {
-    limitations.push(`Referência citada não verificada e removida da fundamentação: "${r.raw}" (${r.reason}).`);
-  }
-  const ungroundedSections = sections.filter((s) => !s.grounded).map((s) => s.title);
-  if (ungroundedSections.length > 0 && grounding.groundingState !== "ungrounded") {
-    limitations.push(`Seções com fundamentação pendente: ${ungroundedSections.join("; ")}.`);
-  }
+  const sections: AuthoredSection[] = canon.map((section) => {
+    const fill = fillByKey.get(section.key);
+    const grounded = groundedByKey.get(section.key) ?? false;
+    const rawProse = fill?.prose ?? "";
+    // Gap 6 — citações inexistentes/revogadas na prosa: validar e REMOVER (não permanecem no rascunho).
+    const cite = validateCitedLegalReferences(index, rawProse);
+    rejectedAll.push(...cite.rejected);
+    let prose = sanitizeProse(rawProse, cite.rejected).trim();
+    if (section.required && prose.length === 0) {
+      prose = `Fundamentação pendente para ${section.title.toLowerCase()} (${section.legalAnchorLabel} da Lei nº 14.133/2021): requer elaboração e revisão pelo servidor competente.`;
+    }
+    // Referências estruturadas: citadas validadas + declaradas validadas + âncora canônica quando aterrada.
+    const refs = new Map<string, AuthoredLegalReference>();
+    for (const r of cite.valid) refs.set(r.locatorId, r);
+    if (fill) for (const r of validateProviderRef(index, fill)) refs.set(r.locatorId, r);
+    const { sourceId, locatorPath } = anchorParts(section.legalAnchor);
+    if (grounded && locatorExistsAndCurrent(index, sourceId, locatorPath)) {
+      const anchorRef: AuthoredLegalReference = { sourceId, locatorId: section.legalAnchor, display: `Lei nº 14.133/2021 — ${section.legalAnchorLabel}`, status: "vigente" };
+      refs.set(anchorRef.locatorId, anchorRef);
+    }
+    for (const l of fill?.limitations ?? []) limitations.push(`${section.title}: ${l}`);
+    return {
+      key: section.key, title: section.title, legalAnchorLabel: section.legalAnchorLabel,
+      prose: truncate(prose, 8000), grounded,
+      legalReferences: [...refs.values()].slice(0, 24),
+    };
+  });
 
-  // 7) Contrato Zod bounded → fail-closed. Estrutura inválida NÃO é rascunho válido.
-  // O estado factual desta fase nunca é `legacy_unclassified` (isso é registro histórico A1); por
-  // segurança de contrato, um valor histórico degrada honestamente para `ungrounded`.
+  // 7) Limitações honestas (fundamentação parcial/ausente, citações rejeitadas).
+  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o rascunho não está fundamentado e exige elaboração pelo servidor.");
+  else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: nem todas as seções obrigatórias contam com evidência normativa compatível.");
+  // Gap 6 — a limitação registra a CATEGORIA da rejeição, sem reproduzir a citação falsa (não vira nota de
+  // rodapé que ecoa o dispositivo inexistente). O texto exato fica só em `rejectedReferences` (dado, não render).
+  const rejectionCategories = new Set(rejectedAll.map((r) => rejectionCategory(r.reason)));
+  for (const cat of rejectionCategories) limitations.push(`Uma ou mais referências jurídicas citadas não puderam ser verificadas no corpus e foram removidas da fundamentação (${cat}).`);
+  const pendingRequired = sections.filter((s) => !s.grounded).map((s) => s.title);
+  if (pendingRequired.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções com fundamentação pendente: ${pendingRequired.join("; ")}.`);
+
+  // 8) Contrato Zod bounded → fail-closed. `groundingState` já é factual (grounded/partial/ungrounded);
+  // histórico (não ocorre nesta avaliação) degrada honestamente para ungrounded por segurança de contrato.
   const factualGroundingState: StructuredAuthoring["groundingState"] =
-    grounding.groundingState === "legacy_unclassified" ? "ungrounded" : grounding.groundingState;
+    groundingState === "grounded" || groundingState === "partially_grounded" || groundingState === "not_applicable" ? groundingState : "ungrounded";
   const candidate: StructuredAuthoring = {
     contract: AUTHORING_CONTRACT_VERSION, kind: input.kind, object: truncate(input.object, 500),
-    sections, groundingState: factualGroundingState, evidenceCount: grounding.evidenceCount,
-    evidenceComplete: grounding.evidenceComplete, usedSourceIds: [...grounding.usedSourceIds],
-    evidenceFingerprint: grounding.evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
-    limitations: limitations.slice(0, 24), reviewNotice: REVIEW_NOTICE,
+    sections, groundingState: factualGroundingState, evidenceCount,
+    evidenceComplete, usedSourceIds: [...grounding.usedSourceIds],
+    evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
+    limitations: [...new Set(limitations)].slice(0, 24), reviewNotice: REVIEW_NOTICE,
   };
-  const structured = validateStructuredAuthoring(candidate);
+  let structured: StructuredAuthoring;
+  try {
+    structured = validateStructuredAuthoring(candidate);
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(input, err);
+    throw err;
+  }
   const content = renderMarkdown(structured);
 
   return {
-    content, structured, evidences: grounding.evidences, evidenceComplete: grounding.evidenceComplete,
-    groundingState: grounding.groundingState, evidenceFingerprint: grounding.evidenceFingerprint,
-    corpusFingerprint: grounding.corpusFingerprint, contextPackage, execution,
-    rejectedReferences: citeCheck.rejected,
+    content, structured, evidences: grounding.evidences, evidenceComplete,
+    groundingState: factualGroundingState, evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
+    contextPackage, execution, rejectedReferences: rejectedAll,
   };
+}
+
+/**
+ * Helper de teste/seam: constrói um OUTPUT ESTRUTURADO válido do provider (JSON) preenchendo todas as
+ * seções canônicas do tipo. `overrides` permite injetar prosa/refs específicas por key (testes A/E/injeção).
+ */
+export function buildMockProviderAuthoring(
+  kind: "etp" | "tr",
+  overrides: Record<string, { prose?: string; legalReferences?: { identifier: string; diploma?: string }[] }> = {},
+): string {
+  return JSON.stringify({
+    sections: canonicalSectionsFor(kind).map((s) => ({
+      key: s.key,
+      prose: overrides[s.key]?.prose ?? `Conteúdo determinístico para ${s.title.toLowerCase()} (${s.legalAnchorLabel}).`,
+      legalReferences: overrides[s.key]?.legalReferences ?? [],
+      limitations: [],
+    })),
+  });
 }

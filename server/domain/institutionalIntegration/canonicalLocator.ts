@@ -60,10 +60,48 @@ export interface ParsedLegalReference {
   readonly diplomaHint: string | null;
   /** Número do artigo (ex.: "18", "6-A"). */
   readonly article: string;
-  /** Identificador estrutural legível reconstruído (ex.: "Art. 18"). */
+  /** Identificador estrutural legível reconstruído (ex.: "Art. 18, §1º, IX"). */
   readonly identifier: string;
+  /**
+   * Segmentos de locator canônico APÓS o sourceId (ex.: ["art-18","par-1","inc-ix"]). Representa a
+   * referência estrutural COMPLETA citada — artigo + §/inciso/alínea/item quando presentes. Usado para
+   * validar a granularidade real contra o corpus (não basta o artigo existir).
+   */
+  readonly segments: readonly string[];
+  /** Sub-caminho de locator após o artigo (ex.: "par-1:inc-ix"); vazio quando só o artigo é citado. */
+  readonly subLocatorPath: string;
   /** Trecho bruto capturado (para diagnóstico/sanitização). */
   readonly raw: string;
+}
+
+/** Converte números romanos (i..m) em label maiúsculo canônico (ex.: "ix" → "IX"). */
+function romanUpper(r: string): string {
+  return r.toUpperCase();
+}
+
+/**
+ * Extrai segmentos estruturais (§/inciso/alínea/item) do trecho que segue "Art. N", em ORDEM. Só o
+ * material ANTES de uma citação de diploma é considerado. Determinístico e conservador (evita capturar
+ * romanos/letras que não sejam referência estrutural). Retorna slugs canônicos (par-1, inc-ix, al-a…).
+ */
+export function parseStructuralSegments(tailBeforeDiploma: string): { segments: string[]; labels: string[] } {
+  const segments: string[] = [];
+  const labels: string[] = [];
+  const s = tailBeforeDiploma ?? "";
+  // Parágrafo: "§ 1º" | "§1" | "parágrafo único".
+  let m: RegExpMatchArray | null;
+  if ((m = s.match(/§\s*(\d+)/))) { segments.push(`par-${m[1]}`); labels.push(`§ ${m[1]}º`); }
+  else if (/par[áa]grafo\s+[úu]nico/i.test(s)) { segments.push("par-unico"); labels.push("parágrafo único"); }
+  // Inciso: "inciso IX" | ", IX" | "§1º, IX" (romano MAIÚSCULO após vírgula/§/'inciso').
+  if ((m = s.match(/inciso\s+([IVXLCDM]+)\b/))) { segments.push(`inc-${m[1].toLowerCase()}`); labels.push(`inciso ${romanUpper(m[1])}`); }
+  else if ((m = s.match(/[,§][^,]*?,\s*([IVXLCDM]+)\b/)) || (m = s.match(/[,§]\s*([IVXLCDM]+)\b/))) { segments.push(`inc-${m[1].toLowerCase()}`); labels.push(`inciso ${romanUpper(m[1])}`); }
+  // Alínea: "alínea a" | ", a)" | ", a" (após inciso) | 'a)'.
+  if ((m = s.match(/al[íi]nea\s+["“']?([a-z])["”']?/i))) { segments.push(`al-${m[1].toLowerCase()}`); labels.push(`alínea ${m[1].toLowerCase()}`); }
+  else if ((m = s.match(/["“']?([a-z])["”']?\s*\)/))) { segments.push(`al-${m[1].toLowerCase()}`); labels.push(`alínea ${m[1].toLowerCase()}`); }
+  else if (segments.some((x) => x.startsWith("inc-")) && (m = s.match(/,\s*([a-z])\b/))) { segments.push(`al-${m[1].toLowerCase()}`); labels.push(`alínea ${m[1].toLowerCase()}`); }
+  // Item: "item 3".
+  if ((m = s.match(/item\s+(\d+)/i))) { segments.push(`item-${m[1]}`); labels.push(`item ${m[1]}`); }
+  return { segments, labels };
 }
 
 /** Normaliza uma citação de diploma no texto ("Lei 14.133/2021", "Lei nº 8.666/93") → normId-hint. */
@@ -90,18 +128,35 @@ function expandYear(y: string | undefined): string {
  * apenas identifica "Art. N (da Lei X)" para posterior verificação de EXISTÊNCIA no corpus. A pista de
  * diploma vem da mesma sentença/parênteses quando presente.
  */
+const DIPLOMA_RE = /\b(?:da\s+|do\s+)?(lei\s+complementar\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|lei\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|decreto\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|in\s+(?:seges\/?me\s+)?[\d.]+(?:\/\d{2,4})?)/i;
+
 export function parseLegalReferences(text: string): ParsedLegalReference[] {
   const out: ParsedLegalReference[] = [];
   const seen = new Set<string>();
-  const re = /\b(?:art\.?|artigo)\s*(\d+(?:-[A-Za-z])?)\s*(?:º|°)?(?:[^.,;)\n]{0,40}?\b(?:da\s+)?(lei\s+complementar\s+[\d.]+(?:\/\d{2,4})?|lei\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|decreto\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|in\s+(?:seges\/?me\s+)?[\d.]+(?:\/\d{2,4})?))?/gi;
+  // Captura "Art. N" + a cauda da citação (até ~80 chars; permite "." de "14.133") — o diploma e a
+  // estrutura (§/inciso/alínea) são pós-parseados dessa cauda, em ordem, ANTES da menção do diploma.
+  const re = /\b(?:art\.?|artigo)\s*(\d+(?:-[A-Za-z])?)\s*[º°]?([^;\n]{0,80})/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text ?? "")) !== null) {
-    const article = m[1].replace(/º|°/g, "");
-    const diplomaHint = normalizeDiplomaHint(m[2]);
-    const key = `${diplomaHint ?? ""}|${article.toLowerCase()}`;
+    const article = m[1].replace(/[º°]/g, "");
+    const tail = m[2] ?? "";
+    const diplomaMatch = tail.match(DIPLOMA_RE);
+    const diplomaHint = normalizeDiplomaHint(diplomaMatch?.[1] ?? null);
+    // Estrutura só do material ANTES do diploma (evita capturar números do diploma como inciso/item).
+    const structPart = diplomaMatch ? tail.slice(0, diplomaMatch.index) : tail.split(/[.]\s|\s{2,}/)[0];
+    const { segments: subSegs, labels } = parseStructuralSegments(structPart);
+    const segments = [`art-${article.toLowerCase()}`, ...subSegs];
+    const subLocatorPath = subSegs.join(":");
+    const identifier = [`Art. ${article}`, ...labels].join(", ");
+    // `raw` = a citação COMPLETA e EXATA (substring original: artigo + estrutura + diploma) — usada para
+    // REMOVER a citação falsa da prosa (a remoção depende de casar o texto verbatim).
+    const rawTail = diplomaMatch ? tail.slice(0, (diplomaMatch.index ?? 0) + diplomaMatch[0].length) : structPart;
+    const prefix = m[0].slice(0, m[0].length - tail.length); // "Art. 999 " exatamente como no texto
+    const raw = (prefix + rawTail).trim();
+    const key = `${diplomaHint ?? ""}|${segments.join(":")}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ diplomaHint, article, identifier: `Art. ${article}`, raw: m[0].trim() });
+    out.push({ diplomaHint, article, identifier, segments, subLocatorPath, raw });
   }
   return out;
 }
