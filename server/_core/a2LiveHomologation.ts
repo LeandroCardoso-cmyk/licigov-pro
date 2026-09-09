@@ -144,14 +144,36 @@ export function runA2LiveHomologationOnBoot(): void {
 }
 
 /**
+ * Extrai o token de homologação SOMENTE de cabeçalhos (nunca de query string — evita vazar segredo em
+ * URL/proxy/access logs). Preferência `Authorization: Bearer <token>`; alternativa `X-A2-Homolog-Token`.
+ * Puro/testável: recebe um getter de header case-insensitive. Retorna null quando ausente.
+ */
+export function extractHomologToken(getHeader: (name: string) => string | undefined): string | null {
+  const auth = getHeader("authorization");
+  if (auth) {
+    const m = /^bearer\s+(.+)$/i.exec(auth.trim());
+    if (m) { const t = m[1].trim(); return t.length > 0 ? t : null; }
+  }
+  const x = getHeader("x-a2-homolog-token");
+  if (x && x.trim().length > 0) return x.trim();
+  return null;
+}
+
+/** Autorização do endpoint efêmero: exige token esperado configurado E token do request igual. Fail-closed. */
+export function isHomologAuthorized(token: string | null, expected: string | undefined): boolean {
+  return typeof expected === "string" && expected.length > 0 && token !== null && token === expected;
+}
+
+/**
  * Registra o endpoint de homologação live (staging-only, token-gated). No-op em produção.
  */
 export function registerA2LiveHomologationRoute(app: Express): void {
   if (APP_CONFIG.isProduction) return; // NUNCA em produção.
   app.get("/__a2/live-homolog", async (req: Request, res: Response) => {
     const expected = process.env.A2_HOMOLOG_TOKEN; // token efêmero, setado só em staging
-    const token = String(req.query.token ?? "");
-    if (!expected || token !== expected) { res.status(403).json({ error: "forbidden" }); return; }
+    // Token SOMENTE via header (Authorization: Bearer … | X-A2-Homolog-Token) — nunca query string; nunca logado.
+    const token = extractHomologToken((name) => req.header(name) ?? undefined);
+    if (!isHomologAuthorized(token, expected)) { res.status(403).json({ error: "forbidden" }); return; }
     try {
       await cleanup(TEST_ORG);
       const etp = await runOne("etp");
