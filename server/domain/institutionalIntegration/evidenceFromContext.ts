@@ -16,12 +16,37 @@ import {
 import { canonicalLocatorId } from "./canonicalLocator";
 import type { ContextPackage, ContextDocument } from "./contextPackage";
 
-/** Status temporais que PERMITEM uso como fundamento atual (fonte revogada/histórica é excluída). */
-const CURRENT_STATUSES = new Set(["vigente", "parcialmente_vigente", "publicado"]);
+/**
+ * VIGÊNCIA NORMATIVA — status jurídicos que permitem uma NORMA fundamentar uma contratação ATUAL. NÃO
+ * inclui "publicado": publicação editorial não é vigência jurídica (uma norma revogada pode ter sido
+ * publicada). Usado para âncoras LEGAIS (art./§/inciso) e validação de citações normativas.
+ */
+const NORMATIVE_CURRENT = new Set(["vigente", "parcialmente_vigente"]);
 
-/** Um status é utilizável como fundamento atual? (temporalidade — REGRA CONGELADA A2). */
+/**
+ * DISPONIBILIDADE de fonte COMPLEMENTAR (manual/orientação/jurisprudência) — inclui "publicado"
+ * (disponibilidade editorial/consulta). Uma fonte complementar NÃO é norma jurídica: pode ser evidência
+ * de apoio, mas não satisfaz uma âncora legal (isso é decidido pela qualidade da fonte, não só pelo status).
+ */
+const SUPPLEMENTAL_AVAILABLE = new Set(["vigente", "parcialmente_vigente", "publicado"]);
+
+/** VIGÊNCIA NORMATIVA: a norma está juridicamente vigente para fundamentar? (temporalidade — REGRA CONGELADA). */
+export function isNormativeCurrent(status: string | undefined | null): boolean {
+  return NORMATIVE_CURRENT.has((status ?? "").trim().toLowerCase());
+}
+
+/** DISPONIBILIDADE de fonte complementar (inclui publicado). NÃO promove a fonte a norma vigente. */
+export function isSupplementalAvailable(status: string | undefined | null): boolean {
+  return SUPPLEMENTAL_AVAILABLE.has((status ?? "").trim().toLowerCase());
+}
+
+/**
+ * @deprecated Semântica ambígua. Prefira `isNormativeCurrent` (âncora legal) ou `isSupplementalAvailable`
+ * (fonte complementar). Mantido para coleta genérica de evidência (fingerprint/lineage), onde exclui
+ * apenas fontes revogadas/históricas/desconhecidas.
+ */
 export function isCurrentStatus(status: string | undefined | null): boolean {
-  return CURRENT_STATUSES.has((status ?? "").trim().toLowerCase());
+  return isSupplementalAvailable(status);
 }
 
 export interface GroundingAssessment {

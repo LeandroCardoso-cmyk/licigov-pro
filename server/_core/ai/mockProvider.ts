@@ -47,7 +47,9 @@ function tryBuildStructuredFromSchema(schema: Record<string, unknown> | undefine
   return JSON.stringify({
     sections: enumKeys.map((k) => ({
       key: String(k),
+      contentMode: "provided",
       prose: `Conteúdo determinístico (mock) para a seção ${String(k)}: mock:${sha256(`${seed}:${String(k)}`).slice(0, 16)}.`,
+      omissionJustification: "",
       legalReferences: [],
       limitations: [],
     })),

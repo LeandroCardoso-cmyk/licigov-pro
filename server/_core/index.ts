@@ -14,6 +14,7 @@ import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
 import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
+import { registerA2LiveHomologationRoute } from "./a2LiveHomologation";
 import { recoverStuckImportSessions } from "../services/importQueueService";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
@@ -66,6 +67,9 @@ async function startServer() {
   // PR B.2.1 — byte-upload da ingestão canônica (Express, binário cru, fora do tRPC).
   // Montado ANTES do tRPC; gated por feature flag tenant-aware (fail-closed).
   registerIngestionUploadRoute(app);
+
+  // A2 — homologação LIVE (provider real) — harness staging-only, token-gated. No-op em produção.
+  registerA2LiveHomologationRoute(app);
 
   // tRPC API
   app.use(

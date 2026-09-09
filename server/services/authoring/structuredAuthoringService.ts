@@ -36,7 +36,7 @@ import {
   buildCorpusLegalIndex, validateCitedLegalReferences, locatorExistsAndCurrent, sourceKindOf, articleKeyOf,
   type CorpusLegalIndex,
 } from "./legalReferenceValidationService";
-import { isCurrentStatus } from "../../domain/institutionalIntegration/evidenceFromContext";
+import { isNormativeCurrent } from "../../domain/institutionalIntegration/evidenceFromContext";
 import { getAuthoringCorpus } from "./authoringCorpus";
 
 const DOMAIN = "processo_licitatorio";
@@ -99,7 +99,7 @@ function buildRetrievedNormativeArticles(pkg: ContextPackage, index: CorpusLegal
   const set = new Set<string>();
   for (const p of pkg.retrievedPassages) {
     const status = statusByNorm.get(p.normId);
-    if (!status || !isCurrentStatus(status)) continue;         // fonte revogada/desconhecida não conta
+    if (!status || !isNormativeCurrent(status)) continue;         // fonte revogada/desconhecida não conta
     if (sourceKindOf(index, p.normId) !== "normative") continue; // Gap 8: âncora legal exige fonte normativa
     set.add(`${p.normId}|${articleKeyOf(p.identifier)}`);
   }
@@ -132,12 +132,42 @@ export function assessSectionCoverage(kind: "etp" | "tr", pkg: ContextPackage, i
   const retrieved = buildRetrievedNormativeArticles(pkg, index);
   const groundedByKey = new Map<string, boolean>();
   for (const s of canon) groundedByKey.set(s.key, sectionGrounded(s, retrieved, index));
-  const mandatory = canon.filter((s) => s.required);
+  // Estimativa PRÉ-provider (assume todas as seções produzidas): cobertura dos MÍNIMOS LEGAIS.
+  const mandatory = canon.filter((s) => s.mustProvide);
   const mandatoryCovered = mandatory.filter((s) => groundedByKey.get(s.key)).length;
   const anyGrounded = canon.some((s) => groundedByKey.get(s.key));
   const evidenceComplete = mandatory.length > 0 && mandatoryCovered === mandatory.length;
   const groundingState: GroundingState = evidenceComplete ? "grounded" : anyGrounded ? "partially_grounded" : "ungrounded";
   return { groundedByKey, mandatoryCovered, mandatoryTotal: mandatory.length, evidenceComplete, groundingState };
+}
+
+/** Grounding de RECUPERAÇÃO por âncora (mapa key→bool), independente do output do provider. */
+export function retrievalGroundedByAnchor(kind: "etp" | "tr", pkg: ContextPackage, index: CorpusLegalIndex): Map<string, boolean> {
+  const retrieved = buildRetrievedNormativeArticles(pkg, index);
+  const m = new Map<string, boolean>();
+  for (const s of canonicalSectionsFor(kind)) m.set(s.key, sectionGrounded(s, retrieved, index));
+  return m;
+}
+
+/**
+ * Cobertura FINAL do documento (Gaps 3/4) — pós-provider. Uma seção "precisa de grounding" quando é
+ * MÍNIMO LEGAL ou foi efetivamente PRODUZIDA. `evidenceComplete` = todas as que precisam estão FINAL-aterradas
+ * (retrieval + produzida + sem citação rejeitada). Seção legitimamente omitida/não-aplicável com justificativa
+ * NÃO conta como "faltando". Determinística.
+ */
+export function assessDocumentCoverage(
+  kind: "etp" | "tr",
+  sections: readonly { key: string; contentMode: string; grounded: boolean }[],
+): { evidenceComplete: boolean; groundingState: GroundingState } {
+  const canonByKey = new Map(canonicalSectionsFor(kind).map((s) => [s.key, s]));
+  const needs = sections.filter((s) => {
+    const canon = canonByKey.get(s.key);
+    return (canon?.mustProvide ?? false) || s.contentMode === "provided";
+  });
+  const needsGroundedCount = needs.filter((s) => s.grounded).length;
+  const evidenceComplete = needs.length > 0 && needsGroundedCount === needs.length;
+  const groundingState: GroundingState = evidenceComplete ? "grounded" : needsGroundedCount > 0 ? "partially_grounded" : "ungrounded";
+  return { evidenceComplete, groundingState };
 }
 
 /** Valida uma referência declarada pelo provider (identifier + diploma) contra o corpus. */
@@ -177,7 +207,11 @@ function renderMarkdown(doc: StructuredAuthoring): string {
   const lines: string[] = [`# ${heading} — ${doc.object}`, ""];
   lines.push(`> Estado de fundamentação: **${stateLabel[doc.groundingState]}** — ${doc.evidenceCount} evidência(s) normativa(s) utilizada(s).`, "");
   for (const s of doc.sections) {
-    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel} · ${s.grounded ? "fundamentada" : "fundamentação pendente"}_`, "", s.prose, "");
+    const statusTag = s.contentMode !== "provided"
+      ? (s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)")
+      : (s.grounded ? "fundamentada" : "fundamentação pendente");
+    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel} · ${statusTag}_`, "");
+    lines.push(s.contentMode === "provided" ? s.prose : `**Justificativa:** ${s.omissionJustification}`, "");
     if (s.legalReferences.length > 0) {
       lines.push("**Base legal:**");
       for (const r of s.legalReferences) lines.push(`- ${r.display}`);
@@ -235,11 +269,9 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   // 2) Evidências REAIS (fontes vigentes) → fingerprint/lineage (A1).
   const grounding = assessGrounding(contextPackage, { minEvidences: 1, minCoverage: 0 });
 
-  // 3) GROUNDING POR LOCATOR + cobertura de seções OBRIGATÓRIAS (determinístico, pré-provider).
-  const coverage = assessSectionCoverage(input.kind, contextPackage, index);
-  const groundedByKey = coverage.groundedByKey;
-  const evidenceComplete = coverage.evidenceComplete; // Gap 3
-  const groundingState = coverage.groundingState;
+  // 3) GROUNDING POR LOCATOR (retrieval) + estimativa PRÉ-provider dos mínimos legais (hint da cognição).
+  const retrievalGrounded = retrievalGroundedByAnchor(input.kind, contextPackage, index);
+  const preEstimate = assessSectionCoverage(input.kind, contextPackage, index);
   const evidenceCount = grounding.evidenceCount;
   const evidenceFingerprint = grounding.evidenceFingerprint;
 
@@ -258,7 +290,7 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
         contextPackage,
         documentRefs: contextPackage.documents.map((d) => d.documentId),
         lawRefs: contextPackage.citations.map((c) => c.reference),
-        evidences: grounding.evidences, evidenceComplete,
+        evidences: grounding.evidences, evidenceComplete: preEstimate.evidenceComplete,
         responseSchema,
       });
       rawProviderText = execution.response.content ?? "";
@@ -278,25 +310,26 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   }
   const fillByKey = new Map<string, ProviderSectionFill>(providerOutput.sections.map((s) => [s.key, s]));
 
-  // 6) Monta seções (autoridade do servidor: key/title/anchor/grounding) + prosa do provider sanitizada.
+  // 6) Monta seções (autoridade do servidor: key/title/anchor/modo/grounding) + prosa do provider sanitizada.
   const rejectedAll: { raw: string; reason: string }[] = [];
   const limitations: string[] = [];
   const sections: AuthoredSection[] = canon.map((section) => {
     const fill = fillByKey.get(section.key);
-    const grounded = groundedByKey.get(section.key) ?? false;
-    const rawProse = fill?.prose ?? "";
+    const contentMode = fill?.contentMode ?? "provided";
+    const isProvided = contentMode === "provided";
+    const rawProse = isProvided ? (fill?.prose ?? "") : "";
     // Gap 6 — citações inexistentes/revogadas na prosa: validar e REMOVER (não permanecem no rascunho).
     const cite = validateCitedLegalReferences(index, rawProse);
     rejectedAll.push(...cite.rejected);
-    let prose = sanitizeProse(rawProse, cite.rejected).trim();
-    if (section.required && prose.length === 0) {
-      prose = `Fundamentação pendente para ${section.title.toLowerCase()} (${section.legalAnchorLabel} da Lei nº 14.133/2021): requer elaboração e revisão pelo servidor competente.`;
-    }
+    const prose = isProvided ? sanitizeProse(rawProse, cite.rejected).trim() : "";
+    // Gap 4 — a referência rejeitada DEGRADA a seção: só aterrada se produzida, com âncora recuperada E
+    // SEM nenhuma citação rejeitada (recalculado APÓS a validação do output do provider).
+    const { sourceId, locatorPath } = anchorParts(section.legalAnchor);
+    const grounded = isProvided && (retrievalGrounded.get(section.key) ?? false) && cite.rejected.length === 0;
     // Referências estruturadas: citadas validadas + declaradas validadas + âncora canônica quando aterrada.
     const refs = new Map<string, AuthoredLegalReference>();
     for (const r of cite.valid) refs.set(r.locatorId, r);
     if (fill) for (const r of validateProviderRef(index, fill)) refs.set(r.locatorId, r);
-    const { sourceId, locatorPath } = anchorParts(section.legalAnchor);
     if (grounded && locatorExistsAndCurrent(index, sourceId, locatorPath)) {
       const anchorRef: AuthoredLegalReference = { sourceId, locatorId: section.legalAnchor, display: `Lei nº 14.133/2021 — ${section.legalAnchorLabel}`, status: "vigente" };
       refs.set(anchorRef.locatorId, anchorRef);
@@ -304,28 +337,35 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     for (const l of fill?.limitations ?? []) limitations.push(`${section.title}: ${l}`);
     return {
       key: section.key, title: section.title, legalAnchorLabel: section.legalAnchorLabel,
-      prose: truncate(prose, 8000), grounded,
-      legalReferences: [...refs.values()].slice(0, 24),
+      contentMode, prose: truncate(prose, 8000),
+      omissionJustification: isProvided ? "" : truncate((fill?.omissionJustification ?? "").trim(), 8000),
+      grounded, legalReferences: [...refs.values()].slice(0, 24),
     };
   });
 
-  // 7) Limitações honestas (fundamentação parcial/ausente, citações rejeitadas).
+  // 7) Cobertura FINAL do documento (Gaps 3/4) — recalculada APÓS a validação do output do provider.
+  const finalCoverage = assessDocumentCoverage(input.kind, sections);
+  const groundingState = finalCoverage.groundingState;
+  const evidenceComplete = finalCoverage.evidenceComplete;
+
+  // Limitações honestas (fundamentação parcial/ausente, citações rejeitadas, seções não contempladas).
   if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o rascunho não está fundamentado e exige elaboração pelo servidor.");
-  else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: nem todas as seções obrigatórias contam com evidência normativa compatível.");
+  else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: nem todas as seções que exigem grounding contam com evidência normativa compatível.");
   // Gap 6 — a limitação registra a CATEGORIA da rejeição, sem reproduzir a citação falsa (não vira nota de
   // rodapé que ecoa o dispositivo inexistente). O texto exato fica só em `rejectedReferences` (dado, não render).
   const rejectionCategories = new Set(rejectedAll.map((r) => rejectionCategory(r.reason)));
   for (const cat of rejectionCategories) limitations.push(`Uma ou mais referências jurídicas citadas não puderam ser verificadas no corpus e foram removidas da fundamentação (${cat}).`);
-  const pendingRequired = sections.filter((s) => !s.grounded).map((s) => s.title);
-  if (pendingRequired.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções com fundamentação pendente: ${pendingRequired.join("; ")}.`);
+  const omittedSections = sections.filter((s) => s.contentMode !== "provided").map((s) => s.title);
+  if (omittedSections.length > 0) limitations.push(`Seções não contempladas (com justificativa): ${omittedSections.join("; ")}.`);
+  const pendingGrounding = sections.filter((s) => s.contentMode === "provided" && !s.grounded).map((s) => s.title);
+  if (pendingGrounding.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções produzidas com fundamentação pendente: ${pendingGrounding.join("; ")}.`);
 
-  // 8) Contrato Zod bounded → fail-closed. `groundingState` já é factual (grounded/partial/ungrounded);
-  // histórico (não ocorre nesta avaliação) degrada honestamente para ungrounded por segurança de contrato.
-  const factualGroundingState: StructuredAuthoring["groundingState"] =
+  // 8) Contrato Zod bounded → fail-closed (mínimos legais, representação de todas as seções, justificativas).
+  const contractGroundingState: StructuredAuthoring["groundingState"] =
     groundingState === "grounded" || groundingState === "partially_grounded" || groundingState === "not_applicable" ? groundingState : "ungrounded";
   const candidate: StructuredAuthoring = {
     contract: AUTHORING_CONTRACT_VERSION, kind: input.kind, object: truncate(input.object, 500),
-    sections, groundingState: factualGroundingState, evidenceCount,
+    sections, groundingState: contractGroundingState, evidenceCount,
     evidenceComplete, usedSourceIds: [...grounding.usedSourceIds],
     evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
     limitations: [...new Set(limitations)].slice(0, 24), reviewNotice: REVIEW_NOTICE,
@@ -341,7 +381,7 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
 
   return {
     content, structured, evidences: grounding.evidences, evidenceComplete,
-    groundingState: factualGroundingState, evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
+    groundingState, evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
     contextPackage, execution, rejectedReferences: rejectedAll,
   };
 }
@@ -352,14 +392,20 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
  */
 export function buildMockProviderAuthoring(
   kind: "etp" | "tr",
-  overrides: Record<string, { prose?: string; legalReferences?: { identifier: string; diploma?: string }[] }> = {},
+  overrides: Record<string, { contentMode?: string; prose?: string; omissionJustification?: string; legalReferences?: { identifier: string; diploma?: string }[] }> = {},
 ): string {
   return JSON.stringify({
-    sections: canonicalSectionsFor(kind).map((s) => ({
-      key: s.key,
-      prose: overrides[s.key]?.prose ?? `Conteúdo determinístico para ${s.title.toLowerCase()} (${s.legalAnchorLabel}).`,
-      legalReferences: overrides[s.key]?.legalReferences ?? [],
-      limitations: [],
-    })),
+    sections: canonicalSectionsFor(kind).map((s) => {
+      const o = overrides[s.key];
+      const contentMode = o?.contentMode ?? "provided";
+      return {
+        key: s.key,
+        contentMode,
+        prose: contentMode === "provided" ? (o?.prose ?? `Conteúdo determinístico para ${s.title.toLowerCase()} (${s.legalAnchorLabel}).`) : "",
+        omissionJustification: contentMode === "provided" ? "" : (o?.omissionJustification ?? `Elemento não aplicável ao objeto: justificativa determinística (${s.legalAnchorLabel}).`),
+        legalReferences: o?.legalReferences ?? [],
+        limitations: [],
+      };
+    }),
   });
 }

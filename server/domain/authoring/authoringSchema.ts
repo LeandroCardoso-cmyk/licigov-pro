@@ -27,7 +27,16 @@ export const AUTHORING_LIMITS = {
 
 // ─── Enumerações legais REAIS (Lei nº 14.133/2021) ────────────────────────────
 
-/** Seção canônica de autoria — chave estável + título + âncora legal REAL (não inventada). */
+/**
+ * Seção canônica de autoria — chave estável + título + âncora legal REAL (não inventada).
+ *
+ * SEMÂNTICA JURÍDICA (art. 18, §2º da Lei 14.133/2021 para o ETP):
+ *   - `mustProvide=true` → MÍNIMO LEGAL: a seção deve ser efetivamente PRODUZIDA (conteúdo), nunca
+ *     apenas justificada como omitida;
+ *   - `mustProvide=false` → seção prevista no modelo que PODE ser produzida OU omitida COM justificativa
+ *     (ETP) / não aplicável COM justificativa (TR). Omissão SILENCIOSA (sem justificativa) → fail-closed.
+ * TODAS as seções canônicas do tipo são SEMPRE representadas no rascunho (nenhuma omissão silenciosa).
+ */
 export interface CanonicalAuthoringSection {
   /** Chave estável e legível por máquina (ex.: "necessidade"). */
   readonly key: string;
@@ -37,39 +46,47 @@ export interface CanonicalAuthoringSection {
   readonly legalAnchor: string;
   /** Rótulo legível da âncora (ex.: "Art. 18, §1º, III"). */
   readonly legalAnchorLabel: string;
-  /** A seção é obrigatória no contrato (prosa não-vazia exigida)? */
-  readonly required: boolean;
+  /** MÍNIMO LEGAL: conteúdo efetivo obrigatório (não admite omissão com justificativa). */
+  readonly mustProvide: boolean;
 }
 
 /**
- * ETP — exigências do art. 18, §1º, da Lei nº 14.133/2021 (incisos I a XIII). Enumeração REAL:
- * cada seção corresponde a um inciso legal existente, não a uma seção fabricada.
+ * ETP — TODOS os elementos do art. 18, §1º, da Lei nº 14.133/2021 (incisos I a XIII). Enumeração REAL.
+ * Mínimos legais do §2º: I, IV, VI, VIII e XIII (conteúdo obrigatório). Os demais podem ser omitidos
+ * com justificativa quando não contemplados.
  */
 export const ETP_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Object.freeze([
-  { key: "necessidade", title: "Descrição da necessidade da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-i", legalAnchorLabel: "Art. 18, §1º, I", required: true },
-  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iii", legalAnchorLabel: "Art. 18, §1º, III", required: true },
-  { key: "estimativa_quantidades", title: "Estimativa das quantidades", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iv", legalAnchorLabel: "Art. 18, §1º, IV", required: true },
-  { key: "levantamento_mercado", title: "Levantamento de mercado e justificativa da escolha", legalAnchor: "lei-14133-2021:art-18:par-1:inc-v", legalAnchorLabel: "Art. 18, §1º, V", required: true },
-  { key: "estimativa_valor", title: "Estimativa do valor da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vi", legalAnchorLabel: "Art. 18, §1º, VI", required: true },
-  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vii", legalAnchorLabel: "Art. 18, §1º, VII", required: true },
-  { key: "parcelamento", title: "Justificativa do parcelamento ou não", legalAnchor: "lei-14133-2021:art-18:par-1:inc-viii", legalAnchorLabel: "Art. 18, §1º, VIII", required: false },
-  { key: "resultados_pretendidos", title: "Demonstrativo dos resultados pretendidos", legalAnchor: "lei-14133-2021:art-18:par-1:inc-ix", legalAnchorLabel: "Art. 18, §1º, IX", required: false },
-  { key: "viabilidade", title: "Posicionamento conclusivo sobre a viabilidade", legalAnchor: "lei-14133-2021:art-18:par-1:inc-xiii", legalAnchorLabel: "Art. 18, §1º, XIII", required: true },
+  { key: "necessidade", title: "Descrição da necessidade da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-i", legalAnchorLabel: "Art. 18, §1º, I", mustProvide: true },
+  { key: "previsao_pca", title: "Demonstração da previsão no plano de contratações anual", legalAnchor: "lei-14133-2021:art-18:par-1:inc-ii", legalAnchorLabel: "Art. 18, §1º, II", mustProvide: false },
+  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iii", legalAnchorLabel: "Art. 18, §1º, III", mustProvide: false },
+  { key: "estimativa_quantidades", title: "Estimativas das quantidades", legalAnchor: "lei-14133-2021:art-18:par-1:inc-iv", legalAnchorLabel: "Art. 18, §1º, IV", mustProvide: true },
+  { key: "levantamento_mercado", title: "Levantamento de mercado e justificativa da escolha", legalAnchor: "lei-14133-2021:art-18:par-1:inc-v", legalAnchorLabel: "Art. 18, §1º, V", mustProvide: false },
+  { key: "estimativa_valor", title: "Estimativa do valor da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vi", legalAnchorLabel: "Art. 18, §1º, VI", mustProvide: true },
+  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-18:par-1:inc-vii", legalAnchorLabel: "Art. 18, §1º, VII", mustProvide: false },
+  { key: "parcelamento", title: "Justificativas para o parcelamento ou não da contratação", legalAnchor: "lei-14133-2021:art-18:par-1:inc-viii", legalAnchorLabel: "Art. 18, §1º, VIII", mustProvide: true },
+  { key: "resultados_pretendidos", title: "Demonstrativo dos resultados pretendidos", legalAnchor: "lei-14133-2021:art-18:par-1:inc-ix", legalAnchorLabel: "Art. 18, §1º, IX", mustProvide: false },
+  { key: "providencias_previas", title: "Providências prévias à celebração do contrato", legalAnchor: "lei-14133-2021:art-18:par-1:inc-x", legalAnchorLabel: "Art. 18, §1º, X", mustProvide: false },
+  { key: "contratacoes_correlatas", title: "Contratações correlatas e/ou interdependentes", legalAnchor: "lei-14133-2021:art-18:par-1:inc-xi", legalAnchorLabel: "Art. 18, §1º, XI", mustProvide: false },
+  { key: "impactos_ambientais", title: "Descrição de possíveis impactos ambientais e medidas mitigadoras", legalAnchor: "lei-14133-2021:art-18:par-1:inc-xii", legalAnchorLabel: "Art. 18, §1º, XII", mustProvide: false },
+  { key: "viabilidade", title: "Posicionamento conclusivo sobre a viabilidade e razoabilidade", legalAnchor: "lei-14133-2021:art-18:par-1:inc-xiii", legalAnchorLabel: "Art. 18, §1º, XIII", mustProvide: true },
 ]);
 
 /**
- * TR — conteúdo do art. 6º, inciso XXIII, da Lei nº 14.133/2021 (alíneas a a j). Enumeração REAL.
+ * TR — TODAS as alíneas do art. 6º, inciso XXIII, da Lei nº 14.133/2021 (a a j). Enumeração REAL.
+ * Todas devem ser REPRESENTADAS; um elemento concretamente não aplicável ao objeto exige justificativa
+ * explícita (não aplicável com justificativa), nunca omissão silenciosa.
  */
 export const TR_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Object.freeze([
-  { key: "objeto", title: "Definição do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-a", legalAnchorLabel: "Art. 6º, XXIII, a", required: true },
-  { key: "fundamentacao", title: "Fundamentação da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-b", legalAnchorLabel: "Art. 6º, XXIII, b", required: true },
-  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-c", legalAnchorLabel: "Art. 6º, XXIII, c", required: true },
-  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-d", legalAnchorLabel: "Art. 6º, XXIII, d", required: true },
-  { key: "modelo_execucao", title: "Modelo de execução do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-e", legalAnchorLabel: "Art. 6º, XXIII, e", required: true },
-  { key: "modelo_gestao", title: "Modelo de gestão do contrato", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-f", legalAnchorLabel: "Art. 6º, XXIII, f", required: false },
-  { key: "medicao_pagamento", title: "Critérios de medição e de pagamento", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-g", legalAnchorLabel: "Art. 6º, XXIII, g", required: false },
-  { key: "selecao_fornecedor", title: "Forma e critérios de seleção do fornecedor", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-h", legalAnchorLabel: "Art. 6º, XXIII, h", required: true },
-  { key: "estimativa_valor", title: "Estimativas do valor da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-i", legalAnchorLabel: "Art. 6º, XXIII, i", required: true },
+  { key: "objeto", title: "Definição do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-a", legalAnchorLabel: "Art. 6º, XXIII, a", mustProvide: true },
+  { key: "fundamentacao", title: "Fundamentação da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-b", legalAnchorLabel: "Art. 6º, XXIII, b", mustProvide: true },
+  { key: "descricao_solucao", title: "Descrição da solução como um todo", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-c", legalAnchorLabel: "Art. 6º, XXIII, c", mustProvide: true },
+  { key: "requisitos", title: "Requisitos da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-d", legalAnchorLabel: "Art. 6º, XXIII, d", mustProvide: true },
+  { key: "modelo_execucao", title: "Modelo de execução do objeto", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-e", legalAnchorLabel: "Art. 6º, XXIII, e", mustProvide: true },
+  { key: "modelo_gestao", title: "Modelo de gestão do contrato", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-f", legalAnchorLabel: "Art. 6º, XXIII, f", mustProvide: false },
+  { key: "medicao_pagamento", title: "Critérios de medição e de pagamento", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-g", legalAnchorLabel: "Art. 6º, XXIII, g", mustProvide: false },
+  { key: "selecao_fornecedor", title: "Forma e critérios de seleção do fornecedor", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-h", legalAnchorLabel: "Art. 6º, XXIII, h", mustProvide: true },
+  { key: "estimativa_valor", title: "Estimativas do valor da contratação", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-i", legalAnchorLabel: "Art. 6º, XXIII, i", mustProvide: true },
+  { key: "adequacao_orcamentaria", title: "Adequação orçamentária", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-j", legalAnchorLabel: "Art. 6º, XXIII, j", mustProvide: true },
 ]);
 
 /** Conjunto canônico de seções por tipo de documento (fonte da verdade do contrato). */
@@ -97,14 +114,27 @@ export const AuthoredLegalReferenceSchema = z.object({
 });
 export type AuthoredLegalReference = z.infer<typeof AuthoredLegalReferenceSchema>;
 
-/** Seção autorada (título canônico + prosa revisável + referências estruturadas). */
+/**
+ * Modo de conteúdo da seção (semântica jurídica):
+ *   - `provided` → conteúdo efetivo (prosa não-vazia);
+ *   - `omitted_with_justification` (ETP) → elemento não mínimo NÃO contemplado, COM justificativa;
+ *   - `not_applicable_with_justification` (TR) → elemento concretamente não aplicável, COM justificativa.
+ */
+export const CONTENT_MODES = ["provided", "omitted_with_justification", "not_applicable_with_justification"] as const;
+export type ContentMode = (typeof CONTENT_MODES)[number];
+
+/** Seção autorada (título canônico + modo de conteúdo + prosa/justificativa + referências estruturadas). */
 export const AuthoredSectionSchema = z.object({
   key: z.string().min(1).max(80),
   title: z.string().min(1).max(200),
   legalAnchorLabel: z.string().min(1).max(120),
-  /** Prosa cognitiva (rascunho revisável). Bounded. Pode ser vazia em seção OPCIONAL. */
+  /** Modo de conteúdo (produzido × omitido/não-aplicável com justificativa). */
+  contentMode: z.enum(CONTENT_MODES),
+  /** Prosa cognitiva (rascunho revisável). Bounded. Vazia quando o modo é omissão/não-aplicabilidade. */
   prose: z.string().max(AUTHORING_LIMITS.maxProseChars),
-  /** Esta seção está factualmente aterrada em evidência real? */
+  /** Justificativa de omissão/não-aplicabilidade (obrigatória quando NÃO é `provided`). */
+  omissionJustification: z.string().max(AUTHORING_LIMITS.maxProseChars),
+  /** Esta seção está factualmente aterrada em evidência real (só quando `provided`)? */
   grounded: z.boolean(),
   legalReferences: z.array(AuthoredLegalReferenceSchema).max(AUTHORING_LIMITS.maxReferencesPerSection),
 });
@@ -167,12 +197,20 @@ export function validateStructuredAuthoring(candidate: unknown): StructuredAutho
     if (seen.has(s.key)) issues.push(`seção duplicada "${s.key}"`);
     seen.add(s.key);
   }
-  // Toda seção OBRIGATÓRIA do tipo deve estar presente e com prosa não-vazia.
+  // TODA seção canônica do tipo deve estar REPRESENTADA (nenhuma omissão silenciosa).
   for (const canon of canonicalSectionsFor(doc.kind)) {
-    if (!canon.required) continue;
     const found = doc.sections.find((s) => s.key === canon.key);
-    if (!found) { issues.push(`seção obrigatória ausente: "${canon.key}"`); continue; }
-    if (found.prose.trim().length === 0) issues.push(`seção obrigatória sem conteúdo: "${canon.key}"`);
+    if (!found) { issues.push(`seção canônica ausente (não representada): "${canon.key}"`); continue; }
+    if (canon.mustProvide) {
+      // MÍNIMO LEGAL: conteúdo efetivo obrigatório — nunca omitido com justificativa.
+      if (found.contentMode !== "provided") issues.push(`mínimo legal "${canon.key}" (${canon.legalAnchorLabel}) não pode ser omitido/justificado — exige conteúdo`);
+      else if (found.prose.trim().length === 0) issues.push(`mínimo legal "${canon.key}" sem conteúdo`);
+    } else if (found.contentMode === "provided") {
+      if (found.prose.trim().length === 0) issues.push(`seção "${canon.key}" marcada como produzida, mas sem conteúdo`);
+    } else {
+      // Omitida/não-aplicável → JUSTIFICATIVA obrigatória (não inventar; fail-closed se ausente).
+      if (found.omissionJustification.trim().length === 0) issues.push(`seção "${canon.key}" omitida/não-aplicável SEM justificativa`);
+    }
   }
   if (issues.length > 0) throw new AuthoringContractError(issues);
   return Object.freeze(doc);
@@ -191,7 +229,10 @@ export const ProviderLegalRefSchema = z.object({
 /** Preenchimento de UMA seção produzido pelo provider (key restrita às canônicas; prose bounded). */
 export const ProviderSectionFillSchema = z.object({
   key: z.string().min(1).max(80),
-  prose: z.string().max(AUTHORING_LIMITS.maxProseChars),
+  /** Modo declarado pelo provider (default `provided`). Omissão/não-aplicabilidade exige justificativa. */
+  contentMode: z.enum(CONTENT_MODES).optional().default("provided"),
+  prose: z.string().max(AUTHORING_LIMITS.maxProseChars).optional().default(""),
+  omissionJustification: z.string().max(AUTHORING_LIMITS.maxProseChars).optional().default(""),
   legalReferences: z.array(ProviderLegalRefSchema).max(AUTHORING_LIMITS.maxReferencesPerSection).optional().default([]),
   limitations: z.array(z.string().min(1)).max(AUTHORING_LIMITS.maxLimitations).optional().default([]),
 });
@@ -228,9 +269,9 @@ export function parseProviderAuthoringOutput(kind: "etp" | "tr", rawText: string
     if (seen.has(s.key)) issues.push(`provider retornou seção duplicada "${s.key}"`);
     seen.add(s.key);
   }
-  // O provider DEVE preencher TODAS as seções obrigatórias (não pode omitir uma exigência legal).
+  // O provider DEVE REPRESENTAR TODAS as seções canônicas (nenhuma omissão silenciosa).
   for (const canon of canonicalSectionsFor(kind)) {
-    if (canon.required && !seen.has(canon.key)) issues.push(`provider omitiu a seção obrigatória "${canon.key}"`);
+    if (!seen.has(canon.key)) issues.push(`provider não representou a seção canônica "${canon.key}" (${canon.legalAnchorLabel})`);
   }
   if (issues.length > 0) throw new AuthoringContractError(issues);
   return parsed.data;
@@ -253,7 +294,9 @@ export function buildAuthoringResponseSchema(kind: "etp" | "tr"): { name: string
             type: "object",
             properties: {
               key: { type: "string", enum: keys },
+              contentMode: { type: "string", enum: [...CONTENT_MODES] },
               prose: { type: "string" },
+              omissionJustification: { type: "string" },
               legalReferences: {
                 type: "array",
                 items: {
@@ -264,7 +307,7 @@ export function buildAuthoringResponseSchema(kind: "etp" | "tr"): { name: string
               },
               limitations: { type: "array", items: { type: "string" } },
             },
-            required: ["key", "prose"],
+            required: ["key", "contentMode"],
           },
         },
       },

@@ -158,5 +158,22 @@ export function parseLegalReferences(text: string): ParsedLegalReference[] {
     seen.add(key);
     out.push({ diplomaHint, article, identifier, segments, subLocatorPath, raw });
   }
+  // ── 2ª passagem — forma DIPLOMA-FIRST: "Lei nº 14.133/2021, art. 18" | "Lei X, art. 999" ──────────
+  // Não deixa uma citação falsa escapar apenas pela ordem sintática (diploma antes do artigo).
+  const reDip = /(lei\s+complementar\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|lei\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|decreto\s+n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?|in\s+(?:seges\/?me\s+)?[\d.]+(?:\/\d{2,4})?)\s*,?\s*(?:art\.?|artigo)\s*(\d+(?:-[A-Za-z])?)\s*[º°]?([^;\n]{0,60})/gi;
+  let d: RegExpExecArray | null;
+  while ((d = reDip.exec(text ?? "")) !== null) {
+    const diplomaHint = normalizeDiplomaHint(d[1]);
+    if (!diplomaHint) continue;
+    const article = d[2].replace(/[º°]/g, "");
+    const structPart = (d[3] ?? "").split(/[.]\s|\s{2,}|\sda\s|\sdo\s/)[0];
+    const { segments: subSegs, labels } = parseStructuralSegments(structPart);
+    const segments = [`art-${article.toLowerCase()}`, ...subSegs];
+    const identifier = [`Art. ${article}`, ...labels].join(", ");
+    const key = `${diplomaHint}|${segments.join(":")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ diplomaHint, article, identifier, segments, subLocatorPath: subSegs.join(":"), raw: d[0].trim() });
+  }
   return out;
 }

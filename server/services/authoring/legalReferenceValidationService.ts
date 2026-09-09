@@ -11,7 +11,7 @@
 import type { OfficialCorpusBuildResult } from "../officialCorpus/officialCorpusBuilder";
 import { allBlocks } from "../../domain/knowledge/knowledgeDocument";
 import { canonicalLocatorId, displayLocator, normalizeDiplomaHint, parseLegalReferences } from "../../domain/institutionalIntegration/canonicalLocator";
-import { isCurrentStatus } from "../../domain/institutionalIntegration/evidenceFromContext";
+import { isNormativeCurrent } from "../../domain/institutionalIntegration/evidenceFromContext";
 import type { AuthoredLegalReference } from "../../domain/authoring/authoringSchema";
 
 /** Qualidade/natureza da fonte — governa a política de fundamentação (Gap 8). */
@@ -168,7 +168,7 @@ export function validateCitedLegalReferences(index: CorpusLegalIndex, text: stri
     if (!ref.diplomaHint) continue; // sem diploma identificável → não comprovável (não fabricar, não rejeitar)
     const diploma = index.diplomas.get(ref.diplomaHint);
     if (!diploma) { rejected.push({ raw: ref.raw, reason: `diploma ausente/não-vigente no corpus: ${ref.diplomaHint}` }); continue; }
-    if (!isCurrentStatus(diploma.status)) { rejected.push({ raw: ref.raw, reason: `diploma com status incompatível (${diploma.status}): ${ref.diplomaHint}` }); continue; }
+    if (!isNormativeCurrent(diploma.status)) { rejected.push({ raw: ref.raw, reason: `diploma com status incompatível (${diploma.status}): ${ref.diplomaHint}` }); continue; }
     const article = diploma.articles.get(articleKey(ref.article));
     if (!article) { rejected.push({ raw: ref.raw, reason: `artigo inexistente no diploma ${ref.diplomaHint}: Art. ${ref.article}` }); continue; }
     // Sub-locator (§/inciso/alínea/item) — validado contra o texto verbatim do artigo (Gap 5).
@@ -191,7 +191,7 @@ export function validateCitedLegalReferences(index: CorpusLegalIndex, text: stri
  */
 export function locatorExistsAndCurrent(index: CorpusLegalIndex, sourceId: string, locatorPath: string): boolean {
   const diploma = index.diplomas.get(sourceId);
-  if (!diploma || !isCurrentStatus(diploma.status)) return false;
+  if (!diploma || !isNormativeCurrent(diploma.status)) return false;
   const segs = locatorPath.split(":").filter(Boolean);
   const artSeg = segs.find((s) => s.startsWith("art-"));
   if (!artSeg) return false;
@@ -209,7 +209,7 @@ export function sourceKindOf(index: CorpusLegalIndex, sourceId: string): SourceK
 /** Reconstrói uma referência estruturada validada para uma âncora canônica (path), quando comprovada. */
 export function resolveCanonicalReference(index: CorpusLegalIndex, sourceId: string, locatorPath: string, displayLabel: string): AuthoredLegalReference | null {
   const diploma = index.diplomas.get(sourceId);
-  if (!diploma || !isCurrentStatus(diploma.status)) return null;
+  if (!diploma || !isNormativeCurrent(diploma.status)) return null;
   if (!locatorExistsAndCurrent(index, sourceId, locatorPath)) return null;
   return { sourceId, locatorId: `${sourceId}:${locatorPath}`, display: displayLocator(diploma.title, displayLabel), status: diploma.status };
 }
