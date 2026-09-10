@@ -505,7 +505,7 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
 /** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
 export async function getGeneratedDocumentByKind(
   processId: string, orgId: number, kind: string,
-): Promise<{ id: string; kind: string; title: string; content: string; status: string; authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string } | null> {
+): Promise<{ id: string; kind: string; title: string; content: string; status: string; sources: string[]; authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string } | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(generatedDocumentsTable)
@@ -518,6 +518,8 @@ export async function getGeneratedDocumentByKind(
   const r = rows[0];
   return {
     id: r.id, kind: r.kind, title: r.title, content: r.content ?? "", status: r.status,
+    // A2 — `sources` carrega os marcadores de fundamentação (grounding:…, evidencias:…) da geração.
+    sources: parseArr<string>(r.sources),
     authorUserId: r.authorUserId ?? null, lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
     updatedAt: fromDb(r.updatedAt),
   };

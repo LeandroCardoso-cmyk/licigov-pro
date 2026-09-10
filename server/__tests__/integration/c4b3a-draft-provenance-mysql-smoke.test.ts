@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, saveDFDDraft, generateDFDDraft } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { promoteOfficialDocument } from "../../services/documentPromotionService";
 import { draftContentHash, createGeneratedDocument } from "../../domain/generatedDocument";
 import { applyDraftContentMutationTx } from "../../db/procurement";
@@ -40,7 +41,7 @@ async function seedEtp(org: number, pid: string, object: string, actor: number) 
   return generateDocument({
     organizationId: org, processId: pid, kind: "etp", object,
     correlationId: "c4b3a-smoke", idempotencyKey: `gen-${org}-${pid}-${object}-${actor}`,
-    actorUserId: actor, invoke: async () => "",
+    actorUserId: actor, invoke: async () => buildMockProviderAuthoring("etp"),
   });
 }
 

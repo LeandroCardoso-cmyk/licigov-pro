@@ -7,6 +7,10 @@
  * explicabilidade), limites (contexto, custo) e parâmetros do modelo.
  */
 
+// A2 MODEL CONTRACT HARDENING — o modelo Gemini das políticas vem da fonte ÚNICA da verdade
+// (config/ai), pinado e auditável; nunca um alias móvel `*-latest`.
+import { CANONICAL_GEMINI_MODEL } from "../../config/ai";
+
 /** Provedores conhecidos pela camada de IA (agnóstica). */
 export type ProviderName = "gemini" | "claude" | "openai" | "mock";
 
@@ -41,27 +45,27 @@ export const AI_EXECUTION_POLICIES: Record<AITaskId, AIExecutionPolicy> = {
   document_generation: {
     task: "document_generation", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: true, requiresKnowledgeGraph: true, requiresExplainability: true,
-    maxContext: 32000, maxCost: 0.5, temperature: 0.2, model: "gemini-flash-latest",
+    maxContext: 32000, maxCost: 0.5, temperature: 0.2, model: CANONICAL_GEMINI_MODEL,
   },
   legal_analysis: {
     task: "legal_analysis", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: true, requiresKnowledgeGraph: true, requiresExplainability: true,
-    maxContext: 32000, maxCost: 0.75, temperature: 0.1, model: "gemini-flash-latest",
+    maxContext: 32000, maxCost: 0.75, temperature: 0.1, model: CANONICAL_GEMINI_MODEL,
   },
   classification: {
     task: "classification", preferredProvider: "gemini", fallbackProvider: "openai",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 8000, maxCost: 0.1, temperature: 0.0, model: "gemini-flash-latest",
+    maxContext: 8000, maxCost: 0.1, temperature: 0.0, model: CANONICAL_GEMINI_MODEL,
   },
   extraction: {
     task: "extraction", preferredProvider: "gemini", fallbackProvider: "openai",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 16000, maxCost: 0.2, temperature: 0.0, model: "gemini-flash-latest",
+    maxContext: 16000, maxCost: 0.2, temperature: 0.0, model: CANONICAL_GEMINI_MODEL,
   },
   summarization: {
     task: "summarization", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: false,
-    maxContext: 16000, maxCost: 0.15, temperature: 0.3, model: "gemini-flash-latest",
+    maxContext: 16000, maxCost: 0.15, temperature: 0.3, model: CANONICAL_GEMINI_MODEL,
   },
   embedding: {
     task: "embedding", preferredProvider: "gemini", fallbackProvider: "openai",
@@ -71,7 +75,7 @@ export const AI_EXECUTION_POLICIES: Record<AITaskId, AIExecutionPolicy> = {
   generic: {
     task: "generic", preferredProvider: "gemini", fallbackProvider: "claude",
     requiresGrounding: false, requiresKnowledgeGraph: false, requiresExplainability: true,
-    maxContext: 16000, maxCost: 0.25, temperature: 0.2, model: "gemini-flash-latest",
+    maxContext: 16000, maxCost: 0.25, temperature: 0.2, model: CANONICAL_GEMINI_MODEL,
   },
 };
 

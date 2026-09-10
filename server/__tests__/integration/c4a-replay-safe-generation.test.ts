@@ -51,12 +51,23 @@ vi.mock("../../db/cognitiveProvenance", () => ({
   linkProvenanceArtifact: vi.fn(async () => { effectOrder.push("provenance-link"); return { linked: 1 }; }),
 }));
 
-vi.mock("../../services/workspaceOrchestratorService", () => ({
-  orchestrateMultiCopilot: vi.fn(async () => {
+// A2 — a cognição da geração ETP/TR passou a ser a AUTORIA ESTRUTURADA com grounding real. Este
+// unitário isola `runReplaySafeGeneration` da cognição: o serviço de autoria é um espião que registra o
+// efeito "cognition" e devolve um resultado estruturado mínimo (o grounding real é coberto nos testes A2).
+vi.mock("../../services/authoring/structuredAuthoringService", () => ({
+  generateStructuredAuthoring: vi.fn(async () => {
     effectOrder.push("cognition");
     return {
-      selectedCopilots: ["planejamento"],
-      consolidated: { summary: "resumo", suggestions: ["s1"], legalBasis: ["art. 18"] },
+      content: "# ETP — Material de escritório\n\n> Revisão OBRIGATÓRIA pelo servidor competente.",
+      structured: { usedSourceIds: ["lei-14133-2021"] },
+      evidences: [{ sourceId: "lei-14133-2021", locator: "lei-14133-2021:art-18", contentHash: "h" }],
+      evidenceComplete: true,
+      groundingState: "grounded",
+      evidenceFingerprint: "efp",
+      corpusFingerprint: "cfp",
+      contextPackage: { replayHash: "rh" },
+      execution: undefined,
+      rejectedReferences: [],
     };
   }),
 }));
@@ -79,7 +90,7 @@ import {
 } from "../../services/procurementProcessService";
 import * as procDb from "../../db/procurement";
 import * as docEngine from "../../services/documentEngineService";
-import * as orchestrator from "../../services/workspaceOrchestratorService";
+import * as authoring from "../../services/authoring/structuredAuthoringService";
 import * as provDb from "../../db/cognitiveProvenance";
 
 const ORG = 42;
@@ -208,7 +219,7 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     const { document, replayed } = await call();
     expect(replayed).toBe(true);
     expect(document).toEqual(cached);
-    expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
+    expect(authoring.generateStructuredAuthoring).not.toHaveBeenCalled();
     expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
     expect(docEngine.generateOfficialDocument).not.toHaveBeenCalled();
     expect(saveIdempotencyResult).not.toHaveBeenCalled();
@@ -218,14 +229,14 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
   it("status completed + payload diferente → CONFLICT (nunca sobrescreve)", async () => {
     checkIdempotency.mockResolvedValue({ status: "completed", payloadMismatch: true, response: null });
     await expect(call()).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
+    expect(authoring.generateStructuredAuthoring).not.toHaveBeenCalled();
     expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
   it("status processing (em voo) → CONFLICT, sem cognição nem persistência", async () => {
     checkIdempotency.mockResolvedValue({ status: "processing" });
     await expect(call()).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(orchestrator.orchestrateMultiCopilot).not.toHaveBeenCalled();
+    expect(authoring.generateStructuredAuthoring).not.toHaveBeenCalled();
     expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
@@ -233,7 +244,7 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
     checkIdempotency.mockResolvedValue({ status: "failed" });
     const { replayed } = await call();
     expect(replayed).toBe(false);
-    expect(orchestrator.orchestrateMultiCopilot).toHaveBeenCalledTimes(1);
+    expect(authoring.generateStructuredAuthoring).toHaveBeenCalledTimes(1);
     expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(1);
   });
 

@@ -47,7 +47,7 @@ describe("resilientAiCall — retry controlado", () => {
       .mockRejectedValueOnce(new Error("503 unavailable"))
       .mockResolvedValueOnce({ text: "ok" });
     const result = await resilientAiCall(() => gen(), {
-      provider: "gemini", model: "gemini-flash-latest", operation: "op", correlationId: "corr-1",
+      provider: "gemini", model: "gemini-3.8-flash", operation: "op", correlationId: "corr-1",
     });
     expect(result).toEqual({ text: "ok" });
     expect(gen).toHaveBeenCalledTimes(2);

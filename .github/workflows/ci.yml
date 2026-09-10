@@ -171,6 +171,11 @@ jobs:
       - name: Smoke — geração canônica replay-safe estrito (C.4A)
         run: pnpm exec vitest run server/__tests__/integration/c4a-replay-safe-generation-mysql-smoke.test.ts
 
+      # A2 — autoria estruturada × proveniência A1: cognição real → proveniência com evidenceFingerprint
+      # REAL + grounding factual + artefato vinculado; structured output inválido → fail-closed + failed.
+      - name: Smoke — autoria estruturada × proveniência A1 (A2)
+        run: pnpm exec vitest run server/__tests__/integration/a2-authoring-provenance-mysql-smoke.test.ts
+
       # C.4B.1 — EMISSÃO OFICIAL governada em MODO ESTRITO: SoD (autor não emite), ator humano,
       # promoção válida (1 versão emitida + ledger), replay/CONFLICT, concorrência (uma emissão),
       # imutabilidade após edição do rascunho, nova versão após alteração, isolamento multi-tenant,

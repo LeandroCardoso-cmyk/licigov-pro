@@ -31,7 +31,7 @@ const PID = "proc-c4b2-1";
 const mockProcess = { id: PID, organizationId: 1, processNumber: "700/2026", object: "Aquisição X" };
 
 function draftRow(kind: string, content: string) {
-  return { id: `gd-${kind}`, kind, title: `${kind.toUpperCase()} — X`, content, status: "rascunho", authorUserId: 9, updatedAt: "2026-08-25T12:00:00.000Z" };
+  return { id: `gd-${kind}`, kind, title: `${kind.toUpperCase()} — X`, content, status: "rascunho", sources: [], authorUserId: 9, updatedAt: "2026-08-25T12:00:00.000Z" };
 }
 
 describe("C.4B.2 — reviewableDraft (leitura canônica reload-safe)", () => {

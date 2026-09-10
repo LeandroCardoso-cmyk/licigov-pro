@@ -11,9 +11,8 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
-import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
+import { generateStructuredAuthoring } from "./authoring/structuredAuthoringService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
-import { DOMAIN_COPILOTS } from "../domain/procurementProcess";
 import {
   buildDFDDraft,
   createGeneratedDocument,
@@ -337,14 +336,15 @@ export async function saveReviewableDraft(params: {
 }
 
 /**
- * Gera um documento (ETP/TR) a partir do fluxo: aciona os copilotos do domínio
- * (Planejamento, TR Intelligence, Pesquisa de Preços, Jurídico, Agente de
- * Contratação) via Multi-Copilot Orchestrator e consolida um rascunho fundamentado.
+ * A2 — Gera um documento (ETP/TR) a partir do fluxo, via AUTORIA ESTRUTURADA com GROUNDING REAL:
+ * recupera evidência do corpus institucional (fontes vigentes), fundamenta as seções nas exigências
+ * legais reais da Lei 14.133/2021, alimenta a proveniência A1 com `EvidenceRef[]` reais e consolida um
+ * rascunho estruturado, bounded e validado (Zod). O DFD permanece determinístico (path próprio).
  */
 export async function generateDocument(params: {
   organizationId: number;
   processId: string;
-  kind: Exclude<DocumentKind, "edital">;
+  kind: "etp" | "tr";
   object: string;
   correlationId: string;
   idempotencyKey: string;
@@ -375,31 +375,19 @@ export async function generateDocument(params: {
       const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
       const expectedState = before ? { type: "present" as const, contentHash: draftContentHash(before.content) } : { type: "absent" as const };
 
-      const request = params.kind === "tr"
-        ? `Elaborar Termo de Referência para "${params.object}" com base em ${approved.length} item(ns) inteligente(s) aprovado(s), CATMAT, especificações e histórico.`
-        : `Elaborar Estudo Técnico Preliminar (ETP) para "${params.object}" com fundamentação da necessidade, alternativas e riscos.`;
-
-      // Cognição SEMPRE fora da transação (rede/modelo).
-      const orchestration = await orchestrateMultiCopilot({
+      // A2 — AUTORIA ESTRUTURADA com GROUNDING REAL. Cognição SEMPRE fora da transação (rede/modelo).
+      // Recupera evidência REAL do corpus institucional, alimenta a proveniência A1 com EvidenceRef[]
+      // reais e produz um rascunho estruturado (Zod, bounded) fundamentado nas exigências legais reais
+      // (ETP: art. 18, §1º; TR: art. 6º, XXIII da Lei 14.133/2021). Fail-closed em estrutura inválida.
+      const authoring = await generateStructuredAuthoring({
         organizationId: params.organizationId,
-        request,
-        copilotTypes: DOMAIN_COPILOTS,
+        kind: params.kind,
+        object: params.object,
         correlationId: params.correlationId,
+        actorUserId: params.actorUserId,
         invoke: params.invoke,
       });
-
-      const content = [
-        `# ${params.kind === "tr" ? "Termo de Referência" : "Estudo Técnico Preliminar"} — ${params.object}`,
-        orchestration.consolidated.summary,
-        "",
-        "## Sugestões consolidadas",
-        ...orchestration.consolidated.suggestions.map(s => `- ${s}`),
-        "",
-        "## Base legal",
-        ...orchestration.consolidated.legalBasis.map(l => `- ${l}`),
-        "",
-        "> Rascunho gerado a partir do fluxo. Revisão obrigatória pelo servidor competente.",
-      ].join("\n");
+      const content = authoring.content;
 
       const doc = createGeneratedDocument({
         organizationId: params.organizationId,
@@ -407,7 +395,11 @@ export async function generateDocument(params: {
         kind: params.kind,
         title: `${params.kind.toUpperCase()} — ${params.object}`,
         content,
-        sources: [`itens_aprovados:${approved.length}`, `copilotos:${orchestration.selectedCopilots.join(",")}`],
+        sources: [
+          `itens_aprovados:${approved.length}`,
+          `grounding:${authoring.groundingState}`,
+          `evidencias:${authoring.evidences.length}`,
+        ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
@@ -426,8 +418,16 @@ export async function generateDocument(params: {
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
           const official = await generateOfficialDocument({
             organizationId: params.organizationId, businessDomain: DOMAIN, documentType: params.kind,
-            origin: params.processId, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
-            metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, approvedItems: approved.length },
+            origin: params.processId, title: doc.title, content, author: "structured_authoring", correlationId: params.correlationId,
+            metadata: {
+              approvedItems: approved.length,
+              groundingState: authoring.groundingState,
+              evidenceCount: authoring.evidences.length,
+              evidenceComplete: authoring.evidenceComplete,
+              evidenceFingerprint: authoring.evidenceFingerprint,
+              corpusFingerprint: authoring.corpusFingerprint,
+              usedSources: authoring.structured.usedSourceIds,
+            },
           }, tx);
           // A1 — LINKAGE de proveniência cognitiva → artefato de trabalho (generated_document) + documento
           // oficial materializado + linhagem, na MESMA transação (atomicidade). Escopado ao tenant e à

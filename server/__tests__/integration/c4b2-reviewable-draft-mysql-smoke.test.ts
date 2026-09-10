@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, generateNotice } from "../../services/procurementProcessService";
+import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { getGeneratedDocumentByKind } from "../../db/procurement";
 import { draftContentHash } from "../../services/documentPromotionService";
 
@@ -34,7 +35,7 @@ async function seedEtpOrTr(org: number, processId: string, kind: "etp" | "tr", o
   return generateDocument({
     organizationId: org, processId, kind, object,
     correlationId: "c4b2-smoke", idempotencyKey: `gen-${org}-${processId}-${kind}`,
-    actorUserId: AUTHOR, invoke: async () => "",
+    actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring(kind),
   });
 }
 
