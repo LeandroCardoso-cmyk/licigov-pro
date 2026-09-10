@@ -216,7 +216,12 @@ export async function bootstrap(): Promise<void> {
   validateAiProviderConfig(process.env);
   // Modelo de IA: sem allowlist rígida, mas bloqueia formato inválido/vazio e IDs
   // confirmadamente descontinuados — falha explícita no boot em vez de só na 1ª geração.
-  validateAiRuntime({ provider: AI_CONFIG.provider, model: AI_CONFIG.model });
+  // A2 MODEL CONTRACT HARDENING: em staging/produção exige versão PINADA (rejeita alias móvel
+  // `*-latest`/preview/experimental) — determinismo/replay; dev/test permanece permissivo (fixtures/mocks).
+  validateAiRuntime(
+    { provider: AI_CONFIG.provider, model: AI_CONFIG.model },
+    { requirePinnedModel: !APP_CONFIG.isDevelopment },
+  );
 
   console.info(
     `[BOOT]${ENV_TAG} Iniciando ${APP_CONFIG.name} v${APP_CONFIG.version}` +

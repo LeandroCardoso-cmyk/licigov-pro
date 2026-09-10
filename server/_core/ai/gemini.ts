@@ -56,10 +56,14 @@ export class GeminiProvider implements AIProvider {
   private readonly client: GoogleGenerativeAI;
   private readonly modelId: string;
 
-  constructor(apiKey: string, modelId = "gemini-flash-latest") {
+  // A2 MODEL CONTRACT HARDENING — `modelId` é OBRIGATÓRIO (sem default de alias móvel). O único ponto
+  // que instancia o provider é o Provider Adapter, que passa `AI_CONFIG.model` (versão pinada, validada
+  // no boot). Assim não há como uma construção sem modelo cair silenciosamente em `*-latest`.
+  constructor(apiKey: string, modelId: string) {
     if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+    if (!modelId || !modelId.trim()) throw new Error("GeminiProvider: modelId é obrigatório (versão pinada)");
     this.client = new GoogleGenerativeAI(apiKey);
-    this.modelId = modelId;
+    this.modelId = modelId.trim();
   }
 
   async generateText(prompt: string): Promise<string> {

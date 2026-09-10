@@ -22,8 +22,8 @@ import { shouldDisableThinking } from "../_core/ai/gemini";
 
 // Config de geração COMUM a todos os documentos institucionais (DFD/ETP/TR/Edital/
 // Contrato/Ata/Parecer) — fonte única, sem duplicação. Usa o modelo VIVO configurado
-// (AI_CONFIG.model = gemini-flash-latest por padrão) — o antigo "gemini-2.0-flash-exp"
-// foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos Flash 2.5
+// (AI_CONFIG.model = versão pinada gemini-3.8-flash por padrão; sem alias móvel) — o antigo
+// "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos Flash 2.5
 // (senão consome o orçamento de saída e trunca o documento — ver #175). Cada tipo
 // documental mantém seu próprio teto de saída (maxOutputTokens), o resto é idêntico.
 function buildDocGenerationConfig(maxOutputTokens: number) {

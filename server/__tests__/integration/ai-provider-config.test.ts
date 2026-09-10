@@ -8,8 +8,8 @@ import { resolveAiRuntime, validateAiRuntime, DEFAULT_MODEL_BY_PROVIDER, KNOWN_D
 import { getCognitiveTask } from "../../domain/cognitiveTask";
 
 describe("Config de IA — resolução de provider/modelo por ENV", () => {
-  it("default: gemini + gemini-flash-latest (alias auto-atualizável)", () => {
-    expect(resolveAiRuntime({})).toEqual({ provider: "gemini", model: "gemini-flash-latest" });
+  it("default: gemini + gemini-3.8-flash (versão PINADA, sem alias móvel)", () => {
+    expect(resolveAiRuntime({})).toEqual({ provider: "gemini", model: "gemini-3.8-flash" });
   });
 
   it("AI_PROVIDER=claude → claude + modelo padrão do claude", () => {
@@ -25,7 +25,7 @@ describe("Config de IA — resolução de provider/modelo por ENV", () => {
   });
 
   it("provider desconhecido cai em gemini; AI_MODEL em branco usa o default", () => {
-    expect(resolveAiRuntime({ AI_PROVIDER: "xpto", AI_MODEL: "  " })).toEqual({ provider: "gemini", model: "gemini-flash-latest" });
+    expect(resolveAiRuntime({ AI_PROVIDER: "xpto", AI_MODEL: "  " })).toEqual({ provider: "gemini", model: "gemini-3.8-flash" });
   });
 
   it("case-insensitive e com trim", () => {
@@ -34,13 +34,13 @@ describe("Config de IA — resolução de provider/modelo por ENV", () => {
 });
 
 describe("Config de IA — políticas cognitivas usam o modelo configurado", () => {
-  it("LEGAL_ANALYSIS deixa de usar gemini-2.5-pro e usa o modelo primário (gemini-flash-latest por padrão)", () => {
-    expect(getCognitiveTask("LEGAL_ANALYSIS").policy.model).toBe("gemini-flash-latest");
+  it("LEGAL_ANALYSIS deixa de usar gemini-2.5-pro e usa o modelo primário PINADO (gemini-3.8-flash)", () => {
+    expect(getCognitiveTask("LEGAL_ANALYSIS").policy.model).toBe("gemini-3.8-flash");
   });
 });
 
 describe("Config de IA — validateAiRuntime (guarda de boot, sem allowlist rígida)", () => {
-  it("aceita o runtime default (gemini + gemini-flash-latest)", () => {
+  it("aceita o runtime default (gemini + gemini-3.8-flash, pinado)", () => {
     expect(() => validateAiRuntime(resolveAiRuntime({}))).not.toThrow();
   });
 

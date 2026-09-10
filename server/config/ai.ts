@@ -13,12 +13,19 @@
 
 export type AIProviderName = "gemini" | "claude" | "openai";
 
-/** Modelo padrão de cada provider (custo-benefício atual; sobrescrevível por AI_MODEL). */
+/**
+ * A2 MODEL CONTRACT HARDENING — versão ESPECÍFICA e auditável do Gemini Flash (NUNCA um alias móvel
+ * `*-latest`). O alias `gemini-flash-latest` foi removido do contrato institucional porque pode mudar
+ * o modelo subjacente sem alteração de código/config, quebrando determinismo/replay-safety (o modelo
+ * entra no replayHash cognitivo). Fonte ÚNICA da verdade do modelo default do Gemini — referenciada
+ * também pela AI Execution Policy. Ao descontinuar, atualize este valor por uma nova versão pinada
+ * (use `pnpm ai:models` para listar os disponíveis) e registre o antigo em KNOWN_DEAD_MODEL_IDS se preciso.
+ */
+export const CANONICAL_GEMINI_MODEL = "gemini-3.8-flash";
+
+/** Modelo padrão de cada provider (custo-benefício atual; sobrescrevível por AI_MODEL — mas ver fail-closed). */
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderName, string> = {
-  // Alias auto-atualizável: aponta sempre para o Flash estável atual — evita descontinuações de
-  // versões específicas (ex.: gemini-2.5-flash saiu do free tier para contas novas). Se a sua conta
-  // suportar outro modelo, defina AI_MODEL (use `pnpm ai:models` para listar os disponíveis).
-  gemini: "gemini-flash-latest",
+  gemini: CANONICAL_GEMINI_MODEL, // versão pinada; sem alias móvel (determinismo/replay)
   claude: "claude-sonnet-4-5",
   openai: "gpt-4o-mini",
 };
@@ -113,6 +120,24 @@ const MODEL_ID_PREFIX_BY_PROVIDER: Record<AIProviderName, RegExp> = {
 };
 
 /**
+ * A2 MODEL CONTRACT HARDENING — padrões de id de modelo MÓVEL/INSTÁVEL: alias auto-atualizável
+ * (`*-latest`), preview e experimental. Não são determinísticos/auditáveis: o modelo subjacente
+ * pode mudar sem alteração de código/config, quebrando replay-safety (o modelo entra no replayHash).
+ * NÃO é allowlist: cresce só com formas de instabilidade conhecidas; qualquer versão pinada específica
+ * (ex.: gemini-3.8-flash) NÃO casa. Pura/testável.
+ */
+const UNSTABLE_MODEL_ID_PATTERNS: readonly RegExp[] = [
+  /-latest$/i,          // alias móvel (gemini-flash-latest, gemini-pro-latest…)
+  /-preview(?:$|-)/i,   // preview (gemini-2.5-flash-preview-05-20…)
+  /-exp(?:$|-)/i,       // experimental (gemini-2.0-flash-exp…)
+  /-experimental(?:$|-)/i,
+];
+export function isUnstableModelId(model: string): boolean {
+  const m = model.trim().toLowerCase();
+  return UNSTABLE_MODEL_ID_PATTERNS.some((re) => re.test(m));
+}
+
+/**
  * Valida o runtime de IA resolvido — chamada no boot (server/bootstrap.ts), NÃO em
  * cada request. Pura e testável. NÃO é allowlist rígida (não valida contra uma lista
  * de modelos "permitidos", que ficaria obsoleta a cada lançamento) — apenas: (1) modelo
@@ -120,7 +145,10 @@ const MODEL_ID_PREFIX_BY_PROVIDER: Record<AIProviderName, RegExp> = {
  * denylist de modelos confirmadamente mortos. Lança erro descritivo no boot em vez de
  * deixar a primeira geração de documento falhar silenciosamente em produção.
  */
-export function validateAiRuntime(runtime: { provider: AIProviderName; model: string }): void {
+export function validateAiRuntime(
+  runtime: { provider: AIProviderName; model: string },
+  opts: { requirePinnedModel?: boolean } = {},
+): void {
   const model = runtime.model.trim();
   if (!model) {
     throw new Error(
@@ -138,6 +166,18 @@ export function validateAiRuntime(runtime: { provider: AIProviderName; model: st
     throw new Error(
       `[BOOT] AI_MODEL="${model}" não tem o formato esperado para o provider "${runtime.provider}" ` +
       `(esperado prefixo ${expectedPrefix}). Verifique a variável AI_MODEL.`
+    );
+  }
+  // A2 MODEL CONTRACT HARDENING (fail-closed) — em staging/produção o modelo deve ser PINADO (versão
+  // específica e auditável). Aliases móveis (`*-latest`), preview e experimental NÃO são aceitos: o
+  // runtime falha explicitamente no boot em vez de servir tráfego com um modelo não determinístico
+  // (o modelo entra no replayHash cognitivo). Em desenvolvimento/teste é permitido (fixtures/mocks).
+  // NUNCA há troca automática de modelo — a falha é controlada, sem fallback silencioso.
+  if (opts.requirePinnedModel && isUnstableModelId(model)) {
+    throw new Error(
+      `[BOOT] AI_MODEL="${model}" é um alias MÓVEL/instável (…-latest, preview ou experimental) e NÃO é permitido ` +
+      `em staging/produção — o contrato institucional exige uma versão ESPECÍFICA e auditável (determinismo/replay). ` +
+      `Defina AI_MODEL com uma versão pinada (ex.: "${DEFAULT_MODEL_BY_PROVIDER[runtime.provider]}").`
     );
   }
 }
