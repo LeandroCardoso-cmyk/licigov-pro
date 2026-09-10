@@ -14,7 +14,6 @@ import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
 import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
-import { registerA2LiveHomologationRoute, runA2LiveHomologationOnBoot } from "./a2LiveHomologation";
 import { recoverStuckImportSessions } from "../services/importQueueService";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
@@ -68,9 +67,6 @@ async function startServer() {
   // Montado ANTES do tRPC; gated por feature flag tenant-aware (fail-closed).
   registerIngestionUploadRoute(app);
 
-  // A2 — homologação LIVE (provider real) — harness staging-only, token-gated. No-op em produção.
-  registerA2LiveHomologationRoute(app);
-
   // tRPC API
   app.use(
     "/api/trpc",
@@ -101,9 +97,6 @@ async function startServer() {
   server.listen(port, () => {
     console.info(`[BOOT][${APP_CONFIG.env}] ${APP_CONFIG.name} rodando em http://localhost:${port}/`);
   });
-
-  // A2 — homologação LIVE no boot (staging-only, opt-in A2_HOMOLOG_ON_BOOT=1). Best-effort, não bloqueia.
-  runA2LiveHomologationOnBoot();
 
   // PR A.1 — o dispatcher NUNCA roda automaticamente ao importar o módulo (ver comentário em
   // emailDispatcher.ts); precisa deste start() explícito, e só quando há algo para enviar
