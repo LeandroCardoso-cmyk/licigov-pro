@@ -274,6 +274,8 @@ export const legalOpinionsRouter = router({
         context: opinion.context || undefined,
         sourceType: opinion.sourceType,
         sourceData,
+        // A3 — boundary institucional (tenant + correlation + ator) para o Cognitive Kernel.
+        meta: { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id },
       });
 
       // Atualizar parecer com o resultado

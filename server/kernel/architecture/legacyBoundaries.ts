@@ -50,7 +50,8 @@ export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [
   // A3 — server/services/catmatMatcher.ts MIGRADO para executeCognitiveTask (CATMAT_MATCHING);
   // não usa mais invokeLLM e saiu desta allowlist (guard impede reintrodução do bypass).
   "server/services/directContractDocuments.ts",
-  "server/services/legalOpinionService.ts",
+  // A3 — server/services/legalOpinionService.ts MIGRADO para executeCognitiveTask (LEGAL_ANALYSIS);
+  // não usa mais invokeLLM e saiu desta allowlist (guard impede reintrodução do bypass).
   "server/services/examples/legalValidationExample.ts",
 ];
 
@@ -186,7 +187,8 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   // A3 — server/services/catmatMatcher.ts MIGRADO: agora chama executeCognitiveTask (CATMAT_MATCHING),
   // sem invokeLLM. Removido das allowlists de bypass (não requer mais classificação de exceção).
   { path: "server/services/directContractDocuments.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para DIRECT_PROCUREMENT_REASONING." },
-  { path: "server/services/legalOpinionService.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para LEGAL_ANALYSIS/REASONING." },
+  // A3 — server/services/legalOpinionService.ts MIGRADO: agora chama executeCognitiveTask (LEGAL_ANALYSIS),
+  // sem invokeLLM. Removido da allowlist de bypass (não requer mais classificação de exceção).
   { path: "server/services/examples/legalValidationExample.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "remocao_futura", note: "Exemplo — remover em limpeza." },
   // Document renderers
   { path: "server/services/documentConverter.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Internal Renderer oficial." },
