@@ -46,7 +46,8 @@ export const EXECUTION_POLICY_ALLOWLIST: readonly string[] = [
 // pode usar invokeLLM — a cognição oficial passa por executeCognitiveTask.
 export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [
   "server/services/legalFrameworkAssistant.ts",
-  "server/services/catmatMatcher.ts",
+  // A3 — server/services/catmatMatcher.ts MIGRADO para executeCognitiveTask (CATMAT_MATCHING);
+  // não usa mais invokeLLM e saiu desta allowlist (guard impede reintrodução do bypass).
   "server/services/directContractDocuments.ts",
   "server/services/legalOpinionService.ts",
   "server/services/examples/legalValidationExample.ts",
@@ -180,7 +181,8 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "server/services/ai/suggestions.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Sugestões legadas — migrar para AIExecutionEngine." },
   // invokeLLM — migração futura (bypass do pipeline cognitivo)
   { path: "server/services/legalFrameworkAssistant.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para executeCognitiveTask." },
-  { path: "server/services/catmatMatcher.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para CATMAT_MATCHING task." },
+  // A3 — server/services/catmatMatcher.ts MIGRADO: agora chama executeCognitiveTask (CATMAT_MATCHING),
+  // sem invokeLLM. Removido das allowlists de bypass (não requer mais classificação de exceção).
   { path: "server/services/directContractDocuments.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para DIRECT_PROCUREMENT_REASONING." },
   { path: "server/services/legalOpinionService.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para LEGAL_ANALYSIS/REASONING." },
   { path: "server/services/examples/legalValidationExample.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "remocao_futura", note: "Exemplo — remover em limpeza." },

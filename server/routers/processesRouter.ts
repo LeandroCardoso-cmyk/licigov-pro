@@ -213,7 +213,14 @@ export const processesRouter = router({
       const { findCatmatMatches } = await import("../services/catmatMatcher");
       const { trackCATMATMatching } = await import("../services/aiUsageTracker");
 
-      const matches = await findCatmatMatches(input.description, input.itemType);
+      // A3 — via Cognitive Kernel (tenant + correlation obrigatórios; provider/replay governados).
+      const matches = await findCatmatMatches({
+        itemDescription: input.description,
+        itemType: input.itemType,
+        organizationId: ctx.organizationId,
+        correlationId: ctx.correlationId,
+        userId: ctx.user.id,
+      });
 
       await trackCATMATMatching({
         userId: ctx.user.id,
