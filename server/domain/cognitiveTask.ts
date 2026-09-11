@@ -53,7 +53,13 @@ export interface GroundingDeclaration {
  */
 export interface CognitiveExecutionPolicy {
   readonly preferredProvider: ProviderName;
-  readonly fallbackProvider: ProviderName;
+  /**
+   * Fallback entre providers REAIS distintos. `null` = **sem fallback automático
+   * cross-provider**: falha do provider preferido NÃO troca de provider sozinha
+   * (fail-closed/degrada conforme a criticidade da task). Contrato preparado para um
+   * fallback real futuro, mas hoje NENHUMA política o declara (Gemini único ativo).
+   */
+  readonly fallbackProvider: ProviderName | null;
   readonly model: string;
   readonly temperature: number;
   readonly maxContext: number;
@@ -83,15 +89,15 @@ export interface CognitiveTask {
 // ─── Políticas base ───────────────────────────────────────────────────────────
 
 const REASONING_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "claude", model: AI_CONFIG.model,
+  preferredProvider: "gemini", fallbackProvider: null, model: AI_CONFIG.model,
   temperature: 0.2, maxContext: 32000, maxCost: 0.5, requiresExplainability: true,
 };
 const LEGAL_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "claude", model: AI_CONFIG.model,
+  preferredProvider: "gemini", fallbackProvider: null, model: AI_CONFIG.model,
   temperature: 0.1, maxContext: 32000, maxCost: 0.75, requiresExplainability: true,
 };
 const LIGHT_POLICY: CognitiveExecutionPolicy = {
-  preferredProvider: "gemini", fallbackProvider: "openai", model: AI_CONFIG.model,
+  preferredProvider: "gemini", fallbackProvider: null, model: AI_CONFIG.model,
   temperature: 0.0, maxContext: 12000, maxCost: 0.15, requiresExplainability: true,
 };
 

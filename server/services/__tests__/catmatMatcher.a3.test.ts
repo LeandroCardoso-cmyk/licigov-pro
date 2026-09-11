@@ -63,6 +63,34 @@ describe("A3 — findCatmatMatches via Cognitive Kernel", () => {
     expect(matches[0].code).toBe("123456");
   });
 
+  it("resultado é ASSISTIVO: todo candidato exige validação humana e NÃO carrega grounding/evidência", async () => {
+    executeCognitiveTask.mockResolvedValue(cognitiveExecutionWith(VALID));
+    const matches = await findCatmatMatches({
+      itemDescription: "x", organizationId: 1, correlationId: "c", userId: 1,
+    });
+    for (const m of matches) {
+      // Aprovação-aware: marca invariável de que é candidato a validar.
+      expect(m.requiresHumanValidation).toBe(true);
+      // Nenhuma metadata de evidência/grounding é fabricada.
+      expect(m).not.toHaveProperty("evidenceFingerprint");
+      expect(m).not.toHaveProperty("grounded");
+      expect(m).not.toHaveProperty("evidences");
+      expect(m).not.toHaveProperty("sourceScope");
+    }
+  });
+
+  it("prompt não afirma consulta ao catálogo oficial nem 'descrição oficial' — é assistivo", async () => {
+    executeCognitiveTask.mockResolvedValue(cognitiveExecutionWith(VALID));
+    await findCatmatMatches({ itemDescription: "caneta", organizationId: 1, correlationId: "c", userId: 1 });
+    const query: string = executeCognitiveTask.mock.calls[0][0].query;
+    // Não deve prometer códigos verificados / descrição oficial / busca no catálogo oficial.
+    expect(query).not.toMatch(/descrição oficial/i);
+    expect(query).not.toMatch(/APENAS códigos reais do catálogo/i);
+    // Deve enquadrar como candidato/sugestão a validar.
+    expect(query).toMatch(/candidat|sugest/i);
+    expect(query).toMatch(/validar|valida[çc]/i);
+  });
+
   it("tenants distintos enviam tenantId distinto ao Kernel (isolamento)", async () => {
     executeCognitiveTask.mockResolvedValue(cognitiveExecutionWith(VALID));
     await findCatmatMatches({ itemDescription: "x", organizationId: 111, correlationId: "c", userId: 1 });

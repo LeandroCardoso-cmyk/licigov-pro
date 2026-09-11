@@ -120,25 +120,33 @@ export interface ProviderResolution {
 }
 
 /**
- * Seleciona o provider seguindo a AI Execution Policy: tenta o preferido, depois o fallback REAL.
+ * Seleciona o provider seguindo a AI Execution Policy: tenta o preferido e, SOMENTE se a política
+ * declarar explicitamente um fallback real distinto (`fallback != null`), tenta esse fallback.
  * A decisão de provider vive AQUI — jamais nos Business Domains. Providers não implementados
  * (claude/openai) são pulados na seleção automática (mas continuam resolvíveis como contrato).
+ *
+ * SEM FALLBACK AUTOMÁTICO CROSS-PROVIDER: hoje TODAS as políticas passam `fallback = null`, então
+ * a falha do Gemini NÃO troca de provider por conta própria — ela cai no mock (só dev/test, ver
+ * abaixo) ou falha fail-closed. O parâmetro/branch de fallback permanece como contrato preparado
+ * para uma futura ativação explícita, sem alterar o comportamento atual.
  *
  * AI-015 — FAIL-CLOSED: se nenhum provider real puder ser construído, o fallback para o mock só é
  * usado quando `mockFallbackAllowed` (dev/test + `AI_ALLOW_MOCK_FALLBACK=true`). Caso contrário
  * (staging/production, ou sem a flag), lança `NoRealAIProviderError` em vez de servir mock como
  * oficial. Um erro de RUNTIME do provider real (ex.: `generate()` falhando) NÃO é tratado aqui —
- * propaga para o chamador, jamais caindo para o mock.
+ * propaga para o chamador, jamais caindo para o mock nem para outro provider.
  */
-export function selectProvider(preferred: ProviderName, fallback: ProviderName): ProviderResolution {
+export function selectProvider(preferred: ProviderName, fallback: ProviderName | null = null): ProviderResolution {
   if (isProviderImplemented(preferred)) {
     try {
       return { provider: resolveProviderByName(preferred), selected: preferred, requested: preferred, usedFallback: false };
     } catch {
-      /* provider preferido não pôde ser CONSTRUÍDO (ex.: chave ausente) — tenta o fallback real */
+      /* provider preferido não pôde ser CONSTRUÍDO (ex.: chave ausente) — só tenta fallback se declarado */
     }
   }
-  if (isProviderImplemented(fallback)) {
+  // Fallback cross-provider APENAS quando a política o declara explicitamente (contrato preparado).
+  // `null` (padrão de todas as políticas atuais) = sem troca automática de provider.
+  if (fallback !== null && fallback !== preferred && isProviderImplemented(fallback)) {
     try {
       return { provider: resolveProviderByName(fallback), selected: fallback, requested: preferred, usedFallback: true };
     } catch {

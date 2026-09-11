@@ -214,6 +214,8 @@ export const processesRouter = router({
       const { trackCATMATMatching } = await import("../services/aiUsageTracker");
 
       // A3 — via Cognitive Kernel (tenant + correlation obrigatórios; provider/replay governados).
+      // Assistivo: os retornos são CANDIDATOS gerados por IA (não-grounded), não consultas
+      // ao catálogo oficial; ficam pendentes de validação humana (approve/reject) antes de uso.
       const matches = await findCatmatMatches({
         itemDescription: input.description,
         itemType: input.itemType,
@@ -241,7 +243,14 @@ export const processesRouter = router({
         }
       }
 
-      return { success: true, suggestions: matches };
+      return {
+        success: true,
+        suggestions: matches,
+        // Contrato explícito para a UI: candidatos assistivos, não códigos verificados.
+        requiresHumanValidation: true as const,
+        notice:
+          "Sugestões geradas por IA — candidatos a validar no catálogo oficial CATMAT/CATSER antes de usar.",
+      };
     }),
 
   getCatmatSuggestions: tenantProcedure
