@@ -94,8 +94,10 @@ export const directContractsRouter = router({
           hasExclusiveSupplier: z.boolean().optional(),
         })
       )
-      .mutation(async ({ input }) => {
-        return await suggestLegalArticle(input);
+      .mutation(async ({ ctx, input }) => {
+        return await suggestLegalArticle(input, {
+          organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id,
+        });
       }),
 
     // Gerar justificativa inicial
@@ -108,8 +110,10 @@ export const directContractsRouter = router({
           estimatedValue: z.number(),
         })
       )
-      .mutation(async ({ input }) => {
-        return await generateJustification(input);
+      .mutation(async ({ ctx, input }) => {
+        return await generateJustification(input, {
+          organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id,
+        });
       }),
 
     // Validar valor

@@ -1,14 +1,26 @@
 /**
- * RC-4.1 — Classificação: **LEGADO (AI)**.
+ * RC-4.1 → A3 — Assistente de Enquadramento Legal via **Cognitive Kernel**.
  *
- * Usa invokeLLM diretamente (anterior à ativação cognitiva). Mantido por
- * compatibilidade e registrado em INVOKE_LLM_LEGACY_ALLOWLIST
- * (server/kernel/architecture/legacyBoundaries.ts). NÃO usar em código novo: a
- * cognição oficial passa por executeCognitiveTask (AIExecutionEngine).
+ * MIGRADO (A3 — Cognitive Authoring Extension & Legacy Chain Retirement): este serviço
+ * NÃO usa mais `invokeLLM`. Ele solicita a Cognitive Task `DIRECT_PROCUREMENT_REASONING`
+ * (domínio contratacao_direta) ao AIExecutionEngine (`executeCognitiveTask`) — provider,
+ * modelo (pinado), proveniência (A1), replay e o prompt tipado são governados pelo Kernel.
+ * O structured output é declarado por `responseSchema`; a validação de citações legais
+ * permanece obrigatória e fail-closed (nunca emite artigo inexistente).
+ *
+ * Multi-tenant: `tenantId` (organizationId), `correlationId` e o ator (userId) são
+ * obrigatórios e fluem do router (`tenantProcedure`) para o Kernel.
  */
-import { invokeLLM } from "../_core/llm";
+import { executeCognitiveTask } from "./aiExecutionEngine";
 import * as db from "../db";
 import { validateLegalCitations } from "./legalValidation";
+
+/** Boundary institucional obrigatório propagado do router (`tenantProcedure`). */
+export interface LegalFrameworkMeta {
+  organizationId: number;
+  correlationId: string;
+  userId: number;
+}
 
 /**
  * Assistente de Enquadramento Legal com IA
@@ -22,6 +34,24 @@ interface SuggestLegalArticleParams {
   urgency?: string; // Nível de urgência (opcional)
   hasExclusiveSupplier?: boolean; // Se há fornecedor exclusivo (opcional)
 }
+
+/** JSON Schema da sugestão de artigo que o provider DEVE preencher (o servidor revalida). */
+const LEGAL_ARTICLE_SCHEMA = {
+  name: "legal_article_suggestion",
+  schema: {
+    type: "object",
+    properties: {
+      articleNumber: { type: "string" },
+      articleType: { type: "string", enum: ["dispensa", "inexigibilidade"] },
+      confidence: { type: "number" },
+      reasoning: { type: "string" },
+      warnings: { type: "array", items: { type: "string" } },
+      requiredDocuments: { type: "array", items: { type: "string" } },
+    },
+    required: ["articleNumber", "articleType", "confidence", "reasoning", "warnings", "requiredDocuments"],
+    additionalProperties: false,
+  },
+} as const;
 
 interface LegalArticleSuggestion {
   articleId: number;
@@ -37,7 +67,8 @@ interface LegalArticleSuggestion {
  * Sugere artigo legal baseado na situação descrita
  */
 export async function suggestLegalArticle(
-  params: SuggestLegalArticleParams
+  params: SuggestLegalArticleParams,
+  meta: LegalFrameworkMeta
 ): Promise<LegalArticleSuggestion> {
   const { situation, object, estimatedValue, urgency, hasExclusiveSupplier } = params;
 
@@ -57,7 +88,7 @@ export async function suggestLegalArticle(
 
   const valueInReais = estimatedValue / 100;
 
-  const prompt = `Você é um assistente jurídico especializado em Licitações e Contratos Públicos (Lei 14.133/2021).
+  const query = `Analise a situação de contratação direta e sugira o artigo legal mais adequado (Art. 74 ou Art. 75 da Lei 14.133/2021).
 
 **ARTIGOS LEGAIS DISPONÍVEIS:**
 ${articlesContext}
@@ -69,69 +100,26 @@ ${articlesContext}
 ${urgency ? `- Urgência: ${urgency}` : ""}
 ${hasExclusiveSupplier !== undefined ? `- Fornecedor exclusivo: ${hasExclusiveSupplier ? "Sim" : "Não"}` : ""}
 
-**TAREFA:**
-Analise a situação e sugira o artigo legal mais adequado (Art. 74 ou Art. 75 da Lei 14.133/2021).
+**DIRETRIZES:**
+- Seja preciso e objetivo; use "articleNumber" no formato "Art. 75, I".
+- Considere os limites de valor (Art. 75, I: até R$ 100.000 para obras, até R$ 50.000 para outros).
+- Considere a urgência (Art. 75, III: emergência; Art. 75, IV: urgência).
+- Considere exclusividade (Art. 74, I: fornecedor exclusivo).
+- Liste todos os alertas relevantes (prazos, limites, condições) em "warnings".
+- Liste todos os documentos obrigatórios em "requiredDocuments".
+- "articleType" deve ser "dispensa" ou "inexigibilidade"; "confidence" entre 0 e 100.`;
 
-**RESPONDA EM JSON:**
-{
-  "articleNumber": "Art. 75, I" (exemplo),
-  "articleType": "dispensa" ou "inexigibilidade",
-  "confidence": 85 (0-100, quanto maior mais confiante),
-  "reasoning": "Explicação clara e objetiva do porquê este artigo se aplica",
-  "warnings": ["Alerta 1", "Alerta 2"] (alertas importantes, como limites de valor, prazos, etc.),
-  "requiredDocuments": ["Documento 1", "Documento 2"] (documentos obrigatórios para este tipo de contratação)
-}
-
-**IMPORTANTE:**
-- Seja preciso e objetivo
-- Considere os limites de valor (Art. 75, I: até R$ 100.000 para obras, até R$ 50.000 para outros)
-- Considere a urgência (Art. 75, III: emergência, Art. 75, IV: urgência)
-- Considere exclusividade (Art. 74, I: fornecedor exclusivo)
-- Liste todos os alertas relevantes (prazos, limites, condições)
-- Liste todos os documentos obrigatórios`;
-
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Você é um assistente jurídico especializado em Licitações Públicas. Responda APENAS em JSON válido, sem texto adicional.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "legal_article_suggestion",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            articleNumber: { type: "string" },
-            articleType: { type: "string", enum: ["dispensa", "inexigibilidade"] },
-            confidence: { type: "number" },
-            reasoning: { type: "string" },
-            warnings: { type: "array", items: { type: "string" } },
-            requiredDocuments: { type: "array", items: { type: "string" } },
-          },
-          required: [
-            "articleNumber",
-            "articleType",
-            "confidence",
-            "reasoning",
-            "warnings",
-            "requiredDocuments",
-          ],
-          additionalProperties: false,
-        },
-      },
-    },
+  const execution = await executeCognitiveTask({
+    task: "DIRECT_PROCUREMENT_REASONING",
+    tenantId: meta.organizationId,
+    userId: String(meta.userId),
+    correlationId: meta.correlationId,
+    businessDomain: "contratacao_direta",
+    query,
+    responseSchema: LEGAL_ARTICLE_SCHEMA,
   });
 
-  const result = JSON.parse((response.choices[0].message.content as string) || "{}");
+  const result = JSON.parse(execution.response.content || "{}");
 
   // Encontrar o artigo correspondente no banco
   const matchedArticle = articles.find(
@@ -161,7 +149,7 @@ export async function generateJustification(params: {
   object: string;
   situation: string;
   estimatedValue: number;
-}): Promise<string> {
+}, meta: LegalFrameworkMeta): Promise<string> {
   const { articleId, object, situation, estimatedValue } = params;
 
   // Buscar artigo legal
@@ -172,7 +160,7 @@ export async function generateJustification(params: {
 
   const valueInReais = estimatedValue / 100;
 
-  const prompt = `Você é um servidor público especializado em elaborar justificativas para contratações diretas.
+  const query = `Elabore uma justificativa técnica e jurídica COMPLETA para a contratação direta.
 
 **ARTIGO LEGAL APLICÁVEL:**
 ${article.article} ${article.inciso || ""}: ${article.summary}
@@ -183,8 +171,7 @@ Descrição: ${article.description}
 - Valor estimado: R$ ${valueInReais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
 - Situação: ${situation}
 
-**TAREFA:**
-Elabore uma justificativa técnica e jurídica COMPLETA para a contratação direta, seguindo este modelo:
+**ESTRUTURA OBRIGATÓRIA:**
 
 1. **INTRODUÇÃO**
    - Apresentar o objeto da contratação
@@ -214,22 +201,19 @@ Elabore uma justificativa técnica e jurídica COMPLETA para a contratação dir
 - Formate em Markdown com títulos e subtítulos
 - Mínimo 500 palavras`;
 
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Você é um servidor público especializado em elaborar justificativas para contratações diretas. Use linguagem formal e técnica.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
+  const execution = await executeCognitiveTask({
+    task: "DIRECT_PROCUREMENT_REASONING",
+    tenantId: meta.organizationId,
+    userId: String(meta.userId),
+    correlationId: meta.correlationId,
+    businessDomain: "contratacao_direta",
+    query,
+    responseType: "text",
+    maxOutputTokens: 2048,
   });
 
-  const content = (response.choices[0].message.content as string) || "";
-  
+  const content = execution.response.content || "";
+
   // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
   const validation = validateLegalCitations(content);
   
