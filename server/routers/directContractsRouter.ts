@@ -570,6 +570,8 @@ export const directContractsRouter = router({
         const content = await generateTermoDispensa({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco
@@ -612,6 +614,8 @@ export const directContractsRouter = router({
         const content = await generateTermoInexigibilidade({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco
@@ -654,6 +658,8 @@ export const directContractsRouter = router({
         const content = await generateMinutaContrato({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco
