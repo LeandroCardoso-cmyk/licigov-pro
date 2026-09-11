@@ -33,7 +33,8 @@ export const AI_SDK_ALLOWLIST: readonly string[] = [
   "server/_core/ai/gemini.ts",         // GeminiProvider (definição canônica do provider)
   "server/services/embeddings.ts",     // KG infrastructure (text-embedding-004)
   "server/services/gemini.ts",         // LEGACY
-  "server/services/ai/suggestions.ts", // LEGACY
+  // A3 — server/services/ai/suggestions.ts MIGRADO para executeCognitiveTask (Cognitive Kernel);
+  // não instancia mais o SDK Gemini e saiu desta allowlist (guard impede reintrodução do bypass).
 ];
 
 // Único componente autorizado a acessar a AIExecutionPolicy (decisões cognitivas).
@@ -178,7 +179,8 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "server/_core/ai/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "GeminiProvider — provider canônico." },
   { path: "server/services/embeddings.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "Infra de embeddings do Knowledge Graph." },
   { path: "server/services/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Geração legada — migrar para AIExecutionEngine." },
-  { path: "server/services/ai/suggestions.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Sugestões legadas — migrar para AIExecutionEngine." },
+  // A3 — server/services/ai/suggestions.ts MIGRADO: agora chama executeCognitiveTask (Cognitive Kernel),
+  // sem instanciar o SDK Gemini. Removido da allowlist de bypass (não requer mais classificação de exceção).
   // invokeLLM — migração futura (bypass do pipeline cognitivo)
   { path: "server/services/legalFrameworkAssistant.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para executeCognitiveTask." },
   // A3 — server/services/catmatMatcher.ts MIGRADO: agora chama executeCognitiveTask (CATMAT_MATCHING),

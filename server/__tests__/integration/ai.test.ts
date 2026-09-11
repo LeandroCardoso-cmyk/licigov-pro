@@ -112,6 +112,8 @@ describe("AI Assistant Router — Integração", () => {
           modality: mockProcess.modality,
           estimatedValue: mockProcess.estimatedValue,
         }),
+        // A3 — meta institucional (tenant + correlation + ator) propagada ao Kernel.
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -172,6 +174,7 @@ describe("AI Assistant Router — Integração", () => {
 
       expect(suggestions.suggestRisks).toHaveBeenCalledWith(
         expect.objectContaining({ etpContent: "Conteúdo do ETP", trContent: "Conteúdo do TR" }),
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -194,6 +197,7 @@ describe("AI Assistant Router — Integração", () => {
       expect(suggestions.suggestClauses).toHaveBeenCalledWith(
         expect.any(Object),
         "penalidades",
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -217,6 +221,7 @@ describe("AI Assistant Router — Integração", () => {
       expect(suggestions.suggestLegalBasis).toHaveBeenCalledWith(
         expect.any(Object),
         "Posso dispensar licitação para valor abaixo de R$ 50.000?",
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -242,6 +247,7 @@ describe("AI Assistant Router — Integração", () => {
         expect.any(Object),
         "tr",
         "A contratação visa adquirir computadores.",
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -281,6 +287,7 @@ describe("AI Assistant Router — Integração", () => {
           etpContent: null,
           trContent: null,
         }),
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
 
@@ -294,6 +301,7 @@ describe("AI Assistant Router — Integração", () => {
 
       expect(suggestions.suggestRisks).toHaveBeenCalledWith(
         expect.objectContaining({ dfdContent: "# DFD aqui" }),
+        expect.objectContaining({ organizationId: 1, userId: 1 }),
       );
     });
   });

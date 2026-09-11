@@ -1,52 +1,73 @@
 /**
- * RC-3.5.1 — Classificação: **LEGADO** (acesso direto ao Gemini).
+ * RC-3.5.1 → A3 — Sugestões contextuais via **Cognitive Kernel**.
  *
- * Sugestões contextuais que instanciam o Gemini diretamente, anterior ao Provider
- * Adapter/AIExecutionEngine. Usado apenas pelo router legado aiAssistantRouter — NÃO
- * pelos Business Domains oficiais. Mantido por compatibilidade (não removido). Novos
- * fluxos DEVEM usar AIExecutionEngine → Provider Adapter. Consta na allowlist de
- * exceções legadas dos testes de fronteira.
+ * MIGRADO (A3 — Cognitive Authoring Extension & Legacy Chain Retirement):
+ * este serviço NÃO instancia mais o Gemini diretamente (`new GoogleGenerativeAI`).
+ * Cada sugestão é uma Cognitive Task solicitada ao AIExecutionEngine
+ * (`executeCognitiveTask`) — provider, modelo (pinado), proveniência (A1), replay e o
+ * prompt tipado por tarefa são governados pelo Kernel. O contexto legal recuperado via
+ * RAG é passado como `groundingBlock` (o engine nunca acessa o Corpus por conta própria).
  *
- * Funções de sugestão contextual usando Gemini.
- * Cada função usa processBlock/documentsBlock do promptBuilder
- * para manter os prompts enxutos e reutilizáveis.
+ * Multi-tenant: `tenantId` (organizationId), `correlationId` e o ator (userId) são
+ * obrigatórios e fluem do router (`tenantProcedure`) para o Kernel.
+ *
+ * Natureza: apoio supervisionado — toda saída é editável, revisável e validada por humano.
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveRelevantLaw, formatRetrievedContext } from "../rag";
-import { AI_CONFIG } from "../../config/ai";
-import { shouldDisableThinking } from "../../_core/ai/gemini";
+import { executeCognitiveTask } from "../aiExecutionEngine";
+import type { CognitiveTaskId } from "../../domain/cognitiveTask";
+import type { BusinessDomainCode } from "../../domain/businessDomain";
 import {
-  ProcessContext, processBlock, documentsBlock, outputInstruction, fmtBrl, truncate,
+  ProcessContext, processBlock, documentsBlock, outputInstruction, truncate,
 } from "./promptBuilder";
 
-const genAI = new GoogleGenerativeAI(AI_CONFIG.geminiApiKey);
+/** Boundary institucional obrigatório propagado do router (`tenantProcedure`). */
+export interface SuggestionMeta {
+  /** Tenant (organizationId). */
+  organizationId: number;
+  /** Correlation do fluxo de negócio. */
+  correlationId: string;
+  /** Ator do pedido. */
+  userId: number;
+}
 
-function getModel(maxTokens = 2048) {
-  // Modelo VIVO configurado (o antigo "gemini-2.0-flash-exp" foi descontinuado → falhava).
-  // Desliga o "thinking" nos Flash 2.5 (evita consumir os tokens de saída — ver #175).
-  return genAI.getGenerativeModel({
-    model: AI_CONFIG.model,
-    generationConfig: {
-      temperature: 0.4,
-      topP: 0.85,
-      maxOutputTokens: maxTokens,
-      ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-    },
+/**
+ * Executa uma Cognitive Task de saída textual (markdown supervisionado) pelo Kernel.
+ * Fail-closed: sem conteúdo válido não há sugestão (nunca retorna string vazia).
+ */
+async function runTextSuggestion(params: {
+  task: CognitiveTaskId;
+  businessDomain: BusinessDomainCode;
+  query: string;
+  groundingBlock?: string;
+  maxOutputTokens: number;
+  meta: SuggestionMeta;
+}): Promise<string> {
+  const execution = await executeCognitiveTask({
+    task: params.task,
+    tenantId: params.meta.organizationId,
+    userId: String(params.meta.userId),
+    correlationId: params.meta.correlationId,
+    businessDomain: params.businessDomain,
+    query: params.query,
+    groundingBlock: params.groundingBlock,
+    responseType: "text",
+    maxOutputTokens: params.maxOutputTokens,
   });
+  const content = execution.response.content?.trim();
+  if (!content) {
+    throw new Error("Não foi possível gerar a sugestão no momento. Por favor, tente novamente.");
+  }
+  return content;
 }
 
 /** Sugere a modalidade de licitação mais adequada */
-export async function suggestModality(ctx: ProcessContext): Promise<string> {
+export async function suggestModality(ctx: ProcessContext, meta: SuggestionMeta): Promise<string> {
   const law = formatRetrievedContext(
     await retrieveRelevantLaw("modalidade licitação limites valor Lei 14.133/21 pregão concorrência dispensa", 4)
   );
-  const prompt = `Você é especialista em licitações públicas (Lei 14.133/21).
-
-${processBlock(ctx)}
-
-**CONTEXTO LEGAL:**
-${law}
+  const query = `${processBlock(ctx)}
 
 Analise os dados acima e recomende:
 1. **Modalidade mais adequada** (Pregão Eletrônico, Concorrência, Dispensa, etc.) com justificativa legal
@@ -55,24 +76,21 @@ Analise os dados acima e recomende:
 
 ${outputInstruction("Use Markdown com seções numeradas. Seja objetivo (máx. 400 palavras).")}`;
 
-  const result = await getModel(1024).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "PROCUREMENT_REASONING", businessDomain: "processo_licitatorio",
+    query, groundingBlock: law, maxOutputTokens: 1024, meta,
+  });
 }
 
 /** Identifica riscos no processo */
-export async function suggestRisks(ctx: ProcessContext): Promise<string> {
+export async function suggestRisks(ctx: ProcessContext, meta: SuggestionMeta): Promise<string> {
   const law = formatRetrievedContext(
     await retrieveRelevantLaw("riscos contratos públicos irregularidades licitação Lei 14.133", 3)
   );
-  const prompt = `Você é auditor especializado em controle interno de licitações públicas (Lei 14.133/21).
-
-${processBlock(ctx)}
+  const query = `${processBlock(ctx)}
 
 **DOCUMENTOS DO PROCESSO:**
 ${documentsBlock(ctx)}
-
-**CONTEXTO LEGAL:**
-${law}
 
 Identifique os principais **riscos jurídicos, operacionais e financeiros** deste processo licitatório.
 
@@ -88,47 +106,41 @@ ${outputInstruction(`Retorne uma lista de riscos no formato:
 
 Máximo 600 palavras.`)}`;
 
-  const result = await getModel(1536).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "RISK_ANALYSIS", businessDomain: "processo_licitatorio",
+    query, groundingBlock: law, maxOutputTokens: 1536, meta,
+  });
 }
 
 /** Sugere cláusulas contratuais */
-export async function suggestClauses(ctx: ProcessContext, clauseType: string): Promise<string> {
+export async function suggestClauses(ctx: ProcessContext, clauseType: string, meta: SuggestionMeta): Promise<string> {
   const law = formatRetrievedContext(
     await retrieveRelevantLaw(`cláusulas obrigatórias contrato administrativo ${clauseType} Lei 14.133`, 4)
   );
-  const prompt = `Você é especialista em contratos administrativos (Lei 14.133/21).
-
-${processBlock(ctx)}
+  const query = `${processBlock(ctx)}
 
 **CONTEXTO DO CONTRATO:**
 ${truncate(ctx.contratoContent || ctx.editalContent, 1000)}
-
-**CONTEXTO LEGAL:**
-${law}
 
 Sugira o texto completo da cláusula sobre **"${clauseType}"** para este contrato, conforme a Lei 14.133/21.
 
 ${outputInstruction("Retorne apenas o texto da cláusula em Markdown, pronto para inserção no contrato. Inclua o número da cláusula e o embasamento legal.")}`;
 
-  const result = await getModel(1536).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "CONTRACT_REASONING", businessDomain: "contratos",
+    query, groundingBlock: law, maxOutputTokens: 1536, meta,
+  });
 }
 
 /** Sugere exigências técnicas para o TR */
-export async function suggestTechnicalRequirements(ctx: ProcessContext): Promise<string> {
+export async function suggestTechnicalRequirements(ctx: ProcessContext, meta: SuggestionMeta): Promise<string> {
   const law = formatRetrievedContext(
     await retrieveRelevantLaw("especificações técnicas termo referência habilitação requisitos Lei 14.133", 3)
   );
-  const prompt = `Você é especialista em elaboração de Termos de Referência (Lei 14.133/21).
-
-${processBlock(ctx)}
+  const query = `${processBlock(ctx)}
 
 **ETP disponível:**
 ${truncate(ctx.etpContent, 1200)}
-
-**CONTEXTO LEGAL:**
-${law}
 
 Sugira as **exigências técnicas** que devem constar no Termo de Referência para este objeto, incluindo:
 1. Qualificação técnica da empresa
@@ -138,24 +150,21 @@ Sugira as **exigências técnicas** que devem constar no Termo de Referência pa
 
 ${outputInstruction("Use Markdown com listas numeradas. Máximo 500 palavras. Cite os artigos da Lei 14.133/21 quando relevante.")}`;
 
-  const result = await getModel(1280).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "PROCUREMENT_REASONING", businessDomain: "processo_licitatorio",
+    query, groundingBlock: law, maxOutputTokens: 1280, meta,
+  });
 }
 
 /** Sugere fundamentação jurídica para qualquer decisão do processo */
-export async function suggestLegalBasis(ctx: ProcessContext, question: string): Promise<string> {
+export async function suggestLegalBasis(ctx: ProcessContext, question: string, meta: SuggestionMeta): Promise<string> {
   const law = formatRetrievedContext(
     await retrieveRelevantLaw(question, 5)
   );
-  const prompt = `Você é assessor jurídico especializado em licitações e contratos públicos (Lei 14.133/21).
-
-${processBlock(ctx)}
+  const query = `${processBlock(ctx)}
 
 **PERGUNTA / SITUAÇÃO:**
 ${question}
-
-**DISPOSITIVOS LEGAIS RELEVANTES:**
-${law}
 
 Forneça a **fundamentação jurídica** completa para esta situação, citando:
 - Artigos aplicáveis da Lei 14.133/21
@@ -164,15 +173,15 @@ Forneça a **fundamentação jurídica** completa para esta situação, citando:
 
 ${outputInstruction("Use Markdown. Máximo 500 palavras. Seja preciso nas citações legais.")}`;
 
-  const result = await getModel(1280).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "LEGAL_REASONING", businessDomain: "parecer_juridico",
+    query, groundingBlock: law, maxOutputTokens: 1280, meta,
+  });
 }
 
 /** Melhora um trecho de texto de documento licitatório */
-export async function improveText(ctx: ProcessContext, docType: string, textSnippet: string): Promise<string> {
-  const prompt = `Você é especialista em redação de documentos licitatórios conforme a Lei 14.133/21.
-
-${processBlock(ctx)}
+export async function improveText(ctx: ProcessContext, docType: string, textSnippet: string, meta: SuggestionMeta): Promise<string> {
+  const query = `${processBlock(ctx)}
 
 **TIPO DE DOCUMENTO:** ${docType.toUpperCase()}
 
@@ -186,6 +195,8 @@ Reescreva este trecho para que seja:
 
 ${outputInstruction("Retorne apenas o texto reescrito em Markdown, sem explicações adicionais.")}`;
 
-  const result = await getModel(1536).generateContent(prompt);
-  return result.response.text();
+  return runTextSuggestion({
+    task: "DOCUMENT_IMPROVEMENT", businessDomain: "processo_licitatorio",
+    query, maxOutputTokens: 1536, meta,
+  });
 }
