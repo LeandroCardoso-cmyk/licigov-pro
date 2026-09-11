@@ -150,7 +150,7 @@ export const processesRouter = router({
       const workbook = XLSX.read(buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const data: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
 
       if (data.length === 0) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo vazio' });
@@ -182,16 +182,16 @@ export const processesRouter = router({
         return {
           description,
           quantity: input.columnMapping.quantity !== undefined
-            ? parseFloat(row[input.columnMapping.quantity]) || 1
+            ? parseFloat(String(row[input.columnMapping.quantity])) || 1
             : 1,
           unit: input.columnMapping.unit !== undefined
             ? row[input.columnMapping.unit]?.toString().trim() || 'UN'
             : 'UN',
           unitPrice: input.columnMapping.unitPrice !== undefined
-            ? parseFloat(row[input.columnMapping.unitPrice]) || 0
+            ? parseFloat(String(row[input.columnMapping.unitPrice])) || 0
             : 0,
           totalPrice: input.columnMapping.totalPrice !== undefined
-            ? parseFloat(row[input.columnMapping.totalPrice]) || 0
+            ? parseFloat(String(row[input.columnMapping.totalPrice])) || 0
             : 0,
         };
       }).filter(item => item.description);

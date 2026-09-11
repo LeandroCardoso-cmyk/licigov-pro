@@ -225,7 +225,7 @@ Descrição: ${article.description}
     );
   }
   
-  console.log("[Legal Framework] Justificativa validada com sucesso");
+  console.info("[Legal Framework] Justificativa validada com sucesso");
   
   return content;
 }

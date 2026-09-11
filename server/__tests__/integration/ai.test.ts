@@ -5,6 +5,7 @@
  * improveText, tratamento de timeout, tratamento de erro do Gemini,
  * log de atividade, processo inexistente.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any -- mocks de teste usam `as any` para stubs de db/middleware */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

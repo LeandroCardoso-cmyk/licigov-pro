@@ -26,6 +26,9 @@ interface GenerateLegalOpinionParams {
   legalQuestion: string;
   context?: string;
   sourceType: "process" | "direct_contract" | "contract" | "other";
+  // União ampla de 3 origens distintas (processo/contratação direta/contrato), cada uma com
+  // colunas próprias — mantida dinâmica de propósito (apenas lida para montar o contexto textual).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sourceData?: any; // Dados do processo, contratação ou contrato relacionado
   /** Boundary institucional (tenant + correlation + ator). */
   meta: LegalOpinionMeta;
@@ -170,8 +173,8 @@ ${additionalContext}
     
     // Log de sucesso
     const citedArticles = extractCitedArticles(result.opinion);
-    console.log("[Legal Opinion] Parecer gerado com sucesso");
-    console.log("[Legal Opinion] Artigos citados:", citedArticles.length);
+    console.info("[Legal Opinion] Parecer gerado com sucesso");
+    console.info("[Legal Opinion] Artigos citados:", citedArticles.length);
     
     if (validation.suggestions.length > 0) {
       console.warn("[Legal Opinion] Sugestões:", validation.suggestions);

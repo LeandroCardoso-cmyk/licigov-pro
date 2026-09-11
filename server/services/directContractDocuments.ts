@@ -62,7 +62,7 @@ async function generateDirectContractDoc(
       `Por favor, gere novamente o documento.`
     );
   }
-  console.log("[Direct Contract Doc] Documento validado com sucesso");
+  console.info("[Direct Contract Doc] Documento validado com sucesso");
   return content;
 }
 
