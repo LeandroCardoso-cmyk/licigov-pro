@@ -42,20 +42,14 @@ export const EXECUTION_POLICY_ALLOWLIST: readonly string[] = [
   "server/services/aiExecutionEngine.ts",
 ];
 
-// ─── AI Entry Allowlist (RC-4.1 — ativação cognitiva) ─────────────────────────
-// invokeLLM permanece APENAS em código legado allowlistado. Nenhum novo componente
-// pode usar invokeLLM — a cognição oficial passa por executeCognitiveTask.
-export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [
-  // A3 — server/services/legalFrameworkAssistant.ts MIGRADO para executeCognitiveTask
-  // (DIRECT_PROCUREMENT_REASONING); não usa mais invokeLLM e saiu desta allowlist.
-  // A3 — server/services/catmatMatcher.ts MIGRADO para executeCognitiveTask (CATMAT_MATCHING);
-  // não usa mais invokeLLM e saiu desta allowlist (guard impede reintrodução do bypass).
-  // A3 — server/services/directContractDocuments.ts MIGRADO para executeCognitiveTask
-  // (GENERATE_DOCUMENT); não usa mais invokeLLM e saiu desta allowlist.
-  // A3 — server/services/legalOpinionService.ts MIGRADO para executeCognitiveTask (LEGAL_ANALYSIS);
-  // não usa mais invokeLLM e saiu desta allowlist (guard impede reintrodução do bypass).
-  "server/services/examples/legalValidationExample.ts",
-];
+// ─── AI Entry Allowlist (RC-4.1 → A3 — cadeia legada RETIRADA) ────────────────
+// A3 (fechamento): a allowlist de bypass do invokeLLM está VAZIA. Todos os serviços
+// de negócio foram migrados para executeCognitiveTask (Cognitive Kernel) e o único
+// exemplo remanescente (legalValidationExample.ts) foi REMOVIDO. `invokeLLM` agora só
+// existe como definição em `server/_core/llm.ts`; nenhum componente pode chamá-lo — a
+// cognição oficial passa exclusivamente pelo Kernel. O guard (rc41) trava esta lista
+// vazia: qualquer novo caller de invokeLLM fora de llm.ts quebra o CI.
+export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [];
 
 // executeAITask é o pipeline de baixo nível (RC-3.5), APOSENTADO na ativação: não possui
 // callers oficiais. Definido apenas no Engine; exercitado só por testes.
@@ -193,7 +187,8 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   // (GENERATE_DOCUMENT), sem invokeLLM. Removido da allowlist de bypass.
   // A3 — server/services/legalOpinionService.ts MIGRADO: agora chama executeCognitiveTask (LEGAL_ANALYSIS),
   // sem invokeLLM. Removido da allowlist de bypass (não requer mais classificação de exceção).
-  { path: "server/services/examples/legalValidationExample.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "remocao_futura", note: "Exemplo — remover em limpeza." },
+  // A3 (fechamento) — server/services/examples/legalValidationExample.ts REMOVIDO (dead code, sem callers).
+  // A INVOKE_LLM_LEGACY_ALLOWLIST está VAZIA: nenhum caller de invokeLLM fora de _core/llm.ts.
   // Document renderers
   { path: "server/services/documentConverter.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Internal Renderer oficial." },
   { path: "server/services/officialExportEngine.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Renderer especializado interno (exportRouter)." },

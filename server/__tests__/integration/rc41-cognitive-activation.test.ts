@@ -55,6 +55,18 @@ describe("RC-4.1 — Cognitive Activation", () => {
       expect(offenders, `chamam invokeLLM fora do legado: ${offenders.join(", ")}`).toEqual([]);
     });
 
+    // A3 (fechamento) — a cadeia legada de invokeLLM foi RETIRADA: a allowlist está VAZIA.
+    // Qualquer novo caller de invokeLLM (fora da definição em _core/llm.ts) passa a quebrar o CI.
+    it("A3: a allowlist de bypass do invokeLLM está VAZIA (cadeia legada retirada)", () => {
+      expect(INVOKE_LLM_LEGACY_ALLOWLIST).toEqual([]);
+    });
+
+    it("invokeLLM só é CHAMADO na sua própria definição (_core/llm.ts)", () => {
+      const callers = SERVER_TS.filter(f => /invokeLLM\(/.test(read(f)));
+      expect(callers, `invokeLLM chamado fora de _core/llm.ts: ${callers.join(", ")}`)
+        .toEqual(["server/_core/llm.ts"]);
+    });
+
     it("todos os callers legados de invokeLLM carregam a classificação LEGADO", () => {
       for (const f of INVOKE_LLM_LEGACY_ALLOWLIST) {
         expect(read(f), `${f} sem classificação legado`).toMatch(/LEGAD|LEGACY|legado|EXEMPLO/);
