@@ -24,7 +24,7 @@ import { suggestLegalArticle, generateJustification, type LegalFrameworkMeta } f
 const META: LegalFrameworkMeta = { organizationId: 8080, correlationId: "corr-direct", userId: 3 };
 
 const ARTICLE = {
-  id: 42, article: "Art. 75", inciso: "I", summary: "Dispensa por valor",
+  id: 42, type: "dispensa", article: "Art. 75, I", inciso: "I", summary: "Dispensa por valor",
   description: "Dispensa de licitação por baixo valor", valueLimit: "R$ 50.000", examples: "Material de expediente",
 };
 
@@ -57,9 +57,11 @@ describe("A3 — suggestLegalArticle via Cognitive Kernel", () => {
     expect(arg.userId).toBe("3");
     expect(arg.correlationId).toBe("corr-direct");
     expect(arg.responseSchema?.name).toBe("legal_article_suggestion");
-    // Casa o artigo sugerido com o registro do banco (multi-tenant seguro).
+    // Casa o artigo sugerido com o registro do banco por locator SEMÂNTICO (multi-tenant seguro);
+    // o retorno usa a AUTORIDADE do catálogo (id/type/display canônico), não os campos crus da IA.
     expect(res.articleId).toBe(42);
-    expect(res.articleNumber).toBe("Art. 75 I");
+    expect(res.articleType).toBe("dispensa");
+    expect(res.articleNumber).toBe("Art. 75, I");
   });
 
   it("fail-closed: artigo sugerido inexistente no banco → erro", async () => {

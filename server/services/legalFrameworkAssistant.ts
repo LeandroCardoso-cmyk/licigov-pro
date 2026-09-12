@@ -14,6 +14,23 @@
 import { executeCognitiveTask } from "./aiExecutionEngine";
 import * as db from "../db";
 import { validateLegalCitations } from "./legalValidation";
+import { z } from "zod";
+import { findUniqueLegalArticle } from "../domain/legalArticleLocator";
+
+/**
+ * A3 — Validação ESTRITA (autoridade final) da resposta de DIRECT_PROCUREMENT_REASONING.
+ * O response schema do provider apenas ORIENTA a geração; o Zod é a autoridade de validação.
+ */
+const legalArticleResponseSchema = z
+  .object({
+    articleNumber: z.string().min(1),
+    articleType: z.enum(["dispensa", "inexigibilidade"]),
+    confidence: z.number().min(0).max(100),
+    reasoning: z.string().min(1),
+    warnings: z.array(z.string()),
+    requiredDocuments: z.array(z.string()),
+  })
+  .strict();
 
 /** Boundary institucional obrigatório propagado do router (`tenantProcedure`). */
 export interface LegalFrameworkMeta {
@@ -101,10 +118,8 @@ ${urgency ? `- Urgência: ${urgency}` : ""}
 ${hasExclusiveSupplier !== undefined ? `- Fornecedor exclusivo: ${hasExclusiveSupplier ? "Sim" : "Não"}` : ""}
 
 **DIRETRIZES:**
-- Seja preciso e objetivo; use "articleNumber" no formato "Art. 75, I".
-- Considere os limites de valor (Art. 75, I: até R$ 100.000 para obras, até R$ 50.000 para outros).
-- Considere a urgência (Art. 75, III: emergência; Art. 75, IV: urgência).
-- Considere exclusividade (Art. 74, I: fornecedor exclusivo).
+- Seja preciso e objetivo; use "articleNumber" no formato "Art. 75, I" (artigo e inciso).
+- Baseie-se EXCLUSIVAMENTE nos DADOS DE REFERÊNCIA acima (artigo, inciso, summary, description, limite de valor e exemplos fornecidos pelo servidor) — não use limites ou hipóteses de memória.
 - Liste todos os alertas relevantes (prazos, limites, condições) em "warnings".
 - Liste todos os documentos obrigatórios em "requiredDocuments".
 - "articleType" deve ser "dispensa" ou "inexigibilidade"; "confidence" entre 0 e 100.`;
@@ -119,25 +134,43 @@ ${hasExclusiveSupplier !== undefined ? `- Fornecedor exclusivo: ${hasExclusiveSu
     responseSchema: LEGAL_ARTICLE_SCHEMA,
   });
 
-  const result = JSON.parse(execution.response.content || "{}");
+  // Validação ESTRITA server-side (autoridade final): fail-closed em qualquer desvio de contrato.
+  let parsed: z.infer<typeof legalArticleResponseSchema>;
+  try {
+    parsed = legalArticleResponseSchema.parse(JSON.parse(execution.response.content || "{}"));
+  } catch {
+    throw new Error("Sugestão de artigo inválida (estrutura fora do contrato).");
+  }
 
-  // Encontrar o artigo correspondente no banco
-  const matchedArticle = articles.find(
-    (art) => `${art.article} ${art.inciso || ""}`.trim() === result.articleNumber
-  );
+  // Casamento SEMÂNTICO determinístico contra o catálogo — vírgula/ponto/espaço/casing NÃO fazem
+  // parte da identidade jurídica. Exatamente 1 casamento é aceito; 0 ou 2+ → fail-closed.
+  const match = findUniqueLegalArticle(articles, parsed.articleNumber);
+  if (match.status === "malformed") {
+    throw new Error(`Número de artigo inválido na sugestão: ${parsed.articleNumber}`);
+  }
+  if (match.status === "not_found") {
+    // Pode indicar defeito de DADOS DE REFERÊNCIA (artigo ausente no catálogo) — reportar, nunca fabricar.
+    throw new Error(`Artigo sugerido não encontrado no catálogo: ${parsed.articleNumber}`);
+  }
+  if (match.status === "ambiguous") {
+    throw new Error(`Artigo sugerido ambíguo no catálogo: ${parsed.articleNumber}`);
+  }
 
-  if (!matchedArticle) {
-    throw new Error(`Artigo sugerido não encontrado: ${result.articleNumber}`);
+  // Autoridade do CATÁLOGO: id/type/display canônicos vêm do registro do servidor. Se o articleType
+  // gerado pela IA divergir do type do registro → fail-closed (a IA nunca fabrica a identidade).
+  const matched = match.item;
+  if (parsed.articleType !== matched.type) {
+    throw new Error(`Tipo divergente do catálogo para ${matched.article}: IA="${parsed.articleType}" vs catálogo="${matched.type}".`);
   }
 
   return {
-    articleId: matchedArticle.id,
-    articleType: result.articleType,
-    articleNumber: result.articleNumber,
-    confidence: result.confidence,
-    reasoning: result.reasoning,
-    warnings: result.warnings,
-    requiredDocuments: result.requiredDocuments,
+    articleId: matched.id,
+    articleType: matched.type, // autoridade do catálogo
+    articleNumber: matched.article, // display canônico do catálogo
+    confidence: parsed.confidence,
+    reasoning: parsed.reasoning,
+    warnings: parsed.warnings,
+    requiredDocuments: parsed.requiredDocuments,
   };
 }
 
