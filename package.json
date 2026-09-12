@@ -23,6 +23,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:release": "tsx scripts/migrate-release.ts",
+    "db:install:reference": "tsx scripts/install-reference-data.ts",
     "db:audit": "tsx scripts/schema-audit.ts",
     "ai:models": "tsx scripts/ai-models.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
