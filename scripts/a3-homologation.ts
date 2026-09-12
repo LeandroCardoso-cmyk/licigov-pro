@@ -317,10 +317,16 @@ export async function runHomologation(runId: string): Promise<{ ok: boolean; res
         },
         { organizationId: HOMOLOG_TENANT_ID, correlationId, userId: HOMOLOG_ACTOR_USER_ID },
       );
-      // O serviço é fail-closed: só retorna se o articleNumber casar (semanticamente) com o catálogo.
-      const catalogOk = suggestion.articleId > 0 && !!suggestion.articleNumber && (suggestion.articleType === "dispensa" || suggestion.articleType === "inexigibilidade");
-      if (!catalogOk) {
-        return { ok: false, envelope: { ok: false, runId, flow: "direct", classification: "ARTICLE_NOT_IN_CATALOG", message: "artigo sugerido não resolveu no catálogo" } };
+      // A3-RD1: o serviço é fail-closed contra o REFERENCE SET GOVERNADO (readiness). Só retorna se
+      // o locator canônico resolver no set ativo aprovado — a identidade vem do registro governado
+      // (legalReferenceEntryId/canonicalLocator/referenceSetVersion), nunca do `articleId` legado.
+      const governedOk =
+        suggestion.legalReferenceEntryId > 0 &&
+        !!suggestion.canonicalLocator &&
+        suggestion.referenceSetVersion > 0 &&
+        (suggestion.articleType === "dispensa" || suggestion.articleType === "inexigibilidade");
+      if (!governedOk) {
+        return { ok: false, envelope: { ok: false, runId, flow: "direct", classification: "GOVERNED_REFERENCE_UNRESOLVED", message: "sugestão não resolveu no reference set governado" } };
       }
       return checkProvenance(runId, "direct", correlationId, "DIRECT_PROCUREMENT_REASONING", "not_grounded");
     }),

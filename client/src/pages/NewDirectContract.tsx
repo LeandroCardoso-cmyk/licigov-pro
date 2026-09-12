@@ -3,7 +3,13 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/routers";
 import { toast } from "sonner";
+
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type AiSuggestion = RouterOutputs["directContracts"]["assistant"]["suggestArticle"];
+type CnpjData = NonNullable<RouterOutputs["directContracts"]["validation"]["consultCNPJ"]["data"]>;
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { WizardStepper } from "@/components/new-direct-contract/WizardStepper";
@@ -51,10 +57,10 @@ export default function NewDirectContract() {
   const [supplierContact, setSupplierContact] = useState("");
 
   // AI / CNPJ UI state
-  const [aiSuggestion, setAiSuggestion] = useState<any>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [cnpjValidation, setCnpjValidation] = useState<{ isValid: boolean; error?: string } | null>(null);
-  const [cnpjData, setCnpjData] = useState<any>(null);
+  const [cnpjData, setCnpjData] = useState<CnpjData | null>(null);
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
 
   const { data: articles } = trpc.directContracts.legalArticles.list.useQuery(
@@ -77,28 +83,38 @@ export default function NewDirectContract() {
       });
       setAiSuggestion(result);
       setType(result.articleType);
-      setSelectedArticleId(result.articleId);
+      // A3-RD1: a sugestão governada NÃO carrega o `legalArticleId` legado. O vínculo de criação
+      // (legalArticleId) permanece na seleção legada do dropdown; nunca reaproveitamos IDs entre domínios.
       toast.success("Artigo legal sugerido pela IA!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao sugerir artigo");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sugerir artigo");
     } finally {
       setLoadingAI(false);
     }
   };
 
   const handleGenerateJustification = async () => {
-    if (!selectedArticleId || !object || !situation || !value) {
+    // A3-RD1: prefere autoridade GOVERNADA (canonicalLocator da sugestão) quando presente;
+    // caso contrário, usa o vínculo LEGADO (articleId da seleção do dropdown). Nunca ambos.
+    const governedLocator: string | undefined = aiSuggestion?.canonicalLocator;
+    if (!governedLocator && !selectedArticleId) {
       toast.error("Selecione um artigo legal primeiro"); return;
+    }
+    if (!object || !situation || !value) {
+      toast.error("Preencha objeto, situação e valor estimado"); return;
     }
     setLoadingAI(true);
     try {
-      const result = await generateJustificationMutation.mutateAsync({
-        articleId: selectedArticleId, object, situation, estimatedValue: parseFloat(value) * 100,
-      });
+      const base = { object, situation, estimatedValue: parseFloat(value) * 100 };
+      const result = await generateJustificationMutation.mutateAsync(
+        governedLocator
+          ? { ...base, canonicalLocator: governedLocator }
+          : { ...base, articleId: selectedArticleId! }
+      );
       setJustification(result as string);
       toast.success("Justificativa gerada pela IA!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao gerar justificativa");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao gerar justificativa");
     } finally {
       setLoadingAI(false);
     }
@@ -155,8 +171,8 @@ export default function NewDirectContract() {
       });
       toast.success("Contratação direta criada com sucesso!");
       setLocation(`/direct-contracts/${result.id}`);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao criar contratação direta");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao criar contratação direta");
     }
   };
 

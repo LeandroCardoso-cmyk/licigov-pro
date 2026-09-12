@@ -100,18 +100,29 @@ export const directContractsRouter = router({
         });
       }),
 
-    // Gerar justificativa inicial
+    // Gerar justificativa inicial — A3-RD1: dual-input GOVERNADO (canonicalLocator) OU LEGADO (articleId),
+    // mutuamente exclusivos (IDs nunca misturados). Governado tem precedência.
     generateJustification: tenantProcedure
       .input(
-        z.object({
-          articleId: z.number(),
-          object: z.string(),
-          situation: z.string(),
-          estimatedValue: z.number(),
-        })
+        z
+          .object({
+            object: z.string(),
+            situation: z.string(),
+            estimatedValue: z.number(),
+            canonicalLocator: z.string().optional(),
+            asOfDate: z.string().optional(),
+            articleId: z.number().optional(),
+          })
+          .refine((d) => (d.canonicalLocator != null) !== (d.articleId != null), {
+            message: "Informe canonicalLocator (governado) OU articleId (legado), nunca ambos.",
+          })
       )
       .mutation(async ({ ctx, input }) => {
-        return await generateJustification(input, {
+        const base = { object: input.object, situation: input.situation, estimatedValue: input.estimatedValue };
+        const params = input.canonicalLocator
+          ? { ...base, canonicalLocator: input.canonicalLocator, asOfDate: input.asOfDate }
+          : { ...base, articleId: input.articleId! };
+        return await generateJustification(params, {
           organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id,
         });
       }),

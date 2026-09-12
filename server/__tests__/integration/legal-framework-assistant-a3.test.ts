@@ -1,17 +1,21 @@
 /**
- * A3 — `suggestLegalArticle` (Contratação Direta) pós-fix da 2ª LIVE.
+ * A3-RD1 — `suggestLegalArticle` (Contratação Direta) sobre o REFERENCE SET GOVERNADO.
  *
  * Prova: roteia pelo Kernel (DIRECT_PROCUREMENT_REASONING), validação Zod ESTRITA da resposta,
- * casamento SEMÂNTICO contra o catálogo (formatação não é identidade), AUTORIDADE do catálogo
- * (id/type/display), fail-closed em type divergente / não-encontrado, e tenant/correlation/actor
- * preservados. Mocka executeCognitiveTask (sem rede) e db.getLegalArticles (catálogo controlado).
+ * casamento SEMÂNTICO contra o catálogo GOVERNADO (formatação não é identidade), AUTORIDADE do
+ * registro governado (legalReferenceEntryId/type/display/valor), fail-closed em type divergente /
+ * fora do set, e tenant/correlation/actor preservados. Mocka executeCognitiveTask (sem rede) e
+ * db.getGovernedCatalog (catálogo governado controlado).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const h = vi.hoisted(() => ({
   content: "",
   lastInput: null as unknown as { task: string; tenantId: number; correlationId: string; userId: string },
-  catalog: [] as Array<{ id: number; type: string; article: string; inciso: string | null }>,
+  catalog: null as unknown as {
+    referenceSetVersion: number; setId: number;
+    items: Array<{ canonicalLocator: string; canonicalDisplay: string; procurementType: "dispensa" | "inexigibilidade"; hypothesisSummary: string; valueCents: number | null; legalReferenceEntryId: number }>;
+  },
 }));
 
 vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
@@ -27,7 +31,7 @@ vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
 
 vi.mock("../../db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../db")>();
-  return { ...actual, getLegalArticles: (async () => h.catalog) as unknown as typeof actual.getLegalArticles };
+  return { ...actual, getGovernedCatalog: (async () => h.catalog) as unknown as typeof actual.getGovernedCatalog };
 });
 
 import { suggestLegalArticle } from "../../services/legalFrameworkAssistant";
@@ -39,6 +43,7 @@ const PARAMS = {
   estimatedValue: 1500000,
   urgency: "normal",
   hasExclusiveSupplier: false,
+  asOfDate: "2026-06-01",
 };
 
 function aiResponse(over: Record<string, unknown> = {}): string {
@@ -54,13 +59,17 @@ function aiResponse(over: Record<string, unknown> = {}): string {
 }
 
 beforeEach(() => {
-  h.catalog = [
-    { id: 10, type: "dispensa", article: "Art. 75, I", inciso: "I" },
-    { id: 12, type: "inexigibilidade", article: "Art. 74, II", inciso: "II" },
-  ];
+  h.catalog = {
+    referenceSetVersion: 1,
+    setId: 5,
+    items: [
+      { canonicalLocator: "lei-14.133-2021/art-75/inc-I", canonicalDisplay: "Art. 75, I", procurementType: "dispensa", hypothesisSummary: "Baixo valor.", valueCents: 13098420, legalReferenceEntryId: 10 },
+      { canonicalLocator: "lei-14.133-2021/art-74/inc-II", canonicalDisplay: "Art. 74, II", procurementType: "inexigibilidade", hypothesisSummary: "Exclusividade.", valueCents: null, legalReferenceEntryId: 12 },
+    ],
+  };
 });
 
-describe("A3 — suggestLegalArticle (Kernel + Zod + catálogo)", () => {
+describe("A3-RD1 — suggestLegalArticle (Kernel + Zod + catálogo GOVERNADO)", () => {
   it("I/J. roteia por DIRECT_PROCUREMENT_REASONING preservando tenant/correlation/actor", async () => {
     h.content = aiResponse();
     await suggestLegalArticle(PARAMS, META);
@@ -70,23 +79,26 @@ describe("A3 — suggestLegalArticle (Kernel + Zod + catálogo)", () => {
     expect(h.lastInput.userId).toBe("7");
   });
 
-  it("H. casa por semântica e retorna id/type/display do CATÁLOGO (não da IA)", async () => {
+  it("H. casa por semântica e retorna identidade/type/display/valor do REGISTRO GOVERNADO (não da IA)", async () => {
     h.content = aiResponse({ articleNumber: "art 75, i" }); // ainda equivalente a Art. 75, I
     const r = await suggestLegalArticle(PARAMS, META);
-    expect(r.articleId).toBe(10); // id vem do catálogo
-    expect(r.articleType).toBe("dispensa"); // type do catálogo
-    expect(r.articleNumber).toBe("Art. 75, I"); // display canônico do catálogo
+    expect(r.legalReferenceEntryId).toBe(10); // identidade vem do set governado
+    expect(r.canonicalLocator).toBe("lei-14.133-2021/art-75/inc-I");
+    expect(r.referenceSetVersion).toBe(1);
+    expect(r.articleType).toBe("dispensa"); // type do registro governado
+    expect(r.articleNumber).toBe("Art. 75, I"); // display canônico governado
+    expect(r.resolvedValueCents).toBe(13098420); // valor resolvido do value override governado
     expect(r.confidence).toBe(80);
   });
 
-  it("G. articleType divergente do catálogo → fail-closed", async () => {
-    h.content = aiResponse({ articleType: "inexigibilidade" }); // catálogo Art. 75, I é dispensa
+  it("G. articleType divergente do registro governado → fail-closed", async () => {
+    h.content = aiResponse({ articleType: "inexigibilidade" }); // Art. 75, I governado é dispensa
     await expect(suggestLegalArticle(PARAMS, META)).rejects.toThrow(/divergente/i);
   });
 
-  it("not_found (Art. 75, II ausente do catálogo) → fail-closed, sem fabricar", async () => {
+  it("fora do set (Art. 75, II ausente do reference set) → fail-closed, sem fabricar", async () => {
     h.content = aiResponse({ articleNumber: "Art. 75, II" });
-    await expect(suggestLegalArticle(PARAMS, META)).rejects.toThrow(/não encontrado no catálogo/i);
+    await expect(suggestLegalArticle(PARAMS, META)).rejects.toThrow(/fora do reference set/i);
   });
 
   it("F. Zod estrito rejeita respostas fora do contrato", async () => {
