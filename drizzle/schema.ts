@@ -6019,3 +6019,96 @@ export const institutionalConsultationSourcesTable = mysqlTable("institutional_c
   sourceOrder:     int("source_order").notNull().default(0),
   createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * A3-RD1 — Domínio GOVERNADO de referência jurídica (Lei 14.133/2021), aditivo e
+ * SEPARADO do legado `direct_contract_legal_articles`. Escopo GLOBAL/BR-FEDERAL
+ * (governança de plataforma; NÃO pertence a tenant). Contrato: F-LEGAL1.1/F-LEGAL1.2.
+ * Instalar ≠ ativar: o set nasce `draft` e só entra em `active` por aprovação humana.
+ */
+export const legalReferenceSets = mysqlTable("legal_reference_sets", {
+  id: int("id").autoincrement().primaryKey(),
+  law: varchar("law", { length: 50 }).notNull(),
+  jurisdiction: varchar("jurisdiction", { length: 30 }).notNull(),
+  scope: varchar("scope", { length: 20 }).notNull(),
+  version: int("version").notNull(),
+  status: mysqlEnum("status", ["draft", "active", "superseded"]).default("draft").notNull(),
+  coverageManifest: json("coverage_manifest").notNull(),
+  coverageManifestHash: varchar("coverage_manifest_hash", { length: 64 }).notNull(),
+  contentHash: varchar("content_hash", { length: 64 }).notNull(), // referenceSetContentHash
+  effectiveFrom: varchar("effective_from", { length: 10 }).notNull(), // ISO YYYY-MM-DD
+  effectiveTo: varchar("effective_to", { length: 10 }), // null = aberto/vigente
+  sourceAuthority: varchar("source_authority", { length: 120 }),
+  sourceIdentifier: varchar("source_identifier", { length: 200 }),
+  verificationMethod: varchar("verification_method", { length: 60 }),
+  approvedByUserId: int("approved_by_user_id"),
+  approvedAt: timestamp("approved_at"),
+  approvalSource: varchar("approval_source", { length: 60 }),
+  approvedReferenceHash: varchar("approved_reference_hash", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("legal_reference_sets_law_jur_ver_unique").on(table.law, table.jurisdiction, table.version),
+]);
+export type LegalReferenceSet = typeof legalReferenceSets.$inferSelect;
+export type InsertLegalReferenceSet = typeof legalReferenceSets.$inferInsert;
+
+/** Norma ESTRUTURAL (imutável) dentro de um set; vigência deriva do set (sem lifecycle próprio). */
+export const legalReferenceEntries = mysqlTable("legal_reference_entries", {
+  id: int("id").autoincrement().primaryKey(),
+  setId: int("set_id").notNull(),
+  law: varchar("law", { length: 50 }).notNull(),
+  article: varchar("article", { length: 20 }).notNull(),
+  inciso: varchar("inciso", { length: 10 }),
+  alinea: varchar("alinea", { length: 10 }),
+  canonicalLocator: varchar("canonical_locator", { length: 120 }).notNull(),
+  canonicalDisplay: varchar("canonical_display", { length: 40 }).notNull(),
+  procurementType: mysqlEnum("procurement_type", ["dispensa", "inexigibilidade"]).notNull(),
+  hypothesisSummary: varchar("hypothesis_summary", { length: 1000 }).notNull(),
+  sourceAuthority: varchar("source_authority", { length: 120 }).notNull(),
+  sourceIdentifier: varchar("source_identifier", { length: 200 }).notNull(),
+  sourceUrl: varchar("source_url", { length: 500 }).notNull(),
+  publicationDate: varchar("publication_date", { length: 10 }),
+  contentHash: varchar("content_hash", { length: 64 }).notNull(), // structuralContentHash
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("legal_reference_entries_set_locator_unique").on(table.setId, table.canonicalLocator),
+]);
+export type LegalReferenceEntry = typeof legalReferenceEntries.$inferSelect;
+export type InsertLegalReferenceEntry = typeof legalReferenceEntries.$inferInsert;
+
+/** VALOR temporal desacoplado da norma; pertence à versão imutável do set. */
+export const legalValueOverrides = mysqlTable("legal_value_overrides", {
+  id: int("id").autoincrement().primaryKey(),
+  setId: int("set_id").notNull(),
+  canonicalLocator: varchar("canonical_locator", { length: 120 }).notNull(),
+  valueCents: int("value_cents").notNull(),
+  effectiveFrom: varchar("effective_from", { length: 10 }).notNull(),
+  effectiveTo: varchar("effective_to", { length: 10 }),
+  sourceAuthority: varchar("source_authority", { length: 120 }).notNull(),
+  sourceIdentifier: varchar("source_identifier", { length: 200 }).notNull(),
+  sourceUrl: varchar("source_url", { length: 500 }).notNull(),
+  publicationDate: varchar("publication_date", { length: 10 }),
+  contentHash: varchar("content_hash", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("legal_value_overrides_set_locator_from_unique").on(table.setId, table.canonicalLocator, table.effectiveFrom),
+]);
+export type LegalValueOverride = typeof legalValueOverrides.$inferSelect;
+export type InsertLegalValueOverride = typeof legalValueOverrides.$inferInsert;
+
+/** Auditoria APPEND-ONLY do lifecycle do set (instalação/aprovação/ativação). Autoridade persistida. */
+export const legalReferenceSetEvents = mysqlTable("legal_reference_set_events", {
+  id: int("id").autoincrement().primaryKey(),
+  setId: int("set_id").notNull(),
+  action: varchar("action", { length: 30 }).notNull(), // installed | approved | activated | superseded
+  fromStatus: varchar("from_status", { length: 20 }),
+  toStatus: varchar("to_status", { length: 20 }),
+  actorUserId: int("actor_user_id"),
+  actorRole: varchar("actor_role", { length: 40 }),
+  correlationId: varchar("correlation_id", { length: 64 }),
+  approvedReferenceHash: varchar("approved_reference_hash", { length: 64 }),
+  details: json("details"),
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+});
+export type LegalReferenceSetEvent = typeof legalReferenceSetEvents.$inferSelect;
+export type InsertLegalReferenceSetEvent = typeof legalReferenceSetEvents.$inferInsert;
