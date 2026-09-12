@@ -159,7 +159,12 @@ recomputa e compara (fail-closed em divergência).
 
 ## 5. Auditoria do dataset atual (`seedDirectContractLegalArticles.ts`) — 10 entradas
 
-> Classificação com base **apenas** nos fatos normativos confirmados nesta sessão. Onde não há fonte
+> **ATUALIZAÇÃO F-LEGAL1.2:** a auditoria **definitiva** das 10 entradas — agora com **fonte oficial**
+> (Planalto, via `cross-environment-official-source-handoff`) — vive em
+> `legal-reference/LEGAL_REFERENCE_MANIFEST_V1_2026.md` §4. A tabela abaixo é o snapshot ANTERIOR
+> (pré-handoff, com vários `UNVERIFIED`) e é mantida apenas como histórico do raciocínio.
+>
+> Classificação (snapshot anterior) com base **apenas** nos fatos normativos confirmados naquela sessão. Onde não havia fonte
 > oficial verificável em sessão → `UNVERIFIED` (NUNCA completar por inferência/memória do modelo).
 
 | Locator (seed) | Tipo (seed) | Classificação | Problema / fonte necessária | Impacto |
@@ -252,4 +257,5 @@ locator ausente (not_found) vs fora de cobertura (unsupported); locator inativo;
 `F-LEGAL1.1 = 25% — CONTRACT HARDENED`. Contrato reforçado (coverageManifest, append-only por hash,
 canonical hashing, temporal overlap fail-closed, lifecycle de entry derivado do set, escopo BR-FEDERAL).
 Não implementar schema/runtime sem nova autorização (isso é A3-RD1). A **autoria do conteúdo jurídico
-verificado** (F-LEGAL1.2) depende de acesso às fontes oficiais — ver `LEGAL_REFERENCE_MANIFEST_V1_2026.md`.
+verificado** (F-LEGAL1.2) foi **desbloqueada** por evidence handoff oficial (Planalto) e está em
+`legal-reference/LEGAL_REFERENCE_MANIFEST_V1_2026.md` (`DRAFT VERIFIED CONTENT`, 7 locators + 2 value overrides).
