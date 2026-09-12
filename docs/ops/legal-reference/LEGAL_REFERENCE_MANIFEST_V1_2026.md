@@ -1,10 +1,13 @@
 # LEGAL REFERENCE MANIFEST V1 (2026) — Lei nº 14.133/2021 · `BR-FEDERAL`
 
 > **Estado:** `F-LEGAL1.2 — 50% — AUTHORITATIVE CONTENT MANIFEST READY` · conteúdo: `DRAFT VERIFIED CONTENT`.
-> **Branch:** `claude/rebuild-licigov-pro-bFyTO` · **PR** #222 · **HEAD de referência:** `6a0650d` · **Produção:** A2 (intocada).
-> **Natureza:** DOCS/CONTENT ONLY. Nenhum schema, migration, seed, runtime ou DB foi tocado. Nenhuma branch nova.
+> **Branch:** `claude/rebuild-licigov-pro-bFyTO` · **PR** #222 · **Produção:** A2 (intocada — A3-RD1 não toca produção).
+> **Natureza do conteúdo:** o dataset jurídico é DRAFT VERIFIED (não ativo). A implementação do mecanismo
+> (schema/installer/readiness) é a fase **A3-RD1** — o installer instala o set como `draft` (instalar ≠ ativar).
 > **Contrato estrutural:** ver `../F_LEGAL1_1_AUTHORITATIVE_LEGAL_REFERENCE_CONTRACT.md` (§4.2 hash, §1.1 coverage, §3 temporal).
-> **Reprodutibilidade dos hashes:** `node docs/ops/legal-reference/legal_reference_manifest_v1_2026.hash.mjs`.
+> **Fonte única machine-readable (A3-RD1):** `server/domain/legalReference/manifestV1.ts` — este `.md` é derivado/documental; o runtime, os testes e o CLI de hash consomem o módulo TS, sem duplicar o dataset.
+> **Reprodutibilidade dos hashes:** `pnpm tsx server/scripts/legalReferenceManifestHashes.ts` (execução repetida = idêntica).
+> **Correção A3-RD1 §1:** `Art. 74, IV` passa a `procurementType = inexigibilidade` (o enum do domínio é `dispensa|inexigibilidade`; a natureza de **credenciamento** fica na hipótese, sem ampliar o enum) — recalculados o `structuralContentHash` da entry e o `referenceSetContentHash`; `coverageManifestHash` inalterado (não depende de procurementType).
 
 ## 0. Verification method — `cross-environment-official-source-handoff`
 
@@ -53,7 +56,7 @@ Todos: `law = Lei nº 14.133/2021`, `sourceAuthority = Presidência da Repúblic
 | Art. 74, I | lei-14.133-2021/art-74/inc-I | inexigibilidade | Inviabilidade de competição: aquisição de materiais, equipamentos ou gêneros, ou contratação de serviços, que só possam ser fornecidos/prestados por produtor, empresa ou representante comercial **exclusivo**. | `ff0389a3736d1c88a6a022e328d3292443dec11770469ac9ba1150ea2d20c1d6` |
 | Art. 74, II | lei-14.133-2021/art-74/inc-II | inexigibilidade | Contratação de profissional do setor **artístico**, diretamente ou por empresário exclusivo, consagrado pela crítica especializada ou pela opinião pública. | `3a30774265c62a3d952ae359bc180c604dac5cb27c7d64f1895243c605526004` |
 | Art. 74, III | lei-14.133-2021/art-74/inc-III | inexigibilidade | **Serviços técnicos especializados** de natureza predominantemente intelectual, com profissional/empresa de **notória especialização** (inciso com alíneas); vedada para publicidade e divulgação. | `97312a3f27095eacc8dbc62a6ab2402070bc1fb8b7dec8cc57a5d9d3bdab5e70` |
-| Art. 74, IV | lei-14.133-2021/art-74/inc-IV | credenciamento | Objetos que devam ou possam ser contratados por meio de **credenciamento**. | `4217d67c376aed4560119f40ba70468310bee78a620e51bb0d4a1f00c2f5f436` |
+| Art. 74, IV | lei-14.133-2021/art-74/inc-IV | inexigibilidade | Objetos que devam ou possam ser contratados por meio de **credenciamento** (natureza registrada na hipótese; `procurementType` = inexigibilidade — enum não ampliado nesta fase). | `e725972fe075069005d65bcd723d9e624ed966f5f3b60a3879c1efef2c5682de` |
 | Art. 74, V | lei-14.133-2021/art-74/inc-V | inexigibilidade | Aquisição ou **locação de imóvel** cujas características de instalações e de localização tornem necessária sua escolha. | `a6282a6cbd5b335925cd2bb0b813f046dee9b28cb86c8cdfa0fb9be7d4f0fd02` |
 | Art. 75, I | lei-14.133-2021/art-75/inc-I | dispensa | Dispensa **em razão do valor**: obras e serviços de engenharia **ou** serviços de manutenção de veículos automotores, até o limite vigente (valor em §3). | `40b4ace8581fb442924a8d3a28fa58dbe84492e41c6acfb89a4f31d080ad89a5` |
 | Art. 75, II | lei-14.133-2021/art-75/inc-II | dispensa | Dispensa **em razão do valor**: outros serviços e compras, até o limite vigente (valor em §3). | `eca203b523578e10d07233c8700b2d5ac930786db81be165d3e062b4a75bb6fb` |
@@ -114,7 +117,7 @@ entries, overrides, source lineage e hashes são **imutáveis** (F-LEGAL1.1 §3.
   **excluídos** do hash).
 - Objetos canônicos e cálculo: `docs/ops/legal-reference/legal_reference_manifest_v1_2026.hash.mjs` (reprodutível;
   execução repetida → saída idêntica).
-- **`referenceSetContentHash` = `1e53b5cf84fe7dffaed2980c503b15770a9362f7ca511f667cd7abb156eed6e3`**
+- **`referenceSetContentHash` = `332a9cb3ff8477eddc5cf94790a13d7ea9bd7a8c5855078f7f567f5400196832`**
   (sela `{law, jurisdiction, scope, version, coverageManifest, entries[7], overrides[2]}`).
 - `sourceHash` (bytes das páginas oficiais remotas) = `unavailable_in_current_environment` (não fabricado).
 
