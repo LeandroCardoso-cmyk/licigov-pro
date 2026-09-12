@@ -15,7 +15,7 @@ import { executeCognitiveTask } from "./aiExecutionEngine";
 import * as db from "../db";
 import { validateLegalCitations } from "./legalValidation";
 import { z } from "zod";
-import { findUniqueLegalArticle } from "../domain/legalArticleLocator";
+import { findUniqueLegalArticle, formatCatalogArticleDisplay } from "../domain/legalArticleLocator";
 
 /**
  * A3 — Validação ESTRITA (autoridade final) da resposta de DIRECT_PROCUREMENT_REASONING.
@@ -92,11 +92,11 @@ export async function suggestLegalArticle(
   // Buscar todos os artigos legais do banco
   const articles = await db.getLegalArticles();
 
-  // Preparar contexto para a IA
+  // Preparar contexto para a IA — usa o display CANÔNICO (nunca duplica inciso; ex.: "Art. 75, I").
   const articlesContext = articles
     .map(
       (art) =>
-        `${art.article} ${art.inciso ? art.inciso : ""}: ${art.summary}\n` +
+        `${formatCatalogArticleDisplay(art) ?? art.article}: ${art.summary}\n` +
         `Descrição: ${art.description}\n` +
         `Limite de valor: ${art.valueLimit || "Não especificado"}\n` +
         `Exemplos: ${art.examples || "Não especificado"}\n`

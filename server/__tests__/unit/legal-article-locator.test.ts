@@ -8,6 +8,8 @@ import {
   normalizeLegalArticleLocator,
   legalArticleLocatorEquals,
   catalogArticleLocator,
+  formatCatalogArticleDisplay,
+  formatLegalArticleLocator,
   findUniqueLegalArticle,
 } from "../../domain/legalArticleLocator";
 
@@ -70,5 +72,24 @@ describe("findUniqueLegalArticle — fail-closed determinístico", () => {
   it("E. articleNumber malformado → malformed (fail-closed)", () => {
     expect(findUniqueLegalArticle(CATALOG, "sem artigo").status).toBe("malformed");
     expect(findUniqueLegalArticle(CATALOG, "").status).toBe("malformed");
+  });
+});
+
+describe("display canônico — NUNCA duplica inciso (contexto enviado ao Kernel)", () => {
+  it('"Art. 75, I" + inciso "I" → "Art. 75, I" (sem duplicação)', () => {
+    expect(formatCatalogArticleDisplay({ article: "Art. 75, I", inciso: "I" })).toBe("Art. 75, I");
+  });
+  it('"Art. 75" + inciso "I" → "Art. 75, I" (compõe do campo separado)', () => {
+    expect(formatCatalogArticleDisplay({ article: "Art. 75", inciso: "I" })).toBe("Art. 75, I");
+  });
+  it("artigo sem inciso → display sem inciso", () => {
+    expect(formatCatalogArticleDisplay({ article: "Art. 75", inciso: null })).toBe("Art. 75");
+  });
+  it("representações equivalentes → mesmo display canônico", () => {
+    const canonical = "Art. 74, II";
+    expect(formatCatalogArticleDisplay({ article: "Art. 74, II", inciso: "II" })).toBe(canonical);
+    expect(formatCatalogArticleDisplay({ article: "art 74 ii", inciso: "II" })).toBe(canonical);
+    expect(formatCatalogArticleDisplay({ article: "Art. 74", inciso: "ii" })).toBe(canonical);
+    expect(formatLegalArticleLocator(normalizeLegalArticleLocator("Art. 74, II"))).toBe(canonical);
   });
 });

@@ -225,6 +225,15 @@ async function runFlow(
 export async function runHomologation(runId: string): Promise<{ ok: boolean; results: FlowResult[] }> {
   const results: FlowResult[] = [];
 
+  // Anotação explícita: o LIVE positivo de DIRECT NÃO significa catálogo jurídico completo.
+  emit({
+    ok: true,
+    runId,
+    flow: "note",
+    classification: "REFERENCE_DATA_DEFECT",
+    message: "DIRECT PROCUREMENT REFERENCE DATA DEFECT — Art. 75, II ausente do catálogo — tracked by F-LEGAL1",
+  });
+
   // FLUXO 1 — CATMAT_MATCHING (assistivo, não-grounded)
   results.push(
     await runFlow(runId, "catmat", async () => {
@@ -289,20 +298,26 @@ export async function runHomologation(runId: string): Promise<{ ok: boolean; res
   );
 
   // FLUXO 4 — DIRECT_PROCUREMENT_REASONING (suggestLegalArticle)
+  // Cenário coberto por um registro REAL do catálogo (seedDirectContractLegalArticles):
+  // FORNECEDOR EXCLUSIVO → Art. 74, I (inexigibilidade). NÃO usar o cenário "material de
+  // expediente de baixo valor" da 2ª LIVE: ele levava a Art. 75, II, que NÃO existe no catálogo
+  // (DIRECT PROCUREMENT REFERENCE DATA DEFECT — Art. 75, II ausente — tracked by F-LEGAL1).
+  // O objetivo é provar o fluxo técnico migrado ponta a ponta com uma referência disponível,
+  // sem inserir dado ad hoc nem induzir escolha juridicamente incorreta.
   results.push(
     await runFlow(runId, "direct", async () => {
       const correlationId = `a3-homolog-direct-${runId}`;
       const suggestion = await suggestLegalArticle(
         {
-          situation: "Aquisição pontual de material de expediente de baixo valor, sem fornecedor exclusivo.",
-          object: "Material de expediente",
-          estimatedValue: 1500000, // R$ 15.000,00 em centavos
+          situation: "Aquisição de peças originais de veículo que só podem ser fornecidas por representante comercial exclusivo, com atestado de exclusividade do fabricante.",
+          object: "Peças originais de veículo (fornecedor exclusivo)",
+          estimatedValue: 4000000, // R$ 40.000,00 em centavos
           urgency: "normal",
-          hasExclusiveSupplier: false,
+          hasExclusiveSupplier: true,
         },
         { organizationId: HOMOLOG_TENANT_ID, correlationId, userId: HOMOLOG_ACTOR_USER_ID },
       );
-      // O serviço já é fail-closed: só retorna se o articleNumber existir no catálogo (articleId resolvido).
+      // O serviço é fail-closed: só retorna se o articleNumber casar (semanticamente) com o catálogo.
       const catalogOk = suggestion.articleId > 0 && !!suggestion.articleNumber && (suggestion.articleType === "dispensa" || suggestion.articleType === "inexigibilidade");
       if (!catalogOk) {
         return { ok: false, envelope: { ok: false, runId, flow: "direct", classification: "ARTICLE_NOT_IN_CATALOG", message: "artigo sugerido não resolveu no catálogo" } };

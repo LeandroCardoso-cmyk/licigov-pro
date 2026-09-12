@@ -48,6 +48,12 @@ export function legalArticleLocatorEquals(a: LegalArticleLocator | null, b: Lega
   return a.article === b.article && (a.inciso ?? null) === (b.inciso ?? null);
 }
 
+/** Display CANÔNICO de um locator: "Art. 75" ou "Art. 75, II" (nunca duplica inciso). */
+export function formatLegalArticleLocator(loc: LegalArticleLocator | null): string | null {
+  if (!loc) return null;
+  return loc.inciso ? `Art. ${loc.article}, ${loc.inciso}` : `Art. ${loc.article}`;
+}
+
 /** Registro mínimo de catálogo para casamento por locator. */
 export interface CatalogArticleLike {
   readonly article: string;
@@ -63,6 +69,15 @@ export function catalogArticleLocator(row: CatalogArticleLike): LegalArticleLoca
     if (ROMAN.test(t)) return { article: base.article, inciso: t.toUpperCase() };
   }
   return base;
+}
+
+/**
+ * Display CANÔNICO de um registro do catálogo. Evita a duplicação de inciso quando o campo
+ * `article` já o contém (ex.: article="Art. 75, I" + inciso="I" → "Art. 75, I", nunca "Art. 75, I I").
+ * Usado para montar o contexto enviado ao Kernel — o modelo nunca recebe representação duplicada.
+ */
+export function formatCatalogArticleDisplay(row: CatalogArticleLike): string | null {
+  return formatLegalArticleLocator(catalogArticleLocator(row));
 }
 
 export type LegalArticleMatch<T> =
