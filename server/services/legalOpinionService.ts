@@ -35,7 +35,7 @@ interface GenerateLegalOpinionParams {
 }
 
 /** JSON Schema do parecer que o provider DEVE preencher (o servidor revalida). */
-const LEGAL_OPINION_SCHEMA = {
+export const LEGAL_OPINION_SCHEMA = {
   name: "legal_opinion",
   schema: {
     type: "object",

@@ -50,7 +50,7 @@ export interface CatmatMatchRequest {
 }
 
 /** JSON Schema que o provider DEVE preencher (o servidor revalida com Zod). */
-const CATMAT_RESPONSE_SCHEMA = {
+export const CATMAT_RESPONSE_SCHEMA = {
   name: "catmat_matches",
   schema: {
     type: "object",

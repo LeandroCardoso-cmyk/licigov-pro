@@ -36,7 +36,7 @@ interface SuggestLegalArticleParams {
 }
 
 /** JSON Schema da sugestão de artigo que o provider DEVE preencher (o servidor revalida). */
-const LEGAL_ARTICLE_SCHEMA = {
+export const LEGAL_ARTICLE_SCHEMA = {
   name: "legal_article_suggestion",
   schema: {
     type: "object",

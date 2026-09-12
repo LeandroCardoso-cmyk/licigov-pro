@@ -17,6 +17,7 @@ import type {
   AIToolCall,
 } from "./types";
 import { AI_CONFIG } from "../../config/ai";
+import { normalizeGeminiResponseSchema } from "./geminiSchema";
 
 // AI-014 — timeout suportado pelo SDK (RequestOptions.timeout): aborta a chamada HTTP real ao
 // Gemini quando excede o limite. Complementa o withTimeout externo (que rejeita a promise). O SDK
@@ -118,7 +119,9 @@ export class GeminiProvider implements AIProvider {
     if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
     if (responseSchema) {
       generationConfig.responseMimeType = "application/json";
-      generationConfig.responseSchema = responseSchema.schema;
+      // Boundary do provider: o Gemini rejeita `additionalProperties` no response_schema (400).
+      // Normaliza para o subset aceito sem alterar o contrato do domínio (Zod segue estrito).
+      generationConfig.responseSchema = normalizeGeminiResponseSchema(responseSchema.schema);
     }
     // Gemini 2.5 Flash ativa "thinking" por padrão, que CONSOME tokens de saída (truncando a resposta
     // visível) e é cobrado. Este app é grounded/objetivo (o raciocínio vem do pipeline, não do modelo),
