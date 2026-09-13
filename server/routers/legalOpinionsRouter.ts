@@ -189,16 +189,18 @@ export const legalOpinionsRouter = router({
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;
-      if ((opinion as any).signatureId) {
+      const pdfSignatureId = (opinion as { signatureId?: number }).signatureId;
+      if (pdfSignatureId) {
         const { getDigitalSignatureById } = await import("../db");
         const { formatSignatureBlock } = await import("../services/digitalSignatureService");
-        const signature = await getDigitalSignatureById((opinion as any).signatureId);
+        const signature = await getDigitalSignatureById(pdfSignatureId);
         if (signature) {
           signatureBlock = formatSignatureBlock(signature);
         }
       }
 
-      const pdfBuffer = await exportLegalOpinionToPDF(opinion, settings as any || {}, signatureBlock);
+      const pdfSettings = (settings ?? {}) as Parameters<typeof exportLegalOpinionToPDF>[1];
+      const pdfBuffer = await exportLegalOpinionToPDF(opinion, pdfSettings, signatureBlock);
 
       return {
         buffer: pdfBuffer.toString("base64"),
@@ -218,16 +220,18 @@ export const legalOpinionsRouter = router({
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;
-      if ((opinion as any).signatureId) {
+      const docxSignatureId = (opinion as { signatureId?: number }).signatureId;
+      if (docxSignatureId) {
         const { getDigitalSignatureById } = await import("../db");
         const { formatSignatureBlock } = await import("../services/digitalSignatureService");
-        const signature = await getDigitalSignatureById((opinion as any).signatureId);
+        const signature = await getDigitalSignatureById(docxSignatureId);
         if (signature) {
           signatureBlock = formatSignatureBlock(signature);
         }
       }
 
-      const docxBuffer = await exportLegalOpinionToDOCX(opinion, settings as any || {}, signatureBlock);
+      const docxSettings = (settings ?? {}) as Parameters<typeof exportLegalOpinionToDOCX>[1];
+      const docxBuffer = await exportLegalOpinionToDOCX(opinion, docxSettings, signatureBlock);
 
       return {
         buffer: docxBuffer.toString("base64"),
@@ -274,6 +278,8 @@ export const legalOpinionsRouter = router({
         context: opinion.context || undefined,
         sourceType: opinion.sourceType,
         sourceData,
+        // A3 — boundary institucional (tenant + correlation + ator) para o Cognitive Kernel.
+        meta: { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id },
       });
 
       // Atualizar parecer com o resultado
@@ -402,12 +408,13 @@ export const legalOpinionsRouter = router({
 
       // Buscar parecer dentro da organização
       const opinion = await getLegalOpinionByIdForOrganization(input.id, ctx.organizationId);
-      if (!opinion || !(opinion as any).signatureId) {
+      const verifySignatureId = opinion && (opinion as { signatureId?: number }).signatureId;
+      if (!opinion || !verifySignatureId) {
         return { signed: false, valid: false };
       }
 
       // Buscar assinatura
-      const digitalSignature = await getDigitalSignatureById((opinion as any).signatureId);
+      const digitalSignature = await getDigitalSignatureById(verifySignatureId);
       if (!digitalSignature) {
         return { signed: false, valid: false };
       }

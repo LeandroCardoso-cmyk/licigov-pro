@@ -258,6 +258,18 @@ jobs:
       - name: Smoke — snapshot de assinatura do Parecer (metadata emitido)
         run: pnpm exec vitest run server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts
 
+      # A3-RD1 — domínio GOVERNADO de referência jurídica (Lei 14.133/2021) contra MySQL real:
+      # installer replay-safe (INSERT/no-op/fail-closed por hash), readiness fail-closed, resolução
+      # temporal exatamente-um e aprovação/ativação auditada (instalar ≠ ativar).
+      - name: Smoke — reference set governado (A3-RD1)
+        run: pnpm exec vitest run server/__tests__/integration/legal-reference-governance-mysql-smoke.test.ts
+
+      # A3-RD1 — BRIDGE governada em direct_contracts (migration 0300): registro GOVERNADO
+      # (legalReferenceEntryId, legalArticleId NULL) × registro LEGADO (legalArticleId, governed NULL);
+      # domínios de identidade separados persistem corretamente contra MySQL real.
+      - name: Smoke — bridge governada em direct_contracts (A3-RD1)
+        run: pnpm exec vitest run server/__tests__/integration/direct-contract-governed-bridge-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { suggestLegalArticle, generateJustification, validateValue } from "../services/legalFrameworkAssistant";
+import { suggestLegalArticle, generateJustification, validateValue, validateGovernedValue } from "../services/legalFrameworkAssistant";
 import {
   generateTermoDispensa,
   generateTermoInexigibilidade,
@@ -43,6 +43,7 @@ import {
   getTopSuppliersForOrganization,
   getTopLegalArticlesForOrganization,
   getRecentDirectContractsForOrganization,
+  resolveGovernedReference,
 } from "../db";
 
 /**
@@ -52,10 +53,13 @@ import {
  */
 function fireDirectContractShadow(
   ctx: { organizationId: number; user: { id: number }; correlationId: string },
-  directContract: { id: number; processId: number | null; object: string; justification: string; type: "dispensa" | "inexigibilidade"; legalArticleId: number; value: number },
+  directContract: { id: number; processId: number | null; object: string; justification: string; type: "dispensa" | "inexigibilidade"; legalArticleId: number | null; value: number },
   docType: DirectContractDocType,
   legacyContent: string | null,
 ): void {
+  // A3-RD1: o shadow canônico é do fluxo LEGADO (compara canônico × legado). Registro GOVERNADO
+  // (legalArticleId null) não tem contraparte legada — pula o shadow (nunca fabrica ID legado).
+  if (directContract.legalArticleId == null) return;
   void runDirectContractShadow({
     organizationId: ctx.organizationId,
     actorUserId: ctx.user.id,
@@ -94,22 +98,37 @@ export const directContractsRouter = router({
           hasExclusiveSupplier: z.boolean().optional(),
         })
       )
-      .mutation(async ({ input }) => {
-        return await suggestLegalArticle(input);
+      .mutation(async ({ ctx, input }) => {
+        return await suggestLegalArticle(input, {
+          organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id,
+        });
       }),
 
-    // Gerar justificativa inicial
+    // Gerar justificativa inicial — A3-RD1: dual-input GOVERNADO (canonicalLocator) OU LEGADO (articleId),
+    // mutuamente exclusivos (IDs nunca misturados). Governado tem precedência.
     generateJustification: tenantProcedure
       .input(
-        z.object({
-          articleId: z.number(),
-          object: z.string(),
-          situation: z.string(),
-          estimatedValue: z.number(),
-        })
+        z
+          .object({
+            object: z.string(),
+            situation: z.string(),
+            estimatedValue: z.number(),
+            canonicalLocator: z.string().optional(),
+            asOfDate: z.string().optional(),
+            articleId: z.number().optional(),
+          })
+          .refine((d) => (d.canonicalLocator != null) !== (d.articleId != null), {
+            message: "Informe canonicalLocator (governado) OU articleId (legado), nunca ambos.",
+          })
       )
-      .mutation(async ({ input }) => {
-        return await generateJustification(input);
+      .mutation(async ({ ctx, input }) => {
+        const base = { object: input.object, situation: input.situation, estimatedValue: input.estimatedValue };
+        const params = input.canonicalLocator
+          ? { ...base, canonicalLocator: input.canonicalLocator, asOfDate: input.asOfDate }
+          : { ...base, articleId: input.articleId! };
+        return await generateJustification(params, {
+          organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id,
+        });
       }),
 
     // Validar valor
@@ -162,12 +181,14 @@ export const directContractsRouter = router({
   // CONTRATAÇÕES DIRETAS
   // ========================================
   
+  // A3-RD1: enquadramento em DOIS DOMÍNIOS DISJUNTOS (exatamente-um; IDs nunca misturados):
+  //   GOVERNED -> canonicalLocator (+ asOfDate/referenceSetVersion) resolvido no reference set ativo;
+  //   LEGACY   -> legalArticleId (catálogo legado). Refine estrito: ambos/nenhum → FAIL-CLOSED.
   create: tenantProcedure
     .input(z.object({
       number: z.string(),
       year: z.number(),
       type: z.enum(["dispensa", "inexigibilidade"]),
-      legalArticleId: z.number(),
       object: z.string().min(10, "Objeto deve ter no mínimo 10 caracteres"),
       justification: z.string().min(20, "Justificativa deve ter no mínimo 20 caracteres"),
       value: z.number().positive("Valor deve ser positivo"),
@@ -179,61 +200,111 @@ export const directContractsRouter = router({
       mode: z.enum(["presencial", "eletronico"]).default("presencial"),
       platformId: z.number().optional(),
       metadata: z.any().optional(),
-    }))
+      // Enquadramento — EXATAMENTE UM domínio (nunca comparar IDs de tabelas distintas):
+      legalArticleId: z.number().optional(),        // LEGADO
+      canonicalLocator: z.string().optional(),      // GOVERNADO
+      referenceSetVersion: z.number().optional(),   // GOVERNADO — asserção da versão esperada (opcional)
+      asOfDate: z.string().optional(),              // GOVERNADO — resolução temporal explícita (opcional)
+    }).refine(
+      (d) => (d.legalArticleId != null) !== (d.canonicalLocator != null),
+      { message: "Enquadramento inválido: informe legalArticleId (legado) OU canonicalLocator (governado) — nunca ambos, nunca nenhum." },
+    ))
     .mutation(async ({ input, ctx }) => {
-      // VALIDAÇÃO DE CONFORMIDADE LEGAL (Auditoria Técnica - Item 4.2)
-      if (input.type === 'dispensa') {
-        const { validateDispensaValue } = await import("../services/contractValidation");
-        
-        // Buscar artigo legal para determinar fundamentação
-        const article = await getLegalArticleById(input.legalArticleId);
+      const referenceMode: "governed" | "legacy" = input.canonicalLocator ? "governed" : "legacy";
+
+      const commonInsert = {
+        number: input.number, year: input.year, type: input.type,
+        object: input.object, justification: input.justification, value: input.value,
+        executionDeadline: input.executionDeadline,
+        supplierName: input.supplierName, supplierCNPJ: input.supplierCNPJ,
+        supplierAddress: input.supplierAddress, supplierContact: input.supplierContact,
+        mode: input.mode, platformId: input.platformId, metadata: input.metadata,
+        createdBy: ctx.user.id, organizationId: ctx.organizationId, status: "draft" as const,
+      };
+
+      let insertData: Parameters<typeof createDirectContract>[0];
+      let auditDetails: Record<string, unknown>;
+
+      if (referenceMode === "governed") {
+        const asOfDate = input.asOfDate ?? new Date().toISOString().slice(0, 10);
+        // Resolução GOVERNADA fail-closed: set ACTIVE aprovado + cobertura + temporal + value override.
+        // Enquanto o set estiver DRAFT (fase atual), isto fail-closes corretamente (nenhum set ativo).
+        let resolved: Awaited<ReturnType<typeof resolveGovernedReference>>;
+        try {
+          resolved = await resolveGovernedReference(input.canonicalLocator!, asOfDate);
+        } catch (err) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Referência governada indisponível" });
+        }
+        // Versão esperada do cliente é ASSERÇÃO, nunca autoridade (a autoridade é o set ativo).
+        if (input.referenceSetVersion != null && input.referenceSetVersion !== resolved.referenceSetVersion) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Versão do reference set divergente: esperada ${input.referenceSetVersion}, ativa ${resolved.referenceSetVersion}.` });
+        }
+        // Tipo é autoridade do registro governado (nunca do cliente).
+        if (resolved.entry.procurementType !== input.type) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Tipo divergente do reference set para ${resolved.entry.canonicalDisplay}: informado="${input.type}" vs governado="${resolved.entry.procurementType}".` });
+        }
+        // Valor: SOMENTE via value override governado (PROIBIDO validateDispensaValue/DISPENSA_LIMITS aqui).
+        const valueCheck = await validateGovernedValue({ canonicalLocator: input.canonicalLocator!, estimatedValue: input.value, asOfDate });
+        if (!valueCheck.isValid) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: valueCheck.message });
+        }
+        insertData = {
+          ...commonInsert,
+          legalArticleId: null,
+          legalReferenceEntryId: resolved.entry.id,
+          legalReferenceSetVersion: resolved.referenceSetVersion,
+          legalReferenceLocator: resolved.entry.canonicalLocator,
+        };
+        auditDetails = {
+          referenceMode: "governed",
+          legalReferenceEntryId: resolved.entry.id,
+          canonicalLocator: resolved.entry.canonicalLocator,
+          referenceSetVersion: resolved.referenceSetVersion,
+          asOfDate,
+          resolvedValueOverrideCents: valueCheck.limitCents,
+          type: input.type, number: input.number, year: input.year,
+        };
+      } else {
+        // LEGADO — preserva a validação de dispensa hardcoded existente (contractValidation).
+        const article = await getLegalArticleById(input.legalArticleId!);
         if (!article) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Artigo legal não encontrado',
-          });
+          throw new TRPCError({ code: "NOT_FOUND", message: "Artigo legal não encontrado" });
         }
-        
-        // Validar limite de valor conforme fundamentação legal
-        const legalBasis = article.article.includes('75, I') ? 'art75_i_a' : 'art75_ii_outros';
-        const valueValidation = validateDispensaValue(input.value, legalBasis as "art75_i_a" | "art75_ii_outros");
-        
-        if (!valueValidation.isValid) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: valueValidation.error!,
-          });
+        if (input.type === "dispensa") {
+          const { validateDispensaValue } = await import("../services/contractValidation");
+          const legalBasis = article.article.includes("75, I") ? "art75_i_a" : "art75_ii_outros";
+          const valueValidation = validateDispensaValue(input.value, legalBasis as "art75_i_a" | "art75_ii_outros");
+          if (!valueValidation.isValid) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: valueValidation.error! });
+          }
         }
-        
+        insertData = {
+          ...commonInsert,
+          legalArticleId: input.legalArticleId!,
+          legalReferenceEntryId: null,
+          legalReferenceSetVersion: null,
+          legalReferenceLocator: null,
+        };
+        auditDetails = {
+          referenceMode: "legacy",
+          legalArticleId: input.legalArticleId,
+          type: input.type, number: input.number, year: input.year,
+        };
       }
-      
-      const directContract = await createDirectContract({
-        ...input,
-        createdBy: ctx.user.id,
-        organizationId: ctx.organizationId,
-        status: "draft",
-      });
-      
+
+      const directContract = await createDirectContract(insertData);
       if (!directContract) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Erro ao criar contratação direta",
-        });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao criar contratação direta" });
       }
-      
-      // Registrar auditoria
+
       await createDirectContractAuditLog({
         directContractId: directContract.id,
         action: "created",
         userId: ctx.user.id,
         userName: ctx.user.name || undefined,
-        details: {
-          type: input.type,
-          number: input.number,
-          year: input.year,
-        },
+        details: auditDetails,
       });
-      
+
       return directContract;
     }),
   
@@ -566,6 +637,8 @@ export const directContractsRouter = router({
         const content = await generateTermoDispensa({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco
@@ -608,6 +681,8 @@ export const directContractsRouter = router({
         const content = await generateTermoInexigibilidade({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco
@@ -650,6 +725,8 @@ export const directContractsRouter = router({
         const content = await generateMinutaContrato({
           directContractId: input.directContractId,
           userId: ctx.user.id,
+          organizationId: ctx.organizationId,
+          correlationId: ctx.correlationId,
         });
         
         // Salvar documento no banco

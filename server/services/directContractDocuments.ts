@@ -1,12 +1,20 @@
 /**
- * RC-4.1 — Classificação: **LEGADO (AI)**.
+ * RC-4.1 → A3 — Documentos de Contratação Direta via **Cognitive Kernel**.
  *
- * Usa invokeLLM diretamente (anterior à ativação cognitiva). Mantido por
- * compatibilidade e registrado em INVOKE_LLM_LEGACY_ALLOWLIST
- * (server/kernel/architecture/legacyBoundaries.ts). NÃO usar em código novo: a
- * cognição oficial passa por executeCognitiveTask (AIExecutionEngine).
+ * MIGRADO (A3 — Cognitive Authoring Extension & Legacy Chain Retirement): as gerações de
+ * IA (Termo de Dispensa, Termo de Inexigibilidade, Minuta de Contrato) NÃO usam mais
+ * `invokeLLM`. Cada uma solicita a Cognitive Task `GENERATE_DOCUMENT` (domínio
+ * contratacao_direta) ao AIExecutionEngine (`executeCognitiveTask`) — provider, modelo
+ * (pinado), proveniência (A1), replay e o prompt tipado são governados pelo Kernel. A
+ * validação de citações legais permanece obrigatória e fail-closed.
+ *
+ * DETERMINÍSTICO (não-IA): `generatePlanilhaCotacao` e `generateMapaComparativo`
+ * permanecem puramente determinísticos (montam Markdown sem provider) — inalterados.
+ *
+ * Multi-tenant: `tenantId` (organizationId), `correlationId` e o ator (userId) são
+ * obrigatórios e fluem do router (`tenantProcedure`) para o Kernel.
  */
-import { invokeLLM } from "../_core/llm";
+import { executeCognitiveTask } from "./aiExecutionEngine";
 import { getDirectContractById, getLegalArticleById, getDocumentSettingsByUser } from "../db";
 import { validateLegalCitations } from "./legalValidation";
 
@@ -17,13 +25,52 @@ import { validateLegalCitations } from "./legalValidation";
 interface GenerateTermoParams {
   directContractId: number;
   userId: number;
+  /** Boundary institucional (tenant). */
+  organizationId: number;
+  /** Correlation do fluxo de negócio (propagado do request). */
+  correlationId: string;
+}
+
+/**
+ * Gera um documento de contratação direta pelo Cognitive Kernel (GENERATE_DOCUMENT) e
+ * aplica a validação obrigatória de citações legais. Fail-closed: documento com artigo
+ * inexistente é rejeitado (nunca emitido).
+ */
+async function generateDirectContractDoc(
+  query: string,
+  meta: { organizationId: number; userId: number; correlationId: string }
+): Promise<string> {
+  const execution = await executeCognitiveTask({
+    task: "GENERATE_DOCUMENT",
+    tenantId: meta.organizationId,
+    userId: String(meta.userId),
+    correlationId: meta.correlationId,
+    businessDomain: "contratacao_direta",
+    query,
+    responseType: "text",
+    maxOutputTokens: 4096,
+  });
+
+  const content = execution.response.content || "";
+
+  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
+  const validation = validateLegalCitations(content);
+  if (!validation.isValid) {
+    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
+    throw new Error(
+      `Documento contém citações legais inválidas:\n${validation.warnings.join("\n")}\n\n` +
+      `Por favor, gere novamente o documento.`
+    );
+  }
+  console.info("[Direct Contract Doc] Documento validado com sucesso");
+  return content;
 }
 
 /**
  * Gera Termo de Dispensa de Licitação
  */
 export async function generateTermoDispensa(params: GenerateTermoParams): Promise<string> {
-  const { directContractId, userId } = params;
+  const { directContractId, userId, organizationId, correlationId } = params;
 
   // Buscar dados da contratação
   const contract = await getDirectContractById(directContractId);
@@ -35,6 +82,11 @@ export async function generateTermoDispensa(params: GenerateTermoParams): Promis
     throw new Error("Este documento é apenas para dispensas");
   }
 
+  // A3-RD1: o gerador LEGADO depende do artigo legado. Registro GOVERNADO (legalArticleId null) não
+  // é suportado por este caminho — fail-closed (a emissão governada é um passo governado separado).
+  if (contract.legalArticleId == null) {
+    throw new Error("Contratação governada (A3-RD1): gerador legado de documentos indisponível — use o fluxo governado de emissão.");
+  }
   // Buscar artigo legal
   const article = await getLegalArticleById(contract.legalArticleId);
   if (!article) {
@@ -124,43 +176,14 @@ Autoridade Competente
 - Formate em Markdown profissional
 - Mínimo 800 palavras`;
 
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Você é um servidor público especializado em elaborar Termos de Dispensa de Licitação. Use linguagem formal, técnica e objetiva.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
-
-  const content = (response.choices[0].message.content as string) || "";
-  
-  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
-  const validation = validateLegalCitations(content);
-  
-  if (!validation.isValid) {
-    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
-    throw new Error(
-      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
-      `Por favor, gere novamente o documento.`
-    );
-  }
-  
-  console.log("[Direct Contract Doc] Documento validado com sucesso");
-  
-  return content;
+  return generateDirectContractDoc(prompt, { organizationId, userId, correlationId });
 }
 
 /**
  * Gera Termo de Inexigibilidade de Licitação
  */
 export async function generateTermoInexigibilidade(params: GenerateTermoParams): Promise<string> {
-  const { directContractId, userId } = params;
+  const { directContractId, userId, organizationId, correlationId } = params;
 
   // Buscar dados da contratação
   const contract = await getDirectContractById(directContractId);
@@ -172,6 +195,11 @@ export async function generateTermoInexigibilidade(params: GenerateTermoParams):
     throw new Error("Este documento é apenas para inexigibilidades");
   }
 
+  // A3-RD1: o gerador LEGADO depende do artigo legado. Registro GOVERNADO (legalArticleId null) não
+  // é suportado por este caminho — fail-closed (a emissão governada é um passo governado separado).
+  if (contract.legalArticleId == null) {
+    throw new Error("Contratação governada (A3-RD1): gerador legado de documentos indisponível — use o fluxo governado de emissão.");
+  }
   // Buscar artigo legal
   const article = await getLegalArticleById(contract.legalArticleId);
   if (!article) {
@@ -267,43 +295,14 @@ Autoridade Competente
 - Formate em Markdown profissional
 - Mínimo 1000 palavras`;
 
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Você é um servidor público especializado em elaborar Termos de Inexigibilidade de Licitação. Use linguagem formal, técnica e demonstre claramente a inviabilidade de competição.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
-
-  const content = (response.choices[0].message.content as string) || "";
-  
-  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
-  const validation = validateLegalCitations(content);
-  
-  if (!validation.isValid) {
-    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
-    throw new Error(
-      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
-      `Por favor, gere novamente o documento.`
-    );
-  }
-  
-  console.log("[Direct Contract Doc] Documento validado com sucesso");
-  
-  return content;
+  return generateDirectContractDoc(prompt, { organizationId, userId, correlationId });
 }
 
 /**
  * Gera Minuta de Contrato para Contratação Direta
  */
 export async function generateMinutaContrato(params: GenerateTermoParams): Promise<string> {
-  const { directContractId, userId } = params;
+  const { directContractId, userId, organizationId, correlationId } = params;
 
   // Buscar dados da contratação
   const contract = await getDirectContractById(directContractId);
@@ -413,36 +412,7 @@ _________________________________
 - Formate em Markdown profissional
 - Mínimo 1200 palavras`;
 
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Você é um advogado especializado em contratos administrativos. Use linguagem jurídica formal e cite a Lei 14.133/2021.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
-
-  const content = (response.choices[0].message.content as string) || "";
-  
-  // VALIDAÇÃO DE ARTIGOS LEGAIS (Auditoria Técnica - Item 6.5)
-  const validation = validateLegalCitations(content);
-  
-  if (!validation.isValid) {
-    console.error("[Direct Contract Doc] Artigos inválidos:", validation.invalidArticles);
-    throw new Error(
-      `Documento contém citações legais inválidas:\n${validation.warnings.join('\n')}\n\n` +
-      `Por favor, gere novamente o documento.`
-    );
-  }
-  
-  console.log("[Direct Contract Doc] Documento validado com sucesso");
-  
-  return content;
+  return generateDirectContractDoc(prompt, { organizationId, userId, correlationId });
 }
 
 /**
