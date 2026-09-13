@@ -1,0 +1,3 @@
+A3 LIVE HOMOLOGATION — staging-only deployment trigger.
+Created solely to force a fresh Railway snapshot for the governed LIVE gate.
+Must be removed after homologation; no runtime/product behavior.
