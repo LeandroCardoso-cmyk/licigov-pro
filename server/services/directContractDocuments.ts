@@ -82,6 +82,11 @@ export async function generateTermoDispensa(params: GenerateTermoParams): Promis
     throw new Error("Este documento é apenas para dispensas");
   }
 
+  // A3-RD1: o gerador LEGADO depende do artigo legado. Registro GOVERNADO (legalArticleId null) não
+  // é suportado por este caminho — fail-closed (a emissão governada é um passo governado separado).
+  if (contract.legalArticleId == null) {
+    throw new Error("Contratação governada (A3-RD1): gerador legado de documentos indisponível — use o fluxo governado de emissão.");
+  }
   // Buscar artigo legal
   const article = await getLegalArticleById(contract.legalArticleId);
   if (!article) {
@@ -190,6 +195,11 @@ export async function generateTermoInexigibilidade(params: GenerateTermoParams):
     throw new Error("Este documento é apenas para inexigibilidades");
   }
 
+  // A3-RD1: o gerador LEGADO depende do artigo legado. Registro GOVERNADO (legalArticleId null) não
+  // é suportado por este caminho — fail-closed (a emissão governada é um passo governado separado).
+  if (contract.legalArticleId == null) {
+    throw new Error("Contratação governada (A3-RD1): gerador legado de documentos indisponível — use o fluxo governado de emissão.");
+  }
   // Buscar artigo legal
   const article = await getLegalArticleById(contract.legalArticleId);
   if (!article) {

@@ -2012,6 +2012,13 @@
       "when": 1789084800000,
       "tag": "0299_a3_rd1_legal_reference_governance",
       "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "5",
+      "when": 1789171200000,
+      "tag": "0300_a3_rd1_direct_contract_governed_bridge",
+      "breakpoints": true
     }
   ]
 }

@@ -77,7 +77,9 @@ DATABASE_URL=... pnpm db:migrate:release
 
 ```
 Railway Pre-Deploy Command
-  → pnpm db:migrate:release   (aplica migrations sob advisory lock, ANTES do app)
+  → pnpm db:release:predeploy   (orquestrador canônico A3-RD1, ANTES do app):
+      1) pnpm db:migrate:release      (migrations sob advisory lock — schema only)
+      2) pnpm db:install:reference    (reference set governado replay-safe → DRAFT; SÓ após (1) OK)
       → application boot (pnpm start)
           → validateSchema     (NÃO muta; prova a migration mais recente + estruturas críticas)
               → servidor pronto
@@ -85,6 +87,20 @@ Railway Pre-Deploy Command
 
 O boot **NÃO aplica migrations** — não há mais "ponte transitória" no startup. As migrations são o
 passo de **RELEASE**, executado antes do start pelo Pre-Deploy Command (ver B-EXT1 abaixo).
+
+### A3-RD1 — orquestrador de Pre-Deploy (`db:release:predeploy`)
+
+`db:migrate:release` continua **migrations-only** (separação de responsabilidades da Fase B). O
+comando canônico **`pnpm db:release:predeploy`** (`scripts/predeploy-release.ts`) orquestra, em
+ORDEM e **fail-closed**, os dois passos DISTINTOS do release: (1) migrations versionadas e, **somente
+após sucesso**, (2) a instalação governada do reference set (replay-safe, por hash). **Instalar ≠
+ativar**: o set entra como `draft` — a ativação é aprovação humana separada (`approveAndActivate…`),
+**nunca automática**. Qualquer falha em (1) impede (2) e aborta o release (exit ≠ 0). Logs distinguem
+`[RELEASE][migrate]`, `[RELEASE][reference-data]` e `[RELEASE][predeploy]`; nenhum segredo é logado.
+
+> **Cutover (janela controlada, fora desta execução):** o Pre-Deploy Command do Railway staging deve
+> migrar de `pnpm db:migrate:release` para `pnpm db:release:predeploy` para que o reference set passe
+> a ser instalado (como `draft`) de forma determinística junto do release. A ativação permanece manual.
 
 ## Comportamento do boot (schema drift)
 

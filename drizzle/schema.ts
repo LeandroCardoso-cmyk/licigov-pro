@@ -1008,8 +1008,15 @@ export const directContracts = mysqlTable("direct_contracts", {
   year: int("year").notNull(),
   // Tipo de contratação
   type: mysqlEnum("type", ["dispensa", "inexigibilidade"]).notNull(),
-  // Enquadramento legal
-  legalArticleId: int("legalArticleId").notNull(), // FK para direct_contract_legal_articles
+  // Enquadramento legal — LEGADO. Nullable a partir da 0300 (bridge governada A3-RD1): um novo
+  // registro GOVERNADO não fabrica legalArticleId legado; registros históricos permanecem LEGACY.
+  legalArticleId: int("legalArticleId"), // FK para direct_contract_legal_articles (legado)
+  // A3-RD1 — bridge GOVERNADA (aditiva). Registro GOVERNADO usa estes campos; LEGADO usa legalArticleId.
+  // Regra de identidade (exatamente-um): governed => legalReferenceEntryId != null & legalArticleId = null;
+  // legacy => legalArticleId != null & legalReferenceEntryId = null. NUNCA comparar IDs de tabelas distintas.
+  legalReferenceEntryId: int("legalReferenceEntryId"), // FK para legal_reference_entries (governado)
+  legalReferenceSetVersion: int("legalReferenceSetVersion"), // snapshot de lineage: versão do reference set resolvido
+  legalReferenceLocator: varchar("legalReferenceLocator", { length: 120 }), // snapshot de lineage: locator canônico
   // Dados da contratação
   object: text("object").notNull(), // Objeto da contratação
   justification: text("justification").notNull(), // Justificativa legal

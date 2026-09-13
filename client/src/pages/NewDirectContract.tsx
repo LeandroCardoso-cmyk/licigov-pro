@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { buildLegalFramingInput } from "@/lib/directContractCreateInput";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 import { toast } from "sonner";
@@ -34,6 +35,9 @@ export default function NewDirectContract() {
   // Step 1
   const [type, setType] = useState<"dispensa" | "inexigibilidade" | "">("");
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  // A3-RD1: referência GOVERNADA selecionada (via sugestão IA governada). Mutuamente exclusiva com
+  // o vínculo LEGADO (selectedArticleId): escolher o dropdown legado limpa governedRef e vice-versa.
+  const [governedRef, setGovernedRef] = useState<{ canonicalLocator: string; referenceSetVersion: number; legalReferenceEntryId: number } | null>(null);
   const [situation, setSituation] = useState("");
   const [urgency] = useState("");
   const [hasExclusiveSupplier] = useState(false);
@@ -83,8 +87,14 @@ export default function NewDirectContract() {
       });
       setAiSuggestion(result);
       setType(result.articleType);
-      // A3-RD1: a sugestão governada NÃO carrega o `legalArticleId` legado. O vínculo de criação
-      // (legalArticleId) permanece na seleção legada do dropdown; nunca reaproveitamos IDs entre domínios.
+      // A3-RD1: a sugestão governada NÃO carrega `legalArticleId` legado. Guardamos a referência
+      // GOVERNADA para o create e limpamos o vínculo legado (nunca reaproveitamos IDs entre domínios).
+      setGovernedRef({
+        canonicalLocator: result.canonicalLocator,
+        referenceSetVersion: result.referenceSetVersion,
+        legalReferenceEntryId: result.legalReferenceEntryId,
+      });
+      setSelectedArticleId(null);
       toast.success("Artigo legal sugerido pela IA!");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao sugerir artigo");
@@ -120,6 +130,13 @@ export default function NewDirectContract() {
     }
   };
 
+  // A3-RD1: escolher o dropdown LEGADO é uma decisão explícita pelo domínio legado — limpa a
+  // referência governada para preservar a exclusividade (nunca os dois domínios ao mesmo tempo).
+  const handleArticleChange = (id: number) => {
+    setSelectedArticleId(id);
+    setGovernedRef(null);
+  };
+
   const handleValidateCNPJ = async () => {
     if (!supplierCNPJ || supplierCNPJ.length < 14) { setCnpjValidation(null); setCnpjData(null); return; }
     setLoadingCNPJ(true);
@@ -146,8 +163,11 @@ export default function NewDirectContract() {
     }
   };
 
+  // Enquadramento definido = referência GOVERNADA (sugestão IA) OU artigo LEGADO (dropdown).
+  const hasLegalFraming = !!governedRef || !!selectedArticleId;
+
   const handleNext = () => {
-    if (currentStep === 1 && (!type || !selectedArticleId)) {
+    if (currentStep === 1 && (!type || !hasLegalFraming)) {
       toast.error("Selecione o tipo e o artigo legal"); return;
     }
     if (currentStep === 2 && (!number || !object || !justification || !value)) {
@@ -157,17 +177,23 @@ export default function NewDirectContract() {
   };
 
   const handleSubmit = async () => {
-    if (!type || !selectedArticleId || !number || !object || !justification || !value) {
+    if (!type || !hasLegalFraming || !number || !object || !justification || !value) {
       toast.error("Preencha todos os campos obrigatórios"); return;
     }
     try {
-      const result = await createMutation.mutateAsync({
-        number, year, type, legalArticleId: selectedArticleId, object, justification,
+      const base = {
+        number, year, type, object, justification,
         value: parseFloat(value) * 100,
         executionDeadline: executionDeadline ? parseInt(executionDeadline) : undefined,
         supplierName: supplierName || undefined, supplierCNPJ: supplierCNPJ || undefined,
         supplierAddress: supplierAddress || undefined, supplierContact: supplierContact || undefined,
         mode, platformId,
+      };
+      // A3-RD1: envia referência GOVERNADA quando presente; caso contrário, o vínculo LEGADO.
+      // Nunca os dois (o backend também é fail-closed por refine estrito). Lógica pura compartilhada.
+      const result = await createMutation.mutateAsync({
+        ...base,
+        ...buildLegalFramingInput(governedRef, selectedArticleId),
       });
       toast.success("Contratação direta criada com sucesso!");
       setLocation(`/direct-contracts/${result.id}`);
@@ -207,7 +233,7 @@ export default function NewDirectContract() {
                 articles={articles}
                 onTypeChange={setType} onSituationChange={setSituation}
                 onObjectChange={setObject} onValueChange={setValue}
-                onArticleChange={setSelectedArticleId} onSuggestArticle={handleSuggestArticle}
+                onArticleChange={handleArticleChange} onSuggestArticle={handleSuggestArticle}
               />
             )}
             {currentStep === 2 && (
