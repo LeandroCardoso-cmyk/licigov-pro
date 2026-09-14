@@ -39,13 +39,32 @@ describe("F-EMB1 embeddings", () => {
     expect(a).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("rejeita cache de outro modelo e vetores fora do contrato", () => {
-    expect(isCompatibleCachedEmbedding({ model: EMBEDDING_MODEL, embedding: vector() })).toBe(true);
-    expect(isCompatibleCachedEmbedding({ model: "text-embedding-004", embedding: vector() })).toBe(false);
+  it("rejeita cache de outro modelo, dimensão ou vetor fora do contrato", () => {
+    expect(isCompatibleCachedEmbedding({
+      model: EMBEDDING_MODEL,
+      dimensions: EMBEDDING_DIM,
+      embedding: vector(),
+    })).toBe(true);
+
+    expect(isCompatibleCachedEmbedding({
+      model: "text-embedding-004",
+      dimensions: EMBEDDING_DIM,
+      embedding: vector(),
+    })).toBe(false);
+
+    expect(isCompatibleCachedEmbedding({
+      model: EMBEDDING_MODEL,
+      dimensions: 1536,
+      embedding: vector(),
+    })).toBe(false);
+
     expect(isValidEmbeddingVector(vector().slice(1))).toBe(false);
     const withNaN = vector();
     withNaN[20] = Number.NaN;
     expect(isValidEmbeddingVector(withNaN)).toBe(false);
+    const withInfinity = vector();
+    withInfinity[21] = Number.POSITIVE_INFINITY;
+    expect(isValidEmbeddingVector(withInfinity)).toBe(false);
   });
 
   it("chama a API atual com dimensionalidade explícita sem chave na URL", async () => {
