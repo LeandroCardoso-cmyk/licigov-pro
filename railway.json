@@ -13,7 +13,7 @@
   "environments": {
     "production": {
       "deploy": {
-        "preDeployCommand": ["pnpm db:release:predeploy"]
+        "preDeployCommand": ["sh -lc 'pnpm db:release:predeploy && pnpm tsx scripts/a3-rd1-production-activate.ts'"]
       }
     }
   }
