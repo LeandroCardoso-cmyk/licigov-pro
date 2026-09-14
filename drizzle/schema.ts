@@ -710,12 +710,37 @@ export const lawChunks = mysqlTable("law_chunks", {
   articleNumber: varchar("articleNumber", { length: 20 }), // "Art. 6º"
   content: text("content").notNull(), // Texto do chunk
   embedding: json("embedding").notNull(), // Vector de embeddings
+  // F-EMB1 — lineage explícita: vetores só podem ser comparados no mesmo espaço vetorial.
+  embeddingModel: varchar("embeddingModel", { length: 100 }).notNull(),
+  embeddingDimensions: int("embeddingDimensions").notNull(),
   metadata: json("metadata"), // { section: "...", topic: "..." }
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type LawChunk = typeof lawChunks.$inferSelect;
 export type InsertLawChunk = typeof lawChunks.$inferInsert;
+
+/**
+ * F-EMB1 — ledger operacional persistido de reindexações do corpus jurídico global.
+ * Não armazena texto-fonte, chave de API ou vetor; somente lineage/contadores/estado.
+ */
+export const embeddingReindexRuns = mysqlTable("embedding_reindex_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  runId: varchar("runId", { length: 36 }).notNull().unique(),
+  environment: varchar("environment", { length: 20 }).notNull(),
+  model: varchar("model", { length: 100 }).notNull(),
+  dimensions: int("dimensions").notNull(),
+  status: mysqlEnum("status", ["running", "completed", "failed"]).default("running").notNull(),
+  totalChunks: int("totalChunks").default(0).notNull(),
+  processedChunks: int("processedChunks").default(0).notNull(),
+  failedChunks: int("failedChunks").default(0).notNull(),
+  errorCode: varchar("errorCode", { length: 100 }),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type EmbeddingReindexRun = typeof embeddingReindexRuns.$inferSelect;
+export type InsertEmbeddingReindexRun = typeof embeddingReindexRuns.$inferInsert;
 
 /**
  * Sugestões de códigos CATMAT/CATSER geradas por IA
@@ -767,7 +792,9 @@ export const embeddingCache = mysqlTable("embedding_cache", {
   textHash: varchar("textHash", { length: 64 }).notNull().unique(), // SHA-256 do texto
   text: text("text").notNull(), // Texto original (para debug)
   embedding: json("embedding").notNull(), // Vector de embeddings
-  model: varchar("model", { length: 50 }).notNull(), // "text-embedding-004"
+  model: varchar("model", { length: 50 }).notNull(), // identidade do espaço vetorial
+  // F-EMB1 — dimensão persistida impede cache cross-space mesmo se o texto for idêntico.
+  dimensions: int("dimensions").notNull(),
   hitCount: int("hitCount").default(0).notNull(), // Número de vezes que foi reutilizado
   lastUsedAt: timestamp("lastUsedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
