@@ -55,7 +55,19 @@ export async function retrieveRelevantLaw(
       .from(lawChunks)
       .where(scopedFilter);
 
-    if (currentSpaceChunks.length === 0) {
+    // Defense in depth: a query já filtra lineage no banco, mas o boundary de similaridade também
+    // rejeita qualquer linha inesperada. Uma regressão futura de query/adapter não pode reabrir
+    // mixed vector spaces silenciosamente.
+    const eligibleChunks = currentSpaceChunks.filter((chunk) => {
+      const compatible = chunk.embeddingModel === EMBEDDING_MODEL
+        && chunk.embeddingDimensions === EMBEDDING_DIM;
+      if (!compatible) {
+        console.warn(`[RAG] incompatible_chunk_lineage chunkId=${chunk.id}`);
+      }
+      return compatible;
+    });
+
+    if (eligibleChunks.length === 0) {
       console.warn(
         `[RAG] current_vector_space_empty model=${EMBEDDING_MODEL} dim=${EMBEDDING_DIM} lawFilterCount=${lawNames?.length ?? 0}`,
       );
@@ -64,7 +76,7 @@ export async function retrieveRelevantLaw(
 
     const queryEmbedding = await generateEmbedding(query);
 
-    const chunksWithSimilarity = currentSpaceChunks.flatMap((chunk) => {
+    const chunksWithSimilarity = eligibleChunks.flatMap((chunk) => {
       let parsed: unknown = chunk.embedding;
       if (typeof parsed === "string") {
         try {
