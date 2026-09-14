@@ -112,7 +112,7 @@ function finalize() {
 
   const allowed = new Set([
     "drizzle/schema.ts",
-    candidates[0],
+    `drizzle/${candidates[0]}`,
     "drizzle/meta/_journal.json",
     "drizzle/meta/0301_snapshot.json",
   ]);
