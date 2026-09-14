@@ -35,6 +35,9 @@ jobs:
         run: node scripts/f-emb1-bootstrap-schema.mjs --prepare
 
       - name: Generate Drizzle journal and snapshot
+        env:
+          # drizzle.config.ts exige a variável mesmo no modo generate; nenhuma conexão é aberta.
+          DATABASE_URL: mysql://root:offline@127.0.0.1:3306/licigov_schema_generation
         run: pnpm exec drizzle-kit generate --name=f_emb1_embedding_lineage
 
       - name: Finalize rollout-safe migration
