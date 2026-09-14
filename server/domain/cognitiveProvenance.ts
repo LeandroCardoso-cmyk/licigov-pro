@@ -232,6 +232,9 @@ export function deriveExecutionState(p: {
   return { status: "completed", degradationReason: null, groundingState };
 }
 
+/** Limite máximo (em caracteres) da mensagem de falha persistida — casa com `failure_message` varchar(300). */
+export const MAX_FAILURE_MESSAGE_LENGTH = 300;
+
 /** Redige uma mensagem de erro para persistência: sem segredos/URLs de banco/chaves/SQL cru. */
 export function sanitizeFailureMessage(raw: string): string {
   let m = (raw ?? "").toString();
@@ -240,7 +243,8 @@ export function sanitizeFailureMessage(raw: string): string {
   m = m.replace(/\b(password|senha|secret|token|api[_-]?key|authorization|bearer)\b\s*[:=]\s*\S+/gi, "$1=[redacted]");
   m = m.replace(/\b[A-Za-z0-9_\-]{32,}\b/g, "[redacted-token]"); // possíveis chaves/segredos longos
   m = m.replace(/\s+/g, " ").trim();
-  return m.length > 300 ? `${m.slice(0, 300)}…` : m;
+  // Truncamento com a elipse DENTRO do limite (nunca excede a coluna): slice(MAX-1) + "…" = MAX chars.
+  return m.length > MAX_FAILURE_MESSAGE_LENGTH ? `${m.slice(0, MAX_FAILURE_MESSAGE_LENGTH - 1)}…` : m;
 }
 
 /**

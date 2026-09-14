@@ -2,9 +2,10 @@
  * RC-LEGAL-SEC-001 — Isolamento multi-tenant completo do `legalOpinionsRouter`
  * legado — smoke contra MySQL REAL. Só roda quando DATABASE_URL está definido.
  *
- * Cobre as 15 procedures do router. `invokeLLM` é mockado (chamada de rede
- * externa) — a PERSISTÊNCIA e o ISOLAMENTO TENANT são exercitados contra MySQL
- * real, não contra `db` mockado.
+ * Cobre as 15 procedures do router. A geração de parecer (A3 — Cognitive Kernel)
+ * roteia por `executeCognitiveTask`, que é mockado aqui (evita rede/modelo) —
+ * a PERSISTÊNCIA e o ISOLAMENTO TENANT são exercitados contra MySQL real, não
+ * contra `db` mockado.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -14,25 +15,22 @@ const DB = process.env.DATABASE_URL;
 const ORG_A = 900301;
 const ORG_B = 900302;
 
-vi.mock("../../_core/llm", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../_core/llm")>();
+// A3 — generateLegalOpinion agora solicita a Cognitive Task LEGAL_ANALYSIS ao Kernel.
+// Mockamos executeCognitiveTask para devolver um parecer estruturado válido (structured
+// output no `response.content`), sem depender de provider/rede.
+vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/aiExecutionEngine")>();
+  const content = JSON.stringify({
+    opinion: "# Parecer\n\nConteúdo gerado (Lei 14.133/2021, Art. 6º).",
+    conclusion: "favorable",
+    citedArticles: ["Art. 6º"],
+    jurisprudence: [{ court: "TCU", number: "1/2026", summary: "Resumo" }],
+  });
   return {
     ...actual,
-    invokeLLM: async () => ({
-      id: "mock", created: Date.now(), model: "mock",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: JSON.stringify({
-            opinion: "# Parecer\n\nConteúdo gerado (Lei 14.133/2021, Art. 6º).",
-            conclusion: "favorable",
-            citedArticles: ["Art. 6º"],
-            jurisprudence: [{ court: "TCU", number: "1/2026", summary: "Resumo" }],
-          }),
-        },
-      }],
-    }),
+    executeCognitiveTask: (async () => ({
+      response: { content },
+    })) as unknown as typeof actual.executeCognitiveTask,
   };
 });
 

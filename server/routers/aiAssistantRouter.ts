@@ -43,7 +43,7 @@ export const aiAssistantRouter = router({
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await suggestModality(context);
+      const suggestion = await suggestModality(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,
@@ -56,7 +56,7 @@ export const aiAssistantRouter = router({
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await suggestRisks(context);
+      const suggestion = await suggestRisks(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,
@@ -69,7 +69,7 @@ export const aiAssistantRouter = router({
     .input(z.object({ processId: z.number(), clauseType: z.string().min(3).max(100) }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await suggestClauses(context, input.clauseType);
+      const suggestion = await suggestClauses(context, input.clauseType, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,
@@ -82,7 +82,7 @@ export const aiAssistantRouter = router({
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await suggestTechnicalRequirements(context);
+      const suggestion = await suggestTechnicalRequirements(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,
@@ -95,7 +95,7 @@ export const aiAssistantRouter = router({
     .input(z.object({ processId: z.number(), question: z.string().min(10).max(500) }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await suggestLegalBasis(context, input.question);
+      const suggestion = await suggestLegalBasis(context, input.question, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,
@@ -112,7 +112,7 @@ export const aiAssistantRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
-      const suggestion = await improveText(context, input.docType, input.textSnippet);
+      const suggestion = await improveText(context, input.docType, input.textSnippet, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
       await db.createActivityLog({
         processId: input.processId,
         userId: ctx.user.id,

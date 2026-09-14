@@ -33,7 +33,8 @@ export const AI_SDK_ALLOWLIST: readonly string[] = [
   "server/_core/ai/gemini.ts",         // GeminiProvider (definição canônica do provider)
   "server/services/embeddings.ts",     // KG infrastructure (text-embedding-004)
   "server/services/gemini.ts",         // LEGACY
-  "server/services/ai/suggestions.ts", // LEGACY
+  // A3 — server/services/ai/suggestions.ts MIGRADO para executeCognitiveTask (Cognitive Kernel);
+  // não instancia mais o SDK Gemini e saiu desta allowlist (guard impede reintrodução do bypass).
 ];
 
 // Único componente autorizado a acessar a AIExecutionPolicy (decisões cognitivas).
@@ -41,16 +42,14 @@ export const EXECUTION_POLICY_ALLOWLIST: readonly string[] = [
   "server/services/aiExecutionEngine.ts",
 ];
 
-// ─── AI Entry Allowlist (RC-4.1 — ativação cognitiva) ─────────────────────────
-// invokeLLM permanece APENAS em código legado allowlistado. Nenhum novo componente
-// pode usar invokeLLM — a cognição oficial passa por executeCognitiveTask.
-export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [
-  "server/services/legalFrameworkAssistant.ts",
-  "server/services/catmatMatcher.ts",
-  "server/services/directContractDocuments.ts",
-  "server/services/legalOpinionService.ts",
-  "server/services/examples/legalValidationExample.ts",
-];
+// ─── AI Entry Allowlist (RC-4.1 → A3 — cadeia legada RETIRADA) ────────────────
+// A3 (fechamento): a allowlist de bypass do invokeLLM está VAZIA. Todos os serviços
+// de negócio foram migrados para executeCognitiveTask (Cognitive Kernel) e o único
+// exemplo remanescente (legalValidationExample.ts) foi REMOVIDO. `invokeLLM` agora só
+// existe como definição em `server/_core/llm.ts`; nenhum componente pode chamá-lo — a
+// cognição oficial passa exclusivamente pelo Kernel. O guard (rc41) trava esta lista
+// vazia: qualquer novo caller de invokeLLM fora de llm.ts quebra o CI.
+export const INVOKE_LLM_LEGACY_ALLOWLIST: readonly string[] = [];
 
 // executeAITask é o pipeline de baixo nível (RC-3.5), APOSENTADO na ativação: não possui
 // callers oficiais. Definido apenas no Engine; exercitado só por testes.
@@ -177,13 +176,19 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   { path: "server/_core/ai/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "GeminiProvider — provider canônico." },
   { path: "server/services/embeddings.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "mantem", note: "Infra de embeddings do Knowledge Graph." },
   { path: "server/services/gemini.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Geração legada — migrar para AIExecutionEngine." },
-  { path: "server/services/ai/suggestions.ts", allowlist: "AI_SDK_ALLOWLIST", disposition: "migracao_futura", note: "Sugestões legadas — migrar para AIExecutionEngine." },
+  // A3 — server/services/ai/suggestions.ts MIGRADO: agora chama executeCognitiveTask (Cognitive Kernel),
+  // sem instanciar o SDK Gemini. Removido da allowlist de bypass (não requer mais classificação de exceção).
   // invokeLLM — migração futura (bypass do pipeline cognitivo)
-  { path: "server/services/legalFrameworkAssistant.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para executeCognitiveTask." },
-  { path: "server/services/catmatMatcher.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para CATMAT_MATCHING task." },
-  { path: "server/services/directContractDocuments.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para DIRECT_PROCUREMENT_REASONING." },
-  { path: "server/services/legalOpinionService.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "migracao_futura", note: "Migrar para LEGAL_ANALYSIS/REASONING." },
-  { path: "server/services/examples/legalValidationExample.ts", allowlist: "INVOKE_LLM_LEGACY_ALLOWLIST", disposition: "remocao_futura", note: "Exemplo — remover em limpeza." },
+  // A3 — server/services/legalFrameworkAssistant.ts MIGRADO: agora chama executeCognitiveTask
+  // (DIRECT_PROCUREMENT_REASONING), sem invokeLLM. Removido da allowlist de bypass.
+  // A3 — server/services/catmatMatcher.ts MIGRADO: agora chama executeCognitiveTask (CATMAT_MATCHING),
+  // sem invokeLLM. Removido das allowlists de bypass (não requer mais classificação de exceção).
+  // A3 — server/services/directContractDocuments.ts MIGRADO: agora chama executeCognitiveTask
+  // (GENERATE_DOCUMENT), sem invokeLLM. Removido da allowlist de bypass.
+  // A3 — server/services/legalOpinionService.ts MIGRADO: agora chama executeCognitiveTask (LEGAL_ANALYSIS),
+  // sem invokeLLM. Removido da allowlist de bypass (não requer mais classificação de exceção).
+  // A3 (fechamento) — server/services/examples/legalValidationExample.ts REMOVIDO (dead code, sem callers).
+  // A INVOKE_LLM_LEGACY_ALLOWLIST está VAZIA: nenhum caller de invokeLLM fora de _core/llm.ts.
   // Document renderers
   { path: "server/services/documentConverter.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Internal Renderer oficial." },
   { path: "server/services/officialExportEngine.ts", allowlist: "DOCUMENT_RENDERERS", disposition: "mantem", note: "Renderer especializado interno (exportRouter)." },

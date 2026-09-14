@@ -17,6 +17,7 @@ export * from "./tasks";
 export * from "./aiUsage";
 export * from "./platforms";
 export * from "./directContracts";
+export * from "./legalReference";
 export * from "./contracts";
 export * from "./legalOpinions";
 export * from "./knowledgeGraph";

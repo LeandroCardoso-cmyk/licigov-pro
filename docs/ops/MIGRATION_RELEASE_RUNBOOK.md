@@ -77,7 +77,9 @@ DATABASE_URL=... pnpm db:migrate:release
 
 ```
 Railway Pre-Deploy Command
-  → pnpm db:migrate:release   (aplica migrations sob advisory lock, ANTES do app)
+  → pnpm db:release:predeploy   (orquestrador canônico A3-RD1, ANTES do app):
+      1) pnpm db:migrate:release      (migrations sob advisory lock — schema only)
+      2) pnpm db:install:reference    (reference set governado replay-safe → DRAFT; SÓ após (1) OK)
       → application boot (pnpm start)
           → validateSchema     (NÃO muta; prova a migration mais recente + estruturas críticas)
               → servidor pronto
@@ -85,6 +87,49 @@ Railway Pre-Deploy Command
 
 O boot **NÃO aplica migrations** — não há mais "ponte transitória" no startup. As migrations são o
 passo de **RELEASE**, executado antes do start pelo Pre-Deploy Command (ver B-EXT1 abaixo).
+
+### A3-RD1 — orquestrador de Pre-Deploy (`db:release:predeploy`)
+
+`db:migrate:release` continua **migrations-only** (separação de responsabilidades da Fase B). O
+comando canônico **`pnpm db:release:predeploy`** (`scripts/predeploy-release.ts`) orquestra, em
+ORDEM e **fail-closed**, os dois passos DISTINTOS do release: (1) migrations versionadas e, **somente
+após sucesso**, (2) a instalação governada do reference set (replay-safe, por hash). **Instalar ≠
+ativar**: o set entra como `draft` — a ativação é aprovação humana separada (`approveAndActivate…`),
+**nunca automática**. Qualquer falha em (1) impede (2) e aborta o release (exit ≠ 0). Logs distinguem
+`[RELEASE][migrate]`, `[RELEASE][reference-data]` e `[RELEASE][predeploy]`; nenhum segredo é logado.
+
+> **Cutover (janela controlada, fora desta execução):** o Pre-Deploy Command do Railway staging deve
+> migrar de `pnpm db:migrate:release` para `pnpm db:release:predeploy` para que o reference set passe
+> a ser instalado (como `draft`) de forma determinística junto do release. A ativação permanece manual.
+
+### A3-RD1 — sequência controlada de instalação e aprovação (INSTALL ≠ APPROVE)
+
+**Instalar não é aprovar.** A instalação deixa o reference set em `draft`; a **ativação** é um ato
+humano, deliberado e auditado, executado **apenas após autorização explícita do owner**, pelo boundary
+`pnpm db:reference:approve` (`scripts/approve-legal-reference-set.ts`) — nunca por SQL manual, `tsx -e`,
+código improvisado ou agente arbitrário.
+
+1. **Pre-deploy** (instala o schema + reference set como `draft`):
+   `pnpm db:release:predeploy` (migrations → install DRAFT; sem ativar).
+2. **Verificar** o estado instalado (sem ativar):
+   - `version` do set instalado;
+   - `content_hash` instalado (o mesmo `referenceSetContentHash` do manifesto V1);
+   - `status = draft`.
+3. **Autorização explícita do owner** (fora da ferramenta) — decide ativar aquela `version`/`hash`.
+4. **Aprovar/ativar** pelo boundary governado, com **todos** os campos explícitos (nada inferido):
+   ```
+   pnpm db:reference:approve \
+     --version <n> \
+     --expected-hash <sha256-hex-64 do content_hash instalado> \
+     --actor-user-id <id do owner> \
+     --approval-source "<origem da autorização>" \
+     --correlation-id "<correlação de auditoria>" \
+     [--actor-role platform_admin]
+   ```
+   Fail-closed: hash divergente/ausente, set inexistente/incompleto → exit ≠ 0, **sem** ativação.
+   **Sem** `--force` e **sem** bypass de hash; o CLI **nunca** busca o "último hash" para auto-aprovar.
+5. **Readiness** (resolução governada passa a resolver o set `active`).
+6. **LIVE** do fluxo Contratação Direta governado.
 
 ## Comportamento do boot (schema drift)
 

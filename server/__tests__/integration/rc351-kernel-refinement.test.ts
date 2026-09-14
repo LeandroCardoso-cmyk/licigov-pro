@@ -141,7 +141,7 @@ describe("RC-3.5.1 — Kernel Infrastructure Refinement", () => {
       "server/_core/ai/gemini.ts",            // GeminiProvider (definição do provider)
       "server/services/embeddings.ts",        // infra de embeddings (text-embedding-004)
       "server/services/gemini.ts",            // LEGADO (classificado)
-      "server/services/ai/suggestions.ts",    // LEGADO (classificado)
+      // A3 — server/services/ai/suggestions.ts MIGRADO para o Cognitive Kernel (não importa mais o SDK).
     ];
 
     it("apenas a camada de IA importa @google/generative-ai", () => {
