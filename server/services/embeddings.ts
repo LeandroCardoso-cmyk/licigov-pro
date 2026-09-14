@@ -45,9 +45,12 @@ export function isValidEmbeddingVector(value: unknown): value is number[] {
 
 export function isCompatibleCachedEmbedding(cached: {
   model: string;
+  dimensions: number;
   embedding: unknown;
-}): cached is { model: string; embedding: number[] } {
-  return cached.model === EMBEDDING_MODEL && isValidEmbeddingVector(cached.embedding);
+}): cached is { model: string; dimensions: number; embedding: number[] } {
+  return cached.model === EMBEDDING_MODEL
+    && cached.dimensions === EMBEDDING_DIM
+    && isValidEmbeddingVector(cached.embedding);
 }
 
 async function requestEmbedding(text: string): Promise<number[]> {
@@ -147,6 +150,7 @@ export async function generateEmbedding(text: string, useCache: boolean = true):
         text: text.substring(0, 1000),
         embedding,
         model: EMBEDDING_MODEL,
+        dimensions: EMBEDDING_DIM,
         hitCount: 0,
         lastUsedAt: new Date(),
       });
