@@ -1,7 +1,13 @@
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../db";
 import { lawChunks } from "../../drizzle/schema";
-import { generateEmbedding, cosineSimilarity } from "./embeddings";
-import { eq } from "drizzle-orm";
+import {
+  EMBEDDING_DIM,
+  EMBEDDING_MODEL,
+  cosineSimilarity,
+  generateEmbedding,
+  isValidEmbeddingVector,
+} from "./embeddings";
 
 export interface RetrievedChunk {
   content: string;
@@ -10,93 +16,98 @@ export interface RetrievedChunk {
 }
 
 /**
- * Busca trechos relevantes da Lei 14.133/21 baseado em uma query
- * @param query - Texto da consulta
- * @param topK - Número de chunks mais relevantes a retornar (padrão: 5)
- * @returns Array de chunks ordenados por relevância
+ * F-EMB1 — recuperação jurídica model-aware.
+ *
+ * O corpus legal é global/autoridade de referência; não existe tenantId em law_chunks.
+ * Isolamento aqui significa, portanto, isolamento do espaço vetorial: nenhum vetor histórico
+ * ou de outra dimensionalidade pode ser comparado ao embedding da consulta atual.
  */
 export async function retrieveRelevantLaw(
   query: string,
   topK: number = 5,
-  lawNames?: string[] // Filtrar por documentos específicos (opcional, padrão: todos)
+  lawNames?: string[],
 ): Promise<RetrievedChunk[]> {
   const db = await getDb();
   if (!db) {
-    console.warn("[RAG] Database not available");
+    console.warn(`[RAG] database_unavailable model=${EMBEDDING_MODEL} dim=${EMBEDDING_DIM}`);
     return [];
   }
-  
+
   try {
-    // 1. Gerar embedding da query
-    const queryEmbedding = await generateEmbedding(query);
-    
-    // 2. Buscar chunks (com filtro opcional por documentos)
-    let dbQuery = db.select().from(lawChunks);
-    
-    if (lawNames && lawNames.length > 0) {
-      // Filtrar por documentos específicos
-      dbQuery = dbQuery.where(
-        lawNames.length === 1
-          ? eq(lawChunks.lawName, lawNames[0])
-          : (lawChunks.lawName as any) // Simplificado: buscar todos se múltiplos
-      ) as any;
-    }
-    
-    const allChunks = await dbQuery;
-    
-    if (allChunks.length === 0) {
-      const docs = lawNames && lawNames.length > 0 ? lawNames.join(", ") : "todos os documentos";
-      console.warn(`[RAG] Nenhum chunk encontrado para: ${docs}`);
+    const lineageFilter = and(
+      eq(lawChunks.embeddingModel, EMBEDDING_MODEL),
+      eq(lawChunks.embeddingDimensions, EMBEDDING_DIM),
+    );
+
+    const scopedFilter = lawNames && lawNames.length > 0
+      ? and(
+          lineageFilter,
+          lawNames.length === 1
+            ? eq(lawChunks.lawName, lawNames[0])
+            : inArray(lawChunks.lawName, lawNames),
+        )
+      : lineageFilter;
+
+    // Primeiro prova que existe corpus no espaço atual. Isso evita chamar o provider quando a
+    // reindexação ainda não ocorreu e impede fallback silencioso para vetores incompatíveis.
+    const currentSpaceChunks = await db
+      .select()
+      .from(lawChunks)
+      .where(scopedFilter);
+
+    if (currentSpaceChunks.length === 0) {
+      console.warn(
+        `[RAG] current_vector_space_empty model=${EMBEDDING_MODEL} dim=${EMBEDDING_DIM} lawFilterCount=${lawNames?.length ?? 0}`,
+      );
       return [];
     }
-    
-    // 3. Calcular similaridade para cada chunk
-    const chunksWithSimilarity = allChunks.map((chunk) => {
-      try {
-        // Embedding pode vir como objeto (já parseado) ou string (precisa parsear)
-        const chunkEmbedding = typeof chunk.embedding === 'string' 
-          ? JSON.parse(chunk.embedding) 
-          : chunk.embedding as number[];
-        const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
-        
-        return {
-          content: chunk.content,
-          articleNumber: chunk.articleNumber,
-          similarity,
-        };
-      } catch (error) {
-        console.error(`[RAG] Erro ao processar chunk ${chunk.id}:`, error);
-        return {
-          content: chunk.content,
-          articleNumber: chunk.articleNumber,
-          similarity: 0,
-        };
+
+    const queryEmbedding = await generateEmbedding(query);
+
+    const chunksWithSimilarity = currentSpaceChunks.flatMap((chunk) => {
+      let parsed: unknown = chunk.embedding;
+      if (typeof parsed === "string") {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          console.warn(`[RAG] invalid_chunk_vector chunkId=${chunk.id} reason=json_parse`);
+          return [];
+        }
       }
+
+      if (!isValidEmbeddingVector(parsed)) {
+        console.warn(`[RAG] invalid_chunk_vector chunkId=${chunk.id} reason=contract`);
+        return [];
+      }
+
+      return [{
+        content: chunk.content,
+        articleNumber: chunk.articleNumber,
+        similarity: cosineSimilarity(queryEmbedding, parsed),
+      }];
     });
-    
-    // 4. Ordenar por similaridade e retornar top-K
+
     return chunksWithSimilarity
       .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK);
+      .slice(0, Math.max(0, topK));
   } catch (error) {
-    console.error("[RAG] Erro ao recuperar trechos relevantes:", error);
+    const code = error instanceof Error ? error.name : "unknown";
+    console.error(`[RAG] retrieval_failed code=${code} model=${EMBEDDING_MODEL} dim=${EMBEDDING_DIM}`);
     return [];
   }
 }
 
 /**
- * Formata chunks recuperados em contexto legal para o prompt
+ * Formata chunks recuperados em contexto legal para o prompt.
  */
 export function formatRetrievedContext(chunks: RetrievedChunk[]): string {
-  if (chunks.length === 0) {
-    return "";
-  }
-  
+  if (chunks.length === 0) return "";
+
   return chunks
-    .map((chunk, i) => {
+    .map((chunk, index) => {
       const article = chunk.articleNumber ? `[${chunk.articleNumber}]` : "";
       const similarity = `(${(chunk.similarity * 100).toFixed(1)}% relevância)`;
-      return `### Trecho Relevante ${i + 1} ${article} ${similarity}\n${chunk.content}`;
+      return `### Trecho Relevante ${index + 1} ${article} ${similarity}\n${chunk.content}`;
     })
     .join("\n\n");
 }
