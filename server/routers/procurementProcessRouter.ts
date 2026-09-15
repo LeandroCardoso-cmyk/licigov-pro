@@ -24,8 +24,8 @@ import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import { getOrganizationById } from "../db/organizations";
 import {
-  insertProcess, getProcess, listProcesses, updateProcessStage,
-  insertResearch, insertResearchItem, listIntelligentItems,
+  createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
+  insertResearchWithItems, listIntelligentItems,
   recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
   getGeneratedDocumentByKind,
 } from "../db/procurement";
@@ -76,9 +76,10 @@ export const procurementProcessRouter = router({
       try {
         // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
         // clique repetido/retry NÃO cria processo duplicado.
-        await insertProcess(process);
-        await recordProcessEvent({
-          organizationId: orgId, processId: process.id, eventType: "workspace_created",
+        // DATA-039: processo + evento inicial persistem ATOMICAMENTE (tudo-ou-nada) —
+        // nunca deixa processo sem evento de criação nem evento órfão em caso de falha parcial.
+        await createProcessWithInitialEvent(process, {
+          eventType: "workspace_created",
           actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
           refId: process.id, correlationId: ctx.correlationId,
         });
@@ -279,8 +280,10 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       const research = createPriceResearchWorkspace({ processId: input.processId, organizationId: orgId, source: input.source, correlationId: ctx.correlationId });
       const rawItems = extractItemsFromText(input.text, { researchId: research.id, processId: input.processId, organizationId: orgId });
-      await insertResearch({ ...research, itemCount: rawItems.length });
-      for (const it of rawItems) await insertResearchItem(it);
+      // DATA-039: cabeçalho da pesquisa + itens brutos persistem ATOMICAMENTE — nunca uma pesquisa
+      // com itens faltando. Enriquecimento (abaixo) e evento são derivados/re-executáveis e ficam
+      // fora da transação (operação pesada não deve segurar transação de banco).
+      await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
 
       // Cada item da pesquisa vira um Item Inteligente enriquecido.
       const enriched = [];

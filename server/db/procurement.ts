@@ -60,8 +60,8 @@ const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Process ─────────────────────────────────────────────────────────────────
 
-export async function insertProcess(p: ProcurementWorkspace): Promise<ProcurementWorkspace | null> {
-  const db = await getDb();
+export async function insertProcess(p: ProcurementWorkspace, executor?: ProcurementExecutor): Promise<ProcurementWorkspace | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(procurementProcessesTable).values({
     id: p.id, organizationId: p.organizationId, processNumber: p.processNumber, object: p.object,
@@ -70,6 +70,29 @@ export async function insertProcess(p: ProcurementWorkspace): Promise<Procuremen
     activeCopilots: JSON.stringify(p.activeCopilots), correlationId: p.correlationId,
     createdAt: toDb(p.createdAt), updatedAt: toDb(p.updatedAt),
   }).onDuplicateKeyUpdate({ set: { currentStage: p.currentStage, status: p.status, modality: p.modality, updatedAt: toDb(p.updatedAt) } });
+  return p;
+}
+
+/**
+ * DATA-039 (Bloco D) — cria o processo e o SEU evento inicial de timeline ATOMICAMENTE.
+ * Evita estado parcial (processo sem evento de criação, ou evento sem processo) em caso de falha
+ * entre os dois writes. Idempotente: id determinístico + onDuplicateKeyUpdate em ambos os writes,
+ * portanto retry/clique repetido não duplica. Degrada sem DB (retorna o objeto em memória).
+ */
+export async function createProcessWithInitialEvent(
+  p: ProcurementWorkspace,
+  event: { eventType: string; actor: string; summary: string; refId?: string; correlationId: string },
+): Promise<ProcurementWorkspace | null> {
+  const db = await getDb();
+  if (!db) return p; // sem DB: preserva o comportamento degradado (nada persiste; API ainda responde)
+  await db.transaction(async (tx) => {
+    await insertProcess(p, tx);
+    await recordProcessEvent({
+      organizationId: p.organizationId, processId: p.id,
+      eventType: event.eventType, actor: event.actor, summary: event.summary,
+      refId: event.refId, correlationId: event.correlationId,
+    }, tx);
+  });
   return p;
 }
 
@@ -110,8 +133,8 @@ export async function updateProcessStage(id: string, orgId: number, stage: strin
 
 // ─── Price research ────────────────────────────────────────────────────────
 
-export async function insertResearch(r: PriceResearchWorkspace): Promise<PriceResearchWorkspace | null> {
-  const db = await getDb();
+export async function insertResearch(r: PriceResearchWorkspace, executor?: ProcurementExecutor): Promise<PriceResearchWorkspace | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(priceResearchTable).values({
     id: r.id, organizationId: r.organizationId, processId: r.processId, source: r.source,
@@ -120,8 +143,8 @@ export async function insertResearch(r: PriceResearchWorkspace): Promise<PriceRe
   return r;
 }
 
-export async function insertResearchItem(it: PriceResearchItem): Promise<PriceResearchItem | null> {
-  const db = await getDb();
+export async function insertResearchItem(it: PriceResearchItem, executor?: ProcurementExecutor): Promise<PriceResearchItem | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(priceResearchItemsTable).values({
     id: it.id, organizationId: it.organizationId, researchId: it.researchId, processId: it.processId,
@@ -130,6 +153,27 @@ export async function insertResearchItem(it: PriceResearchItem): Promise<PriceRe
     source: it.source, createdAt: toDb(it.createdAt),
   }).onDuplicateKeyUpdate({ set: { value: String(it.value), quantity: String(it.quantity) } });
   return it;
+}
+
+/**
+ * DATA-039 (Bloco D) — persiste o cabeçalho da pesquisa de preços e TODOS os seus itens brutos
+ * ATOMICAMENTE. Uma pesquisa com itens faltando (falha no meio do laço) é um estado corrompido;
+ * a transação garante tudo-ou-nada. O enriquecimento (Itens Inteligentes) e o evento de timeline
+ * permanecem FORA da transação por serem DERIVADOS/re-executáveis (idempotentes por id) e por
+ * envolverem operação pesada (CATMAT/IA) que não deve manter uma transação de banco aberta.
+ * Idempotente por onDuplicateKeyUpdate; degrada sem DB.
+ */
+export async function insertResearchWithItems(
+  r: PriceResearchWorkspace,
+  items: readonly PriceResearchItem[],
+): Promise<PriceResearchWorkspace | null> {
+  const db = await getDb();
+  if (!db) return r;
+  await db.transaction(async (tx) => {
+    await insertResearch(r, tx);
+    for (const it of items) await insertResearchItem(it, tx);
+  });
+  return r;
 }
 
 // ─── Intelligent items ────────────────────────────────────────────────────

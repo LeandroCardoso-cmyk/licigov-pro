@@ -33,8 +33,8 @@ const input = { processNumber: "100/2026", object: "Aquisição de Equipamentos 
 describe("procurementProcess.createProcess (PR B)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(procDb.insertProcess).mockResolvedValue({} as any);
-    vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
+    // DATA-039: o router agora persiste processo + evento inicial ATOMICAMENTE via um único helper.
+    vi.mocked(procDb.createProcessWithInitialEvent).mockImplementation(async (p) => p);
   });
 
   it("cria processo com número 100/2026 e forma 'Criar DFD do zero'", async () => {
@@ -46,8 +46,10 @@ describe("procurementProcess.createProcess (PR B)", () => {
     // criar_dfd NÃO pula etapa: começa em NEW_PROCESS (Adaptive Process Engine).
     expect(result.process.currentStage).toBe("NEW_PROCESS");
     expect(result.process.status).toBe("rascunho");
-    expect(procDb.insertProcess).toHaveBeenCalledTimes(1);
-    expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);
+    // DATA-039: um único write composto atômico (processo + evento inicial), não dois separados.
+    expect(procDb.createProcessWithInitialEvent).toHaveBeenCalledTimes(1);
+    const [, event] = vi.mocked(procDb.createProcessWithInitialEvent).mock.calls[0];
+    expect(event.eventType).toBe("workspace_created");
   });
 
   it("gera processId determinístico → retry não cria duplicata (idempotência)", async () => {
@@ -61,12 +63,12 @@ describe("procurementProcess.createProcess (PR B)", () => {
   it("preserva o processId retornado (mesmo id do workspace persistido)", async () => {
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     const result = await caller.createProcess(input);
-    const persisted = vi.mocked(procDb.insertProcess).mock.calls[0][0];
+    const persisted = vi.mocked(procDb.createProcessWithInitialEvent).mock.calls[0][0];
     expect(result.process.id).toBe(persisted.id);
   });
 
-  it("falha de persistência → mensagem amigável pt-BR, sem vazar o erro técnico", async () => {
-    vi.mocked(procDb.insertProcess).mockRejectedValue(new Error("Incorrect datetime value: '2026-07-26T23:40:16.123Z'"));
+  it("falha da persistência atômica → mensagem amigável pt-BR, sem vazar o erro técnico", async () => {
+    vi.mocked(procDb.createProcessWithInitialEvent).mockRejectedValue(new Error("Incorrect datetime value: '2026-07-26T23:40:16.123Z'"));
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
 
     await expect(caller.createProcess(input)).rejects.toMatchObject({
@@ -79,8 +81,8 @@ describe("procurementProcess.createProcess (PR B)", () => {
     });
   });
 
-  it("falha ao registrar evento também é tratada com mensagem amigável", async () => {
-    vi.mocked(procDb.recordProcessEvent).mockRejectedValue(new Error("db down"));
+  it("falha genérica na operação atômica também é tratada com mensagem amigável", async () => {
+    vi.mocked(procDb.createProcessWithInitialEvent).mockRejectedValue(new Error("db down"));
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     await expect(caller.createProcess(input)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
   });
@@ -89,6 +91,6 @@ describe("procurementProcess.createProcess (PR B)", () => {
     await expect(
       procurementProcessRouter.createCaller(makeContext(null)).createProcess(input),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    expect(procDb.insertProcess).not.toHaveBeenCalled();
+    expect(procDb.createProcessWithInitialEvent).not.toHaveBeenCalled();
   });
 });
