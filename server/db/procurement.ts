@@ -87,11 +87,21 @@ export async function createProcessWithInitialEvent(
   if (!db) return p; // sem DB: preserva o comportamento degradado (nada persiste; API ainda responde)
   await db.transaction(async (tx) => {
     await insertProcess(p, tx);
-    await recordProcessEvent({
-      organizationId: p.organizationId, processId: p.id,
-      eventType: event.eventType, actor: event.actor, summary: event.summary,
-      refId: event.refId, correlationId: event.correlationId,
-    }, tx);
+    // Replay-safe: o evento de criação é registrado no MÁXIMO uma vez. `recordProcessEvent` deriva o
+    // id do evento pela ORDEM (append), então um retry criaria um 2º evento de criação; aqui só
+    // registramos se ainda não houver um evento desse tipo para o processo (retry NÃO duplica).
+    const existing = await tx.select({ id: processTimelineTable.id }).from(processTimelineTable).where(and(
+      eq(processTimelineTable.processId, p.id),
+      eq(processTimelineTable.organizationId, p.organizationId),
+      eq(processTimelineTable.eventType, event.eventType),
+    ));
+    if (existing.length === 0) {
+      await recordProcessEvent({
+        organizationId: p.organizationId, processId: p.id,
+        eventType: event.eventType, actor: event.actor, summary: event.summary,
+        refId: event.refId, correlationId: event.correlationId,
+      }, tx);
+    }
   });
   return p;
 }
