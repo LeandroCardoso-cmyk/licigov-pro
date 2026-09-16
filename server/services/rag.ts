@@ -8,19 +8,31 @@ import {
   generateEmbedding,
   isValidEmbeddingVector,
 } from "./embeddings";
+import {
+  GOVERNED_LAW_CONTENT_KIND,
+  readGovernedChunkMetadata,
+} from "./governedLawCorpusMaterializer";
 
 export interface RetrievedChunk {
   content: string;
   articleNumber: string | null;
   similarity: number;
+  contentKind?: string;
+  canonicalLocator?: string;
+  sourceIdentifier?: string;
+  sourceUrl?: string;
 }
 
 /**
- * F-EMB1 — recuperação jurídica model-aware.
+ * F-EMB1/F-RAG1 — recuperação jurídica model-aware e provenance-aware.
  *
  * O corpus legal é global/autoridade de referência; não existe tenantId em law_chunks.
  * Isolamento aqui significa, portanto, isolamento do espaço vetorial: nenhum vetor histórico
  * ou de outra dimensionalidade pode ser comparado ao embedding da consulta atual.
+ *
+ * Chunks materializados a partir do reference set governado só entram no RAG quando
+ * `activeReference=true`. Isso evita tornar visível uma materialização parcial ou um set
+ * governado já substituído. Chunks legados sem essa metadata mantêm a semântica anterior.
  */
 export async function retrieveRelevantLaw(
   query: string,
@@ -56,15 +68,21 @@ export async function retrieveRelevantLaw(
       .where(scopedFilter);
 
     // Defense in depth: a query já filtra lineage no banco, mas o boundary de similaridade também
-    // rejeita qualquer linha inesperada. Uma regressão futura de query/adapter não pode reabrir
-    // mixed vector spaces silenciosamente.
+    // rejeita qualquer linha inesperada. Chunks governados incompletos/inativos também ficam fora.
     const eligibleChunks = currentSpaceChunks.filter((chunk) => {
       const compatible = chunk.embeddingModel === EMBEDDING_MODEL
         && chunk.embeddingDimensions === EMBEDDING_DIM;
       if (!compatible) {
         console.warn(`[RAG] incompatible_chunk_lineage chunkId=${chunk.id}`);
+        return false;
       }
-      return compatible;
+
+      const governed = readGovernedChunkMetadata(chunk.metadata);
+      if (governed && !governed.activeReference) {
+        console.warn(`[RAG] inactive_governed_chunk chunkId=${chunk.id}`);
+        return false;
+      }
+      return true;
     });
 
     if (eligibleChunks.length === 0) {
@@ -92,10 +110,19 @@ export async function retrieveRelevantLaw(
         return [];
       }
 
+      const governed = readGovernedChunkMetadata(chunk.metadata);
       return [{
         content: chunk.content,
         articleNumber: chunk.articleNumber,
         similarity: cosineSimilarity(queryEmbedding, parsed),
+        ...(governed
+          ? {
+              contentKind: governed.contentKind,
+              canonicalLocator: governed.canonicalLocator,
+              sourceIdentifier: governed.sourceIdentifier,
+              sourceUrl: governed.sourceUrl,
+            }
+          : {}),
       }];
     });
 
@@ -111,6 +138,7 @@ export async function retrieveRelevantLaw(
 
 /**
  * Formata chunks recuperados em contexto legal para o prompt.
+ * Resumos governados são rotulados explicitamente como RESUMO, nunca como transcrição literal.
  */
 export function formatRetrievedContext(chunks: RetrievedChunk[]): string {
   if (chunks.length === 0) return "";
@@ -119,6 +147,17 @@ export function formatRetrievedContext(chunks: RetrievedChunk[]): string {
     .map((chunk, index) => {
       const article = chunk.articleNumber ? `[${chunk.articleNumber}]` : "";
       const similarity = `(${(chunk.similarity * 100).toFixed(1)}% relevância)`;
+
+      if (chunk.contentKind === GOVERNED_LAW_CONTENT_KIND) {
+        const source = chunk.sourceIdentifier
+          ? `\nFonte oficial identificada: ${chunk.sourceIdentifier}${chunk.sourceUrl ? ` — ${chunk.sourceUrl}` : ""}`
+          : "";
+        const locator = chunk.canonicalLocator ? `\nLocator: ${chunk.canonicalLocator}` : "";
+        return `### Referência Jurídica Governada ${index + 1} ${article} ${similarity}`
+          + `\nNatureza: resumo verificado para enquadramento; NÃO é transcrição literal da norma.`
+          + `${source}${locator}\nResumo: ${chunk.content}`;
+      }
+
       return `### Trecho Relevante ${index + 1} ${article} ${similarity}\n${chunk.content}`;
     })
     .join("\n\n");
