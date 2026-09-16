@@ -283,7 +283,21 @@ export const procurementProcessRouter = router({
       // DATA-039: cabeçalho da pesquisa + itens brutos persistem ATOMICAMENTE — nunca uma pesquisa
       // com itens faltando. Enriquecimento (abaixo) e evento são derivados/re-executáveis e ficam
       // fora da transação (operação pesada não deve segurar transação de banco).
-      await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
+      // Fail-closed + sanitizado: falha da persistência autoritativa é logada (com correlationId) e
+      // convertida em erro institucional; NÃO mascara falhas de enriquecimento (que ficam fora daqui).
+      try {
+        await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
+      } catch (err) {
+        log.error("import_price_research_persist_failed", {
+          organizationId: orgId, userId: ctx.user.id, processId: input.processId,
+          source: input.source, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
 
       // Cada item da pesquisa vira um Item Inteligente enriquecido.
       const enriched = [];

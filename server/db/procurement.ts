@@ -83,14 +83,19 @@ export async function insertProcess(p: ProcurementWorkspace, executor?: Procurem
  * uma `idempotencyKey` estável. Retries sequenciais OU concorrentes colidem no MESMO id, e a
  * PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM processo e EXATAMENTE UM evento inicial —
  * a garantia é do banco, não da aplicação. Multi-tenant: o id inclui `organizationId`, então tenants
- * distintos com o mesmo número de processo nunca colidem. Degrada sem DB (retorna o objeto em memória).
+ * distintos com o mesmo número de processo nunca colidem.
+ *
+ * FAIL-CLOSED: operação AUTORITATIVA de criação — se o banco estiver indisponível, LANÇA (não finge
+ * sucesso). Um "sucesso fantasma" quebraria auditabilidade/determinismo/rastreabilidade. O erro é
+ * genérico (sem detalhe de infraestrutura/secret); o router traduz para mensagem institucional e loga
+ * o técnico com correlationId. Mesma política das escritas autoritativas do documentVersionService.
  */
 export async function createProcessWithInitialEvent(
   p: ProcurementWorkspace,
   event: { eventType: string; actor: string; summary: string; refId?: string; correlationId: string },
-): Promise<ProcurementWorkspace | null> {
+): Promise<ProcurementWorkspace> {
   const db = await getDb();
-  if (!db) return p; // sem DB: preserva o comportamento degradado (nada persiste; API ainda responde)
+  if (!db) throw new Error("Banco de dados indisponível — criação de processo não persistida (fail-closed).");
   await db.transaction(async (tx) => {
     await insertProcess(p, tx);
     await recordProcessEvent({
@@ -168,14 +173,17 @@ export async function insertResearchItem(it: PriceResearchItem, executor?: Procu
  * a transação garante tudo-ou-nada. O enriquecimento (Itens Inteligentes) e o evento de timeline
  * permanecem FORA da transação por serem DERIVADOS/re-executáveis (idempotentes por id) e por
  * envolverem operação pesada (CATMAT/IA) que não deve manter uma transação de banco aberta.
- * Idempotente por onDuplicateKeyUpdate; degrada sem DB.
+ * Idempotente por onDuplicateKeyUpdate.
+ *
+ * FAIL-CLOSED: escrita AUTORITATIVA — se o banco estiver indisponível, LANÇA (não finge sucesso).
+ * Erro genérico (sem infraestrutura/secret); o router sanitiza e loga o técnico com correlationId.
  */
 export async function insertResearchWithItems(
   r: PriceResearchWorkspace,
   items: readonly PriceResearchItem[],
-): Promise<PriceResearchWorkspace | null> {
+): Promise<PriceResearchWorkspace> {
   const db = await getDb();
-  if (!db) return r;
+  if (!db) throw new Error("Banco de dados indisponível — importação de pesquisa não persistida (fail-closed).");
   await db.transaction(async (tx) => {
     await insertResearch(r, tx);
     for (const it of items) await insertResearchItem(it, tx);
