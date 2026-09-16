@@ -76,8 +76,14 @@ export async function insertProcess(p: ProcurementWorkspace, executor?: Procurem
 /**
  * DATA-039 (Bloco D) — cria o processo e o SEU evento inicial de timeline ATOMICAMENTE.
  * Evita estado parcial (processo sem evento de criação, ou evento sem processo) em caso de falha
- * entre os dois writes. Idempotente: id determinístico + onDuplicateKeyUpdate em ambos os writes,
- * portanto retry/clique repetido não duplica. Degrada sem DB (retorna o objeto em memória).
+ * entre os dois writes.
+ *
+ * Replay-safety ESTRUTURAL (sem check-then-insert / sem janela TOCTOU): ambos os writes usam id
+ * DETERMINÍSTICO e INDEPENDENTE de ordem — o processo por `plp:org:número`; o evento de criação por
+ * uma `idempotencyKey` estável. Retries sequenciais OU concorrentes colidem no MESMO id, e a
+ * PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM processo e EXATAMENTE UM evento inicial —
+ * a garantia é do banco, não da aplicação. Multi-tenant: o id inclui `organizationId`, então tenants
+ * distintos com o mesmo número de processo nunca colidem. Degrada sem DB (retorna o objeto em memória).
  */
 export async function createProcessWithInitialEvent(
   p: ProcurementWorkspace,
@@ -87,21 +93,12 @@ export async function createProcessWithInitialEvent(
   if (!db) return p; // sem DB: preserva o comportamento degradado (nada persiste; API ainda responde)
   await db.transaction(async (tx) => {
     await insertProcess(p, tx);
-    // Replay-safe: o evento de criação é registrado no MÁXIMO uma vez. `recordProcessEvent` deriva o
-    // id do evento pela ORDEM (append), então um retry criaria um 2º evento de criação; aqui só
-    // registramos se ainda não houver um evento desse tipo para o processo (retry NÃO duplica).
-    const existing = await tx.select({ id: processTimelineTable.id }).from(processTimelineTable).where(and(
-      eq(processTimelineTable.processId, p.id),
-      eq(processTimelineTable.organizationId, p.organizationId),
-      eq(processTimelineTable.eventType, event.eventType),
-    ));
-    if (existing.length === 0) {
-      await recordProcessEvent({
-        organizationId: p.organizationId, processId: p.id,
-        eventType: event.eventType, actor: event.actor, summary: event.summary,
-        refId: event.refId, correlationId: event.correlationId,
-      }, tx);
-    }
+    await recordProcessEvent({
+      organizationId: p.organizationId, processId: p.id,
+      eventType: event.eventType, actor: event.actor, summary: event.summary,
+      refId: event.refId, correlationId: event.correlationId,
+      idempotencyKey: "initial", // evento SINGLETON de criação — id estável, retry (mesmo concorrente) não duplica
+    }, tx);
   });
   return p;
 }
@@ -354,13 +351,25 @@ export async function listItemHistory(processId: string, orgId: number): Promise
 
 export async function recordProcessEvent(params: {
   organizationId: number; processId: string; eventType: string; actor: string; summary: string; refId?: string; correlationId: string;
+  /**
+   * DATA-039 — chave de idempotência OPCIONAL para eventos SINGLETON (ex.: criação de processo).
+   * Quando fornecida, o id do evento é derivado dela (INDEPENDENTE da ordem), então retries — inclusive
+   * CONCORRENTES — colidem no MESMO id: a PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM
+   * registro de forma ESTRUTURAL no banco (sem check-then-insert / sem janela TOCTOU). Sem a chave, o
+   * comportamento append-only por ordem é preservado (contrato inalterado para os demais eventos).
+   */
+  idempotencyKey?: string;
 }, executor?: ProcurementExecutor): Promise<void> {
   const db = executor ?? await getDb();
   if (!db) return;
   const existing = await db.select({ id: processTimelineTable.id }).from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, params.processId), eq(processTimelineTable.organizationId, params.organizationId)));
   const order = existing.length;
-  const id = createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
+  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id por ORDEM (append). Espaços de hash
+  // disjuntos por prefixo ("ptl-key:" × "ptl:") — nunca colidem entre si.
+  const id = params.idempotencyKey
+    ? createHash("sha256").update(`ptl-key:${params.organizationId}:${params.processId}:${params.eventType}:${params.idempotencyKey}`).digest("hex").slice(0, 20)
+    : createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
   await db.insert(processTimelineTable).values({
     id, organizationId: params.organizationId, processId: params.processId, eventOrder: order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, refId: params.refId ?? "",
