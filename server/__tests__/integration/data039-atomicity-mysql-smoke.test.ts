@@ -7,7 +7,7 @@
  *   - ROLLBACK real: uma transação que grava e depois lança NÃO deixa estado parcial persistido
  *     (as funções executor-aware participam do rollback — base das duas garantias acima).
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { getDb } from "../../db";
 import {
@@ -20,6 +20,7 @@ import { createPriceResearchWorkspace, extractItemsFromText } from "../../domain
 
 const DB = process.env.DATABASE_URL;
 const ORG = 950390;
+const ORG2 = 950391; // segundo tenant, para provar isolamento cross-tenant (mesmo número de processo)
 
 const DDL_PROCESSES = `CREATE TABLE IF NOT EXISTS \`procurement_processes\` (
   \`id\` VARCHAR(20) NOT NULL, \`organization_id\` INT NOT NULL,
@@ -63,10 +64,10 @@ const DDL_RESEARCH_ITEMS = `CREATE TABLE IF NOT EXISTS \`price_research_items\` 
 
 async function cleanup() {
   const conn = await mysql.createConnection(DB!);
-  await conn.query("DELETE FROM `process_timeline` WHERE organization_id = ?", [ORG]);
-  await conn.query("DELETE FROM `procurement_processes` WHERE organization_id = ?", [ORG]);
-  await conn.query("DELETE FROM `price_research_items` WHERE organization_id = ?", [ORG]);
-  await conn.query("DELETE FROM `price_research` WHERE organization_id = ?", [ORG]);
+  await conn.query("DELETE FROM `process_timeline` WHERE organization_id IN (?, ?)", [ORG, ORG2]);
+  await conn.query("DELETE FROM `procurement_processes` WHERE organization_id IN (?, ?)", [ORG, ORG2]);
+  await conn.query("DELETE FROM `price_research_items` WHERE organization_id IN (?, ?)", [ORG, ORG2]);
+  await conn.query("DELETE FROM `price_research` WHERE organization_id IN (?, ?)", [ORG, ORG2]);
   await conn.end();
 }
 
@@ -78,6 +79,7 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     await cleanup();
   });
   afterAll(cleanup);
+  beforeEach(cleanup); // cada teste parte de um estado limpo → independente de ordem e de resíduos
 
   it("createProcessWithInitialEvent: processo + evento inicial commitam JUNTOS; retry não duplica", async () => {
     const mk = () => createProcurementWorkspace({
@@ -104,6 +106,40 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     expect((await listProcessTimeline(p.id, ORG)).length).toBe(1);
   });
 
+  it("retry CONCORRENTE (mesmo processo, N simultâneos): exatamente 1 processo e 1 evento inicial", async () => {
+    // Prova a garantia ESTRUTURAL (id determinístico + PK + onDuplicateKeyUpdate) sob concorrência real:
+    // sem check-then-insert, nenhuma janela TOCTOU. N transações concorrentes convergem para 1+1.
+    const mk = () => createProcurementWorkspace({
+      organizationId: ORG, processNumber: "D039-CONC/2026", object: "Objeto concorrente",
+      startOption: "criar_dfd", responsibleUser: 1, correlationId: "d039-conc",
+    });
+    const runs = Array.from({ length: 8 }, () => createProcessWithInitialEvent(mk(), {
+      eventType: "workspace_created", actor: "1",
+      summary: "Processo D039-CONC/2026 criado.", refId: mk().id, correlationId: "d039-conc",
+    }));
+    await Promise.all(runs); // disparados juntos → exercita a corrida
+    const pid = mk().id;
+    expect((await listProcesses(ORG, 200)).filter(x => x.processNumber === "D039-CONC/2026").length).toBe(1);
+    expect((await listProcessTimeline(pid, ORG)).length).toBe(1);
+  });
+
+  it("cross-tenant: mesmo número de processo em 2 tenants NÃO colide (id inclui organizationId)", async () => {
+    const mk = (org: number) => createProcurementWorkspace({
+      organizationId: org, processNumber: "D039-SHARED/2026", object: `Objeto ${org}`,
+      startOption: "criar_dfd", responsibleUser: 1, correlationId: `d039-xt-${org}`,
+    });
+    const pA = mk(ORG); const pB = mk(ORG2);
+    expect(pA.id).not.toBe(pB.id); // ids determinísticos distintos por tenant
+    await createProcessWithInitialEvent(pA, { eventType: "workspace_created", actor: "1", summary: "A", refId: pA.id, correlationId: "d039-xt-a" });
+    await createProcessWithInitialEvent(pB, { eventType: "workspace_created", actor: "1", summary: "B", refId: pB.id, correlationId: "d039-xt-b" });
+    // Cada tenant vê apenas o seu processo e o seu evento; nenhum interfere no outro.
+    expect(await getProcess(pA.id, ORG)).not.toBeNull();
+    expect(await getProcess(pA.id, ORG2)).toBeNull();   // tenant B não enxerga o processo do A
+    expect(await getProcess(pB.id, ORG2)).not.toBeNull();
+    expect((await listProcessTimeline(pA.id, ORG)).length).toBe(1);
+    expect((await listProcessTimeline(pB.id, ORG2)).length).toBe(1);
+  });
+
   it("insertResearchWithItems: cabeçalho + todos os itens commitam JUNTOS", async () => {
     const research = createPriceResearchWorkspace({ processId: "d039-proc", organizationId: ORG, source: "manual", correlationId: "d039-res" });
     const items = extractItemsFromText(
@@ -119,6 +155,24 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     await conn.end();
     expect((hdr as mysql.RowDataPacket[]).length).toBe(1);
     expect((rows as mysql.RowDataPacket[])[0].c).toBe(items.length);
+  });
+
+  it("insertResearchWithItems: retry (mesmo processo/source/texto) NÃO duplica header nem itens", async () => {
+    // research id = prw:org:processId:source e item id = pri:org:researchId:index:desc — determinísticos.
+    const research = createPriceResearchWorkspace({ processId: "d039-retry-proc", organizationId: ORG, source: "manual", correlationId: "d039-res-retry" });
+    const items = extractItemsFromText(
+      "Item A, 10 un, R$ 2,00\nItem B, 5 un, R$ 7,00",
+      { researchId: research.id, processId: "d039-retry-proc", organizationId: ORG },
+    );
+    await insertResearchWithItems({ ...research, itemCount: items.length }, items);
+    await insertResearchWithItems({ ...research, itemCount: items.length }, items); // retry idêntico
+
+    const conn = await mysql.createConnection(DB!);
+    const [hdr] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) c FROM `price_research` WHERE id = ?", [research.id]);
+    const [rows] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) c FROM `price_research_items` WHERE research_id = ?", [research.id]);
+    await conn.end();
+    expect((hdr as mysql.RowDataPacket[])[0].c).toBe(1);            // header não duplica
+    expect((rows as mysql.RowDataPacket[])[0].c).toBe(items.length); // itens não duplicam
   });
 
   it("ROLLBACK real: transação que grava processo+evento e lança NÃO deixa estado parcial", async () => {
