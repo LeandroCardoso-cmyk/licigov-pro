@@ -207,4 +207,26 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     expect((hdr as mysql.RowDataPacket[])[0].c).toBe(0);
     expect((it as mysql.RowDataPacket[])[0].c).toBe(0);
   });
+
+  it("ROLLBACK real: falha APÓS o último de vários itens reverte cabeçalho + TODOS os itens (all-or-nothing)", async () => {
+    const db = await getDb();
+    if (!db) return;
+    const research = createPriceResearchWorkspace({ processId: "d039-rb-multi", organizationId: ORG, source: "manual", correlationId: "d039-rb3" });
+    const items = extractItemsFromText(
+      "Item 1, 1 un, R$ 1,00\nItem 2, 2 un, R$ 2,00\nItem 3, 3 un, R$ 3,00",
+      { researchId: research.id, processId: "d039-rb-multi", organizationId: ORG },
+    );
+    expect(items.length).toBe(3);
+    await expect(db.transaction(async (tx) => {
+      await insertResearch({ ...research, itemCount: items.length }, tx);
+      for (const it of items) await insertResearchItem(it, tx); // insere os 3 itens
+      throw new Error("boom após o último item (força rollback de todo o conjunto)");
+    })).rejects.toThrow(/boom/);
+    const conn = await mysql.createConnection(DB!);
+    const [hdr] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) c FROM `price_research` WHERE id = ?", [research.id]);
+    const [it] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) c FROM `price_research_items` WHERE research_id = ?", [research.id]);
+    await conn.end();
+    expect((hdr as mysql.RowDataPacket[])[0].c).toBe(0); // cabeçalho revertido
+    expect((it as mysql.RowDataPacket[])[0].c).toBe(0);  // NENHUM dos 3 itens persistiu (nem N-1)
+  });
 });
