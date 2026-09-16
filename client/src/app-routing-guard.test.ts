@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const APP = readFileSync(path.join(process.cwd(), "client/src/App.tsx"), "utf8");
+const DOMAIN_NAV = readFileSync(path.join(process.cwd(), "client/src/components/business-domains/DomainNavigation.tsx"), "utf8");
 
 /** Remove comentários de bloco/linha para inspecionar apenas rotas ATIVAS. */
 function stripComments(src: string): string {
@@ -37,5 +38,15 @@ describe("G8 — navegação canônica (guarda de regressão)", () => {
     // O seletor de módulos legado e a criação legada de processo redirecionam ao fluxo canônico.
     expect(ACTIVE).toMatch(/path=\{["']\/modulos["']\}\s*component=\{\(\)\s*=>\s*<Redirect/);
     expect(ACTIVE).toMatch(/path=\{["']\/novo-processo["']\}\s*component=\{\(\)\s*=>\s*<Redirect/);
+  });
+
+  it("a NAVEGAÇÃO OFICIAL (DomainNavigation) não aponta para nenhuma rota legada (invariante arquitetural)", () => {
+    // G8 real: o menu canônico dos Business Domains nunca linka rotas legadas duplicadas. Auto-navegação
+    // interna das páginas legadas (acesso por URL direta) está fora deste componente — este é o menu oficial.
+    for (const legacy of ["/direct-contracts", "/parecer-juridico", "/modulos"]) {
+      expect(DOMAIN_NAV).not.toContain(legacy);
+    }
+    // "/contracts" só como rota legada exata (não confundir com a canônica "/contratos").
+    expect(DOMAIN_NAV).not.toMatch(/["']\/contracts(["'/]|$)/);
   });
 });
