@@ -119,3 +119,13 @@ Logs não devem conter:
 ## Fallback
 
 Se o corpus compatível estiver ausente ou incompleto, o RAG falha de forma observável e não fabrica grounding. O legado permanece identificado historicamente até regeneração real; não existe conversão de metadata sem novo vetor.
+
+
+## Checkpoint de integração DATA-039/G8 — 2026-09-18
+
+- DATA-039/G8 reconciliado de forma aditiva sobre F-EMB1/F-RAG1; schema, journal, package e migration 0301 preservados da linha F-EMB1.
+- CI de validação integrada #560: SUCCESS; suíte 5.209 passed / 328 skipped; smoke DATA-039 MySQL 8/8 passed.
+- CI oficial do PR #226 #561: SUCCESS, incluindo novamente Smoke MySQL + DATA-039.
+- Staging web no SHA integrado passou pelo predeploy canônico (migrations replay-safe + reference-data noop).
+- F-RAG1 dry-run em staging: setId=1, version=1, total=7, existing=0, materialized=0, replayed=false.
+- Apply F-RAG1 permanece gate operacional seguinte; produção e main continuam fora de escopo.
