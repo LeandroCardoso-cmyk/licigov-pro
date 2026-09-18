@@ -60,8 +60,8 @@ const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Process ─────────────────────────────────────────────────────────────────
 
-export async function insertProcess(p: ProcurementWorkspace): Promise<ProcurementWorkspace | null> {
-  const db = await getDb();
+export async function insertProcess(p: ProcurementWorkspace, executor?: ProcurementExecutor): Promise<ProcurementWorkspace | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(procurementProcessesTable).values({
     id: p.id, organizationId: p.organizationId, processNumber: p.processNumber, object: p.object,
@@ -70,6 +70,41 @@ export async function insertProcess(p: ProcurementWorkspace): Promise<Procuremen
     activeCopilots: JSON.stringify(p.activeCopilots), correlationId: p.correlationId,
     createdAt: toDb(p.createdAt), updatedAt: toDb(p.updatedAt),
   }).onDuplicateKeyUpdate({ set: { currentStage: p.currentStage, status: p.status, modality: p.modality, updatedAt: toDb(p.updatedAt) } });
+  return p;
+}
+
+/**
+ * DATA-039 (Bloco D) — cria o processo e o SEU evento inicial de timeline ATOMICAMENTE.
+ * Evita estado parcial (processo sem evento de criação, ou evento sem processo) em caso de falha
+ * entre os dois writes.
+ *
+ * Replay-safety ESTRUTURAL (sem check-then-insert / sem janela TOCTOU): ambos os writes usam id
+ * DETERMINÍSTICO e INDEPENDENTE de ordem — o processo por `plp:org:número`; o evento de criação por
+ * uma `idempotencyKey` estável. Retries sequenciais OU concorrentes colidem no MESMO id, e a
+ * PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM processo e EXATAMENTE UM evento inicial —
+ * a garantia é do banco, não da aplicação. Multi-tenant: o id inclui `organizationId`, então tenants
+ * distintos com o mesmo número de processo nunca colidem.
+ *
+ * FAIL-CLOSED: operação AUTORITATIVA de criação — se o banco estiver indisponível, LANÇA (não finge
+ * sucesso). Um "sucesso fantasma" quebraria auditabilidade/determinismo/rastreabilidade. O erro é
+ * genérico (sem detalhe de infraestrutura/secret); o router traduz para mensagem institucional e loga
+ * o técnico com correlationId. Mesma política das escritas autoritativas do documentVersionService.
+ */
+export async function createProcessWithInitialEvent(
+  p: ProcurementWorkspace,
+  event: { eventType: string; actor: string; summary: string; refId?: string; correlationId: string },
+): Promise<ProcurementWorkspace> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados indisponível — criação de processo não persistida (fail-closed).");
+  await db.transaction(async (tx) => {
+    await insertProcess(p, tx);
+    await recordProcessEvent({
+      organizationId: p.organizationId, processId: p.id,
+      eventType: event.eventType, actor: event.actor, summary: event.summary,
+      refId: event.refId, correlationId: event.correlationId,
+      idempotencyKey: "initial", // evento SINGLETON de criação — id estável, retry (mesmo concorrente) não duplica
+    }, tx);
+  });
   return p;
 }
 
@@ -110,8 +145,8 @@ export async function updateProcessStage(id: string, orgId: number, stage: strin
 
 // ─── Price research ────────────────────────────────────────────────────────
 
-export async function insertResearch(r: PriceResearchWorkspace): Promise<PriceResearchWorkspace | null> {
-  const db = await getDb();
+export async function insertResearch(r: PriceResearchWorkspace, executor?: ProcurementExecutor): Promise<PriceResearchWorkspace | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(priceResearchTable).values({
     id: r.id, organizationId: r.organizationId, processId: r.processId, source: r.source,
@@ -120,8 +155,8 @@ export async function insertResearch(r: PriceResearchWorkspace): Promise<PriceRe
   return r;
 }
 
-export async function insertResearchItem(it: PriceResearchItem): Promise<PriceResearchItem | null> {
-  const db = await getDb();
+export async function insertResearchItem(it: PriceResearchItem, executor?: ProcurementExecutor): Promise<PriceResearchItem | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(priceResearchItemsTable).values({
     id: it.id, organizationId: it.organizationId, researchId: it.researchId, processId: it.processId,
@@ -130,6 +165,30 @@ export async function insertResearchItem(it: PriceResearchItem): Promise<PriceRe
     source: it.source, createdAt: toDb(it.createdAt),
   }).onDuplicateKeyUpdate({ set: { value: String(it.value), quantity: String(it.quantity) } });
   return it;
+}
+
+/**
+ * DATA-039 (Bloco D) — persiste o cabeçalho da pesquisa de preços e TODOS os seus itens brutos
+ * ATOMICAMENTE. Uma pesquisa com itens faltando (falha no meio do laço) é um estado corrompido;
+ * a transação garante tudo-ou-nada. O enriquecimento (Itens Inteligentes) e o evento de timeline
+ * permanecem FORA da transação por serem DERIVADOS/re-executáveis (idempotentes por id) e por
+ * envolverem operação pesada (CATMAT/IA) que não deve manter uma transação de banco aberta.
+ * Idempotente por onDuplicateKeyUpdate.
+ *
+ * FAIL-CLOSED: escrita AUTORITATIVA — se o banco estiver indisponível, LANÇA (não finge sucesso).
+ * Erro genérico (sem infraestrutura/secret); o router sanitiza e loga o técnico com correlationId.
+ */
+export async function insertResearchWithItems(
+  r: PriceResearchWorkspace,
+  items: readonly PriceResearchItem[],
+): Promise<PriceResearchWorkspace> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados indisponível — importação de pesquisa não persistida (fail-closed).");
+  await db.transaction(async (tx) => {
+    await insertResearch(r, tx);
+    for (const it of items) await insertResearchItem(it, tx);
+  });
+  return r;
 }
 
 // ─── Intelligent items ────────────────────────────────────────────────────
@@ -300,13 +359,25 @@ export async function listItemHistory(processId: string, orgId: number): Promise
 
 export async function recordProcessEvent(params: {
   organizationId: number; processId: string; eventType: string; actor: string; summary: string; refId?: string; correlationId: string;
+  /**
+   * DATA-039 — chave de idempotência OPCIONAL para eventos SINGLETON (ex.: criação de processo).
+   * Quando fornecida, o id do evento é derivado dela (INDEPENDENTE da ordem), então retries — inclusive
+   * CONCORRENTES — colidem no MESMO id: a PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM
+   * registro de forma ESTRUTURAL no banco (sem check-then-insert / sem janela TOCTOU). Sem a chave, o
+   * comportamento append-only por ordem é preservado (contrato inalterado para os demais eventos).
+   */
+  idempotencyKey?: string;
 }, executor?: ProcurementExecutor): Promise<void> {
   const db = executor ?? await getDb();
   if (!db) return;
   const existing = await db.select({ id: processTimelineTable.id }).from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, params.processId), eq(processTimelineTable.organizationId, params.organizationId)));
   const order = existing.length;
-  const id = createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
+  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id por ORDEM (append). Espaços de hash
+  // disjuntos por prefixo ("ptl-key:" × "ptl:") — nunca colidem entre si.
+  const id = params.idempotencyKey
+    ? createHash("sha256").update(`ptl-key:${params.organizationId}:${params.processId}:${params.eventType}:${params.idempotencyKey}`).digest("hex").slice(0, 20)
+    : createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
   await db.insert(processTimelineTable).values({
     id, organizationId: params.organizationId, processId: params.processId, eventOrder: order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, refId: params.refId ?? "",
