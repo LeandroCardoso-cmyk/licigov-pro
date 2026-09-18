@@ -4,17 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pnpm start",
-    "healthcheckPath": "/readyz",
-    "healthcheckTimeout": 30,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3
-  },
-  "environments": {
-    "production": {
-      "deploy": {
-        "preDeployCommand": ["pnpm db:release:predeploy"]
-      }
-    }
+    "startCommand": "pnpm db:embedding:reindex -- --dry-run --environment production --production-approved",
+    "restartPolicyType": "NEVER"
   }
 }
