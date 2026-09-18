@@ -106,7 +106,7 @@ function harness(options?: { failOnEmbedCall?: number }) {
         .filter((event) => event.action === "rag_materialization_started")
         .map((event) => event.correlationId)
         .find((candidate): candidate is string =>
-          Boolean(candidate)
+          typeof candidate === "string"
           && candidate !== input.runId
           && runState(candidate) === "started"
         );
