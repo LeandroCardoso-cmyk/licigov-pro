@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pnpm db:embedding:reindex -- --dry-run --environment production --production-approved",
+    "startCommand": "pnpm exec tsx scripts/materialize-governed-law-corpus.ts --dry-run --environment production --as-of-date 2026-09-18 --production-approved",
     "restartPolicyType": "NEVER"
   }
 }
