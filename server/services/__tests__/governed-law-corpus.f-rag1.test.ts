@@ -63,6 +63,12 @@ function entry(id: number, locator: string): LegalReferenceEntry {
   };
 }
 
+type HarnessEvent = {
+  action: string;
+  correlationId: string | null;
+  details: unknown;
+};
+
 function harness(options?: { failOnEmbedCall?: number }) {
   const referenceSet = set();
   const entries = [
@@ -70,14 +76,63 @@ function harness(options?: { failOnEmbedCall?: number }) {
     entry(2, "lei-14.133-2021/art-75/inc-I"),
   ];
   const chunks: LawChunk[] = [];
-  const events: Array<{ action: string; details: unknown }> = [];
+  const events: HarnessEvent[] = [];
   let nextId = 1;
   let embedCalls = 0;
+
+  const runState = (runId: string): "completed" | "started" | "failed" | null => {
+    let started = false;
+    let failed = false;
+    for (const event of events) {
+      if (event.correlationId !== runId) continue;
+      if (event.action === "rag_materialization_completed") return "completed";
+      if (event.action === "rag_materialization_failed") failed = true;
+      if (event.action === "rag_materialization_started") started = true;
+    }
+    if (failed) return "failed";
+    if (started) return "started";
+    return null;
+  };
 
   const deps: GovernedLawCorpusDeps = {
     resolveGovernedSet: vi.fn(async () => ({ set: referenceSet, entries })),
     listChunks: vi.fn(async () => chunks),
-    insertChunk: vi.fn(async (chunk: InsertLawChunk) => {
+    claimRun: vi.fn(async (input) => {
+      const state = runState(input.runId);
+      if (state === "completed") return "replayed" as const;
+      if (state) throw new Error("GOVERNED_LAW_CORPUS_RUN_ID_NOT_REUSABLE");
+
+      const otherRunning = events
+        .filter((event) => event.action === "rag_materialization_started")
+        .map((event) => event.correlationId)
+        .find((candidate): candidate is string =>
+          Boolean(candidate)
+          && candidate !== input.runId
+          && runState(candidate) === "started"
+        );
+      if (otherRunning) throw new Error("GOVERNED_LAW_CORPUS_ALREADY_RUNNING");
+
+      events.push({
+        action: "rag_materialization_started",
+        correlationId: input.runId,
+        details: {
+          runId: input.runId,
+          environment: input.environment,
+          totalEntries: input.totalEntries,
+          alreadyMaterialized: input.alreadyMaterialized,
+        },
+      });
+      return "claimed" as const;
+    }),
+    insertChunkIfMissing: vi.fn(async ({ materializationKey, chunk }) => {
+      const matching = chunks.filter(
+        (current) => readGovernedChunkMetadata(current.metadata)?.materializationKey === materializationKey,
+      );
+      if (matching.length > 1) {
+        throw new Error("GOVERNED_LAW_CORPUS_DUPLICATE_MATERIALIZATION_KEY");
+      }
+      if (matching.length === 1) return "existing" as const;
+
       chunks.push({
         id: nextId++,
         lawName: chunk.lawName,
@@ -90,24 +145,63 @@ function harness(options?: { failOnEmbedCall?: number }) {
         metadata: chunk.metadata ?? null,
         createdAt: new Date(),
       });
+      return "inserted" as const;
     }),
-    listSetEvents: vi.fn(async () => events),
-    appendSetEvent: vi.fn(async ({ action, details }) => {
-      events.push({ action, details });
-    }),
-    finalizeActiveReference: vi.fn(async (hash: string) => {
+    completeRun: vi.fn(async (input) => {
+      if (runState(input.runId) !== "started") {
+        throw new Error("GOVERNED_LAW_CORPUS_RUN_STATE_INVALID");
+      }
+
+      const expected = new Set(input.expectedMaterializationKeys);
+      for (const materializationKey of expected) {
+        const count = chunks.filter(
+          (chunk) => readGovernedChunkMetadata(chunk.metadata)?.materializationKey === materializationKey,
+        ).length;
+        if (count !== 1) throw new Error("GOVERNED_LAW_CORPUS_INCOMPLETE");
+      }
+
       for (const chunk of chunks) {
         const metadata = readGovernedChunkMetadata(chunk.metadata);
         if (!metadata) continue;
         chunk.metadata = {
           ...metadata,
-          activeReference: metadata.referenceSetContentHash === hash,
+          activeReference: expected.has(metadata.materializationKey),
         };
       }
+
+      events.push({
+        action: "rag_materialization_completed",
+        correlationId: input.runId,
+        details: {
+          runId: input.runId,
+          environment: input.environment,
+          totalEntries: input.totalEntries,
+          alreadyMaterialized: input.alreadyMaterialized,
+          materialized: input.materialized,
+        },
+      });
+    }),
+    failRun: vi.fn(async (input) => {
+      const state = runState(input.runId);
+      if (state === "completed" || state === "failed") return;
+      if (state !== "started") throw new Error("GOVERNED_LAW_CORPUS_RUN_STATE_INVALID");
+
+      events.push({
+        action: "rag_materialization_failed",
+        correlationId: input.runId,
+        details: {
+          runId: input.runId,
+          environment: input.environment,
+          errorCode: input.errorCode,
+          materialized: input.materialized,
+        },
+      });
     }),
     embed: vi.fn(async () => {
       embedCalls += 1;
-      if (options?.failOnEmbedCall === embedCalls) throw new Error("EMBEDDING_PROVIDER_TRANSPORT_ERROR");
+      if (options?.failOnEmbedCall === embedCalls) {
+        throw new Error("EMBEDDING_PROVIDER_TRANSPORT_ERROR");
+      }
       return vector();
     }),
   };
@@ -127,8 +221,10 @@ describe("F-RAG1 governed law corpus materialization", () => {
     expect(result.totalEntries).toBe(2);
     expect(result.alreadyMaterialized).toBe(0);
     expect(h.deps.embed).not.toHaveBeenCalled();
-    expect(h.deps.insertChunk).not.toHaveBeenCalled();
-    expect(h.deps.appendSetEvent).not.toHaveBeenCalled();
+    expect(h.deps.claimRun).not.toHaveBeenCalled();
+    expect(h.deps.insertChunkIfMissing).not.toHaveBeenCalled();
+    expect(h.deps.completeRun).not.toHaveBeenCalled();
+    expect(h.deps.failRun).not.toHaveBeenCalled();
   });
 
   it("materializa somente resumo governado com lineage explícita e espaço vetorial canônico", async () => {
@@ -144,6 +240,10 @@ describe("F-RAG1 governed law corpus materialization", () => {
     expect(h.chunks).toHaveLength(2);
     expect(h.chunks.every((chunk) => chunk.embeddingModel === EMBEDDING_MODEL)).toBe(true);
     expect(h.chunks.every((chunk) => chunk.embeddingDimensions === EMBEDDING_DIM)).toBe(true);
+    expect(h.events.map((event) => event.action)).toEqual([
+      "rag_materialization_started",
+      "rag_materialization_completed",
+    ]);
 
     const metadata = readGovernedChunkMetadata(h.chunks[0].metadata);
     expect(metadata).toMatchObject({
@@ -174,20 +274,29 @@ describe("F-RAG1 governed law corpus materialization", () => {
     expect(replay.replayed).toBe(true);
     expect(h.deps.embed).not.toHaveBeenCalled();
     expect(h.chunks).toHaveLength(2);
+    expect(h.events.filter((event) => event.action === "rag_materialization_completed")).toHaveLength(1);
   });
 
   it("falha parcial permanece inativa e novo runId retoma somente o restante", async () => {
     const h = harness({ failOnEmbedCall: 2 });
-    await expect(materializeGovernedLawCorpus({
-      mode: "apply",
-      environment: "staging",
+    const failedInput = {
+      mode: "apply" as const,
+      environment: "staging" as const,
       asOfDate: "2026-09-16",
       runId: "33333333-3333-4333-8333-333333333333",
-    }, h.deps)).rejects.toThrow("EMBEDDING_PROVIDER_TRANSPORT_ERROR");
+    };
+
+    await expect(materializeGovernedLawCorpus(failedInput, h.deps))
+      .rejects.toThrow("EMBEDDING_PROVIDER_TRANSPORT_ERROR");
 
     expect(h.chunks).toHaveLength(1);
     expect(readGovernedChunkMetadata(h.chunks[0].metadata)?.activeReference).toBe(false);
     expect(h.events.some((event) => event.action === "rag_materialization_failed")).toBe(true);
+
+    vi.mocked(h.deps.embed).mockClear();
+    await expect(materializeGovernedLawCorpus(failedInput, h.deps))
+      .rejects.toThrow("GOVERNED_LAW_CORPUS_RUN_ID_NOT_REUSABLE");
+    expect(h.deps.embed).not.toHaveBeenCalled();
 
     vi.mocked(h.deps.embed).mockImplementation(async () => vector());
     vi.mocked(h.deps.embed).mockClear();
@@ -202,6 +311,8 @@ describe("F-RAG1 governed law corpus materialization", () => {
     expect(retry.materialized).toBe(1);
     expect(h.deps.embed).toHaveBeenCalledTimes(1);
     expect(h.chunks).toHaveLength(2);
-    expect(h.chunks.every((chunk) => readGovernedChunkMetadata(chunk.metadata)?.activeReference === true)).toBe(true);
+    expect(h.chunks.every(
+      (chunk) => readGovernedChunkMetadata(chunk.metadata)?.activeReference === true,
+    )).toBe(true);
   });
 });
