@@ -1,9 +1,9 @@
 # F-LEGAL1.1 — Authoritative Legal Reference Contract & Temporal Model
 
-> **Estado:** `25% — CONTRACT HARDENED` · **Slice de F-LEGAL1** (promovida a **dependência BLOQUEANTE da Phase A3**).
-> **NÃO implementar sem nova autorização.** Este documento é APENAS o CONTRATO/plano — nenhum schema,
-> migration, reference data, runtime ou serviço cognitivo foi alterado.
-> HEAD de referência: `acaf297b` · branch `claude/rebuild-licigov-pro-bFyTO` · PR #222 · produção A2.
+> **Estado atual:** `100% — CONTRACT + GOVERNED RUNTIME PASS — CLOSED (V1)`.
+> Este documento preserva o contrato histórico que originou A3-RD1. O mecanismo foi posteriormente implementado,
+> homologado e ativado sob aprovação humana. Evidência de encerramento: [`F_LEGAL1_V1_CLOSURE_2026-09-18.md`](./F_LEGAL1_V1_CLOSURE_2026-09-18.md).
+> Qualquer ampliação de cobertura é **nova versão append-only (V2+)**, não edição do V1.
 >
 > **Endurecimento F-LEGAL1.2 (docs-only) aplicado** — este contrato foi reforçado em 6 pontos antes da
 > autoria do conteúdo verificado: (A) **coverageManifest** determinístico no set (§1.1) participante do hash;
@@ -254,8 +254,7 @@ locator ausente (not_found) vs fora de cobertura (unsupported); locator inativo;
 
 ## 14. Classificação
 
-`F-LEGAL1.1 = 25% — CONTRACT HARDENED`. Contrato reforçado (coverageManifest, append-only por hash,
-canonical hashing, temporal overlap fail-closed, lifecycle de entry derivado do set, escopo BR-FEDERAL).
-Não implementar schema/runtime sem nova autorização (isso é A3-RD1). A **autoria do conteúdo jurídico
-verificado** (F-LEGAL1.2) foi **desbloqueada** por evidence handoff oficial (Planalto) e está em
-`legal-reference/LEGAL_REFERENCE_MANIFEST_V1_2026.md` (`DRAFT VERIFIED CONTENT`, 7 locators + 2 value overrides).
+`F-LEGAL1.1 V1 = 100% — CLOSED`. O contrato foi materializado por A3-RD1 com coverageManifest,
+append-only por hash, canonical hashing, resolução temporal fail-closed, lifecycle governado, escopo
+`GLOBAL / BR-FEDERAL`, source lineage, approval hash e testes MySQL. A expansão de conteúdo após o V1
+deve ocorrer por nova versão governada e permanece fora deste contrato encerrado.
