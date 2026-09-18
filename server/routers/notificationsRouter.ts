@@ -16,8 +16,9 @@ export const notificationsRouter = router({
 
   markAsRead: protectedProcedure
     .input(z.object({ notificationId: z.number() }))
-    .mutation(async ({ input }) => {
-      await db.markNotificationAsRead(input.notificationId);
+    .mutation(async ({ ctx, input }) => {
+      // Escopo por dono: só a própria notificação do usuário (evita IDOR cross-user).
+      await db.markNotificationAsRead(input.notificationId, ctx.user.id);
       return { success: true };
     }),
 
