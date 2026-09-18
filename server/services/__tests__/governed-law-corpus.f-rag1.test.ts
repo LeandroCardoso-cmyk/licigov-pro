@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  InsertLawChunk,
   LawChunk,
   LegalReferenceEntry,
   LegalReferenceSet,
