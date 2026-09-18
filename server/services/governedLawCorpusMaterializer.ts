@@ -194,37 +194,6 @@ function errorCode(error: unknown): string {
     : error.name || "GOVERNED_LAW_CORPUS_ERROR";
 }
 
-async function lockReferenceSet(tx: { execute: (query: unknown) => Promise<unknown> }, setId: number): Promise<void> {
-  await tx.execute(sql`SELECT id FROM legal_reference_sets WHERE id = ${setId} FOR UPDATE`);
-}
-
-async function assertReferenceStillActive(
-  tx: any,
-  setId: number,
-  expectedContentHash: string,
-): Promise<void> {
-  const rows = await tx
-    .select({
-      status: legalReferenceSets.status,
-      contentHash: legalReferenceSets.contentHash,
-      approvedReferenceHash: legalReferenceSets.approvedReferenceHash,
-      approvedByUserId: legalReferenceSets.approvedByUserId,
-    })
-    .from(legalReferenceSets)
-    .where(eq(legalReferenceSets.id, setId))
-    .limit(1);
-  const current = rows[0];
-  if (
-    !current
-    || current.status !== "active"
-    || current.contentHash !== expectedContentHash
-    || current.approvedReferenceHash !== expectedContentHash
-    || !current.approvedByUserId
-  ) {
-    throw new Error("GOVERNED_LAW_CORPUS_REFERENCE_CHANGED");
-  }
-}
-
 export const defaultGovernedLawCorpusDeps: GovernedLawCorpusDeps = {
   async resolveGovernedSet(asOfDate) {
     const { set } = await resolveActiveReferenceSet(asOfDate);
@@ -238,8 +207,27 @@ export const defaultGovernedLawCorpusDeps: GovernedLawCorpusDeps = {
   async claimRun(input) {
     const db = await requireDb();
     return db.transaction(async (tx) => {
-      await lockReferenceSet(tx as any, input.setId);
-      await assertReferenceStillActive(tx, input.setId, input.referenceSetContentHash);
+      await tx.execute(sql`SELECT id FROM legal_reference_sets WHERE id = ${input.setId} FOR UPDATE`);
+      const currentRows = await tx
+        .select({
+          status: legalReferenceSets.status,
+          contentHash: legalReferenceSets.contentHash,
+          approvedReferenceHash: legalReferenceSets.approvedReferenceHash,
+          approvedByUserId: legalReferenceSets.approvedByUserId,
+        })
+        .from(legalReferenceSets)
+        .where(eq(legalReferenceSets.id, input.setId))
+        .limit(1);
+      const current = currentRows[0];
+      if (
+        !current
+        || current.status !== "active"
+        || current.contentHash !== input.referenceSetContentHash
+        || current.approvedReferenceHash !== input.referenceSetContentHash
+        || !current.approvedByUserId
+      ) {
+        throw new Error("GOVERNED_LAW_CORPUS_REFERENCE_CHANGED");
+      }
 
       const events: CorpusEvent[] = await tx
         .select({
@@ -278,8 +266,27 @@ export const defaultGovernedLawCorpusDeps: GovernedLawCorpusDeps = {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       // Row-lock curto: serializa somente o check+insert; provider roda FORA da transação.
-      await lockReferenceSet(tx as any, input.setId);
-      await assertReferenceStillActive(tx, input.setId, input.referenceSetContentHash);
+      await tx.execute(sql`SELECT id FROM legal_reference_sets WHERE id = ${input.setId} FOR UPDATE`);
+      const currentRows = await tx
+        .select({
+          status: legalReferenceSets.status,
+          contentHash: legalReferenceSets.contentHash,
+          approvedReferenceHash: legalReferenceSets.approvedReferenceHash,
+          approvedByUserId: legalReferenceSets.approvedByUserId,
+        })
+        .from(legalReferenceSets)
+        .where(eq(legalReferenceSets.id, input.setId))
+        .limit(1);
+      const current = currentRows[0];
+      if (
+        !current
+        || current.status !== "active"
+        || current.contentHash !== input.referenceSetContentHash
+        || current.approvedReferenceHash !== input.referenceSetContentHash
+        || !current.approvedByUserId
+      ) {
+        throw new Error("GOVERNED_LAW_CORPUS_REFERENCE_CHANGED");
+      }
       const rows = await tx.select().from(lawChunks);
       const counts = countMaterializationKeys(rows);
       const count = counts.get(input.materializationKey) ?? 0;
@@ -292,8 +299,27 @@ export const defaultGovernedLawCorpusDeps: GovernedLawCorpusDeps = {
   async completeRun(input) {
     const db = await requireDb();
     await db.transaction(async (tx) => {
-      await lockReferenceSet(tx as any, input.setId);
-      await assertReferenceStillActive(tx, input.setId, input.referenceSetContentHash);
+      await tx.execute(sql`SELECT id FROM legal_reference_sets WHERE id = ${input.setId} FOR UPDATE`);
+      const currentRows = await tx
+        .select({
+          status: legalReferenceSets.status,
+          contentHash: legalReferenceSets.contentHash,
+          approvedReferenceHash: legalReferenceSets.approvedReferenceHash,
+          approvedByUserId: legalReferenceSets.approvedByUserId,
+        })
+        .from(legalReferenceSets)
+        .where(eq(legalReferenceSets.id, input.setId))
+        .limit(1);
+      const current = currentRows[0];
+      if (
+        !current
+        || current.status !== "active"
+        || current.contentHash !== input.referenceSetContentHash
+        || current.approvedReferenceHash !== input.referenceSetContentHash
+        || !current.approvedByUserId
+      ) {
+        throw new Error("GOVERNED_LAW_CORPUS_REFERENCE_CHANGED");
+      }
 
       const events: CorpusEvent[] = await tx
         .select({
@@ -347,7 +373,7 @@ export const defaultGovernedLawCorpusDeps: GovernedLawCorpusDeps = {
   async failRun(input) {
     const db = await requireDb();
     await db.transaction(async (tx) => {
-      await lockReferenceSet(tx as any, input.setId);
+      await tx.execute(sql`SELECT id FROM legal_reference_sets WHERE id = ${input.setId} FOR UPDATE`);
       const events: CorpusEvent[] = await tx
         .select({
           action: legalReferenceSetEvents.action,
