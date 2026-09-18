@@ -4270,8 +4270,8 @@
     "semantic_hash": ""
   },
   "server/db/collaboration.ts": {
-    "mtime": 1789127769.307346,
-    "ast_hash": "c21e671582b02a312baf32085567bed3",
+    "mtime": 1789765574.2678142,
+    "ast_hash": "56497e463d54d57c7406554ef060655d",
     "semantic_hash": ""
   },
   "server/db/comments.ts": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "server/routers/editalParametersRouter.ts": {
-    "mtime": 1788023705.790377,
-    "ast_hash": "2eddd9bd1b489813e4232a728b8e4de1",
+    "mtime": 1789765568.819814,
+    "ast_hash": "b16b063f30fb6d1e4537df743f7071c8",
     "semantic_hash": ""
   },
   "server/routers/exportRouter.ts": {
@@ -5200,8 +5200,8 @@
     "semantic_hash": ""
   },
   "server/routers/notificationsRouter.ts": {
-    "mtime": 1788023705.790377,
-    "ast_hash": "88a99eb0e181d91b0b7b9b126249f4f8",
+    "mtime": 1789765578.1158144,
+    "ast_hash": "285b1343059ae08508615dc363cac34e",
     "semantic_hash": ""
   },
   "server/routers/onboardingRouter.ts": {
@@ -11622,6 +11622,16 @@
   "server/__tests__/fixtures/a2-corpus/lei_14133_2021.txt": {
     "mtime": 1789127769.300615,
     "ast_hash": "9b72249c4ee9422fcdbd31f9483bcdda",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/edital-parameters-tenant-scope.test.ts": {
+    "mtime": 1789765609.1478164,
+    "ast_hash": "4e9ad496033906c61dbff4826b8faa64",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/notifications-owner-scope.test.ts": {
+    "mtime": 1789765620.311817,
+    "ast_hash": "6036035229d5f085f0fa0843f519b450",
     "semantic_hash": ""
   }
 }
