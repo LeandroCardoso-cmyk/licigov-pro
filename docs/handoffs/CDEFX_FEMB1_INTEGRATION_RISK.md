@@ -35,6 +35,25 @@ e **uma linha** em `.github/workflows/ci.yml`.
 | `drizzle/meta/_journal.json` | sim (+idx 301) | **LOW** p/ DATA-039/G8 | DATA-039/G8 **não altera** o journal — entrada 301 é aditiva |
 | `package.json` | sim (`db:embedding:reindex`) | **LOW** p/ DATA-039/G8 | DATA-039/G8 **não altera** package.json |
 
+## 3-bis. Matriz de classificação A–F (superfície verificada)
+
+Snapshot: `MY=3cb10dd`, `FEMB1=bf5089b`, `BASE=f90757d`; ~11 commits DATA-039/G8 × ~11 F-EMB1 acima da
+linhagem A3-RD1 compartilhada. Método: `comm -12` entre `diff(BASE..MY)` e `diff(BASE..FEMB1)`, e o
+recorte do que a linha DATA-039/G8 realmente mudou (`diff 191b324..MY`).
+
+| Classe | Definição | Arquivos |
+|---|---|---|
+| **A — exclusivos desta branch (DATA-039/G8)** | mudados só aqui | `server/db/procurement.ts` (hunks DATA-039), `server/routers/procurementProcessRouter.ts`, `server/__tests__/integration/data039-atomicity-mysql-smoke.test.ts`, `server/__tests__/integration/procurement-create-process.test.ts`, `server/__tests__/unit/data039-fail-closed.test.ts`, `client/src/app-routing-guard.test.ts`, `docs/ops/DATA_039_ADDENDUM_ATOMICITY_FOLLOWUP.md`, `docs/architecture/data039-transactional-atomicity.md`, este handoff |
+| **B — exclusivos F-EMB1** | mudados só lá | `scripts/reindex-legal-embeddings.ts`, tabela `embedding_reindex_runs` + colunas de lineage em `schema.ts`, `drizzle/0301_f_emb1_embedding_lineage.sql` (+snapshot), script `db:embedding:reindex` |
+| **C — alterados nas duas branches** | tocados dos dois lados | **linhagem A3-RD1 compartilhada**: `drizzle/schema.ts`, `drizzle/meta/_journal.json`, `package.json`, `scripts/{install-reference,predeploy-release,approve-legal-reference-set}.ts`, `server/db/legalReference.ts`, `server/domain/legalReference/*`, routers/serviços A3, docs F-LEGAL — **e** `.github/workflows/ci.yml` |
+| **D — conflito textual provável** | overlap real de hunks | **apenas `.github/workflows/ci.yml`** (ambos anexam steps de smoke) |
+| **E — merge automático provável** | sem overlap de hunks | todos os arquivos da classe A (F-EMB1 não os toca) |
+| **F — revisão semântica mesmo sem conflito textual** | precisa olho humano | `.github/workflows/ci.yml` (união de steps, sem duplicar nomes); `drizzle/schema.ts` + `_journal.json` (garantir A3-RD1 `0299/0300` + F-EMB1 `0301`; DATA-039/G8 não contribui); confirmar que `recordProcessEvent(idempotencyKey)` sobrevive à integração |
+
+**Conclusão da matriz:** a superfície DATA-039/G8 é **classe A/E** (auto-merge) exceto **um único
+arquivo classe D/F** (`ci.yml`, união mecânica). A classe C é a linhagem A3-RD1 compartilhada — sua
+reconciliação é **independente** do DATA-039/G8 (que não altera schema/journal/package).
+
 ## 4. Riscos semânticos
 - **Baixíssimo acoplamento semântico:** DATA-039/G8 mexe no fluxo de **criação de processo / pesquisa
   de preços** e na **guarda de rotas**; F-EMB1 mexe em **embeddings / RAG lineage**. Domínios
