@@ -270,6 +270,12 @@ jobs:
       - name: Smoke — bridge governada em direct_contracts (A3-RD1)
         run: pnpm exec vitest run server/__tests__/integration/direct-contract-governed-bridge-mysql-smoke.test.ts
 
+      # DATA-039 (Bloco D) — atomicidade de operações compostas do fluxo canônico contra MySQL real:
+      # createProcessWithInitialEvent (processo + evento inicial átomo) e insertResearchWithItems
+      # (cabeçalho + itens átomo), com prova de ROLLBACK real (transação que lança não deixa parcial).
+      - name: Smoke — atomicidade de operações compostas (DATA-039)
+        run: pnpm exec vitest run server/__tests__/integration/data039-atomicity-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)
