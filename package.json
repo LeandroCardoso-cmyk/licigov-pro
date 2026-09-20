@@ -18,7 +18,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts",
+    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts",
     "db:push": "tsx scripts/db-push-guard.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
