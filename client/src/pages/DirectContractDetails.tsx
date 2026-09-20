@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
@@ -13,7 +13,7 @@ import { DocumentsTab } from "@/components/direct-contract-details/DocumentsTab"
 import { QuotationsTab } from "@/components/direct-contract-details/QuotationsTab";
 
 export default function DirectContractDetails() {
-  const [, params] = useRoute("/direct-contracts/:id");
+  const params = useParams();
   const [, setLocation] = useLocation();
   const contractId = params?.id ? parseInt(params.id) : 0;
 
@@ -35,14 +35,14 @@ export default function DirectContractDetails() {
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 mb-4">Contratação não encontrada</p>
-          <Button onClick={() => setLocation("/direct-contracts")}>Voltar para Lista</Button>
+          <Button onClick={() => setLocation("/contratacao-direta")}>Voltar para Lista</Button>
         </div>
       </div>
     );
   }
 
   const handleRequestOpinion = () =>
-    setLocation(`/parecer-juridico/novo?contractId=${contract.id}&type=contratacao_direta`);
+    setLocation(`/parecer/novo?contractId=${contract.id}&type=contratacao_direta`);
 
   const handleCreateContract = () => {
     const qs = new URLSearchParams({
@@ -54,7 +54,7 @@ export default function DirectContractDetails() {
       contractedCnpj: contract.supplierCNPJ || "",
       value: (contract.value / 100).toString(),
     });
-    setLocation(`/contracts/new?${qs.toString()}`);
+    setLocation(`/contratos/novo?${qs.toString()}`);
   };
 
   return (
@@ -62,7 +62,7 @@ export default function DirectContractDetails() {
       <div className="max-w-7xl mx-auto">
         <DirectContractHeader
           contract={contract}
-          onBack={() => setLocation("/direct-contracts")}
+          onBack={() => setLocation("/contratacao-direta")}
           onRequestOpinion={handleRequestOpinion}
           onCreateContract={handleCreateContract}
           onOpenPresentialPackage={() => setShowPresentialPackage(true)}

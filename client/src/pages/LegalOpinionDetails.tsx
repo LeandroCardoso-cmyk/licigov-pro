@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { useState } from "react";
 import { SetSignaturePasswordDialog } from "@/components/SetSignaturePasswordDialog";
@@ -15,7 +15,7 @@ import { SignOpinionDialog } from "@/components/legal-opinion-details/SignOpinio
 export default function LegalOpinionDetails() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-  const [, params] = useRoute("/parecer-juridico/:id");
+  const params = useParams();
   const opinionId = params?.id ? parseInt(params.id) : null;
 
   const [showSignDialog, setShowSignDialog] = useState(false);
@@ -34,7 +34,7 @@ export default function LegalOpinionDetails() {
   );
   trpc.legalOpinions.verifySignature.useQuery(
     { id: opinionId! },
-    { enabled: !!opinionId && !!(opinion as any)?.signatureId }
+    { enabled: !!opinionId && !!(opinion as { signatureId?: unknown } | undefined)?.signatureId }
   );
 
   const generateMutation = trpc.legalOpinions.generateOpinion.useMutation({
@@ -106,7 +106,7 @@ export default function LegalOpinionDetails() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <p className="text-lg text-muted-foreground mb-4">Parecer não encontrado</p>
-        <Button onClick={() => navigate("/parecer-juridico")}>Voltar para Pareceres</Button>
+        <Button onClick={() => navigate("/parecer")}>Voltar para Pareceres</Button>
       </div>
     );
   }
@@ -133,7 +133,7 @@ export default function LegalOpinionDetails() {
         onExportDOCX={() => exportDOCXMutation.mutate({ id: opinion.id })}
         onPrint={() => printPDFMutation.mutate({ id: opinion.id })}
         printPending={printPDFMutation.isPending}
-        onSaveAsTemplate={() => (updateMutation as any).mutate({ id: opinion.id, isTemplate: true })}
+        onSaveAsTemplate={() => updateMutation.mutate({ id: opinion.id, isTemplate: true } as unknown as Parameters<typeof updateMutation.mutate>[0])}
       />
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
