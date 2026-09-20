@@ -12,28 +12,34 @@
 Após o fechamento produtivo de 20/09/2026 (merge de #228/#229, F-RAG1 apply 7/7 + replay PASS,
 produção web SUCCESS), esta rodada executou a reconciliação formal dos gates pendentes:
 
-- **G7 (CI)** → **PASS** reconciliado (evidência de CI verde real em `main`); PR #230.
-- **G5 (segredos)** → **PARTIAL** (código completo; rotação de `JWT_SECRET`/`DATABASE_URL` é
-  `OPERATOR_ACTION_REQUIRED`); PR #231.
-- **G8 (navegação)** → **PARTIAL** (nav canônica limpa e órfãos de teste removidos; duplicação legada
-  cross-wired do núcleo exige decisão de produto); PR #232.
+- **G7 (CI)** → **PASS** reconciliado (evidência de CI verde real em `main`); PR #230 (merge `8cd153a`).
+- **G8 (navegação)** → **PASS** (consolidação canônica governada: o canônico absorve criação/detalhe
+  contextual reusando componentes/routers existentes; legados viram redirect de compatibilidade;
+  núcleo vivo sem cross-link legado; guarda `g8-canonical-navigation.test.ts`); PR #234 (merge `36aae20`).
+- **G5 (segredos)** → **PARTIAL** (código `CODE_COMPLETE`; **único bloqueante restante** = rotação
+  operacional do `JWT_SECRET` no Railway = `OPERATOR_ACTION_REQUIRED`; `DATABASE_URL` histórica **sem
+  credencial inline**, `GEMINI_API_KEY` já rotacionada — G12); PR #231.
 
-**Resultado do Gate Obrigatório (técnico): 10 PASS · 0 FAIL · 2 PARTIAL (G5, G8).**
+**Resultado do Gate Obrigatório (técnico): 11 PASS · 0 FAIL · 1 PARTIAL (G5).**
 Como a prontidão é **conjuntiva** (todos os itens aplicáveis devem estar PASS), a classificação é:
 
-> ## **PILOT NOT READY** — bloqueado por **G5** (rotação operacional de segredos) e **G8** (reconciliação da duplicação legada).
+> ## **PILOT NOT READY** — bloqueado **exclusivamente** por **G5** (rotação operacional do `JWT_SECRET` no Railway — ação de operador; não executável/verificável pelo repositório).
 
-Ambos os bloqueios têm **caminho de fechamento objetivo e curto** (ver M/P). Nenhum é falha de
-segurança nova; nenhum é regressão.
+O único bloqueio restante tem **caminho de fechamento objetivo e curto** (ver M/P) e é **operacional**
+(não é falha de código, nem regressão). **Nota de execução:** a rotação do `JWT_SECRET` **não foi
+executada** por este agente por **ausência de acesso ao Railway** (sem CLI/token/URL de produção);
+fabricar metadata de rotação é proibido — por isso G5 permanece PARTIAL até a atestação do operador.
 
 > **Atualização (pós-merge, 2026-09-20).** As reconciliações documentais foram **mergeadas em `main`**
 > (com CI verde e branch protection, sem bypass): **#230** (G7→PASS, squash `8cd153a`), **#231**
 > (auditoria G5, `952d202`), **#232** (remoção de órfãos de teste + auditoria G8, `1621d5e`). `main`
 > agora reflete **G7 = PASS** e as auditorias de G5/G8. **Migration frontier inalterada (`0301`)**;
-> nenhuma migração; nenhuma ativação jurídica; F-RAG1/F-EMB1 intactos. **G5 e G8 permanecem PARTIAL**
-> (não promovidos por merge documental) — os bloqueios são, respectivamente, **ação de operador no
-> Railway** (rotação do `JWT_SECRET`) e **decisão de produto humana** (consolidação canônica), ambos
-> **fora do que pode ser executado/verificado autonomamente por este agente**.
+> nenhuma migração; nenhuma ativação jurídica; F-RAG1/F-EMB1 intactos.
+>
+> **Fechamento subsequente do G8 (PR #234, merge `36aae20`):** a consolidação canônica foi
+> **implementada e mergeada** — **G8 = PASS**. Resta **G5** como **único** PARTIAL/bloqueante, cujo
+> fecho é **ação de operador no Railway** (rotação do `JWT_SECRET`), **fora do que este agente pode
+> executar/verificar** (sem acesso ao Railway; fabricar metadata de rotação é proibido).
 >
 > **Refino da exposição G5:** a auditoria por formato confirmou que o `DATABASE_URL` versionado
 > historicamente **não continha credenciais inline** (sem `usuário:senha@`) — portanto **nenhuma
@@ -67,16 +73,16 @@ segurança nova; nenhum é regressão.
 | G2 | Sem endpoint público sem auth | **PASS** | AUTH-003 (adminProcedure); canônico |
 | G3 | Sem escalação de privilégio | **PASS** | RBAC-004 (orgRoleProcedure; `adminRouter` com guard `role==='admin'`) |
 | G4 | Sem credencial default em produção | **PASS** | CONFIG-005: `auth.ts` exige `ADMIN_PASSWORD` (fail-closed); confirmado no ambiente |
-| G5 | Segredos fora do repo e rotacionados | **PARTIAL** | Código `CODE_COMPLETE` (só `.env.example`, fail-closed); **JWT_SECRET/DATABASE_URL rotação = OPERATOR_ACTION_REQUIRED**. [`G5_SECRET_READINESS_AUDIT.md`](./../../security/G5_SECRET_READINESS_AUDIT.md), PR #231 |
+| G5 | Segredos fora do repo e rotacionados | **PARTIAL** | Código `CODE_COMPLETE` (só `.env.example`, fail-closed); **único bloqueante = rotação do `JWT_SECRET` no Railway = OPERATOR_ACTION_REQUIRED** (não executável pelo repositório); `DATABASE_URL` histórica sem credencial inline; `GEMINI_API_KEY` já rotacionada. [`G5_SECRET_READINESS_AUDIT.md`](./../../security/G5_SECRET_READINESS_AUDIT.md), PR #231 |
 | G6 | Registro fail-closed no tenant | **PASS** | SEC-017 (fallback org 1 removido) |
 | G7 | CI comprova build/typecheck/isolamento | **PASS** | Reconciliado: CI real verde em `main` (#573; deploy `needs` todos os gates + `if main`; sem `\|\| true`; smoke MySQL real; build com artefato). PR #230 |
-| G8 | Fluxo navegável, sem debug/duplicadas | **PARTIAL** | Nav canônica limpa + `/test*` removidos; **duplicação legada cross-wired do núcleo** não reconciliada. [`G8_PILOT_NAVIGATION_AUDIT.md`](./G8_PILOT_NAVIGATION_AUDIT.md), PR #232 |
+| G8 | Fluxo navegável, sem debug/duplicadas | **PASS** | Consolidação canônica governada: canônico absorve criação/detalhe contextual (rotas `/parecer/novo`, `/contratos/novo`, `/contratacao-direta/novo` + `:id`) reusando componentes; legados → redirect de compatibilidade (preserva `:id`/query); fluxo vivo do processo sem cross-link legado (`ProcessDetails` é órfão); `useParams` agnóstico; nav sem legados; `/test*` fora. Guarda `g8-canonical-navigation.test.ts`. [`G8_PILOT_NAVIGATION_AUDIT.md`](./G8_PILOT_NAVIGATION_AUDIT.md), PRs #232+#234 |
 | G9 | Login/sessão/logout | **PASS** | JWT httpOnly; TTL 24h configurável (SEC-022) |
 | G10 | Suíte verde | **PASS** | `pnpm test` **5218 passed / 337 skipped / 0 falhas** (verificado nesta rodada e no #573) |
 | G11 | Backup e restauração | **PASS** | Drill real (312 tabelas, 120 migrations, órfãs=0) — PR D |
 | G12 | IA nunca serve mock como oficial | **PASS** | AI-015 fail-closed do provider; `GEMINI_API_KEY` rotacionada/validada; RAG governado 3/3 em produção (Art. 74 I/V/II, locator canônico, zero legacy bleed) |
 
-**Total: 10 PASS · 0 FAIL · 2 PARTIAL · 0 NOT_VERIFIED · 0 N/A.** Bloqueiam: **G5, G8.**
+**Total: 11 PASS · 0 FAIL · 1 PARTIAL · 0 NOT_VERIFIED · 0 N/A.** Bloqueia: **G5** (apenas).
 
 ---
 
@@ -182,26 +188,26 @@ rollback de schema exige restore.
 
 ## P. Pilot Decision Package (para o owner)
 
-1. **Gates:** 10 PASS · 2 PARTIAL (G5, G8) — ver C.
-2. **Produção:** main `81afdf5`, #573 SUCCESS, readyz ok (atestação do operador).
+1. **Gates:** **11 PASS · 1 PARTIAL (G5)** — ver C. (G7 e G8 fechados/mergeados em `main`.)
+2. **Produção:** `main` `36aae20` (pós-#234); último deploy conhecido `81afdf5`/#573 SUCCESS, readyz ok
+   (atestação do operador). Um novo deploy de `main` (docs + G8) roda ao mergear; confirmar readyz.
 3. **Riscos residuais:** ver L.
 4. **Módulos aprovados/fora:** ver M.
-5. **Bloqueios e fechamento objetivo:**
-   - **G5:** executar a rotação de `JWT_SECRET` e `DATABASE_URL` no Railway conforme
-     `PR_A_SECRET_ROTATION_RUNBOOK.md`; validar por presença + relogin + health; **atestar**. → G5 PASS.
-   - **G8:** decidir a consolidação da duplicação legada (construir criação-com-contexto canônica →
-     migrar cross-links do núcleo → redirecionar/retirar rotas legadas). → G8 PASS.
+5. **Bloqueio único e fechamento objetivo:**
+   - **G5 (único):** operador executa a rotação do `JWT_SECRET` no Railway conforme
+     `PR_A_SECRET_ROTATION_RUNBOOK.md`; valida por presença + relogin + health; **atesta**. → G5 PASS.
+     (`DATABASE_URL` histórica sem credencial inline; `GEMINI_API_KEY` já rotacionada.)
 6. **Fallback/rollback/monitoramento/incidentes:** N, O.
-7. **Ações humanas requeridas:** (a) mergear #230/#231/#232 após revisão; (b) rotação de segredos (G5);
-   (c) decisão de produto sobre G8; (d) manter branch protection + Wait-for-CI.
+7. **Ações humanas requeridas:** (a) rotação/atestação do `JWT_SECRET` no Railway (G5); (b) manter
+   branch protection + Wait-for-CI; (c) smoke visual dos fluxos canônicos pós-deploy (não bloqueante).
 
 ## Q. Owner Authorization Required
 
-> **A IA NÃO autoriza o piloto.** No estado atual (**PILOT NOT READY**, bloqueado por G5 e G8), o
-> go-live **não** é recomendado. Quando G5 e G8 estiverem em **PASS** (com as PRs revisadas/mergeadas
-> e a rotação atestada), a classificação técnica passará a **PILOT TECHNICALLY READY FOR OWNER
+> **A IA NÃO autoriza o piloto.** No estado atual (**PILOT NOT READY**, bloqueado **exclusivamente por
+> G5**), o go-live **não** é recomendado. Quando **G5** estiver em **PASS** (rotação do `JWT_SECRET`
+> atestada pelo operador), a classificação técnica passará a **PILOT TECHNICALLY READY FOR OWNER
 > DECISION**, e o **owner** decide o go-live. Solicita-se: **OWNER PILOT AUTHORIZATION** somente após o
-> fechamento de G5 e G8.
+> fechamento de G5. G7 e G8 já estão **PASS** em `main`.
 
 ## R. RC-X Readiness — NOT STARTED
 
