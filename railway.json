@@ -4,7 +4,8 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pnpm exec tsx scripts/materialize-governed-law-corpus.ts --dry-run --environment production --as-of-date 2026-09-18 --production-approved",
+    "startCommand": "pnpm exec tsx scripts/production-rag-gate.mjs",
+    "preDeployCommand": [],
     "restartPolicyType": "NEVER"
   }
 }
