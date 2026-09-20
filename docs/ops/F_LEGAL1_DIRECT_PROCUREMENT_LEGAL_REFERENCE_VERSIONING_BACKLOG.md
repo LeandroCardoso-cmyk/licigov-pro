@@ -1,8 +1,9 @@
 # F-LEGAL1 — Direct Procurement Legal Reference Versioning & Temporal Validity
 
-> **Estado:** `PLANNED — PRE-PILOT BLOCKER`
-> **Origem:** correção A3 (2ª LIVE) do fluxo `DIRECT_PROCUREMENT_REASONING` (`suggestLegalArticle`).
-> **NÃO implementar nesta correção A3** — este documento é o REGISTRO FORMAL do backlog.
+> **Estado atual:** `V1 CLOSED — PRE-PILOT BLOCKER RESOLVED`.
+> O conteúdo abaixo preserva o backlog histórico que originou F-LEGAL1.1/F-LEGAL1.2/A3-RD1.
+> O fluxo oficial já resolve referência e valor pelo domínio governado. Expansão adicional passa a ser **V2 não bloqueante**.
+> Evidência: [`F_LEGAL1_V1_CLOSURE_2026-09-18.md`](./F_LEGAL1_V1_CLOSURE_2026-09-18.md).
 
 ## Contexto
 
@@ -43,3 +44,13 @@ catálogo semeado** (`direct_contract_legal_articles` tem Art. 75 I, III, IV, VI
 Classificado como **`DIRECT PROCUREMENT REFERENCE DATA DEFECT`** e reportado — **nenhum registro
 ad hoc foi inserido** para "fazer a homologação passar". A completude/curadoria do catálogo (com
 fonte e vigência) é parte de F-LEGAL1.
+
+
+## Addendum de encerramento — 2026-09-18
+
+- O problema estrutural foi resolvido para o fluxo oficial por A3-RD1.
+- `validateGovernedValue` usa `legal_value_override` temporal; o helper com valores históricos permanece somente `@legacy`.
+- O reference set V1 foi aprovado e ativado com hash pinado e cobertura declarada.
+- Artigos fora do coverage manifest retornam `LEGAL_REFERENCE_UNSUPPORTED`; não há aproximação/fabricação.
+- Cobertura jurídica adicional deve nascer como V2 append-only, com nova verificação oficial, staging e aprovação humana.
+- Portanto este backlog deixa de ser blocker pré-piloto do V1 e passa a registrar evolução futura.

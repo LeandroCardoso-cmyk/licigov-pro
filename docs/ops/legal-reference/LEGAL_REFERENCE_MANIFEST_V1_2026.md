@@ -1,9 +1,9 @@
 # LEGAL REFERENCE MANIFEST V1 (2026) — Lei nº 14.133/2021 · `BR-FEDERAL`
 
-> **Estado:** `F-LEGAL1.2 — 50% — AUTHORITATIVE CONTENT MANIFEST READY` · conteúdo: `DRAFT VERIFIED CONTENT`.
-> **Branch:** `claude/rebuild-licigov-pro-bFyTO` · **PR** #222 · **Produção:** A2 (intocada — A3-RD1 não toca produção).
-> **Natureza do conteúdo:** o dataset jurídico é DRAFT VERIFIED (não ativo). A implementação do mecanismo
-> (schema/installer/readiness) é a fase **A3-RD1** — o installer instala o set como `draft` (instalar ≠ ativar).
+> **Estado atual:** `F-LEGAL1.2 V1 — 100% — AUTHORITATIVE CONTENT APPROVED + ACTIVE — CLOSED`.
+> O manifesto continua sendo a definição imutável do conteúdo V1. O lifecycle ativo vive no banco governado;
+> a ativação produtiva ocorreu posteriormente via A3-RD1, com aprovação humana e hash pinado.
+> Evidência: [`../F_LEGAL1_V1_CLOSURE_2026-09-18.md`](../F_LEGAL1_V1_CLOSURE_2026-09-18.md).
 > **Contrato estrutural:** ver `../F_LEGAL1_1_AUTHORITATIVE_LEGAL_REFERENCE_CONTRACT.md` (§4.2 hash, §1.1 coverage, §3 temporal).
 > **Fonte única machine-readable (A3-RD1):** `server/domain/legalReference/manifestV1.ts` — este `.md` é derivado/documental; o runtime, os testes e o CLI de hash consomem o módulo TS, sem duplicar o dataset.
 > **Reprodutibilidade dos hashes:** `pnpm tsx server/scripts/legalReferenceManifestHashes.ts` (execução repetida = idêntica).
@@ -108,7 +108,7 @@ Nenhum exemplo/checklist do seed foi convertido em norma neste manifesto.
 Conteúdo nasce `DRAFT VERIFIED CONTENT` — **não** ativa automaticamente. Ativação (governança de **plataforma**,
 federal, nunca de tenant) exige `approvedByUserId`, `approvedAt`, `approvalSource`,
 `approvedReferenceHash` (= `referenceSetContentHash` no momento do aprovar). Após aprovado: coverageManifest,
-entries, overrides, source lineage e hashes são **imutáveis** (F-LEGAL1.1 §3.1/§4). Estado atual: **não aprovado**.
+entries, overrides, source lineage e hashes são **imutáveis** (F-LEGAL1.1 §3.1/§4). Estado operacional do V1: **aprovado e ativo**; qualquer mudança exige nova versão.
 
 ## 7. Hash contract & set hash
 
@@ -130,10 +130,10 @@ entries, overrides, source lineage e hashes são **imutáveis** (F-LEGAL1.1 §3.
 - Nenhum `requiredDocument`/exemplo tratado como norma (§5).
 - Source lineage completo (authority + identifier + url + publicationDate) em todas as entries/overrides.
 - Hashes estruturais/set reprodutíveis (§7).
-- Approval contract preservado (§6); conteúdo `DRAFT VERIFIED`, não ativo.
+- Approval contract preservado (§6); V1 aprovado e ativo no lifecycle governado, sem mutação do conteúdo selado.
 
 ## 9. Classificação
 
-`F-LEGAL1.2 = 50% — AUTHORITATIVE CONTENT MANIFEST READY`.
-Conteúdo `DRAFT VERIFIED` (não ativo). **Não** iniciar A3-RD1. **Não** implementar schema/migration/seed/runtime.
-Produção intocada. Próxima fase (não agora): `A3-RD1 — Reference Data Initialization & Readiness`.
+`F-LEGAL1.2 V1 = 100% — AUTHORITATIVE CONTENT APPROVED + ACTIVE — CLOSED`.
+A3-RD1 foi concluído posteriormente e o V1 foi ativado por aprovação humana. Cobertura adicional é evolução
+versionada V2+, nunca alteração in-place deste manifesto.
