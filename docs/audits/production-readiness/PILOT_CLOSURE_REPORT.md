@@ -24,8 +24,21 @@ Como a prontidão é **conjuntiva** (todos os itens aplicáveis devem estar PASS
 > ## **PILOT NOT READY** — bloqueado por **G5** (rotação operacional de segredos) e **G8** (reconciliação da duplicação legada).
 
 Ambos os bloqueios têm **caminho de fechamento objetivo e curto** (ver M/P). Nenhum é falha de
-segurança nova; nenhum é regressão. As reconciliações documentais (G7/G5/G8) estão em **PRs abertas
-(#230/#231/#232), pendentes de merge humano** — merge é gate humano e **não foi executado**.
+segurança nova; nenhum é regressão.
+
+> **Atualização (pós-merge, 2026-09-20).** As reconciliações documentais foram **mergeadas em `main`**
+> (com CI verde e branch protection, sem bypass): **#230** (G7→PASS, squash `8cd153a`), **#231**
+> (auditoria G5, `952d202`), **#232** (remoção de órfãos de teste + auditoria G8, `1621d5e`). `main`
+> agora reflete **G7 = PASS** e as auditorias de G5/G8. **Migration frontier inalterada (`0301`)**;
+> nenhuma migração; nenhuma ativação jurídica; F-RAG1/F-EMB1 intactos. **G5 e G8 permanecem PARTIAL**
+> (não promovidos por merge documental) — os bloqueios são, respectivamente, **ação de operador no
+> Railway** (rotação do `JWT_SECRET`) e **decisão de produto humana** (consolidação canônica), ambos
+> **fora do que pode ser executado/verificado autonomamente por este agente**.
+>
+> **Refino da exposição G5:** a auditoria por formato confirmou que o `DATABASE_URL` versionado
+> historicamente **não continha credenciais inline** (sem `usuário:senha@`) — portanto **nenhuma
+> credencial de banco foi exposta**. Isso estreita o bloqueio real de G5 a **um único item**: a
+> rotação/atestação do `JWT_SECRET` de produção (o único segredo real comprometido no histórico).
 
 ---
 
@@ -33,10 +46,10 @@ segurança nova; nenhum é regressão. As reconciliações documentais (G7/G5/G8
 
 | Item | Valor |
 |---|---|
-| `main` HEAD | `81afdf50b4f3dab79b9ab2ed3b729a9dd81dbb6c` |
-| CI pós-merge main | run **#573** (`35532091237`) — **SUCCESS** (6/6 jobs) |
-| PRs mergeadas | #228 (`b2e2df3`), #229 (`81afdf5`) |
-| Migration frontier | `0301` (inalterada) |
+| `main` HEAD | `1621d5e0c5ca0cb29cb572681ec5a943dfe2464a` (pós-merge #230/#231/#232; base do audit `81afdf5`) |
+| CI pós-merge main | #573 (`81afdf5`) SUCCESS; merges #230/#231/#232 com todos os 5 gates verdes (check runs) |
+| PRs mergeadas | #228, #229, **#230** (`8cd153a`), **#231** (`952d202`), **#232** (`1621d5e`) |
+| Migration frontier | `0301` (inalterada — nenhuma migração nesta série) |
 | Produção web (operador) | deployment `952b62d1-…-14d392cdb159` — SUCCESS; MySQL SUCCESS; `/readyz` `status=ok`, `database=ok` |
 | Release path | `pnpm db:release:predeploy` (config-as-code `railway.json`) |
 | PRs abertas desta rodada | #230 (G7), #231 (G5), #232 (G8), **todas Ready for Review, não mergeadas** |
