@@ -70,11 +70,16 @@ do **efeito persistido** e cleanup determinístico (zero resíduo):
 
 ### Release safety (`railway.json`) — RESOLVED / runtime evidence confirmed
 
-A divergência histórica `railway.json` (`pnpm db:release`) × config efetiva observada
-(`pnpm db:migrate`) foi **investigada**. O deploy real de produção executou efetivamente
-`pnpm db:release`: migrations sob o release path, installer governado, reference set retornou **noop**
-(nenhuma nova ativação), aplicação iniciou, `/readyz` passou. **Não é mais blocker ativo** — permanece
-como nota histórica marcada **RESOLVED / runtime evidence confirmed** (antes R6).
+Comandos exatos (sem abreviação):
+- **Config-as-code desejada** (`railway.json` › `preDeployCommand`): `pnpm db:release:predeploy`.
+- **Config efetiva historicamente observada no service** (citação histórica): `pnpm db:migrate:release`.
+
+A divergência histórica entre essas duas formas foi **investigada**. **Evidência real:** o deployment
+produtivo executou **`pnpm db:release:predeploy`**, que: aplicou migrations sob o release path;
+executou o installer governado; encontrou o Reference Set como **noop** (nenhuma nova ativação);
+iniciou a aplicação; passou `/readyz`. **Classificação: RESOLVED / runtime evidence confirmed** — não
+é mais blocker ativo (antes R6). A forma antiga (`db:migrate:release`) permanece apenas como citação
+histórica claramente marcada, não como evidência operacional atual.
 
 ### F-EMB1 + F-RAG1 — dry-runs produtivos executados (registrados em conjunto)
 
@@ -105,16 +110,27 @@ A preocupação com registros legacy de `organizationId` NULL foi auditada: já 
 `direct_contracts`, `legal_opinions`, `comments`, `activity_logs`). **Nenhuma migration de backfill é
 necessária nesta rodada.**
 
-### Blockers atuais (pós-auditoria)
+### Blockers atuais (pós-auditoria) — matriz autoritativa
 
-| Frente | Status atual |
+| Frente | Estado |
 |---|---|
 | F-LEGAL1.1 / F-LEGAL1.2 V1 | **CLOSED** (não é mais blocker) |
-| Release safety `railway.json` | **RESOLVED / runtime evidence confirmed** |
-| **F-RAG1 produção 0/7 materializado** | **BLOCKER OPERACIONAL REAL** (próximo gate; fora desta PR) |
-| F-EMB1 produção | Pendente do apply do F-RAG1 (registrado em conjunto; não encerrado isoladamente) |
-| Pilot go-live (G5/G7/G8/G11) | Inalterado (frentes bloqueadas, não tocadas) |
+| Legal Reference Set V1 | **ACTIVE / APPROVED** (hash `332a9cb3…196832`; ativação **não** ocorreu nesta PR) |
+| Release Safety (`railway.json`) | **RESOLVED — runtime evidence confirmed** (`pnpm db:release:predeploy`) |
+| **F-RAG1 produção** | **BLOCKER OPERACIONAL REAL** — corpus governado **0/7** materializado (próximo gate; fora desta PR) |
+| F-EMB1 produção | Depende da materialização do F-RAG1 (registrado em conjunto; não encerrado isoladamente) |
+| G5 (segredos) | Permanece conforme o Production Gate canônico (não alterado por esta PR) |
+| G7 (CI) | Evidência técnica de CI verde **satisfeita** (runs #567/#568 no HEAD `1a27df3`); **reconciliação formal do status no documento canônico pendente** — esta PR não altera o gate institucional |
+| G8 (rotas legadas/telas) | Permanece conforme o Production Gate canônico (não alterado por esta PR) |
+| G11 (backup/restore) | **PASS** (já reconciliado no Production Gate — PR D: backup agendado + drill de restauração real) |
 | RC-X.1/RC-X.2 wiring | Preparado, não integrado (inalterado) |
+
+> **Governança:** G5/G8 são reproduzidos **exatamente** como no documento canônico
+> `docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md` (não há inferência de status aqui).
+> G11 já consta **PASS** nesse documento. Para G7, a **evidência técnica** exigida pelo adendo PR D
+> (typecheck + lint + `pnpm test` + smokes de isolamento MySQL + build + CI verde no PR) está
+> satisfeita, mas o **status formal FAIL** do documento canônico **ainda não foi reconciliado** — é um
+> follow-up documental separado, deliberadamente não feito nesta PR.
 
 ---
 
@@ -132,7 +148,7 @@ necessária nesta rodada.**
 | Parecer Jurídico | "roadmap" | `legalOpinionsRouter` completo em `tenantProcedure` + `...ForOrganization` | **Adiantado**; canônico |
 | Contratos e Aditivos | "roadmap" | `contract*Router` (workspaces, aditivos, apostilamentos, ocorrências) tenant-safe | **Adiantado**; canônico |
 | Gestão / Central de Operações | "implementado" | `departmentOperation*` canônico; Central de Operações no `/dashboard` | **Alinhado** |
-| IA / Governança cognitiva | "em dev" | Kernel Cognitivo único (`aiExecutionEngine`), fail-closed AI-015, Legal Reference governado (A3-RD1) | **Alinhado**; ativação de referência é **bloqueada** (fora de escopo) |
+| IA / Governança cognitiva | "em dev" | Kernel Cognitivo único (`aiExecutionEngine`), fail-closed AI-015, Legal Reference governado (A3-RD1) | **Alinhado**; **Legal Reference V1 governada e ATIVA** — novas versões/expansões permanecem approval-gated (esta PR **não** ativou referência) |
 | RC-X.1 Experience / RC-X.2 Bootstrap | frameworks "X" | `server/domain/experience/**` e `server/domain/bootstrap/**` **presentes mas não fiados** ao runtime | **Preparado, não integrado** (ver Risk Register) |
 
 **Conclusão:** o roadmap 5.x subestima o estado real — a maior parte de 5.2–5.4 já existe canônica e
@@ -202,9 +218,11 @@ qualquer DDL. Isso respeita a restrição de não tocar `0301` nem inventar tabe
 - **Build (`pnpm build`):** ok (`vite build` + `esbuild`).
 
 > **Evidência pós-auditoria (P2-A):** o novo smoke foi executado contra **MySQL real** (banco
-> descartável, migrations aplicadas via `db:migrate`, fronteira `0301`): **9/9 passed**, e o gate
+> descartável, migrations aplicadas via `pnpm db:migrate`, fronteira `0301`): **9/9 passed**, e o gate
 > `test:smoke:security` completo (7 arquivos, **108 tests**) passou verde incluindo o novo smoke.
-> **PASS pleno de CI** segue condicionado ao `workflow_dispatch` rodar **verde** no runner.
+> **CI verde confirmado no HEAD `1a27df3`:** run **#567** (`pull_request`) e run **#568**
+> (`workflow_dispatch`) — ambos **SUCCESS** (Typecheck+Lint, Testes Automatizados, Smoke
+> MySQL+Isolamento, Auditoria de Dependências, Build = PASS; Deploy = skipped).
 
 ---
 
@@ -216,8 +234,8 @@ qualquer DDL. Isso respeita a restrição de não tocar `0301` nem inventar tabe
 | R2 | `institutionalRagRouter` / `ragGovernanceRouter` leem `ctx.organizationId!` sob `protectedProcedure` (nunca populado → `undefined`) | P3 | **Documentado** | Inócuo enquanto stubs; sinaliza que deveriam ser `tenantProcedure`. Corrigir junto de R1 |
 | R3 | Funções globais de analytics em `admin.ts` (`getProcessCountByStatus`/`getDocumentCountByMonth`/`getMostActiveMembers`) sem consumidor de produção após a correção #1 | P3 | **Mantidas** | Removê-las é limpeza fora de escopo e de risco desnecessário; exportadas (sem warning de unused). Candidatas a poda futura |
 | R4 | RC-X.1 / RC-X.2 presentes mas **não fiados** ao runtime | P2 | **Preparado, bloqueado** | Fiar o bootstrap ao boot tem risco de inicialização; requer decisão de rollout. Não tocado |
-| R5 | Frentes que dependem de decisão humana/jurídica: F-LEGAL1.1/1.2, ativação de Legal Reference Set, PNCP, assinatura ICP-Brasil, sync de calendário externo | — | **Bloqueado por design** | Explicitamente fora do mandato; não iniciadas para não inventar contratos/decisões. **Delta pós-auditoria:** **F-LEGAL1.1/1.2 V1 = CLOSED** (reference set instalado/aprovado/ativo, hash `332a9cb3…196832`) — **removidos** desta lista de blockers; permanecem bloqueadas apenas PNCP, ICP-Brasil e calendário externo |
-| R6 | `railway.json`: `db:release:predeploy` × `db:migrate:release` divergentes | P2 | **Não corrigido (bloqueado)** → **RESOLVED (pós-auditoria)** | **Delta pós-auditoria:** deploy real de produção executou `pnpm db:release` (migrations sob release path, installer governado, reference set **noop**, app iniciou, `/readyz` passou) → **RESOLVED / runtime evidence confirmed**. Não é mais blocker ativo; nota histórica preservada |
+| R5 | Frentes que dependem de decisão/contrato externos: **(apenas)** PNCP, assinatura ICP-Brasil, sync de calendário externo | — | **Parcialmente reduzido** | **F-LEGAL1.1/1.2 V1 = CLOSED** e **Legal Reference Set V1 = ACTIVE/APPROVED** (hash `332a9cb3…196832`) — **removidos** do conjunto de blockers; ativação **não** ocorreu nesta PR. Permanecem futuras/bloqueadas por decisão externa apenas PNCP, ICP-Brasil e calendário externo (não iniciadas para não inventar contratos/decisões) |
+| R6 | `railway.json`: divergência histórica entre a config-as-code (`pnpm db:release:predeploy`) e a config efetiva historicamente observada (`pnpm db:migrate:release`) | P2 | **RESOLVED — runtime evidence confirmed** | Deploy real de produção executou **`pnpm db:release:predeploy`** (migrations sob release path, installer governado, reference set **noop**, app iniciou, `/readyz` passou) → **RESOLVED**. Não é mais blocker ativo; a forma antiga permanece só como nota histórica |
 | R7 | Os helpers org-scoped novos (`getProcessCountByStatusForOrg` / `getDocumentCountByMonthForOrg` / `getMostActiveMembersForOrg`) carregam registros da organização e **agregam em Node** | P3 (performance/scalability debt) | **Documentado, não implementado** | Correto funcionalmente e **seguro multi-tenant**, porém menos eficiente em escala. Recomendação futura: `COUNT`/`GROUP BY`/filtros temporais em SQL (agregação no banco). **Não otimizar nesta execução** (não ampliar o diff) |
 | R8 | **F-RAG1 produção: corpus governado 0/7 materializado** (Reference Set ACTIVE, mas `materialized=0`) | — (operacional) | **BLOCKER OPERACIONAL REAL — fora desta PR** | Próximo gate: F-RAG1 *apply* em produção → 7/7 → *replay* do mesmo runId → F-EMB1 dry-run esperando 7 current/skipped → A3 LIVE validation. Conduzido pela frente responsável; **não executado nesta PR** |
 
@@ -226,7 +244,7 @@ qualquer DDL. Isso respeita a restrição de não tocar `0301` nem inventar tabe
 ## F. Pilot Readiness Delta
 
 Referência: `INTERNAL_PRODUCTION_GATE.md` (Piloto Moreira Sales). Esta rodada **não altera o
-veredito do gate** (segue `NÃO PRONTO` até G5/G7/G8/G11 fecharem — frentes bloqueadas), mas
+veredito institucional do gate** — o status formal permanece definido pelo documento canônico —, mas
 **reduz risco residual** em um item do Teste de Realidade:
 
 - **Pergunta 21 do gate** ("Existe risco de acessar dados de outro órgão?") citava
@@ -234,8 +252,13 @@ veredito do gate** (segue `NÃO PRONTO` até G5/G7/G8/G11 fecharem — frentes b
   fecham **duas superfícies concretas da classe TENANT-006** (overview institucional + parâmetros de
   edital) que permaneciam globais/sem-org, e a #3 fecha um IDOR cross-user adjacente. Em ambiente
   **multi-tenant** (pós-piloto), isso remove vetores de leitura/escrita cross-org reais.
-- **Sem impacto** nos itens bloqueantes G5 (segredos), G7 (CI verde), G8 (rotas legadas fora da
-  navegação) e G11 (backup) — que permanecem como estão. Nenhum módulo foi exposto/ocultado.
+- **Estado dos itens do Gate Obrigatório** (conforme documento canônico, sem inferência):
+  - **G11 = PASS** (já reconciliado no Production Gate — backup agendado + drill de restauração real).
+  - **G7:** a **evidência técnica** de CI verde exigida pelo adendo PR D está **satisfeita** (runs
+    #567/#568 no HEAD `1a27df3`); o status formal `FAIL` do documento canônico **ainda requer
+    reconciliação formal** — esta PR **não** altera unilateralmente o gate institucional.
+  - **G5 (segredos)** e **G8 (rotas legadas fora da navegação)** permanecem exatamente conforme o
+    documento canônico. Nenhum módulo foi exposto/ocultado por esta PR.
 
 **Delta líquido:** postura de isolamento **mais forte**; go-live **inalterado** (continua
 condicionado às frentes bloqueadas, que não foram tocadas).
@@ -266,7 +289,14 @@ job `deploy` fica restrito a `main`).
 1. **R1/R2** — ao dar persistência DB a cada router satélite, migrar para `tenantProcedure` e derivar
    `organizationId` do contexto (padrão desta rodada). É a maior dívida de isolamento restante.
 2. **R4** — planejar o fiamento (wiring) de RC-X.1/RC-X.2 ao runtime com gate de inicialização.
-3. **Frentes bloqueadas (R5/R6)** — permanecem com o time responsável; nada aqui as antecipa.
+3. **R5** — apenas integrações externas ainda dependentes de decisão/contrato (PNCP, ICP-Brasil,
+   calendário externo); **F-LEGAL V1 já está CLOSED** e a Legal Reference V1 **ACTIVE**.
+4. **R6** — **RESOLVED** (runtime evidence confirmed; `pnpm db:release:predeploy`).
+5. **R8** — **F-RAG1 produção 0/7** permanece o próximo gate operacional (apply → 7/7 → replay →
+   F-EMB1 esperando 7 → A3 LIVE); conduzido pela frente responsável, fora desta PR.
+6. **Production Gate** — reconciliar **formalmente G7** no documento canônico (evidência técnica de CI
+   verde já satisfeita nos runs #567/#568); **G11 já é PASS**; **G5/G8** permanecem conforme o
+   documento canônico. Esta PR não altera o gate institucional.
 
 **Garantias desta entrega:** sem merge em `main`; sem produção; sem ativação jurídica; sem migration;
 sem novo núcleo; sem dado fictício; sem mascarar estado degradado. Toda correção é real, provável por
@@ -284,10 +314,12 @@ teste, e é a **menor mudança segura** para a invariante que restaura.
 lint dos arquivos alterados `--max-warnings 0` limpo · novo smoke **9/9 passed** ·
 `pnpm test:smoke:security` **108/108 passed** (7 arquivos, inclui o novo) · `pnpm build` ok.
 
-**Blockers atuais (autoritativo):** ver seção "Estado atualizado após auditoria". Em resumo:
-F-LEGAL1 V1 **CLOSED**; release safety `railway.json` **RESOLVED (runtime evidence)**; **blocker
-operacional real = F-RAG1 produção 0/7 materializado** (próximo gate, fora desta PR); F-EMB1 registrado
-em conjunto; Pilot G5/G7/G8/G11 inalterados; RC-X.1/X.2 preparados e não integrados.
+**Blockers atuais (autoritativo):** ver a matriz na seção "Estado atualizado após auditoria". Em
+resumo: F-LEGAL1 V1 **CLOSED** e Legal Reference V1 **ACTIVE**; release safety `railway.json`
+**RESOLVED (runtime evidence, `pnpm db:release:predeploy`)**; **blocker operacional real = F-RAG1
+produção 0/7 materializado** (próximo gate, fora desta PR); F-EMB1 registrado em conjunto;
+**G11 = PASS**; **G7 = evidência técnica de CI satisfeita (reconciliação formal pendente)**; **G5/G8**
+conforme o documento canônico; RC-X.1/X.2 preparados e não integrados.
 
 **Invariantes preservadas nesta rodada:** NO MERGE · NO PRODUCTION CHANGE · NO LEGAL ACTIVATION ·
 NO MIGRATION (fronteira `0301`) · NO RAILWAY CHANGE · runner de dry-run **não** tocado · PR permanece
