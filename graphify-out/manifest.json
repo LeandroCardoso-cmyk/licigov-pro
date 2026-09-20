@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1789127769.187346,
-    "ast_hash": "04ec2c29409fce114202bbd818db02ed",
+    "mtime": 1789938285.732366,
+    "ast_hash": "66193dd94a13bbf8ce3bd503821a211f",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -1160,7 +1160,7 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion-details/LegalOpinionHeader.tsx": {
-    "mtime": 1788023705.0953667,
+    "mtime": 1789938939.7911892,
     "ast_hash": "bfb8d572bdaa415fd8d81c26e56bf143",
     "semantic_hash": ""
   },
@@ -2250,12 +2250,12 @@
     "semantic_hash": ""
   },
   "client/src/pages/ContractAlerts.tsx": {
-    "mtime": 1788023705.1365132,
+    "mtime": 1789938939.7911892,
     "ast_hash": "f553df4af9b2f006413465c260fe71a2",
     "semantic_hash": ""
   },
   "client/src/pages/ContractDetails.tsx": {
-    "mtime": 1788023705.1365132,
+    "mtime": 1789938939.7911892,
     "ast_hash": "8fb054b4f9dde37321ad67904683dd3f",
     "semantic_hash": ""
   },
@@ -2275,8 +2275,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/DirectContractDetails.tsx": {
-    "mtime": 1788023705.138377,
-    "ast_hash": "58a52ba12a19d57fa577c8bf4041adb5",
+    "mtime": 1789938340.2932544,
+    "ast_hash": "94c39a39af2d0996f5072dcbb7f3fe47",
     "semantic_hash": ""
   },
   "client/src/pages/DirectContracts.tsx": {
@@ -2285,7 +2285,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/DirectContractsAnalytics.tsx": {
-    "mtime": 1788023705.138377,
+    "mtime": 1789938390.939008,
     "ast_hash": "8ae79a2cac7f3248afb8dc80a763d5ea",
     "semantic_hash": ""
   },
@@ -2305,8 +2305,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
-    "mtime": 1788023705.138377,
-    "ast_hash": "019a251bee14761629c2c39aa7498cf9",
+    "mtime": 1789938987.311189,
+    "ast_hash": "c0b863a346039b8a4b2db151d33569be",
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinions.tsx": {
@@ -2315,7 +2315,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionsAnalytics.tsx": {
-    "mtime": 1788023705.138377,
+    "mtime": 1789938939.7911892,
     "ast_hash": "7a10ccc38d1dfd06baaaa0758e19a833",
     "semantic_hash": ""
   },
@@ -2335,17 +2335,17 @@
     "semantic_hash": ""
   },
   "client/src/pages/NewContract.tsx": {
-    "mtime": 1788023705.138377,
+    "mtime": 1789938853.9831898,
     "ast_hash": "d7d52ccb9f28af748bc0c2e35ce11b52",
     "semantic_hash": ""
   },
   "client/src/pages/NewDirectContract.tsx": {
-    "mtime": 1789268737.2905352,
+    "mtime": 1789938939.7911892,
     "ast_hash": "7b512149c8ad3566f389391ce434a38c",
     "semantic_hash": ""
   },
   "client/src/pages/NewLegalOpinion.tsx": {
-    "mtime": 1788023705.138377,
+    "mtime": 1789938853.9831898,
     "ast_hash": "499acde59bf0ab94a1a317080e71c70a",
     "semantic_hash": ""
   },
@@ -2370,7 +2370,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessDetails.tsx": {
-    "mtime": 1788023705.142377,
+    "mtime": 1789938853.9831898,
     "ast_hash": "45e8ac8060d379e08cad91c0ba62b894",
     "semantic_hash": ""
   },
@@ -9735,8 +9735,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1789935396.9128382,
-    "ast_hash": "a11eccefe316655198b23988b5df6082",
+    "mtime": 1789938672.7231908,
+    "ast_hash": "17bb9252e3547d15014e91a6a476ec10",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -11625,13 +11625,28 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/G8_PILOT_NAVIGATION_AUDIT.md": {
-    "mtime": 1789935386.9808383,
-    "ast_hash": "ded0d8b03e1609afe73f07bcbddb1316",
+    "mtime": 1789938694.7911906,
+    "ast_hash": "7974ff08f89ca06be1dbca8f08a22512",
     "semantic_hash": ""
   },
   "docs/ops/F_LEGAL1_V1_CLOSURE_2026-09-18.md": {
     "mtime": 1789934403.364844,
     "ast_hash": "4485dcc34222645ea572ce4535282bcd",
+    "semantic_hash": ""
+  },
+  "client/src/g8-canonical-navigation.test.ts": {
+    "mtime": 1789938873.3031895,
+    "ast_hash": "7b2da50bea39a2cbdf626d505f18190a",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/PILOT_CLOSURE_REPORT.md": {
+    "mtime": 1789937236.4948401,
+    "ast_hash": "6acd2e49e2591dd8045d11814ab8dd0e",
+    "semantic_hash": ""
+  },
+  "docs/security/G5_SECRET_READINESS_AUDIT.md": {
+    "mtime": 1789937236.4948401,
+    "ast_hash": "fd4335c84a07753014f2b0dc1747d2b0",
     "semantic_hash": ""
   }
 }

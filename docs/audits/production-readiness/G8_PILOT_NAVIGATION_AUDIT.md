@@ -69,3 +69,38 @@ uma limpeza segura autônoma. **G8 permanece `PARTIAL`** (não forçado a PASS).
 Enquanto (1)–(3) não ocorrerem, as legadas seguem **fora da navegação** e **auth-protegidas**
 (tratamento de "legado necessário internamente"), mas a **duplicação não está reconciliada** —
 condição que mantém G8 em `PARTIAL`.
+
+---
+
+## Adendo — Fechamento canônico do G8 (2026-09-20)
+
+Decisão de produto do owner: **os workspaces canônicos absorvem a criação/detalhe contextual**;
+rotas legadas viram redirects de compatibilidade (transição governada, sem remoção abrupta). Executado
+o **mínimo necessário reusando componentes/routers existentes** (sem service/router/CRUD paralelo):
+
+1. **Equivalência canônica (reuso):** novas rotas `/parecer/novo`, `/parecer/analytics`, `/parecer/:id`;
+   `/contratos/novo`, `/contratos/alertas`, `/contratos/:id`; `/contratacao-direta/novo`,
+   `/contratacao-direta/analytics`, `/contratacao-direta/:id` — renderizando os **mesmos** componentes
+   já testados (`NewLegalOpinion`/`LegalOpinionDetails`/`NewContract`/`ContractDetails`/
+   `NewDirectContract`/`DirectContractDetails`/analytics), sob `AuthenticatedRoute` (auth+tenant).
+   Detalhes passaram a ler `:id` via `useParams` (agnóstico à rota).
+2. **Migração dos cross-links do núcleo:** `ProcessDetails` cria parecer/contrato via
+   `/parecer/novo?processId=` e `/contratos/novo?...`; `DirectContractDetails` via `/parecer/novo?contractId=`
+   e `/contratos/novo?...`. Nenhum componente migrado referencia mais paths legados.
+3. **Legado → redirect de compatibilidade:** `/parecer-juridico*`, `/contracts*`, `/direct-contracts*`
+   redirecionam ao canônico **preservando `:id` e query** (`LegacyRedirect` + render-prop). Sempre
+   legado → canônico (sem loop). Deep links/bookmarks continuam válidos.
+4. **Criação standalone sem dead-end:** os Homes canônicos já possuem criação própria
+   (`DirectProcurementHome`/`ContractsHome` view "Novo"); parecer é orientado a caixa/solicitação
+   (modelo institucional). Contextual via `/X/novo?params`.
+5. **Guarda de regressão:** `client/src/g8-canonical-navigation.test.ts` (11 asserts) — rotas canônicas,
+   ordenação estática-antes-de-`:id`, redirects preservando query/`:id`, núcleo sem legado, `useParams`,
+   nav sem legados, sem `/test*`. Suíte completa verde; typecheck 0; build ok.
+
+**Follow-ups não bloqueantes (transição, pós-RC-5):** remover componentes de lista legados órfãos
+(`Contracts`/`DirectContracts`/`LegalOpinions`, já fora do roteamento); unificar as duas superfícies de
+criação (view "Novo" do Home × formulário legado reusado) numa só; smoke visual dos fluxos em produção.
+
+**Classificação: G8 = PASS** (critérios de navegação/duplicação/redirect/bypass atendidos e cobertos por
+teste). Validação pela barra do repositório (source-scan + CI); sem ambiente de browser/staging nesta
+execução — recomenda-se smoke visual operacional pós-deploy (não bloqueante).

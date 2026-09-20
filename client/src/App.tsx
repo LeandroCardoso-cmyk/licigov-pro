@@ -38,15 +38,12 @@ import DepartmentManagement from "./pages/DepartmentManagement";
 import AIUsageDashboard from "./pages/AIUsageDashboard";
 import AdminPlatforms from "./pages/AdminPlatforms";
 import PublicationLogs from "./pages/PublicationLogs";
-import DirectContracts from "./pages/DirectContracts";
 import NewDirectContract from "./pages/NewDirectContract";
 import DirectContractDetails from "./pages/DirectContractDetails";
 import DirectContractsAnalytics from "./pages/DirectContractsAnalytics";
-import Contracts from "./pages/Contracts";
 import NewContract from "./pages/NewContract";
 import ContractDetails from "./pages/ContractDetails";
 import ContractAlerts from "./pages/ContractAlerts";
-import LegalOpinions from "./pages/LegalOpinions";
 import NewLegalOpinion from "./pages/NewLegalOpinion";
 import LegalOpinionDetails from "./pages/LegalOpinionDetails";
 import LegalOpinionsAnalytics from "./pages/LegalOpinionsAnalytics";
@@ -61,7 +58,7 @@ import Register from "./pages/Register";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { KeyboardShortcutsTooltip } from "./components/KeyboardShortcutsTooltip";
 import DashboardLayout from "./components/DashboardLayout";
@@ -134,10 +131,8 @@ const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashbo
 // V1 UI/UX Stabilization — Plataformas é item do menu lateral: renderiza DENTRO do shell.
 const AdminPlatformsRoute = withAuthenticatedShell(AdminPlatforms);
 const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLogs} />;
-const DirectContractsRoute = () => <AuthenticatedRoute component={DirectContracts} />;
 const NewDirectContractRoute = () => <AuthenticatedRoute component={NewDirectContract} />;
 const DirectContractDetailsRoute = () => <AuthenticatedRoute component={DirectContractDetails} />;
-const LegalOpinionsRoute = () => <AuthenticatedRoute component={LegalOpinions} />;
 const LegalOpinionsAnalyticsRoute = () => <AuthenticatedRoute component={LegalOpinionsAnalytics} />;
 const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
 const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
@@ -159,6 +154,16 @@ const ContratosWorkspaceShellRoute = withAuthenticatedShell(ContratosWorkspace);
 const TirarDuvidasShellRoute = withAuthenticatedShell(TirarDuvidas);
 const UsuariosShellRoute = withAuthenticatedShell(Usuarios);
 const AdminOrganizacoesShellRoute = withAuthenticatedShell(AdminOrganizacoes);
+
+/**
+ * G8 — redirect de compatibilidade de rota legada → canônica, PRESERVANDO a query string
+ * (ex.: `?processId=`). O alvo `to` já traz o caminho canônico (com o `:id` resolvido pelo
+ * chamador). Sempre legado → canônico (nunca o contrário) — não há loop de redirect.
+ */
+function LegacyRedirect({ to }: { to: string }) {
+  const search = useSearch();
+  return <Redirect to={search ? `${to}?${search}` : to} replace />;
+}
 
 function Router() {
   return (
@@ -192,18 +197,35 @@ function Router() {
               NÃO fazem parte da navegação oficial. A operação usa os Business Domains acima:
               /contratacao-direta, /parecer, /contratos, /centro-operacoes. Ver
               docs/architecture/LEGACY_INVENTORY.md. Remoção planejada só após RC-5. ── */}
-      <Route path={'/direct-contracts'} component={DirectContractsRoute} />
-      <Route path={'/direct-contracts/analytics'} component={() => <AuthenticatedRoute component={DirectContractsAnalytics} />} />
-      <Route path={'/direct-contracts/new'} component={NewDirectContractRoute} />
-      <Route path={'/direct-contracts/:id'} component={DirectContractDetailsRoute} />
-      <Route path={'/contracts'} component={() => <AuthenticatedRoute component={Contracts} />} />
-      <Route path={'/contracts/new'} component={() => <AuthenticatedRoute component={NewContract} />} />
-      <Route path={'/contracts/alerts'} component={() => <AuthenticatedRoute component={ContractAlerts} />} />
-      <Route path={'/contracts/:id'} component={() => <AuthenticatedRoute component={ContractDetails} />} />
-      <Route path={'/parecer-juridico'} component={LegalOpinionsRoute} />
-      <Route path={'/parecer-juridico/analytics'} component={LegalOpinionsAnalyticsRoute} />
-      <Route path={'/parecer-juridico/novo'} component={NewLegalOpinionRoute} />
-      <Route path={'/parecer-juridico/:id'} component={LegalOpinionDetailsRoute} />
+      {/* ── G8 (RC transição governada) — o CANÔNICO absorve a criação/detalhe contextual.
+              REUSA os componentes/serviços/routers existentes (sem arquitetura paralela, sem CRUD
+              duplicado). Ordem: rotas estáticas ANTES de `:id`. Auth/tenant preservados via
+              AuthenticatedRoute; `?processId=` preservado (o formulário lê da query). ── */}
+      <Route path={'/contratacao-direta/novo'} component={NewDirectContractRoute} />
+      <Route path={'/contratacao-direta/analytics'} component={() => <AuthenticatedRoute component={DirectContractsAnalytics} />} />
+      <Route path={'/contratacao-direta/:id'} component={DirectContractDetailsRoute} />
+      <Route path={'/contratos/novo'} component={() => <AuthenticatedRoute component={NewContract} />} />
+      <Route path={'/contratos/alertas'} component={() => <AuthenticatedRoute component={ContractAlerts} />} />
+      <Route path={'/contratos/:id'} component={() => <AuthenticatedRoute component={ContractDetails} />} />
+      <Route path={'/parecer/novo'} component={NewLegalOpinionRoute} />
+      <Route path={'/parecer/analytics'} component={LegalOpinionsAnalyticsRoute} />
+      <Route path={'/parecer/:id'} component={LegalOpinionDetailsRoute} />
+
+      {/* ── Rotas LEGADAS → redirect de compatibilidade para o canônico (preserva `:id` e query).
+              Deep links/bookmarks continuam válidos; a navegação oficial usa os Business Domains.
+              Sempre legado → canônico (sem loop). Remoção dos componentes só após RC-5. ── */}
+      <Route path={'/direct-contracts/analytics'} component={() => <LegacyRedirect to="/contratacao-direta/analytics" />} />
+      <Route path={'/direct-contracts/new'} component={() => <LegacyRedirect to="/contratacao-direta/novo" />} />
+      <Route path={'/direct-contracts/:id'}>{(p) => <LegacyRedirect to={`/contratacao-direta/${p.id}`} />}</Route>
+      <Route path={'/direct-contracts'} component={() => <LegacyRedirect to="/contratacao-direta" />} />
+      <Route path={'/contracts/new'} component={() => <LegacyRedirect to="/contratos/novo" />} />
+      <Route path={'/contracts/alerts'} component={() => <LegacyRedirect to="/contratos/alertas" />} />
+      <Route path={'/contracts/:id'}>{(p) => <LegacyRedirect to={`/contratos/${p.id}`} />}</Route>
+      <Route path={'/contracts'} component={() => <LegacyRedirect to="/contratos" />} />
+      <Route path={'/parecer-juridico/analytics'} component={() => <LegacyRedirect to="/parecer/analytics" />} />
+      <Route path={'/parecer-juridico/novo'} component={() => <LegacyRedirect to="/parecer/novo" />} />
+      <Route path={'/parecer-juridico/:id'}>{(p) => <LegacyRedirect to={`/parecer/${p.id}`} />}</Route>
+      <Route path={'/parecer-juridico'} component={() => <LegacyRedirect to="/parecer" />} />
       {/* PR B — Detalhe legado de processo desativado. Documentado expressamente:
               o :id aqui é o ID NUMÉRICO da tabela legada `processes`. O fluxo canônico
               usa IDs string de `procurementProcessesTable` e navega por estado interno
