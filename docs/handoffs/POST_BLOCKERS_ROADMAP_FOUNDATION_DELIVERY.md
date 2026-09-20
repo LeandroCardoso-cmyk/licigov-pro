@@ -34,6 +34,90 @@ Nenhuma migration criada — a fronteira permanece em `0301` (F-EMB1). Gates loc
 
 ---
 
+## Estado atualizado após auditoria (Post-audit status — 2026-09-20)
+
+> Esta seção reconcilia o handoff com o estado **atual** dos blockers após os trabalhos posteriores
+> (produção/cutover conduzidos por outra frente, fora desta branch). O conteúdo acima permanece como
+> registro histórico de quando a branch foi criada; os deltas abaixo têm precedência quando divergirem.
+> **Nada aqui alterou runtime jurídico, F-EMB1/F-RAG1, Railway ou produção nesta branch.**
+
+### P2-A — Prova MySQL real das 3 correções (fechado nesta rodada)
+
+Adicionado o smoke dedicado
+`server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts`, executado contra
+**MySQL real**, complementando (sem substituir) os testes de caller com mock. Registrado no gate de
+segurança existente (`test:smoke:security` → job "Smoke MySQL + Isolamento" do CI). Cobre, com prova
+do **efeito persistido** e cleanup determinístico (zero resíduo):
+
+- **Analytics** — `getProcessCountByStatusForOrg` / `getDocumentCountByMonthForOrg` /
+  `getMostActiveMembersForOrg` contam **somente** a própria organização; dados da Org B jamais entram
+  nos contadores da Org A (ex.: `em_dfd` de A = 2, não 7); `analytics.getOverview` (caller real)
+  resolve a org pelo contexto, **nunca** pelo input.
+- **Edital** — Org A tentando `get`/`save` em processo da Org B → `NOT_FOUND`; prova por query direta
+  ao MySQL de que os parâmetros de B **não mudam** e **nenhum** `activity_log` é inserido; happy path
+  de A no próprio processo persiste corretamente.
+- **Notificações** — User A marcando notificação de B → permanece **não lida** (prova no MySQL); o
+  dono (B) marca a própria → efetivamente **lida**.
+
+### F-LEGAL1 V1 — CLOSED (removido dos blockers ativos)
+
+- **F-LEGAL1.1 V1 = 100% CLOSED** e **F-LEGAL1.2 V1 = 100% CLOSED.**
+- Reference Set V1: **instalado, aprovado por humano, ativo, hash pinado.**
+  Hash: `332a9cb3ff8477eddc5cf94790a13d7ea9bd7a8c5855078f7f567f5400196832`.
+- Expansão jurídica futura = **F-LEGAL1 V2** (append-only), **não bloqueante** para o Pilot V1.
+- **Não** foi tocado runtime jurídico nesta branch. F-LEGAL1.1/1.2 **deixam de constar como blocker**
+  (ver Risk Register, R5, atualizado).
+
+### Release safety (`railway.json`) — RESOLVED / runtime evidence confirmed
+
+A divergência histórica `railway.json` (`pnpm db:release`) × config efetiva observada
+(`pnpm db:migrate`) foi **investigada**. O deploy real de produção executou efetivamente
+`pnpm db:release`: migrations sob o release path, installer governado, reference set retornou **noop**
+(nenhuma nova ativação), aplicação iniciou, `/readyz` passou. **Não é mais blocker ativo** — permanece
+como nota histórica marcada **RESOLVED / runtime evidence confirmed** (antes R6).
+
+### F-EMB1 + F-RAG1 — dry-runs produtivos executados (registrados em conjunto)
+
+Autorizados e executados por outra frente (não nesta branch):
+
+- **F-EMB1** (dry-run produtivo): `model=gemini-embedding-2`, `dim=768`, `status=dry-run`,
+  `total=0 / processed=0 / skipped=0 / failed=0`. Interpretação correta: **nenhum embedding stale**;
+  porém o corpus governado **ainda não estava materializado**, por isso `skipped=0` (e não 7). Portanto
+  **não** se declara o rollout de produção do F-EMB1 encerrado isoladamente — registra-se **junto** com
+  F-RAG1.
+- **F-RAG1** (dry-run produtivo): `environment=production`, `setId=1`, `setVersion=1`,
+  `hash=332a9cb3ff84`, `total=7 / existing=0 / materialized=0 / replayed=false`. Interpretação:
+  Reference Set **ACTIVE**; **corpus RAG governado 0/7 materializado em produção**.
+
+> **Blocker operacional real ATUAL desta frente:** F-RAG1 **0/7 materializado em produção.**
+> Próximo gate correto (a ser conduzido pela frente responsável, **NÃO nesta PR**): F-RAG1 *apply* em
+> produção → materializar **7/7** → *replay* do **mesmo runId** → F-EMB1 dry-run esperando **7
+> current/skipped** → **A3 LIVE production validation.**
+
+O runner usado para os dry-runs foi **neutralizado** (comando inerte; `preDeployCommand=[]`;
+`restartPolicy=NEVER`; `APP_ENV`/`DATABASE_URL`/`JWT_SECRET`/`ADMIN_PASSWORD` zerados). Não tocar
+nesse serviço.
+
+### Backfill de `organizationId` legado — auditado, mecanismo já existe
+
+A preocupação com registros legacy de `organizationId` NULL foi auditada: já existe
+`drizzle/0039_backfill_org_ids.sql` (backfill de `processes`, `documents`, `tasks`, `contracts`,
+`direct_contracts`, `legal_opinions`, `comments`, `activity_logs`). **Nenhuma migration de backfill é
+necessária nesta rodada.**
+
+### Blockers atuais (pós-auditoria)
+
+| Frente | Status atual |
+|---|---|
+| F-LEGAL1.1 / F-LEGAL1.2 V1 | **CLOSED** (não é mais blocker) |
+| Release safety `railway.json` | **RESOLVED / runtime evidence confirmed** |
+| **F-RAG1 produção 0/7 materializado** | **BLOCKER OPERACIONAL REAL** (próximo gate; fora desta PR) |
+| F-EMB1 produção | Pendente do apply do F-RAG1 (registrado em conjunto; não encerrado isoladamente) |
+| Pilot go-live (G5/G7/G8/G11) | Inalterado (frentes bloqueadas, não tocadas) |
+| RC-X.1/RC-X.2 wiring | Preparado, não integrado (inalterado) |
+
+---
+
 ## A. Roadmap Reconciliation Report
 
 **Fonte da verdade cruzada:** `docs/business-domains/roadmap.md` (Sprints 5.x),
@@ -91,23 +175,36 @@ colunas já existentes (`processes.organizationId`, `documents.organizationId`,
 `activity_logs.organizationId`, `notifications.userId`), adicionando filtros de leitura/escrita — sem
 qualquer DDL. Isso respeita a restrição de não tocar `0301` nem inventar tabelas.
 
+> **Backfill legado auditado (pós-auditoria):** a preocupação com registros legacy de
+> `organizationId` NULL foi verificada — já existe `drizzle/0039_backfill_org_ids.sql` (backfill de
+> `processes`, `documents`, `tasks`, `contracts`, `direct_contracts`, `legal_opinions`, `comments`,
+> `activity_logs`). O mecanismo histórico de reconciliação existe; **nenhuma migration de backfill é
+> necessária nesta rodada.** Fronteira preservada em `0301`.
+
 ---
 
 ## D. Test Report
 
-- **Novos testes de regressão (parallel-safe):**
+- **Testes de regressão de caller (mock) — pirâmide, camada 1:**
   - `server/__tests__/integration/analytics-tenant-scope.test.ts` (2)
   - `server/__tests__/integration/edital-parameters-tenant-scope.test.ts` (5)
   - `server/__tests__/integration/notifications-owner-scope.test.ts` (2)
-- **Suíte completa (`pnpm test`):** **5218 passed / 328 skipped / 0 falhas** (267 arquivos; +7 vs.
-  base). Os 40 arquivos skipped são os smokes MySQL (`*-mysql-smoke.test.ts`), que exigem
+- **Smoke MySQL real — pirâmide, camada 2 (adicionado pós-auditoria, P2-A):**
+  `server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts` (9) — prova de
+  **persistência e isolamento contra MySQL real** para as 3 correções (Org A × Org B; efeito
+  persistido verificado por query direta; cleanup determinístico com zero resíduo). Registrado no
+  `test:smoke:security` (job "Smoke MySQL + Isolamento" do CI). As duas camadas coexistem.
+- **Suíte completa (`pnpm test`), snapshot da criação da branch:** **5218 passed / 328 skipped / 0
+  falhas** (267 arquivos; +7 vs. base). Os smokes MySQL (`*-mysql-smoke.test.ts`) exigem
   `DATABASE_URL` e rodam no runner de CI com o serviço MySQL.
 - **Typecheck (`pnpm check`):** 0 erros.
 - **Lint (`--max-warnings 0`, arquivos alterados):** limpo (gate de não-regressão do `ci.yml`).
 - **Build (`pnpm build`):** ok (`vite build` + `esbuild`).
 
-> **PASS pleno de CI** fica condicionado ao `workflow_dispatch` rodar **verde** no runner (a suíte
-> completa + smokes MySQL de isolamento executam lá) — ver Master Handoff.
+> **Evidência pós-auditoria (P2-A):** o novo smoke foi executado contra **MySQL real** (banco
+> descartável, migrations aplicadas via `db:migrate`, fronteira `0301`): **9/9 passed**, e o gate
+> `test:smoke:security` completo (7 arquivos, **108 tests**) passou verde incluindo o novo smoke.
+> **PASS pleno de CI** segue condicionado ao `workflow_dispatch` rodar **verde** no runner.
 
 ---
 
@@ -119,8 +216,10 @@ qualquer DDL. Isso respeita a restrição de não tocar `0301` nem inventar tabe
 | R2 | `institutionalRagRouter` / `ragGovernanceRouter` leem `ctx.organizationId!` sob `protectedProcedure` (nunca populado → `undefined`) | P3 | **Documentado** | Inócuo enquanto stubs; sinaliza que deveriam ser `tenantProcedure`. Corrigir junto de R1 |
 | R3 | Funções globais de analytics em `admin.ts` (`getProcessCountByStatus`/`getDocumentCountByMonth`/`getMostActiveMembers`) sem consumidor de produção após a correção #1 | P3 | **Mantidas** | Removê-las é limpeza fora de escopo e de risco desnecessário; exportadas (sem warning de unused). Candidatas a poda futura |
 | R4 | RC-X.1 / RC-X.2 presentes mas **não fiados** ao runtime | P2 | **Preparado, bloqueado** | Fiar o bootstrap ao boot tem risco de inicialização; requer decisão de rollout. Não tocado |
-| R5 | Frentes que dependem de decisão humana/jurídica: F-LEGAL1.1/1.2, ativação de Legal Reference Set, PNCP, assinatura ICP-Brasil, sync de calendário externo | — | **Bloqueado por design** | Explicitamente fora do mandato; não iniciadas para não inventar contratos/decisões |
-| R6 | `railway.json`: `db:release:predeploy` × `db:migrate:release` divergentes | P2 | **Não corrigido (bloqueado)** | Rollout da PR #226 é frente protegida; correção proibida nesta branch |
+| R5 | Frentes que dependem de decisão humana/jurídica: F-LEGAL1.1/1.2, ativação de Legal Reference Set, PNCP, assinatura ICP-Brasil, sync de calendário externo | — | **Bloqueado por design** | Explicitamente fora do mandato; não iniciadas para não inventar contratos/decisões. **Delta pós-auditoria:** **F-LEGAL1.1/1.2 V1 = CLOSED** (reference set instalado/aprovado/ativo, hash `332a9cb3…196832`) — **removidos** desta lista de blockers; permanecem bloqueadas apenas PNCP, ICP-Brasil e calendário externo |
+| R6 | `railway.json`: `db:release:predeploy` × `db:migrate:release` divergentes | P2 | **Não corrigido (bloqueado)** → **RESOLVED (pós-auditoria)** | **Delta pós-auditoria:** deploy real de produção executou `pnpm db:release` (migrations sob release path, installer governado, reference set **noop**, app iniciou, `/readyz` passou) → **RESOLVED / runtime evidence confirmed**. Não é mais blocker ativo; nota histórica preservada |
+| R7 | Os helpers org-scoped novos (`getProcessCountByStatusForOrg` / `getDocumentCountByMonthForOrg` / `getMostActiveMembersForOrg`) carregam registros da organização e **agregam em Node** | P3 (performance/scalability debt) | **Documentado, não implementado** | Correto funcionalmente e **seguro multi-tenant**, porém menos eficiente em escala. Recomendação futura: `COUNT`/`GROUP BY`/filtros temporais em SQL (agregação no banco). **Não otimizar nesta execução** (não ampliar o diff) |
+| R8 | **F-RAG1 produção: corpus governado 0/7 materializado** (Reference Set ACTIVE, mas `materialized=0`) | — (operacional) | **BLOCKER OPERACIONAL REAL — fora desta PR** | Próximo gate: F-RAG1 *apply* em produção → 7/7 → *replay* do mesmo runId → F-EMB1 dry-run esperando 7 current/skipped → A3 LIVE validation. Conduzido pela frente responsável; **não executado nesta PR** |
 
 ---
 
@@ -172,3 +271,24 @@ job `deploy` fica restrito a `main`).
 **Garantias desta entrega:** sem merge em `main`; sem produção; sem ativação jurídica; sem migration;
 sem novo núcleo; sem dado fictício; sem mascarar estado degradado. Toda correção é real, provável por
 teste, e é a **menor mudança segura** para a invariante que restaura.
+
+### Addendum pós-auditoria (2026-09-20)
+
+**Commits adicionais nesta rodada (fecham os dois P2 da auditoria da PR #229):**
+- `test(security): add MySQL proof for post-blockers isolation fixes` — novo smoke MySQL real +
+  registro no `test:smoke:security`.
+- `docs(handoff): reconcile post-audit blocker state` — este arquivo (seção "Estado atualizado após
+  auditoria", Test/Migration/Risk atualizados).
+
+**Validação local pós-auditoria (contra MySQL real, banco descartável):** `pnpm check` 0 erros ·
+lint dos arquivos alterados `--max-warnings 0` limpo · novo smoke **9/9 passed** ·
+`pnpm test:smoke:security` **108/108 passed** (7 arquivos, inclui o novo) · `pnpm build` ok.
+
+**Blockers atuais (autoritativo):** ver seção "Estado atualizado após auditoria". Em resumo:
+F-LEGAL1 V1 **CLOSED**; release safety `railway.json` **RESOLVED (runtime evidence)**; **blocker
+operacional real = F-RAG1 produção 0/7 materializado** (próximo gate, fora desta PR); F-EMB1 registrado
+em conjunto; Pilot G5/G7/G8/G11 inalterados; RC-X.1/X.2 preparados e não integrados.
+
+**Invariantes preservadas nesta rodada:** NO MERGE · NO PRODUCTION CHANGE · NO LEGAL ACTIVATION ·
+NO MIGRATION (fronteira `0301`) · NO RAILWAY CHANGE · runner de dry-run **não** tocado · PR permanece
+**DRAFT**.
