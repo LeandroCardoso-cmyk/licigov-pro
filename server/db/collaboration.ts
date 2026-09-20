@@ -240,10 +240,14 @@ export async function getUnreadNotificationsCount(userId: number) {
   return result.length;
 }
 
-export async function markNotificationAsRead(notificationId: number) {
+export async function markNotificationAsRead(notificationId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, notificationId));
+  // Escopo por dono: um usuário só marca como lida a PRÓPRIA notificação (no-op para as de outrem).
+  await db
+    .update(notifications)
+    .set({ isRead: true })
+    .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
 }
 
 export async function markAllNotificationsAsRead(userId: number) {

@@ -112,3 +112,69 @@ export async function getMostActiveMembers(limit: number = 10) {
   }
   return result;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT-SCOPED analytics (correção de vazamento cross-tenant no analyticsRouter).
+// As funções acima são GLOBAIS (uso platform-admin/legado). O overview institucional por
+// organização DEVE derivar `organizationId` do contexto do servidor e filtrar toda agregação —
+// nenhum tenant enxerga processos/documentos/atividade de outro. Invariante multi-tenant do
+// PRODUCT_NORTH_STAR. Retornam vazio sem DB (leitura, degradação graciosa).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getProcessCountByStatusForOrg(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const orgProcesses = await db.select().from(processes).where(eq(processes.organizationId, organizationId));
+  const statusCounts: Record<string, number> = {};
+  for (const process of orgProcesses) {
+    statusCounts[process.status] = (statusCounts[process.status] || 0) + 1;
+  }
+  return Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+}
+
+export async function getDocumentCountByMonthForOrg(organizationId: number, months: number = 6) {
+  const db = await getDb();
+  if (!db) return [];
+  const orgDocuments = await db.select().from(documents).where(eq(documents.organizationId, organizationId));
+  const monthCounts: Record<string, number> = {};
+  const now = new Date();
+  for (const doc of orgDocuments) {
+    const docDate = new Date(doc.createdAt);
+    const monthDiff =
+      (now.getFullYear() - docDate.getFullYear()) * 12 + (now.getMonth() - docDate.getMonth());
+    if (monthDiff < months) {
+      const monthKey = `${docDate.getFullYear()}-${String(docDate.getMonth() + 1).padStart(2, "0")}`;
+      monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+    }
+  }
+  return Object.entries(monthCounts)
+    .map(([month, count]) => ({ month, count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export async function getMostActiveMembersForOrg(organizationId: number, limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  const orgActivities = await db.select().from(activityLogs).where(eq(activityLogs.organizationId, organizationId));
+  const userActivityCounts: Record<number, number> = {};
+  for (const activity of orgActivities) {
+    userActivityCounts[activity.userId] = (userActivityCounts[activity.userId] || 0) + 1;
+  }
+  const sortedUsers = Object.entries(userActivityCounts)
+    .map(([userId, count]) => ({ userId: parseInt(userId), activityCount: count }))
+    .sort((a, b) => b.activityCount - a.activityCount)
+    .slice(0, limit);
+  const result = [];
+  for (const { userId, activityCount } of sortedUsers) {
+    const user = await getUserById(userId);
+    if (user) {
+      result.push({
+        userId: user.id,
+        userName: user.name || "Usuário sem nome",
+        userEmail: user.email || "",
+        activityCount,
+      });
+    }
+  }
+  return result;
+}
