@@ -33,21 +33,27 @@ G1/G2/G3/G6. A série de hardening do runtime Gemini + recuperação jurídica +
 | G2 | Nenhum endpoint institucional público sem auth | **PASS** | RC-SEC-PR-A: AUTH-003 corrigido (deployment/stability → adminProcedure); freeze |
 | G3 | Nenhuma escalação de privilégio | **PASS** | RC-SEC-PR-A: RBAC-004 corrigido (onboarding orgRoleProcedure, escopo global só admin plataforma) |
 | G4 | Sem credencial default em produção | **PASS** | CONFIG-005: código exige `ADMIN_PASSWORD` (mínimo 8 chars) em staging/production, sem default — boot falha se ausente; `ADMIN_PASSWORD` **configurada e validada** no ambiente (confirmação operacional) |
-| G5 | Segredos fora do repositório e rotacionados | **PARTIAL** | SEC-018: `.env` removido do índice; PASS = rotação dos segredos (runbook, OPERATOR_ACTION_REQUIRED) |
+| G5 | Segredos fora do repositório e rotacionados | **PARTIAL** | SEC-018: `.env` removido do índice; código **CODE_COMPLETE** (só `.env.example`, fail-closed, sem default inseguro). Auditoria 2026-09-20: [`G5_SECRET_READINESS_AUDIT.md`](../../security/G5_SECRET_READINESS_AUDIT.md) confirma `JWT_SECRET` real exposto no histórico (P1) e `DATABASE_URL` (P2); `GEMINI_API_KEY` já rotacionada (G12). **PASS bloqueado** = `OPERATOR_ACTION_REQUIRED`: rotacionar/atestar `JWT_SECRET` e `DATABASE_URL` no Railway (runbook [`PR_A_SECRET_ROTATION_RUNBOOK.md`](../../security/PR_A_SECRET_ROTATION_RUNBOOK.md)) — não executável/verificável pelo repositório |
 | G6 | Registro não permite entrada indevida no tenant do órgão | **PASS** | RC-SEC-PR-A: SEC-017 corrigido (fallback org 1 removido; registro fail-closed) |
-| G7 | CI comprova que o projeto compila e o isolamento não regrediu | **FAIL** | DEPLOY-019/049; PASS = build+typecheck+smokes de isolamento no gate |
-| G8 | Fluxo principal navegável e sem telas de debug/duplicadas | **PARTIAL** | UI-054, LEGACY-013; PASS = rotas de teste e legadas fora da navegação |
+| G7 | CI comprova que o projeto compila e o isolamento não regrediu | **PASS** | Reconciliado em 2026-09-20 (ver "Adendo — Reconciliação formal do G7"). Gate de CI real executa **verde** em `main`: typecheck (`pnpm check`), lint de não-regressão, `pnpm test`, **smokes MySQL de isolamento** (`test:smoke:security` + demais) com serviço MySQL, e `pnpm build` (artefato publicado); `deploy` depende de todos via `needs` e é restrito a `main` (`if: github.ref == 'refs/heads/main'`), **sem `\|\| true`** e **sem build simbólico**. Evidência: run **#573** (push `main` @ `81afdf5`, todos os 6 jobs SUCCESS) + runs #567–#570 na PR #229 |
+| G8 | Fluxo principal navegável e sem telas de debug/duplicadas | **PARTIAL** | Auditoria 2026-09-20: [`G8_PILOT_NAVIGATION_AUDIT.md`](./G8_PILOT_NAVIGATION_AUDIT.md). Feito: nav canônica limpa (`businessDomains.ts`/`LEGACY_PATHS`), rotas `/test*` fora do roteamento + **arquivos órfãos removidos**, redirects canônicos ativos, sem bypass de auth. **PASS bloqueado**: rotas legadas (`/direct-contracts`, `/parecer-juridico`, `/contracts`) seguem montadas e **cross-wired do núcleo** (`ProcessDetails` → criar parecer/contrato com contexto); redirecioná-las quebraria fluxo crítico e migrar exige entrada canônica de criação-com-contexto (**feature fora de escopo**) — **decisão de produto humana** |
 | G9 | Login/sessão/logout funcionais | **PASS** | JWT httpOnly ok; SEC-022 corrigido — TTL de sessão padrão **24h, configurável** via `SESSION_TTL_HOURS` (1–720h; `SESSION_TTL_MS` em `config/auth.ts`, aplicado ao JWT em `_core/sdk.ts`). O default de 1 ano foi removido |
 | G10 | Suíte de testes verde no snapshot | **PASS** | 3924 passed / 92 skipped / 0 falhas; typecheck 0 erros; build ok (snapshot pós AI-015 fail-closed) |
 | G11 | Backup e restauração disponíveis | **PASS** | DEPLOY-051 resolvido: backup **agendado** + checksum + retenção (14d) + criptografia; **drill de restauração com backup REAL** concluído em banco descartável (run `30682397855` #8, checksum `b882…685e`, 770s, **312 tabelas**, **120 migrations**, isolamento **órfãs=0/mismatch=0**, **PASS**). Ressalva: job marcado "failure" por falso negativo de cleanup **posterior** às validações — correção preventiva em `0fd5099`. Evidência: [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md) |
 | G12 | IA nunca serve conteúdo mock como oficial sem sinalizar | **PASS** | AI-015 resolvido em duas frentes: (a) `thinkingConfig` deixou de derrubar a chamada real e `GEMINI_API_KEY` foi rotacionada e **validada em staging**; (b) **fail-closed do provider** — o fallback implícito para `MockAIProvider` é PROIBIDO em staging/production (`selectProvider` lança `NoRealAIProviderError`); sem provider real a consulta falha de forma controlada e NÃO persiste resposta oficial (`failed`); erro de runtime do Gemini não cai no mock; mock só em dev/test com `AI_ALLOW_MOCK_FALLBACK=true` (default false) e, quando usado, é marcado (`provider=mock`) e NUNCA classificado como oficial/"Fundamentada". Selos de suficiência + evidência-por-intenção complementam. Testes: `ai-015-mock-fallback-policy.test.ts`. Ver adendo |
 
-**Resultado do Gate Obrigatório (pós-PR A + hardening Gemini/retrieval + AI-015 fail-closed): 8 PASS · 1 FAIL · 3 PARTIAL · 0 NOT_VERIFIED · 0 N/A (total 12).**
+**Resultado do Gate Obrigatório (histórico — pós-PR A + hardening Gemini/retrieval + AI-015 fail-closed): 8 PASS · 1 FAIL · 3 PARTIAL · 0 NOT_VERIFIED · 0 N/A (total 12).**
 PASS: G1, G2, G3, G4, G6, G9, G10, G12 · FAIL: G7 · PARTIAL: G5, G8, G11.
 > **Atualização (PR D):** **G11 → `PASS`** — drill de restauração com backup **real** concluído
 > em banco descartável (evidência em [`DB_RESTORE_DRILL_EVIDENCE.md`](./DB_RESTORE_DRILL_EVIDENCE.md);
 > ver linha da tabela e adendo PR D). G7 endereçado pelo gate de CI real (ver adendo). Restam
 > pendentes apenas **G5** e **G8**.
+>
+> **Atualização (2026-09-20 — reconciliação formal do G7):** **G7 → `PASS`** (condição do adendo PR D
+> satisfeita: CI real **verde** em `main`, run **#573** @ `81afdf5`). Estado corrente do Gate
+> Obrigatório: **10 PASS · 0 FAIL · 2 PARTIAL** — PASS: G1, G2, G3, G4, G6, **G7**, G9, G10, G11, G12 ·
+> PARTIAL: **G5** (rotação de segredos) e **G8** (rotas de teste/legadas fora da navegação). Estes dois
+> permanecem bloqueantes até `PASS`. Ver "Adendo — Reconciliação formal do G7".
 Pela regra de bloqueio acima, enquanto qualquer item aplicável não estiver em `PASS` — incluindo
 os `PARTIAL` (G5/G8/G11) — o go-live **não** é autorizado. A PR A moveu G1/G2/G3/G6 para PASS;
 a série Gemini/retrieval + AI-015 fail-closed fechou **G12**; a confirmação de `ADMIN_PASSWORD` no
@@ -193,3 +199,46 @@ Ver detalhes em [`PR_D_PRODUCTION_RESILIENCE.md`](./PR_D_PRODUCTION_RESILIENCE.m
 > Pendências fora do escopo do PR D (não mascaradas, com evidência honesta): reduzir o baseline de
 > vulnerabilidades de dependências (upgrades), drill de restore real, transações P3/P4
 > (aditivos/processo+evento), gate de lint completo — ver o [resumo do PR D](./PR_D_PRODUCTION_RESILIENCE.md).
+
+---
+
+## Adendo — Reconciliação formal do G7 (2026-09-20)
+
+Este adendo formaliza a transição **G7: `FAIL` → `PASS`**, satisfazendo a condição já registrada no
+adendo PR D ("**PASS pleno** de G7 fica condicionado ao CI executar **verde**"). Não reescreve
+histórico: as linhas anteriores (FAIL e a condição PR D) permanecem como registro; esta seção é a
+reconciliação datada e a evidência objetiva.
+
+**Pergunta do G7:** o CI comprova build + typecheck + testes + isolamento, em gate real (sem máscara)?
+
+**Evidência estrutural (workflow `.github/workflows/ci.yml`, em `main` @ `81afdf5`):**
+- Jobs obrigatórios: `quality` (Typecheck + Lint), `test` (Testes Automatizados), `mysql-smoke`
+  (Smoke MySQL + Isolamento), `security-audit` (Auditoria de Dependências), `build` (Build de Produção).
+- `deploy` declara `needs: [quality, test, mysql-smoke, build, security-audit]` e
+  `if: github.ref == 'refs/heads/main'` — só prepara deploy se **todos** os gates passarem, e apenas em `main`.
+- **Sem `|| true`** mascarando gate crítico e **sem build simbólico**: `pnpm check` (tsc real),
+  `pnpm test` (vitest real), `pnpm build` (vite + esbuild, publica artefato), e o job `mysql-smoke`
+  sobe **serviço MySQL real** (containers), aplica migrations (`db:migrate:release`) e executa os
+  smokes de isolamento enumerados, incluindo `test:smoke:security`.
+
+**Evidência de execução (verde):**
+
+| Run | Evento | HEAD | Resultado |
+|---|---|---|---|
+| **#573** (`35532091237`) | `push` em `main` | `81afdf5` | **SUCCESS** — 6/6 jobs (Typecheck+Lint, Testes Automatizados, Smoke MySQL+Isolamento, Auditoria de Dependências, Build, Deploy-Preparação) |
+| #572 / #571 | pós-merge / merges | `81afdf5` / `b2e2df3` | SUCCESS |
+| #567 (`pull_request`), #568 (`workflow_dispatch`) | PR #229 | `1a27df3` | SUCCESS |
+| #569 (`pull_request`), #570 (`workflow_dispatch`) | PR #229 | `48ef5cb` | SUCCESS |
+
+Detalhe do #573 (`main`): todos os passos do `mysql-smoke` (migration safety, DATETIME, concorrência
+DATA-012, item CAS, `test:smoke:security`, ingestão/promoção, idempotência PR C, replay-safe C.4A,
+oficial C.4B.1/2/3A/3B, A3-RD1 reference set + bridge, DATA-039) SUCCESS; `build` publicou o artefato
+validado; `deploy` (preparação) executou após os gates.
+
+**Governança:** o **bloqueio efetivo** do deploy depende também de branch protection em `main` +
+"Wait for CI" no Railway (ações operacionais — ver [`CI_CD_GATES.md`](../../architecture/CI_CD_GATES.md)).
+A #229 foi mergeada em `main` com o CI verde (run pós-merge **#573** SUCCESS), consistente com o gate
+de checks obrigatórios.
+
+**Classificação formal:** **G7 = PASS** (reconciliado 2026-09-20; HEAD `81afdf5`; evidência run #573).
+Risco residual: manter branch protection + Wait-for-CI ativos (ação operacional contínua).
