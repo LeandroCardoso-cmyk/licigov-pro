@@ -2404,26 +2404,6 @@
     "ast_hash": "57e0fa37905b82ed463266a6d5a7aa4f",
     "semantic_hash": ""
   },
-  "client/src/pages/TestPage.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "70da4a95eb1973870f50f2815bf56855",
-    "semantic_hash": ""
-  },
-  "client/src/pages/TestPage2.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "55936e586c643efe8672d9c1611d6c30",
-    "semantic_hash": ""
-  },
-  "client/src/pages/TestPage3.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "33e8bf2ea5592955fb2380dad09eebfc",
-    "semantic_hash": ""
-  },
-  "client/src/pages/TestPage4.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "76a0ccb041d7d925ca9d86e10bc68e31",
-    "semantic_hash": ""
-  },
   "client/src/services/download.ts": {
     "mtime": 1788023705.142377,
     "ast_hash": "5b84c832d57b17104746d7488fd6bbfc",
@@ -9755,8 +9735,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1788023705.5307798,
-    "ast_hash": "b64193feda5c889782bbb692ded4bd61",
+    "mtime": 1789935396.9128382,
+    "ast_hash": "a11eccefe316655198b23988b5df6082",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -11600,13 +11580,13 @@
     "semantic_hash": ""
   },
   "docs/ops/F_LEGAL1_1_AUTHORITATIVE_LEGAL_REFERENCE_CONTRACT.md": {
-    "mtime": 1789248333.7378137,
-    "ast_hash": "94ca6d6512cd7aa329108d9788df782b",
+    "mtime": 1789934403.364844,
+    "ast_hash": "8c9184225ff2c46af886e29a92a9dae3",
     "semantic_hash": ""
   },
   "docs/ops/F_LEGAL1_DIRECT_PROCUREMENT_LEGAL_REFERENCE_VERSIONING_BACKLOG.md": {
-    "mtime": 1789243872.469539,
-    "ast_hash": "b9fd875c2e0b8b5ce71a746e85fbaae4",
+    "mtime": 1789934403.364844,
+    "ast_hash": "813cf735018848a8d6130152e30078a0",
     "semantic_hash": ""
   },
   "docs/ops/MIGRATION_RELEASE_RUNBOOK.md": {
@@ -11615,8 +11595,8 @@
     "semantic_hash": ""
   },
   "docs/ops/legal-reference/LEGAL_REFERENCE_MANIFEST_V1_2026.md": {
-    "mtime": 1789249261.3269548,
-    "ast_hash": "801d865b7df8488aab7df644a448f24f",
+    "mtime": 1789934403.364844,
+    "ast_hash": "cd5f65c00d1512c391ef869958caed21",
     "semantic_hash": ""
   },
   "server/__tests__/fixtures/a2-corpus/lei_14133_2021.txt": {
@@ -11640,8 +11620,18 @@
     "semantic_hash": ""
   },
   "docs/handoffs/POST_BLOCKERS_ROADMAP_FOUNDATION_DELIVERY.md": {
-    "mtime": 1789872191.4421077,
-    "ast_hash": "582a98609e4616c60f90018437be921c",
+    "mtime": 1789877052.9929478,
+    "ast_hash": "08dc4a67125bc39374f245047197d31d",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/G8_PILOT_NAVIGATION_AUDIT.md": {
+    "mtime": 1789935386.9808383,
+    "ast_hash": "ded0d8b03e1609afe73f07bcbddb1316",
+    "semantic_hash": ""
+  },
+  "docs/ops/F_LEGAL1_V1_CLOSURE_2026-09-18.md": {
+    "mtime": 1789934403.364844,
+    "ast_hash": "4485dcc34222645ea572ce4535282bcd",
     "semantic_hash": ""
   }
 }
