@@ -1,297 +1,545 @@
-import { Button } from "@/components/ui/button";
-import { CheckCircle2, ArrowRight } from "lucide-react";
-import { APP_TITLE, APP_LOGO } from "@/const";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { AnimatedSection } from "@/components/AnimatedSection";
-import WhatsAppButton from "@/components/WhatsAppButton";
-import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
-import { FAQSection } from "@/components/landing/FAQSection";
-import { ContactForm } from "@/components/landing/ContactForm";
-import { PricingPlans } from "@/components/landing/PricingPlans";
+import "./landing.css";
 
-const benefits = [
-  "Redução significativa do tempo de elaboração de processos",
-  "100% de conformidade com a Lei 14.133/2021",
-  "Eliminação de erros manuais em documentos",
-  "Centralização de informações e documentos",
-  "Rastreabilidade completa de alterações",
-  "Segurança e backup automático",
+/**
+ * Landing institucional do LiciGov Pro.
+ *
+ * Port fiel do design produzido no Claude Design (opção A: reconstrução como componente React,
+ * sem HTML standalone de ~5,8 MB embutido). O visual vive em `./landing.css`, com tokens
+ * ESCOPADOS em `.lgv-landing` (não vazam para o design system shadcn/Tailwind do app) e modo
+ * escuro atrelado à classe `.dark` do ThemeProvider.
+ *
+ * CTAs reais (sem âncoras mortas):
+ *  - "Entrar"                    → /login
+ *  - "Agendar demonstração" /
+ *    "Solicitar proposta" /
+ *    "Falar com um especialista" → /solicitar-proposta (fluxo comercial já existente)
+ *  - Âncoras internas (#produto…) → navegação entre seções da própria página.
+ *
+ * Toda saída de IA descrita aqui é apresentada como supervisionada, explicável e auditável —
+ * coerente com o PRODUCT_NORTH_STAR (IA nunca protagonista; revisão humana obrigatória).
+ */
+
+const LOGO = "/landing/logo-lockup.png";
+const PROPOSAL = "/solicitar-proposta";
+
+const CAPACIDADES: { titulo: string; itens: string[] }[] = [
+  {
+    titulo: "Instrumentos de contratação",
+    itens: [
+      "DFD — Documento de Formalização",
+      "ETP — Estudo Técnico Preliminar",
+      "Termo de Referência",
+      "Editais e minutas",
+      "Contratações diretas",
+    ],
+  },
+  {
+    titulo: "Gestão contratual",
+    itens: ["Contratos administrativos", "Termos aditivos", "Vencimentos e prazos", "Central de Controle"],
+  },
+  {
+    titulo: "Catálogos e padrões",
+    itens: ["CATMAT", "CATSER", "Modelos institucionais", "Consulta normativa"],
+  },
+  {
+    titulo: "Inteligência e governança",
+    itens: [
+      "IA supervisionada",
+      "Workflow e colaboração",
+      "Histórico e versionamento",
+      "Auditoria e rastreabilidade",
+    ],
+  },
 ];
 
-const howItWorks = [
-  {
-    step: "1",
-    title: "Cadastre o Processo",
-    description: "Informe o objeto da contratação, valor estimado e modalidade em um formulário simples e intuitivo.",
-  },
-  {
-    step: "2",
-    title: "IA Gera os Documentos",
-    description: "Nossa inteligência artificial cria automaticamente ETP, TR, DFD e Edital conforme a Lei 14.133/21.",
-  },
-  {
-    step: "3",
-    title: "Revise e Personalize",
-    description: "Edite os documentos gerados, adicione informações específicas e colabore com sua equipe.",
-  },
-  {
-    step: "4",
-    title: "Exporte e Publique",
-    description: "Baixe os documentos em PDF ou DOCX e publique seu processo licitatório com total conformidade legal.",
-  },
+const FLUXO: { n: string; nome: string; desc: string; artigo: string }[] = [
+  { n: "01", nome: "DFD", desc: "Formaliza a demanda", artigo: "Art. 12, VII" },
+  { n: "02", nome: "ETP", desc: "Estuda a viabilidade", artigo: "Art. 18" },
+  { n: "03", nome: "TR", desc: "Referencia o objeto", artigo: "Art. 6º, XXIII" },
+  { n: "04", nome: "Edital", desc: "Publica com segurança", artigo: "Art. 25" },
+  { n: "05", nome: "Contrato", desc: "Formaliza a execução", artigo: "Art. 89" },
+  { n: "06", nome: "Aditivos", desc: "Gerencia alterações", artigo: "Art. 124" },
+];
+
+const CENTRAL_BULLETS = [
+  "Andamento das contratações",
+  "Documentos pendentes",
+  "Responsáveis e aprovações",
+  "Contratos e aditivos",
+  "Vencimentos e prazos",
+  "Alertas e indicadores",
+];
+
+const CONTEXTO: { k: string; v: string }[] = [
+  { k: "Legislação municipal", v: "Leis e regulamentos próprios do órgão." },
+  { k: "Decretos e pareceres", v: "Atos normativos e entendimentos internos." },
+  { k: "Modelos internos", v: "Padrões e minutas já adotados pelo setor." },
+  { k: "Tribunal de Contas competente", v: "Orientações do TC do seu estado, quando disponibilizadas." },
 ];
 
 export default function LandingPage() {
-  return (
-    <div className="min-h-screen bg-white">
-      <WhatsAppButton />
+  const [scrolled, setScrolled] = useState(false);
 
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src={APP_LOGO} alt="LiciGov Pro" className="h-20 w-auto" />
-            <h1 className="text-2xl font-bold text-gray-900">{APP_TITLE}</h1>
-          </div>
-          <div className="flex gap-3">
-            <Button asChild className="bg-slate-600 hover:bg-slate-700">
-              <a href="/login">Entrar no Sistema</a>
-            </Button>
-          </div>
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div className="lgv-landing">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="lgv-header" data-scrolled={scrolled}>
+        <div className="lgv-header-inner">
+          <a href="#topo" className="lgv-brand">
+            <img src={LOGO} alt="LiciGov Pro" />
+          </a>
+          <nav aria-label="Navegação principal" className="lgv-nav">
+            <span className="lgv-nav-sections">
+              <a href="#produto" className="lgv-nav-link">
+                A plataforma
+              </a>
+              <a href="#capacidades" className="lgv-nav-link">
+                Capacidades
+              </a>
+              <a href="#central" className="lgv-nav-link">
+                Central de Controle
+              </a>
+              <a href="#fluxo" className="lgv-nav-link">
+                Fluxo
+              </a>
+            </span>
+            <span className="lgv-nav-actions">
+              <Link href="/login" className="lgv-btn lgv-btn-ghost">
+                Entrar
+              </Link>
+              <Link href={PROPOSAL} className="lgv-btn lgv-btn-navy">
+                Agendar demonstração
+              </Link>
+            </span>
+          </nav>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative py-16 md:py-24 overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img
-            src="/hero-background-government.jpg"
-            alt="Prédios Governamentais"
-            className="w-full h-full object-cover"
-            style={{ filter: "blur(4px)" }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-700/80 via-slate-600/70 to-blue-900/75"></div>
-        </div>
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <div className="inline-block px-4 py-2 bg-white/90 text-slate-700 rounded-full text-sm font-semibold backdrop-blur-sm">
-                🚀 Plataforma Oficial para Licitações Públicas
-              </div>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight drop-shadow-lg">
-                Simplifique a Gestão de
-                <span className="text-yellow-300"> Processos Licitatórios</span>
-              </h2>
-              <p className="text-xl text-white/95 leading-relaxed drop-shadow-md">
-                Plataforma completa para órgãos públicos gerenciarem licitações com <strong>eficiência</strong>,{" "}
-                <strong>conformidade</strong> e <strong>agilidade</strong>. Geração automática de documentos com
-                Inteligência Artificial.
-              </p>
-              <div className="flex gap-4 flex-wrap">
-                    <Button
-                  asChild
-                  size="lg"
-                  className="bg-white text-slate-700 hover:bg-slate-50 text-lg px-8 shadow-2xl hover:shadow-3xl transition-all animate-breathing font-bold"
-                >
-                  <Link href="/solicitar-proposta" className="flex items-center">
-                    Solicitar Proposta Comercial
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="relative z-10 rounded-2xl overflow-hidden shadow-2xl animate-float">
-                <img src="/hero-dashboard-mockup.png" alt="Dashboard LiciGov Pro" className="w-full h-auto" />
-              </div>
-              <div className="absolute -top-4 -right-4 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-blob"></div>
-              <div className="absolute -bottom-8 -left-4 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-blob animation-delay-2000"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Benefícios Principais */}
-      <section className="bg-gradient-to-r from-slate-600 to-slate-700 text-white py-16">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl md:text-4xl font-bold mb-4">Por que escolher o LiciGov Pro?</h3>
-            <p className="text-xl text-slate-200 max-w-2xl mx-auto">Benefícios comprovados para órgãos públicos</p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {benefits.map((benefit, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 bg-slate-700/30 p-4 rounded-lg backdrop-blur-sm hover:bg-slate-700/40 transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-blue-400 flex items-center justify-center flex-shrink-0 shadow-lg">
-                  <CheckCircle2 className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-slate-50">{benefit}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <FeaturesGrid />
-
-      {/* Como Funciona */}
-      <section className="bg-gradient-to-br from-slate-50 to-blue-50 py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Como Funciona</h3>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Em 4 passos simples, você cria processos licitatórios completos e conformes
+      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      <section id="topo" className="lgv-hero">
+        <div aria-hidden="true" className="lgv-hero-overlay" />
+        <div className="lgv-hero-grid lgv-fade-up">
+          <div>
+            <span className="lgv-eyebrow">
+              <span style={{ width: 24, height: 1, background: "var(--brass)", display: "inline-block" }} />O sistema
+              operacional do departamento de licitações
+            </span>
+            <h1 className="lgv-hero-h1">Todo o seu departamento de licitações, organizado em uma só plataforma.</h1>
+            <p className="lgv-hero-sub">
+              O LiciGov Pro acompanha toda a jornada da contratação pública — do planejamento à gestão dos Contratos
+              Administrativos e Termos Aditivos. Menos retrabalho, documentos padronizados e segurança jurídica, com
+              apoio <b>supervisionado, explicável e auditável</b>.
             </p>
+            <div className="lgv-hero-cta">
+              <Link href={PROPOSAL} className="lgv-btn lgv-btn-brass">
+                Agendar demonstração →
+              </Link>
+              <Link href={PROPOSAL} className="lgv-btn lgv-btn-glass">
+                Solicitar proposta
+              </Link>
+            </div>
+            <div className="lgv-hero-trust">
+              <span>Fundamentado em</span>
+              <b>Lei 14.133</b>
+              <span className="lgv-dot" />
+              <b>Fontes governadas</b>
+              <span className="lgv-dot" />
+              <b>Contexto institucional</b>
+            </div>
           </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {howItWorks.map((item, index) => (
-              <AnimatedSection key={index} animation="slide-up" delay={index * 150}>
-                <div className="relative h-full flex flex-col">
-                  <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 h-full group">
-                    <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-700 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
-                      {item.step}
-                    </div>
-                    <h4 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h4>
-                    <p className="text-gray-600 text-sm">{item.description}</p>
-                  </div>
-                  {index < howItWorks.length - 1 && (
-                    <div className="hidden lg:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
-                      <ArrowRight className="h-8 w-8 text-slate-400 animate-pulse" />
-                    </div>
-                  )}
-                </div>
-              </AnimatedSection>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Geração Automática com IA */}
-      <section className="bg-white py-20">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="order-2 md:order-1">
+          <div className="lgv-hero-figure">
+            <div aria-hidden="true" className="lgv-hero-glow" />
+            <div className="lgv-hero-card">
+              <div className="lgv-hero-card-bar">
+                <img src={LOGO} alt="LiciGov Pro" />
+                <span className="lgv-hero-card-tag">Ambiente demonstrativo · dados ilustrativos</span>
+              </div>
               <img
-                src="/documents-generation.png"
-                alt="Geração Automática de Documentos"
-                className="w-full h-auto rounded-2xl shadow-2xl"
+                className="lgv-shot"
+                src="/landing/central-de-controle.png"
+                alt="Centro de Operações do LiciGov Pro com visão consolidada de processos, contratos, pareceres, tarefas, solicitações e recomendações do departamento."
               />
             </div>
-            <div className="order-1 md:order-2 space-y-6">
-              <h3 className="text-3xl md:text-4xl font-bold text-gray-900">
-                Geração Automática de Documentos com{" "}
-                <span className="text-slate-600">Inteligência Artificial</span>
-              </h3>
-              <p className="text-lg text-gray-600">
-                Nossa IA especializada em licitações públicas cria automaticamente todos os documentos necessários,
-                seguindo rigorosamente a <strong>Lei 14.133/2021</strong>.
-              </p>
-              <ul className="space-y-3">
-                {[
-                  "ETP (Estudo Técnico Preliminar) completo",
-                  "TR (Termo de Referência) detalhado",
-                  "DFD (Documento de Formalização da Demanda)",
-                  "Edital com todos os anexos necessários",
-                ].map((item, index) => (
-                  <li key={index} className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">{item}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="lgv-hero-badge">
+              <div className="lgv-hero-badge-k">Preparado para o seu órgão</div>
+              <div className="lgv-hero-badge-v">Uma visão única de contratações, prazos e responsáveis.</div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Colaboração em Equipe */}
-      <section className="bg-gradient-to-b from-gray-50 to-white py-20">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h3 className="text-3xl md:text-4xl font-bold text-gray-900">
-                Trabalhe em Equipe com <span className="text-slate-600">Total Transparência</span>
-              </h3>
-              <p className="text-lg text-gray-600">
-                Colabore com sua equipe em tempo real. Controle de versões, comentários e histórico completo de todas
-                as alterações.
-              </p>
-              <ul className="space-y-3">
-                {[
-                  "Convide membros e defina permissões",
-                  "Histórico completo de alterações",
-                  "Comentários e revisões em documentos",
-                  "Notificações automáticas de atualizações",
-                ].map((item, index) => (
-                  <li key={index} className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">{item}</span>
-                  </li>
-                ))}
+      {/* ── Posicionamento ─────────────────────────────────────────────────── */}
+      <section id="produto" className="lgv-section">
+        <div className="lgv-container">
+          <div style={{ maxWidth: "64ch" }}>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              Posicionamento
+            </span>
+            <h2 className="lgv-h2">
+              A camada cognitiva e operacional do departamento — não mais um sistema paralelo.
+            </h2>
+            <p className="lgv-lead" style={{ maxWidth: "60ch" }}>
+              O LiciGov Pro organiza, padroniza e dá inteligência à rotina interna do setor. Ele opera ao lado dos seus
+              sistemas — e o protagonista é sempre o departamento.
+            </p>
+          </div>
+          <div className="lgv-two-col">
+            <div>
+              <h3 className="lgv-col-title is-sage">O que ele é</h3>
+              <ul className="lgv-check-list is-positive">
+                <li>
+                  <span className="lgv-mark is-dot" />
+                  Sistema operacional do departamento de licitações
+                </li>
+                <li>
+                  <span className="lgv-mark is-dot" />
+                  Plataforma operacional e de engenharia documental
+                </li>
+                <li>
+                  <span className="lgv-mark is-dot" />
+                  Inteligência documental e apoio técnico-jurídico
+                </li>
+                <li>
+                  <span className="lgv-mark is-dot" />
+                  Um copiloto — sempre supervisionado por servidor competente
+                </li>
               </ul>
             </div>
             <div>
-              <img
-                src="/collaboration-team.png"
-                alt="Colaboração em Equipe"
-                className="w-full h-auto rounded-2xl shadow-2xl"
-              />
+              <h3 className="lgv-col-title is-brass">O que ele não substitui</h3>
+              <ul className="lgv-check-list is-negative">
+                <li>
+                  <span className="lgv-mark is-square" />
+                  ERP municipal, sistemas contábeis e financeiros
+                </li>
+                <li>
+                  <span className="lgv-mark is-square" />
+                  Compras.gov e o PNCP
+                </li>
+                <li>
+                  <span className="lgv-mark is-square" />
+                  Portais e sistemas de pregão eletrônico
+                </li>
+                <li>
+                  <span className="lgv-mark is-square" />
+                  Uma caixa-preta que decide sozinha — nenhum documento se torna oficial sem revisão e ação humana
+                  competente
+                </li>
+              </ul>
             </div>
           </div>
         </div>
       </section>
 
-      <FAQSection />
-      <ContactForm />
-      <PricingPlans />
-
-      {/* CTA Final */}
-      <section className="bg-gradient-to-r from-slate-600 to-slate-700 text-white py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h3 className="text-3xl md:text-4xl font-bold mb-4">
-            Pronto para modernizar seus processos licitatórios?
-          </h3>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Solicite uma proposta comercial personalizada para o seu órgão. Sem compromisso.
-          </p>
-          {/* @ts-ignore - asChild is valid but TypeScript doesn't recognize it */}
-          <Button
-            asChild
-            size="lg"
-            className="text-lg px-8 bg-white text-slate-700 hover:bg-gray-100 shadow-lg hover:shadow-xl transition-all"
-          >
-            <Link href="/solicitar-proposta" className="flex items-center">
-              Solicitar Proposta Agora
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-          </Button>
+      {/* ── Capacidades ────────────────────────────────────────────────────── */}
+      <section id="capacidades" className="lgv-section lgv-section-paper">
+        <div className="lgv-container">
+          <div style={{ maxWidth: "64ch" }}>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              A plataforma completa
+            </span>
+            <h2 className="lgv-h2">Muito mais do que geração de documentos.</h2>
+            <p className="lgv-lead" style={{ maxWidth: "60ch" }}>
+              Toda a inteligência operacional do departamento reunida — do primeiro estudo à gestão dos contratos, com
+              governança e rastreabilidade em cada etapa.
+            </p>
+          </div>
+          <div className="lgv-cap-grid">
+            {CAPACIDADES.map((col) => (
+              <div key={col.titulo}>
+                <h3 className="lgv-cap-title">{col.titulo}</h3>
+                <ul className="lgv-cap-list">
+                  {col.itens.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-300 py-8">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm">© 2024 {APP_TITLE}. Todos os direitos reservados.</p>
-          <p className="text-xs text-gray-500 mt-2">
-            Desenvolvido em conformidade com a Lei 14.133/2021 - Nova Lei de Licitações
+      {/* ── Central de Controle ────────────────────────────────────────────── */}
+      <section id="central" className="lgv-section">
+        <div className="lgv-container">
+          <div style={{ maxWidth: "74ch" }}>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              O grande diferencial
+            </span>
+            <h2 className="lgv-h2">Central de Controle: o departamento inteiro em um só lugar.</h2>
+            <p className="lgv-lead" style={{ maxWidth: "64ch" }}>
+              O gestor acompanha o andamento de todas as contratações, prazos e responsáveis em um único ambiente — com
+              histórico, indicadores e alertas para decidir com clareza e no tempo certo.
+            </p>
+            <div className="lgv-central-bullets">
+              {CENTRAL_BULLETS.map((b) => (
+                <div key={b}>
+                  <span className="lgv-bullet" />
+                  {b}
+                </div>
+              ))}
+            </div>
+          </div>
+          <figure className="lgv-figure">
+            <img
+              src="/landing/central-de-controle.png"
+              loading="lazy"
+              decoding="async"
+              alt="Centro de Operações do LiciGov Pro com visão consolidada de processos, contratos, pareceres, tarefas, solicitações e recomendações do departamento."
+            />
+            <figcaption className="lgv-figcaption">
+              Centro de Operações — visão consolidada da rotina do Departamento de Licitações. Ambiente demonstrativo ·
+              dados ilustrativos.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      {/* ── Fluxo ──────────────────────────────────────────────────────────── */}
+      <section id="fluxo" className="lgv-section lgv-section-paper">
+        <div className="lgv-container">
+          <div style={{ maxWidth: "64ch" }}>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              O caminho de uma contratação
+            </span>
+            <h2 className="lgv-h2">Cada etapa reaproveita a anterior. Menos retrabalho e mais consistência.</h2>
+            <p className="lgv-lead" style={{ maxWidth: "60ch" }}>
+              Do planejamento à gestão do contrato, as informações são reaproveitadas de forma controlada entre os
+              instrumentos, com validação e rastreabilidade em cada etapa.
+            </p>
+          </div>
+          <div className="lgv-flow-grid">
+            {FLUXO.map((f) => (
+              <div key={f.n} className="lgv-flow-card">
+                <div className="lgv-flow-n">{f.n}</div>
+                <div className="lgv-flow-name">{f.nome}</div>
+                <div className="lgv-flow-desc">{f.desc}</div>
+                <div className="lgv-flow-art">{f.artigo}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Diferencial técnico (IA) ───────────────────────────────────────── */}
+      <section className="lgv-section">
+        <div className="lgv-container lgv-split">
+          <div>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              O diferencial técnico
+            </span>
+            <h2 className="lgv-h2">Inteligência que mostra por quê.</h2>
+            <p className="lgv-lead" style={{ maxWidth: "58ch" }}>
+              A IA é uma das tecnologias que sustentam o produto — nunca a protagonista. Ela estrutura tecnicamente a
+              contratação com padronização e mais segurança jurídica, sempre sob supervisão humana.
+            </p>
+            <div className="lgv-def-list">
+              <div>
+                <b>Supervisionada</b>
+                <span> — o servidor competente revisa e decide.</span>
+              </div>
+              <div>
+                <b>Explicável</b>
+                <span>
+                  {" "}
+                  — o sistema apresenta as fontes e evidências utilizadas, quando disponíveis no contexto governado.
+                </span>
+              </div>
+              <div>
+                <b>Auditável</b>
+                <span> — versões, fontes, contexto e trilha de execução ficam disponíveis para rastreabilidade.</span>
+              </div>
+            </div>
+          </div>
+          <div className="lgv-panel">
+            <div className="lgv-panel-head">
+              <span style={{ color: "var(--sage)" }}>●</span>
+              <b>Rastreabilidade da geração</b>
+            </div>
+            <div className="lgv-panel-body">
+              <div className="lgv-panel-row">
+                <span>Documento</span>
+                <b>Termo de Referência</b>
+              </div>
+              <div className="lgv-panel-row">
+                <span>Fundamentação</span>
+                <b>Art. 6º, XXIII</b>
+              </div>
+              <div className="lgv-panel-row">
+                <span>Fontes</span>
+                <b>Federal · Estadual · Municipal</b>
+              </div>
+              <div className="lgv-panel-row">
+                <span>Revisão humana</span>
+                <b className="is-sage">Obrigatória</b>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Consulta normativa ─────────────────────────────────────────────── */}
+      <section id="duvidas" className="lgv-section lgv-section-paper">
+        <div className="lgv-container lgv-consulta">
+          <figure className="lgv-consulta-figure">
+            <img
+              src="/landing/consulta-normativa.png"
+              loading="lazy"
+              decoding="async"
+              alt="Consulta normativa do LiciGov Pro com pergunta sobre contratação direta, resposta fundamentada e referência à Lei 14.133."
+            />
+            <figcaption className="lgv-figcaption">Ambiente demonstrativo · dados ilustrativos</figcaption>
+          </figure>
+          <div>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              Consulta normativa
+            </span>
+            <h2 className="lgv-h2">Perguntou, a norma responde.</h2>
+            <p className="lgv-lead" style={{ maxWidth: "58ch" }}>
+              Uma ferramenta institucional de consulta técnica — não apenas um chatbot. O LiciGov Pro utiliza as fontes
+              governadas disponíveis no contexto do órgão e apresenta fundamentação e referências rastreáveis,
+              preservando a decisão sob responsabilidade do servidor competente.
+            </p>
+            <div className="lgv-note">
+              <div>
+                <b style={{ display: "block", marginBottom: 4 }}>Sem fundamento verificável, o sistema não conclui</b>
+                <span>
+                  Quando o conjunto de fontes disponível não oferece evidência suficiente, o sistema sinaliza a
+                  limitação em vez de apresentar uma conclusão como se estivesse fundamentada.
+                </span>
+              </div>
+              <div>
+                <b>Histórico durável</b>
+                <span> — auditável e isolado por município.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Inteligência contextual ────────────────────────────────────────── */}
+      <section className="lgv-section">
+        <div className="lgv-container">
+          <div style={{ maxWidth: "64ch" }}>
+            <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
+              Inteligência contextual
+            </span>
+            <h2 className="lgv-h2">
+              Cada município tem a sua realidade. O LiciGov Pro foi preparado para operar com o contexto institucional do
+              seu órgão.
+            </h2>
+            <p className="lgv-lead" style={{ maxWidth: "60ch" }}>
+              Além da legislação federal, o sistema pode operar com a legislação municipal, decretos, pareceres, modelos
+              internos e orientações do Tribunal de Contas competente — quando essas fontes fizerem parte do contexto
+              institucional disponibilizado ao órgão.
+            </p>
+          </div>
+          <div className="lgv-context-grid">
+            {CONTEXTO.map((c) => (
+              <div key={c.k} className="lgv-context-cell">
+                <div className="k">{c.k}</div>
+                <div className="v">{c.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Autoridade ─────────────────────────────────────────────────────── */}
+      <section className="lgv-authority">
+        <div className="lgv-authority-inner">
+          <span className="lgv-eyebrow" style={{ marginBottom: 16, display: "inline-block", color: "var(--brass)" }}>
+            Feito por quem vive a rotina
+          </span>
+          <h2>
+            Desenvolvido por profissionais que vivem, diariamente, a realidade dos departamentos de licitações públicas.
+          </h2>
+          <p>
+            Cada decisão de produto nasce da prática real do serviço público — não de suposições. É essa vivência que
+            torna o LiciGov Pro rigoroso na forma e seguro no conteúdo.
           </p>
         </div>
-      </footer>
+      </section>
 
-      <style>{`
-        @keyframes blob {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-        .animate-blob { animation: blob 7s infinite; }
-        .animation-delay-2000 { animation-delay: 2s; }
-      `}</style>
+      {/* ── CTA final ──────────────────────────────────────────────────────── */}
+      <section id="proposta" className="lgv-section">
+        <div className="lgv-container">
+          <div className="lgv-cta-card">
+            <div className="lgv-cta-inner">
+              <div style={{ maxWidth: "44ch" }}>
+                <h2 className="lgv-cta-h2">Um Departamento de Licitações mais organizado, seguro e inteligente.</h2>
+                <p className="lgv-cta-p">
+                  Menos retrabalho, mais segurança jurídica e inteligência institucional em cada contratação — do
+                  planejamento à gestão dos Contratos Administrativos e Termos Aditivos, sempre com supervisão humana.
+                  Fale com um especialista e leve o LiciGov Pro para o seu órgão.
+                </p>
+              </div>
+              <div className="lgv-cta-actions">
+                <Link href={PROPOSAL} className="lgv-btn lgv-btn-navy" style={{ justifyContent: "center" }}>
+                  Agendar demonstração →
+                </Link>
+                <Link href={PROPOSAL} className="lgv-btn lgv-btn-outline">
+                  Solicitar proposta
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      <footer className="lgv-footer">
+        <div className="lgv-container">
+          <div className="lgv-footer-grid">
+            <div className="lgv-footer-brand">
+              <img src={LOGO} alt="LiciGov Pro" loading="lazy" decoding="async" />
+              <p>A camada cognitiva e operacional do departamento de licitações públicas.</p>
+            </div>
+            <div>
+              <div className="lgv-footer-h">Contato</div>
+              <ul className="lgv-footer-list">
+                <li>
+                  <Link href={PROPOSAL}>Agendar demonstração</Link>
+                </li>
+                <li>
+                  <Link href={PROPOSAL}>Solicitar proposta</Link>
+                </li>
+                <li>
+                  <Link href={PROPOSAL}>Falar com um especialista</Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <div className="lgv-footer-h">Legal</div>
+              <ul className="lgv-footer-list">
+                <li>
+                  <Link href="/privacidade">Política de Privacidade</Link>
+                </li>
+                <li>
+                  <Link href="/termos">Termos de Uso</Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <div className="lgv-footer-h">Empresa</div>
+              <div className="lgv-footer-note">Desenvolvido para apoiar contratações sob a Lei nº 14.133/2021</div>
+            </div>
+          </div>
+          <div className="lgv-footer-bottom">
+            <span>© {new Date().getFullYear()} LiciGov Pro. Todos os direitos reservados.</span>
+            <span>Nova Lei de Licitações · Lei nº 14.133/2021</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

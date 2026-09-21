@@ -62,6 +62,7 @@ import { useLocation, useSearch } from "wouter";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { KeyboardShortcutsTooltip } from "./components/KeyboardShortcutsTooltip";
 import DashboardLayout from "./components/DashboardLayout";
+import { isPublicRoute } from "./lib/publicRoutes";
 
 function AuthenticatedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -120,8 +121,10 @@ const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments}
 // const AdminDefaultDashboardRoute = () => <AuthenticatedRoute component={AdminDefaultDashboard} />;
 // const AdminContractsReportRoute = () => <AuthenticatedRoute component={AdminContractsReport} />;
 // const AdminFinancialReportsRoute = () => <AuthenticatedRoute component={AdminFinancialReports} />;
-const TermsOfUseRoute = () => <AuthenticatedRoute component={TermsOfUse} />;
-const PrivacyPolicyRoute = () => <AuthenticatedRoute component={PrivacyPolicy} />;
+// Landing V2 — páginas legais canônicas são PÚBLICAS (acessíveis sem login): a landing
+// institucional linka Política de Privacidade e Termos de Uso no rodapé. Renderizam os
+// componentes diretamente (sem AuthenticatedRoute), preservando as URLs canônicas
+// `/privacidade` e `/termos`. Ver client/src/lib/publicRoutes.ts.
 // const AuditLogsRoute = () => <AuthenticatedRoute component={AuditLogs} />;
 // V1 UI/UX Stabilization — Templates é item do menu lateral: renderiza DENTRO do shell.
 const TemplatesRoute = withAuthenticatedShell(Templates);
@@ -242,8 +245,8 @@ function Router() {
       {/* <Route path={"/admin/inadimplencia"} component={AdminDefaultDashboardRoute} /> */}
       {/* <Route path={"/admin/contratos-limite"} component={AdminContractsReportRoute} /> */}
       {/* <Route path={"/admin/relatorios-financeiros"} component={AdminFinancialReportsRoute} /> */}
-      <Route path={"/termos"} component={TermsOfUseRoute} />
-      <Route path={"/privacidade"} component={PrivacyPolicyRoute} />
+      <Route path={"/termos"} component={TermsOfUse} />
+      <Route path={"/privacidade"} component={PrivacyPolicy} />
       {/* <Route path={"/audit-logs"} component={AuditLogsRoute} /> */}
       <Route path={"/planos"} component={Plans} />
       <Route path={"/solicitar-proposta"} component={SolicitarProposta} />
@@ -262,15 +265,23 @@ function Router() {
 }
 
 function App() {
-  // Atalhos de teclado globais (ESC, Ctrl+Home)
+  // Atalhos de teclado globais (ESC, Ctrl+Home) — a FUNCIONALIDADE permanece ativa em toda a
+  // aplicação (não é desabilitada em rota pública; apenas o overlay informativo é suprimido).
   useKeyboardNavigation();
+
+  // Landing V2 — o overlay "Atalhos de Teclado" pertence à área operacional autenticada e não
+  // deve aparecer em superfícies públicas (landing, login, proposta, páginas legais…). Gating
+  // centralizado pela classificação canônica de rota pública (client/src/lib/publicRoutes.ts),
+  // evitando comparações de pathname espalhadas.
+  const [location] = useLocation();
+  const shouldShowShortcuts = !isPublicRoute(location);
 
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="system">
         <TooltipProvider>
           <Toaster />
-          <KeyboardShortcutsTooltip />
+          {shouldShowShortcuts && <KeyboardShortcutsTooltip />}
           <Router />
         </TooltipProvider>
       </ThemeProvider>

@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1789939558.9551854,
-    "ast_hash": "66193dd94a13bbf8ce3bd503821a211f",
+    "mtime": 1790019407.6481316,
+    "ast_hash": "b9601268590ea24fd83902e8cc62390c",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -2300,8 +2300,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/LandingPage.tsx": {
-    "mtime": 1788023705.138377,
-    "ast_hash": "0083fd6ff353dd7ca4fdb6c47832ae64",
+    "mtime": 1790018530.350659,
+    "ast_hash": "b314dbf13d5c3baddb1cff2a76331222",
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
@@ -11692,6 +11692,46 @@
   "docs/audits/production-readiness/MOREIRA_SALES_INTERNAL_PILOT_PLAN.md": {
     "mtime": 1789999029.3166413,
     "ast_hash": "f01357341fb83d3fbd83258b155fbb44",
+    "semantic_hash": ""
+  },
+  "client/src/pages/landingpage.test.ts": {
+    "mtime": 1790018610.4306636,
+    "ast_hash": "8beae3c025971233f327c4f056a94bd0",
+    "semantic_hash": ""
+  },
+  "client/public/landing/central-de-controle.png": {
+    "mtime": 1790018308.183071,
+    "ast_hash": "34ce3773008ce78be6488190899cf819",
+    "semantic_hash": ""
+  },
+  "client/public/landing/consulta-normativa.png": {
+    "mtime": 1790018308.187107,
+    "ast_hash": "c843d1c866988c0bd45f20c1780c95ea",
+    "semantic_hash": ""
+  },
+  "client/public/landing/hero-bg.png": {
+    "mtime": 1790018308.1804109,
+    "ast_hash": "064b18f71e5a71f3556479f61e076ccf",
+    "semantic_hash": ""
+  },
+  "client/public/landing/logo-lockup.png": {
+    "mtime": 1790018308.17847,
+    "ast_hash": "3b8a908f1d909a7e33c1efcd631dff2e",
+    "semantic_hash": ""
+  },
+  "client/src/app-public-surface.test.ts": {
+    "mtime": 1790019497.200137,
+    "ast_hash": "465ae966dbbe5cfe1861901ce3d2f9db",
+    "semantic_hash": ""
+  },
+  "client/src/lib/publicRoutes.test.ts": {
+    "mtime": 1790019444.8521338,
+    "ast_hash": "91ddff468eefbbe4b36a374671bf7e17",
+    "semantic_hash": ""
+  },
+  "client/src/lib/publicRoutes.ts": {
+    "mtime": 1790019384.26813,
+    "ast_hash": "bf77e766b07cb5cd701d54264c3c1618",
     "semantic_hash": ""
   }
 }
