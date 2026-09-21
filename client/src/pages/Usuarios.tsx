@@ -314,24 +314,36 @@ export default function Usuarios() {
 
                             <DropdownMenuItem disabled>Editar usuário (em breve)</DropdownMenuItem>
 
-                            {/* Alterar papel — submenu (owner não pode ser alterado por esta API). */}
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger disabled={isOwner || updateRoleMutation.isPending}>
-                                Alterar papel
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuSubContent>
-                                {ASSIGNABLE_ROLES.map(role => (
-                                  <DropdownMenuItem
-                                    key={role}
-                                    disabled={m.role === role}
-                                    onClick={() => updateRoleMutation.mutate({ userId: m.userId, role })}
-                                  >
-                                    {ROLE_LABELS[role]}
-                                    {m.role === role && <span className="ml-auto text-xs text-muted-foreground">atual</span>}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuSubContent>
-                            </DropdownMenuSub>
+                            {/* Alterar papel. Para o membro cujo papel técnico é o mais alto da
+                                organização (exibido como "Administrador da Organização"), o papel NÃO é
+                                alterável por esta API (protegido no backend) — em vez de um submenu
+                                mudo/desabilitado (que dava a impressão de "nada acontece"), mostramos um
+                                item explicativo. A copy segue os rótulos institucionais de orgRoleLabels.ts
+                                (não expõe o enum técnico). Para os demais membros, o submenu abre
+                                normalmente com apenas as roles atribuíveis; a role atual é marcada. */}
+                            {isOwner ? (
+                              <DropdownMenuItem disabled className="whitespace-normal">
+                                O papel deste administrador não pode ser alterado nesta tela
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger disabled={updateRoleMutation.isPending}>
+                                  Alterar papel
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  {ASSIGNABLE_ROLES.map(role => (
+                                    <DropdownMenuItem
+                                      key={role}
+                                      disabled={m.role === role || updateRoleMutation.isPending}
+                                      onClick={() => updateRoleMutation.mutate({ userId: m.userId, role })}
+                                    >
+                                      {ROLE_LABELS[role]}
+                                      {m.role === role && <span className="ml-auto text-xs text-muted-foreground">atual</span>}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                            )}
 
                             <DropdownMenuSeparator />
 
