@@ -76,3 +76,40 @@ Executar conforme [`PR_A_SECRET_ROTATION_RUNBOOK.md`](./PR_A_SECRET_ROTATION_RUN
 **Atestação do operador (preencher para fechar G5):** responsável __________ · data __________ ·
 método de verificação (presença + relogin + health) __________. Somente após esta atestação o G5
 passa a **PASS** no `INTERNAL_PRODUCTION_GATE.md`.
+
+---
+
+## Adendo — Atestação da rotação do JWT_SECRET (2026-09-21)
+
+Rotação operacional **executada pelo operador** (owner) no Railway e **validada** por este agente via
+Railway MCP + confirmação de login do operador. **Nenhum valor de segredo passou por este agente**,
+foi impresso, lido ou persistido — somente metadata abaixo.
+
+```
+secretName:            JWT_SECRET
+rotationStatus:        completed
+environment:           production
+projectId:             893a1317-51ad-4b18-9d9a-f6e579e09351
+serviceId:             2d497607-3208-4996-9295-0f919b6a93bd   (web: licigov-pro)
+environmentId:         3efa7f99-8641-48e1-ad33-3c98bf5e91c7
+baselineDeploymentId:  baf6c189-e1b5-427f-aa65-7d0e651e25e0   (REMOVED após a rotação)
+newDeploymentId:       120edffb-7e75-499c-925c-85e7b689fb6e   (SUCCESS, commit 751b120)
+timestamp:             2026-09-21T01:06:13Z (deploy) / 01:08:54Z (boot pronto)
+readyz:                PASS   (healthcheckPath=/readyz gatilho do SUCCESS)
+database:              PASS   (readyz + boot "Schema validado")
+loginSmoke:            PASS   (operador autenticou com sessão nova; sessões antigas invalidadas)
+bootFailClosed:        OK     (boot concluiu → JWT_SECRET presente/válido; sem fallback/default)
+referenceInstaller:    noop / replay-safe (contentHash 332a9cb3…196832; NÃO ativado)
+oldSecretInvalidated:  true
+rollbackRequired:      false
+operator:              leandrocardoso-cmyk (owner)
+```
+
+**Critérios de PASS do G5 — todos atendidos:** (1) novo `JWT_SECRET` em produção; (2) segredo
+histórico deixou de ser ativo (relogin exigido/confirmado); (3) deployment SUCCESS; (4) `/readyz`
+PASS; (5) database PASS; (6) nova autenticação PASS; (7) config fail-closed mantida; (8) nenhuma
+credencial exposta durante a operação; (9) evidência registrada sem segredo.
+
+**Classificação: G5 = PASS.** (`DATABASE_URL` histórica sem credencial inline; `GEMINI_API_KEY` já
+rotacionada — G12. Segue como boa prática operacional revogar/expirar credenciais antigas nos
+respectivos consoles, follow-up não bloqueante.)
