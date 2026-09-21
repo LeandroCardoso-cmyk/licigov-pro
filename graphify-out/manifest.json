@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1789939558.9551854,
-    "ast_hash": "66193dd94a13bbf8ce3bd503821a211f",
+    "mtime": 1790019407.6481316,
+    "ast_hash": "b9601268590ea24fd83902e8cc62390c",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -11717,6 +11717,21 @@
   "client/public/landing/logo-lockup.png": {
     "mtime": 1790018308.17847,
     "ast_hash": "3b8a908f1d909a7e33c1efcd631dff2e",
+    "semantic_hash": ""
+  },
+  "client/src/app-public-surface.test.ts": {
+    "mtime": 1790019497.200137,
+    "ast_hash": "465ae966dbbe5cfe1861901ce3d2f9db",
+    "semantic_hash": ""
+  },
+  "client/src/lib/publicRoutes.test.ts": {
+    "mtime": 1790019444.8521338,
+    "ast_hash": "91ddff468eefbbe4b36a374671bf7e17",
+    "semantic_hash": ""
+  },
+  "client/src/lib/publicRoutes.ts": {
+    "mtime": 1790019384.26813,
+    "ast_hash": "bf77e766b07cb5cd701d54264c3c1618",
     "semantic_hash": ""
   }
 }
