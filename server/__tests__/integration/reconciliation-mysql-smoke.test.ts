@@ -116,12 +116,35 @@ describe.skipIf(!DB)("Fase B — migration safety (MySQL real)", () => {
     }
   }, 60_000);
 
+  // Teardown resiliente em runners de CI carregados (correção do flake "Hook timed out in 10000ms"):
+  //  - os bancos dedicados são INDEPENDENTES → dropá-los em PARALELO (cada um em sua própria conexão)
+  //    elimina a serialização desnecessária e reduz o tempo de parede e a variância do teardown,
+  //    já que o servidor pode dropar os schemas concorrentemente. NÃO mascara hangs reais: falhas de
+  //    DROP são agregadas e propagadas (cleanup incompleto ainda falha a suíte).
+  //  - o DROP dos bancos com o schema completo (~297 tabelas) é legitimamente variável em CI; por isso
+  //    o timeout ESPECÍFICO deste hook é 30s — o default do Vitest é 10s, e este hook fazia trabalho
+  //    comparável ao beforeAll (que já tinha 60s) sem nenhuma folga. 30s fica bem abaixo do beforeAll
+  //    (60s) e dos testes (120–300s), então um hang verdadeiro continua estourando o timeout e falhando.
   afterAll(async () => {
-    for (const name of Object.values(DBS)) {
-      await admin.query(`DROP DATABASE IF EXISTS \`${name}\``);
-    }
+    const drops = await Promise.allSettled(
+      Object.values(DBS).map(async (name) => {
+        const c = await mysql.createConnection(baseUrl());
+        try {
+          await c.query(`DROP DATABASE IF EXISTS \`${name}\``);
+        } finally {
+          await c.end();
+        }
+      }),
+    );
     await admin?.end();
-  });
+    const failed = drops.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed.length > 0) {
+      throw new AggregateError(
+        failed.map((f) => f.reason),
+        "afterAll: falha ao dropar bancos dedicados do smoke (cleanup incompleto)",
+      );
+    }
+  }, 30_000);
 
   it("A. CLEAN INSTALL + prova da migration MAIS RECENTE (ledger por hash, sem contagem/hardcode)", async () => {
     const conn = await mysql.createConnection(urlFor(DBS.clean));
