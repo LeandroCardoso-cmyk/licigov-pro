@@ -89,14 +89,43 @@ export const TR_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Objec
   { key: "adequacao_orcamentaria", title: "Adequação orçamentária", legalAnchor: "lei-14133-2021:art-6:inc-xxiii:al-j", legalAnchorLabel: "Art. 6º, XXIII, j", mustProvide: true },
 ]);
 
+/**
+ * EDITAL — estrutura institucional do instrumento convocatório (Lei nº 14.133/2021, art. 25 e
+ * correlatos). Diferente do ETP/TR, cujas seções derivam de UMA enumeração legal fechada (art. 18, §1º
+ * e art. 6º, XXIII), o Edital compõe conteúdo de MÚLTIPLOS dispositivos; por isso as âncoras aqui são
+ * REFERÊNCIAS de exibição (rótulo legal da seção) e NÃO impõem grounding por locator verbatim — a
+ * fundamentação do Edital é AVALIADA POR EVIDÊNCIA (RAG governado), não por sub-locator de artigo.
+ * `mustProvide=true` marca as seções nucleares que a minuta deve efetivamente conter. Bounded (≤16).
+ */
+export const EDITAL_CANONICAL_SECTIONS: readonly CanonicalAuthoringSection[] = Object.freeze([
+  { key: "preambulo", title: "Preâmbulo e identificação do certame", legalAnchor: "lei-14133-2021:art-25", legalAnchorLabel: "Art. 25", mustProvide: false },
+  { key: "objeto", title: "Objeto da licitação", legalAnchor: "lei-14133-2021:art-25", legalAnchorLabel: "Art. 6º, XXIII / Art. 25", mustProvide: true },
+  { key: "participacao", title: "Condições de participação", legalAnchor: "lei-14133-2021:art-9", legalAnchorLabel: "Arts. 9º e 14", mustProvide: true },
+  { key: "apresentacao_proposta", title: "Apresentação e credenciamento das propostas", legalAnchor: "lei-14133-2021:art-56", legalAnchorLabel: "Arts. 17 e 56", mustProvide: true },
+  { key: "modo_disputa", title: "Modo de disputa", legalAnchor: "lei-14133-2021:art-56", legalAnchorLabel: "Art. 56", mustProvide: true },
+  { key: "criterio_julgamento", title: "Critério de julgamento e aceitabilidade", legalAnchor: "lei-14133-2021:art-33", legalAnchorLabel: "Arts. 33 e 34", mustProvide: true },
+  { key: "habilitacao", title: "Habilitação", legalAnchor: "lei-14133-2021:art-62", legalAnchorLabel: "Arts. 62 a 70", mustProvide: true },
+  { key: "recursos", title: "Recursos administrativos", legalAnchor: "lei-14133-2021:art-165", legalAnchorLabel: "Art. 165", mustProvide: true },
+  { key: "sancoes", title: "Sanções administrativas", legalAnchor: "lei-14133-2021:art-155", legalAnchorLabel: "Arts. 155 e 156", mustProvide: true },
+  { key: "adjudicacao_homologacao", title: "Adjudicação e homologação", legalAnchor: "lei-14133-2021:art-71", legalAnchorLabel: "Art. 71", mustProvide: false },
+  { key: "contratacao_obrigacoes", title: "Contratação e obrigações das partes", legalAnchor: "lei-14133-2021:art-92", legalAnchorLabel: "Arts. 89 a 95 e 92", mustProvide: false },
+  { key: "execucao_pagamento", title: "Execução, fiscalização e pagamento", legalAnchor: "lei-14133-2021:art-117", legalAnchorLabel: "Arts. 117 e 141", mustProvide: false },
+  { key: "impugnacoes_esclarecimentos", title: "Impugnações e pedidos de esclarecimento", legalAnchor: "lei-14133-2021:art-164", legalAnchorLabel: "Art. 164", mustProvide: false },
+  { key: "disposicoes_anexos", title: "Disposições finais e anexos", legalAnchor: "lei-14133-2021:art-25", legalAnchorLabel: "Art. 25, §1º", mustProvide: false },
+]);
+
+/** Tipos de documento suportados pela autoria estruturada (contrato bounded). */
+export type AuthoringKind = "etp" | "tr" | "edital";
+
 /** Conjunto canônico de seções por tipo de documento (fonte da verdade do contrato). */
-export function canonicalSectionsFor(kind: "etp" | "tr"): readonly CanonicalAuthoringSection[] {
-  return kind === "tr" ? TR_CANONICAL_SECTIONS : ETP_CANONICAL_SECTIONS;
+export function canonicalSectionsFor(kind: AuthoringKind): readonly CanonicalAuthoringSection[] {
+  return kind === "tr" ? TR_CANONICAL_SECTIONS : kind === "edital" ? EDITAL_CANONICAL_SECTIONS : ETP_CANONICAL_SECTIONS;
 }
 
-const CANONICAL_KEYS: Record<"etp" | "tr", ReadonlySet<string>> = {
+const CANONICAL_KEYS: Record<AuthoringKind, ReadonlySet<string>> = {
   etp: new Set(ETP_CANONICAL_SECTIONS.map((s) => s.key)),
   tr: new Set(TR_CANONICAL_SECTIONS.map((s) => s.key)),
+  edital: new Set(EDITAL_CANONICAL_SECTIONS.map((s) => s.key)),
 };
 
 // ─── Schema Zod (bounded) ─────────────────────────────────────────────────────
@@ -150,7 +179,7 @@ const GROUNDING_STATES = [
 /** Rascunho estruturado completo (ETP/TR) — contrato bounded e versionado. */
 export const StructuredAuthoringSchema = z.object({
   contract: z.literal(AUTHORING_CONTRACT_VERSION),
-  kind: z.enum(["etp", "tr"]),
+  kind: z.enum(["etp", "tr", "edital"]),
   object: z.string().min(1).max(AUTHORING_LIMITS.maxObjectChars),
   sections: z.array(AuthoredSectionSchema).min(1).max(AUTHORING_LIMITS.maxSections),
   groundingState: z.enum(GROUNDING_STATES),
@@ -250,7 +279,7 @@ export type ProviderAuthoringOutput = z.infer<typeof ProviderAuthoringOutputSche
  * JSON inválido, seção desconhecida, duplicada, prose acima do limite ou referência malformada → lança
  * `AuthoringContractError`. NÃO usa regex frágil — usa JSON.parse + Zod (mecanismo estruturado).
  */
-export function parseProviderAuthoringOutput(kind: "etp" | "tr", rawText: string): ProviderAuthoringOutput {
+export function parseProviderAuthoringOutput(kind: AuthoringKind, rawText: string): ProviderAuthoringOutput {
   let json: unknown;
   try {
     json = JSON.parse(rawText);
@@ -281,7 +310,7 @@ export function parseProviderAuthoringOutput(kind: "etp" | "tr", rawText: string
  * Constrói o JSON Schema (responseSchema) que o provider DEVE conformar — restringe `key` ao enum das
  * seções canônicas do tipo (o provider NÃO pode escolher novas seções). Enviado ao adapter/Kernel.
  */
-export function buildAuthoringResponseSchema(kind: "etp" | "tr"): { name: string; schema: Record<string, unknown> } {
+export function buildAuthoringResponseSchema(kind: AuthoringKind): { name: string; schema: Record<string, unknown> } {
   const keys = canonicalSectionsFor(kind).map((s) => s.key);
   return {
     name: `authoring_${kind}`,
@@ -317,6 +346,6 @@ export function buildAuthoringResponseSchema(kind: "etp" | "tr"): { name: string
 }
 
 /** Lista ordenada de keys canônicas do tipo (autoridade do servidor). */
-export function canonicalKeysFor(kind: "etp" | "tr"): string[] {
+export function canonicalKeysFor(kind: AuthoringKind): string[] {
   return canonicalSectionsFor(kind).map((s) => s.key);
 }

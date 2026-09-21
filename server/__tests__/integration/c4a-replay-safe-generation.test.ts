@@ -39,6 +39,8 @@ vi.mock("../../db/procurement", () => ({
   getGeneratedDocumentByKind: vi.fn(async () => null), // sem rascunho anterior → 1ª geração (estado ausente)
   recordProcessEvent: vi.fn(async () => { effectOrder.push("event"); }),
   listIntelligentItems: vi.fn(async () => []),
+  // P0 — o Context Builder do Edital lê o processo (tenant-scoped) para montar o contexto reaproveitado.
+  getProcess: vi.fn(async () => ({ id: "proc-2026-0007", organizationId: 42, object: "Registro de preços", processNumber: "2026/0007", modality: "pregao", currentStage: "NOTICE", status: "em_edital" })),
 }));
 
 vi.mock("../../services/documentEngineService", () => ({
@@ -70,6 +72,34 @@ vi.mock("../../services/authoring/structuredAuthoringService", () => ({
       rejectedReferences: [],
     };
   }),
+  // P0 — a geração do Edital passou a usar a AUTORIA ESTRUTURADA cognitiva (mesmo contrato). Espião
+  // registra "cognition" e devolve um resultado estruturado mínimo (grounding real coberto nos testes P0).
+  generateEditalAuthoring: vi.fn(async () => {
+    effectOrder.push("cognition");
+    return {
+      content: "# Edital de Licitação — Registro de preços\n\n> Revisão OBRIGATÓRIA pelo servidor competente.",
+      structured: { usedSourceIds: ["lei-14133-2021"] },
+      evidences: [{ sourceId: "lei-14133-2021", locator: "lei-14133-2021:art-25", contentHash: "h" }],
+      evidenceComplete: true,
+      groundingState: "grounded",
+      evidenceFingerprint: "efp",
+      corpusFingerprint: "cfp",
+      contextPackage: { replayHash: "rh" },
+      execution: undefined,
+      rejectedReferences: [],
+    };
+  }),
+}));
+
+// P0 — o Context Builder do Edital é isolado neste unitário (o reaproveitamento real é coberto nos
+// testes de contexto P0). Devolve um contexto mínimo determinístico.
+vi.mock("../../services/authoring/editalContext", () => ({
+  resolveEditalSources: vi.fn(async () => ({
+    promptContext: "## contexto", usedSources: ["tr"], missing: [],
+    sourcesDigest: "a".repeat(64),
+    sourceVersions: { dfd: { present: false, status: null, contentHash: null }, etp: { present: false, status: null, contentHash: null }, tr: { present: true, status: "aprovado", contentHash: "trhash" } },
+    lineageMarkers: ["srcdigest:aaaaaaaaaaaaaaaa", "base:tr@trhash", "itens:0"],
+  })),
 }));
 
 // checkIdempotency controlado por teste; save/fail são espiões (registram ordem/tx).
@@ -269,7 +299,8 @@ describe("C.4A — generateNotice (Edital)", () => {
     const res = await valid();
     expect(res.validation.valid).toBe(true);
     expect(res.replayed).toBe(false);
-    expect(effectOrder).toEqual(["generated", "official", "event", "idempotency-save"]);
+    // P0 — Edital agora usa cognição (autoria estruturada) + linkage de proveniência, como ETP/TR.
+    expect(effectOrder).toEqual(["cognition", "generated", "official", "provenance-link", "event", "idempotency-save"]);
     expect(saveIdempotencyResult.mock.calls[0][4]).toBe(fakeTx);
   });
 

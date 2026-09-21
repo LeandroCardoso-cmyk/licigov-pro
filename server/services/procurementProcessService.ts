@@ -11,7 +11,8 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
-import { generateStructuredAuthoring } from "./authoring/structuredAuthoringService";
+import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
+import { resolveEditalSources } from "./authoring/editalContext";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -82,6 +83,9 @@ function approvedItemsSignature(items: ApprovedItemSignature[]): Array<Record<st
 export function generatePayloadHash(p: {
   organizationId: number; processId: string; kind: DocumentKind; object: string;
   approvedItems?: ApprovedItemSignature[]; modality?: string; form?: string; platform?: string | null;
+  /** P0 Edital — digest das FONTES reaproveitadas (DFD/ETP/TR/itens/parâmetros): mudança de fonte muda o
+   *  payload (retry técnico com as MESMAS fontes replaya; fonte alterada sob a mesma chave → CONFLICT). */
+  sourcesDigest?: string;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -94,6 +98,7 @@ export function generatePayloadHash(p: {
       m: p.modality ?? null,
       f: p.form ?? null,
       pl: p.platform ?? null,
+      src: p.sourcesDigest ?? null,
     }))
     .digest("hex");
 }
@@ -460,8 +465,11 @@ export async function generateDocument(params: {
 }
 
 /**
- * Gera o Edital após aprovação do TR. Presencial exige justificativa legal
- * automática; eletrônico exige plataforma. Valida antes de persistir.
+ * P0 — Gera o Edital após o TR, REAPROVEITANDO o contexto do processo (DFD/ETP/TR/itens/parâmetros) e
+ * produzindo uma minuta ESTRUTURADA e fundamentada pelo Kernel cognitivo (AIExecutionEngine + RAG
+ * governado), no MESMO pipeline replay-safe do ETP/TR. Presencial exige justificativa legal automática;
+ * eletrônico exige plataforma. Valida modalidade/forma/plataforma ANTES de reservar idempotência.
+ * Fail-closed: sem provider real (cognição real) a proveniência é obrigatória; falha não deixa rascunho falso.
  */
 export async function generateNotice(params: {
   organizationId: number;
@@ -473,34 +481,37 @@ export async function generateNotice(params: {
   correlationId: string;
   idempotencyKey: string;
   actorUserId: number;
+  /** Seam determinístico (testes): OUTPUT ESTRUTURADO do provider (JSON) sem chamar o Engine. */
+  invoke?: (prompt: string) => Promise<string>;
 }): Promise<{ document: GeneratedDocument; validation: { valid: boolean; violations: string[] }; replayed: boolean }> {
+  // Acesso cognitivo governado (RAG + copilotos + document engine) exclusivamente via kernelAccessService.
+  assertKernelAccess(DOMAIN, "institutional_rag");
+  assertKernelAccess(DOMAIN, "copilot_infrastructure");
   assertKernelAccess(DOMAIN, "document_engine");
 
   const legalJustification = params.form === "presencial"
     ? defaultPresencialJustification(params.modality)
     : "";
+  const platform = params.form === "eletronico" ? (params.platform ?? null) : null;
 
-  // Determinístico e puro (sem DB): monta o rascunho e valida ANTES de reservar idempotência.
-  const doc = createGeneratedDocument({
-    organizationId: params.organizationId,
-    processId: params.processId,
-    kind: "edital",
-    title: `Edital — ${params.object}`,
-    content: `# Edital — ${params.object}\nModalidade: ${params.modality} | Forma: ${params.form}${params.platform ? ` | Plataforma: ${params.platform}` : ""}\n\n> Templates, cláusulas e cronograma aplicados conforme a modalidade. Revisão obrigatória.`,
-    sources: ["tr_aprovado"],
-    modality: params.modality,
-    form: params.form,
-    platform: params.form === "eletronico" ? (params.platform ?? null) : null,
-    legalJustification,
-    authorUserId: params.actorUserId,
-    lastSubstantiveActorUserId: params.actorUserId,
+  // Validação de parâmetros (modalidade/forma/plataforma/justificativa) ANTES de qualquer efeito/cognição.
+  // Edital inválido: nenhum efeito, nenhuma reserva de idempotência, nenhuma chamada ao provider.
+  const prelim = createGeneratedDocument({
+    organizationId: params.organizationId, processId: params.processId, kind: "edital",
+    title: `Edital — ${params.object}`, content: "",
+    modality: params.modality, form: params.form, platform, legalJustification,
     correlationId: params.correlationId,
   });
-  const validation = validateEdital(doc);
-  // Edital inválido: nenhum efeito, nenhuma reserva de idempotência (determinístico — retry livre).
+  const validation = validateEdital(prelim);
   if (!validation.valid) {
-    return { document: doc, validation, replayed: false };
+    return { document: prelim, validation, replayed: false };
   }
+
+  // Reaproveitamento canônico do contexto (TENANT-SCOPED): DFD/ETP/TR/itens/parâmetros do processo.
+  const sourceContext = await resolveEditalSources({
+    organizationId: params.organizationId, processId: params.processId, object: params.object,
+    modality: params.modality, form: params.form, platform,
+  });
 
   // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
   const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
@@ -508,37 +519,123 @@ export async function generateNotice(params: {
     ? { type: "present" as const, contentHash: draftContentHash(beforeEdital.content) }
     : { type: "absent" as const };
 
+  // Replay-safe: o digest das FONTES entra no payload → retry técnico com as MESMAS fontes replaya; fonte
+  // alterada sob a MESMA chave → CONFLICT (não cria duas versões independentes).
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: "edital",
-    object: params.object, modality: params.modality, form: params.form, platform: params.platform ?? null,
+    object: params.object, modality: params.modality, form: params.form, platform,
+    sourcesDigest: sourceContext.sourcesDigest,
   });
 
   const { result, replayed } = await runReplaySafeGeneration<{ document: GeneratedDocument; validation: { valid: boolean; violations: string[] } }>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
     reviveIdempotent,
-    async () => ({
-      response: { document: doc, validation },
-      persist: async (tx) => {
-        const { document } = await applyDraftContentMutationTx(tx, {
-          organizationId: params.organizationId, processId: params.processId, kind: "edital",
-          actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
-          expectedState: expectedStateEdital, idempotencyKey: params.idempotencyKey,
-          correlationId: params.correlationId,
-        });
-        // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
-        await generateOfficialDocument({
-          organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "edital",
-          origin: params.processId, title: doc.title, content: doc.content, author: "sistema", correlationId: params.correlationId,
-          metadata: { modality: params.modality, form: params.form, platform: params.platform ?? null },
-        }, tx);
-        await recordProcessEvent({
-          organizationId: params.organizationId, processId: params.processId, eventType: "decision",
-          actor: "sistema", summary: `Edital gerado: ${params.modality}/${params.form}.`, refId: doc.id,
-          correlationId: params.correlationId,
-        }, tx);
-        return { document, validation }; // snapshot canônico + validação
-      },
-    }),
+    async () => {
+      // Cognição SEMPRE fora da transação (rede/modelo): autoria estruturada do Edital com reaproveitamento
+      // de contexto + grounding por evidência (RAG governado). Fail-closed em structured output inválido.
+      const authoring = await generateEditalAuthoring({
+        organizationId: params.organizationId, object: params.object,
+        modality: params.modality, form: params.form, platform,
+        sourceContext, correlationId: params.correlationId, actorUserId: params.actorUserId,
+        invoke: params.invoke,
+      });
+
+      const doc = createGeneratedDocument({
+        organizationId: params.organizationId, processId: params.processId, kind: "edital",
+        title: `Edital — ${params.object}`, content: authoring.content,
+        // Lineage/explicabilidade nas `sources` (consumidas por reviewableDraft: grounding:… / evidencias:…).
+        sources: [
+          "tr_aprovado",
+          `grounding:${authoring.groundingState}`,
+          `evidencias:${authoring.evidences.length}`,
+          ...sourceContext.lineageMarkers,
+        ],
+        modality: params.modality, form: params.form, platform, legalJustification,
+        authorUserId: params.actorUserId, lastSubstantiveActorUserId: params.actorUserId,
+        correlationId: params.correlationId,
+      });
+
+      return {
+        response: { document: doc, validation },
+        persist: async (tx) => {
+          const { document } = await applyDraftContentMutationTx(tx, {
+            organizationId: params.organizationId, processId: params.processId, kind: "edital",
+            actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
+            expectedState: expectedStateEdital, idempotencyKey: params.idempotencyKey,
+            correlationId: params.correlationId,
+          });
+          // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação. Metadata
+          // carrega o LINEAGE completo (parâmetros + fundamentação + versões das fontes) para explainability/replay.
+          const official = await generateOfficialDocument({
+            organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "edital",
+            origin: params.processId, title: doc.title, content: doc.content, author: "structured_authoring",
+            correlationId: params.correlationId,
+            metadata: {
+              modality: params.modality, form: params.form, platform,
+              groundingState: authoring.groundingState,
+              evidenceCount: authoring.evidences.length,
+              evidenceComplete: authoring.evidenceComplete,
+              evidenceFingerprint: authoring.evidenceFingerprint,
+              corpusFingerprint: authoring.corpusFingerprint,
+              usedSources: authoring.structured.usedSourceIds,
+              sourcesDigest: sourceContext.sourcesDigest,
+              sourceVersions: sourceContext.sourceVersions,
+              contextUsedSources: sourceContext.usedSources,
+              contextMissing: sourceContext.missing,
+            },
+          }, tx);
+          // A1 — LINKAGE de proveniência cognitiva → artefato + oficial + linhagem (MESMA transação).
+          // FAIL-CLOSED: cognição real (sem seam `invoke`) exige proveniência; ZERO linhas → aborta tudo.
+          const { linked } = await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
+            organizationId: params.organizationId, correlationId: params.correlationId,
+            artifactKind: "edital", artifactId: document.id,
+            officialDocumentId: official.id, officialLineageId: official.lineageId,
+          });
+          if (params.invoke === undefined && linked === 0) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Proveniência cognitiva obrigatória ausente para esta geração — operação abortada (fail-closed).",
+            });
+          }
+          await recordProcessEvent({
+            organizationId: params.organizationId, processId: params.processId, eventType: "decision",
+            actor: "multi_copilot",
+            summary: `Edital gerado (rascunho) — ${params.modality}/${params.form} — fundamentação: ${authoring.groundingState}.`,
+            refId: doc.id, correlationId: params.correlationId,
+          }, tx);
+          return { document, validation }; // snapshot canônico + validação
+        },
+      };
+    },
   );
   return { ...result, replayed };
+}
+
+/**
+ * P0 — Detecção de DESATUALIZAÇÃO (SOURCE_CHANGED) do Edital: compara o digest de fontes gravado na
+ * geração (marcador `srcdigest:` em `sources`) com o digest ATUAL das fontes (DFD/ETP/TR/itens/parâmetros).
+ * NÃO altera nem regenera nada (read-only). Estados: `never_generated`, `current`, `source_changed`.
+ */
+export async function getEditalSourceState(params: {
+  organizationId: number; processId: string; object: string;
+  modality: EditalModality; form: EditalForm; platform?: EditalPlatform;
+}): Promise<{
+  state: "never_generated" | "current" | "source_changed";
+  storedDigest: string | null; currentDigest: string;
+  usedSources: string[]; missing: string[];
+}> {
+  const platform = params.form === "eletronico" ? (params.platform ?? null) : null;
+  const current = await resolveEditalSources({
+    organizationId: params.organizationId, processId: params.processId, object: params.object,
+    modality: params.modality, form: params.form, platform,
+  });
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  if (!existing || !existing.content.trim()) {
+    return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing };
+  }
+  const stored = (existing.sources ?? []).find((s) => s.startsWith("srcdigest:"))?.slice("srcdigest:".length) ?? null;
+  // O marcador guarda o prefixo (16 chars) do digest — compara com o mesmo prefixo do digest atual.
+  const currentShort = current.sourcesDigest.slice(0, 16);
+  const state = stored === null ? "source_changed" : stored === currentShort ? "current" : "source_changed";
+  return { state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing };
 }

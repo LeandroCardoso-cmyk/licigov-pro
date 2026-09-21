@@ -44,7 +44,7 @@ async function seedEdital(org: number, processId: string, object: string) {
     organizationId: org, processId, object,
     modality: "pregao", form: "eletronico", platform: "compras_gov",
     correlationId: "c4b2-smoke", idempotencyKey: `gen-${org}-${processId}-edital`,
-    actorUserId: AUTHOR,
+    actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("edital"),
   });
 }
 
