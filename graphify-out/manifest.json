@@ -10100,8 +10100,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Usuarios.tsx": {
-    "mtime": 1790003675.064041,
-    "ast_hash": "01efd14eb3ff4ac0d6650183e8156fd8",
+    "mtime": 1790004560.658711,
+    "ast_hash": "968f2a28198b00c8ab15d51f7aae1c5c",
     "semantic_hash": ""
   },
   "client/src/utils/slugify.test.ts": {
@@ -11685,8 +11685,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/usuarios-role-submenu.test.ts": {
-    "mtime": 1790003691.7960417,
-    "ast_hash": "f6c683d069944c3a920d6880897bd0b6",
+    "mtime": 1790004495.470707,
+    "ast_hash": "2864f1519be4f5d7882dd5476ba8188c",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MOREIRA_SALES_INTERNAL_PILOT_PLAN.md": {

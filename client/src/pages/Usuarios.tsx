@@ -314,14 +314,16 @@ export default function Usuarios() {
 
                             <DropdownMenuItem disabled>Editar usuário (em breve)</DropdownMenuItem>
 
-                            {/* Alterar papel. Para o `owner` (Administrador da Organização) o papel NÃO
-                                é alterável por esta API (protegido no backend) — em vez de um submenu
+                            {/* Alterar papel. Para o membro cujo papel técnico é o mais alto da
+                                organização (exibido como "Administrador da Organização"), o papel NÃO é
+                                alterável por esta API (protegido no backend) — em vez de um submenu
                                 mudo/desabilitado (que dava a impressão de "nada acontece"), mostramos um
-                                item explicativo. Para os demais membros, o submenu abre normalmente com
-                                apenas as roles atribuíveis; a role atual é marcada e não-clicável. */}
+                                item explicativo. A copy segue os rótulos institucionais de orgRoleLabels.ts
+                                (não expõe o enum técnico). Para os demais membros, o submenu abre
+                                normalmente com apenas as roles atribuíveis; a role atual é marcada. */}
                             {isOwner ? (
                               <DropdownMenuItem disabled className="whitespace-normal">
-                                Alterar papel — proprietário é gerido fora desta tela
+                                O papel deste administrador não pode ser alterado nesta tela
                               </DropdownMenuItem>
                             ) : (
                               <DropdownMenuSub>

@@ -16,9 +16,11 @@ const SRC = readFileSync(path.join(ROOT, "client/src/pages/Usuarios.tsx"), "utf8
 const ROUTER = readFileSync(path.join(ROOT, "server/routers/organizationsRouter.ts"), "utf8");
 
 describe("Usuarios · submenu Alterar papel", () => {
-  it("owner tem feedback explícito (não um SubTrigger mudo)", () => {
+  it("owner tem feedback explícito (não um SubTrigger mudo), sem expor 'owner'/'proprietário'", () => {
     expect(SRC).toMatch(/isOwner \?\s*\(\s*<DropdownMenuItem disabled/);
-    expect(SRC).toContain("proprietário é gerido fora desta tela");
+    expect(SRC).toContain("O papel deste administrador não pode ser alterado nesta tela");
+    // Copy institucional: não expõe o termo técnico nem "Proprietário" (decisão de domínio).
+    expect(SRC).not.toMatch(/proprietári/i);
   });
 
   it("membros não-owner têm submenu com SubTrigger + SubContent funcional", () => {
