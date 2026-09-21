@@ -2320,7 +2320,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/Login.tsx": {
-    "mtime": 1789998657.3326192,
+    "mtime": 1790003497.7880304,
     "ast_hash": "d9346292e24955ea543c242e81161d5c",
     "semantic_hash": ""
   },
@@ -2380,7 +2380,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/Register.tsx": {
-    "mtime": 1789998689.8446212,
+    "mtime": 1790003497.7880304,
     "ast_hash": "7effd6cb7d2117be2a8479b67ae55acf",
     "semantic_hash": ""
   },
@@ -10050,7 +10050,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/AceitarConvite.tsx": {
-    "mtime": 1789998700.672622,
+    "mtime": 1790003497.7840302,
     "ast_hash": "958487dfcff964370c0bd82cf169a1ae",
     "semantic_hash": ""
   },
@@ -10060,7 +10060,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/RedefinirSenha.tsx": {
-    "mtime": 1789998785.704627,
+    "mtime": 1790003497.7880304,
     "ast_hash": "bbbd60ee06af2b87cdddd42036fd1f35",
     "semantic_hash": ""
   },
@@ -10100,8 +10100,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Usuarios.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "37f7a3346241f1fc9c4e284a0cb1c3c3",
+    "mtime": 1790003675.064041,
+    "ast_hash": "01efd14eb3ff4ac0d6650183e8156fd8",
     "semantic_hash": ""
   },
   "client/src/utils/slugify.test.ts": {
@@ -11675,13 +11675,23 @@
     "semantic_hash": ""
   },
   "client/src/components/ui/password-input.test.ts": {
-    "mtime": 1789998754.452625,
+    "mtime": 1790003497.7840302,
     "ast_hash": "d196b9320fe76b9bb65ca5fc91c58ca1",
     "semantic_hash": ""
   },
   "client/src/components/ui/password-input.tsx": {
-    "mtime": 1789998641.7446184,
+    "mtime": 1790003497.7840302,
     "ast_hash": "bf5238de0cdf13dd6beaadbbab3e2493",
+    "semantic_hash": ""
+  },
+  "client/src/pages/usuarios-role-submenu.test.ts": {
+    "mtime": 1790003691.7960417,
+    "ast_hash": "f6c683d069944c3a920d6880897bd0b6",
+    "semantic_hash": ""
+  },
+  "docs/audits/production-readiness/MOREIRA_SALES_INTERNAL_PILOT_PLAN.md": {
+    "mtime": 1789999029.3166413,
+    "ast_hash": "f01357341fb83d3fbd83258b155fbb44",
     "semantic_hash": ""
   }
 }
