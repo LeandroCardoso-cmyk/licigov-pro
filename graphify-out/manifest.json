@@ -2320,8 +2320,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Login.tsx": {
-    "mtime": 1788023705.138377,
-    "ast_hash": "48ac8b9cb3c40b2ede7cb6a122ba52b4",
+    "mtime": 1789998657.3326192,
+    "ast_hash": "d9346292e24955ea543c242e81161d5c",
     "semantic_hash": ""
   },
   "client/src/pages/ModuleSelectionDashboard.tsx": {
@@ -2380,8 +2380,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Register.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "5cb42450d7cf708df49eb2396c661927",
+    "mtime": 1789998689.8446212,
+    "ast_hash": "7effd6cb7d2117be2a8479b67ae55acf",
     "semantic_hash": ""
   },
   "client/src/pages/Settings.tsx": {
@@ -10050,8 +10050,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/AceitarConvite.tsx": {
-    "mtime": 1788023705.1365132,
-    "ast_hash": "d6012915f3a7a36e4a21bde6c8761cc4",
+    "mtime": 1789998700.672622,
+    "ast_hash": "958487dfcff964370c0bd82cf169a1ae",
     "semantic_hash": ""
   },
   "client/src/pages/EsqueciSenha.tsx": {
@@ -10060,8 +10060,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/RedefinirSenha.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "f72bf9466cd4e9d21d0160ee482a6b59",
+    "mtime": 1789998785.704627,
+    "ast_hash": "bbbd60ee06af2b87cdddd42036fd1f35",
     "semantic_hash": ""
   },
   "client/src/utils/authErrorMessages.test.ts": {
@@ -11672,6 +11672,16 @@
   "server/services/authoring/editalContext.ts": {
     "mtime": 1789960403.2050111,
     "ast_hash": "3ae89a6d4ea0fe12a930da9a9cb3f9dd",
+    "semantic_hash": ""
+  },
+  "client/src/components/ui/password-input.test.ts": {
+    "mtime": 1789998754.452625,
+    "ast_hash": "d196b9320fe76b9bb65ca5fc91c58ca1",
+    "semantic_hash": ""
+  },
+  "client/src/components/ui/password-input.tsx": {
+    "mtime": 1789998641.7446184,
+    "ast_hash": "bf5238de0cdf13dd6beaadbbab3e2493",
     "semantic_hash": ""
   }
 }
