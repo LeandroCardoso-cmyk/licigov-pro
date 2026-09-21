@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { APP_DESCRIPTION, APP_LOGO, APP_TITLE } from "@/const";
 import { isSafeReturnTo } from "@/utils/safeReturnTo";
@@ -80,9 +81,8 @@ export default function Login() {
                   Esqueci minha senha
                 </a>
               </div>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

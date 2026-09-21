@@ -3,7 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { translateAuthError } from "@/utils/authErrorMessages";
@@ -82,9 +82,8 @@ export default function RedefinirSenha() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="password">Nova senha</Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   placeholder="Mínimo 8 caracteres"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -96,9 +95,8 @@ export default function RedefinirSenha() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
-                <Input
+                <PasswordInput
                   id="confirmPassword"
-                  type="password"
                   placeholder="Repita a senha"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
