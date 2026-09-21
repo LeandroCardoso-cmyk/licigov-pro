@@ -42,7 +42,7 @@ async function seedTr(org: number, pid: string, object: string, actor: number) {
   return generateDocument({ organizationId: org, processId: pid, kind: "tr", object, correlationId: "c4b3b-seed", idempotencyKey: `gen-tr-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("tr") });
 }
 async function seedEdital(org: number, pid: string, object: string, actor: number) {
-  return generateNotice({ organizationId: org, processId: pid, object, modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "c4b3b-seed", idempotencyKey: `gen-ed-${org}-${pid}`, actorUserId: actor });
+  return generateNotice({ organizationId: org, processId: pid, object, modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "c4b3b-seed", idempotencyKey: `gen-ed-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("edital") });
 }
 
 async function draftRow(org: number, pid: string, kind: string) {

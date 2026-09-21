@@ -17,7 +17,7 @@ import {
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { enrichItem, applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import { serviceLogger } from "../services/observabilityService";
@@ -378,6 +378,24 @@ export const procurementProcessRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
       }
       return { document: result.document };
+    }),
+
+  /**
+   * P0 — Estado de DESATUALIZAÇÃO do Edital (SOURCE_CHANGED): compara o digest das fontes gravado na
+   * geração com o digest ATUAL (DFD/ETP/TR/itens/parâmetros). Read-only (NÃO regenera). Tenant-scoped.
+   */
+  editalSourceState: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1), object: z.string().min(1),
+      modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getEditalSourceState({
+        organizationId: orgId, processId: input.processId, object: input.object,
+        modality: input.modality, form: input.form, platform: input.platform,
+      });
     }),
 
   /**

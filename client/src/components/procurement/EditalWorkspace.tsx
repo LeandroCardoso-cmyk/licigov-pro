@@ -3,6 +3,15 @@ import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
+import GroundingNotice from "./GroundingNotice";
+
+const SOURCE_LABELS: Record<string, string> = {
+  tr: "Termo de Referência (TR)", etp: "Estudo Técnico Preliminar (ETP)",
+  dfd: "Documento de Formalização da Demanda (DFD)", itens: "Itens aprovados",
+  criterio_julgamento: "Critério de julgamento", regime_contratacao: "Regime de contratação",
+  objeto: "Objeto",
+};
+const labelSource = (k: string) => SOURCE_LABELS[k] ?? k;
 
 /**
  * EditalWorkspace — REAL (wired to tRPC).
@@ -69,10 +78,18 @@ export default function EditalWorkspace({
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
     { processId, kind: "edital" }, { enabled: !!processId },
   );
+  // P0 — estado de desatualização das fontes (SOURCE_CHANGED): read-only, depende dos parâmetros atuais.
+  const sourceState = trpc.procurementProcess.editalSourceState.useQuery(
+    { processId, object: object.trim() || "-", modality, form, platform: form === "eletronico" ? platform : undefined },
+    { enabled: !!processId && !!object.trim() },
+  );
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
     onSuccess: () => {
       rotateEditalKey();
-      if (processId) utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
+      if (processId) {
+        utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
+        utils.procurementProcess.editalSourceState.invalidate();
+      }
     },
   });
   const draft = reviewable.data?.draft ?? null;
@@ -186,6 +203,33 @@ export default function EditalWorkspace({
 
       {draft && (
         <div className="mt-6">
+          {/* P0 — origem/contexto: a minuta nasce dos documentos do processo (reaproveitamento canônico). */}
+          <div className="mb-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+            <strong>Minuta gerada com base nos documentos do processo.</strong>
+            {sourceState.data && sourceState.data.usedSources.length > 0 && (
+              <span> Fontes reaproveitadas: {sourceState.data.usedSources.map(labelSource).join(", ")}.</span>
+            )}
+            {sourceState.data && sourceState.data.missing.length > 0 && (
+              <span className="block text-xs opacity-90">
+                Pendências para revisar: {sourceState.data.missing.map(labelSource).join(", ")}.
+              </span>
+            )}
+            <span className="block text-xs opacity-80">
+              Gerada em {new Date(draft.updatedAt).toLocaleString("pt-BR")} · situação: {draft.status}.
+            </span>
+          </div>
+
+          {/* P0 — explicabilidade mínima: estado de fundamentação (RAG governado). */}
+          <GroundingNotice grounding={draft.grounding ?? null} />
+
+          {/* P0 — alerta de desatualização: fontes-base mudaram após a geração (NÃO regenera sozinho). */}
+          {sourceState.data?.state === "source_changed" && (
+            <div className="mb-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-800 dark:text-orange-300" role="alert">
+              <strong>Documentos-base alterados.</strong> Os documentos-base deste Edital (DFD/ETP/TR/itens/parâmetros)
+              foram alterados após a geração da minuta. Revise ou regenere antes da aprovação.
+            </div>
+          )}
+
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
             emissão oficial exige revisão de um terceiro (SoD).

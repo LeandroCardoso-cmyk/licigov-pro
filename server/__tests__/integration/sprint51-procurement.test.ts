@@ -313,6 +313,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
       const { document, validation } = await generateNotice({
         organizationId: ORG_ID, processId: PID, object: "Obra", modality: "concorrencia", form: "presencial", correlationId: CORR,
         idempotencyKey: "t-sprint51-edital-presencial", actorUserId: 1,
+        invoke: async () => buildMockProviderAuthoring("edital"),
       });
       expect(validation.valid).toBe(true);
       expect(document.legalJustification).toContain("14.133");
@@ -330,6 +331,7 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
       const { validation, document } = await generateNotice({
         organizationId: ORG_ID, processId: PID, object: "Compra", modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: CORR,
         idempotencyKey: "t-sprint51-edital-valido", actorUserId: 1,
+        invoke: async () => buildMockProviderAuthoring("edital"),
       });
       expect(validation.valid).toBe(true);
       expect(document.platform).toBe("compras_gov");

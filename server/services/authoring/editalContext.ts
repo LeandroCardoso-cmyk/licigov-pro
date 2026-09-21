@@ -1,0 +1,285 @@
+/**
+ * P0 EDITAL — CONTEXT BUILDER canônico do Edital.
+ *
+ * Coleta, de forma TENANT-SCOPED, o contexto institucional já existente no processo (DFD, ETP, TR,
+ * itens aprovados, parâmetros do edital e metadados do processo) e o consolida num bloco de contexto
+ * BOUNDED que alimenta a autoria estruturada do Edital pelo Kernel cognitivo. O servidor NÃO reintroduz
+ * manualmente o que já existe estruturado no fluxo DFD → ETP → TR.
+ *
+ * Regras (Constituição do Produto + mandato P0):
+ *   - NÃO inventar dado. Fonte ausente/indisponível → marcador EXPLÍCITO `[REVISAR: …]` (nunca alucinação).
+ *   - Precedência de fonte: TR (peso elevado) → ETP → DFD → processo → parâmetros. Preferir conteúdo de
+ *     documento em estado mais avançado (aprovado > em_revisão > rascunho) na sinalização de confiança.
+ *   - Determinístico: mesmo conjunto de fontes ⇒ mesmo `sourcesDigest` (replay-safe + detecção de
+ *     desatualização). Alterar DFD/ETP/TR/itens/parâmetros muda o digest.
+ *   - Puro e testável: `buildEditalSourceContext` não faz IO; `resolveEditalSources` faz as leituras
+ *     org-scoped e delega ao builder puro.
+ */
+
+import { createHash } from "crypto";
+import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
+import { draftContentHash } from "../../domain/generatedDocument";
+
+/** Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage). */
+export const EDITAL_CONTEXT_VERSION = "edital-context/1.0";
+
+/** Limite de caracteres por documento-base injetado no contexto (custo/tamanho previsíveis). */
+const MAX_DOC_CHARS = 4000;
+const MAX_ITEMS = 60;
+
+/** Rascunho canônico de um documento-base (DFD/ETP/TR) já lido do generated_documents. */
+export interface EditalUpstreamDoc {
+  readonly present: boolean;
+  readonly status: string | null;
+  readonly contentHash: string | null;
+  readonly content: string;
+}
+
+export interface EditalApprovedItem {
+  readonly id: string;
+  readonly description: string;
+  readonly quantity: number;
+  readonly unit: string;
+  readonly averagePrice: number;
+  readonly suggestedCATMAT: string | null;
+}
+
+/** Entradas JÁ RESOLVIDAS (fetched) para o builder PURO. */
+export interface EditalSourceInputs {
+  readonly organizationId: number;
+  readonly processId: string;
+  readonly object: string;
+  readonly modality: string;
+  readonly form: string;
+  readonly platform: string | null;
+  readonly processObject: string | null;
+  readonly processNumber: string | null;
+  readonly currentStage: string | null;
+  readonly dfd: EditalUpstreamDoc | null;
+  readonly etp: EditalUpstreamDoc | null;
+  readonly tr: EditalUpstreamDoc | null;
+  readonly approvedItems: readonly EditalApprovedItem[];
+  /** Parâmetros complementares do edital, quando existirem no espaço canônico (senão REVISAR). */
+  readonly criterioJulgamento: string | null;
+  readonly regimeContratacao: string | null;
+}
+
+/** Estado de UMA fonte-base para lineage + detecção de desatualização. */
+export interface EditalSourceVersion {
+  readonly present: boolean;
+  readonly status: string | null;
+  readonly contentHash: string | null;
+}
+
+export interface EditalSourceContext {
+  /** Bloco de contexto BOUNDED (markdown) injetado na query cognitiva. */
+  readonly promptContext: string;
+  /** Fontes efetivamente localizadas (para exibição/explicabilidade). */
+  readonly usedSources: string[];
+  /** Campos NÃO localizados (marcados como [REVISAR] no contexto). */
+  readonly missing: string[];
+  /** Digest determinístico das FONTES (upstream + parâmetros + itens) — replay + stale detection. */
+  readonly sourcesDigest: string;
+  /** Estado por fonte (DFD/ETP/TR) para lineage e detecção de mudança. */
+  readonly sourceVersions: { dfd: EditalSourceVersion; etp: EditalSourceVersion; tr: EditalSourceVersion };
+  /** Marcadores de lineage a persistir em `sources` do documento gerado. */
+  readonly lineageMarkers: string[];
+}
+
+function truncate(s: string, max: number): string {
+  const t = (s ?? "").trim();
+  return t.length <= max ? t : `${t.slice(0, max)}\n…[conteúdo truncado para o contexto]`;
+}
+
+function short(hash: string | null): string {
+  return hash ? hash.slice(0, 12) : "none";
+}
+
+/** Assinatura determinística e ORDENADA dos itens aprovados (independe da ordem de leitura). */
+function itemsSignature(items: readonly EditalApprovedItem[]): Array<Record<string, unknown>> {
+  return items
+    .map((i) => ({ id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), pr: i.averagePrice, cm: i.suggestedCATMAT ?? null }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Builder PURO: consolida o contexto do Edital a partir de entradas já resolvidas. Sem IO, determinístico.
+ * Fontes ausentes viram `[REVISAR: …]` — nunca conteúdo fabricado.
+ */
+export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourceContext {
+  const usedSources: string[] = [];
+  const missing: string[] = [];
+  const lines: string[] = [];
+
+  const objeto = input.object?.trim() || input.processObject?.trim() || "";
+  lines.push("## Parâmetros do certame (definidos no fluxo do Edital)");
+  lines.push(`- Objeto: ${objeto || "[REVISAR: objeto não informado]"}`);
+  if (!objeto) missing.push("objeto");
+  lines.push(`- Modalidade: ${input.modality}`);
+  lines.push(`- Forma: ${input.form}`);
+  lines.push(`- Plataforma: ${input.platform ?? "(não aplicável / presencial)"}`);
+  if (input.processNumber) lines.push(`- Número do processo: ${input.processNumber}`);
+  if (input.criterioJulgamento && input.criterioJulgamento.trim()) {
+    lines.push(`- Critério de julgamento: ${input.criterioJulgamento.trim()}`);
+  } else {
+    lines.push("- Critério de julgamento: [REVISAR: definir critério de julgamento conforme o objeto e a Lei 14.133/2021]");
+    missing.push("criterio_julgamento");
+  }
+  if (input.regimeContratacao && input.regimeContratacao.trim()) {
+    lines.push(`- Regime de contratação/execução: ${input.regimeContratacao.trim()}`);
+  } else {
+    lines.push("- Regime de contratação/execução: [REVISAR: definir regime de execução aplicável]");
+    missing.push("regime_contratacao");
+  }
+  lines.push("");
+
+  const renderDoc = (label: string, key: "dfd" | "etp" | "tr", doc: EditalUpstreamDoc | null) => {
+    if (doc?.present && doc.content.trim()) {
+      usedSources.push(key);
+      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"})`);
+      lines.push(truncate(doc.content, MAX_DOC_CHARS));
+      lines.push("");
+    } else {
+      missing.push(key);
+      lines.push(`## Base — ${label}`);
+      lines.push(`[REVISAR: ${label} não localizado no processo — elaborar a seção correspondente sem inferir dados inexistentes]`);
+      lines.push("");
+    }
+  };
+  // Precedência de exibição: TR primeiro (peso elevado), depois ETP e DFD.
+  renderDoc("Termo de Referência (TR)", "tr", input.tr);
+  renderDoc("Estudo Técnico Preliminar (ETP)", "etp", input.etp);
+  renderDoc("Documento de Formalização da Demanda (DFD)", "dfd", input.dfd);
+
+  const items = input.approvedItems.slice(0, MAX_ITEMS);
+  if (items.length > 0) {
+    usedSources.push("itens");
+    lines.push(`## Itens aprovados (${items.length}${input.approvedItems.length > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""})`);
+    for (const it of items) {
+      const price = it.averagePrice > 0 ? ` · valor médio est.: R$ ${(it.averagePrice / 100).toFixed(2)}` : "";
+      const catmat = it.suggestedCATMAT ? ` · CATMAT/CATSER: ${it.suggestedCATMAT}` : "";
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${it.quantity} ${it.unit}${price}${catmat}`);
+    }
+    lines.push("");
+  } else {
+    missing.push("itens");
+    lines.push("## Itens aprovados");
+    lines.push("[REVISAR: nenhum item aprovado localizado — confira o Termo de Referência quanto a quantitativos e especificações]");
+    lines.push("");
+  }
+
+  const sourcesDigest = createHash("sha256")
+    .update(JSON.stringify({
+      v: EDITAL_CONTEXT_VERSION,
+      o: input.organizationId,
+      p: input.processId,
+      obj: objeto,
+      m: input.modality,
+      f: input.form,
+      pl: input.platform ?? null,
+      cj: input.criterioJulgamento ?? null,
+      rc: input.regimeContratacao ?? null,
+      dfd: input.dfd?.contentHash ?? null,
+      etp: input.etp?.contentHash ?? null,
+      tr: input.tr?.contentHash ?? null,
+      items: itemsSignature(input.approvedItems),
+    }))
+    .digest("hex");
+
+  const sourceVersions = {
+    dfd: { present: !!input.dfd?.present, status: input.dfd?.status ?? null, contentHash: input.dfd?.contentHash ?? null },
+    etp: { present: !!input.etp?.present, status: input.etp?.status ?? null, contentHash: input.etp?.contentHash ?? null },
+    tr: { present: !!input.tr?.present, status: input.tr?.status ?? null, contentHash: input.tr?.contentHash ?? null },
+  };
+
+  const lineageMarkers = [
+    `srcdigest:${sourcesDigest.slice(0, 16)}`,
+    `base:tr@${short(sourceVersions.tr.contentHash)}`,
+    `base:etp@${short(sourceVersions.etp.contentHash)}`,
+    `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
+    `itens:${input.approvedItems.length}`,
+  ];
+
+  return {
+    promptContext: lines.join("\n"),
+    usedSources,
+    missing,
+    sourcesDigest,
+    sourceVersions,
+    lineageMarkers,
+  };
+}
+
+function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>): EditalUpstreamDoc | null {
+  if (!doc) return null;
+  return {
+    present: !!doc.content && doc.content.trim().length > 0,
+    status: doc.status ?? null,
+    contentHash: doc.content ? draftContentHash(doc.content) : null,
+    content: doc.content ?? "",
+  };
+}
+
+/**
+ * Resolve as fontes do Edital de forma TENANT-SCOPED e monta o contexto. Toda leitura é escopada por
+ * `organizationId` (documento de outro tenant retorna null → tratado como ausente/[REVISAR], nunca vaza).
+ * Os parâmetros modalidade/forma/plataforma vêm do próprio passo do Edital (não há reentrada de dados de
+ * etapas anteriores); critério/regime ficam como [REVISAR] quando não disponíveis no espaço canônico.
+ */
+export async function resolveEditalSources(params: {
+  organizationId: number;
+  processId: string;
+  object: string;
+  modality: string;
+  form: string;
+  platform: string | null;
+  criterioJulgamento?: string | null;
+  regimeContratacao?: string | null;
+}): Promise<EditalSourceContext> {
+  const [process, dfd, etp, tr, items] = await Promise.all([
+    getProcess(params.processId, params.organizationId),
+    getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd"),
+    getGeneratedDocumentByKind(params.processId, params.organizationId, "etp"),
+    getGeneratedDocumentByKind(params.processId, params.organizationId, "tr"),
+    listIntelligentItems(params.processId, params.organizationId),
+  ]);
+  const approvedItems: EditalApprovedItem[] = items
+    .filter((i) => i.status === "aprovado")
+    .map((i) => ({ id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice, suggestedCATMAT: i.suggestedCATMAT }));
+
+  return buildEditalSourceContext({
+    organizationId: params.organizationId,
+    processId: params.processId,
+    object: params.object,
+    modality: params.modality,
+    form: params.form,
+    platform: params.platform,
+    processObject: process?.object ?? null,
+    processNumber: process?.processNumber ?? null,
+    currentStage: process?.currentStage ?? null,
+    dfd: toUpstream(dfd),
+    etp: toUpstream(etp),
+    tr: toUpstream(tr),
+    approvedItems,
+    criterioJulgamento: params.criterioJulgamento ?? null,
+    regimeContratacao: params.regimeContratacao ?? null,
+  });
+}
+
+/**
+ * Recalcula APENAS o digest de fontes (sem montar o contexto completo) — usado pela detecção de
+ * desatualização (SOURCE_CHANGED). Reusa `buildEditalSourceContext` para garantir a MESMA fórmula.
+ */
+export async function computeCurrentSourcesDigest(params: {
+  organizationId: number;
+  processId: string;
+  object: string;
+  modality: string;
+  form: string;
+  platform: string | null;
+  criterioJulgamento?: string | null;
+  regimeContratacao?: string | null;
+}): Promise<string> {
+  const ctx = await resolveEditalSources(params);
+  return ctx.sourcesDigest;
+}

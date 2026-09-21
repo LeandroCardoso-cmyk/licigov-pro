@@ -5,7 +5,7 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1789938285.732366,
+    "mtime": 1789939558.9551854,
     "ast_hash": "66193dd94a13bbf8ce3bd503821a211f",
     "semantic_hash": ""
   },
@@ -1360,8 +1360,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "03c4f058877647358b472eb662f880b5",
+    "mtime": 1789960710.8450294,
+    "ast_hash": "879ab9e792bf156b23d2d6df7e2cc4cf",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
@@ -2275,7 +2275,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/DirectContractDetails.tsx": {
-    "mtime": 1789938340.2932544,
+    "mtime": 1789939558.9551854,
     "ast_hash": "94c39a39af2d0996f5072dcbb7f3fe47",
     "semantic_hash": ""
   },
@@ -2305,7 +2305,7 @@
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
-    "mtime": 1789938987.311189,
+    "mtime": 1789939558.9551854,
     "ast_hash": "c0b863a346039b8a4b2db151d33569be",
     "semantic_hash": ""
   },
@@ -4080,8 +4080,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint51-procurement.test.ts": {
-    "mtime": 1789127769.303346,
-    "ast_hash": "aae59ea94cdaaee160aff9381d4c03d0",
+    "mtime": 1789992928.9711487,
+    "ast_hash": "9a33073e8da52c69637e81ace5d82626",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1789588135.1660533,
-    "ast_hash": "b6770c8c44d4543575affff4c520bbd9",
+    "mtime": 1789960642.7850254,
+    "ast_hash": "cf14fb24a35e85ab26fa841bfab6c84e",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -6015,8 +6015,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1789127769.311346,
-    "ast_hash": "4bcb691bde339a5a5fcfab6f456e60a5",
+    "mtime": 1789960681.6490276,
+    "ast_hash": "086181a0e1caa3e03700e3a5d0f5432c",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -9735,8 +9735,8 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/INTERNAL_PRODUCTION_GATE.md": {
-    "mtime": 1789938672.7231908,
-    "ast_hash": "17bb9252e3547d15014e91a6a476ec10",
+    "mtime": 1789955505.3325036,
+    "ast_hash": "7d0dc794ed9ab00baa49c2e6cdb9866e",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/MODULE_READINESS_MATRIX.md": {
@@ -10885,8 +10885,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
-    "mtime": 1789127769.300615,
-    "ast_hash": "b676b08afd3b5ffc4de93914a6e96656",
+    "mtime": 1789992695.6591349,
+    "ast_hash": "509086a915ca532a8af420604194aa42",
     "semantic_hash": ""
   },
   "docs/handoffs/C3A_FINAL_RECLASSIFICATION_AND_CLOSURE.md": {
@@ -10940,8 +10940,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts": {
-    "mtime": 1789127769.300615,
-    "ast_hash": "ef8586261000de017d720fd500c9127b",
+    "mtime": 1789992933.099149,
+    "ast_hash": "45bd42db3111ff6e82a8937d298935a3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft.test.ts": {
@@ -11005,8 +11005,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts": {
-    "mtime": 1789127769.300615,
-    "ast_hash": "e8ca2c328c4691b10b7f94a67f676f19",
+    "mtime": 1789992937.331149,
+    "ast_hash": "a0ae46c43320c933b99ef89ee4e56fbf",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3b-save-reviewable-draft.test.ts": {
@@ -11410,8 +11410,8 @@
     "semantic_hash": ""
   },
   "server/domain/authoring/authoringSchema.ts": {
-    "mtime": 1789127769.307346,
-    "ast_hash": "5cba11d4e76708cfcd6c6ce4d63bd861",
+    "mtime": 1789960311.9770057,
+    "ast_hash": "cb20056d630126d99dc654936b0e37b5",
     "semantic_hash": ""
   },
   "server/domain/cognitiveProvenance.ts": {
@@ -11540,8 +11540,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/structuredAuthoringService.ts": {
-    "mtime": 1789127769.311346,
-    "ast_hash": "21e410c69e34a5e0e5ea486833a747d9",
+    "mtime": 1789960769.8810327,
+    "ast_hash": "0635f8cc594fae744f06423fdc220854",
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveProvenanceService.ts": {
@@ -11625,7 +11625,7 @@
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/G8_PILOT_NAVIGATION_AUDIT.md": {
-    "mtime": 1789938694.7911906,
+    "mtime": 1789939558.9551854,
     "ast_hash": "7974ff08f89ca06be1dbca8f08a22512",
     "semantic_hash": ""
   },
@@ -11635,18 +11635,43 @@
     "semantic_hash": ""
   },
   "client/src/g8-canonical-navigation.test.ts": {
-    "mtime": 1789938873.3031895,
+    "mtime": 1789939558.9551854,
     "ast_hash": "7b2da50bea39a2cbdf626d505f18190a",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/PILOT_CLOSURE_REPORT.md": {
-    "mtime": 1789937236.4948401,
-    "ast_hash": "6acd2e49e2591dd8045d11814ab8dd0e",
+    "mtime": 1789955576.8845077,
+    "ast_hash": "d28e9f724a44c202f1df92d1cdb3afb0",
     "semantic_hash": ""
   },
   "docs/security/G5_SECRET_READINESS_AUDIT.md": {
-    "mtime": 1789937236.4948401,
-    "ast_hash": "fd4335c84a07753014f2b0dc1747d2b0",
+    "mtime": 1789955526.2045047,
+    "ast_hash": "a757d3fb0a0d53c0c0fcf874c2741aa8",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/editalWorkspaceContract.test.ts": {
+    "mtime": 1789993011.3511536,
+    "ast_hash": "74a3aea50611c90410f1187d84466d5b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/p0-edital-context.test.ts": {
+    "mtime": 1789992794.2231407,
+    "ast_hash": "f1a32023c17c742f796a2e0df1b7e4b0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/p0-edital-generation-mysql-smoke.test.ts": {
+    "mtime": 1789992985.655152,
+    "ast_hash": "c154a83f8dcd0f05124f58bd2855d87f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/p0-edital-generation.test.ts": {
+    "mtime": 1789992866.727145,
+    "ast_hash": "502209555c66ebe5a114355c5e818df9",
+    "semantic_hash": ""
+  },
+  "server/services/authoring/editalContext.ts": {
+    "mtime": 1789960403.2050111,
+    "ast_hash": "3ae89a6d4ea0fe12a930da9a9cb3f9dd",
     "semantic_hash": ""
   }
 }

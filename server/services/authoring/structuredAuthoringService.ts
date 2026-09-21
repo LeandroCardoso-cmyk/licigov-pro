@@ -30,7 +30,7 @@ import {
   canonicalSectionsFor, validateStructuredAuthoring, parseProviderAuthoringOutput, buildAuthoringResponseSchema,
   AUTHORING_CONTRACT_VERSION, AuthoringContractError,
   type StructuredAuthoring, type AuthoredSection, type AuthoredLegalReference, type CanonicalAuthoringSection,
-  type ProviderSectionFill,
+  type ProviderSectionFill, type AuthoringKind,
 } from "../../domain/authoring/authoringSchema";
 import {
   buildCorpusLegalIndex, validateCitedLegalReferences, locatorExistsAndCurrent, sourceKindOf, articleKeyOf,
@@ -38,6 +38,7 @@ import {
 } from "./legalReferenceValidationService";
 import { isNormativeCurrent } from "../../domain/institutionalIntegration/evidenceFromContext";
 import { getAuthoringCorpus } from "./authoringCorpus";
+import type { EditalSourceContext } from "./editalContext";
 
 const DOMAIN = "processo_licitatorio";
 const REVIEW_NOTICE = "Rascunho fundamentado gerado com apoio de IA supervisionada. Revisão OBRIGATÓRIA pelo servidor competente — não constitui documento aprovado nem juízo definitivo de legalidade.";
@@ -199,7 +200,7 @@ function sanitizeProse(prose: string, rejected: readonly { raw: string }[]): str
 
 /** Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM). */
 function renderMarkdown(doc: StructuredAuthoring): string {
-  const heading = doc.kind === "tr" ? "Termo de Referência" : "Estudo Técnico Preliminar";
+  const heading = doc.kind === "tr" ? "Termo de Referência" : doc.kind === "edital" ? "Edital de Licitação" : "Estudo Técnico Preliminar";
   const stateLabel: Record<GroundingState, string> = {
     grounded: "Fundamentado", partially_grounded: "Parcialmente fundamentado", ungrounded: "Sem fundamentação recuperada",
     not_applicable: "Não aplicável", legacy_unclassified: "Não classificado",
@@ -386,12 +387,195 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   };
 }
 
+// ─── EDITAL — autoria estruturada contextual (P0) ─────────────────────────────
+// Reutiliza INTEGRALMENTE a infraestrutura cognitiva (executeCognitiveTask), o RAG governado
+// (resolveInstitutionalContextPackage), a avaliação de evidência (assessGrounding), a validação
+// anti-alucinação de citações (validateCitedLegalReferences) e o contrato Zod (validateStructuredAuthoring).
+// NÃO há chamada direta a provider, novo RAG, nova idempotência ou novo pipeline — apenas a autoria
+// específica do Edital (seções institucionais + contexto DFD/ETP/TR). Grounding do Edital é POR EVIDÊNCIA
+// (RAG), não por locator verbatim (a estrutura do Edital deriva de múltiplos dispositivos).
+
+export interface EditalAuthoringInput {
+  readonly organizationId: number;
+  readonly object: string;
+  readonly modality: string;
+  readonly form: string;
+  readonly platform: string | null;
+  /** Contexto institucional já montado (DFD/ETP/TR/itens/parâmetros) — o reaproveitamento canônico. */
+  readonly sourceContext: EditalSourceContext;
+  readonly correlationId: string;
+  readonly actorUserId?: number;
+  readonly userContext?: { state?: string | null; municipality?: string | null };
+  readonly corpus?: OfficialCorpusBuildResult;
+  /** Seam determinístico (testes): fornece o OUTPUT ESTRUTURADO do provider (JSON) sem chamar o Engine. */
+  readonly invoke?: (prompt: string) => Promise<string>;
+}
+
+/** Query determinística de recuperação legal para o Edital (independe de ordem). */
+function editalRetrievalQuery(object: string, modality: string): string {
+  return `Edital de licitação (modalidade ${modality}): conteúdo obrigatório do instrumento convocatório, ` +
+    `condições de participação, julgamento, habilitação, recursos e sanções para "${object}" ` +
+    `(Lei 14.133/2021, arts. 25, 33-34, 56, 62-70, 155-156 e 165).`;
+}
+
+/** Prompt cognitivo do Edital: estrutura (responseSchema) + CONTEXTO reaproveitado + regra anti-alucinação. */
+function editalAuthoringQuery(input: EditalAuthoringInput): string {
+  const canon = canonicalSectionsFor("edital").map((s) => `${s.key} (${s.title})`).join("; ");
+  return [
+    editalRetrievalQuery(input.object, input.modality),
+    "",
+    "Elabore, em JSON estruturado, a prosa de CADA seção canônica do Edital (NÃO invente seções): " + canon + ".",
+    "Reaproveite o CONTEXTO institucional abaixo (DFD, ETP, TR, itens e parâmetros). NÃO reintroduza o que já",
+    "consta. Onde o contexto NÃO fornecer a informação, escreva explicitamente '[REVISAR: <o que falta>]' —",
+    "JAMAIS invente dados institucionais, prazos, valores, exigências de habilitação ou dispositivos legais.",
+    "Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.",
+    "",
+    "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
+    input.sourceContext.promptContext,
+  ].join("\n");
+}
+
+/**
+ * Gera a autoria estruturada do EDITAL com reaproveitamento de contexto (DFD/ETP/TR/itens/parâmetros) e
+ * grounding por evidência (RAG governado). Uma ÚNICA chamada cognitiva via AIExecutionEngine (ou seam
+ * `invoke` nos testes). Fail-closed: structured output inválido → AuthoringContractError + proveniência failed.
+ */
+export async function generateEditalAuthoring(input: EditalAuthoringInput): Promise<StructuredAuthoringResult> {
+  const kind: AuthoringKind = "edital";
+  const corpus = input.corpus ?? getAuthoringCorpus();
+  const index = buildCorpusLegalIndex(corpus);
+  const canon = canonicalSectionsFor(kind);
+
+  // 1) Recuperação institucional REAL (RAG governado) → ContextPackage. Reusa o mesmo resolvedor do ETP/TR.
+  const contextPackage = resolveInstitutionalContextPackage(corpus, {
+    tenantId: input.organizationId, businessDomain: DOMAIN, taskType: "tr",
+    query: editalRetrievalQuery(input.object, input.modality), correlationId: input.correlationId,
+    userContext: input.userContext, enableSourceScopeRouting: true,
+  });
+
+  // 2) Evidências REAIS (fontes vigentes) → fingerprint/contagem (A1). Grounding do Edital é por evidência.
+  const grounding = assessGrounding(contextPackage, { minEvidences: 1, minCoverage: 0 });
+  const evidenceCount = grounding.evidenceCount;
+  const evidenceFingerprint = grounding.evidenceFingerprint;
+
+  // 3) UMA chamada cognitiva → OUTPUT ESTRUTURADO do provider. Fail-closed em output inválido.
+  const responseSchema = buildAuthoringResponseSchema(kind);
+  const query = editalAuthoringQuery(input);
+  const semanticInput: StructuredAuthoringInput = {
+    organizationId: input.organizationId, kind: "tr", object: input.object,
+    correlationId: input.correlationId, actorUserId: input.actorUserId,
+  };
+  let rawProviderText = "";
+  let execution: CognitiveExecution | undefined;
+  try {
+    if (input.invoke) {
+      rawProviderText = await input.invoke(query);
+    } else {
+      execution = await executeCognitiveTask({
+        task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
+        userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
+        query, businessDomain: DOMAIN, contextPackage,
+        documentRefs: contextPackage.documents.map((d) => d.documentId),
+        lawRefs: contextPackage.citations.map((c) => c.reference),
+        evidences: grounding.evidences, evidenceComplete: evidenceCount > 0,
+        responseSchema,
+      });
+      rawProviderText = execution.response.content ?? "";
+    }
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(semanticInput, err);
+    throw err;
+  }
+
+  // 4) Parse GOVERNADO do structured output (JSON + Zod + autoridade do servidor). Fail-closed.
+  let providerOutput;
+  try {
+    providerOutput = parseProviderAuthoringOutput(kind, rawProviderText);
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(semanticInput, err);
+    throw err;
+  }
+  const fillByKey = new Map<string, ProviderSectionFill>(providerOutput.sections.map((s) => [s.key, s]));
+
+  // 5) Monta seções (autoridade do servidor: key/title/anchor/modo) + prosa do provider sanitizada. Grounding
+  // do Edital por EVIDÊNCIA: uma seção produzida está aterrada quando há evidência normativa recuperada e a
+  // seção não contém citação rejeitada (não por sub-locator verbatim, que não se aplica ao Edital).
+  const rejectedAll: { raw: string; reason: string }[] = [];
+  const limitations: string[] = [];
+  const hasEvidence = evidenceCount > 0;
+  const sections: AuthoredSection[] = canon.map((section) => {
+    const fill = fillByKey.get(section.key);
+    const contentMode = fill?.contentMode ?? "provided";
+    const isProvided = contentMode === "provided";
+    const rawProse = isProvided ? (fill?.prose ?? "") : "";
+    const cite = validateCitedLegalReferences(index, rawProse);
+    rejectedAll.push(...cite.rejected);
+    const prose = isProvided ? sanitizeProse(rawProse, cite.rejected).trim() : "";
+    const grounded = isProvided && hasEvidence && cite.rejected.length === 0;
+    const refs = new Map<string, AuthoredLegalReference>();
+    for (const r of cite.valid) refs.set(r.locatorId, r);
+    if (fill) for (const r of validateProviderRef(index, fill)) refs.set(r.locatorId, r);
+    for (const l of fill?.limitations ?? []) limitations.push(`${section.title}: ${l}`);
+    return {
+      key: section.key, title: section.title, legalAnchorLabel: section.legalAnchorLabel,
+      contentMode, prose: truncate(prose, 8000),
+      omissionJustification: isProvided ? "" : truncate((fill?.omissionJustification ?? "").trim(), 8000),
+      grounded, legalReferences: [...refs.values()].slice(0, 24),
+    };
+  });
+
+  // 6) Estado de fundamentação por evidência (honesto): sem evidência → ungrounded; com evidência e sem
+  // citação rejeitada → grounded; com evidência mas alguma citação removida → partially_grounded.
+  const groundingState: GroundingState = !hasEvidence ? "ungrounded" : rejectedAll.length === 0 ? "grounded" : "partially_grounded";
+  const evidenceComplete = hasEvidence && rejectedAll.length === 0;
+
+  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o Edital exige elaboração/validação pelo servidor.");
+  else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: uma ou mais citações não puderam ser verificadas e foram removidas.");
+  if (input.sourceContext.missing.length > 0) {
+    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+  }
+  const rejectionCategories = new Set(rejectedAll.map((r) => rejectionCategory(r.reason)));
+  for (const cat of rejectionCategories) limitations.push(`Referências jurídicas não verificadas foram removidas da fundamentação (${cat}).`);
+
+  // groundingState do Edital já pertence ao enum do contrato (grounded/partially_grounded/ungrounded).
+  const candidate: StructuredAuthoring = {
+    contract: AUTHORING_CONTRACT_VERSION, kind, object: truncate(input.object, 500),
+    sections, groundingState, evidenceCount,
+    evidenceComplete, usedSourceIds: [...grounding.usedSourceIds],
+    evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
+    limitations: [...new Set(limitations)].slice(0, 24), reviewNotice: REVIEW_NOTICE,
+  };
+  let structured: StructuredAuthoring;
+  try {
+    structured = validateStructuredAuthoring(candidate);
+  } catch (err) {
+    if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(semanticInput, err);
+    throw err;
+  }
+
+  // 7) Render markdown + nota de fontes reaproveitadas (explicabilidade mínima na própria minuta).
+  const usedLabel = input.sourceContext.usedSources.length > 0 ? input.sourceContext.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
+  const content = [
+    renderMarkdown(structured),
+    "",
+    "---",
+    `> **Fontes reaproveitadas do processo:** ${usedLabel}.`,
+    input.sourceContext.missing.length > 0 ? `> **Pendências (revisar):** ${input.sourceContext.missing.join(", ")}.` : "",
+  ].filter(Boolean).join("\n");
+
+  return {
+    content, structured, evidences: grounding.evidences, evidenceComplete,
+    groundingState, evidenceFingerprint, corpusFingerprint: grounding.corpusFingerprint,
+    contextPackage, execution, rejectedReferences: rejectedAll,
+  };
+}
+
 /**
  * Helper de teste/seam: constrói um OUTPUT ESTRUTURADO válido do provider (JSON) preenchendo todas as
  * seções canônicas do tipo. `overrides` permite injetar prosa/refs específicas por key (testes A/E/injeção).
  */
 export function buildMockProviderAuthoring(
-  kind: "etp" | "tr",
+  kind: AuthoringKind,
   overrides: Record<string, { contentMode?: string; prose?: string; omissionJustification?: string; legalReferences?: { identifier: string; diploma?: string }[] }> = {},
 ): string {
   return JSON.stringify({
