@@ -183,6 +183,14 @@
     display: none !important;
   }
 }
+/* Mobile — evita overflow horizontal do header: em telas estreitas o toggle de tema e "Entrar"
+   permanecem; o CTA secundário "Agendar demonstração" do header é ocultado (permanece visível
+   no hero logo abaixo, no CTA final e no rodapé), sem alterar altura/logo/paleta do header. */
+@media (max-width: 600px) {
+  .lgv-header .lgv-btn-navy {
+    display: none;
+  }
+}
 
 /* ── Botões ──────────────────────────────────────────────────────────────── */
 .lgv-btn {
@@ -278,6 +286,24 @@
 .lgv-btn-outline:hover {
   border-color: var(--blue);
   color: var(--blue);
+}
+
+/* Alternância de tema (light/dark) — botão de ícone compacto e discreto no header. */
+.lgv-btn-icon {
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  justify-content: center;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.lgv-btn-icon:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  transform: translateY(-2px);
 }
 
 /* ── Seções e tipografia ─────────────────────────────────────────────────── */

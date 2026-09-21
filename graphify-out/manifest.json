@@ -2300,8 +2300,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/LandingPage.tsx": {
-    "mtime": 1790018530.350659,
-    "ast_hash": "b314dbf13d5c3baddb1cff2a76331222",
+    "mtime": 1790021661.568586,
+    "ast_hash": "81edaff632b3181e8e4a44c756276f97",
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
@@ -11695,8 +11695,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/landingpage.test.ts": {
-    "mtime": 1790018610.4306636,
-    "ast_hash": "8beae3c025971233f327c4f056a94bd0",
+    "mtime": 1790021717.1965895,
+    "ast_hash": "cccf4398ab84ea6cd55dfa78e30dfdfa",
     "semantic_hash": ""
   },
   "client/public/landing/central-de-controle.png": {

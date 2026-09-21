@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import "./landing.css";
 
 /**
@@ -81,6 +83,11 @@ const CONTEXTO: { k: string; v: string }[] = [
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
+  // Reutiliza o mecanismo canônico de tema (ThemeProvider) — sem localStorage paralelo. O botão
+  // do header alterna explicitamente light↔dark via toggleTheme; a preferência persiste e o
+  // dark mode da landing continua governado por `.dark .lgv-landing`.
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -113,6 +120,15 @@ export default function LandingPage() {
               </a>
             </span>
             <span className="lgv-nav-actions">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="lgv-btn lgv-btn-icon"
+                aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
+                title={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
+              >
+                {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+              </button>
               <Link href="/login" className="lgv-btn lgv-btn-ghost">
                 Entrar
               </Link>

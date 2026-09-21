@@ -60,3 +60,40 @@ describe("LandingPage · port do Claude Design (opção A)", () => {
     expect(CSS).not.toMatch(/@media \(prefers-color-scheme:\s*dark\)/);
   });
 });
+
+describe("LandingPage · seletor de tema light/dark", () => {
+  it("reutiliza o mecanismo canônico do ThemeProvider (sem sistema paralelo)", () => {
+    expect(TSX).toContain('import { useTheme } from "@/contexts/ThemeContext"');
+    expect(TSX).toMatch(/const \{ resolvedTheme, toggleTheme \} = useTheme\(\)/);
+    // Não pode haver acesso paralelo a localStorage na landing (o ThemeProvider já cuida da
+    // persistência). Verifica chamadas reais (getItem/setItem), não a palavra em comentário.
+    expect(TSX).not.toMatch(/localStorage\s*\./);
+  });
+
+  it("botão de tema acessível: type=button, aria-label dinâmico e ícones Sun/Moon", () => {
+    expect(TSX).toContain('import { Moon, Sun } from "lucide-react"');
+    expect(TSX).toMatch(/<button\s+type="button"/);
+    expect(TSX).toMatch(/aria-label=\{isDark \? "Ativar modo claro" : "Ativar modo escuro"\}/);
+    expect(TSX).toMatch(/title=\{isDark \? "Ativar modo claro" : "Ativar modo escuro"\}/);
+    expect(TSX).toMatch(/isDark \? <Sun[^>]*\/> : <Moon[^>]*\/>/);
+  });
+
+  it("o clique alterna light/dark via toggleTheme e o ícone segue resolvedTheme", () => {
+    expect(TSX).toContain("onClick={toggleTheme}");
+    expect(TSX).toMatch(/const isDark = resolvedTheme === "dark"/);
+  });
+
+  it("o botão de tema não altera os CTAs existentes (Entrar/proposta preservados)", () => {
+    expect(TSX).toMatch(/href="\/login"[^>]*>\s*Entrar/);
+    expect(TSX).toContain('const PROPOSAL = "/solicitar-proposta"');
+    // O botão de tema é <button>, não um <a>/Link (não é navegação de rota).
+    expect(TSX).toMatch(/className="lgv-btn lgv-btn-icon"/);
+  });
+
+  it("o dark mode da landing continua governado por .dark (não reintroduz prefers-color-scheme)", () => {
+    expect(CSS).toMatch(/\.dark \.lgv-landing\s*\{/);
+    expect(CSS).not.toMatch(/@media \(prefers-color-scheme:\s*dark\)/);
+    // Estilo do botão de tema existe e é escopado à landing.
+    expect(CSS).toContain(".lgv-btn-icon");
+  });
+});
