@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
+import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
 
 /**
  * Router para gerenciamento de plataformas de pregão eletrônico
@@ -117,9 +118,10 @@ export const platformsRouter = router({
         ? await db.getPlatformChecklist(platform.id)
         : [];
 
-      // Identidade institucional TENANT-SCOPED (organização do processo), não configuração pessoal.
+      // Identidade institucional TENANT-SCOPED COMPOSTA (canônica `organizations` + extensão), via a
+      // fonte única — nunca lendo tabelas de identidade de forma independente.
       const orgId = await db.getProcessOrganizationId(input.processId);
-      const settings = orgId ? await db.getDocumentSettingsByOrg(orgId) : undefined;
+      const settings = orgId ? await resolveInstitutionalIdentity(orgId) : undefined;
 
       // Montar pacote de publicação
       return {

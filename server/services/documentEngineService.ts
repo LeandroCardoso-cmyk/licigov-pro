@@ -32,6 +32,7 @@ import {
   getOfficialDocument, listVersions, listOfficialDocuments, listDocumentTimeline,
 } from "../db/officialDocuments";
 import { computeLineageId } from "../domain/officialDocument";
+import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 
 export interface GenerateOfficialDocumentParams {
   organizationId: number;
@@ -54,7 +55,17 @@ export interface GenerateOfficialDocumentParams {
  */
 export async function generateOfficialDocument(params: GenerateOfficialDocumentParams, executor?: OfficialDocsExecutor): Promise<OfficialDocument> {
   assertKernelAccess(params.businessDomain, "document_engine");
-  return createDocument(params, executor);
+  // REPLAY-SAFE (todos os Business Domains): congela a identidade institucional vigente no momento em
+  // que esta versão é produzida, em `official_documents.metadata` (coluna JSON já existente — mesmo
+  // mecanismo canônico do `signatureSnapshot`, sem pipeline paralelo). A exportação prefere este
+  // snapshot ao vivo, tornando o cabeçalho do artefato reproduzível ainda que a identidade mude depois.
+  const identity = await snapshotInstitutionalIdentity(params.organizationId);
+  const metadata: Record<string, unknown> = {
+    ...(params.metadata ?? {}),
+    institutionalIdentitySnapshot: identity.snapshot,
+    institutionalIdentityFingerprint: identity.fingerprint,
+  };
+  return createDocument({ ...params, metadata }, executor);
 }
 
 /** Artefato renderizado devolvido pelo Document Engine (metadados de storage vindos do Lifecycle). */

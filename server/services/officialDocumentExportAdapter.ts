@@ -14,8 +14,11 @@
 import { TRPCError } from "@trpc/server";
 import { getOfficialDocument } from "./documentEngineService";
 import { exportDocument, formatBrazilianDateTime } from "./documentExportService";
-import { getOrganizationById } from "../db/organizations";
 import { logActivity } from "./activityLogService";
+import {
+  institutionalIdentityFromMetadataOrLive,
+  institutionalIdentityFingerprint,
+} from "./institutionalIdentityService";
 import type { OfficialFormat } from "../domain/officialDocument";
 
 const TYPE_TITLES: Record<string, string> = {
@@ -119,7 +122,14 @@ export async function exportOfficialDocument(params: {
       message: `Somente a versão oficial "${requiredStatus}" pode ser exportada como documento oficial (atual: "${doc.status}").`,
     });
   }
-  const org = await getOrganizationById(params.organizationId);
+  // REPLAY-SAFE: identidade institucional a partir do SNAPSHOT congelado na emissão desta versão
+  // (`official_documents.metadata`); cai para o vigente só em documentos legados sem snapshot. Assim a
+  // reexportação reproduz EXATAMENTE o cabeçalho da época, mesmo que a identidade mude depois.
+  const identity = await institutionalIdentityFromMetadataOrLive(
+    doc.metadata as Record<string, unknown> | null | undefined,
+    params.organizationId,
+  );
+  const identityFingerprint = institutionalIdentityFingerprint(identity);
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();
   const statusSlug = STATUS_SLUGS[doc.status] ?? doc.status;
 
@@ -141,7 +151,7 @@ export async function exportOfficialDocument(params: {
     scope: doc.businessDomain,
     disposition: params.disposition ?? "attachment",
     meta: {
-      organizationName: org?.nome || undefined,
+      organizationName: identity.organizationName || undefined,
       documentTitle: TYPE_TITLES[doc.documentType] ?? doc.title,
       processNumber: procRef,
       object,
@@ -166,6 +176,8 @@ export async function exportOfficialDocument(params: {
     details: {
       documentId: doc.id, businessDomain: doc.businessDomain, documentType: doc.documentType,
       version: doc.version, status: doc.status, format: params.format,
+      // Lineage: fingerprint da identidade institucional efetivamente aplicada ao artefato exportado.
+      institutionalIdentityFingerprint: identityFingerprint,
     },
   });
 

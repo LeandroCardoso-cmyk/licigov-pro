@@ -15,7 +15,8 @@
  * obrigatórios e fluem do router (`tenantProcedure`) para o Kernel.
  */
 import { executeCognitiveTask } from "./aiExecutionEngine";
-import { getDirectContractById, getLegalArticleById, getDocumentSettingsByOrg } from "../db";
+import { getDirectContractById, getLegalArticleById } from "../db";
+import { resolveInstitutionalIdentity } from "./institutionalIdentityService";
 import { validateLegalCitations } from "./legalValidation";
 
 /**
@@ -94,7 +95,7 @@ export async function generateTermoDispensa(params: GenerateTermoParams): Promis
   }
 
   // Buscar configurações do usuário
-  const settings = await getDocumentSettingsByOrg(organizationId);
+  const settings = await resolveInstitutionalIdentity(organizationId); // fonte canônica composta (org + extensão)
 
   const valueInReais = contract.value / 100;
 
@@ -207,7 +208,7 @@ export async function generateTermoInexigibilidade(params: GenerateTermoParams):
   }
 
   // Buscar configurações do usuário
-  const settings = await getDocumentSettingsByOrg(organizationId);
+  const settings = await resolveInstitutionalIdentity(organizationId); // fonte canônica composta (org + extensão)
 
   const valueInReais = contract.value / 100;
 
@@ -311,7 +312,7 @@ export async function generateMinutaContrato(params: GenerateTermoParams): Promi
   }
 
   // Buscar configurações do usuário
-  const settings = await getDocumentSettingsByOrg(organizationId);
+  const settings = await resolveInstitutionalIdentity(organizationId); // fonte canônica composta (org + extensão)
 
   const valueInReais = contract.value / 100;
 

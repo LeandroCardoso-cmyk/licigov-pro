@@ -9411,13 +9411,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "organizationName": {
-          "name": "organizationName",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "logoUrl": {
           "name": "logoUrl",
           "type": "text",
@@ -9428,13 +9421,6 @@
         "address": {
           "name": "address",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cnpj": {
-          "name": "cnpj",
-          "type": "varchar(18)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

@@ -23,8 +23,42 @@ import { generateETP, generateTR, generateDFD, generateEdital, generateContrato,
 import { convertToPDF, convertToDOCX } from "../services/documentConverter";
 import { storagePut, storageGet } from "../storage";
 import { serviceLogger } from "../services/observabilityService";
+import {
+  resolveInstitutionalIdentity,
+  institutionalIdentityFingerprint,
+  institutionalIdentityFromMetadataOrLive,
+  type InstitutionalIdentity,
+} from "../services/institutionalIdentityService";
 
 const log = serviceLogger("documentsRouter");
+
+/**
+ * Cabeçalho institucional (organização/endereço/cnpj/contato) para os generators/exportadores,
+ * derivado da FONTE CANÔNICA composta (`organizations` + extensão `documentSettings`). Único ponto
+ * de mapeamento identidade → params, para não reintroduzir leitura direta de tabela.
+ */
+function orgHeaderParams(identity: InstitutionalIdentity) {
+  return {
+    organizationName: identity.organizationName || undefined,
+    address: identity.address || undefined,
+    cnpj: identity.cnpj || undefined,
+    phone: identity.phone || undefined,
+    email: identity.email || undefined,
+    website: identity.website || undefined,
+  };
+}
+
+/**
+ * Metadados de SNAPSHOT da identidade (congela a identidade vigente no momento da geração + um
+ * fingerprint determinístico) para gravar em `documents.metadata`. A exportação prefere este snapshot
+ * ao vivo (replay-safe): reexportar reproduz o cabeçalho da época, ainda que a identidade mude depois.
+ */
+function identitySnapshotMetadata(identity: InstitutionalIdentity) {
+  return {
+    institutionalIdentitySnapshot: identity,
+    institutionalIdentityFingerprint: institutionalIdentityFingerprint(identity),
+  };
+}
 
 /**
  * RC-SEC-PR-A — Negação de autorização multi-tenant. Cross-tenant e inexistente
@@ -140,7 +174,7 @@ export const documentsRouter = router({
       }
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
-      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
+      const identity = await resolveInstitutionalIdentity(ctx.organizationId);
       const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
@@ -154,14 +188,7 @@ export const documentsRouter = router({
       const contratoDoc = docs.find(d => d.type === "contrato");
       const ataDoc = docs.find(d => d.type === "ata");
 
-      const commonOrgParams = {
-        organizationName: settings?.organizationName || undefined,
-        address: settings?.address || undefined,
-        cnpj: settings?.cnpj || undefined,
-        phone: settings?.phone || undefined,
-        email: settings?.email || undefined,
-        website: settings?.website || undefined,
-      };
+      const commonOrgParams = orgHeaderParams(identity);
 
       if (process.status === "em_dfd" && dfdDoc) {
         nextDocType = "etp";
@@ -279,6 +306,8 @@ export const documentsRouter = router({
         version: nextVersion,
         createdBy: ctx.user.id,
         organizationId: ctx.organizationId,
+        // REPLAY-SAFE: congela a identidade institucional vigente na geração (cabeçalho reprodutível).
+        metadata: identitySnapshotMetadata(identity),
       });
 
       await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, nextStatus);
@@ -338,7 +367,7 @@ export const documentsRouter = router({
       if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
-      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
+      const identity = await resolveInstitutionalIdentity(ctx.organizationId);
       const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
@@ -346,14 +375,7 @@ export const documentsRouter = router({
       const editalDoc = docs.find(d => d.type === "edital");
       const contratoDoc = docs.find(d => d.type === "contrato");
 
-      const commonOrgParams = {
-        organizationName: settings?.organizationName || undefined,
-        address: settings?.address || undefined,
-        cnpj: settings?.cnpj || undefined,
-        phone: settings?.phone || undefined,
-        email: settings?.email || undefined,
-        website: settings?.website || undefined,
-      };
+      const commonOrgParams = orgHeaderParams(identity);
 
       let generatedContent: string;
 
@@ -465,6 +487,8 @@ export const documentsRouter = router({
         content: generatedContent,
         version: nextVersion,
         createdBy: ctx.user.id,
+        // REPLAY-SAFE: congela a identidade institucional vigente na geração (cabeçalho reprodutível).
+        metadata: identitySnapshotMetadata(identity),
       });
 
       const statusMap: Record<string, string> = {
@@ -621,17 +645,22 @@ export const documentsRouter = router({
         parecer: "Parecer Jurídico",
       };
 
-      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
+      // REPLAY-SAFE: prefere o snapshot de identidade congelado na geração; cai para o vigente só em
+      // documentos legados (sem snapshot). Reexportar reproduz o cabeçalho da época.
+      const identity = await institutionalIdentityFromMetadataOrLive(
+        document.metadata as Record<string, unknown> | null | undefined,
+        ctx.organizationId,
+      );
 
       const buffer = await convertToDOCX(
         document.content || "",
         `${documentLabels[document.type]} - ${process.name}`,
-        settings?.organizationName || undefined,
-        settings?.address || undefined,
-        settings?.cnpj || undefined,
-        settings?.phone || undefined,
-        settings?.email || undefined,
-        settings?.website || undefined
+        identity.organizationName || undefined,
+        identity.address || undefined,
+        identity.cnpj || undefined,
+        identity.phone || undefined,
+        identity.email || undefined,
+        identity.website || undefined
       );
 
       return {
@@ -663,17 +692,22 @@ export const documentsRouter = router({
         parecer: "Parecer Jurídico",
       };
 
-      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
+      // REPLAY-SAFE: prefere o snapshot de identidade congelado na geração; cai para o vigente só em
+      // documentos legados (sem snapshot). Reexportar reproduz o cabeçalho da época.
+      const identity = await institutionalIdentityFromMetadataOrLive(
+        document.metadata as Record<string, unknown> | null | undefined,
+        ctx.organizationId,
+      );
 
       const buffer = await convertToPDF(
         document.content || "",
         `${documentLabels[document.type]} - ${process.name}`,
-        settings?.organizationName || undefined,
-        settings?.address || undefined,
-        settings?.cnpj || undefined,
-        settings?.phone || undefined,
-        settings?.email || undefined,
-        settings?.website || undefined
+        identity.organizationName || undefined,
+        identity.address || undefined,
+        identity.cnpj || undefined,
+        identity.phone || undefined,
+        identity.email || undefined,
+        identity.website || undefined
       );
 
       return {

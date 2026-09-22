@@ -1,13 +1,17 @@
 /**
- * P0 PILOTO — Governança da identidade institucional documental (documentSettings) — MySQL real.
+ * P0 PILOTO — Governança FAIL-CLOSED da identidade institucional (documentSettings) — MySQL real.
  *
- * Prova, contra um MySQL real, que a consolidação per-user → per-org é DETERMINÍSTICA e segura e que
- * o modelo final é TENANT-SCOPED:
- *   A. MIGRATION 0302 — backfill determinístico (userId → org ativa de MENOR id), dedupe por
- *      organização (maior updatedAt; empate por maior id), remoção de órfãos, NOT NULL + UNIQUE e
- *      remoção da coluna userId. Reconstrói o estado PRÉ-0302 e aplica os statements reais do .sql.
- *   B. MODELO FINAL — upsert idempotente por organização (1 linha por org), isolamento entre tenants
- *      (org A ≠ org B) e leitura determinística por organizationId (independe de qual usuário lê).
+ * Prova, contra um MySQL/MariaDB real, que a migration 0302:
+ *   • ABORTA (SIGNAL) ANTES de qualquer mutação quando há ambiguidade — sem seleção arbitrária e sem
+ *     descarte silencioso: órfão (A), multi-org (B), conflito de tenant (C), conflito de nome (D),
+ *     conflito de CNPJ (E). Em todos, prova-se que NADA foi mutado (coluna `userId` intacta, sem
+ *     `organizationId`);
+ *   • CONVERGE quando não há ambiguidade: membership único migra; linhas semanticamente IDÊNTICAS do
+ *     mesmo tenant deduplicam para 1; CNPJ do documentSettings é PRESERVADO promovendo-o para a fonte
+ *     canônica `organizations` (F) antes de a coluna duplicada ser removida;
+ *   • deixa o modelo final TENANT-SCOPED (1 linha por org, UNIQUE) e SEM duplicidade (sem
+ *     `organizationName`/`cnpj` em documentSettings — canônicos só em `organizations`);
+ *   • é REPLAY-SAFE em clean install (tabela vazia → no-op determinístico, converge igual).
  *
  * Só roda quando DATABASE_URL está definido (CI com MySQL efêmero). Usa BANCO DEDICADO.
  */
@@ -30,6 +34,7 @@ function urlFor(dbName: string): string {
   u.pathname = `/${dbName}`;
   return u.toString();
 }
+/** Statements reais da migration, preservando o corpo das procedures (split só no breakpoint). */
 function statements(tag: string): string[] {
   const sql = readFileSync(path.join(DRZ, `${tag}.sql`), "utf8");
   return sql
@@ -37,8 +42,55 @@ function statements(tag: string): string[] {
     .map((s) => s.replace(/^\s*--.*$/gm, "").trim())
     .filter((s) => s.length > 0);
 }
+const MIGRATION = "0302_document_settings_org_scoped";
 
-describe.skipIf(!DB)("documentSettings — governança institucional (MySQL real)", () => {
+/** Reconstrói o schema PRÉ-0302 (organizations canônica + membros + documentSettings per-user). */
+async function resetPre0302(conn: mysql.Connection) {
+  await conn.query("DROP TABLE IF EXISTS documentSettings");
+  await conn.query("DROP TABLE IF EXISTS organization_members");
+  await conn.query("DROP TABLE IF EXISTS organizations");
+  await conn.query(`CREATE TABLE organizations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    cnpj VARCHAR(18) NULL
+  )`);
+  await conn.query(`CREATE TABLE organization_members (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organizationId INT NOT NULL,
+    userId INT NOT NULL,
+    ativo TINYINT(1) NOT NULL DEFAULT 1
+  )`);
+  await conn.query(`CREATE TABLE documentSettings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    userId INT NOT NULL,
+    organizationName TEXT,
+    logoUrl TEXT,
+    address TEXT,
+    cnpj VARCHAR(18),
+    phone VARCHAR(20),
+    email VARCHAR(320),
+    website VARCHAR(255),
+    footerText TEXT,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+}
+
+/** Aplica a migration inteira; propaga o primeiro erro (SIGNAL) — usado para asserir ABORT/CONVERGE. */
+async function applyMigration(conn: mysql.Connection) {
+  for (const s of statements(MIGRATION)) await conn.query(s);
+}
+
+/** Colunas atuais de documentSettings (prova de "nada mutado" no caso de abort). */
+async function columnsOf(conn: mysql.Connection): Promise<string[]> {
+  const [cols] = await conn.query<mysql.RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'documentSettings'`,
+  );
+  return cols.map((c) => String(c.COLUMN_NAME));
+}
+
+describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)", () => {
   let admin: mysql.Connection;
 
   beforeAll(async () => {
@@ -57,107 +109,182 @@ describe.skipIf(!DB)("documentSettings — governança institucional (MySQL real
     await admin?.end();
   }, 30_000);
 
-  it("A. migration 0302 — backfill/dedupe/órfãos determinístico + NOT NULL/UNIQUE + drop userId", async () => {
+  it("membership único + sem conflito → CONVERGE (backfill org + drop userId/nome/cnpj + UNIQUE)", async () => {
     const conn = await mysql.createConnection(urlFor(DBNAME));
     try {
-      // Estado PRÉ-0302: documentSettings per-user + organization_members mínimos.
-      await conn.query(`CREATE TABLE organization_members (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        organizationId INT NOT NULL,
-        userId INT NOT NULL,
-        ativo TINYINT(1) NOT NULL DEFAULT 1
-      )`);
-      await conn.query(`CREATE TABLE documentSettings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        userId INT NOT NULL,
-        organizationName TEXT,
-        cnpj VARCHAR(18),
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-
-      // org 1: userA (mais antigo) e userB (mais novo) → dedupe deve manter B.
-      // org 2: userC. userD sem membership → órfão (removido).
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome, cnpj) VALUES (1,'Prefeitura X', NULL)`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1)`);
+      // nome IGUAL ao canônico; cnpj presente e canônico NULO → deve ser PROMOVIDO (F), não descartado.
       await conn.query(
-        `INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1),(1,102,1),(2,103,1)`,
-      );
-      await conn.query(
-        `INSERT INTO documentSettings (userId, organizationName, cnpj, updatedAt) VALUES
-         (101,'Org1-A','11.111.111/1111-11','2026-01-01 10:00:00'),
-         (102,'Org1-B','22.222.222/2222-22','2026-02-01 10:00:00'),
-         (103,'Org2-C','33.333.333/3333-33','2026-01-15 10:00:00'),
-         (104,'Orphan-D','44.444.444/4444-44','2026-01-20 10:00:00')`,
+        `INSERT INTO documentSettings (userId, organizationName, cnpj, address) VALUES
+         (101,'Prefeitura X','11.111.111/1111-11','Rua 1')`,
       );
 
-      // Aplica os statements REAIS da migration 0302.
-      for (const s of statements("0302_document_settings_org_scoped")) await conn.query(s);
+      await applyMigration(conn);
 
-      // Backfill + dedupe: org1 mantém a linha de maior updatedAt ("Org1-B"); org2 fica "Org2-C".
+      // 1 linha tenant-scoped, org correta, extensão preservada.
       const [rows] = await conn.query<mysql.RowDataPacket[]>(
-        "SELECT organizationId, organizationName FROM documentSettings ORDER BY organizationId",
+        "SELECT organizationId, address FROM documentSettings",
       );
-      expect(rows.map((r) => [Number(r.organizationId), String(r.organizationName)])).toEqual([
-        [1, "Org1-B"],
-        [2, "Org2-C"],
-      ]);
+      expect(rows.length).toBe(1);
+      expect(Number(rows[0].organizationId)).toBe(1);
+      expect(String(rows[0].address)).toBe("Rua 1");
 
-      // Órfão (userD sem organização) foi removido; total = 2.
-      const [cnt] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS c FROM documentSettings");
-      expect(Number((cnt[0] as { c: number }).c)).toBe(2);
+      // Duplicidade eliminada: sem userId/organizationName/cnpj em documentSettings.
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("organizationId");
+      expect(cols).not.toContain("userId");
+      expect(cols).not.toContain("organizationName");
+      expect(cols).not.toContain("cnpj");
 
-      // Coluna userId foi removida (chave per-user extinta).
-      const [cols] = await conn.query<mysql.RowDataPacket[]>(
-        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'documentSettings'`,
-      );
-      const colNames = cols.map((c) => String(c.COLUMN_NAME));
-      expect(colNames).toContain("organizationId");
-      expect(colNames).not.toContain("userId");
+      // PRESERVAÇÃO (F): o CNPJ foi promovido para a fonte canônica (organizations), não perdido.
+      const [org] = await conn.query<mysql.RowDataPacket[]>("SELECT cnpj FROM organizations WHERE id=1");
+      expect(String(org[0].cnpj)).toBe("11.111.111/1111-11");
 
-      // UNIQUE por organização: inserir 2ª linha para a mesma org falha.
+      // UNIQUE por organização.
       await expect(
-        conn.query("INSERT INTO documentSettings (organizationId, organizationName) VALUES (1,'dup')"),
+        conn.query("INSERT INTO documentSettings (organizationId, address) VALUES (1,'dup')"),
       ).rejects.toThrow();
     } finally {
       await conn.end();
     }
   }, 120_000);
 
-  it("B. modelo final — upsert por organização é idempotente, isolado por tenant e determinístico", async () => {
+  it("órfão (usuário sem organização ativa) → ABORTA (A) sem mutar nada", async () => {
     const conn = await mysql.createConnection(urlFor(DBNAME));
     try {
-      // Upsert org 1 duas vezes (mesma org) — deve permanecer 1 linha (idempotência pela unique).
-      const upsert = async (orgId: number, name: string) => {
-        await conn.query(
-          `INSERT INTO documentSettings (organizationId, organizationName) VALUES (?, ?)
-           ON DUPLICATE KEY UPDATE organizationName = VALUES(organizationName)`,
-          [orgId, name],
-        );
-      };
-      await upsert(1, "Prefeitura A v1");
-      await upsert(1, "Prefeitura A v2");
-      await upsert(2, "Prefeitura B");
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome) VALUES (1,'Org 1')`);
+      // userId 999 não tem membership ativo → órfão.
+      await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (999,'X')`);
 
-      const readByOrg = async (orgId: number) => {
-        const [r] = await conn.query<mysql.RowDataPacket[]>(
-          "SELECT organizationName FROM documentSettings WHERE organizationId = ? LIMIT 1",
-          [orgId],
-        );
-        return r.length ? String(r[0].organizationName) : undefined;
-      };
+      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(A\)/);
 
-      // 1 linha por org (idempotência) e valores isolados por tenant.
-      const [c1] = await conn.query<mysql.RowDataPacket[]>(
-        "SELECT COUNT(*) AS c FROM documentSettings WHERE organizationId = 1",
+      // Nada mutado: userId intacto, organizationId não criado.
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("userId");
+      expect(cols).not.toContain("organizationId");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("multi-org (usuário em 2 organizações ativas) → ABORTA (B) sem mutar nada", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome) VALUES (1,'Org 1'),(2,'Org 2')`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1),(2,101,1)`);
+      await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (101,'Org 1')`);
+
+      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(B\)/);
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("userId");
+      expect(cols).not.toContain("organizationId");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("conflito de tenant (2 configs divergentes para a mesma org) → ABORTA (C)", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome) VALUES (1,'Org 1')`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1),(1,102,1)`);
+      // Mesmo tenant, EXTENSÃO divergente (address diferente) → consolidação ambígua.
+      await conn.query(
+        `INSERT INTO documentSettings (userId, organizationName, address) VALUES
+         (101,'Org 1','Rua A'),(102,'Org 1','Rua B')`,
       );
-      expect(Number((c1[0] as { c: number }).c)).toBe(1);
-      expect(await readByOrg(1)).toBe("Prefeitura A v2");
-      expect(await readByOrg(2)).toBe("Prefeitura B");
-      // Isolamento: org A ≠ org B.
-      expect(await readByOrg(1)).not.toBe(await readByOrg(2));
 
-      // Determinismo: a identidade é função pura de organizationId (não do usuário) — duas leituras
-      // por org retornam exatamente o mesmo valor, independentemente de quem lê.
-      expect(await readByOrg(1)).toBe(await readByOrg(1));
+      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(C\)/);
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("userId");
+      expect(cols).not.toContain("organizationId");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("conflito de nome (organizationName ≠ organizations.nome) → ABORTA (D)", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome) VALUES (1,'Nome Canonico')`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1)`);
+      await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (101,'Nome Divergente')`);
+
+      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(D\)/);
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("userId");
+      expect(cols).not.toContain("organizationId");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("conflito de CNPJ (cnpj ≠ organizations.cnpj, ambos presentes) → ABORTA (E)", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome, cnpj) VALUES (1,'Org 1','11.111.111/1111-11')`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1)`);
+      await conn.query(
+        `INSERT INTO documentSettings (userId, organizationName, cnpj) VALUES (101,'Org 1','99.999.999/9999-99')`,
+      );
+
+      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(E\)/);
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("userId");
+      expect(cols).not.toContain("organizationId");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("não-ambíguo (2 linhas IDÊNTICAS do mesmo tenant) → CONVERGE deduplicando para 1", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome, cnpj) VALUES (1,'Org 1','11.111.111/1111-11')`);
+      await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1),(1,102,1)`);
+      // Identidade SEMANTICAMENTE idêntica (mesmos valores) → equivalência provada → dedupe seguro.
+      await conn.query(
+        `INSERT INTO documentSettings (userId, organizationName, cnpj, address) VALUES
+         (101,'Org 1','11.111.111/1111-11','Rua Igual'),
+         (102,'Org 1','11.111.111/1111-11','Rua Igual')`,
+      );
+
+      await applyMigration(conn);
+
+      const [rows] = await conn.query<mysql.RowDataPacket[]>(
+        "SELECT organizationId, address FROM documentSettings",
+      );
+      expect(rows.length).toBe(1);
+      expect(Number(rows[0].organizationId)).toBe(1);
+      expect(String(rows[0].address)).toBe("Rua Igual");
+    } finally {
+      await conn.end();
+    }
+  }, 60_000);
+
+  it("clean install (tabela vazia) → REPLAY-SAFE (no-op determinístico, esquema converge)", async () => {
+    const conn = await mysql.createConnection(urlFor(DBNAME));
+    try {
+      await resetPre0302(conn);
+      await conn.query(`INSERT INTO organizations (id, nome) VALUES (1,'Org 1')`);
+      // documentSettings vazia → todos os guards contam 0 → converge sem tocar em dados.
+      await applyMigration(conn);
+
+      const cols = await columnsOf(conn);
+      expect(cols).toContain("organizationId");
+      expect(cols).not.toContain("userId");
+      expect(cols).not.toContain("organizationName");
+      expect(cols).not.toContain("cnpj");
+      const [cnt] = await conn.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS c FROM documentSettings");
+      expect(Number((cnt[0] as { c: number }).c)).toBe(0);
     } finally {
       await conn.end();
     }

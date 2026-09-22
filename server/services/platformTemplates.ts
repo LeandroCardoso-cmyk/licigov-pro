@@ -4,6 +4,7 @@
  */
 
 import * as db from "../db";
+import { resolveInstitutionalIdentity } from "./institutionalIdentityService";
 
 /**
  * Instruções base de adaptação por plataforma (FALLBACK)
@@ -257,9 +258,10 @@ export async function generatePublicationMetadata(
   }
 
   const platform = platformId ? await db.getPlatformById(platformId) : null;
-  // Identidade institucional TENANT-SCOPED (organização do processo), não per-usuário.
+  // Identidade institucional TENANT-SCOPED COMPOSTA (canônica `organizations` + extensão documental),
+  // resolvida pela fonte única — nunca lendo tabelas de identidade de forma independente.
   const orgId = await db.getProcessOrganizationId(processId);
-  const settings = orgId ? await db.getDocumentSettingsByOrg(orgId) : undefined;
+  const settings = orgId ? await resolveInstitutionalIdentity(orgId) : undefined;
 
   return {
     processName: process.name,

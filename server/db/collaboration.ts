@@ -48,27 +48,28 @@ export async function createActivityLogForOrganization(
 }
 
 /**
- * Identidade institucional documental — TENANT-SCOPED (1 linha por organização).
- * Upsert idempotente pela chave única `organizationId` (`documentSettings_org_unique`):
- * grava/atualiza a identidade da organização, nunca por usuário. Enforcement de RBAC (admin/owner)
- * e auditoria ficam no router; aqui é só a persistência determinística.
+ * EXTENSÃO DOCUMENTAL da organização — TENANT-SCOPED (1 linha por organização).
+ * Upsert idempotente pela chave única `organizationId` (`documentSettings_org_unique`): grava/atualiza
+ * apenas os atributos de EXTENSÃO (logo/endereço/contato/rodapé), nunca por usuário. Nome/CNPJ NÃO
+ * moram aqui — são canônicos em `organizations`. Enforcement de RBAC (admin/owner) e auditoria ficam
+ * no router; aqui é só a persistência determinística.
  */
 export async function upsertDocumentSettings(settings: InsertDocumentSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(documentSettings).values(settings).onDuplicateKeyUpdate({
     set: {
-      organizationName: settings.organizationName, logoUrl: settings.logoUrl,
-      address: settings.address, cnpj: settings.cnpj, phone: settings.phone,
+      logoUrl: settings.logoUrl, address: settings.address, phone: settings.phone,
       email: settings.email, website: settings.website, footerText: settings.footerText,
     },
   });
 }
 
 /**
- * Lê a identidade institucional documental da ORGANIZAÇÃO (tenant-scoped, determinística).
- * Substitui a antiga leitura per-user (chaveada por userId), fonte do defeito multi-tenant em que
- * usuários diferentes da mesma organização geravam documentos com identidades divergentes.
+ * Lê a EXTENSÃO documental da ORGANIZAÇÃO (tenant-scoped, determinística). Substitui a antiga leitura
+ * per-user (chaveada por userId), fonte do defeito multi-tenant em que usuários diferentes da mesma
+ * organização geravam documentos com identidades divergentes. Nome/CNPJ vêm de `organizations` (via
+ * `InstitutionalIdentityService`), não daqui.
  */
 export async function getDocumentSettingsByOrg(organizationId: number) {
   const db = await getDb();

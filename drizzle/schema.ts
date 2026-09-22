@@ -126,15 +126,17 @@ export type InsertEditalParameter = typeof editalParameters.$inferInsert;
  * (RBAC no backend). A troca de per-user → per-org é feita pela migration 0302 (backfill
  * determinístico via organization_members). Lineage de quem alterou fica em activity_logs.
  */
+// EXTENSÃO DOCUMENTAL tenant-scoped (1 linha por organização). NÃO duplica identidade canônica:
+// `nome`/`cnpj` (e esfera/uf/municipio) vivem SÓ em `organizations` — aqui ficam apenas atributos
+// que a organização não possui e que servem à diagramação do documento (logo, endereço completo,
+// contato, rodapé). Composição via `InstitutionalIdentityService.resolveInstitutionalIdentity`.
 export const documentSettings = mysqlTable("documentSettings", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),
-  // Cabeçalho
-  organizationName: text("organizationName"),
+  // Cabeçalho (extensão)
   logoUrl: text("logoUrl"),
   address: text("address"),
-  cnpj: varchar("cnpj", { length: 18 }),
-  // Rodapé
+  // Rodapé (extensão)
   phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 320 }),
   website: varchar("website", { length: 255 }),

@@ -1,9 +1,12 @@
 /**
- * P0 PILOTO — Contrato de governança da identidade institucional documental (varredura de fonte).
+ * P0 PILOTO (HARDENING) — Contrato de governança da identidade institucional (varredura de fonte).
  *
- * Trava os invariantes do fix (sem depender de DB): RBAC no backend, tenant-scope, auditoria,
- * ausência de fallback por userId, consumidores repontados para a fonte tenant e gating do frontend
- * (sem formulário institucional editável para não-admin nem quando a query falha).
+ * Trava os invariantes do fix endurecido (sem depender de DB):
+ *  H1) migration 0302 FAIL-CLOSED: guards ANTES de mutar; aborta em ambiguidade; sem discard silencioso;
+ *  H2) SEM duplicidade: nome/CNPJ só em `organizations`; `documentSettings` é extensão; composição via
+ *      `InstitutionalIdentityService`; router grava por dono de campo;
+ *  H3) REPLAY-SAFE: snapshot de identidade congelado no `metadata` do artefato e preferido na exportação;
+ *  + RBAC no backend, tenant-scope, auditoria, e gating do frontend (sem formulário enganoso).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -16,6 +19,10 @@ const ROUTER = read("server/routers/documentSettingsRouter.ts");
 const COLLAB = read("server/db/collaboration.ts");
 const SCHEMA = read("drizzle/schema.ts");
 const MIGRATION = read("drizzle/0302_document_settings_org_scoped.sql");
+const SERVICE = read("server/services/institutionalIdentityService.ts");
+const DOCS_ROUTER = read("server/routers/documentsRouter.ts");
+const ENGINE = read("server/services/documentEngineService.ts");
+const EXPORT_ADAPTER = read("server/services/officialDocumentExportAdapter.ts");
 
 const CONSUMERS = [
   "server/routers/documentsRouter.ts",
@@ -29,53 +36,101 @@ const CONSUMERS = [
 function documentSettingsBlock(): string {
   const start = SCHEMA.indexOf("export const documentSettings = mysqlTable(");
   const rest = SCHEMA.slice(start);
-  const end = rest.indexOf("export const documentSettings.$inferSelect");
-  // Corta no próximo `export type` após a definição da tabela.
   const cut = rest.indexOf("export type DocumentSettings");
-  return cut > 0 ? rest.slice(0, cut) : rest.slice(0, end > 0 ? end : 1200);
+  return cut > 0 ? rest.slice(0, cut) : rest.slice(0, 1200);
 }
 
-describe("documentSettings · governança institucional (contrato)", () => {
-  it("modelo é TENANT-SCOPED: organizationId único, sem userId (chave per-user extinta)", () => {
+describe("documentSettings · governança institucional endurecida (contrato)", () => {
+  it("H2 modelo: tenant-scoped, SEM duplicidade (sem organizationName/cnpj/userId; org é extensão)", () => {
     const block = documentSettingsBlock();
     expect(block).toMatch(/organizationId:\s*int\("organizationId"\)\.notNull\(\)/);
     expect(block).toContain('unique("documentSettings_org_unique").on(table.organizationId)');
     expect(block).not.toMatch(/userId:\s*int\("userId"\)/);
+    // Duplicidade canônica eliminada: nome/CNPJ vivem só em organizations.
+    expect(block).not.toContain('organizationName: text("organizationName")');
+    expect(block).not.toContain('cnpj: varchar("cnpj"');
+    // Extensão documental permanece.
+    expect(block).toContain('logoUrl: text("logoUrl")');
+    expect(block).toContain('address: text("address")');
   });
 
-  it("migration 0302 é determinística e segura (backfill → dedupe → órfãos → NOT NULL → UNIQUE → drop)", () => {
-    expect(MIGRATION).toMatch(/ADD `organizationId` int NULL/);
-    expect(MIGRATION).toContain("FROM `organization_members`");
-    expect(MIGRATION).toMatch(/MODIFY `organizationId` int NOT NULL/);
-    expect(MIGRATION).toContain("`documentSettings_org_unique` UNIQUE");
+  it("H1 migration 0302 é FAIL-CLOSED: guards ANTES de mutar, aborta em ambiguidade, sem discard", () => {
+    // Guard roda ANTES de qualquer DDL de mutação (ADD organizationId).
+    const guardAt = MIGRATION.indexOf("CALL `_ds0302_guard`()");
+    const addColAt = MIGRATION.indexOf("ADD `organizationId`");
+    expect(guardAt).toBeGreaterThan(0);
+    expect(addColAt).toBeGreaterThan(0);
+    expect(guardAt).toBeLessThan(addColAt);
+    // Fail-closed explícito (SIGNAL) para as 5 precondições.
+    expect(MIGRATION).toContain("SIGNAL SQLSTATE '45000'");
+    for (const g of ["FAIL-CLOSED (A)", "FAIL-CLOSED (B)", "FAIL-CLOSED (C)", "FAIL-CLOSED (D)", "FAIL-CLOSED (E)"]) {
+      expect(MIGRATION, `guard ${g}`).toContain(g);
+    }
+    // Sem descarte silencioso de órfãos (o antigo DELETE de órfãos foi substituído por ABORT).
+    expect(MIGRATION).not.toMatch(/DELETE FROM `documentSettings` WHERE `organizationId` IS NULL/);
+    // Preservação (promove CNPJ ao canônico) e remoção das colunas duplicadas.
+    expect(MIGRATION).toMatch(/UPDATE `organizations`[\s\S]*SET o\.`cnpj`/);
     expect(MIGRATION).toMatch(/DROP COLUMN `userId`/);
+    expect(MIGRATION).toMatch(/DROP COLUMN `organizationName`/);
+    expect(MIGRATION).toMatch(/DROP COLUMN `cnpj`/);
+    expect(MIGRATION).toContain("`documentSettings_org_unique` UNIQUE");
   });
 
-  it("db layer é org-scoped (getDocumentSettingsByOrg) e não há mais leitura por usuário", () => {
+  it("H2 InstitutionalIdentityService COMPÕE fonte única (organizations canônica + documentSettings ext.)", () => {
+    expect(SERVICE).toContain("export async function resolveInstitutionalIdentity");
+    expect(SERVICE).toContain("export async function saveInstitutionalIdentity");
+    expect(SERVICE).toContain("export function institutionalIdentityFingerprint");
+    expect(SERVICE).toContain("export async function snapshotInstitutionalIdentity");
+    // Canônica vem de organizations; extensão de documentSettings.
+    expect(SERVICE).toContain("getOrganizationById");
+    expect(SERVICE).toContain("updateOrganization");
+    expect(SERVICE).toContain("getDocumentSettingsByOrg");
+    expect(SERVICE).toContain("upsertDocumentSettings");
+    // Nome/CNPJ mapeados da fonte canônica (organizations.nome/cnpj).
+    expect(SERVICE).toContain("org?.nome");
+    expect(SERVICE).toContain("org?.cnpj");
+  });
+
+  it("db layer: extensão org-scoped; upsert NÃO grava mais nome/cnpj; sem leitura por usuário", () => {
     expect(COLLAB).toContain("export async function getDocumentSettingsByOrg");
     expect(COLLAB).toContain("eq(documentSettings.organizationId");
     expect(COLLAB).not.toContain("getDocumentSettingsByUser");
+    // upsert só persiste extensão (sem organizationName/cnpj no set-clause).
+    const upsertStart = COLLAB.indexOf("export async function upsertDocumentSettings");
+    const upsertBlock = COLLAB.slice(upsertStart, upsertStart + 500);
+    expect(upsertBlock).not.toContain("organizationName");
+    expect(upsertBlock).not.toContain("cnpj");
   });
 
-  it("router: RBAC admin/owner no backend, tenant-scoped e auditado (enforcement final)", () => {
+  it("router: get compõe identidade; save grava por dono de campo; RBAC admin + auditoria; sem userId", () => {
     expect(ROUTER).toMatch(/get:\s*orgRoleProcedure\("admin"\)/);
     expect(ROUTER).toMatch(/save:\s*orgRoleProcedure\("admin"\)/);
-    expect(ROUTER).toContain("db.getDocumentSettingsByOrg(ctx.organizationId!)");
-    expect(ROUTER).toContain("organizationId: ctx.organizationId!");
+    expect(ROUTER).toContain("resolveInstitutionalIdentity(ctx.organizationId!)");
+    expect(ROUTER).toContain("saveInstitutionalIdentity(ctx.organizationId!");
     expect(ROUTER).toContain("org.document_settings_updated");
-    // Sem gravação/fallback por usuário.
     expect(ROUTER).not.toContain("ctx.user.id");
     expect(ROUTER).not.toContain("getDocumentSettingsByUser");
   });
 
-  it("consumidores repontados para a fonte tenant (sem fallback por userId)", () => {
+  it("H2 consumidores resolvem pela fonte única (InstitutionalIdentity), nunca por usuário", () => {
     for (const f of CONSUMERS) {
       const src = read(f);
-      expect(src, `${f} deve usar getDocumentSettingsByOrg`).toContain("getDocumentSettingsByOrg");
-      expect(src, `${f} não pode mais usar getDocumentSettingsByUser`).not.toContain(
-        "getDocumentSettingsByUser",
-      );
+      expect(src, `${f} deve resolver pela InstitutionalIdentity`).toMatch(/InstitutionalIdentity/);
+      expect(src, `${f} não pode usar getDocumentSettingsByUser`).not.toContain("getDocumentSettingsByUser");
     }
+  });
+
+  it("H3 replay-safe: snapshot de identidade congelado na geração/emissão e preferido na exportação", () => {
+    // Legacy documents: grava snapshot no metadata na geração e prefere-o na exportação.
+    expect(DOCS_ROUTER).toContain("institutionalIdentitySnapshot");
+    expect(DOCS_ROUTER).toContain("institutionalIdentityFromMetadataOrLive");
+    expect(DOCS_ROUTER).toContain("metadata: identitySnapshotMetadata(identity)");
+    // Document Engine oficial: injeta o snapshot no metadata de toda versão emitida.
+    expect(ENGINE).toContain("snapshotInstitutionalIdentity");
+    expect(ENGINE).toContain("institutionalIdentitySnapshot");
+    // Exportador oficial: lê a identidade do snapshot (fallback vivo) e registra o fingerprint (lineage).
+    expect(EXPORT_ADAPTER).toContain("institutionalIdentityFromMetadataOrLive");
+    expect(EXPORT_ADAPTER).toContain("institutionalIdentityFingerprint");
   });
 
   it("frontend: Configurações restrita a admin/owner na sidebar", () => {
@@ -88,16 +143,12 @@ describe("documentSettings · governança institucional (contrato)", () => {
   for (const page of ["client/src/pages/Settings.tsx", "client/src/pages/DocumentSettings.tsx"]) {
     it(`frontend: ${page} gateia por papel, sem formulário enganoso e sem comportamento silencioso`, () => {
       const src = read(page);
-      // Guarda de papel (defense-in-depth) + acesso direto por URL bloqueado.
       expect(src).toContain('useOrgRole');
       expect(src).toContain("canManageUsers");
       expect(src).toContain("Acesso não autorizado");
-      // A query só dispara para quem pode gerenciar (não expõe FORBIDDEN silencioso).
       expect(src).toContain("enabled: canManageUsers");
-      // Falha de query NÃO cai em formulário editável — ramo de erro dedicado com retry.
       expect(src).toMatch(/\)\s*:\s*error\s*\?\s*\(/);
       expect(src).toContain("Tentar novamente");
-      // Copy enganosa antiga removida.
       expect(src).not.toContain("Você pode preencher os dados abaixo");
     });
   }
