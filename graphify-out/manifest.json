@@ -3835,8 +3835,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1790099254.8252337,
-    "ast_hash": "4c191957e774ff7cfcd178555980b46b",
+    "mtime": 1790111856.75929,
+    "ast_hash": "2d98a92e6bb74aa19edff1f8d86d5127",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -3845,8 +3845,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1790100984.864306,
-    "ast_hash": "670ab56160b7c1695d3986a93cd0a36f",
+    "mtime": 1790111846.2232895,
+    "ast_hash": "712998ca5b3aced96269b48ccd16b8ec",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -4335,8 +4335,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1789588124.1580527,
-    "ast_hash": "28ff58094da03a461df45fd081f35e22",
+    "mtime": 1790112467.3876107,
+    "ast_hash": "42273139560d70be145cabdbe7732337",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -4595,13 +4595,13 @@
     "semantic_hash": ""
   },
   "server/domain/importConfidence.ts": {
-    "mtime": 1788023705.7668924,
-    "ast_hash": "e4bc8cbf3e3b54d3eb8609eb1866dc84",
+    "mtime": 1790112369.1473205,
+    "ast_hash": "73cc46c69901f306acc75e124c1a573d",
     "semantic_hash": ""
   },
   "server/domain/importExtraction.ts": {
-    "mtime": 1788023705.7668924,
-    "ast_hash": "9e44aa75ef60fb11c84e2d28b77d019e",
+    "mtime": 1790111975.0312972,
+    "ast_hash": "c281e280bed83c93d9dbb8f323e3390e",
     "semantic_hash": ""
   },
   "server/domain/importProvenance.ts": {
@@ -4615,8 +4615,8 @@
     "semantic_hash": ""
   },
   "server/domain/importTypes.ts": {
-    "mtime": 1788023705.7668924,
-    "ast_hash": "2da672209fea1b1b9427a3184f5cd8de",
+    "mtime": 1790111797.9352865,
+    "ast_hash": "286ae0ebc64317fef0bfe8fea15a07fe",
     "semantic_hash": ""
   },
   "server/domain/institutionalCopilot.ts": {
@@ -4650,8 +4650,8 @@
     "semantic_hash": ""
   },
   "server/domain/intelligentItem.ts": {
-    "mtime": 1789127769.307346,
-    "ast_hash": "ccf9e6f5d1e7cc07919029fdb16d7c96",
+    "mtime": 1790112154.2633078,
+    "ast_hash": "3c8445a872f6a941ead51540e08e7e18",
     "semantic_hash": ""
   },
   "server/domain/itemRecommendation.ts": {
@@ -4755,8 +4755,8 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearch.ts": {
-    "mtime": 1788023705.7795072,
-    "ast_hash": "f2b2a4591bb8edb152383f1b51f8ce94",
+    "mtime": 1790112142.1313071,
+    "ast_hash": "552dc19e6aab754f3b1bd9f3a5e0bd50",
     "semantic_hash": ""
   },
   "server/domain/procurementConcept.ts": {
@@ -4915,13 +4915,13 @@
     "semantic_hash": ""
   },
   "server/parsers/baseParser.ts": {
-    "mtime": 1788023705.7850115,
-    "ast_hash": "a4e78413a48ec3d65028b963fa306278",
+    "mtime": 1790111755.307284,
+    "ast_hash": "cf72093c540791f19862f541b11928ca",
     "semantic_hash": ""
   },
   "server/parsers/csvParser.ts": {
-    "mtime": 1788023705.7854745,
-    "ast_hash": "ac9a264f856c4bed7e0e92b4ec4074b7",
+    "mtime": 1790112070.0113027,
+    "ast_hash": "cc8473ac8d17d1bc606c5b23c6b256c1",
     "semantic_hash": ""
   },
   "server/parsers/parserRegistry.ts": {
@@ -4930,13 +4930,13 @@
     "semantic_hash": ""
   },
   "server/parsers/pdfParser.ts": {
-    "mtime": 1788023705.7854745,
-    "ast_hash": "70ead07fca8f859f412ac6cf4312527b",
+    "mtime": 1790112090.1272867,
+    "ast_hash": "d915754c5d45cab15b1a4a2d82894a40",
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
-    "mtime": 1788023705.7854745,
-    "ast_hash": "0d3b5f65fa51f55a6fc4c9fecc451d37",
+    "mtime": 1790112088.1353037,
+    "ast_hash": "d76d5ec0727b67890acc3c19f7012c93",
     "semantic_hash": ""
   },
   "server/providers/claude/claudeAdapter.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1789960642.7850254,
-    "ast_hash": "cf14fb24a35e85ab26fa841bfab6c84e",
+    "mtime": 1790112470.7396672,
+    "ast_hash": "b7c8052db111b13ecda9d9647d01bd89",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -5835,8 +5835,8 @@
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {
-    "mtime": 1788023706.178377,
-    "ast_hash": "8e4a891ba0a7ab5225132f5a4be14efc",
+    "mtime": 1790112106.631305,
+    "ast_hash": "5bc3f3509504239e3e1d49e026b3f776",
     "semantic_hash": ""
   },
   "server/services/institutionalRequestService.ts": {
@@ -10630,8 +10630,8 @@
     "semantic_hash": ""
   },
   "server/domain/importCorrectionFields.ts": {
-    "mtime": 1788023705.7668924,
-    "ast_hash": "a597957f21c24dd6b887975ec0248566",
+    "mtime": 1790112124.975306,
+    "ast_hash": "b07c4db5b746b2cc32a6ed82fe8a8a8b",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PromoteToDomainPanel.tsx": {
@@ -10665,23 +10665,23 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/parsers-pdf-docx.test.ts": {
-    "mtime": 1788023705.722377,
-    "ast_hash": "395f6d3d0999125a546e6817176afc0c",
+    "mtime": 1790112599.7922113,
+    "ast_hash": "9e7570e5f2cb466408093b7cb36c2c09",
     "semantic_hash": ""
   },
   "server/parsers/docxParser.ts": {
-    "mtime": 1788023705.7854745,
-    "ast_hash": "8faa283e4e0f039f2eaef339538f2aaa",
+    "mtime": 1790112090.12937,
+    "ast_hash": "cd174bd8e40224a05c47a3cb372d4725",
     "semantic_hash": ""
   },
   "server/parsers/tabularExtraction.ts": {
-    "mtime": 1788023705.7854745,
-    "ast_hash": "03cb03db857c74a313acb5dfd238f74d",
+    "mtime": 1790112059.5673022,
+    "ast_hash": "e98b3319097db278a24453b8628bd2f9",
     "semantic_hash": ""
   },
   "server/services/importPromotionService.ts": {
-    "mtime": 1788023706.178377,
-    "ast_hash": "9fe687565fe475e18acefed98697fac8",
+    "mtime": 1790112440.1766415,
+    "ast_hash": "2fe2e431de1cc928d70a8fab449c9b22",
     "semantic_hash": ""
   },
   "server/__tests__/integration/prc-cognitive-governance.test.ts": {
@@ -11767,6 +11767,41 @@
   "server/services/institutionalIdentityService.ts": {
     "mtime": 1790100974.0963056,
     "ast_hash": "0156d91ce73f88a4359fbec780f2b034",
+    "semantic_hash": ""
+  },
+  "drizzle/0303_p0_document_intake_price_items.sql": {
+    "mtime": 1790111881.4392915,
+    "ast_hash": "12157886df07c2bdcf0aabdc0fc51351",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0303_snapshot.json": {
+    "mtime": 1790111856.75529,
+    "ast_hash": "8321c7057af9e5f86614e3b8146310b4",
+    "semantic_hash": ""
+  },
+  "server/domain/authoritativeItems.ts": {
+    "mtime": 1790111694.2472804,
+    "ast_hash": "4e27b095fc429ff8d9aa5322d62ae697",
+    "semantic_hash": ""
+  },
+  "server/domain/documentProjection.ts": {
+    "mtime": 1790111744.5952835,
+    "ast_hash": "c69bccdd08e75f133e6fa1978fae87ce",
+    "semantic_hash": ""
+  },
+  "server/domain/money.ts": {
+    "mtime": 1790111629.8152766,
+    "ast_hash": "b82b188b0366a6010668c789de9968d4",
+    "semantic_hash": ""
+  },
+  "server/domain/priceQuoteConsolidation.ts": {
+    "mtime": 1790111667.8832788,
+    "ast_hash": "a073c19ebde686071ff8ab143e6d67d0",
+    "semantic_hash": ""
+  },
+  "server/services/itemMaterializationService.ts": {
+    "mtime": 1790112467.388002,
+    "ast_hash": "1f8c5ea77d2b983084dc34277f055f53",
     "semantic_hash": ""
   }
 }

@@ -2002,6 +2002,13 @@ export const importStagingItems = mysqlTable("import_staging_items", {
   rawUnit:             varchar("rawUnit",        { length: 50  }),
   rawUnitPrice:        varchar("rawUnitPrice",   { length: 100 }),
   rawTotalPrice:       varchar("rawTotalPrice",  { length: 100 }),
+  // P0 piloto (0303) — campos de COTAÇÃO como colunas de 1ª classe, IMUTÁVEIS como os demais raw*. Antes
+  // eram perdidos (só sobreviviam dentro de parserMetadata.rawCellValues). Nullable/aditivo.
+  rawSupplier:         varchar("rawSupplier",    { length: 255 }),
+  rawBrand:            varchar("rawBrand",       { length: 255 }),
+  rawModel:            varchar("rawModel",       { length: 255 }),
+  rawNotes:            text("rawNotes"),
+  rawSource:           varchar("rawSource",      { length: 255 }),
   rawMetadata:         json("rawMetadata"),
   sourceLocation:      json("sourceLocation"),
   parserMetadata:      json("parserMetadata"),
@@ -2081,6 +2088,55 @@ export const importItemCorrections = mysqlTable("import_item_corrections", {
 
 export type ImportItemCorrectionRow       = typeof importItemCorrections.$inferSelect;
 export type InsertImportItemCorrectionRow = typeof importItemCorrections.$inferInsert;
+
+/**
+ * P0 piloto (0303) — STAGING DOCUMENTAL do Import Engine (DFD/ETP/TR importados como DOCUMENTO).
+ * UMA linha por sessão de importação documental (mesma import_sessions/upload/storage/checksum/parser —
+ * não há pipeline paralelo). `rawContent`/`rawBlocks` = projeção extraída, IMUTÁVEL (nenhum caminho de
+ * escrita os altera após o insert). `reviewedContent` = revisão humana (overlay), com concorrência otimista
+ * por `revision`. Aprovação fixa o `approvedContentHash`; a promoção governada cria/substitui o rascunho em
+ * generated_documents (nunca documento oficial). O binário permanece no Storage Service (não é duplicado).
+ */
+export const importDocumentStaging = mysqlTable("import_document_staging", {
+  id:                   int("id").autoincrement().primaryKey(),
+  organizationId:       int("organizationId").notNull(),
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }).notNull(),
+  importSessionId:      int("importSessionId").notNull(),
+  documentKind:         varchar("documentKind",      { length: 10 }).notNull(),
+  originalFileName:     varchar("originalFileName",  { length: 255 }).notNull(),
+  sourceChecksum:       varchar("sourceChecksum",    { length: 64 }).notNull().default(""),
+  parserType:           varchar("parserType",        { length: 20 }).notNull(),
+  parserVersion:        varchar("parserVersion",     { length: 20 }).notNull(),
+  projectionVersion:    varchar("projectionVersion", { length: 40 }).notNull(),
+  rawContent:           longtext("rawContent").notNull(),
+  rawContentHash:       varchar("rawContentHash",    { length: 64 }).notNull(),
+  rawBlocks:            json("rawBlocks"),
+  reviewedContent:      longtext("reviewedContent"),
+  /** Hash do conteúdo VIGENTE (reviewed ?? raw) — base da concorrência otimista e da aprovação. */
+  contentHash:          varchar("contentHash",       { length: 64 }).notNull(),
+  revision:             int("revision").notNull().default(0),
+  // pending_review | approved | promoted | rejected
+  status:               varchar("status",            { length: 20 }).notNull().default("pending_review"),
+  warnings:             json("warnings"),
+  reviewedBy:           int("reviewedBy"),
+  reviewedAt:           timestamp("reviewedAt"),
+  approvedBy:           int("approvedBy"),
+  approvedAt:           timestamp("approvedAt"),
+  approvedContentHash:  varchar("approvedContentHash", { length: 64 }),
+  promotedBy:           int("promotedBy"),
+  promotedAt:           timestamp("promotedAt"),
+  promotionMode:        varchar("promotionMode",     { length: 20 }),
+  targetDocumentId:     varchar("targetDocumentId",  { length: 20 }),
+  correlationId:        varchar("correlationId",     { length: 36 }),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:            timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("uq_import_doc_staging_session").on(table.organizationId, table.importSessionId),
+  index("idx_import_doc_staging_process").on(table.organizationId, table.procurementProcessId, table.documentKind),
+]);
+
+export type ImportDocumentStagingRow       = typeof importDocumentStaging.$inferSelect;
+export type InsertImportDocumentStagingRow = typeof importDocumentStaging.$inferInsert;
 
 /**
  * Sprint 2.9 — Semantic Candidates.
@@ -5128,6 +5184,10 @@ export const intelligentItemsTable = mysqlTable("intelligent_items", {
   recommendations:  text("recommendations"),
   status:           varchar("status", { length: 20 }).notNull().default("pendente"),
   approvedBy:       int("approved_by"),
+  // P0 piloto (0303) — estado do ENRIQUECIMENTO pós-commit (CATMAT sugerido/riscos/recomendações). A
+  // materialização base é transacional e válida sozinha; o enriquecimento é degradável: pending|done|failed.
+  // Default 'done' para as linhas preexistentes (foram enriquecidas inline pelo caminho legado).
+  enrichmentStatus: varchar("enrichment_status", { length: 20 }).notNull().default("done"),
   correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:        datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
@@ -5300,7 +5360,9 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   processId:         varchar("process_id", { length: 20 }).notNull(),
   kind:              varchar("kind", { length: 20 }).notNull().default("etp"),
   title:             varchar("title", { length: 500 }).notNull().default(""),
-  content:           text("content"),
+  // P0 piloto (0303) — LONGTEXT (antes TEXT, 64 KB): um DFD/ETP/TR IMPORTADO real pode exceder 64 KB.
+  // Alargamento de tipo, sem perda de dados. official_documents.content já é LONGTEXT.
+  content:           longtext("content"),
   status:            varchar("status", { length: 20 }).notNull().default("rascunho"),
   sources:           text("sources"),
   modality:          varchar("modality", { length: 40 }),

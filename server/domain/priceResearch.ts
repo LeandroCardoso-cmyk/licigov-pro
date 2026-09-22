@@ -7,6 +7,8 @@
  */
 
 import { createHash } from "crypto";
+import { parseBRL, averageCents, centsToReais } from "./money";
+import { normalizeDecimal } from "./importCorrectionFields";
 
 export type PriceResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
 
@@ -98,7 +100,11 @@ export function createPriceResearchItem(params: {
 
 /**
  * Extração determinística de itens a partir de texto colado/CSV simples
- * (uma linha por item: "descrição;quantidade;unidade;valor"). Base para itens.
+ * (uma linha por item: "descrição;quantidade;unidade;valor[;fornecedor]"). Base para itens.
+ *
+ * P0 piloto — CONTRATO MONETÁRIO: o valor usa `parseBRL` (antes "R$ 18,90" e "1.234,56" viravam 0 em
+ * silêncio). Valor ambíguo/inválido fica 0 (sem preço) — nunca um número inventado. Quantidade aceita
+ * decimal pt-BR ("1,5"). Valor em REAIS com 2 casas (coluna DECIMAL(14,2)).
  */
 export function extractItemsFromText(
   text: string,
@@ -109,14 +115,17 @@ export function extractItemsFromText(
   lines.forEach((line, index) => {
     const parts = line.split(/[;\t]/).map(p => p.trim());
     if (parts.length === 0 || !parts[0]) return;
+    const qty = parts[1] ? normalizeDecimal(parts[1]) : null;
+    const cents = parts[3] ? parseBRL(parts[3]) : null;
     items.push(createPriceResearchItem({
       researchId: ctx.researchId,
       processId: ctx.processId,
       organizationId: ctx.organizationId,
       description: parts[0],
-      quantity: parts[1] ? Number(parts[1]) || 0 : 0,
+      quantity: qty !== null ? Number(qty) : 0,
       unit: parts[2] || "un",
-      value: parts[3] ? Number(parts[3].replace(",", ".")) || 0 : 0,
+      value: cents !== null && cents > 0 ? centsToReais(cents) : 0,
+      supplier: parts[4] || "",
       source: "colar",
       index,
     }));
@@ -124,9 +133,9 @@ export function extractItemsFromText(
   return items;
 }
 
-/** Preço médio a partir de itens de mesma descrição. */
+/** Preço médio (reais, 2 casas) a partir de itens de mesma descrição — calculado em centavos (half-up). */
 export function averageValue(items: readonly PriceResearchItem[]): number {
-  const valid = items.filter(i => i.value > 0);
-  if (valid.length === 0) return 0;
-  return valid.reduce((a, i) => a + i.value, 0) / valid.length;
+  const cents = items.map(i => parseBRL(i.value)).filter((c): c is number => c !== null && c > 0);
+  if (cents.length === 0) return 0;
+  return centsToReais(averageCents(cents));
 }

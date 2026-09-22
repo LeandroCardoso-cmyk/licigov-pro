@@ -2033,6 +2033,13 @@
       "when": 1790097775948,
       "tag": "0302_document_settings_org_scoped",
       "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "5",
+      "when": 1790111856762,
+      "tag": "0303_p0_document_intake_price_items",
+      "breakpoints": true
     }
   ]
 }

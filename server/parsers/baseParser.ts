@@ -6,6 +6,7 @@
  */
 import type { RawExtractedItem } from "../domain/importExtraction";
 import type { ImportWarning, ImportError, ExtractionSummary } from "../domain/importTypes";
+import type { DocumentProjection } from "../domain/documentProjection";
 
 // ─── Parser capabilities ──────────────────────────────────────────────────────
 
@@ -48,6 +49,11 @@ export interface ParseOptions {
   sheetName?:       string;    // forçar planilha específica
   headerRow?:       number;    // forçar linha de cabeçalho
   onProgress?:      (progress: number) => void;
+  /**
+   * Modo de extração (aditivo, default "rows"). "document" produz a PROJEÇÃO DOCUMENTAL (DFD/ETP/TR:
+   * títulos/parágrafos/listas/tabelas em ordem) em vez de linhas de item. Só PDF/DOCX suportam.
+   */
+  extractionMode?:  "rows" | "document";
 }
 
 // ─── Parse result ─────────────────────────────────────────────────────────────
@@ -58,6 +64,8 @@ export interface ParseResult {
   errors:          ImportError[];
   summary:         ExtractionSummary;
   rawMetadata:     Record<string, unknown>;
+  /** Projeção documental (somente em `extractionMode: "document"`). Ausente em PDF escaneado (OCR). */
+  documentProjection?: DocumentProjection;
 }
 
 // ─── Observability hook ───────────────────────────────────────────────────────

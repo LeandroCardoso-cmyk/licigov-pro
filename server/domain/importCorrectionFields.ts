@@ -8,11 +8,14 @@
  * importTypes sem contrato de correção → capacidade indisponível (não aceitam patch genérico).
  */
 
-export type CorrectionFieldKind = "text" | "decimal" | "unit";
+import { parseBRLDetailed, centsToDecimalString } from "./money";
+
+export type CorrectionFieldKind = "text" | "decimal" | "unit" | "money";
 
 export interface CorrectionFieldSpec {
   logical:  string;   // nome lógico exposto na correção
-  rawKey:   "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice";
+  rawKey:   "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice"
+          | "rawSupplier" | "rawBrand" | "rawModel" | "rawNotes" | "rawSource";
   kind:     CorrectionFieldKind;
   maxLen:   number;
   nullable: boolean;
@@ -24,8 +27,15 @@ export const CORRECTABLE_FIELDS: Record<string, Record<string, CorrectionFieldSp
     description: { logical: "description", rawKey: "rawDescription", kind: "text",    maxLen: 2000, nullable: false },
     quantity:    { logical: "quantity",    rawKey: "rawQuantity",    kind: "decimal", maxLen: 100,  nullable: false },
     unit:        { logical: "unit",        rawKey: "rawUnit",        kind: "unit",    maxLen: 50,   nullable: false },
-    unitPrice:   { logical: "unitPrice",   rawKey: "rawUnitPrice",   kind: "decimal", maxLen: 100,  nullable: false },
-    totalPrice:  { logical: "totalPrice",  rawKey: "rawTotalPrice",  kind: "decimal", maxLen: 100,  nullable: true  },
+    // Preços seguem o CONTRATO MONETÁRIO canônico (money.ts): "R$ 1.234,56" → "1234.56"; ambíguo → rejeita.
+    unitPrice:   { logical: "unitPrice",   rawKey: "rawUnitPrice",   kind: "money",   maxLen: 100,  nullable: false },
+    totalPrice:  { logical: "totalPrice",  rawKey: "rawTotalPrice",  kind: "money",   maxLen: 100,  nullable: true  },
+    // P0 piloto — campos de cotação de 1ª classe (overlay auditado; raw* permanece imutável).
+    supplier:    { logical: "supplier",    rawKey: "rawSupplier",    kind: "text",    maxLen: 255,  nullable: true  },
+    brand:       { logical: "brand",       rawKey: "rawBrand",       kind: "text",    maxLen: 255,  nullable: true  },
+    model:       { logical: "model",       rawKey: "rawModel",       kind: "text",    maxLen: 255,  nullable: true  },
+    notes:       { logical: "notes",       rawKey: "rawNotes",       kind: "text",    maxLen: 2000, nullable: true  },
+    source:      { logical: "source",      rawKey: "rawSource",      kind: "text",    maxLen: 255,  nullable: true  },
   },
 };
 
@@ -89,6 +99,18 @@ export function validateField(spec: CorrectionFieldSpec, input: unknown): FieldV
     const norm = normalizeDecimal(str);
     if (norm === null) return { ok: false, code: "INVALID_NUMBER", message: `Campo "${spec.logical}" deve ser numérico.` };
     return { ok: true, value: norm };
+  }
+  if (spec.kind === "money") {
+    const parsed = parseBRLDetailed(typeof input === "number" ? input : str);
+    if (parsed.reason === "ambiguous") {
+      return { ok: false, code: "AMBIGUOUS_MONEY", message: `Valor de "${spec.logical}" é ambíguo (ex.: "1,234"). Informe no formato "1.234,00" ou "1234,00".` };
+    }
+    if (parsed.cents === null) {
+      if (spec.nullable && str.trim() === "") return { ok: true, value: null };
+      return { ok: false, code: "INVALID_NUMBER", message: `Campo "${spec.logical}" deve ser um valor monetário.` };
+    }
+    if (parsed.cents < 0) return { ok: false, code: "NEGATIVE_MONEY", message: `Campo "${spec.logical}" não pode ser negativo.` };
+    return { ok: true, value: centsToDecimalString(parsed.cents) };
   }
   const text = normalizeText(str, spec.maxLen);
   if (text === "" && !spec.nullable) {

@@ -34,6 +34,12 @@ export interface RawExtractedItem {
   rawUnit:           string | null;
   rawUnitPrice:      string | null;
   rawTotalPrice:     string | null;
+  // P0 piloto — campos de COTAÇÃO de 1ª classe (opcionais/aditivos; antes perdidos em rawCellValues).
+  rawSupplier?:      string | null;
+  rawBrand?:         string | null;
+  rawModel?:         string | null;
+  rawNotes?:         string | null;
+  rawSource?:        string | null;
   rawMetadata:       Record<string, unknown>; // campos extras da linha/tabela
 
   // Rastreabilidade
@@ -52,6 +58,7 @@ export function createRawItem(
   importSessionId:   number,
   raw: Partial<Pick<RawExtractedItem,
     "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice" | "rawMetadata"
+    | "rawSupplier" | "rawBrand" | "rawModel" | "rawNotes" | "rawSource"
   >>,
   provenance:   ExtractionProvenance,
   parser:       ParserMetadata,
@@ -67,6 +74,11 @@ export function createRawItem(
     rawUnit:           raw.rawUnit           ?? null,
     rawUnitPrice:      raw.rawUnitPrice      ?? null,
     rawTotalPrice:     raw.rawTotalPrice     ?? null,
+    rawSupplier:       raw.rawSupplier       ?? null,
+    rawBrand:          raw.rawBrand          ?? null,
+    rawModel:          raw.rawModel          ?? null,
+    rawNotes:          raw.rawNotes          ?? null,
+    rawSource:         raw.rawSource         ?? null,
     rawMetadata:       raw.rawMetadata       ?? {},
     sourceLocation:    provenance,
     parserMetadata:    parser,

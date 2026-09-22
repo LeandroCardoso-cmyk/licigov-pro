@@ -1,9 +1,17 @@
 /**
- * PR B.2.3 — Extração tabular compartilhada pelos parsers reais de PDF e DOCX.
+ * Extração tabular COMPARTILHADA pelos parsers reais (CSV, XLS/XLSX, PDF, DOCX) — fonte ÚNICA do
+ * mapeamento de colunas (antes duplicado em csvParser/xlsxParser/tabularExtraction).
  *
- * Converte tanto MATRIZES de células (tabelas de DOCX / getTable do PDF) quanto LINHAS de texto
- * (getText do PDF) em `RawExtractedItem[]`, preservando os valores BRUTOS (nunca normaliza aqui —
- * normalização/correção ocorre no staging) e anexando confiança, avisos e proveniência por item.
+ * Converte MATRIZES de células (planilha / tabela DOCX / getTable do PDF) e LINHAS de texto (getText do
+ * PDF) em `RawExtractedItem[]`, preservando os valores BRUTOS (nunca normaliza aqui — normalização e
+ * correção ocorrem no staging) e anexando confiança, avisos e proveniência por item.
+ *
+ * P0 piloto:
+ *   - campos de COTAÇÃO de 1ª classe: fornecedor, marca, modelo, observações, fonte;
+ *   - atribuição EXCLUSIVA de colunas por prioridade (ex.: "Preço Unitário" nunca vira "Unidade");
+ *   - MAPA COMPARATIVO (wide format: um item por linha, um fornecedor por coluna de preço) reconhecido de
+ *     forma DETERMINÍSTICA e expandido em uma cotação por fornecedor. Estrutura ambígua → NÃO adivinha:
+ *     mantém o formato longo e emite aviso para revisão humana.
  *
  * Determinístico e puro (sem I/O). Não inventa dados: campos ausentes ficam null.
  */
@@ -14,26 +22,52 @@ import type { CellLocation, ExtractionProvenance } from "../domain/importProvena
 import type { RawExtractedItem } from "../domain/importExtraction";
 import type { ImportWarning } from "../domain/importTypes";
 
-// ─── Padrões de coluna (alinhados com csvParser/xlsxParser) ─────────────────────
+// ─── Normalização de cabeçalho ──────────────────────────────────────────────────
 
-const DESCRIPTION_PATTERNS = ["DESCRIÇÃO", "DESCRICAO", "DESCRIPTION", "OBJETO", "ITEM", "MATERIAL", "PRODUTO", "ESPECIFICAÇÃO", "ESPECIFICACAO", "NOME"];
-const QUANTITY_PATTERNS    = ["QTDE", "QTD", "QT", "QUANTIDADE", "QUANT", "QUANTITY", "QNT"];
-const UNIT_PATTERNS        = ["UNID", "UN", "UNIDADE", "UNIT", "UM"];
-const UNIT_PRICE_PATTERNS  = ["PRECO UNIT", "PREÇO UNIT", "V.UNIT", "VL.UNIT", "VALOR UNIT", "UNIT PRICE", "P.UNIT", "PRECO UNI", "VUNIT"];
-const TOTAL_PRICE_PATTERNS = ["TOTAL", "PRECO TOTAL", "PREÇO TOTAL", "VL TOTAL", "VALOR TOTAL", "TOTAL PRICE", "V.TOTAL"];
+/** Cabeçalho normalizado para casamento: caixa alta, sem acentos, espaços colapsados. */
+export function normalizeHeader(h: string): string {
+  return (h ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+}
 
-function matchColumn(headers: string[], patterns: string[]): number {
+// ─── Padrões de coluna (normalizados: sem acento) ───────────────────────────────
+
+const DESCRIPTION_PATTERNS = ["DESCRICAO", "DESCRIPTION", "ESPECIFICACAO", "OBJETO", "MATERIAL", "PRODUTO", "SERVICO", "NOME", "ITEM"];
+const QUANTITY_PATTERNS    = ["QUANTIDADE", "QTDE", "QTD", "QUANT", "QNT", "QT", "QUANTITY"];
+const UNIT_PATTERNS        = ["UNIDADE", "UNID", "UND", "UN", "UNIT", "UM", "U.M."];
+const UNIT_PRICE_PATTERNS  = ["PRECO UNIT", "VALOR UNIT", "VL. UNIT", "VL.UNIT", "VL UNIT", "V.UNIT", "V. UNIT", "P.UNIT", "P. UNIT", "PRECO UNI", "UNIT PRICE", "VUNIT", "UNITARIO", "VALOR COTADO", "PRECO COTADO", "VALOR (R$)", "PRECO (R$)", "VALOR", "PRECO"];
+const TOTAL_PRICE_PATTERNS = ["VALOR TOTAL", "PRECO TOTAL", "VL TOTAL", "VL. TOTAL", "V.TOTAL", "TOTAL PRICE", "TOTAL"];
+const SUPPLIER_PATTERNS    = ["FORNECEDOR", "EMPRESA", "PROPONENTE", "COTANTE", "RAZAO SOCIAL", "LICITANTE", "SUPPLIER"];
+const BRAND_PATTERNS       = ["MARCA", "FABRICANTE", "BRAND"];
+const MODEL_PATTERNS       = ["MODELO", "REFERENCIA", "MODEL"];
+const NOTES_PATTERNS       = ["OBSERVACOES", "OBSERVACAO", "OBS", "NOTES", "NOTAS"];
+const SOURCE_PATTERNS      = ["FONTE", "ORIGEM", "LINK", "URL", "SOURCE"];
+/** Colunas ESTATÍSTICAS de mapa comparativo (nunca são preço de fornecedor). */
+const STAT_PATTERNS        = ["MEDIA", "MEDIANA", "MENOR", "MAIOR", "MINIMO", "MAXIMO", "ESTIMADO", "DESVIO", "COEFICIENTE", "CV", "PRECO MEDIO", "VALOR MEDIO", "PRECO DE REFERENCIA", "VALOR DE REFERENCIA"];
+/** Colunas de índice/código (nunca são preço nem descrição quando numéricas). */
+const INDEX_PATTERNS       = ["ITEM", "#", "N°", "Nº", "NO.", "N", "SEQ", "LOTE", "CODIGO", "COD", "CATMAT", "CATSER"];
+
+/** Casa um cabeçalho normalizado com um padrão: igualdade, prefixo, ou palavra inteira. */
+function headerMatches(h: string, p: string): boolean {
+  if (!h) return false;
+  if (h === p || h.startsWith(p)) return true;
+  return ` ${h} `.includes(` ${p} `);
+}
+
+function matchColumn(headers: string[], patterns: string[], taken: Set<number> = new Set()): number {
   for (const pattern of patterns) {
-    const idx = headers.findIndex(h => h.toUpperCase().includes(pattern));
+    const idx = headers.findIndex((h, i) => !taken.has(i) && headerMatches(h, pattern));
     if (idx >= 0) return idx;
   }
   return -1;
 }
 
+function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
+function isIndexHeader(h: string): boolean { return INDEX_PATTERNS.some((p) => headerMatches(h, p)); }
+
 // ─── Heurísticas de valor ───────────────────────────────────────────────────────
 
 /** Token que parece um valor monetário/decimal pt-BR ou en-US (aceita R$, milhar e centavos). */
-const MONEY_RE = /^R?\$?\s?-?\d{1,3}(\.\d{3})*(,\d{1,2})?$|^R?\$?\s?-?\d+(\.\d{1,2})?$/;
+const MONEY_RE = /^R?\$?\s?-?\d{1,3}(\.\d{3})*(,\d{1,2})?$|^R?\$?\s?-?\d+(\.\d{1,2})?$|^R?\$?\s?-?\d+(,\d{1,2})?$/;
 /** Token puramente numérico (quantidade): inteiro ou decimal simples. */
 const NUMERIC_RE = /^-?\d+([.,]\d+)?$/;
 /** Unidade: token curto, alfabético (aceita acentos, barra e ponto), ex.: UN, RESMA, CX, M², KG. */
@@ -44,6 +78,10 @@ export function isNumericLike(t: string): boolean { return NUMERIC_RE.test(t.tri
 export function isUnitLike(t: string): boolean {
   const s = t.trim();
   return UNIT_RE.test(s) && !isMoneyLike(s) && !/^\d+$/.test(s);
+}
+function isPriceCell(t: string): boolean {
+  const s = (t ?? "").trim();
+  return s !== "" && (isMoneyLike(s) || isNumericLike(s));
 }
 
 /**
@@ -62,31 +100,91 @@ export function parsePriceRowTokens(tokens: string[]): {
   let rawUnit:       string | null = null;
   let rawQuantity:   string | null = null;
 
-  // total (mais à direita)
   if (toks.length && isMoneyLike(toks[toks.length - 1])) rawTotalPrice = toks.pop()!.trim();
-  // unitário
   if (toks.length && isMoneyLike(toks[toks.length - 1])) rawUnitPrice = toks.pop()!.trim();
-  // unidade
   if (toks.length && isUnitLike(toks[toks.length - 1])) rawUnit = toks.pop()!.trim();
-  // quantidade
   if (toks.length && isNumericLike(toks[toks.length - 1])) rawQuantity = toks.pop()!.trim();
 
   const rawDescription = toks.join(" ").trim() || null;
-  // Exige descrição + ao menos um valor monetário; senão a linha não é uma linha de item confiável.
   if (!rawDescription || (rawTotalPrice === null && rawUnitPrice === null)) return null;
   return { rawDescription, rawQuantity, rawUnit, rawUnitPrice, rawTotalPrice };
 }
 
-// ─── Detecção de cabeçalho em matriz ────────────────────────────────────────────
+// ─── Mapeamento de colunas ──────────────────────────────────────────────────────
 
-/** Uma linha é cabeçalho se casa ≥2 padrões conhecidos, ou se tem ≥3 células não-numéricas não vazias. */
+export interface ColumnMap {
+  description: number; quantity: number; unit: number; unitPrice: number; totalPrice: number;
+  supplier: number; brand: number; model: number; notes: number; source: number;
+}
+
+/**
+ * Mapeia cabeçalhos (normalizados) a papéis, com atribuição EXCLUSIVA por prioridade: preço unitário e
+ * total antes de unidade/quantidade (evita "PREÇO UNITÁRIO" → unidade); colunas estatísticas nunca viram
+ * preço de cotação. Retorna -1 para papéis ausentes.
+ */
+export function mapHeaderColumns(headersNorm: string[]): ColumnMap {
+  const taken = new Set<number>();
+  // Colunas estatísticas ficam RESERVADAS (não são preço unitário de cotação).
+  headersNorm.forEach((h, i) => { if (isStatHeader(h)) taken.add(i); });
+  const pick = (patterns: string[]) => { const i = matchColumn(headersNorm, patterns, taken); if (i >= 0) taken.add(i); return i; };
+  const totalPrice  = pick(TOTAL_PRICE_PATTERNS);
+  const unitPrice   = pick(UNIT_PRICE_PATTERNS);
+  const quantity    = pick(QUANTITY_PATTERNS);
+  const brand       = pick(BRAND_PATTERNS);
+  const model       = pick(MODEL_PATTERNS);
+  const notes       = pick(NOTES_PATTERNS);
+  const source      = pick(SOURCE_PATTERNS);
+  const supplier    = pick(SUPPLIER_PATTERNS);
+  const description = pick(DESCRIPTION_PATTERNS);
+  const unit        = pick(UNIT_PATTERNS);
+  return { description, quantity, unit, unitPrice, totalPrice, supplier, brand, model, notes, source };
+}
+
+/** Uma linha é cabeçalho se casa ≥2 papéis conhecidos, ou se tem ≥3 células não-numéricas não vazias. */
 export function looksLikeHeaderCells(cells: string[]): boolean {
-  const up = cells.map(c => c.toUpperCase());
-  const patternHits = [DESCRIPTION_PATTERNS, QUANTITY_PATTERNS, UNIT_PATTERNS, UNIT_PRICE_PATTERNS, TOTAL_PRICE_PATTERNS]
-    .filter(pats => matchColumn(up, pats) >= 0).length;
-  if (patternHits >= 2) return true;
-  const nonEmpty = cells.filter(c => c.trim() !== "");
+  const norm = cells.map(normalizeHeader);
+  const m = mapHeaderColumns(norm);
+  const roleHits = Object.values(m).filter((i) => i >= 0).length;
+  if (roleHits >= 2) return true;
+  const nonEmpty = cells.filter(c => (c ?? "").trim() !== "");
   return nonEmpty.length >= 3 && nonEmpty.every(c => !isMoneyLike(c) && !isNumericLike(c));
+}
+
+/** Nome do fornecedor a partir do cabeçalho de coluna de preço ("Empresa A (R$)" → "Empresa A"). */
+function supplierNameFromHeader(raw: string): string {
+  return (raw ?? "").replace(/\(?\s*R\$\s*\)?/gi, "").replace(/\s+/g, " ").trim();
+}
+
+export type WideDetection =
+  | { kind: "long" }
+  | { kind: "wide"; supplierColumns: number[] }
+  | { kind: "ambiguous"; candidateColumns: number[]; reason: string };
+
+/**
+ * Detecção DETERMINÍSTICA de mapa comparativo. Candidatas = colunas não atribuídas a descrição/
+ * quantidade/unidade/marca/modelo/obs./fonte, não estatísticas, não índice, com cabeçalho não vazio e
+ * TODOS os valores não vazios numéricos/monetários (≥1 valor). Uma coluna casada como "fornecedor" mas
+ * cujos valores são preços também é candidata (ex.: "Fornecedor A" = coluna de preço).
+ *   - ≥ 2 candidatas e SEM preço unitário explícito → wide (uma cotação por fornecedor);
+ *   - ≥ 2 candidatas e COM preço unitário explícito → ambíguo (não adivinha);
+ *   - caso contrário → long.
+ */
+export function detectWideFormat(headersRaw: string[], dataRows: string[][], map: ColumnMap): WideDetection {
+  const headersNorm = headersRaw.map(normalizeHeader);
+  const structural = new Set([map.description, map.quantity, map.unit, map.brand, map.model, map.notes, map.source, map.totalPrice].filter((i) => i >= 0));
+  const candidates: number[] = [];
+  headersNorm.forEach((h, i) => {
+    if (!h || structural.has(i) || isStatHeader(h) || isIndexHeader(h)) return;
+    if (i === map.unitPrice) return;
+    const values = dataRows.map((r) => (r[i] ?? "").trim()).filter((v) => v !== "");
+    if (values.length === 0) return;
+    if (values.every(isPriceCell)) candidates.push(i);
+  });
+  if (candidates.length < 2) return { kind: "long" };
+  if (map.unitPrice >= 0) {
+    return { kind: "ambiguous", candidateColumns: candidates, reason: "Há coluna de preço unitário E múltiplas colunas de preço por fornecedor." };
+  }
+  return { kind: "wide", supplierColumns: candidates };
 }
 
 // ─── Contexto de extração ───────────────────────────────────────────────────────
@@ -102,33 +200,42 @@ export interface TabularContext {
   maxItems:        number;
 }
 
-function confidenceFor(desc: string | null, qty: string | null, unit: string | null, up: string | null, total: string | null) {
+type RawFields = {
+  rawDescription: string | null; rawQuantity: string | null; rawUnit: string | null;
+  rawUnitPrice: string | null; rawTotalPrice: string | null;
+  rawSupplier?: string | null; rawBrand?: string | null; rawModel?: string | null;
+  rawNotes?: string | null; rawSource?: string | null;
+};
+
+function confidenceFor(raw: RawFields) {
   return aggregateConfidence([
-    buildFieldConfidence("description", desc  ? 0.82 : 0.2),
-    buildFieldConfidence("quantity",    qty   ? 0.78 : 0.3),
-    buildFieldConfidence("unit",        unit  ? 0.75 : 0.3),
-    buildFieldConfidence("unit_price",  up    ? 0.80 : 0.3),
-    buildFieldConfidence("total_price", total ? 0.80 : 0.3),
+    buildFieldConfidence("description", raw.rawDescription ? 0.82 : 0.2),
+    buildFieldConfidence("quantity",    raw.rawQuantity    ? 0.78 : 0.3),
+    buildFieldConfidence("unit",        raw.rawUnit        ? 0.75 : 0.3),
+    buildFieldConfidence("unit_price",  raw.rawUnitPrice   ? 0.80 : 0.3),
+    buildFieldConfidence("total_price", raw.rawTotalPrice  ? 0.80 : 0.3),
   ]);
 }
 
 /** Constrói item bruto com proveniência, aplicando o limite de itens. */
 function pushItem(
-  items: RawExtractedItem[], ctx: TabularContext,
-  raw: { rawDescription: string | null; rawQuantity: string | null; rawUnit: string | null; rawUnitPrice: string | null; rawTotalPrice: string | null },
+  items: RawExtractedItem[], ctx: TabularContext, raw: RawFields,
   location: CellLocation, extras: Partial<Pick<ExtractionProvenance, "sectionTitle" | "tableIndex" | "rawRowData">>,
   rawCellValues: Record<string, unknown>,
+  extra: { sheetName?: string; inferredHeaders?: string[]; warnings?: import("../domain/importConfidence").ExtractionWarning[] } = {},
 ): boolean {
   if (items.length >= ctx.maxItems) return false;
-  const confidence = confidenceFor(raw.rawDescription, raw.rawQuantity, raw.rawUnit, raw.rawUnitPrice, raw.rawTotalPrice);
   const provenance = buildProvenance(
     ctx.sourceFileId, ctx.sourceFileName, ctx.sourceMimeType, ctx.sourceChecksum,
     ctx.parserType, ctx.parserVersion, location, extras,
   );
   items.push(createRawItem(
     ctx.importSessionId, raw, provenance,
-    { parserType: ctx.parserType, parserVersion: ctx.parserVersion, processingMs: 0, rawCellValues, pageNumber: location.page },
-    confidence,
+    {
+      parserType: ctx.parserType, parserVersion: ctx.parserVersion, processingMs: 0, rawCellValues,
+      pageNumber: location.page, sheetName: extra.sheetName, inferredHeaders: extra.inferredHeaders,
+    },
+    confidenceFor(raw), extra.warnings ?? [],
   ));
   return true;
 }
@@ -140,56 +247,141 @@ export interface TabularOutcome {
   skipped:  number;
 }
 
+export interface TableOptions {
+  /** Sem cabeçalho: usar ordem posicional 0-4 (PDF/DOCX) ou só a coluna 0 como descrição (CSV/XLSX). */
+  positionalFallback: "five_columns" | "description_only";
+  /** Força a linha de cabeçalho (0-based), quando informada pelo operador. */
+  headerRow?: number;
+  sheetName?: string;
+}
+
+/** Localiza a linha de cabeçalho entre as 5 primeiras (ou a forçada). -1 se não houver. */
+function findHeaderRow(matrix: string[][], forced?: number): number {
+  if (forced !== undefined && forced >= 0 && forced < matrix.length) return forced;
+  for (let i = 0; i < Math.min(5, matrix.length); i++) {
+    const row = matrix[i] ?? [];
+    if (row.filter((c) => (c ?? "").trim() !== "").length < 2) continue;
+    if (looksLikeHeaderCells(row)) return i;
+    const numeric = row.filter((c) => c && !isNaN(Number(String(c).replace(/[R$.,\s]/g, "")))).length;
+    if (numeric / row.length < 0.5 && row.filter((c) => (c ?? "").trim() !== "").length >= 2) return i;
+  }
+  return -1;
+}
+
 /**
- * Converte uma MATRIZ de células (tabela já segmentada: DOCX/PDF-getTable) em itens brutos.
- * `locate(dataRowIdx)` fornece a localização/proveniência de cada linha de dado.
+ * Converte uma MATRIZ de células (planilha, tabela DOCX, getTable do PDF) em itens brutos. Fonte ÚNICA
+ * usada por CSV/XLSX/PDF/DOCX. `locate(dataRowIdx, colIdx?)` fornece a localização/proveniência.
  */
-export function matrixToRawItems(
-  matrix: string[][], ctx: TabularContext,
-  locate: (dataRowIdx: number) => { location: CellLocation; extras: Partial<Pick<ExtractionProvenance, "sectionTitle" | "tableIndex" | "rawRowData">> },
+export function tableToRawItems(
+  matrixIn: string[][], ctx: TabularContext, opts: TableOptions,
+  locate: (rowIdx: number, colIdx?: number) => { location: CellLocation; extras: Partial<Pick<ExtractionProvenance, "sectionTitle" | "tableIndex" | "rawRowData">> },
 ): TabularOutcome {
   const items: RawExtractedItem[] = [];
   const warnings: ImportWarning[] = [];
   let skipped = 0, rowsRead = 0;
+  const matrix = matrixIn.map((r) => (r ?? []).map((c) => String(c ?? "").trim()));
   if (matrix.length === 0) return { items, warnings, rowsRead, skipped };
 
-  // Cabeçalho entre as 3 primeiras linhas.
-  let headerRowIdx = -1;
-  for (let i = 0; i < Math.min(3, matrix.length); i++) {
-    if (looksLikeHeaderCells(matrix[i])) { headerRowIdx = i; break; }
-  }
-  const headers = headerRowIdx >= 0 ? matrix[headerRowIdx].map(c => c.toUpperCase()) : [];
+  const headerRowIdx = findHeaderRow(matrix, opts.headerRow);
+  const headersRaw = headerRowIdx >= 0 ? matrix[headerRowIdx] : [];
+  const headersNorm = headersRaw.map(normalizeHeader);
   if (headerRowIdx < 0) warnings.push({ code: "HEADER_INFERENCE", message: "Cabeçalho não identificado; usando ordem posicional das colunas.", severity: "warning" });
 
-  const descIdx  = headers.length ? matchColumn(headers, DESCRIPTION_PATTERNS) : 0;
-  const qtyIdx   = headers.length ? matchColumn(headers, QUANTITY_PATTERNS)    : 1;
-  const unitIdx  = headers.length ? matchColumn(headers, UNIT_PATTERNS)        : 2;
-  const upIdx    = headers.length ? matchColumn(headers, UNIT_PRICE_PATTERNS)  : 3;
-  const totalIdx = headers.length ? matchColumn(headers, TOTAL_PRICE_PATTERNS) : 4;
+  let map: ColumnMap;
+  if (headersNorm.length) map = mapHeaderColumns(headersNorm);
+  else if (opts.positionalFallback === "five_columns") map = { description: 0, quantity: 1, unit: 2, unitPrice: 3, totalPrice: 4, supplier: -1, brand: -1, model: -1, notes: -1, source: -1 };
+  else map = { description: 0, quantity: -1, unit: -1, unitPrice: -1, totalPrice: -1, supplier: -1, brand: -1, model: -1, notes: -1, source: -1 };
 
   const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  const dataRows = matrix.slice(startRow);
+  const wide = headersNorm.length ? detectWideFormat(headersRaw, dataRows, map) : { kind: "long" as const };
+  if (wide.kind === "wide") {
+    warnings.push({
+      code: "WIDE_FORMAT_EXPANDED",
+      message: `Mapa comparativo reconhecido: ${wide.supplierColumns.length} colunas de fornecedor expandidas em uma cotação por fornecedor.`,
+      severity: "info",
+    });
+  } else if (wide.kind === "ambiguous") {
+    warnings.push({
+      code: "WIDE_FORMAT_AMBIGUOUS",
+      message: `Estrutura ambígua (${wide.reason}) — nenhuma expansão automática; revise as colunas de preço manualmente.`,
+      severity: "warning",
+    });
+  }
+  const at = (row: string[], idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || null) : null);
+  const headerKeys = headersRaw.map((h, i) => h || `col${i}`);
+
   for (let r = startRow; r < matrix.length; r++) {
-    const row = matrix[r].map(c => (c ?? "").trim());
+    const row = matrix[r];
     rowsRead++;
     if (row.every(c => c === "")) { skipped++; continue; }
-    const at = (idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || null) : null);
-    const rawDescription = at(descIdx);
+    const rawDescription = at(row, map.description);
     if (!rawDescription) { skipped++; continue; }
-    const raw = {
+    const base = {
       rawDescription,
-      rawQuantity:   at(qtyIdx),
-      rawUnit:       at(unitIdx),
-      rawUnitPrice:  at(upIdx),
-      rawTotalPrice: at(totalIdx),
+      rawQuantity: at(row, map.quantity),
+      rawUnit:     at(row, map.unit),
+      rawBrand:    at(row, map.brand),
+      rawModel:    at(row, map.model),
+      rawNotes:    at(row, map.notes),
+      rawSource:   at(row, map.source),
     };
+    const rawCellValues = Object.fromEntries(row.map((c, i) => [headerKeys[i] ?? `col${i}`, c]));
+    const pushExtra = { sheetName: opts.sheetName, inferredHeaders: headersRaw.length ? headersRaw : undefined };
+
+    if (wide.kind === "wide") {
+      // Uma cotação POR FORNECEDOR com valor; fornecedor = cabeçalho da coluna de preço.
+      let pushed = 0;
+      for (const col of wide.supplierColumns) {
+        const value = at(row, col);
+        if (!value) continue;
+        const { location, extras } = locate(r, col);
+        const ok = pushItem(items, ctx, {
+          ...base, rawUnitPrice: value, rawTotalPrice: null, rawSupplier: supplierNameFromHeader(headersRaw[col]) || null,
+        }, location, { ...extras, rawRowData: row }, rawCellValues, {
+          ...pushExtra,
+          warnings: [{ code: "WIDE_FORMAT_EXPANDED", message: `Cotação expandida da coluna "${headersRaw[col]}".`, severity: "info", field: "supplier" }],
+        });
+        if (!ok) { warnings.push({ code: "TRUNCATED_VALUE", message: `Limite de ${ctx.maxItems} itens atingido; linhas adicionais ignoradas.`, severity: "warning" }); return { items, warnings, rowsRead, skipped }; }
+        pushed++;
+      }
+      if (pushed === 0) {
+        // Linha sem nenhum preço: o item não é perdido — vai para revisão sem valor.
+        const { location, extras } = locate(r);
+        pushItem(items, ctx, { ...base, rawUnitPrice: null, rawTotalPrice: null, rawSupplier: null }, location, { ...extras, rawRowData: row }, rawCellValues, {
+          ...pushExtra, warnings: [{ code: "EMPTY_FIELD", message: "Nenhum preço de fornecedor nesta linha do mapa.", severity: "warning", field: "unit_price" }],
+        });
+      }
+      continue;
+    }
+
     const { location, extras } = locate(r);
-    const rawCellValues = Object.fromEntries(row.map((c, i) => [(headers[i] || `col${i}`), c]));
-    if (!pushItem(items, ctx, raw, location, { ...extras, rawRowData: row }, rawCellValues)) {
+    const ok = pushItem(items, ctx, {
+      ...base,
+      rawUnitPrice:  at(row, map.unitPrice),
+      rawTotalPrice: at(row, map.totalPrice),
+      rawSupplier:   at(row, map.supplier),
+    }, location, { ...extras, rawRowData: row }, rawCellValues, pushExtra);
+    if (!ok) {
       warnings.push({ code: "TRUNCATED_VALUE", message: `Limite de ${ctx.maxItems} itens atingido; linhas adicionais ignoradas.`, severity: "warning" });
       break;
     }
   }
   return { items, warnings, rowsRead, skipped };
+}
+
+/**
+ * Converte uma MATRIZ de células já segmentada (DOCX/PDF-getTable) em itens brutos. Mantido por
+ * compatibilidade — delega a `tableToRawItems` (fallback posicional de 5 colunas).
+ */
+export function matrixToRawItems(
+  matrix: string[][], ctx: TabularContext,
+  locate: (dataRowIdx: number) => { location: CellLocation; extras: Partial<Pick<ExtractionProvenance, "sectionTitle" | "tableIndex" | "rawRowData">> },
+): TabularOutcome {
+  return tableToRawItems(matrix, ctx, { positionalFallback: "five_columns" }, (r, col) => {
+    const loc = locate(r);
+    return col === undefined ? loc : { ...loc, location: { ...loc.location, column: col + 1 } };
+  });
 }
 
 /**
@@ -210,11 +402,9 @@ export function linesToRawItems(
     if (line === "") continue;
     rowsRead++;
     const cells = line.split(/\s{2,}/).map(c => c.trim()).filter(c => c !== "");
-    // Cabeçalho: pula (registra que houve).
     if ((cells.length >= 2 && looksLikeHeaderCells(cells)) || looksLikeHeaderCells(line.split(/\s+/))) {
       headerSeen = true; skipped++; continue;
     }
-    // Caminho A: colunas separadas por 2+ espaços (PDF preserva alinhamento).
     let raw: ReturnType<typeof parsePriceRowTokens> = null;
     if (cells.length >= 3) {
       raw = {
@@ -226,7 +416,6 @@ export function linesToRawItems(
       };
       if (!raw.rawDescription) raw = null;
     }
-    // Caminho B: heurística ancorada à direita sobre tokens simples.
     if (!raw) raw = parsePriceRowTokens(line.split(/\s+/));
     if (!raw) { skipped++; continue; }
 

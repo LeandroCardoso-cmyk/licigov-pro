@@ -5,7 +5,7 @@
  * Nunca grava diretamente em tabelas de domínio (ItemTR, CATMAT, etc.).
  * Human review: approve/reject/skip por item, com nota opcional.
  */
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, lt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { addDays } from "date-fns";
 import { getDb } from "../db/connection";
@@ -41,6 +41,12 @@ export async function persistStagingItems(
       rawUnit:            item.rawUnit         ?? null,
       rawUnitPrice:       item.rawUnitPrice    ?? null,
       rawTotalPrice:      item.rawTotalPrice   ?? null,
+      // Campos de cotação de 1ª classe (IMUTÁVEIS como os demais raw*; correção é overlay).
+      rawSupplier:        item.rawSupplier     ?? null,
+      rawBrand:           item.rawBrand        ?? null,
+      rawModel:           item.rawModel        ?? null,
+      rawNotes:           item.rawNotes        ?? null,
+      rawSource:          item.rawSource       ?? null,
       rawMetadata:        (item.rawMetadata ?? null) as object | null,
       sourceLocation:     (item.sourceLocation ?? null) as object | null,
       parserMetadata:     (item.parserMetadata ?? null) as object | null,
@@ -306,15 +312,17 @@ export async function bulkReviewStagingItems(
 
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
 
-export async function cleanupExpiredStaging(): Promise<number> {
+export async function cleanupExpiredStaging(now: Date = new Date()): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
 
+  // P0 piloto — CORREÇÃO: antes apagava TODOS os itens `pending` de TODOS os tenants, ignorando
+  // `expiresAt` (perda de dados em revisão). Agora só remove itens pendentes cujo TTL EXPIROU.
   const result = await db.delete(importStagingItems)
-    .where(
-      // Drizzle MySQL doesn't expose lt() for timestamps in all versions — use raw SQL workaround
+    .where(and(
       eq(importStagingItems.reviewStatus, "pending"),
-    );
+      lt(importStagingItems.expiresAt, now),
+    ));
 
   log.info("staging_cleanup_ran", { deletedRows: (result as unknown as { affectedRows?: number }).affectedRows ?? 0 });
   return (result as unknown as { affectedRows?: number }).affectedRows ?? 0;

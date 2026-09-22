@@ -10,6 +10,7 @@
  */
 import { BaseParser } from "./baseParser";
 import { matrixToRawItems, linesToRawItems, type TabularContext } from "./tabularExtraction";
+import { buildDocumentProjection, pageTextToBlocks, type DocumentBlock } from "../domain/documentProjection";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
 import type { RawExtractedItem } from "../domain/importExtraction";
@@ -19,7 +20,7 @@ const MAX_PAGES  = 500;
 const MAX_ITEMS  = 5000;
 const TIMEOUT_MS = 60_000;
 
-const PARSER_VERSION = "2.0.0";
+const PARSER_VERSION = "2.1.0";
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -119,6 +120,27 @@ export class PdfParser extends BaseParser {
           { code: "OCR_REQUIRED", message: "PDF parece ser escaneado (somente imagem). Extração requer OCR, não suportado nesta versão.", severity: "warning" },
           { code: "SCANNED_PDF_UNSUPPORTED", message: "Nenhum texto extraível encontrado; nenhum item foi extraído.", severity: "warning" },
         ], startMs, pageCount);
+      }
+
+      // PROJEÇÃO DOCUMENTAL (DFD/ETP/TR): texto em ordem de páginas → títulos/parágrafos/listas com
+      // proveniência por página. Mesmo texto real do getText (sem OCR, sem geração). Tabelas já aparecem
+      // no texto da página — não são duplicadas como bloco separado.
+      if (opts.extractionMode === "document") {
+        const blocks: DocumentBlock[] = [];
+        for (const page of pages) blocks.push(...pageTextToBlocks(page.text ?? "", page.num, blocks.length));
+        const projection = buildDocumentProjection(blocks, { pages: pages.length });
+        if (projection.stats.truncated) {
+          warnings.push({ code: "DOCUMENT_TRUNCATED", message: "Documento excede o limite de caracteres; conteúdo truncado para revisão.", severity: "warning" });
+        }
+        if (blocks.length === 0) {
+          warnings.push({ code: "NO_TEXT_EXTRACTED", message: "Nenhum texto legível foi extraído do documento.", severity: "warning" });
+        }
+        const processingMs = Date.now() - startMs;
+        const summary = { ...this.buildSummary(blocks.length, [], 0, warnings, [], processingMs, { pagesProcessed: pages.length }) };
+        return {
+          items: [], warnings, errors: [], summary, documentProjection: projection,
+          rawMetadata: { pageCount, pagesProcessed: pages.length, parserVersion: PARSER_VERSION, mode: "document" },
+        };
       }
 
       const ctx: TabularContext = {

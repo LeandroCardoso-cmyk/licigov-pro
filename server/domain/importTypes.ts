@@ -18,10 +18,15 @@ export type ImportSessionStatus =
   | "archived";       // arquivado (terminal)
 
 export type ImportType =
-  | "price_research"  // pesquisa de preço (planilha XLSX/CSV)
+  | "price_research"  // pesquisa de preço (planilha XLSX/CSV/PDF/DOCX/colar)
   | "tr_items"        // itens de TR existente (DOCX/PDF)
   | "catmat"          // catálogo CATMAT/CATSER importado
-  | "generic";        // arquivo genérico não classificado
+  | "generic"         // arquivo genérico não classificado
+  // Importação DOCUMENTAL (projeção documental → revisão → promoção a generated_documents rascunho).
+  // O tipo de documento é INTRÍNSECO ao importType (autoridade do servidor, nunca texto livre do cliente).
+  | "document_dfd"
+  | "document_etp"
+  | "document_tr";
 
 export type ParserType =
   | "xlsx"
