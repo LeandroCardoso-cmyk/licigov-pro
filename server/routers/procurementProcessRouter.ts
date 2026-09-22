@@ -61,7 +61,7 @@ const STATUS_SLUGS: Record<string, string> = {
 };
 
 export const procurementProcessRouter = router({
-  createProcess: tenantProcedure
+  createProcess: orgRoleProcedure("operator")
     .input(z.object({
       processNumber: z.string().min(1),
       object: z.string().min(1),
@@ -73,7 +73,7 @@ export const procurementProcessRouter = router({
       const process = createProcurementWorkspace({
         organizationId: orgId, processNumber: input.processNumber, object: input.object,
         modality: input.modality, startOption: input.startOption as StartOption,
-        responsibleUser: ctx.user.id, correlationId: ctx.correlationId,
+        responsibleUser: ctx.user!.id, correlationId: ctx.correlationId,
       });
       try {
         // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
@@ -82,14 +82,14 @@ export const procurementProcessRouter = router({
         // nunca deixa processo sem evento de criação nem evento órfão em caso de falha parcial.
         await createProcessWithInitialEvent(process, {
           eventType: "workspace_created",
-          actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
+          actor: String(ctx.user!.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
           refId: process.id, correlationId: ctx.correlationId,
         });
       } catch (err) {
         // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
         // ao usuário, mensagem amigável e estável em pt-BR.
         log.error("create_process_failed", {
-          organizationId: orgId, userId: ctx.user.id, processNumber: input.processNumber,
+          organizationId: orgId, userId: ctx.user!.id, processNumber: input.processNumber,
           startOption: input.startOption, correlationId: ctx.correlationId,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -123,7 +123,7 @@ export const procurementProcessRouter = router({
       return { processes, total: processes.length };
     }),
 
-  updateStage: tenantProcedure
+  updateStage: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), stage: z.enum(STAGES).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -132,13 +132,13 @@ export const procurementProcessRouter = router({
       await updateProcessStage(process.id, orgId, updated.currentStage, updated.status, updated.updatedAt);
       await recordProcessEvent({
         organizationId: orgId, processId: process.id, eventType: "change",
-        actor: String(ctx.user.id), summary: `Etapa: ${updated.currentStage}.`, refId: process.id,
+        actor: String(ctx.user!.id), summary: `Etapa: ${updated.currentStage}.`, refId: process.id,
         correlationId: ctx.correlationId,
       });
       return { process: updated };
     }),
 
-  importDFD: tenantProcedure
+  importDFD: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), source: z.enum(["pdf", "docx", "oficio", "memorando"]), fields: z.record(z.string(), z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -149,7 +149,7 @@ export const procurementProcessRouter = router({
       );
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id), summary: `DFD importado (${input.source}).`, refId: dfd.id,
+        actor: String(ctx.user!.id), summary: `DFD importado (${input.source}).`, refId: dfd.id,
         correlationId: ctx.correlationId,
       });
       return { dfd };
@@ -202,7 +202,7 @@ export const procurementProcessRouter = router({
       });
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id),
+        actor: String(ctx.user!.id),
         summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
         refId: document.id, correlationId: ctx.correlationId,
       });
@@ -224,14 +224,14 @@ export const procurementProcessRouter = router({
    * "Criar DFD do zero": estrutura um rascunho editável do DFD (art. 12, §1º) e
    * persiste como documento canônico (kind "dfd", rascunho). Idempotente.
    */
-  generateDFD: tenantProcedure
+  generateDFD: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
       const { document } = await generateDFDDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       return { document };
     }),
@@ -259,19 +259,19 @@ export const procurementProcessRouter = router({
       return { document };
     }),
 
-  generateETP: tenantProcedure
+  generateETP: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "etp", object: input.object,
-        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       return { document };
     }),
 
-  importPriceResearch: tenantProcedure
+  importPriceResearch: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       source: z.enum(["pdf", "docx", "xlsx", "csv", "colar", "manual"]),
@@ -291,7 +291,7 @@ export const procurementProcessRouter = router({
         await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
       } catch (err) {
         log.error("import_price_research_persist_failed", {
-          organizationId: orgId, userId: ctx.user.id, processId: input.processId,
+          organizationId: orgId, userId: ctx.user!.id, processId: input.processId,
           source: input.source, correlationId: ctx.correlationId,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -331,7 +331,7 @@ export const procurementProcessRouter = router({
       }));
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} cotação(ões) → ${materialized.items.length} Item(ns) Inteligente(s).`,
+        actor: String(ctx.user!.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} cotação(ões) → ${materialized.items.length} Item(ns) Inteligente(s).`,
         refId: research.id, correlationId: ctx.correlationId,
       });
       return {
@@ -351,41 +351,41 @@ export const procurementProcessRouter = router({
       return { items, total: items.length };
     }),
 
-  approveItem: tenantProcedure
+  approveItem: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
       // requisição aplica a transição e registra um evento; duplo clique converge sem novo efeito.
       return applyGovernedItemTransition({
-        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user.id,
-        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "approval",
+        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user!.id,
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "approval",
         summary: (d) => `Item aprovado: ${d}.`,
       });
     }),
 
-  rejectItem: tenantProcedure
+  rejectItem: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       // Transição atômica (compare-and-set) — segura sob concorrência.
       return applyGovernedItemTransition({
         itemId: input.itemId, orgId, target: "rejeitado", approvedBy: null,
-        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "decision",
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "decision",
         summary: (d) => `Item rejeitado: ${d}.`,
       });
     }),
 
-  generateTR: tenantProcedure
+  generateTR: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id });
+      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id });
       return { document };
     }),
 
-  generateNotice: tenantProcedure
+  generateNotice: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
       modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
@@ -397,7 +397,7 @@ export const procurementProcessRouter = router({
       const result = await generateNotice({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform, correlationId: ctx.correlationId,
-        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       if (!result.validation.valid) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
@@ -513,20 +513,20 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       return promoteOfficialDocument({
         organizationId: orgId, processId: input.processId, kind: input.kind,
-        actorUserId: ctx.user.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
+        actorUserId: ctx.user!.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
         expectedContentHash: input.expectedContentHash, reason: input.reason ?? null,
       });
     }),
 
-  issueProcess: tenantProcedure
+  issueProcess: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user.id), summary: "Processo emitido.", refId: process.id, correlationId: ctx.correlationId });
+      await recordProcessEvent({ organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user!.id), summary: "Processo emitido.", refId: process.id, correlationId: ctx.correlationId });
       return { success: true, processId: process.id, status: "emitido" as const };
     }),
 });

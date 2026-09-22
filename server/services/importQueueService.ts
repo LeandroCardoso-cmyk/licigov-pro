@@ -27,6 +27,8 @@ import { isFeatureEnabled } from "./featureFlagService";
 import { CANONICAL_INGESTION_FLAG } from "./ingestionUploadService";
 import { MAX_FILE_SIZE_BYTES, type ParserType } from "../domain/importTypes";
 import type { ParseOptions } from "../parsers/baseParser";
+import { isDocumentImportType } from "../domain/documentProjection";
+import { persistDocumentStaging } from "./documentIntakeService";
 
 const log = serviceLogger("ImportQueueService");
 
@@ -160,11 +162,50 @@ async function processJob(job: ImportJob): Promise<void> {
       organizationId:  job.organizationId,
     };
 
+    // P0 piloto — DFD/ETP/TR importados como DOCUMENTO: mesmo pipeline (sessão/storage/checksum/parser),
+    // projeção documental em vez de linhas. Sem IA; sem OCR (escaneado ⇒ falha terminal explícita).
+    const documentMode = isDocumentImportType(session.importType);
+    if (documentMode) opts.extractionMode = "document";
+
     const result = await parser.safeParse(buffer, opts);
 
     if (result.errors.some(e => e.fatal)) {
       const msg = result.errors.find(e => e.fatal)?.message ?? "Erro fatal no parser.";
       throw new Error(msg);
+    }
+
+    if (documentMode) {
+      const projection = result.documentProjection;
+      const ocr = result.warnings.some(w => w.code === "OCR_REQUIRED");
+      if (!projection || ocr || projection.stats.characters === 0) {
+        // Falha DETERMINÍSTICA (reprocessar não muda o resultado): sem retry, sem extração fingida.
+        const code = ocr ? "OCR_REQUIRED" : projection ? "NO_TEXT_EXTRACTED" : "DOCUMENT_MODE_UNSUPPORTED";
+        const message = ocr
+          ? "O PDF parece ser digitalizado (somente imagem). Esta versão não faz OCR — envie o PDF original com texto ou o DOCX."
+          : projection
+            ? "Nenhum texto legível foi encontrado no documento."
+            : "Formato não suportado para importação de documento — envie PDF com texto ou DOCX.";
+        await updateSessionStatus(job.sessionId, job.organizationId, "failed", {
+          stage: "failed", warnings: result.warnings, extractionSummary: result.summary,
+          errors: [{ code, message, fatal: true }], failedAt: new Date(),
+        });
+        if (rec) { rec.status = "failed"; rec.error = code; }
+        inFlight.delete(job.sessionId);
+        log.warn("job_document_unextractable", { jobId: job.jobId, sessionId: job.sessionId, code });
+        return;
+      }
+      await persistDocumentStaging({
+        session, projection, parserType: parser.parserType,
+        parserVersion: parser.capabilities.parserVersion, warnings: result.warnings,
+      });
+      await updateSessionStatus(job.sessionId, job.organizationId, "awaiting_review", {
+        progress: 90, stage: "awaiting_review", finishedAt: new Date(),
+        warnings: result.warnings, extractionSummary: result.summary,
+      });
+      if (rec) { rec.status = "done"; rec.result = { itemCount: 0 }; }
+      inFlight.delete(job.sessionId);
+      log.info("job_done_document", { jobId: job.jobId, sessionId: job.sessionId, characters: projection.stats.characters });
+      return;
     }
 
     await updateSessionStatus(job.sessionId, job.organizationId, "extracted", {

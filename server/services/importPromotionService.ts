@@ -10,7 +10,10 @@
  *  - Preserva lineage (org, processo, sessão, item, checksum, parser, revisão de correção, correlationId,
  *    ator, timestamp) no ledger e nas observações do item de domínio. NÃO altera/apaga staging/histórico.
  *  - NÃO marca nada como juridicamente aprovado. NÃO decide juridicamente. Só `price_research` é promovível
- *    hoje (DFD/ETP são documentos, não contêineres de linhas — capacidade indisponível, registrada).
+ *    por aqui (linhas). DFD/ETP/TR importados são DOCUMENTOS: caminho próprio e governado em
+ *    documentIntakeService (projeção documental → revisão → rascunho), no MESMO motor de ingestão.
+ *  - P0 piloto: a promoção também MATERIALIZA os Itens Inteligentes (mesma transação, chave lógica
+ *    determinística) e dispara o enriquecimento pós-commit (degradável).
  */
 import { createHash } from "crypto";
 import { and, eq, ne, sql } from "drizzle-orm";

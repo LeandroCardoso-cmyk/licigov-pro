@@ -71,7 +71,7 @@ export const itemIntelligenceRouter = router({
       return { suggestions: persisted.length > 0 ? persisted : computed };
     }),
 
-  acceptCATMAT: tenantProcedure
+  acceptCATMAT: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1), matchId: z.string().min(1), catmatCode: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -79,11 +79,11 @@ export const itemIntelligenceRouter = router({
       if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
       await updateMatchDecision(input.matchId, orgId, "aceito");
       await updateItemCatmat(input.itemId, orgId, input.catmatCode, item.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user.id), summary: `CATMAT ${input.catmatCode} aceito para o item.`, refId: input.itemId, correlationId: ctx.correlationId });
+      await recordProcessEvent({ organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user!.id), summary: `CATMAT ${input.catmatCode} aceito para o item.`, refId: input.itemId, correlationId: ctx.correlationId });
       return { success: true, itemId: input.itemId, catmatCode: input.catmatCode };
     }),
 
-  rejectCATMAT: tenantProcedure
+  rejectCATMAT: orgRoleProcedure("operator")
     .input(z.object({ matchId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -99,7 +99,7 @@ export const itemIntelligenceRouter = router({
       return { results: matches.map(m => ({ catmatCode: m.catmatCode, catmatDescription: m.catmatDescription, score: m.score, rank: m.rank })) };
     }),
 
-  manualCATMAT: tenantProcedure
+  manualCATMAT: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1), catmatCode: z.string().min(1), catmatDescription: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -135,8 +135,8 @@ export const itemIntelligenceRouter = router({
       // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
       // requisição aplica e registra um evento; duplo clique converge sem novo efeito.
       return applyGovernedItemTransition({
-        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user.id,
-        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "approval",
+        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user!.id,
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "approval",
         summary: (d) => `Item aprovado (painel): ${d}.`,
       });
     }),
@@ -169,7 +169,7 @@ export const itemIntelligenceRouter = router({
 
       const { decision: record, replayed } = await decideCatmat({
         organizationId: orgId,
-        actorUserId: ctx.user.id,
+        actorUserId: ctx.user!.id,
         correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey,
         itemId: input.itemId,
@@ -190,7 +190,7 @@ export const itemIntelligenceRouter = router({
         }
         await recordProcessEvent({
           organizationId: orgId, processId: item.processId, eventType: "decision",
-          actor: String(ctx.user.id),
+          actor: String(ctx.user!.id),
           summary: `CATMAT/CATSER — decisão do servidor: ${decision}${record.catmatCode ? ` (${record.catmatCode})` : ""}.`,
           refId: input.itemId, correlationId: ctx.correlationId,
         });

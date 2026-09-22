@@ -420,7 +420,11 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   dfd_regenerate  = regeneração DETERMINÍSTICA (template, sem IA) do DFD "criar do zero";
 //   dfd_manual_edit = edição humana manual do DFD (saveDFD governado);
 //   human_edit      = reservado para o editor humano de ETP/TR/Edital (C.4B.3B).
-export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit";
+//   import_promote  = P0 piloto — documento IMPORTADO (DFD/ETP/TR) promovido a rascunho (criação);
+//   import_replace  = P0 piloto — substituição EXPLÍCITA e confirmada do rascunho por documento importado.
+export type DraftEditOperation =
+  | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
+  | "import_promote" | "import_replace";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):
@@ -446,6 +450,11 @@ export interface DraftMutationInput {
   idempotencyKey: string;
   correlationId: string;
   reason?: string | null;
+  /**
+   * P0 piloto — registra também a CRIAÇÃO no ledger (previous_content_hash vazio). Por padrão a criação não
+   * gera linha (contrato C.4B.3A preservado); a promoção de documento importado exige rastro desde a origem.
+   */
+  ledgerOnCreate?: boolean;
 }
 
 /** Resultado + SNAPSHOT CANÔNICO persistido (Blocker 2): a resposta cacheável reflete EXATAMENTE o
@@ -505,6 +514,15 @@ export async function applyDraftContentMutationTx(
       lastSubstantiveAt: now, createdAt: doc.createdAt || now, updatedAt: now,
     };
     await insertGeneratedDocument(created, tx);
+    if (input.ledgerOnCreate) {
+      await tx.insert(generatedDocumentEditsTable).values({
+        organizationId, processId, generatedDocumentId: created.id, kind,
+        actorUserId, previousContentHash: "", newContentHash: newHash,
+        previousContent: null, operation: input.operation,
+        reason: input.reason ?? null, correlationId: input.correlationId,
+        idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
+      });
+    }
     return { created: true, changed: true, document: created };
   }
 

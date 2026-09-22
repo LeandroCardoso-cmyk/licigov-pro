@@ -67,6 +67,10 @@ export function registerIngestionUploadRoute(app: Express): void {
       if (!membership || !membership.ativo || !orgId) {
         return void res.status(403).json({ error: "Sem acesso à organização." });
       }
+      // P0 piloto — upload é MUTAÇÃO: mesmo papel mínimo da createSession (operator). Viewer não envia.
+      if (membership.role === "viewer") {
+        return void res.status(403).json({ error: "Esta ação requer papel mínimo 'operator' na organização." });
+      }
       organizationId = orgId;
 
       await assertCanonicalIngestionEnabled(organizationId);

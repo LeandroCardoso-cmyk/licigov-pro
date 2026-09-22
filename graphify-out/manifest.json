@@ -4335,8 +4335,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1790112467.3876107,
-    "ast_hash": "42273139560d70be145cabdbe7732337",
+    "mtime": 1790112783.2599378,
+    "ast_hash": "4bb1cc0e2194cb68d5f237753d5d7755",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -5145,8 +5145,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1789127769.307346,
-    "ast_hash": "a23b96e915467debe9ab4de781464847",
+    "mtime": 1790113054.619495,
+    "ast_hash": "5c4bba47264290acacdba38282743ca9",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1790112470.7396672,
-    "ast_hash": "b7c8052db111b13ecda9d9647d01bd89",
+    "mtime": 1790113043.3673148,
+    "ast_hash": "908bd49a79b73e4ea62fc296fd9acaca",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -5770,8 +5770,8 @@
     "semantic_hash": ""
   },
   "server/services/fileIngestionService.ts": {
-    "mtime": 1788023705.8115394,
-    "ast_hash": "ea03d050a511e74c8df6ffa4db0263be",
+    "mtime": 1790112794.6416461,
+    "ast_hash": "46c6564238ab1f3b7cabae5f6249e058",
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
@@ -5830,8 +5830,8 @@
     "semantic_hash": ""
   },
   "server/services/importQueueService.ts": {
-    "mtime": 1788023706.178377,
-    "ast_hash": "547000bab9edab7976643f843c384baf",
+    "mtime": 1790112894.9780056,
+    "ast_hash": "2d91b416f6e40540c367fd9ec45fe77b",
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {
@@ -10400,8 +10400,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-canonical-guard.test.ts": {
-    "mtime": 1788023705.7183769,
-    "ast_hash": "1f9a98fd2ae7cfcb61d08703f3ab4fe0",
+    "mtime": 1790113156.8959947,
+    "ast_hash": "c53555406b36568083d4ad29bb35466e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
@@ -10415,13 +10415,13 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1788023705.790377,
-    "ast_hash": "e8cd788cdb152caea40143b4a73d1468",
+    "mtime": 1790112967.7126017,
+    "ast_hash": "b9e53120c77f6f893f9ec6b5086c91e9",
     "semantic_hash": ""
   },
   "server/routes/ingestionUploadRoute.ts": {
-    "mtime": 1788023705.794377,
-    "ast_hash": "8965c733d31ec27a9e41558ca8228330",
+    "mtime": 1790112974.1508875,
+    "ast_hash": "b406b42614d7aeaf329c7df8a2bb5c61",
     "semantic_hash": ""
   },
   "server/services/ingestionUploadService.ts": {
@@ -10680,8 +10680,8 @@
     "semantic_hash": ""
   },
   "server/services/importPromotionService.ts": {
-    "mtime": 1790112440.1766415,
-    "ast_hash": "2fe2e431de1cc928d70a8fab449c9b22",
+    "mtime": 1790112967.7128162,
+    "ast_hash": "ad4dcc527e57d1766e759c73869fb14d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/prc-cognitive-governance.test.ts": {
@@ -11802,6 +11802,11 @@
   "server/services/itemMaterializationService.ts": {
     "mtime": 1790112467.388002,
     "ast_hash": "1f8c5ea77d2b983084dc34277f055f53",
+    "semantic_hash": ""
+  },
+  "server/services/documentIntakeService.ts": {
+    "mtime": 1790112877.9473507,
+    "ast_hash": "7f31e843f58165e6d73faacfa3f8682e",
     "semantic_hash": ""
   }
 }

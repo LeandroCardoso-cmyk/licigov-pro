@@ -196,6 +196,7 @@ export async function findActiveSessionByChecksum(
   organizationId:       number,
   checksum:             string,
   procurementProcessId: string | null = null,
+  importType:           string | null = null,
 ): Promise<typeof importSessions.$inferSelect | null> {
   const db = await getDb();
   if (!db) return null;
@@ -209,7 +210,10 @@ export async function findActiveSessionByChecksum(
   const active = rows.filter(r =>
     r.status !== "rejected" && r.status !== "archived" &&
     // Dedup só dentro do MESMO processo canônico (null == null para o fluxo sem processo).
-    (r.procurementProcessId ?? null) === (procurementProcessId ?? null),
+    (r.procurementProcessId ?? null) === (procurementProcessId ?? null) &&
+    // P0 piloto — e do MESMO tipo de importação: o mesmo arquivo enviado como "TR" não pode adotar a
+    // sessão de "Pesquisa de Preços" (workspaces distintos; antes havia adoção cruzada).
+    (importType == null || r.importType === importType),
   );
   // Mais recente primeiro (id crescente = criação crescente).
   active.sort((a, b) => b.id - a.id);
@@ -224,6 +228,7 @@ export async function findActiveSessionByChecksum(
 export async function findResumableSessionForProcess(
   organizationId:       number,
   procurementProcessId: string,
+  importType:           string | null = null,
 ): Promise<typeof importSessions.$inferSelect | null> {
   const db = await getDb();
   if (!db) return null;
@@ -235,7 +240,9 @@ export async function findResumableSessionForProcess(
     ));
 
   const resumable = rows.filter(r =>
-    r.status !== "approved" && r.status !== "archived" && r.status !== "rejected",
+    r.status !== "approved" && r.status !== "archived" && r.status !== "rejected" &&
+    // P0 piloto — retomada escopada ao workspace (DFD/ETP/TR/Pesquisa não se misturam).
+    (importType == null || r.importType === importType),
   );
   resumable.sort((a, b) => b.id - a.id);
   return resumable[0] ?? null;
@@ -303,7 +310,10 @@ export async function claimSessionForRecovery(
       inArray(importSessions.status,    ["queued", "parsing"]),
       ne(importSessions.stage,          "recovering"),
     ));
-  return ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) === 1;
+  // mysql2/drizzle devolve [ResultSetHeader, fields]; aceita também o header direto (mocks/drivers).
+  // (Antes lia `affectedRows` da tupla → sempre 0 → a recuperação nunca reivindicava a sessão.)
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  return (header?.affectedRows ?? 0) === 1;
 }
 
 // ─── Status transitions ───────────────────────────────────────────────────────
