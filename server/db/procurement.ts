@@ -204,7 +204,9 @@ export async function insertIntelligentItem(it: IntelligentProcurementItem): Pro
     risks: JSON.stringify(it.risks), recommendations: JSON.stringify(it.recommendations),
     status: it.status, approvedBy: it.approvedBy, correlationId: it.correlationId,
     createdAt: toDb(it.createdAt), updatedAt: toDb(it.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { status: it.status, suggestedCatmat: it.suggestedCATMAT, approvedBy: it.approvedBy, updatedAt: toDb(it.updatedAt) } });
+  // P0 piloto — reinserção do MESMO item lógico NUNCA reverte decisão humana: status/approvedBy/CATMAT
+  // (antes eram sobrescritos, e um item `aprovado` voltava a `pendente` numa reimportação).
+  }).onDuplicateKeyUpdate({ set: { updatedAt: toDb(it.updatedAt) } });
   return it;
 }
 

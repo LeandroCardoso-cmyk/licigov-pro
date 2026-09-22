@@ -19,7 +19,9 @@ import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "..
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
-import { enrichItem, applyGovernedItemTransition } from "../services/itemIntelligenceService";
+import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
+import { materializeAndEnrich } from "../services/itemMaterializationService";
+import { reaisToCents } from "../domain/money";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import { getOrganizationById } from "../db/organizations";
@@ -299,23 +301,46 @@ export const procurementProcessRouter = router({
         });
       }
 
-      // Cada item da pesquisa vira um Item Inteligente enriquecido.
-      const enriched = [];
-      for (const it of rawItems) {
-        const e = await enrichItem({
-          organizationId: orgId, processId: input.processId, researchId: research.id,
-          description: it.description, quantity: it.quantity, unit: it.unit,
-          supplierValues: it.value > 0 ? [{ name: it.supplier || "fornecedor", value: it.value }] : [],
-          correlationId: ctx.correlationId,
+      // P0 piloto — o caminho manual/colar converge no MESMO modelo canônico da ingestão: cotações
+      // consolidadas por chave lógica determinística (sem fuzzy), item aprovado/rejeitado NUNCA revertido,
+      // enriquecimento pós-commit degradável. (Antes: um Item por linha e reset de status em reimportação.)
+      let materialized;
+      try {
+        materialized = await materializeAndEnrich({
+          organizationId: orgId, processId: input.processId, researchId: research.id, correlationId: ctx.correlationId,
+          quotes: rawItems.map((it) => ({
+            quoteId: it.id, researchId: research.id, description: it.description, quantity: it.quantity, unit: it.unit,
+            supplier: it.supplier, brand: it.brand, model: it.model, source: it.source,
+            valueCents: it.value > 0 ? reaisToCents(it.value) : null,
+          })),
         });
-        enriched.push({ id: e.item.id, description: e.item.description, suggestedCATMAT: e.item.suggestedCATMAT });
+      } catch (err) {
+        log.error("import_price_research_materialize_failed", {
+          organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "A pesquisa foi registrada, mas não foi possível consolidar os Itens Inteligentes. Tente importar novamente.",
+        });
       }
+      const itemRows = await listIntelligentItems(input.processId, orgId);
+      const byId = new Map(itemRows.map((r) => [r.id, r]));
+      const enriched = materialized.items.map((m) => ({
+        id: m.id, description: byId.get(m.id)?.description ?? "", suggestedCATMAT: byId.get(m.id)?.suggestedCATMAT ?? null,
+      }));
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} item(ns) → Itens Inteligentes.`,
+        actor: String(ctx.user.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} cotação(ões) → ${materialized.items.length} Item(ns) Inteligente(s).`,
         refId: research.id, correlationId: ctx.correlationId,
       });
-      return { research: { ...research, itemCount: rawItems.length }, intelligentItems: enriched };
+      return {
+        research: { ...research, itemCount: rawItems.length }, intelligentItems: enriched,
+        materialization: {
+          created: materialized.created.length, updated: materialized.updated.length,
+          unchanged: materialized.unchanged.length, preserved: materialized.preserved.length,
+        },
+      };
     }),
 
   listItems: tenantProcedure
