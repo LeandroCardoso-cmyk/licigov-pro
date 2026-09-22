@@ -34,7 +34,11 @@ import {
 
 const log = serviceLogger("procurementProcessRouter");
 
-const START_OPTIONS = ["criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp"] as const;
+const START_OPTIONS = [
+  "criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp",
+  // P0 piloto — entrada no ponto em que a Prefeitura já está.
+  "importar_etp", "iniciar_pesquisa", "importar_tr", "iniciar_tr",
+] as const;
 const STAGES = ["NEW_PROCESS", "DFD", "ETP", "PRICE_RESEARCH", "ITEM_WORKSPACE", "TR", "NOTICE", "REVIEW", "ISSUED", "ARCHIVED"] as const;
 const MODALITIES = ["pregao", "concorrencia", "leilao", "concurso", "chamada_publica", "credenciamento", "registro_de_precos"] as const;
 const FORMS = ["eletronico", "presencial"] as const;

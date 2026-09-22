@@ -28,6 +28,8 @@ const SOURCE_LABELS: Record<ResearchSource, string> = {
 
 export type PesquisaPrecosWorkspaceProps = {
   processId?: string;
+  /** P0 piloto — CTA "Revisar Itens Inteligentes" após a promoção/importação. */
+  onReviewItems?: () => void;
 };
 
 /**
@@ -35,7 +37,7 @@ export type PesquisaPrecosWorkspaceProps = {
  * "Itens Inteligentes" via procurementProcess.importPriceResearch. Mantido intacto: é a entrada
  * "manual" e o comportamento com a flag desligada.
  */
-function LegacyPriceResearchPanel({ processId }: { processId: string }) {
+function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: string; onReviewItems?: () => void }) {
   const [source, setSource] = useState<ResearchSource>("colar");
   const [text, setText] = useState("");
   const importResearch = trpc.procurementProcess.importPriceResearch.useMutation();
@@ -89,14 +91,20 @@ function LegacyPriceResearchPanel({ processId }: { processId: string }) {
       {importResearch.isSuccess && (
         <div className="mt-4 border-t border-border pt-4">
           <p className="mb-3 text-sm font-medium text-green-700 dark:text-green-300">
-            {items.length} Item(ns) Inteligente(s) gerado(s).
+            {importResearch.data?.research.itemCount ?? 0} cotação(ões) → {items.length} Item(ns) Inteligente(s)
+            {importResearch.data?.materialization?.preserved ? ` (${importResearch.data.materialization.preserved} já decidido(s) preservado(s))` : ""}.
           </p>
+          {onReviewItems && (
+            <button type="button" onClick={onReviewItems} className="mb-3 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+              Revisar Itens Inteligentes
+            </button>
+          )}
           <ul className="divide-y divide-border">
             {items.map((it) => (
               <li key={it.id} className="flex items-center justify-between py-2">
                 <span className="text-sm text-foreground">{it.description}</span>
                 <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                  CATMAT: {it.suggestedCATMAT ?? "—"}
+                  CATMAT sugerido: {it.suggestedCATMAT ?? "—"}
                 </span>
               </li>
             ))}
@@ -107,7 +115,7 @@ function LegacyPriceResearchPanel({ processId }: { processId: string }) {
   );
 }
 
-export default function PesquisaPrecosWorkspace({ processId = "" }: PesquisaPrecosWorkspaceProps) {
+export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems }: PesquisaPrecosWorkspaceProps) {
   const { enabled, isLoading } = useIngestionCapabilities();
 
   return (
@@ -130,12 +138,13 @@ export default function PesquisaPrecosWorkspace({ processId = "" }: PesquisaPrec
           procurementProcessId={processId}
           importPurpose="price_research"
           title="Pesquisa de preços — ingestão supervisionada"
-          description="Envie um arquivo (CSV/Excel) ou cole o conteúdo tabular. Você revisará as linhas extraídas antes de aprovar."
+          description="Envie um arquivo (CSV, Excel, PDF ou DOCX — inclusive mapa comparativo com uma coluna por fornecedor) ou cole o conteúdo tabular. Você revisará as cotações extraídas antes de aprovar."
           allowPaste
-          manualSlot={<LegacyPriceResearchPanel processId={processId} />}
+          onReviewItems={onReviewItems}
+          manualSlot={<LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />}
         />
       ) : (
-        <LegacyPriceResearchPanel processId={processId} />
+        <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
       )}
     </div>
   );

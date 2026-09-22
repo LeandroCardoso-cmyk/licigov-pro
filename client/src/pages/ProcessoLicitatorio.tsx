@@ -21,6 +21,7 @@ import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
 import ProcurementItemPanel from "@/components/procurement/ProcurementItemPanel";
+import { startTargetFor } from "@/components/procurement/startOptions";
 
 /**
  * PR B — Processo Licitatório (fluxo canônico, jornada única).
@@ -69,6 +70,8 @@ export default function ProcessoLicitatorio() {
   const [activeProcessId, setActiveProcessId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StageTab>("overview");
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  // Aba cuja importação documental abre expandida (processo iniciado por "Importar DFD/ETP/TR").
+  const [importOpenFor, setImportOpenFor] = useState<StageTab | null>(null);
 
   // Cabeçalho/breadcrumb do processo aberto. Compartilha a query key de
   // `loadProcess` com o ProcessOverview (React Query deduplica), então não há
@@ -99,10 +102,13 @@ export default function ProcessoLicitatorio() {
     setView("process");
   }
 
-  // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial —
-  // assim "Criar/Importar DFD" abre no DFD e "Iniciar direto no ETP" abre no ETP.
-  function tabForStartOption(startOption: string): StageTab {
-    return startOption === "iniciar_etp" ? "etp" : "dfd";
+  // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial — P0 piloto: o processo
+  // começa no ponto em que a Prefeitura já está (DFD, ETP, Pesquisa ou TR), sem pré-requisito artificial.
+  // Formas "importar_*" abrem a importação já expandida.
+  function openForStartOption(processId: string, startOption: string) {
+    const { tab, importOpen } = startTargetFor(startOption);
+    setImportOpenFor(importOpen ? tab : null);
+    openProcess(processId, tab);
   }
 
   function backToList() {
@@ -139,7 +145,7 @@ export default function ProcessoLicitatorio() {
         <NovoProcessoWizard
           onCreated={(processId, startOption) => {
             invalidateProcessSurfaces();
-            openProcess(processId, tabForStartOption(startOption));
+            openForStartOption(processId, startOption);
           }}
         />
       </div>
@@ -208,6 +214,8 @@ export default function ProcessoLicitatorio() {
             tab={activeTab}
             processId={activeProcessId}
             onOpenItem={setOpenItemId}
+            startWithImport={importOpenFor === activeTab}
+            onNavigate={setActiveTab}
           />
         )}
       </div>
@@ -224,18 +232,22 @@ function StagePanel({
   tab,
   processId,
   onOpenItem,
+  startWithImport = false,
+  onNavigate,
 }: {
   tab: StageTab;
   processId: string;
   onOpenItem: (itemId: string) => void;
+  startWithImport?: boolean;
+  onNavigate?: (tab: StageTab) => void;
 }) {
   switch (tab) {
     case "overview":
       return <ProcessOverview processId={processId} />;
     case "dfd":
-      return <DFDWorkspace processId={processId} />;
+      return <DFDWorkspace processId={processId} startWithImport={startWithImport} />;
     case "price":
-      return <PesquisaPrecosWorkspace processId={processId} />;
+      return <PesquisaPrecosWorkspace processId={processId} onReviewItems={() => onNavigate?.("items")} />;
     case "items":
       return (
         <ItemIntelligenceWorkspace
@@ -244,9 +256,9 @@ function StagePanel({
         />
       );
     case "etp":
-      return <ETPWorkspace processId={processId} />;
+      return <ETPWorkspace processId={processId} startWithImport={startWithImport} />;
     case "tr":
-      return <TRWorkspace processId={processId} />;
+      return <TRWorkspace processId={processId} startWithImport={startWithImport} />;
     case "edital":
       return <EditalWorkspace processId={processId} />;
     default:

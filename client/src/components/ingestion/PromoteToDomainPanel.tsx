@@ -14,6 +14,8 @@ interface PromoteResult {
   idempotent?: boolean;
   itemsPromoted?: number;
   targetRef?: string;
+  /** P0 piloto — projeção canônica em Itens Inteligentes feita na MESMA transação da promoção. */
+  intelligentItems?: { created: number; updated: number; unchanged: number; preserved: number; total: number };
 }
 
 interface PromoteToDomainPanelProps {
@@ -27,10 +29,12 @@ interface PromoteToDomainPanelProps {
   error: string | null;
   result: PromoteResult | null;
   onPromote: () => void;
+  /** CTA pós-promoção: abrir a aba de Itens Inteligentes para revisão/aprovação. */
+  onReviewItems?: () => void;
 }
 
 export function PromoteToDomainPanel({
-  status, importType, canPromote, isPromoting, error, result, onPromote,
+  status, importType, canPromote, isPromoting, error, result, onPromote, onReviewItems,
 }: PromoteToDomainPanelProps) {
   const [confirming, setConfirming] = useState(false);
 
@@ -40,9 +44,19 @@ export function PromoteToDomainPanel({
       <Alert className="border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100">
         <AlertTitle>Conteúdo promovido à Pesquisa de Preços</AlertTitle>
         <AlertDescription>
-          Os itens revisados foram promovidos ao domínio de Pesquisa de Preços deste processo
-          {typeof result?.itemsPromoted === "number" ? ` (${result.itemsPromoted} ${result.itemsPromoted === 1 ? "item" : "itens"})` : ""}.
+          {typeof result?.itemsPromoted === "number"
+            ? <>{result.itemsPromoted} {result.itemsPromoted === 1 ? "cotação promovida" : "cotações promovidas"}</>
+            : "As cotações revisadas foram promovidas"}
+          {result?.intelligentItems
+            ? <> → {result.intelligentItems.total} Item(ns) Inteligente(s) ({result.intelligentItems.created} novo(s){result.intelligentItems.updated ? `, ${result.intelligentItems.updated} atualizado(s)` : ""}{result.intelligentItems.preserved ? `, ${result.intelligentItems.preserved} já decidido(s) preservado(s)` : ""}).</>
+            : "."}
+          {" "}Cotações do mesmo item (mesma descrição, unidade e quantidade) foram consolidadas; a média é calculada pelo sistema.
           A promoção é definitiva e idempotente — não recria itens ao repetir.
+          {onReviewItems && (
+            <div className="mt-2">
+              <Button size="sm" onClick={onReviewItems}>Revisar Itens Inteligentes</Button>
+            </div>
+          )}
         </AlertDescription>
       </Alert>
     );

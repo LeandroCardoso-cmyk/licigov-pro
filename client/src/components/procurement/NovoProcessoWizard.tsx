@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
+import { START_OPTIONS, type StartOption } from "./startOptions";
 
 /**
  * NovoProcessoWizard — REAL (wired to tRPC).
@@ -12,48 +13,7 @@ import { trpc } from "../../lib/trpc";
  * que é logado no backend com correlationId).
  */
 
-type StartOption =
-  | "criar_dfd"
-  | "importar_dfd"
-  | "importar_oficio"
-  | "importar_memorando"
-  | "importar_pdf"
-  | "iniciar_etp";
-
-const START_OPTIONS: { value: StartOption; title: string; description: string }[] =
-  [
-    {
-      value: "criar_dfd",
-      title: "Criar DFD do zero",
-      description: "Documento de Formalização da Demanda assistido por IA.",
-    },
-    {
-      value: "importar_dfd",
-      title: "Importar DFD existente",
-      description: "Traga um DFD já elaborado para dentro do processo.",
-    },
-    {
-      value: "importar_oficio",
-      title: "Importar de ofício",
-      description: "Extraímos a demanda a partir de um ofício.",
-    },
-    {
-      value: "importar_memorando",
-      title: "Importar de memorando",
-      description: "Extraímos a demanda a partir de um memorando.",
-    },
-    {
-      value: "importar_pdf",
-      title: "Importar PDF",
-      description: "Envie um PDF e o sistema estrutura a demanda.",
-    },
-    {
-      value: "iniciar_etp",
-      title: "Iniciar direto no ETP",
-      description: "Pule para o Estudo Técnico Preliminar.",
-    },
-  ];
-
+// P0 piloto — formas de início compartilhadas com o roteamento de abas (ponto em que a Prefeitura está).
 export type NovoProcessoWizardProps = {
   /** Recebe o processId e a forma de início escolhida (para abrir na etapa certa). */
   onCreated?: (processId: string, startOption: StartOption) => void;

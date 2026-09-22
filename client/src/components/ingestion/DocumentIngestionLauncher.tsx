@@ -2,8 +2,9 @@
  * PR B.2.2 — Launcher institucional da ingestão supervisionada (composição reutilizável).
  *
  * Orquestra: gate por capability (flag + formatos reais) → entrada (manual / colar / arquivo) →
- * progresso persistido → revisão humana (staging) → aprovação da revisão. NÃO promove ao domínio.
- * Capability-aware: só oferece formatos com parser real (PDF/DOCX stub ⇒ indisponível).
+ * progresso persistido → revisão humana (staging) → aprovação da revisão → promoção supervisionada.
+ * Capability-aware: só oferece formatos com parser real (derivado do parserRegistry no backend).
+ * DFD/ETP/TR como DOCUMENTO usam o DocumentImportPanel (mesmo motor, projeção documental).
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { FileText, Info } from "lucide-react";
@@ -50,6 +51,8 @@ interface DocumentIngestionLauncherProps {
    */
   relevantFormatKeys?: string[];
   onApproved?: (sessionId: number) => void;
+  /** P0 piloto — CTA pós-promoção da Pesquisa: abrir os Itens Inteligentes. */
+  onReviewItems?: () => void;
 }
 
 export function DocumentIngestionLauncher({
@@ -62,6 +65,7 @@ export function DocumentIngestionLauncher({
   allowPaste = true,
   relevantFormatKeys,
   onApproved,
+  onReviewItems,
 }: DocumentIngestionLauncherProps) {
   const { capabilities: rawCaps, enabled, isLoading } = useIngestionCapabilities();
 
@@ -108,16 +112,16 @@ export function DocumentIngestionLauncher({
     );
   }
 
-  // Capability-aware: habilitado, porém sem formato real disponível (ex.: DFD/ETP dependem de
-  // PDF/DOCX, ainda stub) → não expõe funcionalidade incompleta; informa objetivamente.
+  // Capability-aware: habilitado, porém sem formato real disponível → não expõe funcionalidade
+  // incompleta; informa objetivamente (a capacidade vem do parserRegistry, não de texto fixo).
   if (!hasSupportedFormats) {
     return (
       <Alert>
         <Info className="size-4" aria-hidden="true" />
-        <AlertTitle>Importação por arquivo indisponível nesta etapa</AlertTitle>
+        <AlertTitle>Importação por arquivo indisponível</AlertTitle>
         <AlertDescription>
-          Os formatos necessários (PDF/DOCX) ainda não têm extração disponível. A importação assistida
-          será habilitada em etapa posterior (B.2.3). As demais ações deste documento seguem disponíveis.
+          Nenhum formato de arquivo com extração disponível para este documento no momento. As demais
+          ações deste documento seguem disponíveis.
         </AlertDescription>
       </Alert>
     );
@@ -230,6 +234,7 @@ export function DocumentIngestionLauncher({
                   error={ingestion.promoteError}
                   result={ingestion.promotionResult}
                   onPromote={ingestion.promote}
+                  onReviewItems={onReviewItems}
                 />
               </div>
             ) : (

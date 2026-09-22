@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "../../lib/trpc";
-import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
-import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
+import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
+import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
@@ -15,19 +15,23 @@ import GroundingNotice from "./GroundingNotice";
  * `reviewableDraft` (C.4B.2) — o conteúdo reaparece após recarregar a página. A saída de IA é revisável
  * e validada por humano antes de virar autoridade institucional via emissão governada (C.4B.1).
  *
- * B.2.2 — ações distintas: "Gerar ETP a partir do processo" (existente) e "Importar ETP existente"
- * (ingestão canônica supervisionada, capability-aware). Edição humana do conteúdo do ETP ainda não
- * existe (evolução C.4B.3); esta fase entrega leitura persistente + revisão pré-emissão, sem editor.
+ * P0 piloto — ações distintas para o MESMO rascunho canônico: "Gerar ETP com base no processo" (contexto
+ * real: processo + DFD, inclusive importado) e "Importar ETP existente" (projeção documental real de
+ * PDF/DOCX → revisão → aprovação → rascunho). Edição humana governada via DraftEditor (C.4B.3B).
  */
 
 export type ETPWorkspaceProps = {
   processId?: string;
+  /** Abre a importação expandida (processo iniciado por "Importar ETP existente"). */
+  startWithImport?: boolean;
 };
 
-export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
+export default function ETPWorkspace({ processId = "", startWithImport = false }: ETPWorkspaceProps) {
   const [object, setObject] = useState("");
-  const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const utils = trpc.useUtils();
+  const processQuery = trpc.procurementProcess.loadProcess.useQuery({ processId }, { enabled: !!processId });
+  const processObject = processQuery.data?.process?.object ?? "";
+  useEffect(() => { if (!object && processObject) setObject(processObject); }, [processObject]);
 
   const { key: etpKey, rotate: rotateEtpKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
@@ -37,7 +41,10 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
   const generateETP = trpc.procurementProcess.generateETP.useMutation({
     onSuccess: () => {
       rotateEtpKey();
-      if (processId) utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "etp" });
+      if (processId) {
+        utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "etp" });
+        utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "etp" });
+      }
     },
   });
   const draft = reviewable.data?.draft ?? null;
@@ -55,11 +62,12 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
       <p className="text-sm text-muted-foreground">Art. 18 da Lei 14.133/2021</p>
 
       <div className="mt-5 rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-1 font-medium text-foreground">Gerar ETP a partir do processo</h2>
+        <h2 className="mb-1 font-medium text-foreground">Gerar ETP com base no processo</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          O sistema estrutura um rascunho a partir do objeto informado. Rascunho editável e sujeito
-          a revisão humana — nunca um documento oficial automático.
+          O sistema estrutura um rascunho a partir do processo (objeto e DFD, se houver). Rascunho editável e
+          sujeito a revisão humana — nunca um documento oficial automático.
         </p>
+        {processId && object.trim() && <div className="mb-3"><AuthoringSourcesSummary processId={processId} kind="etp" object={object} /></div>}
         <label className="flex flex-col text-sm">
           <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input
@@ -76,7 +84,7 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
           disabled={!processId || !object.trim() || generateETP.isPending}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
-          {generateETP.isPending ? "Gerando..." : "Gerar rascunho de ETP"}
+          {generateETP.isPending ? "Gerando..." : "Gerar ETP com base no processo"}
         </button>
         {!processId && (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
@@ -84,23 +92,16 @@ export default function ETPWorkspace({ processId = "" }: ETPWorkspaceProps) {
           </p>
         )}
         {generateETP.isError && (
-          <p className="mt-2 text-sm text-destructive">Falha ao gerar o ETP.</p>
+          <p className="mt-2 text-sm text-destructive">{generateETP.error?.message || "Falha ao gerar o ETP."}</p>
         )}
       </div>
 
-      {/* Importar ETP existente — ingestão canônica supervisionada, capability-aware (B.2.2).
-          PDF/DOCX ainda são stub (B.2.3): a importação aparece como indisponível de forma objetiva,
-          sem ofertar formatos alheios nem fluxo sem resultado. Só exposta com a flag ligada. */}
-      {ingestionEnabled && (
+      {/* Importar ETP existente — projeção documental real (PDF/DOCX) no MESMO motor de ingestão. */}
+      {processId && (
         <div className="mt-5">
-          <DocumentIngestionLauncher
-            importType="generic"
-            procurementProcessId={processId}
-            importPurpose="etp_import"
-            title="Importar ETP existente"
-            description="A importação assistida de ETP passará por revisão humana antes de qualquer uso."
-            relevantFormatKeys={["pdf", "docx"]}
-            allowPaste={false}
+          <DocumentImportPanel
+            kind="etp" processId={processId} defaultOpen={startWithImport}
+            onPromoted={() => utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "etp" })}
           />
         </div>
       )}

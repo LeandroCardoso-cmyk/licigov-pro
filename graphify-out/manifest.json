@@ -1350,13 +1350,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "4e407ed05a5c73bb104700c92d1fa949",
+    "mtime": 1790113983.3251922,
+    "ast_hash": "c2c2de29c1f7a671373fb83baa0b143e",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "518da191d0c2d878e5d244bec0379f29",
+    "mtime": 1790114094.2277782,
+    "ast_hash": "86e3c65c5e5b87f6266e8c3ad09078c2",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
@@ -1370,13 +1370,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "ae15376a478a787708cea1436839572a",
+    "mtime": 1790113997.0284514,
+    "ast_hash": "36724063c2cc2a1cad5dcadbc57939bb",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "1e55325747c102a79f05f58c978818ad",
+    "mtime": 1790114023.4267738,
+    "ast_hash": "0cdd5108c600b7bb5b6d1eeb909ef90a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
@@ -1395,8 +1395,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1789127769.191346,
-    "ast_hash": "335889c8dbf7fea2aa46a3f2f8dc08cf",
+    "mtime": 1790114094.227872,
+    "ast_hash": "673d446d8322a298aebb73e286f7e5fa",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -3970,8 +3970,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint29-semantic-review.test.ts": {
-    "mtime": 1788023705.734377,
-    "ast_hash": "1b43f8382d1d2af151480ff8db132b25",
+    "mtime": 1790114200.1597593,
+    "ast_hash": "9736d47ce0b3184c857e74aa5c10686d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint295-pre-itemtr.test.ts": {
@@ -4740,8 +4740,8 @@
     "semantic_hash": ""
   },
   "server/domain/parserCapabilities.ts": {
-    "mtime": 1788023705.7795072,
-    "ast_hash": "4ae0f1cb02a5e955046a97fefab96ede",
+    "mtime": 1790114068.8204224,
+    "ast_hash": "4eafd6ef65704c7b9e914089d511e45b",
     "semantic_hash": ""
   },
   "server/domain/pilotExecution.ts": {
@@ -4765,8 +4765,8 @@
     "semantic_hash": ""
   },
   "server/domain/procurementProcess.ts": {
-    "mtime": 1788023705.7795072,
-    "ast_hash": "84d3c8fa70594e103f0a27a79337b0f3",
+    "mtime": 1790113815.1088235,
+    "ast_hash": "4e574699b8b805d85bb061a25963b7a0",
     "semantic_hash": ""
   },
   "server/domain/promptGovernance.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1790113558.4833455,
-    "ast_hash": "3ac5e1db62aa572a2ef53a4337b002dc",
+    "mtime": 1790113815.1091318,
+    "ast_hash": "51f3faf8255a542f4955e219c3547405",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -10185,8 +10185,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1788023705.142377,
-    "ast_hash": "c9dee59fe7b624b51d4bca3b65a55774",
+    "mtime": 1790113983.3254316,
+    "ast_hash": "910f2069d5e6714aa5b64c4ace796ccc",
     "semantic_hash": ""
   },
   "docs/ops/PR_A1_POST_PRODUCTION_BACKLOG.md": {
@@ -10480,8 +10480,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/DocumentIngestionLauncher.tsx": {
-    "mtime": 1788023705.087105,
-    "ast_hash": "04f8f643442d59815cc43434ddbaa34c",
+    "mtime": 1790114023.4265625,
+    "ast_hash": "53c7345d53ace68080591c797daf5327",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/FileDropzone.tsx": {
@@ -10520,8 +10520,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/StagingReviewTable.tsx": {
-    "mtime": 1788023705.087689,
-    "ast_hash": "c18abe274fd25f36542b5750a5717d9d",
+    "mtime": 1790114068.8207474,
+    "ast_hash": "96dca7d0bb08571cbd20edf6628e2395",
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useIngestionCapabilities.ts": {
@@ -10530,18 +10530,18 @@
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useStagingReview.ts": {
-    "mtime": 1788023705.1303325,
-    "ast_hash": "6e977d21c49bdadff8a380013cbfa34f",
+    "mtime": 1790114068.8208437,
+    "ast_hash": "e1dbc18896d126b50ea692022d7b5167",
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useSupervisedIngestion.ts": {
-    "mtime": 1788023705.130377,
-    "ast_hash": "96043864018f9d93d298cbc95e5d2eb8",
+    "mtime": 1790113852.9432905,
+    "ast_hash": "73db6a405c405f8051f01c282557e003",
     "semantic_hash": ""
   },
   "client/src/ingestion-ui-guards.test.ts": {
-    "mtime": 1788023705.130377,
-    "ast_hash": "4d6b93225c15a6594f1d94f512e7c3df",
+    "mtime": 1790114200.1599221,
+    "ast_hash": "5812742d016b1d558a78ed568d896c9b",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/capabilities.test.ts": {
@@ -10550,8 +10550,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/capabilities.ts": {
-    "mtime": 1788023705.1341534,
-    "ast_hash": "13ae9f8d2a2171409afe0d9654f70e31",
+    "mtime": 1790114068.8206117,
+    "ast_hash": "460395e05a5b99edc551bcdc8a30fd2e",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/sha256.test.ts": {
@@ -10635,8 +10635,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PromoteToDomainPanel.tsx": {
-    "mtime": 1788023705.087689,
-    "ast_hash": "93e0640b606f2e4ab8d76c67892be4d3",
+    "mtime": 1790114023.4262838,
+    "ast_hash": "046f3e61e5cca5bdfe0bbd7243cb1432",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/promotion.test.ts": {
@@ -11812,6 +11812,31 @@
   "server/services/authoring/authoringContext.ts": {
     "mtime": 1790113294.8793755,
     "ast_hash": "9b2b66a9f4bc1c2358108ffeed0f6a9d",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/DocumentImportPanel.tsx": {
+    "mtime": 1790114094.2275188,
+    "ast_hash": "aeff97f17d176d28142a9e9933835327",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/AuthoringSourcesSummary.tsx": {
+    "mtime": 1790113929.3834133,
+    "ast_hash": "121656433dded00e848a6e1044a33469",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/startOptions.ts": {
+    "mtime": 1790113995.0594172,
+    "ast_hash": "3ad0f32ff42e53e320a436cea1f0473d",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestion/documentImport.ts": {
+    "mtime": 1790113909.5074122,
+    "ast_hash": "ba11e60354cebb2e80c29f9e688ed029",
+    "semantic_hash": ""
+  },
+  "client/src/lib/money.ts": {
+    "mtime": 1790113934.5634136,
+    "ast_hash": "5b8f31364eb88497c5dc2a48db61058e",
     "semantic_hash": ""
   }
 }

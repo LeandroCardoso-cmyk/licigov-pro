@@ -76,9 +76,15 @@ describe("B.2.2 · gating por capability (sem flag → interface não exposta)",
     expect(LAUNCHER).toMatch(/if\s*\(!enabled[\s\S]{0,40}\)\s*return null/);
   });
   it("cada workspace consulta useIngestionCapabilities", () => {
-    for (const [name, src] of [["Pesquisa", PESQUISA], ["DFD", DFD], ["ETP", ETP]] as const) {
+    // P0 piloto — o ETP (e o TR) passaram a importar pelo DocumentImportPanel, que é quem consulta a
+    // capability e retorna null sem flag. Contrato superado para o ETP: gatear DIRETAMENTE ou via o painel.
+    for (const [name, src] of [["Pesquisa", PESQUISA], ["DFD", DFD]] as const) {
       expect(src, `${name} deve gatear por capability`).toMatch(/useIngestionCapabilities/);
     }
+    expect(ETP, "ETP deve gatear por capability (direto ou via DocumentImportPanel)").toMatch(/useIngestionCapabilities|DocumentImportPanel/);
+    const PANEL = read("client/src/components/ingestion/DocumentImportPanel.tsx");
+    expect(PANEL).toMatch(/useIngestionCapabilities/);
+    expect(PANEL).toMatch(/if\s*\(!enabled[\s\S]{0,60}\)\s*return null/);
   });
 });
 

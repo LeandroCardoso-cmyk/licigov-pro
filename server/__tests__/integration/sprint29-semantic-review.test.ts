@@ -596,10 +596,14 @@ describe("parserCapabilities", () => {
     expect(cap?.supportsMultiSheet).toBe(false);
   });
 
-  it("pdf capability is stub with low confidence", () => {
+  // P0 piloto — contrato superado: o parser de PDF é REAL desde a B.2.3 (pdf-parse; modo documental 2.1.0),
+  // então o metadado não pode mais se declarar "STUB". A confiança semântica continua baixa (layout textual) e
+  // a limitação REAL declarada passa a ser a ausência de OCR.
+  it("pdf capability: parser real, confiança baixa e limitação de OCR declarada", () => {
     const cap = parserCapabilityRegistry.get("pdf");
     expect(cap?.descriptionConfidence).toBeLessThan(0.5);
-    expect(cap?.limitations.some(l => l.includes("STUB"))).toBe(true);
+    expect(cap?.limitations.some(l => l.includes("STUB"))).toBe(false);
+    expect(cap?.limitations.some(l => l.includes("OCR"))).toBe(true);
   });
 
   it("getBestParserFor multiSheet selects xlsx", () => {
