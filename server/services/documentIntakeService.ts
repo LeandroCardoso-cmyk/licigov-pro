@@ -36,6 +36,7 @@ import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./i
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
 import type { ImportWarning } from "../domain/importTypes";
+import { mapHeaderColumns, normalizeHeader, looksLikeHeaderCells } from "../parsers/tabularExtraction";
 
 const log = serviceLogger("DocumentIntakeService");
 const PROMOTE_OP = "procurement.document.import_promote";
@@ -111,6 +112,46 @@ export async function persistDocumentStaging(params: {
   return { stagingId: rows[0].id, created: true };
 }
 
+// ─── Sugestão de itens a partir de tabelas do documento (FASE F) ─────────────────────
+
+export interface DocumentItemSuggestion {
+  readonly tableIndex: number;
+  readonly row: number;
+  readonly description: string;
+  readonly quantity: string | null;
+  readonly unit: string | null;
+  readonly unitPrice: string | null;
+}
+
+/**
+ * P0 piloto — tabelas de itens de um TR/ETP importado viram SUGESTÃO (nunca Item Inteligente automático):
+ * mesma regra de cabeçalhos do extrator tabular (fonte única). Tabela sem coluna de descrição é ignorada.
+ * Puro e determinístico; valores permanecem brutos (o humano decide importar como Pesquisa/Itens).
+ */
+export function suggestItemsFromBlocks(blocks: ReadonlyArray<{ type?: string; rows?: readonly (readonly string[])[]; tableIndex?: number }>, max = 200): DocumentItemSuggestion[] {
+  const out: DocumentItemSuggestion[] = [];
+  let t = -1;
+  for (const b of blocks) {
+    if (b.type !== "table" || !b.rows || b.rows.length < 2) continue;
+    t++;
+    const header = [...b.rows[0]].map((c) => String(c ?? ""));
+    if (!looksLikeHeaderCells(header)) continue;
+    const map = mapHeaderColumns(header.map(normalizeHeader));
+    if (map.description < 0) continue;
+    const at = (row: readonly string[], i: number) => (i >= 0 && i < row.length ? String(row[i] ?? "").trim() || null : null);
+    for (let r = 1; r < b.rows.length && out.length < max; r++) {
+      const row = b.rows[r];
+      const description = at(row, map.description);
+      if (!description) continue;
+      out.push({
+        tableIndex: b.tableIndex ?? t, row: r, description,
+        quantity: at(row, map.quantity), unit: at(row, map.unit), unitPrice: at(row, map.unitPrice),
+      });
+    }
+  }
+  return out;
+}
+
 // ─── Leitura (UI) ────────────────────────────────────────────────────────────────
 
 export interface DocumentIntakeView {
@@ -130,6 +171,8 @@ export interface DocumentIntakeView {
     edited: boolean;
     warnings: Array<{ code: string; message: string }>;
     stats: { blocks: number; headings: number; tables: number; pages: number | null };
+    /** Tabelas de itens encontradas no documento — SUGESTÃO (não materializada). */
+    itemSuggestions: DocumentItemSuggestion[];
     reviewedBy: number | null; reviewedAt: string | null;
     approvedBy: number | null; approvedAt: string | null; approvedContentHash: string | null;
     promotedBy: number | null; promotedAt: string | null; promotionMode: string | null; targetDocumentId: string | null;
@@ -149,7 +192,7 @@ function parseJsonArr<T>(v: unknown): T[] {
 }
 
 function toView(r: ImportDocumentStagingRow): NonNullable<DocumentIntakeView["staging"]> {
-  const blocks = parseJsonArr<{ type?: string; page?: number }>(r.rawBlocks);
+  const blocks = parseJsonArr<{ type?: string; page?: number; rows?: string[][]; tableIndex?: number }>(r.rawBlocks);
   const pages = blocks.reduce((m, b) => (typeof b.page === "number" && b.page > m ? b.page : m), 0);
   return {
     id: r.id, sessionId: r.importSessionId, kind: r.documentKind as DocumentImportKind,
@@ -165,6 +208,7 @@ function toView(r: ImportDocumentStagingRow): NonNullable<DocumentIntakeView["st
       tables: blocks.filter((b) => b.type === "table").length,
       pages: pages > 0 ? pages : null,
     },
+    itemSuggestions: suggestItemsFromBlocks(blocks),
     reviewedBy: r.reviewedBy ?? null, reviewedAt: iso(r.reviewedAt),
     approvedBy: r.approvedBy ?? null, approvedAt: iso(r.approvedAt), approvedContentHash: r.approvedContentHash ?? null,
     promotedBy: r.promotedBy ?? null, promotedAt: iso(r.promotedAt), promotionMode: r.promotionMode ?? null,

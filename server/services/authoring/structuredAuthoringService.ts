@@ -39,6 +39,7 @@ import {
 import { isNormativeCurrent } from "../../domain/institutionalIntegration/evidenceFromContext";
 import { getAuthoringCorpus } from "./authoringCorpus";
 import type { EditalSourceContext } from "./editalContext";
+import type { DocumentAuthoringContext } from "./authoringContext";
 
 const DOMAIN = "processo_licitatorio";
 const REVIEW_NOTICE = "Rascunho fundamentado gerado com apoio de IA supervisionada. Revisão OBRIGATÓRIA pelo servidor competente — não constitui documento aprovado nem juízo definitivo de legalidade.";
@@ -53,6 +54,11 @@ export interface StructuredAuthoringInput {
   readonly corpus?: OfficialCorpusBuildResult;
   /** Seam determinístico (testes/legado): fornece o OUTPUT ESTRUTURADO do provider (JSON) sem chamar o Engine. */
   readonly invoke?: (prompt: string) => Promise<string>;
+  /**
+   * P0 piloto — CONTEXTO REAL do processo (DFD/ETP/itens aprovados/cotações/classificação confirmada),
+   * montado por authoringContext.ts. Ausente ⇒ comportamento anterior (só objeto), por compatibilidade.
+   */
+  readonly sourceContext?: DocumentAuthoringContext;
 }
 
 export interface StructuredAuthoringResult {
@@ -229,10 +235,41 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 }
 
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
-function authoringQuery(kind: "etp" | "tr", object: string): string {
+function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
-  return `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
+  const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
     `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.`;
+  if (!sourceContext) return base;
+  // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
+  return [
+    base,
+    "",
+    "Reaproveite o CONTEXTO do processo abaixo (DFD" + (kind === "tr" ? ", ETP, Itens Inteligentes aprovados e Pesquisa de Preços" : " e, se houver, a pesquisa de preços") + ").",
+    "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
+    kind === "tr"
+      ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
+      : "Não fixe valores monetários: a estimativa de valor é consolidada pelo sistema a partir da Pesquisa de Preços.",
+    "",
+    "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
+    sourceContext.promptContext,
+  ].join("\n");
+}
+
+/**
+ * Insere o bloco AUTORITATIVO de itens (TR) e a nota de fontes ANTES do aviso final de revisão. O bloco é
+ * texto do servidor (determinístico), nunca prosa do provider.
+ */
+function withSourceContext(rendered: string, ctx: DocumentAuthoringContext): string {
+  const usedLabel = ctx.usedSources.length > 0 ? ctx.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
+  const extra = [
+    ...(ctx.authoritativeBlock ? [ctx.authoritativeBlock, ""] : []),
+    `> **Fontes do processo utilizadas:** ${usedLabel}.`,
+    ...(ctx.missing.length > 0 ? [`> **Pendências (revisar):** ${ctx.missing.join(", ")}.`] : []),
+    "",
+  ].join("\n");
+  const marker = "\n---\n> ";
+  const at = rendered.lastIndexOf(marker);
+  return at < 0 ? `${rendered}\n\n${extra}` : `${rendered.slice(0, at)}\n${extra}${rendered.slice(at)}`;
 }
 
 /** Registra proveniência FAILED de contrato de autoria (structured output inválido) — best-effort. */
@@ -282,12 +319,12 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   let execution: CognitiveExecution | undefined;
   try {
     if (input.invoke) {
-      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object));
+      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext));
     } else {
       execution = await executeCognitiveTask({
         task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
         userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
-        query: authoringQuery(input.kind, input.object), businessDomain: DOMAIN,
+        query: authoringQuery(input.kind, input.object, input.sourceContext), businessDomain: DOMAIN,
         contextPackage,
         documentRefs: contextPackage.documents.map((d) => d.documentId),
         lawRefs: contextPackage.citations.map((c) => c.reference),
@@ -360,6 +397,9 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   if (omittedSections.length > 0) limitations.push(`Seções não contempladas (com justificativa): ${omittedSections.join("; ")}.`);
   const pendingGrounding = sections.filter((s) => s.contentMode === "provided" && !s.grounded).map((s) => s.title);
   if (pendingGrounding.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções produzidas com fundamentação pendente: ${pendingGrounding.join("; ")}.`);
+  if (input.sourceContext && input.sourceContext.missing.length > 0) {
+    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+  }
 
   // 8) Contrato Zod bounded → fail-closed (mínimos legais, representação de todas as seções, justificativas).
   const contractGroundingState: StructuredAuthoring["groundingState"] =
@@ -378,7 +418,8 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     if (err instanceof AuthoringContractError) await recordAuthoringContractFailure(input, err);
     throw err;
   }
-  const content = renderMarkdown(structured);
+  const rendered = renderMarkdown(structured);
+  const content = input.sourceContext ? withSourceContext(rendered, input.sourceContext) : rendered;
 
   return {
     content, structured, evidences: grounding.evidences, evidenceComplete,
@@ -428,6 +469,7 @@ function editalAuthoringQuery(input: EditalAuthoringInput): string {
     "Reaproveite o CONTEXTO institucional abaixo (DFD, ETP, TR, itens e parâmetros). NÃO reintroduza o que já",
     "consta. Onde o contexto NÃO fornecer a informação, escreva explicitamente '[REVISAR: <o que falta>]' —",
     "JAMAIS invente dados institucionais, prazos, valores, exigências de habilitação ou dispositivos legais.",
+    "NÃO redija quantidades, preços nem valores estimados: o sistema insere o quadro autoritativo de itens e valores.",
     "Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.",
     "",
     "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
@@ -557,6 +599,9 @@ export async function generateEditalAuthoring(input: EditalAuthoringInput): Prom
   const usedLabel = input.sourceContext.usedSources.length > 0 ? input.sourceContext.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
   const content = [
     renderMarkdown(structured),
+    "",
+    // P0 piloto — quadro AUTORITATIVO de itens/valores (servidor), idêntico ao do TR. Não é prosa da IA.
+    input.sourceContext.authoritativeBlock ?? "",
     "",
     "---",
     `> **Fontes reaproveitadas do processo:** ${usedLabel}.`,

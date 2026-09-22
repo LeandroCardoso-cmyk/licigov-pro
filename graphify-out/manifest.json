@@ -4335,8 +4335,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1790112783.2599378,
-    "ast_hash": "4bb1cc0e2194cb68d5f237753d5d7755",
+    "mtime": 1790113252.639704,
+    "ast_hash": "7a41cffc03a11e51fc783dd4ee622a73",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -5215,8 +5215,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1790113043.3673148,
-    "ast_hash": "908bd49a79b73e4ea62fc296fd9acaca",
+    "mtime": 1790113558.4833455,
+    "ast_hash": "3ac5e1db62aa572a2ef53a4337b002dc",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -6015,8 +6015,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1789960681.6490276,
-    "ast_hash": "086181a0e1caa3e03700e3a5d0f5432c",
+    "mtime": 1790113345.330394,
+    "ast_hash": "66cb6a854049b3b87421e874ce0d6d49",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -10715,8 +10715,8 @@
     "semantic_hash": ""
   },
   "server/db/catmatGovernance.ts": {
-    "mtime": 1788023705.7512896,
-    "ast_hash": "51f27d0b49500a1c0e72c97cf46b4765",
+    "mtime": 1790113239.098956,
+    "ast_hash": "1717fb03db9d21df729e6d742509922f",
     "semantic_hash": ""
   },
   "server/domain/catmatGovernance.ts": {
@@ -11540,8 +11540,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/structuredAuthoringService.ts": {
-    "mtime": 1789960769.8810327,
-    "ast_hash": "0635f8cc594fae744f06423fdc220854",
+    "mtime": 1790113444.2563977,
+    "ast_hash": "6d3de6894ceaa0b50703234a0540ea8c",
     "semantic_hash": ""
   },
   "server/services/cognitive/cognitiveProvenanceService.ts": {
@@ -11655,8 +11655,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-context.test.ts": {
-    "mtime": 1789992794.2231407,
-    "ast_hash": "f1a32023c17c742f796a2e0df1b7e4b0",
+    "mtime": 1790113444.2566955,
+    "ast_hash": "ee99b194dfd9ae8ea8492c138aeb9c96",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation-mysql-smoke.test.ts": {
@@ -11665,13 +11665,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation.test.ts": {
-    "mtime": 1789992866.727145,
-    "ast_hash": "502209555c66ebe5a114355c5e818df9",
+    "mtime": 1790113544.2879574,
+    "ast_hash": "99cc7b491128c6cd7c263a7a3a4b339d",
     "semantic_hash": ""
   },
   "server/services/authoring/editalContext.ts": {
-    "mtime": 1789960403.2050111,
-    "ast_hash": "3ae89a6d4ea0fe12a930da9a9cb3f9dd",
+    "mtime": 1790113408.7746499,
+    "ast_hash": "a0b29084868745dd791793a3957fcce8",
     "semantic_hash": ""
   },
   "client/src/components/ui/password-input.test.ts": {
@@ -11805,8 +11805,13 @@
     "semantic_hash": ""
   },
   "server/services/documentIntakeService.ts": {
-    "mtime": 1790112877.9473507,
-    "ast_hash": "7f31e843f58165e6d73faacfa3f8682e",
+    "mtime": 1790113602.2094283,
+    "ast_hash": "1fb0de6260bd2879b20046412dac55a3",
+    "semantic_hash": ""
+  },
+  "server/services/authoring/authoringContext.ts": {
+    "mtime": 1790113294.8793755,
+    "ast_hash": "9b2b66a9f4bc1c2358108ffeed0f6a9d",
     "semantic_hash": ""
   }
 }

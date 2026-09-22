@@ -19,9 +19,20 @@
 import { createHash } from "crypto";
 import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
 import { draftContentHash } from "../../domain/generatedDocument";
+import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
+import { formatBRL, reaisToCents } from "../../domain/money";
+import {
+  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
+} from "../../domain/authoritativeItems";
+import { confirmedCatalogFromDecision } from "./authoringContext";
 
-/** Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage). */
-export const EDITAL_CONTEXT_VERSION = "edital-context/1.0";
+/**
+ * Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage).
+ * 1.1 (P0 piloto): preço médio lido em REAIS (antes `/100` exibia R$ 25,50 como R$ 0,26), classificação só
+ * quando CONFIRMADA por decisão humana, bloco autoritativo de itens compartilhado com o TR. Editais gerados
+ * com 1.0 passam a aparecer como `source_changed` (o contexto deles continha o valor errado) — correto.
+ */
+export const EDITAL_CONTEXT_VERSION = "edital-context/1.1";
 
 /** Limite de caracteres por documento-base injetado no contexto (custo/tamanho previsíveis). */
 const MAX_DOC_CHARS = 4000;
@@ -40,8 +51,14 @@ export interface EditalApprovedItem {
   readonly description: string;
   readonly quantity: number;
   readonly unit: string;
+  /** Preço médio em REAIS (DECIMAL(14,2) canônico) — NUNCA centavos. */
   readonly averagePrice: number;
+  /** Sugestão automática (NÃO é decisão). */
   readonly suggestedCATMAT: string | null;
+  /** Classificação CONFIRMADA (ledger catmat_decisions); ausente/null ⇒ "a revisar". */
+  readonly confirmedCatalogCode?: string | null;
+  /** Nº de cotações que compõem o preço médio. */
+  readonly quoteCount?: number;
 }
 
 /** Entradas JÁ RESOLVIDAS (fetched) para o builder PURO. */
@@ -84,6 +101,8 @@ export interface EditalSourceContext {
   readonly sourceVersions: { dfd: EditalSourceVersion; etp: EditalSourceVersion; tr: EditalSourceVersion };
   /** Marcadores de lineage a persistir em `sources` do documento gerado. */
   readonly lineageMarkers: string[];
+  /** Bloco AUTORITATIVO de itens/valores (servidor, determinístico) — anexado à minuta, nunca redigido pela IA. */
+  readonly authoritativeBlock: string;
 }
 
 function truncate(s: string, max: number): string {
@@ -98,7 +117,10 @@ function short(hash: string | null): string {
 /** Assinatura determinística e ORDENADA dos itens aprovados (independe da ordem de leitura). */
 function itemsSignature(items: readonly EditalApprovedItem[]): Array<Record<string, unknown>> {
   return items
-    .map((i) => ({ id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), pr: i.averagePrice, cm: i.suggestedCATMAT ?? null }))
+    .map((i) => ({
+      id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: reaisToCents(i.averagePrice),
+      cm: i.suggestedCATMAT ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount ?? 0,
+    }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
@@ -151,15 +173,23 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
   renderDoc("Estudo Técnico Preliminar (ETP)", "etp", input.etp);
   renderDoc("Documento de Formalização da Demanda (DFD)", "dfd", input.dfd);
 
-  const items = input.approvedItems.slice(0, MAX_ITEMS);
+  // Estimativa AUTORITATIVA (mesmo renderer do TR): centavos half-up; preço lido em REAIS (sem /100).
+  const estimate = computeItemEstimates(input.approvedItems.map((i) => ({
+    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
+    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+    confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
+  })));
+  const items = estimate.rows.slice(0, MAX_ITEMS);
   if (items.length > 0) {
     usedSources.push("itens");
-    lines.push(`## Itens aprovados (${items.length}${input.approvedItems.length > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""})`);
+    lines.push(`## Itens aprovados (${items.length}${input.approvedItems.length > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""}) — referência, NÃO redigir valores`);
     for (const it of items) {
-      const price = it.averagePrice > 0 ? ` · valor médio est.: R$ ${(it.averagePrice / 100).toFixed(2)}` : "";
-      const catmat = it.suggestedCATMAT ? ` · CATMAT/CATSER: ${it.suggestedCATMAT}` : "";
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${it.quantity} ${it.unit}${price}${catmat}`);
+      const price = it.averagePriceCents > 0 ? ` · valor médio est.: ${formatBRL(it.averagePriceCents)}` : "";
+      // Sugestão automática NÃO é apresentada como código oficial.
+      const catmat = it.confirmedCatalogCode ? ` · CATMAT/CATSER: ${it.confirmedCatalogCode}` : it.suggestedCatalogCode ? " · CATMAT/CATSER: a revisar (sugestão não confirmada)" : "";
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${price}${catmat}`);
     }
+    lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
   } else {
     missing.push("itens");
@@ -171,6 +201,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
   const sourcesDigest = createHash("sha256")
     .update(JSON.stringify({
       v: EDITAL_CONTEXT_VERSION,
+      iv: AUTHORITATIVE_ITEMS_CONTRACT_VERSION,
       o: input.organizationId,
       p: input.processId,
       obj: objeto,
@@ -207,6 +238,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     sourcesDigest,
     sourceVersions,
     lineageMarkers,
+    authoritativeBlock: renderAuthoritativeItemsBlock(estimate, { heading: "Itens, quantitativos e valor estimado (dados autoritativos do processo)" }),
   };
 }
 
@@ -243,9 +275,13 @@ export async function resolveEditalSources(params: {
     getGeneratedDocumentByKind(params.processId, params.organizationId, "tr"),
     listIntelligentItems(params.processId, params.organizationId),
   ]);
-  const approvedItems: EditalApprovedItem[] = items
-    .filter((i) => i.status === "aprovado")
-    .map((i) => ({ id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice, suggestedCATMAT: i.suggestedCATMAT }));
+  const approved = items.filter((i) => i.status === "aprovado");
+  const decisions = await getLatestCatmatDecisionsForItems(approved.map((i) => i.id), params.organizationId);
+  const approvedItems: EditalApprovedItem[] = approved.map((i) => ({
+    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice,
+    suggestedCATMAT: i.suggestedCATMAT, confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
+    quoteCount: i.quoteCount,
+  }));
 
   return buildEditalSourceContext({
     organizationId: params.organizationId,

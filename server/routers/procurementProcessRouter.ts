@@ -17,7 +17,7 @@ import {
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import { materializeAndEnrich } from "../services/itemMaterializationService";
@@ -421,6 +421,19 @@ export const procurementProcessRouter = router({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform,
       });
+    }),
+
+  /**
+   * P0 piloto — Fontes de autoria do ETP/TR (resumo pré-geração + SOURCE_CHANGED generalizado): DFD/ETP
+   * presentes (e se importados), Itens aprovados/pendentes, cotações, classificação confirmada e o valor
+   * estimado global calculado pelo sistema. Read-only; tenant-scoped.
+   */
+  authoringSourceState: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), kind: z.enum(["etp", "tr"]), object: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getAuthoringSourceState({ organizationId: orgId, processId: input.processId, kind: input.kind, object: input.object });
     }),
 
   /**

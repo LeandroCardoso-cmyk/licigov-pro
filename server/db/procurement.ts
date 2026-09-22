@@ -25,6 +25,7 @@ import {
   generatedDocumentEditsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
+import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
 import type { PriceResearchWorkspace, PriceResearchItem } from "../domain/priceResearch";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
@@ -228,12 +229,28 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
   };
 }
 
-export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{ id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string }>> {
+/**
+ * Itens Inteligentes do processo (tenant-scoped). `averagePrice` em REAIS (DECIMAL(14,2)) — NUNCA centavos.
+ * P0 piloto — campos ADITIVOS: `averagePriceCents` (contrato monetário: reaisToCents, sem /100), fornecedores
+ * (cotações que compõem a média), `quoteCount` e `enrichmentStatus`.
+ */
+export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
+  id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
+  averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; enrichmentStatus: string; sourceResearchId: string;
+}>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(intelligentItemsTable)
     .where(and(eq(intelligentItemsTable.processId, processId), eq(intelligentItemsTable.organizationId, orgId)));
-  return rows.map(r => ({ id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice), suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status }));
+  return rows.map(r => {
+    const suppliers = parseArr<IntelligentItemSupplier>(r.suppliers);
+    return {
+      id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice),
+      suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status,
+      averagePriceCents: reaisToCents(r.averagePrice), suppliers, quoteCount: suppliers.length,
+      enrichmentStatus: r.enrichmentStatus ?? "done", sourceResearchId: r.sourceResearchId,
+    };
+  });
 }
 
 export async function updateItemStatus(id: string, orgId: number, status: ItemStatus, approvedBy: number | null, updatedAt: string): Promise<boolean> {
