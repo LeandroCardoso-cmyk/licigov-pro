@@ -140,7 +140,7 @@ export const documentsRouter = router({
       }
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
       const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
@@ -338,7 +338,7 @@ export const documentsRouter = router({
       if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
       if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
 
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
       const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
       const dfdDoc = docs.find(d => d.type === "dfd");
       const etpDoc = docs.find(d => d.type === "etp");
@@ -480,6 +480,7 @@ export const documentsRouter = router({
       const currentIdx = statusOrder.indexOf(process.status);
       const targetIdx = statusOrder.indexOf(statusMap[input.docType]);
       if (targetIdx > currentIdx) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast de enum pré-existente (fora do escopo deste fix)
         await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, statusMap[input.docType] as any);
       }
 
@@ -620,7 +621,7 @@ export const documentsRouter = router({
         parecer: "Parecer Jurídico",
       };
 
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
 
       const buffer = await convertToDOCX(
         document.content || "",
@@ -662,7 +663,7 @@ export const documentsRouter = router({
         parecer: "Parecer Jurídico",
       };
 
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+      const settings = await db.getDocumentSettingsByOrg(ctx.organizationId);
 
       const buffer = await convertToPDF(
         document.content || "",

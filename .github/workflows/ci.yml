@@ -128,6 +128,10 @@ jobs:
       # bancos dedicados (CREATE/DROP DATABASE) → roda cedo, sem depender de nem sujar os demais smokes.
       - name: Smoke — migration safety (clean install / upgrade / replay / rename preconditions)
         run: pnpm exec vitest run server/__tests__/integration/reconciliation-mysql-smoke.test.ts
+      # P0 piloto — governança da identidade institucional documental: migration 0302 determinística
+      # (backfill/dedupe/órfãos), tenant-scope, unicidade por org e leitura determinística.
+      - name: Smoke — governança de configurações institucionais (documentSettings org-scoped)
+        run: pnpm exec vitest run server/__tests__/integration/document-settings-governance-mysql-smoke.test.ts
       - name: Smoke — persistência da consulta (regressão de DATETIME)
         run: pnpm exec vitest run server/__tests__/integration/consultation-mysql-smoke.test.ts
       - name: Smoke — criação canônica de Processo Licitatório (regressão de DATETIME)

@@ -19,7 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
-import { getDocumentSettingsByUser, getContractByIdForOrganization } from "../db";
+import { getDocumentSettingsByOrg, getContractByIdForOrganization } from "../db";
 import {
   createLegalOpinion,
   getLegalOpinionsByOrganization,
@@ -185,7 +185,7 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
 
-      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const settings = await getDocumentSettingsByOrg(ctx.organizationId);
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;
@@ -216,7 +216,7 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
 
-      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const settings = await getDocumentSettingsByOrg(ctx.organizationId);
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;

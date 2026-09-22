@@ -117,8 +117,9 @@ export const platformsRouter = router({
         ? await db.getPlatformChecklist(platform.id)
         : [];
 
-      // Buscar configurações do usuário
-      const settings = await db.getDocumentSettingsByUser(ctx.user.id);
+      // Identidade institucional TENANT-SCOPED (organização do processo), não configuração pessoal.
+      const orgId = await db.getProcessOrganizationId(input.processId);
+      const settings = orgId ? await db.getDocumentSettingsByOrg(orgId) : undefined;
 
       // Montar pacote de publicação
       return {
@@ -340,7 +341,7 @@ export const platformsRouter = router({
           .optional(),
       })
     )
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") {
         throw new Error("Apenas administradores podem ver logs de publicação");
       }

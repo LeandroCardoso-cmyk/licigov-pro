@@ -15,12 +15,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { executeCognitiveTask } = vi.hoisted(() => ({ executeCognitiveTask: vi.fn() }));
 vi.mock("../aiExecutionEngine", () => ({ executeCognitiveTask }));
 
-const { getDirectContractById, getLegalArticleById, getDocumentSettingsByUser } = vi.hoisted(() => ({
+const { getDirectContractById, getLegalArticleById, getDocumentSettingsByOrg } = vi.hoisted(() => ({
   getDirectContractById: vi.fn(),
   getLegalArticleById: vi.fn(),
-  getDocumentSettingsByUser: vi.fn(),
+  getDocumentSettingsByOrg: vi.fn(),
 }));
-vi.mock("../../db", () => ({ getDirectContractById, getLegalArticleById, getDocumentSettingsByUser }));
+vi.mock("../../db", () => ({ getDirectContractById, getLegalArticleById, getDocumentSettingsByOrg }));
 
 import {
   generateTermoDispensa, generateTermoInexigibilidade, generateMinutaContrato,
@@ -45,9 +45,9 @@ beforeEach(() => {
   executeCognitiveTask.mockReset();
   getDirectContractById.mockReset();
   getLegalArticleById.mockReset();
-  getDocumentSettingsByUser.mockReset();
+  getDocumentSettingsByOrg.mockReset();
   getLegalArticleById.mockResolvedValue(ARTICLE);
-  getDocumentSettingsByUser.mockResolvedValue(SETTINGS);
+  getDocumentSettingsByOrg.mockResolvedValue(SETTINGS);
   executeCognitiveTask.mockResolvedValue(executionWith(
     "# TERMO\n\nFundamentado no Art. 75 da Lei 14.133/2021."
   ));

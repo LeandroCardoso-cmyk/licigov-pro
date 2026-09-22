@@ -47,6 +47,12 @@ export async function createActivityLogForOrganization(
   await db.insert(activityLogs).values({ ...log, organizationId });
 }
 
+/**
+ * Identidade institucional documental — TENANT-SCOPED (1 linha por organização).
+ * Upsert idempotente pela chave única `organizationId` (`documentSettings_org_unique`):
+ * grava/atualiza a identidade da organização, nunca por usuário. Enforcement de RBAC (admin/owner)
+ * e auditoria ficam no router; aqui é só a persistência determinística.
+ */
 export async function upsertDocumentSettings(settings: InsertDocumentSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -59,15 +65,36 @@ export async function upsertDocumentSettings(settings: InsertDocumentSettings) {
   });
 }
 
-export async function getDocumentSettingsByUser(userId: number) {
+/**
+ * Lê a identidade institucional documental da ORGANIZAÇÃO (tenant-scoped, determinística).
+ * Substitui a antiga leitura per-user (chaveada por userId), fonte do defeito multi-tenant em que
+ * usuários diferentes da mesma organização geravam documentos com identidades divergentes.
+ */
+export async function getDocumentSettingsByOrg(organizationId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db
     .select()
     .from(documentSettings)
-    .where(eq(documentSettings.userId, userId))
+    .where(eq(documentSettings.organizationId, organizationId))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Resolve o `organizationId` (tenant) de um processo pelo id. Usado por superfícies que precisam da
+ * identidade institucional TENANT-SCOPED do processo (ex.: metadados de publicação) sem depender de
+ * configuração pessoal de usuário. Retorna null quando o processo não existe ou não tem organização.
+ */
+export async function getProcessOrganizationId(processId: number): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select({ organizationId: processes.organizationId })
+    .from(processes)
+    .where(eq(processes.id, processId))
+    .limit(1);
+  return result.length > 0 ? (result[0].organizationId ?? null) : null;
 }
 
 export async function addProcessMember(member: InsertProcessMember) {

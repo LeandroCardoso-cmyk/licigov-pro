@@ -117,9 +117,18 @@ export type InsertEditalParameter = typeof editalParameters.$inferInsert;
 /**
  * Configurações de personalização de documentos por usuário
  */
+/**
+ * Identidade institucional aplicada aos documentos (cabeçalho/rodapé: nome, CNPJ, endereço,
+ * contato, logo, rodapé). É TENANT-SCOPED (uma linha por organização, `organizationId` único):
+ * informação institucional que aparece em documentos NÃO pode ser configuração pessoal por
+ * usuário. Fonte determinística para a geração/exportação — todos os servidores da mesma
+ * organização produzem documentos com a mesma identidade. Edição restrita a admin/owner
+ * (RBAC no backend). A troca de per-user → per-org é feita pela migration 0302 (backfill
+ * determinístico via organization_members). Lineage de quem alterou fica em activity_logs.
+ */
 export const documentSettings = mysqlTable("documentSettings", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+  organizationId: int("organizationId").notNull(),
   // Cabeçalho
   organizationName: text("organizationName"),
   logoUrl: text("logoUrl"),
@@ -132,7 +141,9 @@ export const documentSettings = mysqlTable("documentSettings", {
   footerText: text("footerText"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  unique("documentSettings_org_unique").on(table.organizationId),
+]);
 
 export type DocumentSettings = typeof documentSettings.$inferSelect;
 export type InsertDocumentSettings = typeof documentSettings.$inferInsert;
