@@ -6385,8 +6385,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1790101980.360346,
-    "ast_hash": "23eefc2e1ecac13c3bf19e4de95d508d",
+    "mtime": 1790114679.998628,
+    "ast_hash": "87854c67016ef3e7f424864e81267fc0",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -7025,8 +7025,8 @@
     "semantic_hash": ""
   },
   "docs/imports/README.md": {
-    "mtime": 1788023705.5416658,
-    "ast_hash": "14ac4f7fd9600a5fe3de8fbf577f7ee7",
+    "mtime": 1790114849.4080267,
+    "ast_hash": "88869444be88e17cd54bed5bc8e518e2",
     "semantic_hash": ""
   },
   "docs/imports/REVIEW_WORKFLOW.md": {
@@ -10430,13 +10430,13 @@
     "semantic_hash": ""
   },
   "docs/architecture/IMPORT_ENGINE.md": {
-    "mtime": 1788023705.526377,
-    "ast_hash": "ad42ac5f5ac233829ec60d040870d12a",
+    "mtime": 1790114857.5038404,
+    "ast_hash": "c085300300bf6c48093433118e840895",
     "semantic_hash": ""
   },
   "docs/ops/INGESTION_RUNBOOK.md": {
-    "mtime": 1788023705.5457075,
-    "ast_hash": "0dfb86a7532708003dcdfa4420c56a50",
+    "mtime": 1790114849.4082894,
+    "ast_hash": "90e64b9177b6234206e32ac7a86d9616",
     "semantic_hash": ""
   },
   "tools/graphify/README.md": {
@@ -10625,8 +10625,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-correction-mysql-smoke.test.ts": {
-    "mtime": 1788023705.7183769,
-    "ast_hash": "6c066e2ce6735e93a74b97f0e9b1c313",
+    "mtime": 1790114319.7194173,
+    "ast_hash": "8df0b95d25cf472e565027e81ed0d009",
     "semantic_hash": ""
   },
   "server/domain/importCorrectionFields.ts": {
@@ -10675,8 +10675,8 @@
     "semantic_hash": ""
   },
   "server/parsers/tabularExtraction.ts": {
-    "mtime": 1790112059.5673022,
-    "ast_hash": "e98b3319097db278a24453b8628bd2f9",
+    "mtime": 1790114454.4016664,
+    "ast_hash": "398fa81d9e452919c897466f8a03f07f",
     "semantic_hash": ""
   },
   "server/services/importPromotionService.ts": {
@@ -11790,13 +11790,13 @@
     "semantic_hash": ""
   },
   "server/domain/money.ts": {
-    "mtime": 1790111629.8152766,
-    "ast_hash": "b82b188b0366a6010668c789de9968d4",
+    "mtime": 1790114454.4011488,
+    "ast_hash": "522954c74197742625b7ff69a036453e",
     "semantic_hash": ""
   },
   "server/domain/priceQuoteConsolidation.ts": {
-    "mtime": 1790111667.8832788,
-    "ast_hash": "a073c19ebde686071ff8ab143e6d67d0",
+    "mtime": 1790114454.4013693,
+    "ast_hash": "51978134de66e00e26a47b644482e91b",
     "semantic_hash": ""
   },
   "server/services/itemMaterializationService.ts": {
@@ -11837,6 +11837,26 @@
   "client/src/lib/money.ts": {
     "mtime": 1790113934.5634136,
     "ast_hash": "5b8f31364eb88497c5dc2a48db61058e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts": {
+    "mtime": 1790114659.7715235,
+    "ast_hash": "9fe114fa612fe6b713448ec1726ccca9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/p0-pilot-rbac-router.test.ts": {
+    "mtime": 1790114494.4674468,
+    "ast_hash": "34bd6939f252b095cefd1cd79c39f8c8",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/p0-pilot-foundation.test.ts": {
+    "mtime": 1790114454.4019074,
+    "ast_hash": "b788c13a4b7aa4ffa1895c8877762203",
+    "semantic_hash": ""
+  },
+  "docs/architecture/P0_PILOT_FOUNDATION.md": {
+    "mtime": 1790114835.155467,
+    "ast_hash": "496d03eca9c65e6a18e63cb9da15bb81",
     "semantic_hash": ""
   }
 }

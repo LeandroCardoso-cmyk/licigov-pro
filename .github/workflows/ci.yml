@@ -169,6 +169,14 @@ jobs:
       - name: Smoke — promoção transacional ao domínio (B.2.4)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-promotion-mysql-smoke.test.ts
 
+      # P0 PILOTO — fundação Document Intake + Pesquisa → Itens Inteligentes → TR → Edital: worker real +
+      # parsers reais (DOCX/PDF/CSV gerados), revisão/aprovação/promoção documental governada (conflito +
+      # substituição), OCR_REQUIRED, isolamento, mapa comparativo → Itens (média/replay/duplicidade),
+      # TR com contexto real + quadro autoritativo + SOURCE_CHANGED, golden A e B. Também exige
+      # import_sessions no formato canônico completo → antes da reconciliação da 0288.
+      - name: Smoke — P0 piloto (document intake + pesquisa → itens → TR → Edital)
+        run: pnpm exec vitest run server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts

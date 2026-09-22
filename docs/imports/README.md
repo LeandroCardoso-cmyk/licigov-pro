@@ -293,12 +293,16 @@ exposta) e reflete a capacidade REAL: `supported` de cada formato é **derivado 
 ### Matriz de capacidades real (formato × parser × estado)
 | Formato | MIME / extensão | Parser | Estado |
 |---|---|---|---|
-| CSV | `text/csv`, `application/csv`, `text/plain`, `.csv`/`.txt` | `csvParser 1.0.0` | ✅ **suportado** |
-| XLSX | OOXML spreadsheet, `.xlsx` | `xlsxParser 1.0.0` (SheetJS) | ✅ **suportado** |
-| XLS | `application/vnd.ms-excel`, `.xls` | `xlsxParser 1.0.0` (OLE via SheetJS) | ✅ **suportado** |
-| PDF | `application/pdf`, `.pdf` | `pdfParser 2.0.0` (pdf-parse/pdfjs) | ✅ **suportado** (B.2.3; OCR não) |
-| DOCX | OOXML word, `.docx` | `docxParser 2.0.0` (mammoth) | ✅ **suportado** (B.2.3) |
-| Conteúdo colado | enviado como `text/csv` (bytes UTF-8) | `csvParser 1.0.0` | ✅ **suportado** |
+| CSV | `text/csv`, `application/csv`, `text/plain`, `.csv`/`.txt` | `csvParser 1.1.0` | ✅ **suportado** (longo + mapa comparativo) |
+| XLSX | OOXML spreadsheet, `.xlsx` | `xlsxParser 1.1.0` (SheetJS) | ✅ **suportado** (longo + mapa comparativo) |
+| XLS | `application/vnd.ms-excel`, `.xls` | `xlsxParser 1.1.0` (OLE via SheetJS) | ✅ **suportado** |
+| PDF | `application/pdf`, `.pdf` | `pdfParser 2.1.0` (pdf-parse/pdfjs) | ✅ **suportado** — linhas + modo **documento** (DFD/ETP/TR); OCR não |
+| DOCX | OOXML word, `.docx` | `docxParser 2.1.0` (mammoth) | ✅ **suportado** — linhas + modo **documento** (DFD/ETP/TR) |
+| Conteúdo colado | enviado como `text/csv` (bytes UTF-8) | `csvParser 1.1.0` | ✅ **suportado** |
+
+> **P0 piloto** — DFD/ETP/TR são importados como **documento** (projeção documental revisada e promovida a
+> rascunho), e a promoção da Pesquisa materializa **Itens Inteligentes**. Detalhes:
+> [architecture/P0_PILOT_FOUNDATION.md](../architecture/P0_PILOT_FOUNDATION.md).
 
 > `supported` é **derivado do `capabilityStatus` do parser**. PDF/DOCX passam a suportados na B.2.3, com
 > **limitações declaradas** (OCR de PDF escaneado não suportado; `.doc` legado rejeitado). OCR permanece
@@ -312,14 +316,13 @@ Com a flag LIGADA, o `DocumentIngestionLauncher` (importType `price_research`) o
 aprovação da revisão`. Com a flag DESLIGADA (padrão de produção), a superfície canônica não é exposta
 e o comportamento legado permanece idêntico.
 
-### DFD e ETP (capability-aware)
-- **DFD**: preserva "Criar DFD do zero"; "Importar DFD existente" usa a fundação canônica
-  (`relevantFormatKeys=[pdf,docx]`). Com PDF/DOCX **suportados** (B.2.3), a importação passa a **extrair
-  para staging** (revisão humana). A **promoção** de DFD ao domínio permanece **indisponível** (DFD é
-  documento, não contêiner de linhas — ver B.2.4). Legado congelado quando a flag está desligada.
-- **ETP**: preserva "Gerar ETP a partir do processo"; adiciona "Importar ETP existente" (canônico,
-  capability-aware). Sem geração jurídica autônoma; **sem promoção** de ETP ao domínio (mesma razão do
-  DFD); revisão humana obrigatória.
+### DFD, ETP e TR (importação documental — P0 piloto)
+- "Importar DFD/ETP/TR existente" usa o `DocumentImportPanel` (importType `document_dfd|etp|tr`) no MESMO
+  motor: upload → parser real em modo documento → **revisão do texto extraído** (original preservado) →
+  **aprovação por hash** → **promoção a rascunho** do processo (ou substituição explícita com motivo).
+- A promoção de linhas (`promoteSession`) continua exclusiva de `price_research`; documentos seguem o
+  caminho documental governado (`approveDocument` → `promoteDocument`). Ver
+  [architecture/P0_PILOT_FOUNDATION.md](../architecture/P0_PILOT_FOUNDATION.md).
 
 ### Estados de sessão visíveis (institucionais, pt-BR)
 `Preparando → Enviando → Enviado → Na fila → Processando → Aguardando revisão → Parcialmente revisado

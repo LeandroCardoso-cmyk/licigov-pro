@@ -92,3 +92,15 @@ manual do journal é necessária — o drizzle decide pela cadeia (`created_at <
 - Parser **PDF/DOCX** ainda é *stub* (não extrai itens reais) — planejado para etapa posterior.
 - **Nenhuma** gravação direta no domínio: itens ficam em `import_staging_items` até promoção (futura).
 - Logs **nunca** contêm URL assinada, credenciais ou conteúdo de documento.
+
+### P0 piloto — importação documental e Itens Inteligentes
+| Sintoma | Causa provável | Ação |
+|---|---|---|
+| Importação de DFD/ETP/TR falha com `OCR_REQUIRED` | PDF digitalizado (só imagem) | Esperado (sem OCR): enviar o PDF original com texto ou o DOCX |
+| `UNSUPPORTED_MEDIA_TYPE` ao importar documento | `.doc`, CSV ou planilha como DFD/ETP/TR | Documentos aceitam só PDF com texto ou DOCX |
+| "Usar como rascunho" retorna `CONFLICT` | Já existe rascunho do documento no processo | Usar "Substituir rascunho…" (confirmação + motivo); o anterior fica no histórico |
+| Substituição retorna `CONFLICT` | O rascunho mudou desde que foi carregado | Recarregar e confirmar de novo |
+| Promoção da pesquisa retorna `CONFLICT` "mesmo arquivo" | Checksum já promovido neste processo | Esperado — evita duplicar cotações |
+| Promoção da pesquisa `PRECONDITION_FAILED` "valor ambíguo" | Preço como "1,234" | Corrigir o valor no staging ("1.234,00" ou "1,23") |
+| Item Inteligente com `enrichment_status = failed` | Falha no enriquecimento pós-commit | Item/pesquisa válidos; sugestão CATMAT ausente — decidir manualmente |
+| TR/ETP mostra "fontes mudaram" | DFD/ETP/itens alterados após a geração | Gerar novamente com base no processo |

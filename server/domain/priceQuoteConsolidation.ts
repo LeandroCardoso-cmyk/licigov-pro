@@ -57,7 +57,8 @@ export function normalizeDescription(description: string): string {
 
 /** Unidade canônica (sinônimo fechado) ou a própria unidade normalizada em caixa alta. Vazio → "UN". */
 export function canonicalUnit(unit: string | null | undefined): string {
-  const u = stripAccents((unit ?? "").trim()).toUpperCase().replace(/\s+/g, "");
+  // Ponto final de abreviação ("Unid.", "Pç.") não distingue unidades.
+  const u = stripAccents((unit ?? "").trim()).toUpperCase().replace(/\s+/g, "").replace(/\.+$/, "");
   if (!u) return "UN";
   return UNIT_SYNONYMS[u] ?? u;
 }

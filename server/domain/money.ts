@@ -155,7 +155,9 @@ export function averageCents(values: readonly Cents[]): Cents {
  * A quantidade é normalizada para milésimos exatos antes da multiplicação.
  */
 export function multiplyQuantityCents(quantity: number | string, unitCents: Cents): Cents {
-  const qStr = typeof quantity === "number" ? quantity.toFixed(3) : String(quantity).trim();
+  let qStr = typeof quantity === "number" ? quantity.toFixed(3) : String(quantity).trim();
+  // Quantidade textual pt-BR ("2,5") — só vírgula decimal, sem milhar (quantidades não usam separador).
+  if (typeof quantity !== "number" && qStr.includes(",") && !qStr.includes(".")) qStr = qStr.replace(",", ".");
   const m = /^(-)?(\d+)(?:\.(\d+))?$/.exec(qStr);
   if (!m) return 0;
   const frac = (m[3] ?? "").padEnd(3, "0").slice(0, 3);

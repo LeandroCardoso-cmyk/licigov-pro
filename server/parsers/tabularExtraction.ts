@@ -308,6 +308,12 @@ export function tableToRawItems(
       severity: "warning",
     });
   }
+  // Coluna casada como "fornecedor" cujos VALORES são preços (ex.: "Empresa A") é coluna de PREÇO, não o
+  // nome do fornecedor — nunca gravar "100,00" como fornecedor (no largo vira cotação; no ambíguo, revisão).
+  if (wide.kind !== "long" && map.supplier >= 0) {
+    const priceCols = wide.kind === "wide" ? wide.supplierColumns : wide.candidateColumns;
+    if (priceCols.includes(map.supplier)) map = { ...map, supplier: -1 };
+  }
   const at = (row: string[], idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || null) : null);
   const headerKeys = headersRaw.map((h, i) => h || `col${i}`);
 

@@ -75,7 +75,9 @@ describe.skipIf(!DB)("Correção humana auditável — MySQL real", () => {
 
     const item = await getStagingItem(id, ORG);
     expect(item?.rawUnitPrice).toBe("5,00");                     // raw IMUTÁVEL
-    expect((item?.correctedPayload as any).unitPrice).toBe("7.5"); // overlay normalizado
+    // P0 piloto — contrato superado: preço corrigido segue o CONTRATO MONETÁRIO (money.ts) → string canônica
+    // com 2 casas ("7.50", coluna DECIMAL(14,2)), não o decimal genérico ("7.5").
+    expect((item?.correctedPayload as any).unitPrice).toBe("7.50"); // overlay normalizado
     expect(item?.correctionRevision).toBe(1);
     expect(item?.reviewStatus).toBe("pending");                  // correção NÃO aprova
 
@@ -83,7 +85,7 @@ describe.skipIf(!DB)("Correção humana auditável — MySQL real", () => {
     expect(hist).toHaveLength(1);
     expect(hist[0].fromRevision).toBe(0);
     expect(hist[0].toRevision).toBe(1);
-    expect((hist[0].afterPayload as any).unitPrice).toBe("7.5");
+    expect((hist[0].afterPayload as any).unitPrice).toBe("7.50");
     expect(hist[0].justification).toContain("digitado errado");
   }, 60_000);
 
@@ -128,7 +130,7 @@ describe.skipIf(!DB)("Correção humana auditável — MySQL real", () => {
     await correctStagingItem(baseParams(id, { expectedRevision: 1, corrections: { description: "cabo corrigido" }, idempotencyKey: `corr-e2-${id}` }));
     const item = await getStagingItem(id, ORG);
     expect(item?.correctionRevision).toBe(2);
-    expect((item?.correctedPayload as any).unitPrice).toBe("7.5");        // overlay acumulado
+    expect((item?.correctedPayload as any).unitPrice).toBe("7.50");       // overlay acumulado (contrato monetário)
     expect((item?.correctedPayload as any).description).toBe("cabo corrigido");
     const hist = await getItemCorrectionHistory(id, ORG);
     expect(hist.map(h => h.toRevision)).toEqual([1, 2]);
