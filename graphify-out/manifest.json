@@ -11735,8 +11735,8 @@
     "semantic_hash": ""
   },
   "drizzle/0302_document_settings_org_scoped.sql": {
-    "mtime": 1790101333.7101061,
-    "ast_hash": "70bf87bd77955c836f60cd169f4d3e96",
+    "mtime": 1790102571.0643697,
+    "ast_hash": "81b838d4cfeda94b8767869adc855bf5",
     "semantic_hash": ""
   },
   "drizzle/meta/0302_snapshot.json": {
@@ -11745,13 +11745,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/document-settings-governance-contract.test.ts": {
-    "mtime": 1790101762.7003372,
-    "ast_hash": "3b98ba24f53205323d9c539203095993",
+    "mtime": 1790102586.9763703,
+    "ast_hash": "c5ba10bd80bc4615e87c73ab8ed93584",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-settings-governance-mysql-smoke.test.ts": {
-    "mtime": 1790101491.3403263,
-    "ast_hash": "4952f2567314c46742619b53db7ff360",
+    "mtime": 1790102578.246961,
+    "ast_hash": "6be3cf3e3877bf27f9f45e554fbb7dbb",
     "semantic_hash": ""
   },
   "scripts/preflight-0302.sql": {

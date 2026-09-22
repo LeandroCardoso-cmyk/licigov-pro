@@ -31,15 +31,16 @@ BEGIN
   -- A) órfão: documentSettings de usuário SEM organização ativa
   SELECT COUNT(*) INTO n FROM `documentSettings` ds
    WHERE NOT EXISTS (SELECT 1 FROM `organization_members` m WHERE m.`userId` = ds.`userId` AND m.`ativo` = 1);
+  -- MESSAGE_TEXT curto/estável (MySQL 8.4 limita a 128 chars); explicação humana fica no comentário.
   IF n > 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302 FAIL-CLOSED (A): documentSettings de usuario sem organizacao ativa (orfao). Resolva manualmente antes de migrar.';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302_FC_A_ORPHAN';
   END IF;
 
   -- B) multi-org: documentSettings de usuário com MAIS DE UMA organização ativa
   SELECT COUNT(*) INTO n FROM `documentSettings` ds
    WHERE (SELECT COUNT(*) FROM `organization_members` m WHERE m.`userId` = ds.`userId` AND m.`ativo` = 1) > 1;
   IF n > 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302 FAIL-CLOSED (B): documentSettings de usuario com multiplas organizacoes ativas — destino do tenant ambiguo. Resolva manualmente.';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302_FC_B_MULTI_ORG';
   END IF;
 
   -- C) conflito de tenant: 2+ documentSettings para o MESMO tenant com identidade DIFERENTE
@@ -60,7 +61,7 @@ BEGIN
              COALESCE(TRIM(ds.`footerText`),''))) > 1
   ) t;
   IF n > 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302 FAIL-CLOSED (C): multiplas configuracoes institucionais DIVERGENTES destinadas ao mesmo tenant. Consolide manualmente antes de migrar.';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302_FC_C_TENANT_CONFLICT';
   END IF;
 
   -- D) conflito de nome: organizationName não-vazio DIFERENTE de organizations.nome (canônico)
@@ -70,7 +71,7 @@ BEGIN
    WHERE TRIM(COALESCE(ds.`organizationName`,'')) <> ''
      AND LOWER(TRIM(ds.`organizationName`)) <> LOWER(TRIM(o.`nome`));
   IF n > 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302 FAIL-CLOSED (D): organizationName em documentSettings diverge de organizations.nome (fonte canonica). Reconcilie antes de migrar.';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302_FC_D_NAME_CONFLICT';
   END IF;
 
   -- E) conflito de CNPJ: cnpj não-vazio DIFERENTE de organizations.cnpj (quando o canônico já existe)
@@ -81,7 +82,7 @@ BEGIN
      AND o.`cnpj` IS NOT NULL
      AND REPLACE(REPLACE(REPLACE(TRIM(ds.`cnpj`),'.',''),'/',''),'-','') <> REPLACE(REPLACE(REPLACE(TRIM(o.`cnpj`),'.',''),'/',''),'-','');
   IF n > 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302 FAIL-CLOSED (E): cnpj em documentSettings diverge de organizations.cnpj (fonte canonica). Reconcilie antes de migrar.';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '0302_FC_E_CNPJ_CONFLICT';
   END IF;
 END
 --> statement-breakpoint

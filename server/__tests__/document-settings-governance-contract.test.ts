@@ -61,10 +61,17 @@ describe("documentSettings · governança institucional endurecida (contrato)", 
     expect(guardAt).toBeGreaterThan(0);
     expect(addColAt).toBeGreaterThan(0);
     expect(guardAt).toBeLessThan(addColAt);
-    // Fail-closed explícito (SIGNAL) para as 5 precondições.
+    // Fail-closed explícito (SIGNAL) com códigos CURTOS/ESTÁVEIS (MySQL 8.4 limita MESSAGE_TEXT a 128).
     expect(MIGRATION).toContain("SIGNAL SQLSTATE '45000'");
-    for (const g of ["FAIL-CLOSED (A)", "FAIL-CLOSED (B)", "FAIL-CLOSED (C)", "FAIL-CLOSED (D)", "FAIL-CLOSED (E)"]) {
-      expect(MIGRATION, `guard ${g}`).toContain(g);
+    for (const code of [
+      "0302_FC_A_ORPHAN", "0302_FC_B_MULTI_ORG", "0302_FC_C_TENANT_CONFLICT",
+      "0302_FC_D_NAME_CONFLICT", "0302_FC_E_CNPJ_CONFLICT",
+    ]) {
+      expect(MIGRATION, `guard ${code}`).toContain(`MESSAGE_TEXT = '${code}'`);
+    }
+    // Nenhum MESSAGE_TEXT pode exceder 128 chars (compatibilidade MySQL 8.4).
+    for (const m of MIGRATION.matchAll(/MESSAGE_TEXT = '([^']*)'/g)) {
+      expect(m[1].length, `MESSAGE_TEXT "${m[1]}" <= 128`).toBeLessThanOrEqual(128);
     }
     // Sem descarte silencioso de órfãos (o antigo DELETE de órfãos foi substituído por ABORT).
     expect(MIGRATION).not.toMatch(/DELETE FROM `documentSettings` WHERE `organizationId` IS NULL/);

@@ -159,7 +159,7 @@ describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)"
       // userId 999 não tem membership ativo → órfão.
       await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (999,'X')`);
 
-      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(A\)/);
+      await expect(applyMigration(conn)).rejects.toThrow(/0302_FC_A_ORPHAN/);
 
       // Nada mutado: userId intacto, organizationId não criado.
       const cols = await columnsOf(conn);
@@ -178,7 +178,7 @@ describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)"
       await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1),(2,101,1)`);
       await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (101,'Org 1')`);
 
-      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(B\)/);
+      await expect(applyMigration(conn)).rejects.toThrow(/0302_FC_B_MULTI_ORG/);
       const cols = await columnsOf(conn);
       expect(cols).toContain("userId");
       expect(cols).not.toContain("organizationId");
@@ -199,7 +199,7 @@ describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)"
          (101,'Org 1','Rua A'),(102,'Org 1','Rua B')`,
       );
 
-      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(C\)/);
+      await expect(applyMigration(conn)).rejects.toThrow(/0302_FC_C_TENANT_CONFLICT/);
       const cols = await columnsOf(conn);
       expect(cols).toContain("userId");
       expect(cols).not.toContain("organizationId");
@@ -216,7 +216,7 @@ describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)"
       await conn.query(`INSERT INTO organization_members (organizationId, userId, ativo) VALUES (1,101,1)`);
       await conn.query(`INSERT INTO documentSettings (userId, organizationName) VALUES (101,'Nome Divergente')`);
 
-      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(D\)/);
+      await expect(applyMigration(conn)).rejects.toThrow(/0302_FC_D_NAME_CONFLICT/);
       const cols = await columnsOf(conn);
       expect(cols).toContain("userId");
       expect(cols).not.toContain("organizationId");
@@ -235,7 +235,7 @@ describe.skipIf(!DB)("documentSettings — governança FAIL-CLOSED (MySQL real)"
         `INSERT INTO documentSettings (userId, organizationName, cnpj) VALUES (101,'Org 1','99.999.999/9999-99')`,
       );
 
-      await expect(applyMigration(conn)).rejects.toThrow(/FAIL-CLOSED \(E\)/);
+      await expect(applyMigration(conn)).rejects.toThrow(/0302_FC_E_CNPJ_CONFLICT/);
       const cols = await columnsOf(conn);
       expect(cols).toContain("userId");
       expect(cols).not.toContain("organizationId");
