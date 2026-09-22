@@ -117,22 +117,35 @@ export type InsertEditalParameter = typeof editalParameters.$inferInsert;
 /**
  * Configurações de personalização de documentos por usuário
  */
+/**
+ * Identidade institucional aplicada aos documentos (cabeçalho/rodapé: nome, CNPJ, endereço,
+ * contato, logo, rodapé). É TENANT-SCOPED (uma linha por organização, `organizationId` único):
+ * informação institucional que aparece em documentos NÃO pode ser configuração pessoal por
+ * usuário. Fonte determinística para a geração/exportação — todos os servidores da mesma
+ * organização produzem documentos com a mesma identidade. Edição restrita a admin/owner
+ * (RBAC no backend). A troca de per-user → per-org é feita pela migration 0302 (backfill
+ * determinístico via organization_members). Lineage de quem alterou fica em activity_logs.
+ */
+// EXTENSÃO DOCUMENTAL tenant-scoped (1 linha por organização). NÃO duplica identidade canônica:
+// `nome`/`cnpj` (e esfera/uf/municipio) vivem SÓ em `organizations` — aqui ficam apenas atributos
+// que a organização não possui e que servem à diagramação do documento (logo, endereço completo,
+// contato, rodapé). Composição via `InstitutionalIdentityService.resolveInstitutionalIdentity`.
 export const documentSettings = mysqlTable("documentSettings", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  // Cabeçalho
-  organizationName: text("organizationName"),
+  organizationId: int("organizationId").notNull(),
+  // Cabeçalho (extensão)
   logoUrl: text("logoUrl"),
   address: text("address"),
-  cnpj: varchar("cnpj", { length: 18 }),
-  // Rodapé
+  // Rodapé (extensão)
   phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 320 }),
   website: varchar("website", { length: 255 }),
   footerText: text("footerText"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  unique("documentSettings_org_unique").on(table.organizationId),
+]);
 
 export type DocumentSettings = typeof documentSettings.$inferSelect;
 export type InsertDocumentSettings = typeof documentSettings.$inferInsert;

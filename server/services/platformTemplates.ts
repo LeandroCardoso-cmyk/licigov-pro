@@ -4,6 +4,7 @@
  */
 
 import * as db from "../db";
+import { resolveInstitutionalIdentity } from "./institutionalIdentityService";
 
 /**
  * Instruções base de adaptação por plataforma (FALLBACK)
@@ -142,6 +143,7 @@ export async function getPlatformInstructions(
   if (!platform) return "";
 
   // 1. PRIORIDADE: Buscar instruções personalizadas do banco (campo config)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config JSON pré-existente (fora do escopo deste fix)
   const config = platform.config as any;
   if (config?.instructions) {
     let fullInstructions = config.instructions.general || "";
@@ -256,7 +258,10 @@ export async function generatePublicationMetadata(
   }
 
   const platform = platformId ? await db.getPlatformById(platformId) : null;
-  const settings = await db.getDocumentSettingsByUser(process.ownerId);
+  // Identidade institucional TENANT-SCOPED COMPOSTA (canônica `organizations` + extensão documental),
+  // resolvida pela fonte única — nunca lendo tabelas de identidade de forma independente.
+  const orgId = await db.getProcessOrganizationId(processId);
+  const settings = orgId ? await resolveInstitutionalIdentity(orgId) : undefined;
 
   return {
     processName: process.name,

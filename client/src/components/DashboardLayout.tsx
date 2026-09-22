@@ -46,7 +46,9 @@ const menuItems = [
   // organizacional admin/owner (mesmo gate do backend, orgRoleProcedure("admin")). Operador,
   // Visualizador e Gestor NÃO veem este item.
   { icon: Users, label: "Usuários", path: "/usuarios", requiresOrgAdmin: true },
-  { icon: Settings, label: "Configurações", path: "/configuracoes" },
+  // Identidade institucional documental (nome, CNPJ, logo, rodapé) é tenant-scoped e restrita a
+  // admin/owner (mesmo gate do backend, orgRoleProcedure("admin")). Operator/Manager/Viewer não veem.
+  { icon: Settings, label: "Configurações", path: "/configuracoes", requiresOrgAdmin: true },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
   { icon: Building2, label: "Organizações", path: "/admin/organizacoes", adminOnly: true },
 ];

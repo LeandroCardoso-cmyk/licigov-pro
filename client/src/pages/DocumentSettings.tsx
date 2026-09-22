@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, ShieldAlert } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { APP_LOGO, APP_TITLE } from "@/const";
@@ -15,7 +16,12 @@ import { validateCNPJ } from "@/lib/validateCNPJ";
 export default function DocumentSettings() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
-  const { data: settings, isLoading } = trpc.documentSettings.get.useQuery();
+  // Identidade institucional é TENANT-SCOPED e restrita a admin/owner (backend: orgRoleProcedure("admin")).
+  const { canManageUsers, isLoading: roleLoading } = useOrgRole();
+  const { data: settings, isLoading, error, refetch } = trpc.documentSettings.get.useQuery(undefined, {
+    retry: false,
+    enabled: canManageUsers,
+  });
   const [formData, setFormData] = useState({
     organizationName: "",
     cnpj: "",
@@ -31,6 +37,11 @@ export default function DocumentSettings() {
     onSuccess: () => {
       toast.success("Configurações salvas com sucesso!", {
         description: "As alterações serão aplicadas aos próximos documentos gerados.",
+      });
+    },
+    onError: (e) => {
+      toast.error("Não foi possível salvar as configurações institucionais.", {
+        description: e.message,
       });
     },
   });
@@ -100,6 +111,34 @@ export default function DocumentSettings() {
     return null;
   }
 
+  // Guarda de papel (defense-in-depth junto ao backend): identidade institucional é admin/owner.
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!canManageUsers) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <ShieldAlert className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Acesso não autorizado</CardTitle>
+            <CardDescription>
+              As configurações institucionais dos documentos (nome, CNPJ, logo, rodapé) são
+              restritas a administradores da organização. Fale com um administrador para ajustá-las.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -140,6 +179,17 @@ export default function DocumentSettings() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
+        ) : error ? (
+          <Card>
+            <CardContent className="pt-6 text-center space-y-3">
+              <p className="text-muted-foreground">
+                Não foi possível carregar as configurações institucionais.
+              </p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Informações da Organização */}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- débito herdado de mocks/fixtures de teste; este fix apenas reaponta o mock de documentSettings para a fonte org-scoped. */
 /**
  * Testes de Integração — Processos Licitatórios
  *
@@ -86,7 +87,7 @@ describe("Processes Router — Integração", () => {
     vi.mocked(db.createProcess).mockResolvedValue(10 as any);
     vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
-    vi.mocked(db.getDocumentSettingsByUser).mockResolvedValue(null as any);
+    vi.mocked(db.getDocumentSettingsByOrg).mockResolvedValue(null as any);
     vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.getActivityLogsByProcess).mockResolvedValue([] as any);
     vi.mocked(db.createDocument).mockResolvedValue(undefined as any);

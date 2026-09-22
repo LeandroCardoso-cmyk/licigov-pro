@@ -47,27 +47,55 @@ export async function createActivityLogForOrganization(
   await db.insert(activityLogs).values({ ...log, organizationId });
 }
 
+/**
+ * EXTENSÃO DOCUMENTAL da organização — TENANT-SCOPED (1 linha por organização).
+ * Upsert idempotente pela chave única `organizationId` (`documentSettings_org_unique`): grava/atualiza
+ * apenas os atributos de EXTENSÃO (logo/endereço/contato/rodapé), nunca por usuário. Nome/CNPJ NÃO
+ * moram aqui — são canônicos em `organizations`. Enforcement de RBAC (admin/owner) e auditoria ficam
+ * no router; aqui é só a persistência determinística.
+ */
 export async function upsertDocumentSettings(settings: InsertDocumentSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(documentSettings).values(settings).onDuplicateKeyUpdate({
     set: {
-      organizationName: settings.organizationName, logoUrl: settings.logoUrl,
-      address: settings.address, cnpj: settings.cnpj, phone: settings.phone,
+      logoUrl: settings.logoUrl, address: settings.address, phone: settings.phone,
       email: settings.email, website: settings.website, footerText: settings.footerText,
     },
   });
 }
 
-export async function getDocumentSettingsByUser(userId: number) {
+/**
+ * Lê a EXTENSÃO documental da ORGANIZAÇÃO (tenant-scoped, determinística). Substitui a antiga leitura
+ * per-user (chaveada por userId), fonte do defeito multi-tenant em que usuários diferentes da mesma
+ * organização geravam documentos com identidades divergentes. Nome/CNPJ vêm de `organizations` (via
+ * `InstitutionalIdentityService`), não daqui.
+ */
+export async function getDocumentSettingsByOrg(organizationId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db
     .select()
     .from(documentSettings)
-    .where(eq(documentSettings.userId, userId))
+    .where(eq(documentSettings.organizationId, organizationId))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Resolve o `organizationId` (tenant) de um processo pelo id. Usado por superfícies que precisam da
+ * identidade institucional TENANT-SCOPED do processo (ex.: metadados de publicação) sem depender de
+ * configuração pessoal de usuário. Retorna null quando o processo não existe ou não tem organização.
+ */
+export async function getProcessOrganizationId(processId: number): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select({ organizationId: processes.organizationId })
+    .from(processes)
+    .where(eq(processes.id, processId))
+    .limit(1);
+  return result.length > 0 ? (result[0].organizationId ?? null) : null;
 }
 
 export async function addProcessMember(member: InsertProcessMember) {

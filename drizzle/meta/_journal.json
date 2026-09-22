@@ -2026,6 +2026,13 @@
       "when": 1789396123460,
       "tag": "0301_f_emb1_embedding_lineage",
       "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "5",
+      "when": 1790097775948,
+      "tag": "0302_document_settings_org_scoped",
+      "breakpoints": true
     }
   ]
 }

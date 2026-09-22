@@ -19,7 +19,27 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
-import { getDocumentSettingsByUser, getContractByIdForOrganization } from "../db";
+import { getContractByIdForOrganization } from "../db";
+import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
+
+/**
+ * Mapeia a identidade institucional COMPOSTA (fonte canônica única) para o formato de settings do
+ * exportador de parecer. Elimina a leitura direta de `documentSettings` (que não guarda mais
+ * nome/cnpj). Exportação de rascunho de parecer é LIVE (preview); o parecer OFICIAL (emitido) sai
+ * pelo pipeline `official_documents`, que congela o snapshot de identidade.
+ */
+async function opinionExportSettings(organizationId: number) {
+  const identity = await resolveInstitutionalIdentity(organizationId);
+  return {
+    organizationName: identity.organizationName ?? null,
+    organizationAddress: identity.address ?? null,
+    organizationCnpj: identity.cnpj ?? null,
+    organizationPhone: identity.phone ?? null,
+    organizationEmail: identity.email ?? null,
+    organizationWebsite: identity.website ?? null,
+    logoUrl: identity.logoUrl ?? null,
+  };
+}
 import {
   createLegalOpinion,
   getLegalOpinionsByOrganization,
@@ -185,7 +205,7 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
 
-      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const settings = await opinionExportSettings(ctx.organizationId);
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;
@@ -216,7 +236,7 @@ export const legalOpinionsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
 
-      const settings = await getDocumentSettingsByUser(ctx.user.id);
+      const settings = await opinionExportSettings(ctx.organizationId);
 
       // Buscar assinatura digital se existir
       let signatureBlock: string | undefined;

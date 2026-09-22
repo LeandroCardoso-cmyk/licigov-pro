@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import { trpc } from "@/lib/trpc";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Loader2, Moon, Save, Sun } from "lucide-react";
+import { Loader2, Moon, Save, ShieldAlert, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -14,6 +15,10 @@ import { toast } from "sonner";
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { user, loading } = useAuth();
+  // Identidade institucional documental é TENANT-SCOPED e restrita a admin/owner (o backend já
+  // protege com orgRoleProcedure("admin")). Aqui é a experiência correta: operator/manager/viewer
+  // NÃO editam a identidade da organização, e o acesso direto por URL cai em "Acesso não autorizado".
+  const { canManageUsers, isLoading: roleLoading } = useOrgRole();
   const { resolvedTheme, toggleTheme } = useTheme();
 
   // Form state
@@ -26,14 +31,21 @@ export default function Settings() {
   const [website, setWebsite] = useState("");
   const [footerText, setFooterText] = useState("");
 
-  // tRPC queries and mutations
-  const { data: settings, isLoading: loadingSettings, error } = trpc.documentSettings.get.useQuery(undefined, {
+  // tRPC queries and mutations — a leitura só dispara para quem pode gerenciar (evita FORBIDDEN
+  // desnecessário para papéis sem permissão).
+  const { data: settings, isLoading: loadingSettings, error, refetch } = trpc.documentSettings.get.useQuery(undefined, {
     retry: false,
+    enabled: canManageUsers,
   });
-  
+
   const saveMutation = trpc.documentSettings.save.useMutation({
     onSuccess: () => {
       toast.success("Configurações salvas com sucesso!");
+    },
+    onError: (e) => {
+      toast.error("Não foi possível salvar as configurações institucionais.", {
+        description: e.message,
+      });
     },
   });
 
@@ -77,6 +89,35 @@ export default function Settings() {
     return null;
   }
 
+  // Guarda de papel (defense-in-depth junto ao backend): apenas admin/owner acessam a identidade
+  // institucional. Acesso direto por URL sem papel → "Acesso não autorizado" (sem formulário).
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!canManageUsers) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <ShieldAlert className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Acesso não autorizado</CardTitle>
+            <CardDescription>
+              As configurações institucionais dos documentos (nome, CNPJ, logo, rodapé) são
+              restritas a administradores da organização. Fale com um administrador para ajustá-las.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8">
@@ -103,15 +144,17 @@ export default function Settings() {
           </div>
         ) : error ? (
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-center">
-                Não foi possível carregar as configurações. Você pode preencher os dados abaixo.
+            <CardContent className="pt-6 text-center space-y-3">
+              <p className="text-muted-foreground">
+                Não foi possível carregar as configurações institucionais.
               </p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Tentar novamente
+              </Button>
             </CardContent>
           </Card>
-        ) : null}
-
-        <div className="grid gap-6">
+        ) : (
+          <div className="grid gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Informações da Organização</CardTitle>
@@ -237,7 +280,8 @@ export default function Settings() {
               )}
             </Button>
           </div>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
