@@ -22,7 +22,7 @@ import { LayoutDashboard, Gauge, FileText, FileCheck, Scale, ScrollText, HelpCir
 
 const SHORTCUTS: Array<{ icon: typeof Gauge; label: string; desc: string; path: string }> = [
   { icon: Gauge, label: "Centro de Operações", desc: "Pendências, painel, calendário e caixa", path: "/centro-operacoes" },
-  { icon: FileText, label: "Processo Licitatório", desc: "DFD → ETP → TR → Edital", path: "/processos" },
+  { icon: FileText, label: "Processo Licitatório", desc: "DFD → ETP → Pesquisa → Itens → TR → Edital", path: "/processos" },
   { icon: FileCheck, label: "Contratação Direta", desc: "Dispensa, inexigibilidade, credenciamento", path: "/contratacao-direta" },
   { icon: Scale, label: "Parecer Jurídico", desc: "Caixa institucional e elaboração", path: "/parecer" },
   { icon: ScrollText, label: "Contratos", desc: "Contratos e aditivos", path: "/contratos" },
@@ -114,7 +114,7 @@ export default function ExecutiveDashboard() {
                       {s.label}
                       <ArrowRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />
                     </span>
-                    <span className="line-clamp-1 text-xs text-muted-foreground">{s.desc}</span>
+                    <span className="line-clamp-2 text-xs text-muted-foreground">{s.desc}</span>
                   </span>
                 </button>
               ))}
