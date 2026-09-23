@@ -53,7 +53,7 @@ export default function ProcessoLicitatorioHome({
   onCreateProcess,
   onOpenProcess,
 }: ProcessoLicitatorioHomeProps) {
-  const { data, isLoading } = trpc.procurementProcess.listProcesses.useQuery({
+  const { data, isLoading, isFetching, error, refetch } = trpc.procurementProcess.listProcesses.useQuery({
     limit: 50,
   });
 
@@ -65,8 +65,8 @@ export default function ProcessoLicitatorioHome({
             Processos Licitatórios
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Fluxo DFD → ETP → TR → Edital. Você valida recomendações; o sistema
-            estrutura a contratação.
+            DFD → ETP → Pesquisa de Preços → Itens Inteligentes → TR → Edital.
+            Comece no ponto em que o processo está; você revisa e decide.
           </p>
         </div>
         <button
@@ -92,7 +92,22 @@ export default function ProcessoLicitatorioHome({
             </div>
           ))}
         </div>
-      ) : !data || data.processes.length === 0 ? (
+      ) : error && !data ? (
+        // Primeira carga falhou (sem dados em cache): estado de erro completo.
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-card p-6 text-sm text-destructive">
+          <p>Não foi possível carregar os processos. Confira a organização selecionada e tente novamente.</p>
+          <button type="button" onClick={() => void refetch()} disabled={isFetching} className="mt-3 underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
+        </div>
+      ) : (
+        <>
+          {/* Refetch falhou com dados válidos em cache: aviso NÃO bloqueante; a lista anterior permanece. */}
+          {error && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+              <span>Não foi possível atualizar os dados agora. As informações abaixo são da última consulta bem-sucedida.</span>
+              <button type="button" onClick={() => void refetch()} disabled={isFetching} className="underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
+            </div>
+          )}
+          {!data || data.processes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <p className="text-muted-foreground">Nenhum processo cadastrado ainda.</p>
           <button
@@ -143,6 +158,8 @@ export default function ProcessoLicitatorioHome({
               </button>
             ))}
           </div>
+        </>
+          )}
         </>
       )}
     </div>

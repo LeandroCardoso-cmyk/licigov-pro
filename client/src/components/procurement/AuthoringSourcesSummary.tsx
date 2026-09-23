@@ -27,6 +27,8 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
     { processId, kind, object },
     { enabled: !!processId && object.trim().length > 0, refetchOnWindowFocus: false },
   );
+  if (q.isLoading) return <p className="text-sm text-muted-foreground">Consultando fontes do processo…</p>;
+  if (q.error) return <p role="alert" className="text-sm text-destructive">Não foi possível consultar as fontes. Recarregue a página antes de gerar o documento.</p>;
   if (!q.data) return null;
   const { summary: s, state } = q.data;
   const originLabel = (o: string | null) => (o === "import" ? "importado e revisado" : o === "manual" ? "editado manualmente" : o ? "gerado" : undefined);
@@ -68,7 +70,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
       {state === "source_changed" && (
         <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Gere novamente para refletir os dados atuais.
+          As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
         </p>
       )}
       {state === "imported" && (

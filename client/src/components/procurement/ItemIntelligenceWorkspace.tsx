@@ -8,7 +8,7 @@ import CatmatThresholdConfig from "./CatmatThresholdConfig";
  * UX: esta é a tela central da experiência. O trabalho NÃO é preencher itens —
  * é VALIDAR (aprovar/rejeitar) os Itens Inteligentes que o servidor já
  * enriqueceu com CATMAT sugerido, preço médio e recomendações. O servidor
- * sempre decide o CATMAT; o operador valida.
+ * sugere a classificação; a confirmação humana ocorre no painel do item.
  */
 
 const ITEM_STATUS_LABELS: Record<string, string> = {
@@ -39,7 +39,7 @@ export default function ItemIntelligenceWorkspace({
   onOpenItem,
 }: ItemIntelligenceWorkspaceProps) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.procurementProcess.listItems.useQuery(
+  const { data, isLoading, isError, isFetching, refetch } = trpc.procurementProcess.listItems.useQuery(
     { processId },
     { enabled: !!processId },
   );
@@ -72,9 +72,15 @@ export default function ItemIntelligenceWorkspace({
         </span>
       </div>
       <p className="mb-6 text-sm text-muted-foreground">
-        Valide as recomendações do sistema. O servidor decide o CATMAT; você
-        aprova ou rejeita cada item.
+        Revise as cotações e aprove ou rejeite cada item. A classificação CATMAT/CATSER é uma
+        sugestão: abra o item para confirmá-la. Aprovar o item não confirma automaticamente o catálogo.
       </p>
+
+      {(approveItem.error || rejectItem.error || applySourceUpdate.error) && (
+        <p role="alert" className="mb-4 rounded-lg border border-destructive/40 p-3 text-sm text-destructive">
+          {approveItem.error?.message || rejectItem.error?.message || applySourceUpdate.error?.message}
+        </p>
+      )}
 
       {processId && <CatmatThresholdConfig />}
 
@@ -88,7 +94,22 @@ export default function ItemIntelligenceWorkspace({
             <div key={i} className="h-12 rounded-lg bg-muted" />
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : isError && !data ? (
+        // Primeira carga falhou (sem itens em cache): estado de erro completo.
+        <div role="alert" className="rounded-xl border border-destructive/40 p-5 text-sm text-destructive">
+          <p>Não foi possível carregar os itens deste processo.</p>
+          <button type="button" onClick={() => void refetch()} disabled={isFetching} className="mt-2 underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
+        </div>
+      ) : (
+        <>
+          {/* Refetch falhou com itens válidos em cache: aviso NÃO bloqueante; a tabela anterior permanece. */}
+          {isError && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+              <span>Não foi possível atualizar os dados agora. As informações abaixo são da última consulta bem-sucedida.</span>
+              <button type="button" onClick={() => void refetch()} disabled={isFetching} className="underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
+            </div>
+          )}
+          {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
           Nenhum item inteligente. Importe uma pesquisa de preços primeiro.
         </div>
@@ -185,6 +206,8 @@ export default function ItemIntelligenceWorkspace({
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
     </div>
   );
