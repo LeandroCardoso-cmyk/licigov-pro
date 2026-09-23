@@ -27,7 +27,7 @@ export default function OperationalRecommendations() {
       {isLoading ? (
         <div className="h-20 animate-pulse rounded-md bg-muted" />
       ) : recs.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nenhuma recomendação no momento. O departamento está em dia.</p>
+        <p className="text-xs text-muted-foreground">Nenhuma recomendação no momento. As recomendações aparecerão conforme houver processos e atividades registradas.</p>
       ) : (
         <ul className="space-y-3">
           {recs.map((r, i) => (
