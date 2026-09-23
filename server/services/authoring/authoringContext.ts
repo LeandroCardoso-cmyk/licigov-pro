@@ -1,36 +1,36 @@
 /**
  * P0 piloto — CONTEXTO REAL DE AUTORIA do ETP e do TR (generaliza o Context Builder do Edital).
  *
- * Antes, ETP/TR eram autorados só com o OBJETO — DFD, ETP, pesquisa e itens aprovados não chegavam à
- * cognição. Agora, de forma TENANT-SCOPED e determinística:
- *
- *   ETP ← processo + DFD (+ resumo dos itens/pesquisa, se houver)          [art. 18 da Lei 14.133/2021]
+ *   ETP ← processo + DFD (+ itens/pesquisa, se houver)                      [art. 18 da Lei 14.133/2021]
  *   TR  ← processo + DFD + ETP + Itens Inteligentes APROVADOS + cotações +
  *         classificação CONFIRMADA (ledger catmat_decisions)                [art. 6º, XXIII]
  *
- * Regras:
- *   - NADA inventado: fonte ausente → `[REVISAR: …]` explícito (e listada em `missing`).
- *   - NÚMEROS NÃO SÃO DA IA: descrição/quantidade/unidade/preço médio/valor do item/valor global do TR vêm do
- *     bloco AUTORITATIVO renderizado pelo servidor (authoritativeItems.ts, centavos half-up). O prompt pede à
- *     IA que NÃO redija valores; o bloco é anexado ao conteúdo após a autoria.
- *   - `sourcesDigest` determinístico (versão do contrato + hashes das fontes + assinatura dos itens) → entra no
- *     payloadHash (replay com as MESMAS fontes; fonte alterada sob a mesma chave → CONFLICT) e grava o marcador
- *     `srcdigest:` no documento (detecção de desatualização SOURCE_CHANGED, como no Edital).
- *   - Documento importado e documento gerado são INDISTINGUÍVEIS aqui (ambos são o rascunho canônico).
+ * Hardening P0 — SNAPSHOT CANÔNICO. O contexto é construído em duas etapas:
+ *   1) `snapshot` = TUDO (e só) o que a autoria consome: processo (objeto, número), recorte EFETIVO dos
+ *      documentos (hash do recorte + cobertura full/partial + seções), itens aprovados (descrição, qtd,
+ *      unidade, média em centavos, nº de cotações válidas, classificação confirmada, sugestão, estado da
+ *      fonte) com as cotações (fornecedor, marca, modelo, valor) e o nº de itens pendentes;
+ *   2) o prompt e o quadro autoritativo são RENDERIZADOS a partir do snapshot.
+ *   `sourcesDigest = SHA-256(JSON canônico do snapshot)`. Regra: altera o prompt ⇔ altera o digest
+ *   (ordem física das cotações/itens NÃO altera — conjuntos ordenados deterministicamente).
+ *
+ * Regras mantidas: fonte ausente → `[REVISAR: …]` explícito; números NÃO são da IA (quadro autoritativo do
+ * servidor); documento importado ≡ documento gerado; tenant-scoped.
  */
-import { createHash } from "crypto";
 import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
-import { draftContentHash } from "../../domain/generatedDocument";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
   type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
-import { formatBRL } from "../../domain/money";
+import { formatBRL, reaisToCents } from "../../domain/money";
+import { draftContentHash } from "../../domain/generatedDocument";
+import { canonicalDigest, selectDocumentExcerpt, sha256Hex, type CanonicalValue } from "../../domain/canonicalJson";
 
-export const AUTHORING_CONTEXT_VERSION = "authoring-context/1.0";
+export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
 
-const MAX_DOC_CHARS = 6000;
+/** Orçamento (caracteres) do recorte de cada documento-base no contexto da autoria. */
+export const AUTHORING_DOC_BUDGET = 6000;
 const MAX_ITEMS_IN_PROMPT = 60;
 
 export type ContextualKind = "etp" | "tr";
@@ -44,9 +44,21 @@ export interface UpstreamDoc {
   readonly origin: "import" | "generated" | "manual" | null;
 }
 
+/** Cotação consumida pela autoria (apenas campos renderizados). */
+export interface ContextQuote {
+  readonly quoteId: string;
+  readonly supplier: string;
+  readonly brand: string;
+  readonly model: string;
+  /** Centavos; null = sem preço (não entra na média nem na contagem). */
+  readonly valueCents: number | null;
+}
+
 /** Item aprovado com os dados necessários à autoria (já resolvidos). */
 export interface ContextItem extends AuthoritativeItemInput {
-  readonly suppliers: readonly string[];
+  readonly quotes: readonly ContextQuote[];
+  /** current | source_changed | review_required */
+  readonly sourceState: string;
 }
 
 export interface DocumentAuthoringInputs {
@@ -59,94 +71,129 @@ export interface DocumentAuthoringInputs {
   readonly dfd: UpstreamDoc | null;
   readonly etp: UpstreamDoc | null;
   readonly approvedItems: readonly ContextItem[];
-  /** Itens ainda não aprovados (informativo: o TR usa SÓ os aprovados). */
+  /** Itens ainda não aprovados (o TR usa SÓ os aprovados; a contagem aparece no prompt ⇒ entra no digest). */
   readonly pendingItemCount: number;
 }
 
-export interface SourceVersion { readonly present: boolean; readonly status: string | null; readonly contentHash: string | null; readonly origin: string | null }
+export interface SourceVersion {
+  readonly present: boolean; readonly status: string | null; readonly contentHash: string | null; readonly origin: string | null;
+  /** Cobertura do recorte consumido: full | partial (null quando ausente). */
+  readonly coverage: "full" | "partial" | null;
+}
 
 export interface DocumentAuthoringContext {
   readonly contractVersion: typeof AUTHORING_CONTEXT_VERSION;
   readonly kind: ContextualKind;
-  /** Bloco de contexto BOUNDED (markdown) injetado na query cognitiva. */
   readonly promptContext: string;
   readonly usedSources: string[];
   readonly missing: string[];
   readonly sourcesDigest: string;
+  /** O snapshot canônico (o que efetivamente alimentou prompt + quadro). */
+  readonly snapshot: CanonicalValue;
   readonly sourceVersions: { dfd: SourceVersion; etp: SourceVersion };
   readonly lineageMarkers: string[];
-  /** TR: bloco autoritativo (markdown) anexado ao conteúdo; ETP: null. */
   readonly authoritativeBlock: string | null;
   readonly estimate: AuthoritativeItemsEstimate;
   readonly pendingItemCount: number;
-}
-
-function truncate(s: string, max: number): string {
-  const t = (s ?? "").trim();
-  return t.length <= max ? t : `${t.slice(0, max)}\n…[conteúdo truncado para o contexto]`;
 }
 
 function short(hash: string | null): string {
   return hash ? hash.slice(0, 12) : "none";
 }
 
-function itemsSignature(items: readonly ContextItem[]): Array<Record<string, unknown>> {
-  return items
-    .map((i) => ({
-      id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: i.averagePriceCents,
-      n: i.quoteCount, cc: i.confirmedCatalogCode ?? null, sc: i.suggestedCatalogCode ? 1 : 0,
-    }))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+function docSnapshot(doc: UpstreamDoc | null): { snap: CanonicalValue; excerpt: ReturnType<typeof selectDocumentExcerpt> | null } {
+  if (!doc?.present || !doc.content.trim()) return { snap: null, excerpt: null };
+  const excerpt = selectDocumentExcerpt(doc.content, AUTHORING_DOC_BUDGET);
+  return {
+    excerpt,
+    snap: {
+      excerptHash: sha256Hex(excerpt.text), coverage: excerpt.coverage, totalChars: excerpt.totalChars,
+      usedChars: excerpt.usedChars, status: doc.status ?? null, origin: doc.origin ?? null,
+    },
+  };
 }
 
-function versionOf(doc: UpstreamDoc | null): SourceVersion {
-  return { present: !!doc?.present, status: doc?.status ?? null, contentHash: doc?.contentHash ?? null, origin: doc?.origin ?? null };
+function versionOf(doc: UpstreamDoc | null, coverage: "full" | "partial" | null): SourceVersion {
+  return { present: !!doc?.present, status: doc?.status ?? null, contentHash: doc?.contentHash ?? null, origin: doc?.origin ?? null, coverage };
 }
+
+/** Ordem determinística pelo CONTEÚDO renderizado (não por id): reordenar/reidentificar não muda nada. */
+const quoteKey = (q: ContextQuote) => JSON.stringify([q.supplier.trim(), q.brand.trim(), q.model.trim(), q.valueCents]);
+const sortQuotes = (qs: readonly ContextQuote[]) => [...qs].sort((a, b) => (quoteKey(a) < quoteKey(b) ? -1 : quoteKey(a) > quoteKey(b) ? 1 : 0));
 
 /**
- * Builder PURO (sem IO, determinístico): monta o contexto de autoria do ETP/TR a partir das fontes resolvidas.
+ * Builder PURO (sem IO, determinístico): snapshot canônico → prompt + quadro + digest.
  */
 export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): DocumentAuthoringContext {
+  const objeto = input.object?.trim() || input.processObject?.trim() || "";
+  const dfd = docSnapshot(input.dfd);
+  const etp = input.kind === "tr" ? docSnapshot(input.etp) : { snap: null, excerpt: null };
+  const estimate = computeItemEstimates(input.approvedItems);
+  const byId = new Map(input.approvedItems.map((i) => [i.id, i]));
+
+  // (1) SNAPSHOT canônico — itens na ordem determinística do quadro; cotações por quoteId.
+  const snapshot: CanonicalValue = {
+    v: AUTHORING_CONTEXT_VERSION, iv: AUTHORITATIVE_ITEMS_CONTRACT_VERSION,
+    o: input.organizationId, p: input.processId, k: input.kind,
+    process: { object: objeto, processNumber: input.processNumber ?? null },
+    dfd: dfd.snap, etp: etp.snap,
+    items: estimate.rows.map((r) => {
+      const src = byId.get(r.id)!;
+      return {
+        id: r.id, description: r.description.trim(), quantity: r.quantity, unit: r.unit.trim(),
+        averagePriceCents: r.averagePriceCents, quoteCount: r.quoteCount,
+        confirmedCatalogCode: r.confirmedCatalogCode ?? null, suggested: !!r.suggestedCatalogCode,
+        sourceState: src.sourceState,
+        // Só campos RENDERIZADOS no prompt (o quoteId não aparece no prompt ⇒ não entra no digest).
+        quotes: sortQuotes(src.quotes).map((q) => ({ supplier: q.supplier.trim(), brand: q.brand.trim(), model: q.model.trim(), valueCents: q.valueCents })),
+      };
+    }),
+    pendingItemCount: input.pendingItemCount,
+  };
+  const sourcesDigest = canonicalDigest(snapshot);
+
+  // (2) Renderização a partir do snapshot.
   const usedSources: string[] = [];
   const missing: string[] = [];
-  const lines: string[] = [];
-  const objeto = input.object?.trim() || input.processObject?.trim() || "";
-
-  lines.push("## Processo");
-  lines.push(`- Objeto: ${objeto || "[REVISAR: objeto não informado]"}`);
+  const lines: string[] = ["## Processo", `- Objeto: ${objeto || "[REVISAR: objeto não informado]"}`];
   if (!objeto) missing.push("objeto");
   if (input.processNumber) lines.push(`- Número do processo: ${input.processNumber}`);
   lines.push("");
 
-  const renderDoc = (label: string, key: "dfd" | "etp", doc: UpstreamDoc | null) => {
-    if (doc?.present && doc.content.trim()) {
+  const renderDoc = (label: string, key: "dfd" | "etp", doc: UpstreamDoc | null, ex: ReturnType<typeof selectDocumentExcerpt> | null) => {
+    if (doc && ex) {
       usedSources.push(key);
-      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}${doc.origin === "import" ? ", importado e revisado" : ""})`);
-      lines.push(truncate(doc.content, MAX_DOC_CHARS));
-      lines.push("");
+      const cov = ex.coverage === "full"
+        ? "cobertura: integral"
+        : `cobertura: PARCIAL — ${ex.usedChars} de ${ex.totalChars} caracteres; todas as ${ex.sections.length} seção(ões) representadas`;
+      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}${doc.origin === "import" ? ", importado e revisado" : ""}; ${cov})`);
+      lines.push(ex.text, "");
     } else {
       missing.push(key);
       lines.push(`## Base — ${label}`);
-      lines.push(`[REVISAR: ${label} não localizado no processo — NÃO inferir o conteúdo; sinalizar a lacuna na seção correspondente]`);
-      lines.push("");
+      lines.push(`[REVISAR: ${label} não localizado no processo — NÃO inferir o conteúdo; sinalizar a lacuna na seção correspondente]`, "");
     }
   };
-  renderDoc("Documento de Formalização da Demanda (DFD)", "dfd", input.dfd);
-  if (input.kind === "tr") renderDoc("Estudo Técnico Preliminar (ETP)", "etp", input.etp);
+  renderDoc("Documento de Formalização da Demanda (DFD)", "dfd", input.dfd, dfd.excerpt);
+  if (input.kind === "tr") renderDoc("Estudo Técnico Preliminar (ETP)", "etp", input.etp, etp.excerpt);
 
-  const estimate = computeItemEstimates(input.approvedItems);
-  if (input.approvedItems.length > 0) {
+  if (estimate.itemCount > 0) {
     usedSources.push("itens");
     if (estimate.quoteCount > 0) usedSources.push("pesquisa_precos");
     const shown = estimate.rows.slice(0, MAX_ITEMS_IN_PROMPT);
-    lines.push(`## Itens Inteligentes aprovados (${estimate.itemCount}${estimate.itemCount > MAX_ITEMS_IN_PROMPT ? `, exibindo ${MAX_ITEMS_IN_PROMPT}` : ""}) — referência, NÃO redigir valores`);
+    lines.push(`## Itens Inteligentes aprovados (${estimate.itemCount}${estimate.itemCount > MAX_ITEMS_IN_PROMPT ? `, exibindo ${MAX_ITEMS_IN_PROMPT}; o quadro do sistema traz todos` : ""}) — referência, NÃO redigir valores`);
     for (const r of shown) {
-      const suppliers = input.approvedItems.find((i) => i.id === r.id)?.suppliers ?? [];
+      const src = byId.get(r.id)!;
       const catalog = r.confirmedCatalogCode ? ` · catálogo confirmado: ${r.confirmedCatalogCode}` : " · catálogo: a revisar";
-      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${formatQuantity(r.quantity)} ${r.unit} · ${r.quoteCount} cotação(ões)${suppliers.length ? ` (${suppliers.slice(0, 5).join(", ")})` : ""}${catalog}`);
+      const flag = src.sourceState !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
+      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${formatQuantity(r.quantity)} ${r.unit} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}`);
+      for (const q of sortQuotes(src.quotes)) {
+        const bm = [q.brand.trim(), q.model.trim()].filter(Boolean).join(" / ");
+        lines.push(`  - ${q.supplier.trim() || "Fornecedor não identificado"}${bm ? ` (${bm})` : ""}: ${q.valueCents !== null && q.valueCents > 0 ? formatBRL(q.valueCents) : "sem preço"}`);
+      }
+      if (src.sourceState !== "current") missing.push(`fonte_alterada:${r.index}`);
     }
-    lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
-    lines.push("");
+    lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`, "");
   } else {
     missing.push("itens");
     lines.push("## Itens Inteligentes aprovados");
@@ -156,36 +203,30 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     lines.push("");
   }
   if (input.pendingItemCount > 0) {
-    lines.push(`> Há ${input.pendingItemCount} Item(ns) Inteligente(s) ainda NÃO aprovado(s) — não considerados.`);
-    lines.push("");
+    lines.push(`> Há ${input.pendingItemCount} Item(ns) Inteligente(s) ainda NÃO aprovado(s) — não considerados.`, "");
   }
 
-  const sourcesDigest = createHash("sha256").update(JSON.stringify({
-    v: AUTHORING_CONTEXT_VERSION, iv: AUTHORITATIVE_ITEMS_CONTRACT_VERSION,
-    o: input.organizationId, p: input.processId, k: input.kind, obj: objeto,
-    dfd: input.dfd?.contentHash ?? null,
-    etp: input.kind === "tr" ? (input.etp?.contentHash ?? null) : null,
-    items: itemsSignature(input.approvedItems),
-  })).digest("hex");
-
-  const sourceVersions = { dfd: versionOf(input.dfd), etp: versionOf(input.kind === "tr" ? input.etp : null) };
+  const sourceVersions = {
+    dfd: versionOf(input.dfd, dfd.excerpt?.coverage ?? null),
+    etp: versionOf(input.kind === "tr" ? input.etp : null, etp.excerpt?.coverage ?? null),
+  };
   const lineageMarkers = [
     `srcdigest:${sourcesDigest.slice(0, 16)}`,
     `ctx:${AUTHORING_CONTEXT_VERSION}`,
     `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
+    ...(sourceVersions.dfd.coverage ? [`coverage:dfd=${sourceVersions.dfd.coverage}`] : []),
     ...(input.kind === "tr" ? [`base:etp@${short(sourceVersions.etp.contentHash)}`] : []),
+    ...(input.kind === "tr" && sourceVersions.etp.coverage ? [`coverage:etp=${sourceVersions.etp.coverage}`] : []),
     `itens:${estimate.itemCount}`,
     `cotacoes:${estimate.quoteCount}`,
   ];
 
   return {
-    contractVersion: AUTHORING_CONTEXT_VERSION,
-    kind: input.kind,
+    contractVersion: AUTHORING_CONTEXT_VERSION, kind: input.kind,
     promptContext: lines.join("\n"),
-    usedSources, missing, sourcesDigest, sourceVersions, lineageMarkers,
+    usedSources, missing, sourcesDigest, snapshot, sourceVersions, lineageMarkers,
     authoritativeBlock: input.kind === "tr" ? renderAuthoritativeItemsBlock(estimate) : null,
-    estimate,
-    pendingItemCount: input.pendingItemCount,
+    estimate, pendingItemCount: input.pendingItemCount,
   };
 }
 
@@ -231,7 +272,12 @@ export async function resolveDocumentAuthoringContext(params: {
     averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount,
     confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
     suggestedCatalogCode: i.suggestedCATMAT,
-    suppliers: i.suppliers.map((s) => s.name).filter(Boolean),
+    sourceState: i.sourceState ?? "current",
+    quotes: i.suppliers.map((s, idx) => ({
+      quoteId: s.quoteId ?? `legacy:${idx}:${s.name}:${s.value}`,
+      supplier: s.name ?? "", brand: s.brand ?? "", model: s.model ?? "",
+      valueCents: Number(s.value) > 0 ? reaisToCents(s.value) : null,
+    })),
   }));
   return buildDocumentAuthoringContext({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,

@@ -27,7 +27,7 @@ export interface AuthoritativeItemInput {
   readonly unit: string;
   /** Preço médio em CENTAVOS (lido de DECIMAL em reais via reaisToCents — nunca /100). */
   readonly averagePriceCents: Cents;
-  /** Nº de cotações que compõem o preço médio. */
+  /** Nº de cotações VÁLIDAS (com preço) que compõem o preço médio. */
   readonly quoteCount: number;
   /** Classificação CONFIRMADA por decisão humana vigente; null quando não há decisão confirmada. */
   readonly confirmedCatalogCode: string | null;
@@ -123,7 +123,8 @@ export function renderAuthoritativeItemsBlock(estimate: AuthoritativeItemsEstima
   lines.push("");
   lines.push(`**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
-  lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) aprovada(s) em ${estimate.itemCount} item(ns).`);
+  // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
+  lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) aprovado(s).`);
   if (estimate.unpricedItemCount > 0) {
     lines.push(`- [REVISAR: ${estimate.unpricedItemCount} item(ns) sem preço de referência — excluído(s) do total.]`);
   }

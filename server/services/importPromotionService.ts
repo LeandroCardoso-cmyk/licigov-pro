@@ -24,11 +24,14 @@ import {
   priceResearchTable, priceResearchItemsTable,
 } from "../../drizzle/schema";
 import { toDbDatetime } from "../db/institutionalConsultations";
-import { computeEffectiveContent, normalizeDecimal } from "../domain/importCorrectionFields";
+import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
-import { parseBRLDetailed, centsToReais, centsToDecimalString } from "../domain/money";
+import { centsToReais, centsToDecimalString } from "../domain/money";
 import type { PriceQuote } from "../domain/priceQuoteConsolidation";
-import { materializeIntelligentItemsTx, enrichMaterializedItems } from "./itemMaterializationService";
+import {
+  materializeIntelligentItemsTx, enrichMaterializedItems, recoverStaleEnrichment, recordMaterializationSignals,
+  type MaterializationResult,
+} from "./itemMaterializationService";
 import { recordProcessEvent } from "../db/procurement";
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
@@ -74,7 +77,13 @@ export interface PromotionResult {
    * P0 piloto — projeção canônica em Itens Inteligentes (mesma transação). Ausente em replay de promoções
    * anteriores a esta versão (o ledger não guardava esse detalhe).
    */
-  intelligentItems?: { created: number; updated: number; unchanged: number; preserved: number; total: number };
+  intelligentItems?: {
+    created: number; updated: number; unchanged: number; preserved: number; total: number;
+    /** Hardening P0 — itens decididos com fonte alterada, legados reconciliados, identidades ambíguas. */
+    sourceChanged?: number; reconciled?: number; reviewRequired?: number;
+    /** Cotações VÁLIDAS (com preço) que compõem as médias dos itens. */
+    validQuotes?: number;
+  };
 }
 
 /**
@@ -87,8 +96,11 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
   const { sessionId, organizationId: org, procurementProcessId, actorUserId, idempotencyKey, correlationId } = params;
 
   let intelligentItems: PromotionResult["intelligentItems"];
+  let materialization: MaterializationResult | null = null;
   let toEnrich: string[] = [];
-  const result = await db.transaction(async (tx): Promise<PromotionResult> => {
+  let result: PromotionResult;
+  try {
+  result = await db.transaction(async (tx): Promise<PromotionResult> => {
     // 1) Lock da sessão (serializa promoções concorrentes da mesma sessão).
     const sessRows = await tx.select().from(importSessions)
       .where(and(eq(importSessions.id, sessionId), eq(importSessions.organizationId, org)))
@@ -134,6 +146,17 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
       }
     }
 
+    // 4c) RESERVA COMPARTILHADA (hardening P0): o ledger import_promotions é gravado AGORA, antes de qualquer
+    //     efeito, com UNIQUE(org, processo, tipo, checksum). Duas sessões concorrentes do MESMO arquivo: a
+    //     segunda bloqueia no índice até a primeira commitar e então recebe ER_DUP_ENTRY → CONFLICT sem
+    //     nenhuma mutação (a transação inteira é revertida). A contagem final é atualizada no passo 9.
+    await tx.insert(importPromotions).values({
+      organizationId: org, procurementProcessId: processId, importSessionId: sessionId,
+      importType: session.importType, targetKind: "price_research", targetRef: null,
+      itemsPromoted: 0, idempotencyKey, correlationId, actorUserId,
+      sourceChecksum: session.checksum ?? null,
+    });
+
     // 5) Itens: nenhum pendente; ao menos um aprovado.
     const [{ pending }] = await tx.select({ pending: sql<number>`SUM(${importStagingItems.reviewStatus} = 'pending')` })
       .from(importStagingItems).where(and(eq(importStagingItems.importSessionId, sessionId), eq(importStagingItems.organizationId, org)));
@@ -163,8 +186,10 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
       const eff = computeEffectiveContent(it as unknown as Record<string, unknown> & { correctedPayload?: unknown }, "price_research");
       const description = (eff.description ?? it.rawDescription ?? "").toString().trim();
       if (!description) continue; // não fabrica linha sem descrição
-      const quantity = toNumber(eff.quantity);
-      const price = parseBRLDetailed(eff.unitPrice);
+      // Contrato monetário TIPADO: correção → canônico; célula numérica nativa → canônico; texto → pt-BR.
+      const qty = resolveEffectiveQuantity(it as unknown as Record<string, unknown>);
+      const quantity = qty === null ? 0 : Number(qty);
+      const price = resolveEffectiveMoney(it as unknown as Record<string, unknown>, "unitPrice");
       if (price.reason === "ambiguous") {
         // Fail-closed: nunca "adivinhar" 1,234 (mil? um vírgula dois?). O revisor corrige no staging.
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Valor unitário ambíguo no item ${it.id} ("${String(eff.unitPrice).slice(0, 30)}"). Corrija o valor no staging antes de promover.` });
@@ -187,7 +212,10 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
         supplier: dom.supplier, brand: dom.brand, model: dom.model,
         value: unitCents !== null ? centsToDecimalString(unitCents) : "0.00",
         observations: dom.observations, source: dom.source, createdAt: toDb(dom.createdAt),
-      }).onDuplicateKeyUpdate({ set: { value: unitCents !== null ? centsToDecimalString(unitCents) : "0.00", quantity: String(dom.quantity), description: dom.description } });
+      }).onDuplicateKeyUpdate({ set: {
+        value: unitCents !== null ? centsToDecimalString(unitCents) : "0.00", quantity: String(dom.quantity), description: dom.description,
+        unit: dom.unit, supplier: dom.supplier, brand: dom.brand, model: dom.model, observations: dom.observations, source: dom.source,
+      } });
       quotes.push({
         quoteId: dom.id, researchId, description: dom.description, quantity: dom.quantity, unit: dom.unit,
         supplier: dom.supplier, brand: dom.brand, model: dom.model, source: dom.source, valueCents: unitCents,
@@ -204,7 +232,10 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
     intelligentItems = {
       created: mat.created.length, updated: mat.updated.length, unchanged: mat.unchanged.length,
       preserved: mat.preserved.length, total: mat.items.length,
+      sourceChanged: mat.sourceChanged.length, reconciled: mat.reconciled.length, reviewRequired: mat.reviewRequired.length,
+      validQuotes: mat.items.reduce((a, i) => a + i.quoteCount, 0),
     };
+    materialization = mat;
     toEnrich = [...mat.created, ...mat.updated];
 
     // 8) Projeção do estado de promoção na sessão (não altera status jurídico; permanece 'approved').
@@ -212,18 +243,41 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
       .set({ promotionStatus: "promoted", promotedAt: new Date(nowIso), promotedByUserId: actorUserId, promotionRef: researchId })
       .where(and(eq(importSessions.id, sessionId), eq(importSessions.organizationId, org)));
 
-    // 9) Ledger imutável (UNIQUE(org, sessão) impede dupla promoção; UNIQUE(org, chave) dá idempotência).
-    await tx.insert(importPromotions).values({
-      organizationId: org, procurementProcessId: processId, importSessionId: sessionId,
-      importType: session.importType, targetKind: "price_research", targetRef: researchId,
-      itemsPromoted: quotes.length, idempotencyKey, correlationId, actorUserId,
-    });
+    // 9) Ledger (reservado no passo 4c) recebe o resultado efetivo. Timeline na MESMA transação: o
+    //    perdedor de uma corrida não deixa evento.
+    await tx.update(importPromotions).set({ targetRef: researchId, itemsPromoted: quotes.length })
+      .where(and(eq(importPromotions.organizationId, org), eq(importPromotions.importSessionId, sessionId)));
+    await recordProcessEvent({
+      organizationId: org, processId, eventType: "change", actor: String(actorUserId),
+      summary: `Pesquisa de preços promovida da ingestão: ${quotes.length} cotação(ões) → ${mat.items.length} Item(ns) Inteligente(s).`,
+      refId: researchId, correlationId,
+    }, tx);
 
     return { sessionId, idempotent: false, targetKind: "price_research", targetRef: researchId, itemsPromoted: quotes.length, intelligentItems };
   });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    // Corrida perdida. Mesma sessão → replay do resultado vencedor; outra sessão com o mesmo arquivo → CONFLICT.
+    const same = await db.select().from(importPromotions)
+      .where(and(eq(importPromotions.organizationId, org), eq(importPromotions.importSessionId, sessionId))).limit(1);
+    if (same[0]) {
+      return { sessionId, idempotent: true, targetKind: "price_research", targetRef: same[0].targetRef ?? "", itemsPromoted: same[0].itemsPromoted };
+    }
+    log.info("import_promotion_race_lost", { sessionId, organizationId: org, correlationId });
+    throw new TRPCError({ code: "CONFLICT", message: "Este mesmo arquivo já foi promovido para este processo em outra importação; as cotações não serão duplicadas." });
+  }
 
-  // Pós-commit (best-effort, não altera o resultado): enriquecimento degradável + auditoria + timeline.
+  // Replay: retoma enriquecimento pendente/travado do processo (recuperação durável, replay-safe).
+  if (result.idempotent) {
+    await recoverStaleEnrichment({ organizationId: org, processId: procurementProcessId, staleMs: 0, correlationId })
+      .catch((err) => log.warn("item_enrichment_recovery_failed", { sessionId, organizationId: org, correlationId, error: err instanceof Error ? err.message : String(err) }));
+  }
+
+  // Pós-commit (best-effort, não altera o resultado): enriquecimento degradável + auditoria + sinalizações.
   if (!result.idempotent) {
+    if (materialization) {
+      await recordMaterializationSignals({ organizationId: org, processId: procurementProcessId, result: materialization, actorUserId, correlationId });
+    }
     if (toEnrich.length > 0) {
       await enrichMaterializedItems({ organizationId: org, processId: procurementProcessId, itemIds: toEnrich, correlationId })
         .catch((err) => log.warn("item_enrichment_dispatch_failed", { sessionId, organizationId: org, correlationId, error: err instanceof Error ? err.message : String(err) }));
@@ -233,11 +287,6 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
       entityType: "import_session", entityId: sessionId, correlationId,
       details: { targetKind: result.targetKind, targetRef: result.targetRef, itemsPromoted: result.itemsPromoted, intelligentItems: result.intelligentItems },
     }).catch(() => {});
-    recordProcessEvent({
-      organizationId: org, processId: procurementProcessId, eventType: "change",
-      actor: String(actorUserId), summary: `Pesquisa de preços promovida da ingestão: ${result.itemsPromoted} cotação(ões) → ${result.intelligentItems?.total ?? 0} Item(ns) Inteligente(s).`,
-      refId: result.targetRef, correlationId,
-    }).catch(() => {});
     log.info("import_session_promoted", { sessionId, organizationId: org, targetRef: result.targetRef, itemsPromoted: result.itemsPromoted, correlationId });
   }
   return result;
@@ -245,12 +294,18 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle. */
+function isDuplicateKeyError(err: unknown): boolean {
+  let e: unknown = err;
+  for (let i = 0; i < 4 && e; i++) {
+    const x = e as { code?: string; errno?: number; cause?: unknown };
+    if (x.code === "ER_DUP_ENTRY" || x.errno === 1062) return true;
+    e = x.cause;
+  }
+  return false;
+}
+
 /** Id determinístico do research por sessão (replay-safe, isolado por sessão). */
 function createResearchId(org: number, sessionId: number): string {
   return createHash("sha256").update(`promo:${org}:${sessionId}`).digest("hex").slice(0, 20);
-}
-function toNumber(v: string | null): number {
-  if (v == null) return 0;
-  const n = normalizeDecimal(String(v));
-  return n === null ? 0 : Number(n);
 }

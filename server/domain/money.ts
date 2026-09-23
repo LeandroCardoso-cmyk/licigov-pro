@@ -10,6 +10,17 @@
  *     resultado de cada operação (média, quantidade × preço). Soma de centavos é exata.
  *   - Moeda: BRL. Nada aqui inventa moeda nem valor; entrada ambígua retorna `null` (exige revisão humana).
  *
+ * TRÊS ENTRADAS DISTINTAS (hardening P0 — nunca misturar):
+ *   A) NÚMERO NATIVO do arquivo (célula numérica de XLSX, JSON numérico) → `numericToCents`: usa a
+ *      representação decimal EXATA mais curta do número (a mesma que a planilha armazena: 1.234 → "1.234",
+ *      1.005 → "1.005") e aplica half-up UMA vez. NUNCA passa pelo parser de texto pt-BR (onde "1.234"
+ *      seria milhar = R$ 1.234,00) e NUNCA faz toFixed antes (arredondamento duplo).
+ *        1.234 → 123 centavos · 1.005 → 101 (half-up do decimal "1.005") · 1.0049 → 100 · 100 → 10000
+ *   B) DECIMAL CANÔNICO (ponto decimal, sem milhar: "1234.56", overlay de correção, DECIMAL do banco)
+ *      → `canonicalDecimalToCents`.
+ *   C) TEXTO LOCALIZADO (CSV, PDF, DOCX, colado, célula de TEXTO) → `parseBRLDetailed` ("R$ 1.234,56").
+ *   Unidade canônica: CENTAVOS INTEIROS. Regra: half-up (em valor absoluto).
+ *
  * Puro e determinístico (sem IO, sem Intl/locale do ambiente).
  */
 
@@ -39,16 +50,45 @@ function decimalStringToCents(s: string): Cents | null {
 }
 
 /**
- * Parse ESTRITO de valor monetário brasileiro. Aceita "R$ 1.234,56", "1234,56", "18,90", "18.90",
+ * Representação decimal EXATA mais curta de um número JS finito, sem notação exponencial
+ * (1e-7 → "0.0000001", 1.5e21 → "1500000000000000000000"). É o valor que o arquivo armazenou.
+ */
+export function numberToDecimalString(n: number): string | null {
+  if (!Number.isFinite(n)) return null;
+  const str = String(n);
+  const m = /^(-)?(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/i.exec(str);
+  if (!m) return null;
+  const neg = m[1] === "-";
+  let digits = m[2] + (m[3] ?? "");
+  let point = m[2].length + (m[4] ? Number(m[4]) : 0);
+  if (point <= 0) { digits = "0".repeat(1 - point) + digits; point = 1; }
+  if (point > digits.length) digits = digits + "0".repeat(point - digits.length);
+  const int = digits.slice(0, point).replace(/^0+(?=\d)/, "");
+  const frac = digits.slice(point).replace(/0+$/, "");
+  return `${neg && (int !== "0" || frac) ? "-" : ""}${int}${frac ? `.${frac}` : ""}`;
+}
+
+/** (A) Número NATIVO em reais → centavos, half-up UMA vez sobre o decimal exato. */
+export function numericToCents(n: number): Cents | null {
+  const s = numberToDecimalString(n);
+  return s === null ? null : decimalStringToCents(s);
+}
+
+/** (B) Decimal CANÔNICO ("1234.56", "-3.1", "7.50") → centavos; qualquer outra forma → null. */
+export function canonicalDecimalToCents(s: string): Cents | null {
+  return decimalStringToCents(String(s).trim());
+}
+
+/**
+ * (C) Parse ESTRITO de valor monetário brasileiro EM TEXTO. Aceita "R$ 1.234,56", "1234,56", "18,90", "18.90",
  * "1.234" (milhar pt-BR → 1234,00), "1234". Retorna `ambiguous` para formas que não podem ser decididas
  * sem contexto (ex.: "1,234" — milhar en-US ou decimal com 3 casas) e `invalid` para texto não numérico.
  */
 export function parseBRLDetailed(input: string | number | null | undefined): MoneyParse {
   if (input === null || input === undefined) return { cents: null, reason: "empty" };
   if (typeof input === "number") {
-    if (!Number.isFinite(input)) return { cents: null, reason: "invalid" };
-    // Número já em REAIS. toFixed(3) + half-up em string evita o erro de float (1.005*100 = 100.4999…).
-    const cents = decimalStringToCents(input.toFixed(3));
+    // Número NATIVO: caminho (A) — nunca o parser de texto.
+    const cents = numericToCents(input);
     return cents === null ? { cents: null, reason: "invalid" } : { cents, reason: "ok" };
   }
   let s = input.replace(/ /g, " ").trim();
@@ -108,7 +148,7 @@ export function parseBRL(input: string | number | null | undefined): Cents | nul
  */
 export function reaisToCents(value: string | number | null | undefined): Cents {
   if (value === null || value === undefined || value === "") return 0;
-  const c = decimalStringToCents(typeof value === "number" ? value.toFixed(3) : String(value).trim());
+  const c = typeof value === "number" ? numericToCents(value) : decimalStringToCents(String(value).trim());
   return c ?? 0;
 }
 
@@ -152,18 +192,20 @@ export function averageCents(values: readonly Cents[]): Cents {
 
 /**
  * Quantidade (DECIMAL(14,3)) × preço unitário (centavos) → total em centavos, HALF-UP, sem float.
- * A quantidade é normalizada para milésimos exatos antes da multiplicação.
+ * A quantidade é usada com TODAS as casas (DECIMAL(14,3) no banco); arredondamento half-up uma única vez.
  */
 export function multiplyQuantityCents(quantity: number | string, unitCents: Cents): Cents {
-  let qStr = typeof quantity === "number" ? quantity.toFixed(3) : String(quantity).trim();
+  let qStr = typeof quantity === "number" ? (numberToDecimalString(quantity) ?? "") : String(quantity).trim();
   // Quantidade textual pt-BR ("2,5") — só vírgula decimal, sem milhar (quantidades não usam separador).
   if (typeof quantity !== "number" && qStr.includes(",") && !qStr.includes(".")) qStr = qStr.replace(",", ".");
   const m = /^(-)?(\d+)(?:\.(\d+))?$/.exec(qStr);
   if (!m) return 0;
-  const frac = (m[3] ?? "").padEnd(3, "0").slice(0, 3);
-  const qMilli = BigInt(m[2]) * 1000n + BigInt(frac);
-  const product = qMilli * BigInt(Math.abs(unitCents));
-  const rounded = (2n * product + 1000n) / 2000n; // /1000 half-up
+  // Quantidade EXATA (sem truncar casas): produto em escala 10^k, half-up UMA vez no resultado.
+  const fracDigits = m[3] ?? "";
+  const scale = 10n ** BigInt(fracDigits.length);
+  const qScaled = BigInt(m[2]) * scale + (fracDigits ? BigInt(fracDigits) : 0n);
+  const product = qScaled * BigInt(Math.abs(unitCents));
+  const rounded = (2n * product + scale) / (2n * scale); // /scale half-up
   const negative = (m[1] === "-") !== (unitCents < 0);
   const n = Number(rounded);
   return negative && n !== 0 ? -n : n;

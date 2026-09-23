@@ -26,6 +26,46 @@ export interface PriceQuote {
   readonly source: string;
   /** Valor unitário em centavos; `null` quando ausente/ambíguo (não entra na média). */
   readonly valueCents: Cents | null;
+  /**
+   * Hardening P0 — identidade de CONTEÚDO da cotação (ver `quoteContentHash`). O mesmo `quoteId` com conteúdo
+   * diferente (ex.: preço corrigido de R$ 100 → R$ 200) é uma cotação ALTERADA, nunca "inalterada".
+   * Calculada quando ausente.
+   */
+  readonly contentHash?: string;
+}
+
+/** Versão da fórmula do hash de conteúdo (compõe o hash; mudar a fórmula ⇒ mudar a versão). */
+export const QUOTE_CONTENT_VERSION = "quote-content/1";
+
+/**
+ * Hash DETERMINÍSTICO do conteúdo da cotação: descrição, quantidade (milésimos), unidade canônica,
+ * fornecedor, marca, modelo, valor (centavos) e fonte. Não inclui ids nem timestamps.
+ */
+export function quoteContentHash(q: Omit<PriceQuote, "contentHash" | "quoteId" | "researchId">): string {
+  return createHash("sha256").update(JSON.stringify([
+    QUOTE_CONTENT_VERSION,
+    (q.description ?? "").replace(/\s+/g, " ").trim(),
+    quantityMilli(q.quantity),
+    canonicalUnit(q.unit),
+    (q.supplier ?? "").trim(), (q.brand ?? "").trim(), (q.model ?? "").trim(),
+    q.valueCents,
+    (q.source ?? "").trim(),
+  ])).digest("hex");
+}
+
+/** A cotação com `contentHash` garantido. */
+export function withContentHash(q: PriceQuote): PriceQuote & { contentHash: string } {
+  return { ...q, contentHash: q.contentHash ?? quoteContentHash(q) };
+}
+
+/** Assinatura do CONJUNTO de cotações (id + conteúdo), ordenada — igualdade ⇔ nada mudou. */
+export function quoteSetSignature(quotes: readonly PriceQuote[]): string {
+  return quotes.map((q) => `${q.quoteId}:${withContentHash(q).contentHash}`).sort().join("|");
+}
+
+/** Cotações VÁLIDAS (com preço > 0) — as únicas que entram na média e na contagem "Baseado em N". */
+export function validQuotes(quotes: readonly PriceQuote[]): PriceQuote[] {
+  return quotes.filter((q) => q.valueCents !== null && q.valueCents > 0);
 }
 
 /** Sinônimos FECHADOS de unidade → forma canônica (lista explícita; nada inferido). */
@@ -104,7 +144,8 @@ export function consolidateQuotes(quotes: readonly PriceQuote[]): ConsolidatedIt
     const key = intelligentItemLogicalKey(q);
     let g = groups.get(key);
     if (!g) { g = new Map(); groups.set(key, g); order.push(key); }
-    if (!g.has(q.quoteId)) g.set(q.quoteId, q);
+    // Mesmo quoteId repetido no lote: a ÚLTIMA ocorrência vence (mais recente).
+    g.set(q.quoteId, withContentHash(q));
   }
   return order.map((key) => {
     const g = groups.get(key)!;
@@ -123,10 +164,14 @@ export function consolidateQuotes(quotes: readonly PriceQuote[]): ConsolidatedIt
   });
 }
 
-/** Merge de conjuntos de cotações (união por quoteId), ordenado — base da atualização idempotente. */
+/**
+ * Merge de conjuntos de cotações (união por quoteId), ordenado — base da atualização idempotente. A
+ * cotação ENTRANTE substitui a existente de mesmo quoteId (o conteúdo novo vence; detectar mudança é
+ * responsabilidade de `quoteSetSignature`, que compara id + contentHash).
+ */
 export function mergeQuotes(existing: readonly PriceQuote[], incoming: readonly PriceQuote[]): PriceQuote[] {
   const byId = new Map<string, PriceQuote>();
-  for (const q of existing) byId.set(q.quoteId, q);
-  for (const q of incoming) byId.set(q.quoteId, q);
+  for (const q of existing) byId.set(q.quoteId, withContentHash(q));
+  for (const q of incoming) byId.set(q.quoteId, withContentHash(q));
   return [...byId.values()].sort((a, b) => (a.quoteId < b.quoteId ? -1 : a.quoteId > b.quoteId ? 1 : 0));
 }

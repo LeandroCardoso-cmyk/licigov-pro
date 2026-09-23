@@ -53,6 +53,11 @@ export default function ItemIntelligenceWorkspace({
   const rejectItem = trpc.procurementProcess.rejectItem.useMutation({
     onSuccess: invalidate,
   });
+  // Hardening P0 — fonte alterada após decisão: aplicar as cotações novas é uma ação HUMANA explícita
+  // (item decidido volta a "Em análise"); nunca acontece em silêncio.
+  const applySourceUpdate = trpc.procurementProcess.applyItemSourceUpdate.useMutation({
+    onSuccess: invalidate,
+  });
 
   const items = data?.items ?? [];
 
@@ -132,9 +137,31 @@ export default function ItemIntelligenceWorkspace({
                     >
                       {ITEM_STATUS_LABELS[it.status] ?? it.status}
                     </span>
+                    {it.sourceState === "source_changed" && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300" title={it.sourceStateReason ?? undefined}>
+                        Fonte alterada
+                      </span>
+                    )}
+                    {it.sourceState === "review_required" && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        Identidade a revisar
+                      </span>
+                    )}
+                    <div className="mt-1 text-xs text-muted-foreground">{it.quoteCount} cotação(ões) válida(s)</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
+                      {it.sourceState === "source_changed" && (
+                        <button
+                          type="button"
+                          onClick={() => applySourceUpdate.mutate({ itemId: it.id })}
+                          disabled={applySourceUpdate.isPending}
+                          title="Aplica as cotações atualizadas da pesquisa; um item já decidido volta a 'Em análise'."
+                          className="rounded-md border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                        >
+                          Aplicar cotações atualizadas{it.pendingQuoteCount != null ? ` (${it.pendingQuoteCount})` : ""}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => approveItem.mutate({ itemId: it.id })}

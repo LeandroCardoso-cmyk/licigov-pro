@@ -16,18 +16,19 @@ import {
   type ProcessStage,
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
-import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
 import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
-import { materializeAndEnrich } from "../services/itemMaterializationService";
-import { reaisToCents } from "../domain/money";
+import {
+  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity,
+} from "../services/itemMaterializationService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import { getOrganizationById } from "../db/organizations";
+import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
-  insertResearchWithItems, listIntelligentItems,
+  listIntelligentItems,
   recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
   getGeneratedDocumentByKind,
 } from "../db/procurement";
@@ -284,15 +285,14 @@ export const procurementProcessRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const research = createPriceResearchWorkspace({ processId: input.processId, organizationId: orgId, source: input.source, correlationId: ctx.correlationId });
-      const rawItems = extractItemsFromText(input.text, { researchId: research.id, processId: input.processId, organizationId: orgId });
-      // DATA-039: cabeçalho da pesquisa + itens brutos persistem ATOMICAMENTE — nunca uma pesquisa
-      // com itens faltando. Enriquecimento (abaixo) e evento são derivados/re-executáveis e ficam
-      // fora da transação (operação pesada não deve segurar transação de banco).
-      // Fail-closed + sanitizado: falha da persistência autoritativa é logada (com correlationId) e
-      // convertida em erro institucional; NÃO mascara falhas de enriquecimento (que ficam fora daqui).
+      // DATA-039 + hardening P0: pesquisa + cotações + BASE dos Itens Inteligentes numa ÚNICA transação
+      // (nunca Pesquisa=200 com Item=100) — ver itemMaterializationService.importManualPriceResearch.
+      let imported;
       try {
-        await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
+        imported = await importManualPriceResearch({
+          organizationId: orgId, processId: input.processId, source: input.source, text: input.text,
+          actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        });
       } catch (err) {
         log.error("import_price_research_persist_failed", {
           organizationId: orgId, userId: ctx.user!.id, processId: input.processId,
@@ -304,45 +304,19 @@ export const procurementProcessRouter = router({
           message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
         });
       }
-
-      // P0 piloto — o caminho manual/colar converge no MESMO modelo canônico da ingestão: cotações
-      // consolidadas por chave lógica determinística (sem fuzzy), item aprovado/rejeitado NUNCA revertido,
-      // enriquecimento pós-commit degradável. (Antes: um Item por linha e reset de status em reimportação.)
-      let materialized;
-      try {
-        materialized = await materializeAndEnrich({
-          organizationId: orgId, processId: input.processId, researchId: research.id, correlationId: ctx.correlationId,
-          quotes: rawItems.map((it) => ({
-            quoteId: it.id, researchId: research.id, description: it.description, quantity: it.quantity, unit: it.unit,
-            supplier: it.supplier, brand: it.brand, model: it.model, source: it.source,
-            valueCents: it.value > 0 ? reaisToCents(it.value) : null,
-          })),
-        });
-      } catch (err) {
-        log.error("import_price_research_materialize_failed", {
-          organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "A pesquisa foi registrada, mas não foi possível consolidar os Itens Inteligentes. Tente importar novamente.",
-        });
-      }
+      const materialized = imported.result;
       const itemRows = await listIntelligentItems(input.processId, orgId);
       const byId = new Map(itemRows.map((r) => [r.id, r]));
       const enriched = materialized.items.map((m) => ({
         id: m.id, description: byId.get(m.id)?.description ?? "", suggestedCATMAT: byId.get(m.id)?.suggestedCATMAT ?? null,
       }));
-      await recordProcessEvent({
-        organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user!.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} cotação(ões) → ${materialized.items.length} Item(ns) Inteligente(s).`,
-        refId: research.id, correlationId: ctx.correlationId,
-      });
       return {
-        research: { ...research, itemCount: rawItems.length }, intelligentItems: enriched,
+        research: imported.research, intelligentItems: enriched,
         materialization: {
           created: materialized.created.length, updated: materialized.updated.length,
           unchanged: materialized.unchanged.length, preserved: materialized.preserved.length,
+          sourceChanged: materialized.sourceChanged.length, reconciled: materialized.reconciled.length,
+          reviewRequired: materialized.reviewRequired.length,
         },
       };
     }),
@@ -353,6 +327,37 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       const items = await listIntelligentItems(input.processId, orgId);
       return { items, total: items.length };
+    }),
+
+  /**
+   * Hardening P0 — aplica as cotações ATUALIZADAS a um item cuja fonte mudou após a decisão. Item aprovado/
+   * rejeitado volta a `em_analise` (decisão anterior invalidada de forma EXPLÍCITA, com timeline).
+   */
+  applyItemSourceUpdate: orgRoleProcedure("operator")
+    .input(z.object({ itemId: z.string().min(1).max(20) }))
+    .mutation(async ({ input, ctx }) => applyItemSourceUpdate({
+      organizationId: ctx.organizationId!, itemId: input.itemId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+    })),
+
+  /**
+   * Hardening P0 — resolução HUMANA de identidade ambígua (legado × nova pesquisa): vincula a chave lógica a
+   * um item existente do processo (`targetItemId`) ou declara item NOVO (`null`). Nada é fundido sem isso.
+   */
+  resolveItemIdentity: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1).max(20),
+      logicalKeyHash: z.string().regex(/^[a-f0-9]{64}$/),
+      targetItemId: z.string().min(1).max(20).nullable(),
+      reason: z.string().min(5).max(255),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const r = await resolveItemIdentity({
+        organizationId: orgId, processId: input.processId, logicalKeyHash: input.logicalKeyHash,
+        targetItemId: input.targetItemId, actorUserId: ctx.user!.id, reason: input.reason, correlationId: ctx.correlationId,
+      });
+      return { created: r.created.length, updated: r.updated.length, sourceChanged: r.sourceChanged.length, reviewRequired: r.reviewRequired.length };
     }),
 
   approveItem: orgRoleProcedure("operator")
@@ -536,14 +541,30 @@ export const procurementProcessRouter = router({
       });
     }),
 
-  issueProcess: orgRoleProcedure("operator")
+  /**
+   * Hardening P0 (risco D) — "emitido" tem UM significado: emissão OFICIAL governada (OfficialDocumentLifecycle,
+   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando o
+   * Edital JÁ possui versão oficial emitida (ledger official_document_promotions). Sem ela → PRECONDITION_FAILED.
+   * Papel mínimo alinhado à emissão (manager).
+   */
+  issueProcess: orgRoleProcedure("manager")
     .input(z.object({ processId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
+      const official = await getLatestOfficialPromotion(orgId, process.id, "edital");
+      if (!official) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "O processo só é marcado como emitido depois da emissão OFICIAL do Edital (revisão de terceiro/SoD).",
+        });
+      }
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user!.id), summary: "Processo emitido.", refId: process.id, correlationId: ctx.correlationId });
-      return { success: true, processId: process.id, status: "emitido" as const };
+      await recordProcessEvent({
+        organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user!.id),
+        summary: `Processo marcado como emitido — Edital oficial v${official.version}.`, refId: official.officialDocumentId, correlationId: ctx.correlationId,
+      });
+      return { success: true, processId: process.id, status: "emitido" as const, officialEditalVersion: official.version };
     }),
 });

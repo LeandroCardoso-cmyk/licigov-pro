@@ -19,7 +19,7 @@ import { createRawItem } from "../domain/importExtraction";
 import { buildProvenance } from "../domain/importProvenance";
 import { buildFieldConfidence, aggregateConfidence } from "../domain/importConfidence";
 import type { CellLocation, ExtractionProvenance } from "../domain/importProvenance";
-import type { RawExtractedItem } from "../domain/importExtraction";
+import type { RawExtractedItem, RawTypedValues } from "../domain/importExtraction";
 import type { ImportWarning } from "../domain/importTypes";
 
 // ─── Normalização de cabeçalho ──────────────────────────────────────────────────
@@ -205,7 +205,14 @@ type RawFields = {
   rawUnitPrice: string | null; rawTotalPrice: string | null;
   rawSupplier?: string | null; rawBrand?: string | null; rawModel?: string | null;
   rawNotes?: string | null; rawSource?: string | null;
+  rawTypedValues?: RawTypedValues;
 };
+
+/**
+ * Matriz PARALELA de valores nativos: para cada célula, o decimal canônico exato quando a célula de origem
+ * é NUMÉRICA (XLSX), ou null (texto). CSV/PDF/DOCX não fornecem (tudo é texto localizado).
+ */
+export type TypedCellMatrix = ReadonlyArray<ReadonlyArray<string | null>>;
 
 function confidenceFor(raw: RawFields) {
   return aggregateConfidence([
@@ -275,7 +282,17 @@ function findHeaderRow(matrix: string[][], forced?: number): number {
 export function tableToRawItems(
   matrixIn: string[][], ctx: TabularContext, opts: TableOptions,
   locate: (rowIdx: number, colIdx?: number) => { location: CellLocation; extras: Partial<Pick<ExtractionProvenance, "sectionTitle" | "tableIndex" | "rawRowData">> },
+  typed?: TypedCellMatrix,
 ): TabularOutcome {
+  const typedAt = (r: number, idx: number): string | null => (idx >= 0 ? (typed?.[r]?.[idx] ?? null) : null);
+  const typedFor = (r: number, cols: { rawQuantity?: number; rawUnitPrice?: number; rawTotalPrice?: number }): RawTypedValues | undefined => {
+    const out: Record<string, { type: "number"; value: string }> = {};
+    for (const [k, c] of Object.entries(cols)) {
+      const v = c === undefined ? null : typedAt(r, c);
+      if (v !== null) out[k] = { type: "number", value: v };
+    }
+    return Object.keys(out).length ? (out as RawTypedValues) : undefined;
+  };
   const items: RawExtractedItem[] = [];
   const warnings: ImportWarning[] = [];
   let skipped = 0, rowsRead = 0;
@@ -344,6 +361,7 @@ export function tableToRawItems(
         const { location, extras } = locate(r, col);
         const ok = pushItem(items, ctx, {
           ...base, rawUnitPrice: value, rawTotalPrice: null, rawSupplier: supplierNameFromHeader(headersRaw[col]) || null,
+          rawTypedValues: typedFor(r, { rawQuantity: map.quantity, rawUnitPrice: col }),
         }, location, { ...extras, rawRowData: row }, rawCellValues, {
           ...pushExtra,
           warnings: [{ code: "WIDE_FORMAT_EXPANDED", message: `Cotação expandida da coluna "${headersRaw[col]}".`, severity: "info", field: "supplier" }],
@@ -367,6 +385,7 @@ export function tableToRawItems(
       rawUnitPrice:  at(row, map.unitPrice),
       rawTotalPrice: at(row, map.totalPrice),
       rawSupplier:   at(row, map.supplier),
+      rawTypedValues: typedFor(r, { rawQuantity: map.quantity, rawUnitPrice: map.unitPrice, rawTotalPrice: map.totalPrice }),
     }, location, { ...extras, rawRowData: row }, rawCellValues, pushExtra);
     if (!ok) {
       warnings.push({ code: "TRUNCATED_VALUE", message: `Limite de ${ctx.maxItems} itens atingido; linhas adicionais ignoradas.`, severity: "warning" });

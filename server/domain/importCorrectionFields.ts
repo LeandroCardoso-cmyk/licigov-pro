@@ -8,7 +8,7 @@
  * importTypes sem contrato de correção → capacidade indisponível (não aceitam patch genérico).
  */
 
-import { parseBRLDetailed, centsToDecimalString } from "./money";
+import { parseBRLDetailed, centsToDecimalString, canonicalDecimalToCents, type MoneyParse } from "./money";
 
 export type CorrectionFieldKind = "text" | "decimal" | "unit" | "money";
 
@@ -174,4 +174,61 @@ export function validateCorrections(importType: string, corrections: unknown): C
     changedFields.push(key);
   }
   return { ok: true, overlay, changedFields };
+}
+
+// ─── Hardening P0 — resolução TIPADA do valor efetivo (contrato monetário) ─────────────────
+
+export type MoneyOrigin = "correction" | "typed_number" | "text" | "none";
+
+type StagingLike = Record<string, unknown> & { correctedPayload?: unknown; rawTypedValues?: unknown };
+
+function overlayOf(item: StagingLike): Record<string, string | null> {
+  const o = item.correctedPayload;
+  if (!o) return {};
+  if (typeof o === "string") { try { return JSON.parse(o) as Record<string, string | null>; } catch { return {}; } }
+  return typeof o === "object" ? (o as Record<string, string | null>) : {};
+}
+function typedOf(item: StagingLike, rawKey: string): string | null {
+  let t = item.rawTypedValues as unknown;
+  if (typeof t === "string") { try { t = JSON.parse(t); } catch { t = null; } }
+  const v = t && typeof t === "object" ? (t as Record<string, { type?: string; value?: string } | undefined>)[rawKey] : undefined;
+  return v && v.type === "number" && typeof v.value === "string" ? v.value : null;
+}
+
+/**
+ * Valor monetário EFETIVO em centavos, com a ORIGEM explícita:
+ *   correção humana (overlay canônico "7.50") → decimal canônico;
+ *   célula NUMÉRICA nativa (rawTypedValues)    → decimal canônico exato (NUNCA o parser de texto pt-BR);
+ *   texto bruto                                → parser localizado (ambíguo ⇒ reason "ambiguous").
+ */
+export function resolveEffectiveMoney(item: StagingLike, logical: "unitPrice" | "totalPrice"): MoneyParse & { origin: MoneyOrigin } {
+  const rawKey = logical === "unitPrice" ? "rawUnitPrice" : "rawTotalPrice";
+  const overlay = overlayOf(item);
+  if (Object.prototype.hasOwnProperty.call(overlay, logical)) {
+    const v = overlay[logical];
+    if (v === null || v === "") return { cents: null, reason: "empty", origin: "correction" };
+    const cents = canonicalDecimalToCents(String(v));
+    return { cents, reason: cents === null ? "invalid" : "ok", origin: "correction" };
+  }
+  const typed = typedOf(item, rawKey);
+  if (typed !== null) {
+    const cents = canonicalDecimalToCents(typed);
+    return { cents, reason: cents === null ? "invalid" : "ok", origin: "typed_number" };
+  }
+  const raw = item[rawKey] as string | null | undefined;
+  if (raw === null || raw === undefined || String(raw).trim() === "") return { cents: null, reason: "empty", origin: "none" };
+  return { ...parseBRLDetailed(String(raw)), origin: "text" };
+}
+
+/** Quantidade EFETIVA (decimal canônico) — correção → nativo numérico → texto (pt-BR/en-US). */
+export function resolveEffectiveQuantity(item: StagingLike): string | null {
+  const overlay = overlayOf(item);
+  if (Object.prototype.hasOwnProperty.call(overlay, "quantity")) {
+    const v = overlay.quantity;
+    return v === null || v === "" ? null : normalizeDecimal(String(v));
+  }
+  const typed = typedOf(item, "rawQuantity");
+  if (typed !== null) return typed;
+  const raw = item.rawQuantity as string | null | undefined;
+  return raw == null ? null : normalizeDecimal(String(raw));
 }

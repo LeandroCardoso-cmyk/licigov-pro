@@ -164,7 +164,12 @@ export async function insertResearchItem(it: PriceResearchItem, executor?: Procu
     description: it.description, quantity: String(it.quantity), unit: it.unit, supplier: it.supplier,
     brand: it.brand, model: it.model, value: String(it.value), observations: it.observations,
     source: it.source, createdAt: toDb(it.createdAt),
-  }).onDuplicateKeyUpdate({ set: { value: String(it.value), quantity: String(it.quantity) } });
+  // Hardening P0 — reimportação converge TODO o conteúdo da cotação (antes só valor/quantidade: fornecedor,
+  // marca etc. ficavam defasados em relação ao Item Inteligente).
+  }).onDuplicateKeyUpdate({ set: {
+    value: String(it.value), quantity: String(it.quantity), description: it.description, unit: it.unit,
+    supplier: it.supplier, brand: it.brand, model: it.model, observations: it.observations, source: it.source,
+  } });
   return it;
 }
 
@@ -237,6 +242,7 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
 export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
   id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
   averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; enrichmentStatus: string; sourceResearchId: string;
+  sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null;
 }>> {
   const db = await getDb();
   if (!db) return [];
@@ -244,11 +250,16 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
     .where(and(eq(intelligentItemsTable.processId, processId), eq(intelligentItemsTable.organizationId, orgId)));
   return rows.map(r => {
     const suppliers = parseArr<IntelligentItemSupplier>(r.suppliers);
+    const pending = r.pendingSuppliers ? parseArr<IntelligentItemSupplier>(r.pendingSuppliers) : null;
     return {
       id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice),
       suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status,
-      averagePriceCents: reaisToCents(r.averagePrice), suppliers, quoteCount: suppliers.length,
+      averagePriceCents: reaisToCents(r.averagePrice), suppliers,
+      // Hardening P0 — "Baseado em N cotações" conta só cotações VÁLIDAS (com preço), as que entram na média.
+      quoteCount: suppliers.filter((x) => Number(x.value) > 0).length,
       enrichmentStatus: r.enrichmentStatus ?? "done", sourceResearchId: r.sourceResearchId,
+      sourceState: r.sourceState ?? "current", sourceStateReason: r.sourceStateReason ?? null,
+      pendingQuoteCount: pending ? pending.filter((x) => Number(x.value) > 0).length : null,
     };
   });
 }

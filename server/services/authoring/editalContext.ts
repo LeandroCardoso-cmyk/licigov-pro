@@ -25,14 +25,18 @@ import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
 } from "../../domain/authoritativeItems";
 import { confirmedCatalogFromDecision } from "./authoringContext";
+import { selectDocumentExcerpt, sha256Hex } from "../../domain/canonicalJson";
 
 /**
  * Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage).
  * 1.1 (P0 piloto): preço médio lido em REAIS (antes `/100` exibia R$ 25,50 como R$ 0,26), classificação só
  * quando CONFIRMADA por decisão humana, bloco autoritativo de itens compartilhado com o TR. Editais gerados
  * com 1.0 passam a aparecer como `source_changed` (o contexto deles continha o valor errado) — correto.
+ * 1.2 (hardening P0): o digest representa o que o prompt CONSOME — número do processo, recorte efetivo de
+ * cada documento (hash + cobertura, seleção por seções) e estado da fonte dos itens (antes: número do
+ * processo fora do digest e hash do documento inteiro mesmo quando só 4.000 caracteres entravam).
  */
-export const EDITAL_CONTEXT_VERSION = "edital-context/1.1";
+export const EDITAL_CONTEXT_VERSION = "edital-context/1.2";
 
 /** Limite de caracteres por documento-base injetado no contexto (custo/tamanho previsíveis). */
 const MAX_DOC_CHARS = 4000;
@@ -57,8 +61,10 @@ export interface EditalApprovedItem {
   readonly suggestedCATMAT: string | null;
   /** Classificação CONFIRMADA (ledger catmat_decisions); ausente/null ⇒ "a revisar". */
   readonly confirmedCatalogCode?: string | null;
-  /** Nº de cotações que compõem o preço médio. */
+  /** Nº de cotações VÁLIDAS que compõem o preço médio. */
   readonly quoteCount?: number;
+  /** current | source_changed | review_required (renderizado ⇒ entra no digest). */
+  readonly sourceState?: string;
 }
 
 /** Entradas JÁ RESOLVIDAS (fetched) para o builder PURO. */
@@ -105,11 +111,6 @@ export interface EditalSourceContext {
   readonly authoritativeBlock: string;
 }
 
-function truncate(s: string, max: number): string {
-  const t = (s ?? "").trim();
-  return t.length <= max ? t : `${t.slice(0, max)}\n…[conteúdo truncado para o contexto]`;
-}
-
 function short(hash: string | null): string {
   return hash ? hash.slice(0, 12) : "none";
 }
@@ -119,7 +120,7 @@ function itemsSignature(items: readonly EditalApprovedItem[]): Array<Record<stri
   return items
     .map((i) => ({
       id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: reaisToCents(i.averagePrice),
-      cm: i.suggestedCATMAT ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount ?? 0,
+      cm: i.suggestedCATMAT ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount ?? 0, ss: i.sourceState ?? "current",
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -155,11 +156,16 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
   }
   lines.push("");
 
+  const excerpts: Record<string, { h: string; cov: string; used: number; total: number } | null> = { dfd: null, etp: null, tr: null };
   const renderDoc = (label: string, key: "dfd" | "etp" | "tr", doc: EditalUpstreamDoc | null) => {
     if (doc?.present && doc.content.trim()) {
       usedSources.push(key);
-      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"})`);
-      lines.push(truncate(doc.content, MAX_DOC_CHARS));
+      // Seleção por SEÇÕES com cobertura explícita (nunca afirma consumo integral quando não houve).
+      const ex = selectDocumentExcerpt(doc.content, MAX_DOC_CHARS);
+      excerpts[key] = { h: sha256Hex(ex.text), cov: ex.coverage, used: ex.usedChars, total: ex.totalChars };
+      const cov = ex.coverage === "full" ? "cobertura: integral" : `cobertura: PARCIAL — ${ex.usedChars} de ${ex.totalChars} caracteres; todas as ${ex.sections.length} seção(ões) representadas`;
+      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}; ${cov})`);
+      lines.push(ex.text);
       lines.push("");
     } else {
       missing.push(key);
@@ -187,7 +193,9 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const price = it.averagePriceCents > 0 ? ` · valor médio est.: ${formatBRL(it.averagePriceCents)}` : "";
       // Sugestão automática NÃO é apresentada como código oficial.
       const catmat = it.confirmedCatalogCode ? ` · CATMAT/CATSER: ${it.confirmedCatalogCode}` : it.suggestedCatalogCode ? " · CATMAT/CATSER: a revisar (sugestão não confirmada)" : "";
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${price}${catmat}`);
+      const changed = input.approvedItems.find((a) => a.id === it.id)?.sourceState;
+      const flag = changed && changed !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${price}${catmat}${flag}`);
     }
     lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
@@ -205,14 +213,14 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       o: input.organizationId,
       p: input.processId,
       obj: objeto,
+      pn: input.processNumber ?? null,
       m: input.modality,
       f: input.form,
       pl: input.platform ?? null,
       cj: input.criterioJulgamento ?? null,
       rc: input.regimeContratacao ?? null,
-      dfd: input.dfd?.contentHash ?? null,
-      etp: input.etp?.contentHash ?? null,
-      tr: input.tr?.contentHash ?? null,
+      // Recorte EFETIVAMENTE consumido de cada documento (hash + cobertura), não o documento inteiro.
+      dfd: excerpts.dfd, etp: excerpts.etp, tr: excerpts.tr,
       items: itemsSignature(input.approvedItems),
     }))
     .digest("hex");
@@ -280,7 +288,7 @@ export async function resolveEditalSources(params: {
   const approvedItems: EditalApprovedItem[] = approved.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice,
     suggestedCATMAT: i.suggestedCATMAT, confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
-    quoteCount: i.quoteCount,
+    quoteCount: i.quoteCount, sourceState: i.sourceState,
   }));
 
   return buildEditalSourceContext({

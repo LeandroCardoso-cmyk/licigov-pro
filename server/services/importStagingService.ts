@@ -47,6 +47,7 @@ export async function persistStagingItems(
       rawModel:           item.rawModel        ?? null,
       rawNotes:           item.rawNotes        ?? null,
       rawSource:          item.rawSource       ?? null,
+      rawTypedValues:     (item.rawTypedValues ?? null) as object | null,
       rawMetadata:        (item.rawMetadata ?? null) as object | null,
       sourceLocation:     (item.sourceLocation ?? null) as object | null,
       parserMetadata:     (item.parserMetadata ?? null) as object | null,

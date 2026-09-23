@@ -13,6 +13,7 @@
  * server-side `POST /api/ingestion/upload/:sessionId` (ver server/routes/ingestionUploadRoute.ts).
  */
 import { z } from "zod";
+import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
@@ -38,6 +39,7 @@ import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
 import { promoteApprovedSessionToDomain } from "../services/importPromotionService";
 import {
   getDocumentIntake, saveDocumentReview, approveDocumentStaging, rejectDocumentStaging, promoteDocumentToDraft,
+  getDocumentReviewHistory,
 } from "../services/documentIntakeService";
 import { isDocumentImportType } from "../domain/documentProjection";
 import { enqueueImport } from "../services/importQueueService";
@@ -95,6 +97,17 @@ function formatCapability(mimeType: string, sampleExt: string): {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Hash CANÔNICO do payload estrutural de createSession (chaves ordenadas; tenant sempre do contexto). */
+export function createSessionPayloadHash(p: {
+  organizationId: number; procurementProcessId: string; importType: string; checksum: string;
+  sourceMimeType: string; sourceSize: number; importPurpose: string | null;
+}): string {
+  return createHash("sha256").update(JSON.stringify([
+    "ingestion.createSession/v2", p.organizationId, p.procurementProcessId, p.importType,
+    p.checksum.toLowerCase(), p.sourceMimeType, p.sourceSize, p.importPurpose,
+  ])).digest("hex");
+}
 
 /** Constrói o contexto de auditoria a partir do contexto tRPC autenticado + tenant. */
 function toAuditCtx(ctx: TrpcContext & { organizationId: number }): TrpcAuditCtx {
@@ -239,13 +252,20 @@ export const ingestionRouter = router({
       // Autorização por processo (processId + organizationId) é validada no serviço
       // createImportSession — fonte autoritativa, independente do caller.
 
-      // Idempotência (replay-safe): payloadHash = checksum garante mesmo arquivo sob mesma chave.
+      // Idempotência (replay-safe) — hardening P0: o payload é o CONJUNTO ESTRUTURAL da sessão (tenant do
+      // contexto, processo, tipo, checksum, mime, tamanho, finalidade), não só o checksum. Mesma chave com
+      // outro processo/tipo/arquivo ⇒ IDEMPOTENCY_CONFLICT (antes devolvia a sessão de outro processo/tipo).
+      const payloadHash = createSessionPayloadHash({
+        organizationId: orgId, procurementProcessId: input.procurementProcessId, importType: input.importType,
+        checksum: input.checksum, sourceMimeType: input.sourceMimeType, sourceSize: input.sourceSize,
+        importPurpose: input.importPurpose ?? null,
+      });
       const idem = await checkIdempotency(
-        input.idempotencyKey, ctx.user!.id, orgId, "ingestion.createSession", input.checksum,
+        input.idempotencyKey, ctx.user!.id, orgId, "ingestion.createSession", payloadHash,
       );
       if (idem.status === "completed") {
         if (idem.payloadMismatch) {
-          throw new TRPCError({ code: "CONFLICT", message: "idempotencyKey já usada com outro arquivo." });
+          throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT: idempotencyKey já usada com outro arquivo, processo ou tipo." });
         }
         return idem.response as { sessionId: number; uploadPath: string; duplicate: boolean };
       }
@@ -418,6 +438,13 @@ export const ingestionRouter = router({
         rawUnit:            i.rawUnit,
         rawUnitPrice:       i.rawUnitPrice,
         rawTotalPrice:      i.rawTotalPrice,
+        // Hardening P0 — valor NATIVO de células numéricas (o que o contrato monetário usa).
+        rawTypedValues:     i.rawTypedValues ?? null,
+        rawSupplier:        i.rawSupplier ?? null,
+        rawBrand:           i.rawBrand ?? null,
+        rawModel:           i.rawModel ?? null,
+        rawNotes:           i.rawNotes ?? null,
+        rawSource:          i.rawSource ?? null,
         sourceLocation:     i.sourceLocation,
         confidenceMetadata: i.confidenceMetadata,
         extractionWarnings: i.extractionWarnings,
@@ -686,6 +713,22 @@ export const ingestionRouter = router({
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
       return getDocumentIntake({ organizationId: orgId, processId: input.procurementProcessId, kind: input.kind });
+    }),
+
+  /**
+   * Hardening P0 — histórico APPEND-ONLY da revisão documental (extraído → revisões → aprovação/invalidação →
+   * descarte/promoção). `includeContent` devolve cada versão integral (reconstrução completa). Tenant + processo.
+   */
+  documentReviewHistory: tenantProcedure
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      stagingId:            z.number().int().positive(),
+      includeContent:       z.boolean().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return getDocumentReviewHistory({ organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId, includeContent: input.includeContent });
     }),
 
   /** Salva a revisão humana (rawContent imutável; concorrência otimista por revision). */

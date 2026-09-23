@@ -18,11 +18,11 @@
  * vem sempre do contexto autenticado. A chave bruta de storage nunca é exposta.
  */
 import { createHash } from "crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import {
-  importDocumentStaging, importSessions, importPromotions, type ImportDocumentStagingRow,
+  importDocumentStaging, importSessions, importPromotions, importDocumentReviewLedger, type ImportDocumentStagingRow,
 } from "../../drizzle/schema";
 import {
   DOCUMENT_PROJECTION_VERSION, MAX_DOCUMENT_CHARS, documentKindForImportType, importTypeForDocumentKind,
@@ -57,6 +57,63 @@ async function requireDb() {
   return db;
 }
 
+// ─── Ledger APPEND-ONLY da revisão documental (hardening P0) ─────────────────────────
+
+type Tx = Parameters<Parameters<Awaited<ReturnType<typeof requireDb>>["transaction"]>[0]>[0];
+export type DocumentReviewEvent = "extracted" | "reviewed" | "approval_invalidated" | "approved" | "rejected" | "promoted";
+
+/**
+ * Anexa um evento ao ledger na MESMA transação da mudança de estado. A sequência é por staging e é
+ * calculada sob o lock da linha de staging (FOR UPDATE do chamador) + UNIQUE(org, staging, sequence):
+ * nunca há buraco nem reordenação. `contentSnapshot` guarda a versão COMPLETA quando o conteúdo muda.
+ */
+async function appendReviewEvent(tx: Tx, row: Pick<ImportDocumentStagingRow, "id" | "organizationId" | "procurementProcessId" | "importSessionId" | "documentKind">, e: {
+  eventType: DocumentReviewEvent; revision: number; contentHash: string; previousContentHash?: string | null;
+  contentSnapshot?: string | null; actorUserId?: number | null; reason?: string | null; targetDocumentId?: string | null; correlationId: string;
+}): Promise<number> {
+  const [{ maxSeq }] = await tx.select({ maxSeq: sql<number | null>`MAX(${importDocumentReviewLedger.sequence})` })
+    .from(importDocumentReviewLedger)
+    .where(and(eq(importDocumentReviewLedger.organizationId, row.organizationId), eq(importDocumentReviewLedger.documentStagingId, row.id)));
+  const sequence = Number(maxSeq ?? 0) + 1;
+  await tx.insert(importDocumentReviewLedger).values({
+    organizationId: row.organizationId, procurementProcessId: row.procurementProcessId, importSessionId: row.importSessionId,
+    documentStagingId: row.id, documentKind: row.documentKind, sequence, revision: e.revision, eventType: e.eventType,
+    actorUserId: e.actorUserId ?? null, correlationId: (e.correlationId ?? "").slice(0, 64), contentHash: e.contentHash,
+    previousContentHash: e.previousContentHash ?? null, contentSnapshot: e.contentSnapshot ?? null,
+    reason: e.reason ? e.reason.slice(0, 2000) : null, targetDocumentId: e.targetDocumentId ?? null,
+  });
+  return sequence;
+}
+
+export interface DocumentReviewHistoryEntry {
+  sequence: number; revision: number; eventType: DocumentReviewEvent; actorUserId: number | null;
+  contentHash: string; previousContentHash: string | null; reason: string | null; targetDocumentId: string | null;
+  correlationId: string; createdAt: string; content?: string | null;
+}
+
+/**
+ * Histórico COMPLETO e ordenado da revisão de um documento importado (tenant + processo). Com
+ * `includeContent`, cada versão traz o conteúdo integral — toda a sequência é reconstruível.
+ */
+export async function getDocumentReviewHistory(p: {
+  organizationId: number; processId: string; stagingId: number; includeContent?: boolean;
+}): Promise<DocumentReviewHistoryEntry[]> {
+  const db = await requireDb();
+  const rows = await db.select().from(importDocumentReviewLedger)
+    .where(and(
+      eq(importDocumentReviewLedger.organizationId, p.organizationId),
+      eq(importDocumentReviewLedger.procurementProcessId, p.processId),
+      eq(importDocumentReviewLedger.documentStagingId, p.stagingId),
+    ))
+    .orderBy(asc(importDocumentReviewLedger.sequence));
+  return rows.map((r) => ({
+    sequence: r.sequence, revision: r.revision, eventType: r.eventType as DocumentReviewEvent, actorUserId: r.actorUserId ?? null,
+    contentHash: r.contentHash, previousContentHash: r.previousContentHash ?? null, reason: r.reason ?? null,
+    targetDocumentId: r.targetDocumentId ?? null, correlationId: r.correlationId, createdAt: String(r.createdAt),
+    ...(p.includeContent ? { content: r.contentSnapshot ?? null } : {}),
+  }));
+}
+
 // ─── Worker: persistência da projeção (imutável) ────────────────────────────────
 
 /**
@@ -81,35 +138,52 @@ export async function persistDocumentStaging(params: {
     .limit(1);
   if (existing[0]) return { stagingId: existing[0].id, created: false };
 
-  await db.insert(importDocumentStaging).values({
-    organizationId: session.organizationId,
-    procurementProcessId: session.procurementProcessId,
-    importSessionId: session.id,
-    documentKind: kind,
-    originalFileName: session.sourceFileName.slice(0, 255),
-    sourceChecksum: session.checksum ?? "",
-    parserType: params.parserType,
-    parserVersion: params.parserVersion,
-    projectionVersion: projection.contractVersion,
-    rawContent: projection.content,
-    rawContentHash: projection.contentHash,
-    rawBlocks: projection.blocks as unknown as object,
-    reviewedContent: null,
-    contentHash: projection.contentHash,
-    revision: 0,
-    status: "pending_review",
-    warnings: params.warnings as unknown as object,
-    correlationId: session.correlationId,
-  }).onDuplicateKeyUpdate({ set: { importSessionId: session.id } }); // corrida: no-op (conteúdo bruto preservado)
-
-  const rows = await db.select({ id: importDocumentStaging.id }).from(importDocumentStaging)
-    .where(and(eq(importDocumentStaging.organizationId, session.organizationId), eq(importDocumentStaging.importSessionId, session.id)))
-    .limit(1);
+  let stagingId: number;
+  try {
+    // Staging + evento `extracted` no ledger: MESMA transação (o histórico começa na extração).
+    stagingId = await db.transaction(async (tx) => {
+      const [ins] = await tx.insert(importDocumentStaging).values({
+        organizationId: session.organizationId,
+        procurementProcessId: session.procurementProcessId!,
+        importSessionId: session.id,
+        documentKind: kind,
+        originalFileName: session.sourceFileName.slice(0, 255),
+        sourceChecksum: session.checksum ?? "",
+        parserType: params.parserType,
+        parserVersion: params.parserVersion,
+        projectionVersion: projection.contractVersion,
+        rawContent: projection.content,
+        rawContentHash: projection.contentHash,
+        rawBlocks: projection.blocks as unknown as object,
+        reviewedContent: null,
+        contentHash: projection.contentHash,
+        revision: 0,
+        status: "pending_review",
+        warnings: params.warnings as unknown as object,
+        correlationId: session.correlationId,
+      }).$returningId();
+      await appendReviewEvent(tx, {
+        id: ins.id, organizationId: session.organizationId, procurementProcessId: session.procurementProcessId!,
+        importSessionId: session.id, documentKind: kind,
+      }, {
+        eventType: "extracted", revision: 0, contentHash: projection.contentHash, contentSnapshot: projection.content,
+        reason: `${params.parserType}@${params.parserVersion} · ${projection.contractVersion}`, correlationId: session.correlationId ?? "",
+      });
+      return ins.id;
+    });
+  } catch (err) {
+    // Corrida (mesma sessão reprocessada): UNIQUE(org, sessão) — o conteúdo bruto gravado primeiro prevalece.
+    const again = await db.select({ id: importDocumentStaging.id }).from(importDocumentStaging)
+      .where(and(eq(importDocumentStaging.organizationId, session.organizationId), eq(importDocumentStaging.importSessionId, session.id)))
+      .limit(1);
+    if (!again[0]) throw err;
+    return { stagingId: again[0].id, created: false };
+  }
   log.info("document_staging_persisted", {
     sessionId: session.id, organizationId: session.organizationId, kind,
     characters: projection.stats.characters, blocks: projection.stats.blocks,
   });
-  return { stagingId: rows[0].id, created: true };
+  return { stagingId, created: true };
 }
 
 // ─── Sugestão de itens a partir de tabelas do documento (FASE F) ─────────────────────
@@ -304,11 +378,19 @@ export async function saveDocumentReview(params: {
     if (affectedRows(result) !== 1) {
       throw new TRPCError({ code: "CONFLICT", message: "A revisão mudou desde o carregamento — recarregue antes de salvar." });
     }
-    // Aprovação desfeita pela edição ⇒ a sessão volta a aguardar revisão.
+    // Aprovação desfeita pela edição ⇒ a sessão volta a aguardar revisão (registrado no ledger).
     if (row.status === "approved") {
       await tx.update(importSessions).set({ status: "awaiting_review", stage: "awaiting_review" })
         .where(and(eq(importSessions.id, row.importSessionId), eq(importSessions.organizationId, params.organizationId)));
+      await appendReviewEvent(tx, row, {
+        eventType: "approval_invalidated", revision: row.revision, contentHash: row.contentHash,
+        actorUserId: params.actorUserId, reason: "Conteúdo aprovado foi editado — aprovação desfeita.", correlationId: params.correlationId,
+      });
     }
+    await appendReviewEvent(tx, row, {
+      eventType: "reviewed", revision: row.revision + 1, contentHash: newHash, previousContentHash: row.contentHash,
+      contentSnapshot: content, actorUserId: params.actorUserId, correlationId: params.correlationId,
+    });
     return { revision: row.revision + 1, contentHash: newHash, changed: true, status: "pending_review" as const, previousHash: row.contentHash, sessionId: row.importSessionId };
   });
 
@@ -348,6 +430,10 @@ export async function approveDocumentStaging(params: {
     }).where(and(eq(importDocumentStaging.id, row.id), eq(importDocumentStaging.organizationId, params.organizationId)));
     await tx.update(importSessions).set({ status: "approved", stage: "approved", progress: 100, finishedAt: new Date() })
       .where(and(eq(importSessions.id, row.importSessionId), eq(importSessions.organizationId, params.organizationId)));
+    await appendReviewEvent(tx, row, {
+      eventType: "approved", revision: row.revision, contentHash: row.contentHash,
+      actorUserId: params.actorUserId, correlationId: params.correlationId,
+    });
     return { status: "approved" as const, approvedContentHash: row.contentHash, idempotent: false, sessionId: row.importSessionId };
   });
   if (!out.idempotent) {
@@ -375,6 +461,10 @@ export async function rejectDocumentStaging(params: {
       .where(and(eq(importDocumentStaging.id, row.id), eq(importDocumentStaging.organizationId, params.organizationId)));
     await tx.update(importSessions).set({ status: "rejected", stage: "rejected", finishedAt: new Date() })
       .where(and(eq(importSessions.id, row.importSessionId), eq(importSessions.organizationId, params.organizationId)));
+    await appendReviewEvent(tx, row, {
+      eventType: "rejected", revision: row.revision, contentHash: row.contentHash,
+      actorUserId: params.actorUserId, reason: params.reason ?? null, correlationId: params.correlationId,
+    });
     return { idempotent: false, sessionId: row.importSessionId };
   });
   if (!out.idempotent) {
@@ -508,10 +598,14 @@ export async function promoteDocumentToDraft(params: {
         organizationId: params.organizationId, processId: params.processId, kind,
         title: `${KIND_LABEL[kind]} — ${process.object}`,
         content,
-        sources: importLineageMarkers({
-          sessionId: session.id, checksum: row.sourceChecksum, parserType: row.parserType,
-          parserVersion: row.parserVersion, kind, projectionVersion: row.projectionVersion,
-        }),
+        sources: [
+          ...importLineageMarkers({
+            sessionId: session.id, checksum: row.sourceChecksum, parserType: row.parserType,
+            parserVersion: row.parserVersion, kind, projectionVersion: row.projectionVersion,
+          }),
+          // Lineage da REVISÃO aprovada (reconstruível no ledger import_document_review_ledger).
+          `aprovado:rev${row.revision}@${row.approvedContentHash.slice(0, 12)}`,
+        ],
         authorUserId: params.actorUserId, lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
@@ -535,6 +629,11 @@ export async function promoteDocumentToDraft(params: {
       await tx.update(importSessions).set({
         promotionStatus: "promoted", promotedAt: now, promotedByUserId: params.actorUserId, promotionRef: mutation.document.id,
       }).where(and(eq(importSessions.id, session.id), eq(importSessions.organizationId, params.organizationId)));
+      await appendReviewEvent(tx, row, {
+        eventType: "promoted", revision: row.revision, contentHash: row.approvedContentHash,
+        actorUserId: params.actorUserId, targetDocumentId: mutation.document.id,
+        reason: params.mode === "replace" ? `replace: ${reason.slice(0, 1000)}` : "create", correlationId: params.correlationId,
+      });
       await tx.insert(importPromotions).values({
         organizationId: params.organizationId, procurementProcessId: params.processId, importSessionId: session.id,
         importType: session.importType, targetKind: kind, targetRef: mutation.document.id,

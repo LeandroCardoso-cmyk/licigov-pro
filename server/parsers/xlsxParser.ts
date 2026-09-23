@@ -7,14 +7,20 @@ import { BaseParser } from "./baseParser";
 import { tableToRawItems, type TabularContext } from "./tabularExtraction";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning } from "../domain/importTypes";
+import { numberToDecimalString } from "../domain/money";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_ITEMS = 5000;
-const PARSER_VERSION = "1.1.0";
+const PARSER_VERSION = "1.2.0"; // 1.2.0: valor nativo de células numéricas preservado (rawTypedValues)
 
+/**
+ * Hardening P0 — célula NUMÉRICA: exibição pt-BR SEM milhar ("1,234", "1234,5") só para o revisor; o valor
+ * autoritativo vai na matriz tipada (decimal canônico exato). Antes, `1.234` virava a string "1.234", que o
+ * contrato de texto pt-BR lia como milhar (R$ 1.234,00 em vez de R$ 1,23).
+ */
 function cellToString(val: unknown): string {
   if (val === null || val === undefined) return "";
-  if (typeof val === "number") return val.toString();
+  if (typeof val === "number") return (numberToDecimalString(val) ?? "").replace(".", ",");
   if (typeof val === "boolean") return val ? "true" : "false";
   if (val instanceof Date) return val.toISOString().slice(0, 10);
   return String(val).trim();
@@ -85,6 +91,8 @@ export class XlsxParser extends BaseParser {
     const sheet   = workbook.Sheets[targetSheet];
     const rawData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
     const rows    = (rawData as unknown[][]).map((r) => r.map(cellToString));
+    // Valores NATIVOS numéricos (sheet_to_json raw=true preserva `number`), paralelos a `rows`.
+    const typed   = (rawData as unknown[][]).map((r) => r.map((v) => (typeof v === "number" ? numberToDecimalString(v) : null)));
 
     if (rows.length === 0) {
       return {
@@ -106,7 +114,7 @@ export class XlsxParser extends BaseParser {
     const out = tableToRawItems(rows, ctx, { positionalFallback: "description_only", headerRow: opts.headerRow, sheetName: targetSheet }, (r, col) => ({
       location: { sheet: targetSheet, row: r + 1, ...(col !== undefined ? { column: col + 1 } : {}) },
       extras: {},
-    }));
+    }), typed);
 
     const allWarnings = [...warnings, ...out.warnings];
     const processingMs = Date.now() - startMs;

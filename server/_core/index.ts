@@ -15,6 +15,7 @@ import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
 import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
 import { recoverStuckImportSessions } from "../services/importQueueService";
+import { recoverStaleEnrichment } from "../services/itemMaterializationService";
 import { EMAIL_CONFIG } from "../config/email";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
@@ -129,6 +130,12 @@ async function main() {
   void recoverStuckImportSessions().then(
     r => { if (r.recovered || r.dlq) console.info(`[BOOT] ingestion recovery: ${JSON.stringify(r)}`); },
     err => console.warn("[BOOT] ingestion recovery falhou:", err instanceof Error ? err.message : err),
+  );
+  // Hardening P0 — recuperação DURÁVEL do enriquecimento de Itens Inteligentes (pending antigo ou
+  // processing travado quando o processo morreu). Claim atômico por item; nunca bloqueia o boot.
+  void recoverStaleEnrichment().then(
+    r => { if (r.scanned) console.info(`[BOOT] enrichment recovery: ${JSON.stringify(r)}`); },
+    err => console.warn("[BOOT] enrichment recovery falhou:", err instanceof Error ? err.message : err),
   );
 }
 
