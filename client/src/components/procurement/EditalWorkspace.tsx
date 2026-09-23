@@ -16,9 +16,11 @@ const labelSource = (k: string) => SOURCE_LABELS[k] ?? k;
 /**
  * EditalWorkspace — REAL (wired to tRPC).
  *
- * UX: seleção guiada (modalidade + forma). Presencial gera justificativa legal
- * automática; eletrônico exige plataforma. O servidor valida e monta o edital —
- * o operador apenas revisa.
+ * UX: seleção guiada (modalidade + forma). A forma presencial exige motivação
+ * (art. 17, § 2º): o sistema pode estruturar uma minuta de justificativa, mas ela
+ * depende dos fatos do processo e não é garantia legal automática. Eletrônico exige
+ * plataforma. O servidor valida e monta a MINUTA do edital — revisão e decisão são
+ * humanas.
  */
 
 type Modality =

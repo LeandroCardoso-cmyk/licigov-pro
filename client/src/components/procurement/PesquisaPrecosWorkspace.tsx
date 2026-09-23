@@ -137,9 +137,15 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           <Spinner className="size-4" /> Carregando…
         </div>
       ) : error ? (
-        <p role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
-          Não foi possível consultar as opções de importação. Recarregue a página para tentar novamente.
-        </p>
+        // Falha ao consultar capabilities: a ingestão canônica por arquivo permanece FAIL-CLOSED (launcher
+        // não é exposto, nada é habilitado implicitamente), mas o caminho legado por texto continua disponível.
+        <div className="space-y-3">
+          <p role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
+            Não foi possível consultar as opções de importação por arquivo, que permanece indisponível no momento.
+            A entrada por texto continua disponível abaixo.
+          </p>
+          <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
+        </div>
       ) : enabled ? (
         <DocumentIngestionLauncher
           importType="price_research"

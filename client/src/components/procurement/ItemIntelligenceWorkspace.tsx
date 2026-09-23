@@ -39,7 +39,7 @@ export default function ItemIntelligenceWorkspace({
   onOpenItem,
 }: ItemIntelligenceWorkspaceProps) {
   const utils = trpc.useUtils();
-  const { data, isLoading, isError, refetch } = trpc.procurementProcess.listItems.useQuery(
+  const { data, isLoading, isError, isFetching, refetch } = trpc.procurementProcess.listItems.useQuery(
     { processId },
     { enabled: !!processId },
   );
@@ -94,12 +94,22 @@ export default function ItemIntelligenceWorkspace({
             <div key={i} className="h-12 rounded-lg bg-muted" />
           ))}
         </div>
-      ) : isError ? (
+      ) : isError && !data ? (
+        // Primeira carga falhou (sem itens em cache): estado de erro completo.
         <div role="alert" className="rounded-xl border border-destructive/40 p-5 text-sm text-destructive">
           <p>Não foi possível carregar os itens deste processo.</p>
-          <button type="button" onClick={() => void refetch()} className="mt-2 underline">Tentar novamente</button>
+          <button type="button" onClick={() => void refetch()} disabled={isFetching} className="mt-2 underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
         </div>
-      ) : items.length === 0 ? (
+      ) : (
+        <>
+          {/* Refetch falhou com itens válidos em cache: aviso NÃO bloqueante; a tabela anterior permanece. */}
+          {isError && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+              <span>Não foi possível atualizar os dados agora. As informações abaixo são da última consulta bem-sucedida.</span>
+              <button type="button" onClick={() => void refetch()} disabled={isFetching} className="underline disabled:no-underline disabled:opacity-60">Tentar novamente</button>
+            </div>
+          )}
+          {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">
           Nenhum item inteligente. Importe uma pesquisa de preços primeiro.
         </div>
@@ -196,6 +206,8 @@ export default function ItemIntelligenceWorkspace({
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
     </div>
   );
