@@ -53,7 +53,7 @@ export default function ProcessoLicitatorioHome({
   onCreateProcess,
   onOpenProcess,
 }: ProcessoLicitatorioHomeProps) {
-  const { data, isLoading } = trpc.procurementProcess.listProcesses.useQuery({
+  const { data, isLoading, error, refetch } = trpc.procurementProcess.listProcesses.useQuery({
     limit: 50,
   });
 
@@ -65,8 +65,8 @@ export default function ProcessoLicitatorioHome({
             Processos Licitatórios
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Fluxo DFD → ETP → TR → Edital. Você valida recomendações; o sistema
-            estrutura a contratação.
+            DFD → ETP → Pesquisa de Preços → Itens Inteligentes → TR → Edital.
+            Comece no ponto em que o processo está; você revisa e decide.
           </p>
         </div>
         <button
@@ -91,6 +91,11 @@ export default function ProcessoLicitatorioHome({
               <div className="h-5 w-20 rounded-full bg-muted" />
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-card p-6 text-sm text-destructive">
+          <p>Não foi possível carregar os processos. Confira a organização selecionada e tente novamente.</p>
+          <button type="button" onClick={() => void refetch()} className="mt-3 underline">Tentar novamente</button>
         </div>
       ) : !data || data.processes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">

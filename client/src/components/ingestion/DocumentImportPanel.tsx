@@ -98,6 +98,7 @@ export function DocumentImportPanel({ kind, processId, defaultOpen = false, onPr
         <CardDescription>
           Traga o {label} que a Secretaria já elaborou (PDF com texto ou DOCX). O texto é extraído sem IA, você
           revisa e aprova, e ele vira o rascunho deste processo — o mesmo usado pelas próximas etapas.
+          PDF escaneado exige OCR, ainda indisponível. O formato antigo .doc não é suportado.
         </CardDescription>
       </CardHeader>
       {open && (

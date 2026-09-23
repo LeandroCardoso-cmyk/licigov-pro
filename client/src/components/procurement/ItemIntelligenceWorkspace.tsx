@@ -8,7 +8,7 @@ import CatmatThresholdConfig from "./CatmatThresholdConfig";
  * UX: esta é a tela central da experiência. O trabalho NÃO é preencher itens —
  * é VALIDAR (aprovar/rejeitar) os Itens Inteligentes que o servidor já
  * enriqueceu com CATMAT sugerido, preço médio e recomendações. O servidor
- * sempre decide o CATMAT; o operador valida.
+ * sugere a classificação; a confirmação humana ocorre no painel do item.
  */
 
 const ITEM_STATUS_LABELS: Record<string, string> = {
@@ -39,7 +39,7 @@ export default function ItemIntelligenceWorkspace({
   onOpenItem,
 }: ItemIntelligenceWorkspaceProps) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.procurementProcess.listItems.useQuery(
+  const { data, isLoading, isError, refetch } = trpc.procurementProcess.listItems.useQuery(
     { processId },
     { enabled: !!processId },
   );
@@ -72,9 +72,15 @@ export default function ItemIntelligenceWorkspace({
         </span>
       </div>
       <p className="mb-6 text-sm text-muted-foreground">
-        Valide as recomendações do sistema. O servidor decide o CATMAT; você
-        aprova ou rejeita cada item.
+        Revise as cotações e aprove ou rejeite cada item. A classificação CATMAT/CATSER é uma
+        sugestão: abra o item para confirmá-la. Aprovar o item não confirma automaticamente o catálogo.
       </p>
+
+      {(approveItem.error || rejectItem.error || applySourceUpdate.error) && (
+        <p role="alert" className="mb-4 rounded-lg border border-destructive/40 p-3 text-sm text-destructive">
+          {approveItem.error?.message || rejectItem.error?.message || applySourceUpdate.error?.message}
+        </p>
+      )}
 
       {processId && <CatmatThresholdConfig />}
 
@@ -87,6 +93,11 @@ export default function ItemIntelligenceWorkspace({
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-12 rounded-lg bg-muted" />
           ))}
+        </div>
+      ) : isError ? (
+        <div role="alert" className="rounded-xl border border-destructive/40 p-5 text-sm text-destructive">
+          <p>Não foi possível carregar os itens deste processo.</p>
+          <button type="button" onClick={() => void refetch()} className="mt-2 underline">Tentar novamente</button>
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-input bg-card p-8 text-center text-muted-foreground">

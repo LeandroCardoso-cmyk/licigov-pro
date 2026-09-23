@@ -110,8 +110,8 @@ export default function EditalWorkspace({
     <div className="mx-auto max-w-3xl p-6">
       <h1 className="text-xl font-semibold text-foreground">Edital</h1>
       <p className="text-sm text-muted-foreground">
-        Modalidade, forma e critério montados pelo sistema conforme a Lei
-        14.133/2021.
+        Prepare uma minuta com base no TR e nas demais fontes do processo. Confira modalidade,
+        forma, plataforma e pendências [REVISAR]. A decisão e a revisão são humanas.
       </p>
 
       <div className="mt-5 space-y-4 rounded-xl border border-border bg-card p-5">
@@ -160,9 +160,8 @@ export default function EditalWorkspace({
 
         {form === "presencial" ? (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Justificativa legal automática.</strong> A forma presencial
-            exige justificativa (art. 17, § 2º). O sistema a incluirá
-            automaticamente no edital.
+            <strong>Justificativa sujeita à revisão.</strong> Confira a motivação da forma presencial
+            incluída na minuta e complete-a com os fatos do processo antes da aprovação.
           </div>
         ) : (
           <label className="flex flex-col text-sm sm:max-w-xs">

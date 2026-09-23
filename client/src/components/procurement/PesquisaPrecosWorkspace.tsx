@@ -51,7 +51,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <label className="mb-3 flex flex-col text-sm sm:max-w-xs">
-        <span className="mb-1 font-medium text-foreground">Fonte</span>
+        <span className="mb-1 font-medium text-foreground">Origem do conteúdo colado</span>
         <select
           value={source}
           onChange={(e) => setSource(e.target.value as ResearchSource)}
@@ -62,6 +62,10 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           ))}
         </select>
       </label>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Esta entrada recebe texto, não arquivos. Ao importar, a pesquisa e os itens são registrados;
+        depois, revise os Itens Inteligentes antes de aprová-los para uso no TR.
+      </p>
       <label className="flex flex-col text-sm">
         <span className="mb-1 font-medium text-foreground">Conteúdo da pesquisa</span>
         <textarea
@@ -86,7 +90,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
         </p>
       )}
       {importResearch.isError && (
-        <p className="mt-2 text-sm text-destructive">Falha ao importar a pesquisa.</p>
+        <p className="mt-2 text-sm text-destructive" role="alert">{importResearch.error.message || "Falha ao importar a pesquisa."}</p>
       )}
       {importResearch.isSuccess && (
         <div className="mt-4 border-t border-border pt-4">
@@ -116,15 +120,15 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
 }
 
 export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems }: PesquisaPrecosWorkspaceProps) {
-  const { enabled, isLoading } = useIngestionCapabilities();
+  const { enabled, isLoading, error } = useIngestionCapabilities();
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Pesquisa de Preços</h1>
         <p className="text-sm text-muted-foreground">
-          Importe cotações por arquivo ou conteúdo colado. As linhas extraídas são sugestões que
-          passam por revisão humana antes de qualquer uso — nada é gravado automaticamente.
+          Organize as cotações da pesquisa e revise os Itens Inteligentes. Somente itens aprovados
+          compõem a base de itens do TR.
         </p>
       </div>
 
@@ -132,19 +136,28 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" /> Carregando…
         </div>
+      ) : error ? (
+        <p role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
+          Não foi possível consultar as opções de importação. Recarregue a página para tentar novamente.
+        </p>
       ) : enabled ? (
         <DocumentIngestionLauncher
           importType="price_research"
           procurementProcessId={processId}
           importPurpose="price_research"
           title="Pesquisa de preços — ingestão supervisionada"
-          description="Envie um arquivo (CSV, Excel, PDF ou DOCX — inclusive mapa comparativo com uma coluna por fornecedor) ou cole o conteúdo tabular. Você revisará as cotações extraídas antes de aprovar."
+          description="Envie CSV, Excel (XLS/XLSX), PDF com texto ou DOCX, ou cole uma tabela. Revise as cotações antes da promoção à pesquisa. PDF escaneado exige OCR, ainda indisponível; arquivos .doc não são suportados."
           allowPaste
           onReviewItems={onReviewItems}
           manualSlot={<LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />}
         />
       ) : (
-        <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            A importação por arquivo não está habilitada para esta organização. A entrada por texto está disponível abaixo.
+          </p>
+          <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
+        </div>
       )}
     </div>
   );
