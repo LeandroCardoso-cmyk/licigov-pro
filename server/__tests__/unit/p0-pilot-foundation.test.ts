@@ -117,7 +117,7 @@ describe("P0 — bloco AUTORITATIVO de itens (servidor, nunca IA)", () => {
     expect(md).toContain("| 2 | Papel A4 | 10 | resma | 100,00 | 1.000,00 | 461234 | 3 |");
     expect(md).toContain("| 1 | Caneta azul | 100 | un | 1,50 | 150,00 | a revisar (sugestão não confirmada) | 2 |");
     expect(md).toContain("**Valor estimado global:** R$ 1.150,00");
-    expect(md).toContain("Baseado em 5 cotação(ões) aprovada(s) em 2 item(ns).");
+    expect(md).toContain("Baseado em 5 cotação(ões) válida(s) em 2 item(ns) aprovado(s)."); // risco A: contagem de VÁLIDAS
     expect(md).not.toContain("| 999 |"); // sugestão NUNCA vira código oficial
   });
   it("determinístico em bytes e independente da ordem; extraível por marcadores", () => {
@@ -235,7 +235,17 @@ const ctxInput = (over: Partial<DocumentAuthoringInputs> = {}): DocumentAuthorin
   processObject: "Aquisição de cadeiras", processNumber: "2026/0001",
   dfd: { present: true, status: "rascunho", contentHash: "dfd-h", content: "DFD: a Secretaria de Educação precisa de 10 cadeiras.", origin: "import" },
   etp: { present: true, status: "rascunho", contentHash: "etp-h", content: "ETP: solução é aquisição direta com garantia.", origin: "generated" },
-  approvedItems: [{ id: "i1", description: "Cadeira giratória", quantity: 10, unit: "un", averagePriceCents: 10000, quoteCount: 3, confirmedCatalogCode: "461234", suggestedCatalogCode: "461234", suppliers: ["A", "B", "C"] }],
+  // Hardening P0 — ContextItem carrega as cotações RENDERIZADAS (fornecedor/marca/modelo/valor) e o estado
+  // da fonte (contrato superado: antes só nomes de fornecedores, que ficavam fora do digest).
+  approvedItems: [{
+    id: "i1", description: "Cadeira giratória", quantity: 10, unit: "un", averagePriceCents: 10000, quoteCount: 3,
+    confirmedCatalogCode: "461234", suggestedCatalogCode: "461234", sourceState: "current",
+    quotes: [
+      { quoteId: "q1", supplier: "A", brand: "", model: "", valueCents: 10000 },
+      { quoteId: "q2", supplier: "B", brand: "", model: "", valueCents: 11000 },
+      { quoteId: "q3", supplier: "C", brand: "", model: "", valueCents: 9000 },
+    ],
+  }],
   pendingItemCount: 1,
   ...over,
 });
@@ -262,8 +272,11 @@ describe("P0 — contexto REAL de autoria (ETP/TR)", () => {
   it("digest sensível a DFD, ETP, item e classificação confirmada; estável para as mesmas fontes", () => {
     const base = buildDocumentAuthoringContext(ctxInput()).sourcesDigest;
     expect(buildDocumentAuthoringContext(ctxInput()).sourcesDigest).toBe(base);
-    expect(buildDocumentAuthoringContext(ctxInput({ dfd: { ...ctxInput().dfd!, contentHash: "x" } })).sourcesDigest).not.toBe(base);
-    expect(buildDocumentAuthoringContext(ctxInput({ etp: { ...ctxInput().etp!, contentHash: "y" } })).sourcesDigest).not.toBe(base);
+    // Hardening P0 — o digest cobre o CONTEÚDO CONSUMIDO (recorte), não rótulos: mudar só o hash informado
+    // com o mesmo conteúdo não muda o prompt ⇒ não muda o digest (contrato superado); mudar o texto muda.
+    expect(buildDocumentAuthoringContext(ctxInput({ dfd: { ...ctxInput().dfd!, contentHash: "x" } })).sourcesDigest).toBe(base);
+    expect(buildDocumentAuthoringContext(ctxInput({ dfd: { ...ctxInput().dfd!, content: "DFD: precisa de 12 cadeiras." } })).sourcesDigest).not.toBe(base);
+    expect(buildDocumentAuthoringContext(ctxInput({ etp: { ...ctxInput().etp!, content: "ETP: locação." } })).sourcesDigest).not.toBe(base);
     const it0 = ctxInput().approvedItems[0];
     expect(buildDocumentAuthoringContext(ctxInput({ approvedItems: [{ ...it0, averagePriceCents: 10001 }] })).sourcesDigest).not.toBe(base);
     expect(buildDocumentAuthoringContext(ctxInput({ approvedItems: [{ ...it0, confirmedCatalogCode: null }] })).sourcesDigest).not.toBe(base);

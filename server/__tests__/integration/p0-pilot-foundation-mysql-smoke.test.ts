@@ -322,13 +322,17 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     // Mesmo arquivo em nova sessão → CONFLICT (não duplica cotações).
     await expect(importPriceMap(ORG, pid, MAPA)).rejects.toMatchObject({ code: "CONFLICT" });
     // Item APROVADO não muda com nova pesquisa do mesmo item lógico (decisão humana preservada).
+    // Contrato superado pelo hardening (blocker 2): antes a nova pesquisa era descartada em silêncio
+    // ("preserved"); agora a decisão continua intocada, mas o item é SINALIZADO como SOURCE_CHANGED
+    // (cotações novas ficam pendentes até o operador aplicá-las) — nunca sobrescrito, nunca ignorado.
     await approveAll(ORG, pid);
     const mapa2 = MAPA.replace("100,00;110,00;90,00;100,00", "200,00;210,00;190,00;200,00");
     const second = await importPriceMap(ORG, pid, mapa2);
-    expect(second.result.intelligentItems).toMatchObject({ preserved: 1, created: 0 });
+    expect(second.result.intelligentItems).toMatchObject({ sourceChanged: 1, preserved: 0, created: 0 });
     const [again] = await listIntelligentItems(pid, ORG);
     expect(again.status).toBe("aprovado");
     expect(again.averagePriceCents).toBe(10000);
+    expect(again.sourceState).toBe("source_changed");
   }, 90_000);
 
   it("7) TR com CONTEXTO REAL: prompt recebe DFD/ETP/itens; números do quadro autoritativo; replay + SOURCE_CHANGED", async () => {
@@ -352,7 +356,7 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     expect(prompt).toContain("Cadeira giratória");           // item aprovado
     expect(document.content).toContain("| 1 | Cadeira giratória | 10 | un | 100,00 | 1.000,00 | 461234 | 3 |");
     expect(document.content).toContain("**Valor estimado global:** R$ 1.000,00");
-    expect(document.content).toContain("Baseado em 3 cotação(ões) aprovada(s)");
+    expect(document.content).toContain("Baseado em 3 cotação(ões) válida(s)"); // risco A: só cotações com preço
     expect(document.sources.some((s) => s.startsWith("srcdigest:"))).toBe(true);
     expect((await getAuthoringSourceState({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras" })).state).toBe("current");
 
