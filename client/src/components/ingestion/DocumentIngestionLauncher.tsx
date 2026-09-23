@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import { useSupervisedIngestion, type IngestionImportType } from "@/hooks/ingestion/useSupervisedIngestion";
 import { useStagingReview } from "@/hooks/ingestion/useStagingReview";
 import { supportedFormatsLabel } from "@/lib/ingestion/capabilities";
@@ -68,6 +69,7 @@ export function DocumentIngestionLauncher({
   onReviewItems,
 }: DocumentIngestionLauncherProps) {
   const { capabilities: rawCaps, enabled, isLoading } = useIngestionCapabilities();
+  const { hasRole, isLoading: roleLoading } = useOrgRole();
 
   // Capacidade escopada aos formatos relevantes do documento (quando informado).
   const capabilities = useMemo(() => {
@@ -143,9 +145,9 @@ export function DocumentIngestionLauncher({
       <CardContent className="space-y-4">
         {/* Entrada: manual / colar / arquivo */}
         {showEntry && (
-          <Tabs defaultValue={manualSlot ? "manual" : "file"}>
+          <Tabs defaultValue="file">
             <TabsList>
-              {manualSlot && <TabsTrigger value="manual">Inserir manualmente</TabsTrigger>}
+              {manualSlot && <TabsTrigger value="manual">Importar texto direto</TabsTrigger>}
               {allowPaste && <TabsTrigger value="paste">Colar conteúdo</TabsTrigger>}
               <TabsTrigger value="file">Enviar arquivo</TabsTrigger>
             </TabsList>
@@ -229,7 +231,8 @@ export function DocumentIngestionLauncher({
                 <PromoteToDomainPanel
                   status={ingestion.promotionStatus}
                   importType={importType}
-                  canPromote={ingestion.canPromote}
+                  canPromote={ingestion.canPromote && !roleLoading && hasRole("manager")}
+                  requiresManager={ingestion.canPromote && !roleLoading && !hasRole("manager")}
                   isPromoting={ingestion.isPromoting}
                   error={ingestion.promoteError}
                   result={ingestion.promotionResult}
