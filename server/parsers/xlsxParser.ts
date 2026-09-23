@@ -1,37 +1,26 @@
 /**
- * Sprint 2.8 — XLSX/XLS Parser Foundation.
- * Usa biblioteca 'xlsx' (SheetJS) já disponível no projeto.
- * Suporta: sheet detection, header inference, merged cells, sparse rows.
+ * Sprint 2.8 — XLSX/XLS Parser (P0 piloto: mapeamento de colunas CONSOLIDADO em tabularExtraction).
+ * Usa a biblioteca 'xlsx' (SheetJS). Suporta seleção de planilha, inferência de cabeçalho, linhas
+ * esparsas, campos de cotação (fornecedor/marca/modelo/obs./fonte) e mapa comparativo.
  */
 import { BaseParser } from "./baseParser";
-import { createRawItem } from "../domain/importExtraction";
-import { buildProvenance } from "../domain/importProvenance";
-import { buildFieldConfidence, aggregateConfidence } from "../domain/importConfidence";
+import { tableToRawItems, type TabularContext } from "./tabularExtraction";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning } from "../domain/importTypes";
-import type { RawExtractedItem } from "../domain/importExtraction";
+import { numberToDecimalString } from "../domain/money";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_ITEMS = 5000;
+const PARSER_VERSION = "1.2.0"; // 1.2.0: valor nativo de células numéricas preservado (rawTypedValues)
 
-// ─── Column patterns (same as CSV) ────────────────────────────────────────────
-
-const DESCRIPTION_PATTERNS = ["DESCRIÇÃO", "DESCRICAO", "DESCRIPTION", "OBJETO", "ITEM", "MATERIAL", "PRODUTO", "ESPECIFICAÇÃO", "ESPECIFICACAO", "NOME"];
-const QUANTITY_PATTERNS     = ["QTDE", "QTD", "QT", "QUANTIDADE", "QUANT", "QUANTITY", "QNT"];
-const UNIT_PATTERNS         = ["UNID", "UN", "UNIDADE", "UNIT", "UM"];
-const UNIT_PRICE_PATTERNS   = ["PRECO UNIT", "PREÇO UNIT", "V.UNIT", "VL.UNIT", "VALOR UNIT", "UNIT PRICE", "P.UNIT", "PRECO UNI"];
-const TOTAL_PRICE_PATTERNS  = ["TOTAL", "PRECO TOTAL", "PREÇO TOTAL", "VL TOTAL", "VALOR TOTAL", "TOTAL PRICE", "V.TOTAL"];
-
-function matchColumn(headers: string[], patterns: string[]): number {
-  for (const pattern of patterns) {
-    const idx = headers.findIndex(h => h.toUpperCase().includes(pattern));
-    if (idx >= 0) return idx;
-  }
-  return -1;
-}
-
+/**
+ * Hardening P0 — célula NUMÉRICA: exibição pt-BR SEM milhar ("1,234", "1234,5") só para o revisor; o valor
+ * autoritativo vai na matriz tipada (decimal canônico exato). Antes, `1.234` virava a string "1.234", que o
+ * contrato de texto pt-BR lia como milhar (R$ 1.234,00 em vez de R$ 1,23).
+ */
 function cellToString(val: unknown): string {
   if (val === null || val === undefined) return "";
-  if (typeof val === "number") return val.toString();
+  if (typeof val === "number") return (numberToDecimalString(val) ?? "").replace(".", ",");
   if (typeof val === "boolean") return val ? "true" : "false";
   if (val instanceof Date) return val.toISOString().slice(0, 10);
   return String(val).trim();
@@ -50,7 +39,7 @@ export class XlsxParser extends BaseParser {
     maxFileSizeBytes:      MAX_SIZE,
     supportsStreaming:     false,
     supportsProgressEvents: false,
-    parserVersion:         "1.0.0",
+    parserVersion:         PARSER_VERSION,
     capabilityStatus:      "supported",
     supportsStructuredExtraction: true,
   };
@@ -63,11 +52,7 @@ export class XlsxParser extends BaseParser {
   async parse(buffer: Buffer, opts: ParseOptions): Promise<ParseResult> {
     const startMs  = Date.now();
     const warnings: ImportWarning[] = [];
-    const items:    RawExtractedItem[] = [];
-    let   skipped  = 0;
-    let   totalRowsRead = 0;
 
-    // Dynamic require — xlsx is optional at module level to avoid test errors
     let XLSX: typeof import("xlsx");
     try {
       XLSX = await import("xlsx");
@@ -99,98 +84,42 @@ export class XlsxParser extends BaseParser {
     if (opts.sheetName && !sheetNames.includes(opts.sheetName)) {
       warnings.push({ code: "HEADER_INFERENCE", message: `Sheet "${opts.sheetName}" não encontrada. Usando "${targetSheet}".`, severity: "warning" });
     }
+    if (sheetNames.length > 1 && !opts.sheetName) {
+      warnings.push({ code: "MULTIPLE_SHEETS", message: `Planilha com ${sheetNames.length} abas; processada apenas "${targetSheet}".`, severity: "info" });
+    }
 
-    const sheet     = workbook.Sheets[targetSheet];
-    const rawData   = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
-    const rows      = rawData as string[][];
+    const sheet   = workbook.Sheets[targetSheet];
+    const rawData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    const rows    = (rawData as unknown[][]).map((r) => r.map(cellToString));
+    // Valores NATIVOS numéricos (sheet_to_json raw=true preserva `number`), paralelos a `rows`.
+    const typed   = (rawData as unknown[][]).map((r) => r.map((v) => (typeof v === "number" ? numberToDecimalString(v) : null)));
 
     if (rows.length === 0) {
       return {
-        items: [], warnings: [{ code: "HEADER_INFERENCE", message: "Sheet vazia.", severity: "warning" }],
+        items: [], warnings: [...warnings, { code: "HEADER_INFERENCE", message: "Sheet vazia.", severity: "warning" }],
         errors: [], summary: this.emptySummary(Date.now() - startMs), rawMetadata: {},
       };
     }
 
-    // Header inference
-    let headerRow  = opts.headerRow ?? 0;
-    let headers:    string[] = [];
-    for (let i = headerRow; i < Math.min(headerRow + 5, rows.length); i++) {
-      const row = rows[i];
-      const numericCount = row.filter(c => c && !isNaN(Number(String(c).replace(/[R$.,\s]/g, "")))).length;
-      if (numericCount / row.length < 0.5) {
-        headers  = row.map(c => cellToString(c).toUpperCase());
-        headerRow = i;
-        break;
-      }
-    }
+    const ctx: TabularContext = {
+      importSessionId: opts.importSessionId,
+      parserType:      this.parserType,
+      parserVersion:   PARSER_VERSION,
+      sourceFileId:    opts.sourceFileId,
+      sourceFileName:  opts.sourceFileName,
+      sourceMimeType:  opts.sourceMimeType,
+      sourceChecksum:  opts.sourceChecksum,
+      maxItems:        Math.min(opts.maxItems ?? MAX_ITEMS, MAX_ITEMS),
+    };
+    const out = tableToRawItems(rows, ctx, { positionalFallback: "description_only", headerRow: opts.headerRow, sheetName: targetSheet }, (r, col) => ({
+      location: { sheet: targetSheet, row: r + 1, ...(col !== undefined ? { column: col + 1 } : {}) },
+      extras: {},
+    }), typed);
 
-    if (headers.length === 0) {
-      warnings.push({ code: "HEADER_INFERENCE", message: "Cabeçalhos não inferidos. Usando índices.", severity: "warning" });
-    }
-
-    const descIdx  = matchColumn(headers, DESCRIPTION_PATTERNS);
-    const qtyIdx   = matchColumn(headers, QUANTITY_PATTERNS);
-    const unitIdx  = matchColumn(headers, UNIT_PATTERNS);
-    const upIdx    = matchColumn(headers, UNIT_PRICE_PATTERNS);
-    const totalIdx = matchColumn(headers, TOTAL_PRICE_PATTERNS);
-
-    for (let rowIdx = headerRow + 1; rowIdx < rows.length; rowIdx++) {
-      const row = rows[rowIdx].map(cellToString);
-      totalRowsRead++;
-
-      if (row.every(c => c === "")) { skipped++; continue; }
-
-      const rawDescription = descIdx >= 0 ? row[descIdx] || null : row[0] || null;
-      const rawQuantity    = qtyIdx  >= 0 ? row[qtyIdx]  || null : null;
-      const rawUnit        = unitIdx >= 0 ? row[unitIdx]  || null : null;
-      const rawUnitPrice   = upIdx   >= 0 ? row[upIdx]   || null : null;
-      const rawTotalPrice  = totalIdx >= 0 ? row[totalIdx] || null : null;
-
-      if (!rawDescription || rawDescription.trim() === "") {
-        skipped++;
-        continue;
-      }
-
-      const isSparse = row.filter(c => c !== "").length < Math.max(2, row.length / 2);
-      if (isSparse) {
-        warnings.push({ code: "SPARSE_ROW", message: `Linha ${rowIdx + 1} é esparsa.`, severity: "info", location: `row:${rowIdx + 1}` });
-      }
-
-      const fieldConfs = [
-        buildFieldConfidence("description", rawDescription ? 0.9 : 0.2),
-        buildFieldConfidence("quantity",    rawQuantity    ? 0.85 : 0.3),
-        buildFieldConfidence("unit",        rawUnit        ? 0.80 : 0.3),
-        buildFieldConfidence("unit_price",  rawUnitPrice   ? 0.85 : 0.3),
-        buildFieldConfidence("total_price", rawTotalPrice  ? 0.85 : 0.3),
-      ];
-      const confidence = aggregateConfidence(fieldConfs);
-
-      const provenance = buildProvenance(
-        opts.sourceFileId, opts.sourceFileName, opts.sourceMimeType, "",
-        this.parserType, this.capabilities.parserVersion,
-        { sheet: targetSheet, row: rowIdx + 1 },
-        { rawRowData: row },
-      );
-      const parserMeta = {
-        parserType:      this.parserType,
-        parserVersion:   this.capabilities.parserVersion,
-        processingMs:    0,
-        rawCellValues:   Object.fromEntries(headers.map((h, i) => [h || `col${i}`, row[i]])),
-        inferredHeaders: headers,
-        sheetName:       targetSheet,
-      };
-
-      items.push(createRawItem(
-        opts.importSessionId,
-        { rawDescription, rawQuantity, rawUnit, rawUnitPrice, rawTotalPrice },
-        provenance, parserMeta, confidence,
-      ));
-    }
-
+    const allWarnings = [...warnings, ...out.warnings];
     const processingMs = Date.now() - startMs;
-    const summary = this.buildSummary(totalRowsRead, items, skipped, warnings, [], processingMs, { sheetsProcessed: 1 });
-
-    return { items, warnings, errors: [], summary, rawMetadata: { sheetNames, processedSheet: targetSheet, headers } };
+    const summary = this.buildSummary(out.rowsRead, out.items, out.skipped, allWarnings, [], processingMs, { sheetsProcessed: 1 });
+    return { items: out.items, warnings: allWarnings, errors: [], summary, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION } };
   }
 }
 

@@ -2,7 +2,7 @@
  * PR B.2.2 — Revisão humana do staging (listagem paginada + ações auditáveis).
  *
  * Reutiliza os contratos B.2.1: listStagingItems (paginado, tenant-safe), reviewItem, reviewBulk
- * e approveSession. NÃO há correção de VALORES na B.2.1 (diferida para a B.2.3) — a revisão cobre
+ * e approveSession. A correção de VALORES é um overlay auditado (correctItem, B.2.2+) — a revisão cobre
  * aceitar / rejeitar / pular (+ nota). Aprovar exige zero pendentes e NÃO promove ao domínio.
  */
 import { useCallback, useState } from "react";

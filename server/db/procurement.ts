@@ -25,6 +25,7 @@ import {
   generatedDocumentEditsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
+import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
 import type { PriceResearchWorkspace, PriceResearchItem } from "../domain/priceResearch";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
@@ -163,7 +164,12 @@ export async function insertResearchItem(it: PriceResearchItem, executor?: Procu
     description: it.description, quantity: String(it.quantity), unit: it.unit, supplier: it.supplier,
     brand: it.brand, model: it.model, value: String(it.value), observations: it.observations,
     source: it.source, createdAt: toDb(it.createdAt),
-  }).onDuplicateKeyUpdate({ set: { value: String(it.value), quantity: String(it.quantity) } });
+  // Hardening P0 — reimportação converge TODO o conteúdo da cotação (antes só valor/quantidade: fornecedor,
+  // marca etc. ficavam defasados em relação ao Item Inteligente).
+  }).onDuplicateKeyUpdate({ set: {
+    value: String(it.value), quantity: String(it.quantity), description: it.description, unit: it.unit,
+    supplier: it.supplier, brand: it.brand, model: it.model, observations: it.observations, source: it.source,
+  } });
   return it;
 }
 
@@ -204,7 +210,9 @@ export async function insertIntelligentItem(it: IntelligentProcurementItem): Pro
     risks: JSON.stringify(it.risks), recommendations: JSON.stringify(it.recommendations),
     status: it.status, approvedBy: it.approvedBy, correlationId: it.correlationId,
     createdAt: toDb(it.createdAt), updatedAt: toDb(it.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { status: it.status, suggestedCatmat: it.suggestedCATMAT, approvedBy: it.approvedBy, updatedAt: toDb(it.updatedAt) } });
+  // P0 piloto — reinserção do MESMO item lógico NUNCA reverte decisão humana: status/approvedBy/CATMAT
+  // (antes eram sobrescritos, e um item `aprovado` voltava a `pendente` numa reimportação).
+  }).onDuplicateKeyUpdate({ set: { updatedAt: toDb(it.updatedAt) } });
   return it;
 }
 
@@ -226,12 +234,34 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
   };
 }
 
-export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{ id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string }>> {
+/**
+ * Itens Inteligentes do processo (tenant-scoped). `averagePrice` em REAIS (DECIMAL(14,2)) — NUNCA centavos.
+ * P0 piloto — campos ADITIVOS: `averagePriceCents` (contrato monetário: reaisToCents, sem /100), fornecedores
+ * (cotações que compõem a média), `quoteCount` e `enrichmentStatus`.
+ */
+export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
+  id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
+  averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; enrichmentStatus: string; sourceResearchId: string;
+  sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null;
+}>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(intelligentItemsTable)
     .where(and(eq(intelligentItemsTable.processId, processId), eq(intelligentItemsTable.organizationId, orgId)));
-  return rows.map(r => ({ id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice), suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status }));
+  return rows.map(r => {
+    const suppliers = parseArr<IntelligentItemSupplier>(r.suppliers);
+    const pending = r.pendingSuppliers ? parseArr<IntelligentItemSupplier>(r.pendingSuppliers) : null;
+    return {
+      id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice),
+      suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status,
+      averagePriceCents: reaisToCents(r.averagePrice), suppliers,
+      // Hardening P0 — "Baseado em N cotações" conta só cotações VÁLIDAS (com preço), as que entram na média.
+      quoteCount: suppliers.filter((x) => Number(x.value) > 0).length,
+      enrichmentStatus: r.enrichmentStatus ?? "done", sourceResearchId: r.sourceResearchId,
+      sourceState: r.sourceState ?? "current", sourceStateReason: r.sourceStateReason ?? null,
+      pendingQuoteCount: pending ? pending.filter((x) => Number(x.value) > 0).length : null,
+    };
+  });
 }
 
 export async function updateItemStatus(id: string, orgId: number, status: ItemStatus, approvedBy: number | null, updatedAt: string): Promise<boolean> {
@@ -418,7 +448,11 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   dfd_regenerate  = regeneração DETERMINÍSTICA (template, sem IA) do DFD "criar do zero";
 //   dfd_manual_edit = edição humana manual do DFD (saveDFD governado);
 //   human_edit      = reservado para o editor humano de ETP/TR/Edital (C.4B.3B).
-export type DraftEditOperation = "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit";
+//   import_promote  = P0 piloto — documento IMPORTADO (DFD/ETP/TR) promovido a rascunho (criação);
+//   import_replace  = P0 piloto — substituição EXPLÍCITA e confirmada do rascunho por documento importado.
+export type DraftEditOperation =
+  | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
+  | "import_promote" | "import_replace";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):
@@ -444,6 +478,11 @@ export interface DraftMutationInput {
   idempotencyKey: string;
   correlationId: string;
   reason?: string | null;
+  /**
+   * P0 piloto — registra também a CRIAÇÃO no ledger (previous_content_hash vazio). Por padrão a criação não
+   * gera linha (contrato C.4B.3A preservado); a promoção de documento importado exige rastro desde a origem.
+   */
+  ledgerOnCreate?: boolean;
 }
 
 /** Resultado + SNAPSHOT CANÔNICO persistido (Blocker 2): a resposta cacheável reflete EXATAMENTE o
@@ -503,6 +542,15 @@ export async function applyDraftContentMutationTx(
       lastSubstantiveAt: now, createdAt: doc.createdAt || now, updatedAt: now,
     };
     await insertGeneratedDocument(created, tx);
+    if (input.ledgerOnCreate) {
+      await tx.insert(generatedDocumentEditsTable).values({
+        organizationId, processId, generatedDocumentId: created.id, kind,
+        actorUserId, previousContentHash: "", newContentHash: newHash,
+        previousContent: null, operation: input.operation,
+        reason: input.reason ?? null, correlationId: input.correlationId,
+        idempotencyKey: input.idempotencyKey, createdAt: toDb(now),
+      });
+    }
     return { created: true, changed: true, document: created };
   }
 

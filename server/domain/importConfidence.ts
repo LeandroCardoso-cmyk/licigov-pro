@@ -38,7 +38,9 @@ export type ExtractionWarningCode =
   | "ZERO_QUANTITY"
   | "NEGATIVE_VALUE"
   | "UNKNOWN_UNIT"
-  | "PRICE_MISMATCH";   // unit_price * qty ≠ total_price
+  | "PRICE_MISMATCH"    // unit_price * qty ≠ total_price
+  | "WIDE_FORMAT_EXPANDED"   // P0 piloto — mapa comparativo: uma cotação por coluna de fornecedor
+  | "WIDE_FORMAT_AMBIGUOUS"; // P0 piloto — formato largo não determinável (sem chute)
 
 export type ExtractionErrorCode =
   | "PARSER_FAILURE"

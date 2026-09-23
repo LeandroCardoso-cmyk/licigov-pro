@@ -1982,8 +1982,14 @@ export const importPromotions = mysqlTable("import_promotions", {
   idempotencyKey:       varchar("idempotencyKey", { length: 64 }),
   correlationId:        varchar("correlationId",  { length: 36 }),
   actorUserId:          int("actorUserId"),
+  // Hardening P0 (0304) — EXCLUSIVIDADE COMPARTILHADA da promoção de pesquisa: o mesmo arquivo (checksum)
+  // é promovido UMA vez por (tenant, processo, tipo), mesmo com sessões concorrentes (UNIQUE no banco).
+  // Nullable: promoções documentais e linhas anteriores não participam (NULL não colide em UNIQUE).
+  sourceChecksum:       varchar("sourceChecksum", { length: 64 }),
   createdAt:            timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => [
+  unique("uq_import_promotions_source").on(table.organizationId, table.procurementProcessId, table.importType, table.sourceChecksum),
+]);
 
 export type ImportPromotionRow       = typeof importPromotions.$inferSelect;
 export type InsertImportPromotionRow = typeof importPromotions.$inferInsert;
@@ -2002,6 +2008,16 @@ export const importStagingItems = mysqlTable("import_staging_items", {
   rawUnit:             varchar("rawUnit",        { length: 50  }),
   rawUnitPrice:        varchar("rawUnitPrice",   { length: 100 }),
   rawTotalPrice:       varchar("rawTotalPrice",  { length: 100 }),
+  // P0 piloto (0303) — campos de COTAÇÃO como colunas de 1ª classe, IMUTÁVEIS como os demais raw*. Antes
+  // eram perdidos (só sobreviviam dentro de parserMetadata.rawCellValues). Nullable/aditivo.
+  rawSupplier:         varchar("rawSupplier",    { length: 255 }),
+  rawBrand:            varchar("rawBrand",       { length: 255 }),
+  rawModel:            varchar("rawModel",       { length: 255 }),
+  rawNotes:            text("rawNotes"),
+  rawSource:           varchar("rawSource",      { length: 255 }),
+  // Hardening P0 (0304) — valor NATIVO de células numéricas ({ rawUnitPrice: { type: "number", value: "1.234" } }).
+  // raw* guardam a exibição; o contrato monetário usa o valor tipado (nunca reparseia NUMBER como texto pt-BR).
+  rawTypedValues:      json("rawTypedValues"),
   rawMetadata:         json("rawMetadata"),
   sourceLocation:      json("sourceLocation"),
   parserMetadata:      json("parserMetadata"),
@@ -2081,6 +2097,86 @@ export const importItemCorrections = mysqlTable("import_item_corrections", {
 
 export type ImportItemCorrectionRow       = typeof importItemCorrections.$inferSelect;
 export type InsertImportItemCorrectionRow = typeof importItemCorrections.$inferInsert;
+
+/**
+ * P0 piloto (0303) — STAGING DOCUMENTAL do Import Engine (DFD/ETP/TR importados como DOCUMENTO).
+ * UMA linha por sessão de importação documental (mesma import_sessions/upload/storage/checksum/parser —
+ * não há pipeline paralelo). `rawContent`/`rawBlocks` = projeção extraída, IMUTÁVEL (nenhum caminho de
+ * escrita os altera após o insert). `reviewedContent` = revisão humana (overlay), com concorrência otimista
+ * por `revision`. Aprovação fixa o `approvedContentHash`; a promoção governada cria/substitui o rascunho em
+ * generated_documents (nunca documento oficial). O binário permanece no Storage Service (não é duplicado).
+ */
+export const importDocumentStaging = mysqlTable("import_document_staging", {
+  id:                   int("id").autoincrement().primaryKey(),
+  organizationId:       int("organizationId").notNull(),
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }).notNull(),
+  importSessionId:      int("importSessionId").notNull(),
+  documentKind:         varchar("documentKind",      { length: 10 }).notNull(),
+  originalFileName:     varchar("originalFileName",  { length: 255 }).notNull(),
+  sourceChecksum:       varchar("sourceChecksum",    { length: 64 }).notNull().default(""),
+  parserType:           varchar("parserType",        { length: 20 }).notNull(),
+  parserVersion:        varchar("parserVersion",     { length: 20 }).notNull(),
+  projectionVersion:    varchar("projectionVersion", { length: 40 }).notNull(),
+  rawContent:           longtext("rawContent").notNull(),
+  rawContentHash:       varchar("rawContentHash",    { length: 64 }).notNull(),
+  rawBlocks:            json("rawBlocks"),
+  reviewedContent:      longtext("reviewedContent"),
+  /** Hash do conteúdo VIGENTE (reviewed ?? raw) — base da concorrência otimista e da aprovação. */
+  contentHash:          varchar("contentHash",       { length: 64 }).notNull(),
+  revision:             int("revision").notNull().default(0),
+  // pending_review | approved | promoted | rejected
+  status:               varchar("status",            { length: 20 }).notNull().default("pending_review"),
+  warnings:             json("warnings"),
+  reviewedBy:           int("reviewedBy"),
+  reviewedAt:           timestamp("reviewedAt"),
+  approvedBy:           int("approvedBy"),
+  approvedAt:           timestamp("approvedAt"),
+  approvedContentHash:  varchar("approvedContentHash", { length: 64 }),
+  promotedBy:           int("promotedBy"),
+  promotedAt:           timestamp("promotedAt"),
+  promotionMode:        varchar("promotionMode",     { length: 20 }),
+  targetDocumentId:     varchar("targetDocumentId",  { length: 20 }),
+  correlationId:        varchar("correlationId",     { length: 36 }),
+  createdAt:            timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:            timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  unique("uq_import_doc_staging_session").on(table.organizationId, table.importSessionId),
+  index("idx_import_doc_staging_process").on(table.organizationId, table.procurementProcessId, table.documentKind),
+]);
+
+/**
+ * Hardening P0 (0304) — LEDGER APPEND-ONLY da revisão documental (pré-promoção). O estado corrente segue
+ * materializado em import_document_staging; ESTE ledger é a fonte histórica imutável (gravado na MESMA
+ * transação da mudança de estado). Eventos: extracted | reviewed | approval_invalidated | approved |
+ * rejected | promoted. `contentSnapshot` = conteúdo COMPLETO da versão (reconstrução integral).
+ */
+export const importDocumentReviewLedger = mysqlTable("import_document_review_ledger", {
+  id:                   int("id").autoincrement().primaryKey(),
+  organizationId:       int("organizationId").notNull(),
+  procurementProcessId: varchar("procurementProcessId", { length: 20 }).notNull(),
+  importSessionId:      int("importSessionId").notNull(),
+  documentStagingId:    int("documentStagingId").notNull(),
+  documentKind:         varchar("documentKind", { length: 10 }).notNull(),
+  sequence:             int("sequence").notNull(),
+  revision:             int("revision").notNull(),
+  eventType:            varchar("eventType", { length: 30 }).notNull(),
+  actorUserId:          int("actorUserId"),
+  correlationId:        varchar("correlationId", { length: 64 }).notNull().default(""),
+  contentHash:          varchar("contentHash", { length: 64 }).notNull(),
+  previousContentHash:  varchar("previousContentHash", { length: 64 }),
+  contentSnapshot:      longtext("contentSnapshot"),
+  reason:               text("reason"),
+  targetDocumentId:     varchar("targetDocumentId", { length: 20 }),
+  createdAt:            datetime("createdAt", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_import_doc_review_seq").on(table.organizationId, table.documentStagingId, table.sequence),
+  index("idx_import_doc_review_process").on(table.organizationId, table.procurementProcessId, table.documentKind),
+]);
+
+export type ImportDocumentReviewLedgerRow = typeof importDocumentReviewLedger.$inferSelect;
+
+export type ImportDocumentStagingRow       = typeof importDocumentStaging.$inferSelect;
+export type InsertImportDocumentStagingRow = typeof importDocumentStaging.$inferInsert;
 
 /**
  * Sprint 2.9 — Semantic Candidates.
@@ -5128,10 +5224,51 @@ export const intelligentItemsTable = mysqlTable("intelligent_items", {
   recommendations:  text("recommendations"),
   status:           varchar("status", { length: 20 }).notNull().default("pendente"),
   approvedBy:       int("approved_by"),
+  // P0 piloto (0303) — estado do ENRIQUECIMENTO pós-commit (CATMAT sugerido/riscos/recomendações). A
+  // materialização base é transacional e válida sozinha; o enriquecimento é degradável: pending|done|failed.
+  // Default 'done' para as linhas preexistentes (foram enriquecidas inline pelo caminho legado).
+  enrichmentStatus: varchar("enrichment_status", { length: 20 }).notNull().default("done"),
+  // Hardening P0 (0304) — RECUPERAÇÃO DURÁVEL do enriquecimento: pending|processing|done|failed + tentativas.
+  enrichmentAttempts:      int("enrichment_attempts").notNull().default(0),
+  enrichmentLastAttemptAt: datetime("enrichment_last_attempt_at", { mode: "string", fsp: 3 }),
+  enrichmentErrorCode:     varchar("enrichment_error_code", { length: 40 }),
+  // Hardening P0 (0304) — CONVERGÊNCIA Pesquisa × Item: 'current' | 'source_changed' (cotação mudou num item
+  // já decidido — decisão preservada, `pending_suppliers` guarda o conjunto novo para revisão) |
+  // 'review_required' (identidade ambígua na reconciliação legado→v2 — nada fundido automaticamente).
+  sourceState:       varchar("source_state", { length: 20 }).notNull().default("current"),
+  sourceStateReason: varchar("source_state_reason", { length: 255 }),
+  sourceChangedAt:   datetime("source_changed_at", { mode: "string", fsp: 3 }),
+  pendingSuppliers:  text("pending_suppliers"),
   correlationId:    varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:        datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:        datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * Hardening P0 (0304) — ALIASES DE IDENTIDADE do Item Inteligente (append-only). A identidade v2 (chave
+ * lógica descrição|unidade|quantidade) difere da legada (só descrição). Em vez de migrar ids (e perder
+ * lineage/decisões/catmat_decisions), a chave lógica v2 é APONTADA para o item legado canônico. Resolução
+ * automática só sem ambiguidade; caso contrário, humana (`manual`). UNIQUE por (tenant, processo, chave).
+ */
+export const intelligentItemIdentityAliasesTable = mysqlTable("intelligent_item_identity_aliases", {
+  id:             int("id").autoincrement().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  processId:      varchar("process_id", { length: 20 }).notNull(),
+  logicalKeyHash: varchar("logical_key_hash", { length: 64 }).notNull(),
+  logicalKey:     text("logical_key").notNull(),
+  itemId:         varchar("item_id", { length: 20 }).notNull(),
+  // auto_legacy | manual | new_item
+  resolution:     varchar("resolution", { length: 20 }).notNull(),
+  actorUserId:    int("actor_user_id"),
+  reason:         varchar("reason", { length: 255 }),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_iitem_alias_key").on(table.organizationId, table.processId, table.logicalKeyHash),
+  index("idx_iitem_alias_item").on(table.organizationId, table.itemId),
+]);
+
+export type IntelligentItemIdentityAliasRow = typeof intelligentItemIdentityAliasesTable.$inferSelect;
 
 export const itemCatmatMatchesTable = mysqlTable("item_catmat_matches", {
   id:                 varchar("id", { length: 20 }).notNull().primaryKey(),
@@ -5300,7 +5437,9 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   processId:         varchar("process_id", { length: 20 }).notNull(),
   kind:              varchar("kind", { length: 20 }).notNull().default("etp"),
   title:             varchar("title", { length: 500 }).notNull().default(""),
-  content:           text("content"),
+  // P0 piloto (0303) — LONGTEXT (antes TEXT, 64 KB): um DFD/ETP/TR IMPORTADO real pode exceder 64 KB.
+  // Alargamento de tipo, sem perda de dados. official_documents.content já é LONGTEXT.
+  content:           longtext("content"),
   status:            varchar("status", { length: 20 }).notNull().default("rascunho"),
   sources:           text("sources"),
   modality:          varchar("modality", { length: 40 }),

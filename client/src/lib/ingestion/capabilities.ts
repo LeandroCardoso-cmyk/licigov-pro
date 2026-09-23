@@ -4,7 +4,8 @@
  * A capacidade real vem do backend (ingestion.getCapabilities), que deriva `supported` do
  * parserRegistry. Aqui só transformamos essa capacidade em regras de UI: `accept` do seletor,
  * validação de arquivo (tamanho/formato) e checagem de disponibilidade — NUNCA apresentando
- * como funcional um formato cujo parser é stub (PDF/DOCX até a B.2.3).
+ * como funcional um formato cujo parser não declara `supported` (hoje CSV/XLS/XLSX/PDF/DOCX são reais;
+ * OCR de PDF digitalizado não existe).
  */
 
 export interface IngestionFormat {
@@ -66,7 +67,7 @@ export function validateFile(file: FileLike, caps: IngestionCapabilities): FileV
   if (!format) {
     const known = caps.formats.find(f => f.extensions.includes(ext) || (file.type && f.mimeTypes.includes(file.type)));
     if (known && !known.supported) {
-      return { ok: false, code: "STUB_FORMAT", message: `${known.label} ainda não é processável (disponível na B.2.3).` };
+      return { ok: false, code: "STUB_FORMAT", message: `${known.label} não está disponível para processamento no momento.` };
     }
     return { ok: false, code: "UNSUPPORTED", message: "Formato não suportado. Use um dos formatos permitidos." };
   }

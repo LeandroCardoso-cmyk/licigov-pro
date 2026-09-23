@@ -8,11 +8,14 @@
  * importTypes sem contrato de correção → capacidade indisponível (não aceitam patch genérico).
  */
 
-export type CorrectionFieldKind = "text" | "decimal" | "unit";
+import { parseBRLDetailed, centsToDecimalString, canonicalDecimalToCents, type MoneyParse } from "./money";
+
+export type CorrectionFieldKind = "text" | "decimal" | "unit" | "money";
 
 export interface CorrectionFieldSpec {
   logical:  string;   // nome lógico exposto na correção
-  rawKey:   "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice";
+  rawKey:   "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice"
+          | "rawSupplier" | "rawBrand" | "rawModel" | "rawNotes" | "rawSource";
   kind:     CorrectionFieldKind;
   maxLen:   number;
   nullable: boolean;
@@ -24,8 +27,15 @@ export const CORRECTABLE_FIELDS: Record<string, Record<string, CorrectionFieldSp
     description: { logical: "description", rawKey: "rawDescription", kind: "text",    maxLen: 2000, nullable: false },
     quantity:    { logical: "quantity",    rawKey: "rawQuantity",    kind: "decimal", maxLen: 100,  nullable: false },
     unit:        { logical: "unit",        rawKey: "rawUnit",        kind: "unit",    maxLen: 50,   nullable: false },
-    unitPrice:   { logical: "unitPrice",   rawKey: "rawUnitPrice",   kind: "decimal", maxLen: 100,  nullable: false },
-    totalPrice:  { logical: "totalPrice",  rawKey: "rawTotalPrice",  kind: "decimal", maxLen: 100,  nullable: true  },
+    // Preços seguem o CONTRATO MONETÁRIO canônico (money.ts): "R$ 1.234,56" → "1234.56"; ambíguo → rejeita.
+    unitPrice:   { logical: "unitPrice",   rawKey: "rawUnitPrice",   kind: "money",   maxLen: 100,  nullable: false },
+    totalPrice:  { logical: "totalPrice",  rawKey: "rawTotalPrice",  kind: "money",   maxLen: 100,  nullable: true  },
+    // P0 piloto — campos de cotação de 1ª classe (overlay auditado; raw* permanece imutável).
+    supplier:    { logical: "supplier",    rawKey: "rawSupplier",    kind: "text",    maxLen: 255,  nullable: true  },
+    brand:       { logical: "brand",       rawKey: "rawBrand",       kind: "text",    maxLen: 255,  nullable: true  },
+    model:       { logical: "model",       rawKey: "rawModel",       kind: "text",    maxLen: 255,  nullable: true  },
+    notes:       { logical: "notes",       rawKey: "rawNotes",       kind: "text",    maxLen: 2000, nullable: true  },
+    source:      { logical: "source",      rawKey: "rawSource",      kind: "text",    maxLen: 255,  nullable: true  },
   },
 };
 
@@ -90,6 +100,18 @@ export function validateField(spec: CorrectionFieldSpec, input: unknown): FieldV
     if (norm === null) return { ok: false, code: "INVALID_NUMBER", message: `Campo "${spec.logical}" deve ser numérico.` };
     return { ok: true, value: norm };
   }
+  if (spec.kind === "money") {
+    const parsed = parseBRLDetailed(typeof input === "number" ? input : str);
+    if (parsed.reason === "ambiguous") {
+      return { ok: false, code: "AMBIGUOUS_MONEY", message: `Valor de "${spec.logical}" é ambíguo (ex.: "1,234"). Informe no formato "1.234,00" ou "1234,00".` };
+    }
+    if (parsed.cents === null) {
+      if (spec.nullable && str.trim() === "") return { ok: true, value: null };
+      return { ok: false, code: "INVALID_NUMBER", message: `Campo "${spec.logical}" deve ser um valor monetário.` };
+    }
+    if (parsed.cents < 0) return { ok: false, code: "NEGATIVE_MONEY", message: `Campo "${spec.logical}" não pode ser negativo.` };
+    return { ok: true, value: centsToDecimalString(parsed.cents) };
+  }
   const text = normalizeText(str, spec.maxLen);
   if (text === "" && !spec.nullable) {
     return { ok: false, code: "NOT_NULLABLE", message: `Campo "${spec.logical}" não pode ser vazio.` };
@@ -152,4 +174,61 @@ export function validateCorrections(importType: string, corrections: unknown): C
     changedFields.push(key);
   }
   return { ok: true, overlay, changedFields };
+}
+
+// ─── Hardening P0 — resolução TIPADA do valor efetivo (contrato monetário) ─────────────────
+
+export type MoneyOrigin = "correction" | "typed_number" | "text" | "none";
+
+type StagingLike = Record<string, unknown> & { correctedPayload?: unknown; rawTypedValues?: unknown };
+
+function overlayOf(item: StagingLike): Record<string, string | null> {
+  const o = item.correctedPayload;
+  if (!o) return {};
+  if (typeof o === "string") { try { return JSON.parse(o) as Record<string, string | null>; } catch { return {}; } }
+  return typeof o === "object" ? (o as Record<string, string | null>) : {};
+}
+function typedOf(item: StagingLike, rawKey: string): string | null {
+  let t = item.rawTypedValues as unknown;
+  if (typeof t === "string") { try { t = JSON.parse(t); } catch { t = null; } }
+  const v = t && typeof t === "object" ? (t as Record<string, { type?: string; value?: string } | undefined>)[rawKey] : undefined;
+  return v && v.type === "number" && typeof v.value === "string" ? v.value : null;
+}
+
+/**
+ * Valor monetário EFETIVO em centavos, com a ORIGEM explícita:
+ *   correção humana (overlay canônico "7.50") → decimal canônico;
+ *   célula NUMÉRICA nativa (rawTypedValues)    → decimal canônico exato (NUNCA o parser de texto pt-BR);
+ *   texto bruto                                → parser localizado (ambíguo ⇒ reason "ambiguous").
+ */
+export function resolveEffectiveMoney(item: StagingLike, logical: "unitPrice" | "totalPrice"): MoneyParse & { origin: MoneyOrigin } {
+  const rawKey = logical === "unitPrice" ? "rawUnitPrice" : "rawTotalPrice";
+  const overlay = overlayOf(item);
+  if (Object.prototype.hasOwnProperty.call(overlay, logical)) {
+    const v = overlay[logical];
+    if (v === null || v === "") return { cents: null, reason: "empty", origin: "correction" };
+    const cents = canonicalDecimalToCents(String(v));
+    return { cents, reason: cents === null ? "invalid" : "ok", origin: "correction" };
+  }
+  const typed = typedOf(item, rawKey);
+  if (typed !== null) {
+    const cents = canonicalDecimalToCents(typed);
+    return { cents, reason: cents === null ? "invalid" : "ok", origin: "typed_number" };
+  }
+  const raw = item[rawKey] as string | null | undefined;
+  if (raw === null || raw === undefined || String(raw).trim() === "") return { cents: null, reason: "empty", origin: "none" };
+  return { ...parseBRLDetailed(String(raw)), origin: "text" };
+}
+
+/** Quantidade EFETIVA (decimal canônico) — correção → nativo numérico → texto (pt-BR/en-US). */
+export function resolveEffectiveQuantity(item: StagingLike): string | null {
+  const overlay = overlayOf(item);
+  if (Object.prototype.hasOwnProperty.call(overlay, "quantity")) {
+    const v = overlay.quantity;
+    return v === null || v === "" ? null : normalizeDecimal(String(v));
+  }
+  const typed = typedOf(item, "rawQuantity");
+  if (typed !== null) return typed;
+  const raw = item.rawQuantity as string | null | undefined;
+  return raw == null ? null : normalizeDecimal(String(raw));
 }

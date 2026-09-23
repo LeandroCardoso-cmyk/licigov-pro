@@ -22,7 +22,10 @@ import {
 } from "@/lib/ingestion/status";
 import { canPromoteSession } from "@/lib/ingestion/promotion";
 
-export type IngestionImportType = "price_research" | "tr_items" | "catmat" | "generic";
+export type IngestionImportType =
+  | "price_research" | "tr_items" | "catmat" | "generic"
+  // P0 piloto — DFD/ETP/TR importados como DOCUMENTO (mesmo motor; projeção documental revisada).
+  | "document_dfd" | "document_etp" | "document_tr";
 
 export interface StartFileInput { kind: "file"; file: File }
 export interface StartTextInput { kind: "text"; text: string }
@@ -67,9 +70,10 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     },
   );
 
-  // Retomada por processo (reload): adota a sessão resumível SOMENTE deste processo canônico.
+  // Retomada por processo (reload): adota a sessão resumível SOMENTE deste processo canônico E deste
+  // workspace (importType) — a sessão da Pesquisa nunca aparece no TR e vice-versa.
   const activeQuery = trpc.ingestion.getActiveSession.useQuery(
-    { procurementProcessId: opts.procurementProcessId },
+    { procurementProcessId: opts.procurementProcessId, importType: opts.importType },
     { enabled: !!opts.procurementProcessId && sessionId == null, refetchOnWindowFocus: false },
   );
   useEffect(() => {

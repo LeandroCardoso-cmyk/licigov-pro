@@ -24,6 +24,9 @@ export interface ParserMetadata {
 
 // ─── Raw extracted item ───────────────────────────────────────────────────────
 
+export type TypedRawField = "rawQuantity" | "rawUnitPrice" | "rawTotalPrice";
+export type RawTypedValues = Partial<Record<TypedRawField, { readonly type: "number"; readonly value: string }>>;
+
 export interface RawExtractedItem {
   id:                string;          // UUID local para staging (nunca é PK de domínio)
   importSessionId:   number;
@@ -34,6 +37,18 @@ export interface RawExtractedItem {
   rawUnit:           string | null;
   rawUnitPrice:      string | null;
   rawTotalPrice:     string | null;
+  // P0 piloto — campos de COTAÇÃO de 1ª classe (opcionais/aditivos; antes perdidos em rawCellValues).
+  rawSupplier?:      string | null;
+  rawBrand?:         string | null;
+  rawModel?:         string | null;
+  rawNotes?:         string | null;
+  rawSource?:        string | null;
+  /**
+   * Hardening P0 — valor NATIVO de células numéricas (XLSX): `value` = decimal canônico EXATO do número
+   * ("1.234" = um vírgula dois três quatro). Os raw* acima guardam só a EXIBIÇÃO; o contrato monetário usa
+   * este valor tipado (nunca reinterpreta a exibição como texto pt-BR). Ausente para texto (CSV/PDF/DOCX).
+   */
+  rawTypedValues?:   RawTypedValues;
   rawMetadata:       Record<string, unknown>; // campos extras da linha/tabela
 
   // Rastreabilidade
@@ -52,6 +67,7 @@ export function createRawItem(
   importSessionId:   number,
   raw: Partial<Pick<RawExtractedItem,
     "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice" | "rawMetadata"
+    | "rawSupplier" | "rawBrand" | "rawModel" | "rawNotes" | "rawSource" | "rawTypedValues"
   >>,
   provenance:   ExtractionProvenance,
   parser:       ParserMetadata,
@@ -67,6 +83,12 @@ export function createRawItem(
     rawUnit:           raw.rawUnit           ?? null,
     rawUnitPrice:      raw.rawUnitPrice      ?? null,
     rawTotalPrice:     raw.rawTotalPrice     ?? null,
+    rawSupplier:       raw.rawSupplier       ?? null,
+    rawBrand:          raw.rawBrand          ?? null,
+    rawModel:          raw.rawModel          ?? null,
+    rawNotes:          raw.rawNotes          ?? null,
+    rawSource:         raw.rawSource         ?? null,
+    ...(raw.rawTypedValues && Object.keys(raw.rawTypedValues).length ? { rawTypedValues: raw.rawTypedValues } : {}),
     rawMetadata:       raw.rawMetadata       ?? {},
     sourceLocation:    provenance,
     parserMetadata:    parser,

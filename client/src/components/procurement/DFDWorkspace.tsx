@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
-import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
+import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import { shouldRotateSaveKeyOnError } from "./saveKeyPolicy";
 
 /**
@@ -30,9 +30,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 export type DFDWorkspaceProps = {
   processId?: string;
+  /** Abre a importação expandida (processo iniciado por "Importar DFD existente"). */
+  startWithImport?: boolean;
 };
 
-export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
+export default function DFDWorkspace({ processId = "", startWithImport = false }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
@@ -130,21 +132,11 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
             )}
           </div>
 
-          {/* Importar DFD existente — capability-aware (B.2.2).
-              Com a ingestão canônica LIGADA, a importação usa a fundação supervisionada; como os
-              parsers de PDF/DOCX ainda são stub (B.2.3), a ação é apresentada como indisponível de
-              forma objetiva (sem ofertar formatos alheios ao DFD nem fluxo sem resultado). Com a
-              flag DESLIGADA, o caminho legado permanece congelado. */}
+          {/* Importar DFD existente — P0 piloto: projeção documental REAL (PDF com texto/DOCX) no mesmo motor
+              de ingestão → revisão → aprovação → rascunho do DFD. Com a flag DESLIGADA, o caminho legado
+              permanece congelado. */}
           {ingestionEnabled ? (
-            <DocumentIngestionLauncher
-              importType="generic"
-              procurementProcessId={processId}
-              importPurpose="dfd_import"
-              title="Importar DFD existente"
-              description="A importação assistida de DFD passará por revisão humana antes de qualquer uso."
-              relevantFormatKeys={["pdf", "docx"]}
-              allowPaste={false}
-            />
+            <DocumentImportPanel kind="dfd" processId={processId} defaultOpen={startWithImport} onPromoted={invalidate} />
           ) : (
             <div className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-3 font-medium text-foreground">Importar DFD existente</h2>
@@ -186,6 +178,10 @@ export default function DFDWorkspace({ processId = "" }: DFDWorkspaceProps) {
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Rascunho já existe: importar outro DFD exige substituição explícita (confirmação + motivo). */}
+          {ingestionEnabled && processId && (
+            <DocumentImportPanel kind="dfd" processId={processId} onPromoted={() => { loadedFor.current = null; invalidate(); }} />
+          )}
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho estruturado do DFD. Revise,
             edite e salve. A geração assistida por IA plena é evolução futura.

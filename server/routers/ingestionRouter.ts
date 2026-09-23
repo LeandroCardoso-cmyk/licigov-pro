@@ -13,6 +13,7 @@
  * server-side `POST /api/ingestion/upload/:sessionId` (ver server/routes/ingestionUploadRoute.ts).
  */
 import { z } from "zod";
+import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
@@ -36,6 +37,11 @@ import {
 } from "../services/importStagingService";
 import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
 import { promoteApprovedSessionToDomain } from "../services/importPromotionService";
+import {
+  getDocumentIntake, saveDocumentReview, approveDocumentStaging, rejectDocumentStaging, promoteDocumentToDraft,
+  getDocumentReviewHistory,
+} from "../services/documentIntakeService";
+import { isDocumentImportType } from "../domain/documentProjection";
 import { enqueueImport } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
@@ -92,6 +98,17 @@ function formatCapability(mimeType: string, sampleExt: string): {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
+/** Hash CANÔNICO do payload estrutural de createSession (chaves ordenadas; tenant sempre do contexto). */
+export function createSessionPayloadHash(p: {
+  organizationId: number; procurementProcessId: string; importType: string; checksum: string;
+  sourceMimeType: string; sourceSize: number; importPurpose: string | null;
+}): string {
+  return createHash("sha256").update(JSON.stringify([
+    "ingestion.createSession/v2", p.organizationId, p.procurementProcessId, p.importType,
+    p.checksum.toLowerCase(), p.sourceMimeType, p.sourceSize, p.importPurpose,
+  ])).digest("hex");
+}
+
 /** Constrói o contexto de auditoria a partir do contexto tRPC autenticado + tenant. */
 function toAuditCtx(ctx: TrpcContext & { organizationId: number }): TrpcAuditCtx {
   return {
@@ -103,7 +120,17 @@ function toAuditCtx(ctx: TrpcContext & { organizationId: number }): TrpcAuditCtx
   };
 }
 
-const IMPORT_TYPE = z.enum(["price_research", "tr_items", "catmat", "generic"]);
+const IMPORT_TYPE = z.enum([
+  "price_research", "tr_items", "catmat", "generic",
+  // P0 piloto — importação DOCUMENTAL (DFD/ETP/TR) no MESMO motor (projeção documental, não linhas).
+  "document_dfd", "document_etp", "document_tr",
+]);
+const DOCUMENT_KIND = z.enum(["dfd", "etp", "tr"]);
+/** Documentos só entram por PDF com texto ou DOCX (projeção documental real; sem OCR). */
+const DOCUMENT_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 const REVIEW_ACTION = z.enum(["approved", "rejected", "skipped"]);
 const SHA256 = z.string().regex(/^[a-fA-F0-9]{64}$/, "checksum sha256 inválido");
 
@@ -196,7 +223,7 @@ export const ingestionRouter = router({
    * server-side onde o upload subsequente gravará o arquivo. Idempotente por idempotencyKey
    * e deduplicado por checksum (sessão ativa com mesmo checksum é reutilizada).
    */
-  createSession: tenantProcedure
+  createSession: orgRoleProcedure("operator")
     .input(z.object({
       importType:     IMPORT_TYPE,
       sourceFileName: z.string().min(1).max(255),
@@ -218,17 +245,27 @@ export const ingestionRouter = router({
       if (!isAllowedMime(input.sourceMimeType)) {
         throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Formato não suportado." });
       }
+      if (isDocumentImportType(input.importType) && !DOCUMENT_MIMES.has(input.sourceMimeType)) {
+        throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Para importar DFD/ETP/TR envie PDF (com texto) ou DOCX." });
+      }
 
       // Autorização por processo (processId + organizationId) é validada no serviço
       // createImportSession — fonte autoritativa, independente do caller.
 
-      // Idempotência (replay-safe): payloadHash = checksum garante mesmo arquivo sob mesma chave.
+      // Idempotência (replay-safe) — hardening P0: o payload é o CONJUNTO ESTRUTURAL da sessão (tenant do
+      // contexto, processo, tipo, checksum, mime, tamanho, finalidade), não só o checksum. Mesma chave com
+      // outro processo/tipo/arquivo ⇒ IDEMPOTENCY_CONFLICT (antes devolvia a sessão de outro processo/tipo).
+      const payloadHash = createSessionPayloadHash({
+        organizationId: orgId, procurementProcessId: input.procurementProcessId, importType: input.importType,
+        checksum: input.checksum, sourceMimeType: input.sourceMimeType, sourceSize: input.sourceSize,
+        importPurpose: input.importPurpose ?? null,
+      });
       const idem = await checkIdempotency(
-        input.idempotencyKey, ctx.user!.id, orgId, "ingestion.createSession", input.checksum,
+        input.idempotencyKey, ctx.user!.id, orgId, "ingestion.createSession", payloadHash,
       );
       if (idem.status === "completed") {
         if (idem.payloadMismatch) {
-          throw new TRPCError({ code: "CONFLICT", message: "idempotencyKey já usada com outro arquivo." });
+          throw new TRPCError({ code: "CONFLICT", message: "IDEMPOTENCY_CONFLICT: idempotencyKey já usada com outro arquivo, processo ou tipo." });
         }
         return idem.response as { sessionId: number; uploadPath: string; duplicate: boolean };
       }
@@ -238,7 +275,8 @@ export const ingestionRouter = router({
 
       try {
         // Dedup por checksum ESCOPADO ao processo canônico (nunca reutiliza entre processos).
-        const existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId);
+        // P0 piloto — e ao MESMO importType (o mesmo arquivo como "TR" não adota a sessão de "Pesquisa").
+        const existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId, input.importType);
         if (existing) {
           const dupResult = {
             sessionId:  existing.id,
@@ -302,11 +340,15 @@ export const ingestionRouter = router({
    * processo. Não lança quando não há sessão (retorna null).
    */
   getActiveSession: tenantProcedure
-    .input(z.object({ procurementProcessId: z.string().min(1).max(20) }))
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      // P0 piloto — retomada escopada ao workspace (Pesquisa ≠ DFD ≠ ETP ≠ TR). Opcional por compatibilidade.
+      importType: IMPORT_TYPE.optional(),
+    }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.organizationId!;
       await assertCanonicalIngestionEnabled(orgId);
-      const session = await findResumableSessionForProcess(orgId, input.procurementProcessId);
+      const session = await findResumableSessionForProcess(orgId, input.procurementProcessId, input.importType ?? null);
       if (!session) return { session: null, staging: null };
       const summary = await getStagingSummary(session.id, orgId);
       return { session: toSessionStatus(session), staging: summary };
@@ -317,7 +359,7 @@ export const ingestionRouter = router({
    * já em andamento/processado → retorna estado corrente sem re-enfileirar; terminal → conflito.
    * Lê os bytes do storage durável (não recebe binário por tRPC).
    */
-  enqueueProcessing: tenantProcedure
+  enqueueProcessing: orgRoleProcedure("operator")
     .input(z.object({
       sessionId: z.number().int().positive(),
       procurementProcessId: z.string().max(20).optional(),
@@ -396,6 +438,13 @@ export const ingestionRouter = router({
         rawUnit:            i.rawUnit,
         rawUnitPrice:       i.rawUnitPrice,
         rawTotalPrice:      i.rawTotalPrice,
+        // Hardening P0 — valor NATIVO de células numéricas (o que o contrato monetário usa).
+        rawTypedValues:     i.rawTypedValues ?? null,
+        rawSupplier:        i.rawSupplier ?? null,
+        rawBrand:           i.rawBrand ?? null,
+        rawModel:           i.rawModel ?? null,
+        rawNotes:           i.rawNotes ?? null,
+        rawSource:          i.rawSource ?? null,
         sourceLocation:     i.sourceLocation,
         confidenceMetadata: i.confidenceMetadata,
         extractionWarnings: i.extractionWarnings,
@@ -420,7 +469,7 @@ export const ingestionRouter = router({
     }),
 
   /** Revisa um item de staging (aceitar/rejeitar/pular). Idempotente e auditável. */
-  reviewItem: tenantProcedure
+  reviewItem: orgRoleProcedure("operator")
     .input(z.object({
       sessionId: z.number().int().positive(),
       procurementProcessId: z.string().max(20).optional(),
@@ -475,7 +524,7 @@ export const ingestionRouter = router({
    * exige justificativa; concorrência otimista por expectedRevision (CONFLICT acionável); idempotente
    * por idempotencyKey; grava histórico before/after. NÃO aprova o item nem promove ao domínio.
    */
-  correctItem: tenantProcedure
+  correctItem: orgRoleProcedure("operator")
     .input(z.object({
       sessionId:            z.number().int().positive(),
       procurementProcessId: z.string().min(1).max(20),
@@ -528,7 +577,7 @@ export const ingestionRouter = router({
     }),
 
   /** Revisão em lote de itens PENDENTES da sessão. Só afeta pendentes (idempotente por natureza). */
-  reviewBulk: tenantProcedure
+  reviewBulk: orgRoleProcedure("operator")
     .input(z.object({
       sessionId: z.number().int().positive(),
       procurementProcessId: z.string().max(20).optional(),
@@ -572,7 +621,7 @@ export const ingestionRouter = router({
    * Aprova a sessão APÓS revisão humana completa. NÃO promove ao domínio (diferido).
    * Exige status `awaiting_review` e zero itens pendentes (aprovação sem revisão é bloqueada).
    */
-  approveSession: tenantProcedure
+  approveSession: orgRoleProcedure("operator")
     .input(z.object({
       sessionId: z.number().int().positive(),
       procurementProcessId: z.string().max(20).optional(),
@@ -585,6 +634,10 @@ export const ingestionRouter = router({
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
       assertSessionProcess(session, input.procurementProcessId);
 
+      if (isDocumentImportType(session.importType)) {
+        // Documento: a aprovação é do CONTEÚDO revisado (hash), não de linhas — use approveDocument.
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Importação de documento: aprove o conteúdo revisado (approveDocument)." });
+      }
       if (session.status === "approved") {
         return { sessionId: session.id, status: "approved" as const, idempotent: true };
       }
@@ -619,7 +672,8 @@ export const ingestionRouter = router({
   /**
    * PR B.2.4 — Promoção TRANSACIONAL e supervisionada da sessão APROVADA ao domínio canônico.
    * Precondição = pós-condição de approveSession (status 'approved', zero pendentes). Só `price_research`
-   * é promovível hoje (DFD/ETP são documentos, não contêineres de linhas — capacidade indisponível).
+   * é promovível por aqui (linhas → pesquisa + Itens Inteligentes). DFD/ETP/TR importados são DOCUMENTOS e
+   * seguem o caminho documental governado (approveDocument → promoteDocument a rascunho).
    * Idempotente (uma promoção por sessão) e escopada por tenant + processo. Não faz merge nem decide juridicamente.
    * Exige papel institucional mínimo 'manager' (segregação de deveres: operador revisa; gestor promove ao domínio).
    */
@@ -645,6 +699,108 @@ export const ingestionRouter = router({
         actorName:            ctx.user!.name ?? undefined,
         idempotencyKey:       input.idempotencyKey,
         correlationId:        ctx.correlationId ?? "",
+      });
+    }),
+  // ─── P0 piloto — DOCUMENT INTAKE (DFD/ETP/TR) ─────────────────────────────────────
+  // Mesma sessão/upload/storage/checksum/parser; projeção documental revisada por humano e promovida a
+  // RASCUNHO governado (nunca oficial). Leitura: tenant; mutações: operator+ (revisar/aprovar/promover a
+  // rascunho não é emissão — a emissão oficial segue exigindo manager + SoD).
+
+  /** Staging documental vigente do processo + tipo e o estado do rascunho canônico (sem storageKey). */
+  getDocumentIntake: tenantProcedure
+    .input(z.object({ procurementProcessId: z.string().min(1).max(20), kind: DOCUMENT_KIND }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return getDocumentIntake({ organizationId: orgId, processId: input.procurementProcessId, kind: input.kind });
+    }),
+
+  /**
+   * Hardening P0 — histórico APPEND-ONLY da revisão documental (extraído → revisões → aprovação/invalidação →
+   * descarte/promoção). `includeContent` devolve cada versão integral (reconstrução completa). Tenant + processo.
+   */
+  documentReviewHistory: tenantProcedure
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      stagingId:            z.number().int().positive(),
+      includeContent:       z.boolean().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return getDocumentReviewHistory({ organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId, includeContent: input.includeContent });
+    }),
+
+  /** Salva a revisão humana (rawContent imutável; concorrência otimista por revision). */
+  saveDocumentReview: orgRoleProcedure("operator")
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      stagingId:            z.number().int().positive(),
+      expectedRevision:     z.number().int().nonnegative(),
+      content:              z.string().min(1).max(1_500_000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return saveDocumentReview({
+        organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId,
+        expectedRevision: input.expectedRevision, content: input.content,
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId ?? "",
+      });
+    }),
+
+  /** Aprovação humana explícita do conteúdo revisado (expectedContentHash = o que o revisor viu). */
+  approveDocument: orgRoleProcedure("operator")
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      stagingId:            z.number().int().positive(),
+      expectedContentHash:  SHA256,
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return approveDocumentStaging({
+        organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId,
+        expectedContentHash: input.expectedContentHash, actorUserId: ctx.user!.id, correlationId: ctx.correlationId ?? "",
+      });
+    }),
+
+  /** Descarta a importação documental (não promovida). */
+  rejectDocument: orgRoleProcedure("operator")
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      stagingId:            z.number().int().positive(),
+      reason:               z.string().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return rejectDocumentStaging({
+        organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId,
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId ?? "", reason: input.reason ?? null,
+      });
+    }),
+
+  /**
+   * Promove o conteúdo APROVADO a rascunho canônico. `create` falha (CONFLICT) se já houver rascunho;
+   * `replace` exige confirmação do rascunho atual (hash) + motivo. Idempotente por idempotencyKey.
+   */
+  promoteDocument: orgRoleProcedure("operator")
+    .input(z.object({
+      procurementProcessId:     z.string().min(1).max(20),
+      stagingId:                z.number().int().positive(),
+      mode:                     z.enum(["create", "replace"]),
+      expectedDraftContentHash: SHA256.optional(),
+      reason:                   z.string().max(1000).optional(),
+      idempotencyKey:           z.string().min(8).max(64),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      return promoteDocumentToDraft({
+        organizationId: orgId, processId: input.procurementProcessId, stagingId: input.stagingId,
+        mode: input.mode, expectedDraftContentHash: input.expectedDraftContentHash ?? null, reason: input.reason ?? null,
+        actorUserId: ctx.user!.id, idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId ?? "",
       });
     }),
 });

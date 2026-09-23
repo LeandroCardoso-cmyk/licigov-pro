@@ -13,6 +13,7 @@ import { matrixToRawItems, type TabularContext } from "./tabularExtraction";
 import { createRawItem } from "../domain/importExtraction";
 import { buildProvenance } from "../domain/importProvenance";
 import { aggregateConfidence, buildFieldConfidence } from "../domain/importConfidence";
+import { buildDocumentProjection, detectHeadingLevel, type DocumentBlock } from "../domain/documentProjection";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
 import type { RawExtractedItem } from "../domain/importExtraction";
@@ -22,7 +23,7 @@ const MAX_UNCOMPRESSED  = 300 * 1024 * 1024;  // 300 MB expandido (guarda zip-bo
 const MAX_ENTRIES       = 10_000;
 const MAX_RATIO         = 500;                 // expansão máxima total
 const MAX_ITEMS         = 5000;
-const PARSER_VERSION    = "2.0.0";
+const PARSER_VERSION    = "2.1.0";
 
 // ─── Guarda de zip-bomb: soma tamanhos descompactados via diretório central ─────
 
@@ -81,18 +82,57 @@ function decodeEntities(s: string): string {
 function stripHtml(s: string): string {
   return decodeEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
+function parseTableRows(tableInner: string): string[][] {
+  const rows: string[][] = [];
+  for (const rm of tableInner.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells: string[] = [];
+    for (const cm of rm[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)) cells.push(stripHtml(cm[1]));
+    if (cells.length) rows.push(cells);
+  }
+  return rows;
+}
 function parseHtmlTables(html: string): string[][][] {
   const tables: string[][][] = [];
   for (const tm of html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi)) {
-    const rows: string[][] = [];
-    for (const rm of tm[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
-      const cells: string[] = [];
-      for (const cm of rm[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)) cells.push(stripHtml(cm[1]));
-      if (cells.length) rows.push(cells);
-    }
+    const rows = parseTableRows(tm[1]);
     if (rows.length) tables.push(rows);
   }
   return tables;
+}
+
+/**
+ * PROJEÇÃO DOCUMENTAL do DOCX (pura): percorre o HTML do mammoth NA ORDEM do documento e produz blocos
+ * (h1–h6 → título; p → parágrafo, ou título quando numerado/caixa-alta/inteiramente em negrito; ul/ol → itens
+ * de lista; table → tabela com linhas). Proveniência por índice de bloco/tabela. Não inventa conteúdo.
+ */
+export function docxHtmlToBlocks(html: string): DocumentBlock[] {
+  const blocks: DocumentBlock[] = [];
+  let tableIndex = 0;
+  const push = (b: Omit<DocumentBlock, "index">) => blocks.push({ ...b, index: blocks.length });
+  for (const m of html.matchAll(/<(h[1-6]|p|table|ul|ol)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const tag = m[1].toLowerCase();
+    const inner = m[2];
+    if (tag === "table") {
+      const rows = parseTableRows(inner);
+      if (rows.length) push({ type: "table", text: "", rows, tableIndex: tableIndex++ });
+    } else if (tag === "ul" || tag === "ol") {
+      for (const li of inner.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+        const text = stripHtml(li[1]);
+        if (text) push({ type: "list_item", text });
+      }
+    } else if (tag.startsWith("h")) {
+      const text = stripHtml(inner);
+      if (text) push({ type: "heading", level: Number(tag[1]), text });
+    } else {
+      const text = stripHtml(inner);
+      if (!text) continue;
+      const allBold = /^\s*<strong>[\s\S]*<\/strong>\s*$/i.test(inner) && !/<\/strong>[\s\S]*<strong>/i.test(inner);
+      const level = detectHeadingLevel(text) ?? (allBold && text.length <= 90 ? 3 : null);
+      if (level !== null) push({ type: "heading", level, text });
+      else push({ type: "paragraph", text });
+    }
+  }
+  return blocks;
 }
 
 export class DocxParser extends BaseParser {
@@ -155,6 +195,24 @@ export class DocxParser extends BaseParser {
       }
     } catch (err) {
       return this.fail({ code: "CORRUPT_FILE", message: `DOCX inválido ou corrompido: ${err instanceof Error ? err.message : String(err)}`, fatal: true }, startMs);
+    }
+
+    // PROJEÇÃO DOCUMENTAL (DFD/ETP/TR): blocos em ordem (títulos/parágrafos/listas/tabelas). Reusa o MESMO
+    // HTML do mammoth (sem segundo parse do arquivo) e a MESMA guarda de zip-bomb já aplicada acima.
+    if (opts.extractionMode === "document") {
+      const blocks = docxHtmlToBlocks(html);
+      const projection = buildDocumentProjection(blocks);
+      if (projection.stats.truncated) {
+        warnings.push({ code: "DOCUMENT_TRUNCATED", message: "Documento excede o limite de caracteres; conteúdo truncado para revisão.", severity: "warning" });
+      }
+      if (blocks.length === 0) {
+        warnings.push({ code: "NO_TEXT_EXTRACTED", message: "Nenhum texto legível foi extraído do documento.", severity: "warning" });
+      }
+      const summary = this.buildSummary(blocks.length, [], 0, warnings, [], Date.now() - startMs);
+      return {
+        items: [], warnings, errors: [], summary, documentProjection: projection,
+        rawMetadata: { tablesDetected: projection.stats.tables, parserVersion: PARSER_VERSION, mode: "document" },
+      };
     }
 
     const ctx: TabularContext = {

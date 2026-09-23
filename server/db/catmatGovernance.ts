@@ -10,7 +10,7 @@
  * sem configuração ativa, o limiar permanece indefinido (o domínio é fail-closed).
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./connection";
 import { catmatDecisionsTable, catmatThresholdConfigTable } from "../../drizzle/schema";
 import type { CATMATGovernanceDecision } from "../domain/catmatGovernance";
@@ -191,4 +191,23 @@ export async function getLatestCatmatDecision(itemId: string, orgId: number): Pr
     .orderBy(desc(catmatDecisionsTable.id))
     .limit(1);
   return rows.length > 0 ? mapRow(rows[0]) : null;
+}
+
+/**
+ * P0 piloto — decisão VIGENTE (última linha do ledger) para VÁRIOS itens numa única leitura, tenant-scoped.
+ * Usado pelo contexto de autoria do TR/Edital: só decisão humana `confirmado`/`substituido` vira código
+ * confirmado; sugestão nunca. Itens sem decisão não aparecem no mapa.
+ */
+export async function getLatestCatmatDecisionsForItems(
+  itemIds: readonly string[], orgId: number,
+): Promise<Map<string, CatmatDecisionRecord>> {
+  const out = new Map<string, CatmatDecisionRecord>();
+  if (itemIds.length === 0) return out;
+  const db = await getDb();
+  if (!db) return out;
+  const rows = await db.select().from(catmatDecisionsTable)
+    .where(and(eq(catmatDecisionsTable.organizationId, orgId), inArray(catmatDecisionsTable.itemId, [...itemIds])))
+    .orderBy(desc(catmatDecisionsTable.id));
+  for (const r of rows) if (!out.has(r.itemId)) out.set(r.itemId, mapRow(r));
+  return out;
 }

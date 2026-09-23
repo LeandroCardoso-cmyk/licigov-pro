@@ -16,23 +16,30 @@ import {
   type ProcessStage,
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
-import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState } from "../services/procurementProcessService";
+import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState } from "../services/procurementProcessService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
-import { enrichItem, applyGovernedItemTransition } from "../services/itemIntelligenceService";
+import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
+import {
+  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity,
+} from "../services/itemMaterializationService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import { getOrganizationById } from "../db/organizations";
+import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
-  insertResearchWithItems, listIntelligentItems,
+  listIntelligentItems,
   recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
   getGeneratedDocumentByKind,
 } from "../db/procurement";
 
 const log = serviceLogger("procurementProcessRouter");
 
-const START_OPTIONS = ["criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp"] as const;
+const START_OPTIONS = [
+  "criar_dfd", "importar_dfd", "importar_oficio", "importar_memorando", "importar_pdf", "iniciar_etp",
+  // P0 piloto — entrada no ponto em que a Prefeitura já está.
+  "importar_etp", "iniciar_pesquisa", "importar_tr", "iniciar_tr",
+] as const;
 const STAGES = ["NEW_PROCESS", "DFD", "ETP", "PRICE_RESEARCH", "ITEM_WORKSPACE", "TR", "NOTICE", "REVIEW", "ISSUED", "ARCHIVED"] as const;
 const MODALITIES = ["pregao", "concorrencia", "leilao", "concurso", "chamada_publica", "credenciamento", "registro_de_precos"] as const;
 const FORMS = ["eletronico", "presencial"] as const;
@@ -59,7 +66,7 @@ const STATUS_SLUGS: Record<string, string> = {
 };
 
 export const procurementProcessRouter = router({
-  createProcess: tenantProcedure
+  createProcess: orgRoleProcedure("operator")
     .input(z.object({
       processNumber: z.string().min(1),
       object: z.string().min(1),
@@ -71,7 +78,7 @@ export const procurementProcessRouter = router({
       const process = createProcurementWorkspace({
         organizationId: orgId, processNumber: input.processNumber, object: input.object,
         modality: input.modality, startOption: input.startOption as StartOption,
-        responsibleUser: ctx.user.id, correlationId: ctx.correlationId,
+        responsibleUser: ctx.user!.id, correlationId: ctx.correlationId,
       });
       try {
         // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
@@ -80,14 +87,14 @@ export const procurementProcessRouter = router({
         // nunca deixa processo sem evento de criação nem evento órfão em caso de falha parcial.
         await createProcessWithInitialEvent(process, {
           eventType: "workspace_created",
-          actor: String(ctx.user.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
+          actor: String(ctx.user!.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
           refId: process.id, correlationId: ctx.correlationId,
         });
       } catch (err) {
         // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
         // ao usuário, mensagem amigável e estável em pt-BR.
         log.error("create_process_failed", {
-          organizationId: orgId, userId: ctx.user.id, processNumber: input.processNumber,
+          organizationId: orgId, userId: ctx.user!.id, processNumber: input.processNumber,
           startOption: input.startOption, correlationId: ctx.correlationId,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -121,7 +128,7 @@ export const procurementProcessRouter = router({
       return { processes, total: processes.length };
     }),
 
-  updateStage: tenantProcedure
+  updateStage: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), stage: z.enum(STAGES).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -130,13 +137,13 @@ export const procurementProcessRouter = router({
       await updateProcessStage(process.id, orgId, updated.currentStage, updated.status, updated.updatedAt);
       await recordProcessEvent({
         organizationId: orgId, processId: process.id, eventType: "change",
-        actor: String(ctx.user.id), summary: `Etapa: ${updated.currentStage}.`, refId: process.id,
+        actor: String(ctx.user!.id), summary: `Etapa: ${updated.currentStage}.`, refId: process.id,
         correlationId: ctx.correlationId,
       });
       return { process: updated };
     }),
 
-  importDFD: tenantProcedure
+  importDFD: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), source: z.enum(["pdf", "docx", "oficio", "memorando"]), fields: z.record(z.string(), z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -147,7 +154,7 @@ export const procurementProcessRouter = router({
       );
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id), summary: `DFD importado (${input.source}).`, refId: dfd.id,
+        actor: String(ctx.user!.id), summary: `DFD importado (${input.source}).`, refId: dfd.id,
         correlationId: ctx.correlationId,
       });
       return { dfd };
@@ -200,7 +207,7 @@ export const procurementProcessRouter = router({
       });
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id),
+        actor: String(ctx.user!.id),
         summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
         refId: document.id, correlationId: ctx.correlationId,
       });
@@ -222,14 +229,14 @@ export const procurementProcessRouter = router({
    * "Criar DFD do zero": estrutura um rascunho editável do DFD (art. 12, §1º) e
    * persiste como documento canônico (kind "dfd", rascunho). Idempotente.
    */
-  generateDFD: tenantProcedure
+  generateDFD: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
       const { document } = await generateDFDDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       return { document };
     }),
@@ -257,19 +264,19 @@ export const procurementProcessRouter = router({
       return { document };
     }),
 
-  generateETP: tenantProcedure
+  generateETP: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "etp", object: input.object,
-        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       return { document };
     }),
 
-  importPriceResearch: tenantProcedure
+  importPriceResearch: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       source: z.enum(["pdf", "docx", "xlsx", "csv", "colar", "manual"]),
@@ -278,18 +285,17 @@ export const procurementProcessRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const research = createPriceResearchWorkspace({ processId: input.processId, organizationId: orgId, source: input.source, correlationId: ctx.correlationId });
-      const rawItems = extractItemsFromText(input.text, { researchId: research.id, processId: input.processId, organizationId: orgId });
-      // DATA-039: cabeçalho da pesquisa + itens brutos persistem ATOMICAMENTE — nunca uma pesquisa
-      // com itens faltando. Enriquecimento (abaixo) e evento são derivados/re-executáveis e ficam
-      // fora da transação (operação pesada não deve segurar transação de banco).
-      // Fail-closed + sanitizado: falha da persistência autoritativa é logada (com correlationId) e
-      // convertida em erro institucional; NÃO mascara falhas de enriquecimento (que ficam fora daqui).
+      // DATA-039 + hardening P0: pesquisa + cotações + BASE dos Itens Inteligentes numa ÚNICA transação
+      // (nunca Pesquisa=200 com Item=100) — ver itemMaterializationService.importManualPriceResearch.
+      let imported;
       try {
-        await insertResearchWithItems({ ...research, itemCount: rawItems.length }, rawItems);
+        imported = await importManualPriceResearch({
+          organizationId: orgId, processId: input.processId, source: input.source, text: input.text,
+          actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        });
       } catch (err) {
         log.error("import_price_research_persist_failed", {
-          organizationId: orgId, userId: ctx.user.id, processId: input.processId,
+          organizationId: orgId, userId: ctx.user!.id, processId: input.processId,
           source: input.source, correlationId: ctx.correlationId,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -298,24 +304,21 @@ export const procurementProcessRouter = router({
           message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
         });
       }
-
-      // Cada item da pesquisa vira um Item Inteligente enriquecido.
-      const enriched = [];
-      for (const it of rawItems) {
-        const e = await enrichItem({
-          organizationId: orgId, processId: input.processId, researchId: research.id,
-          description: it.description, quantity: it.quantity, unit: it.unit,
-          supplierValues: it.value > 0 ? [{ name: it.supplier || "fornecedor", value: it.value }] : [],
-          correlationId: ctx.correlationId,
-        });
-        enriched.push({ id: e.item.id, description: e.item.description, suggestedCATMAT: e.item.suggestedCATMAT });
-      }
-      await recordProcessEvent({
-        organizationId: orgId, processId: input.processId, eventType: "change",
-        actor: String(ctx.user.id), summary: `Pesquisa importada (${input.source}): ${rawItems.length} item(ns) → Itens Inteligentes.`,
-        refId: research.id, correlationId: ctx.correlationId,
-      });
-      return { research: { ...research, itemCount: rawItems.length }, intelligentItems: enriched };
+      const materialized = imported.result;
+      const itemRows = await listIntelligentItems(input.processId, orgId);
+      const byId = new Map(itemRows.map((r) => [r.id, r]));
+      const enriched = materialized.items.map((m) => ({
+        id: m.id, description: byId.get(m.id)?.description ?? "", suggestedCATMAT: byId.get(m.id)?.suggestedCATMAT ?? null,
+      }));
+      return {
+        research: imported.research, intelligentItems: enriched,
+        materialization: {
+          created: materialized.created.length, updated: materialized.updated.length,
+          unchanged: materialized.unchanged.length, preserved: materialized.preserved.length,
+          sourceChanged: materialized.sourceChanged.length, reconciled: materialized.reconciled.length,
+          reviewRequired: materialized.reviewRequired.length,
+        },
+      };
     }),
 
   listItems: tenantProcedure
@@ -326,41 +329,72 @@ export const procurementProcessRouter = router({
       return { items, total: items.length };
     }),
 
-  approveItem: tenantProcedure
+  /**
+   * Hardening P0 — aplica as cotações ATUALIZADAS a um item cuja fonte mudou após a decisão. Item aprovado/
+   * rejeitado volta a `em_analise` (decisão anterior invalidada de forma EXPLÍCITA, com timeline).
+   */
+  applyItemSourceUpdate: orgRoleProcedure("operator")
+    .input(z.object({ itemId: z.string().min(1).max(20) }))
+    .mutation(async ({ input, ctx }) => applyItemSourceUpdate({
+      organizationId: ctx.organizationId!, itemId: input.itemId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+    })),
+
+  /**
+   * Hardening P0 — resolução HUMANA de identidade ambígua (legado × nova pesquisa): vincula a chave lógica a
+   * um item existente do processo (`targetItemId`) ou declara item NOVO (`null`). Nada é fundido sem isso.
+   */
+  resolveItemIdentity: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1).max(20),
+      logicalKeyHash: z.string().regex(/^[a-f0-9]{64}$/),
+      targetItemId: z.string().min(1).max(20).nullable(),
+      reason: z.string().min(5).max(255),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const r = await resolveItemIdentity({
+        organizationId: orgId, processId: input.processId, logicalKeyHash: input.logicalKeyHash,
+        targetItemId: input.targetItemId, actorUserId: ctx.user!.id, reason: input.reason, correlationId: ctx.correlationId,
+      });
+      return { created: r.created.length, updated: r.updated.length, sourceChanged: r.sourceChanged.length, reviewRequired: r.reviewRequired.length };
+    }),
+
+  approveItem: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
       // requisição aplica a transição e registra um evento; duplo clique converge sem novo efeito.
       return applyGovernedItemTransition({
-        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user.id,
-        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "approval",
+        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user!.id,
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "approval",
         summary: (d) => `Item aprovado: ${d}.`,
       });
     }),
 
-  rejectItem: tenantProcedure
+  rejectItem: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       // Transição atômica (compare-and-set) — segura sob concorrência.
       return applyGovernedItemTransition({
         itemId: input.itemId, orgId, target: "rejeitado", approvedBy: null,
-        actorUserId: ctx.user.id, correlationId: ctx.correlationId, eventType: "decision",
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "decision",
         summary: (d) => `Item rejeitado: ${d}.`,
       });
     }),
 
-  generateTR: tenantProcedure
+  generateTR: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id });
+      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id });
       return { document };
     }),
 
-  generateNotice: tenantProcedure
+  generateNotice: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
       modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
@@ -372,7 +406,7 @@ export const procurementProcessRouter = router({
       const result = await generateNotice({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform, correlationId: ctx.correlationId,
-        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user.id,
+        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
       });
       if (!result.validation.valid) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
@@ -396,6 +430,19 @@ export const procurementProcessRouter = router({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform,
       });
+    }),
+
+  /**
+   * P0 piloto — Fontes de autoria do ETP/TR (resumo pré-geração + SOURCE_CHANGED generalizado): DFD/ETP
+   * presentes (e se importados), Itens aprovados/pendentes, cotações, classificação confirmada e o valor
+   * estimado global calculado pelo sistema. Read-only; tenant-scoped.
+   */
+  authoringSourceState: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), kind: z.enum(["etp", "tr"]), object: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getAuthoringSourceState({ organizationId: orgId, processId: input.processId, kind: input.kind, object: input.object });
     }),
 
   /**
@@ -488,20 +535,36 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       return promoteOfficialDocument({
         organizationId: orgId, processId: input.processId, kind: input.kind,
-        actorUserId: ctx.user.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
+        actorUserId: ctx.user!.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
         expectedContentHash: input.expectedContentHash, reason: input.reason ?? null,
       });
     }),
 
-  issueProcess: tenantProcedure
+  /**
+   * Hardening P0 (risco D) — "emitido" tem UM significado: emissão OFICIAL governada (OfficialDocumentLifecycle,
+   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando o
+   * Edital JÁ possui versão oficial emitida (ledger official_document_promotions). Sem ela → PRECONDITION_FAILED.
+   * Papel mínimo alinhado à emissão (manager).
+   */
+  issueProcess: orgRoleProcedure("manager")
     .input(z.object({ processId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
+      const official = await getLatestOfficialPromotion(orgId, process.id, "edital");
+      if (!official) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "O processo só é marcado como emitido depois da emissão OFICIAL do Edital (revisão de terceiro/SoD).",
+        });
+      }
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user.id), summary: "Processo emitido.", refId: process.id, correlationId: ctx.correlationId });
-      return { success: true, processId: process.id, status: "emitido" as const };
+      await recordProcessEvent({
+        organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user!.id),
+        summary: `Processo marcado como emitido — Edital oficial v${official.version}.`, refId: official.officialDocumentId, correlationId: ctx.correlationId,
+      });
+      return { success: true, processId: process.id, status: "emitido" as const, officialEditalVersion: official.version };
     }),
 });

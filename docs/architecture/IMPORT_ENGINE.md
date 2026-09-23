@@ -88,3 +88,7 @@ esgota, preserva correlationId/lineage e é **fail-closed por tenant**.
 
 Promoção ao domínio (DFD/ETP/Pesquisa de Preços/TR), parser real de PDF/DOCX, wiring de workspaces
 e remoção do caminho legado (`processes.parseItemsFile`).
+
+> **Atualização (histórico):** parsers reais PDF/DOCX (B.2.3), promoção da Pesquisa (B.2.4) e, no **P0
+> piloto**, importação DOCUMENTAL de DFD/ETP/TR (projeção documental → revisão → rascunho governado) e
+> materialização de Itens Inteligentes estão implementados — ver [P0_PILOT_FOUNDATION.md](P0_PILOT_FOUNDATION.md).

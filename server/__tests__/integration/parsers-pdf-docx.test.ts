@@ -107,7 +107,7 @@ describe("PdfParser (real)", () => {
     expect(first?.rawTotalPrice).toBe("150,00");
     // Proveniência real: página + versão do parser.
     expect(first?.sourceLocation.location.page).toBeGreaterThanOrEqual(1);
-    expect(first?.parserMetadata.parserVersion).toBe("2.0.0");
+    expect(first?.parserMetadata.parserVersion).toBe("2.1.0"); // P0 piloto: 2.1.0 = 2.0.0 (linhas) + modo "document" (DFD/ETP/TR). Contrato de linhas inalterado.
   });
 
   it("PDF multipágina: provenance cobre mais de uma página", async () => {
@@ -166,7 +166,7 @@ describe("DocxParser (real)", () => {
     expect(caneta?.rawUnitPrice).toBe("1,50");
     expect(caneta?.rawTotalPrice).toBe("150,00");
     expect(caneta?.sourceLocation.tableIndex).toBe(0);
-    expect(caneta?.parserMetadata.parserVersion).toBe("2.0.0");
+    expect(caneta?.parserMetadata.parserVersion).toBe("2.1.0"); // idem — versão superada pelo modo documental aditivo.
   });
 
   it("texto + tabela: prioriza a tabela para dados estruturados", async () => {

@@ -13,6 +13,7 @@ import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
 import { resolveEditalSources } from "./authoring/editalContext";
+import { resolveDocumentAuthoringContext, storedSourcesDigest } from "./authoring/authoringContext";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -363,11 +364,18 @@ export async function generateDocument(params: {
   const items = await listIntelligentItems(params.processId, params.organizationId);
   const approved = items.filter(i => i.status === "aprovado");
 
+  // P0 piloto — CONTEXTO REAL de autoria (DFD/ETP/itens aprovados/cotações/classificação confirmada),
+  // tenant-scoped. O digest das fontes entra no payloadHash: retry com as MESMAS fontes replaya; fonte
+  // alterada sob a mesma chave → CONFLICT (nunca devolve um documento gerado com contexto antigo).
+  const sourceContext = await resolveDocumentAuthoringContext({
+    organizationId: params.organizationId, processId: params.processId, kind: params.kind, object: params.object,
+  });
+
   // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
   // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT.
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
-    object: params.object, approvedItems: approved,
+    object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
   });
 
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
@@ -391,6 +399,7 @@ export async function generateDocument(params: {
         correlationId: params.correlationId,
         actorUserId: params.actorUserId,
         invoke: params.invoke,
+        sourceContext,
       });
       const content = authoring.content;
 
@@ -404,6 +413,7 @@ export async function generateDocument(params: {
           `itens_aprovados:${approved.length}`,
           `grounding:${authoring.groundingState}`,
           `evidencias:${authoring.evidences.length}`,
+          ...sourceContext.lineageMarkers,
         ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,
@@ -432,6 +442,13 @@ export async function generateDocument(params: {
               evidenceFingerprint: authoring.evidenceFingerprint,
               corpusFingerprint: authoring.corpusFingerprint,
               usedSources: authoring.structured.usedSourceIds,
+              // P0 piloto — lineage do contexto de autoria (fontes do processo + números autoritativos).
+              sourcesDigest: sourceContext.sourcesDigest,
+              sourceVersions: sourceContext.sourceVersions,
+              contextUsedSources: sourceContext.usedSources,
+              contextMissing: sourceContext.missing,
+              estimatedGlobalTotalCents: sourceContext.estimate.globalTotalCents,
+              quoteCount: sourceContext.estimate.quoteCount,
             },
           }, tx);
           // A1 — LINKAGE de proveniência cognitiva → artefato de trabalho (generated_document) + documento
@@ -453,7 +470,8 @@ export async function generateDocument(params: {
           }
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
-            actor: "multi_copilot", summary: `${params.kind.toUpperCase()} gerado (rascunho) a partir de ${approved.length} item(ns).`,
+            actor: "multi_copilot",
+            summary: `${params.kind.toUpperCase()} gerado (rascunho) com base no processo — fontes: ${sourceContext.usedSources.join(", ") || "objeto"}${sourceContext.missing.length ? ` · pendências: ${sourceContext.missing.join(", ")}` : ""}.`,
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
           return document; // snapshot canônico (originador preservado em regeneração)
@@ -638,4 +656,43 @@ export async function getEditalSourceState(params: {
   const currentShort = current.sourcesDigest.slice(0, 16);
   const state = stored === null ? "source_changed" : stored === currentShort ? "current" : "source_changed";
   return { state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing };
+}
+
+/**
+ * P0 piloto — Estado das FONTES de autoria do ETP/TR (generaliza o SOURCE_CHANGED do Edital). Read-only:
+ * compara o digest gravado na geração (`srcdigest:`) com o digest ATUAL (DFD/ETP/itens aprovados/cotações/
+ * classificação confirmada). Documento importado (sem digest) ⇒ `imported` (não foi gerado a partir das fontes).
+ * Devolve também o RESUMO das fontes para a UI de pré-geração ("Gerar TR com base no processo").
+ */
+export async function getAuthoringSourceState(params: {
+  organizationId: number; processId: string; kind: "etp" | "tr"; object: string;
+}): Promise<{
+  state: "never_generated" | "current" | "source_changed" | "imported";
+  storedDigest: string | null; currentDigest: string;
+  usedSources: string[]; missing: string[];
+  summary: {
+    dfd: { present: boolean; origin: string | null }; etp: { present: boolean; origin: string | null };
+    approvedItems: number; pendingItems: number; quoteCount: number;
+    pricedItems: number; unpricedItems: number; confirmedClassifications: number; pendingClassifications: number;
+    estimatedGlobalTotalCents: number;
+  };
+}> {
+  const ctx = await resolveDocumentAuthoringContext(params);
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
+  const summary = {
+    dfd: { present: ctx.sourceVersions.dfd.present, origin: ctx.sourceVersions.dfd.origin },
+    etp: { present: ctx.sourceVersions.etp.present, origin: ctx.sourceVersions.etp.origin },
+    approvedItems: ctx.estimate.itemCount, pendingItems: ctx.pendingItemCount, quoteCount: ctx.estimate.quoteCount,
+    pricedItems: ctx.estimate.pricedItemCount, unpricedItems: ctx.estimate.unpricedItemCount,
+    confirmedClassifications: ctx.estimate.confirmedClassificationCount,
+    pendingClassifications: ctx.estimate.pendingClassificationCount,
+    estimatedGlobalTotalCents: ctx.estimate.globalTotalCents,
+  };
+  const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
+  if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base };
+  const stored = storedSourcesDigest(existing.sources);
+  if (stored === null) {
+    return { state: existing.sources.includes("origem:import") ? "imported" : "source_changed", storedDigest: null, ...base };
+  }
+  return { state: stored === ctx.sourcesDigest.slice(0, 16) ? "current" : "source_changed", storedDigest: stored, ...base };
 }

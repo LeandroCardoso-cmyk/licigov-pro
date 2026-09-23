@@ -2,7 +2,7 @@
  * PR B.2.2 — Tabela de revisão do staging (sugestões extraídas; revisão humana obrigatória).
  *
  * Cada linha é uma SUGESTÃO extraída (não é documento oficial). Ações: aceitar / rejeitar / pular
- * (idempotentes, auditadas no backend). Correção de VALORES não existe na B.2.1 (diferida à B.2.3),
+ * (idempotentes, auditadas no backend). Correção de VALORES é feita no drawer (overlay auditado, B.2.2+),
  * então não há edição inline aqui. Seleção múltipla habilita revisão em lote (só afeta pendentes).
  */
 import { useMemo, useState } from "react";

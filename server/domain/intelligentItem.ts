@@ -9,13 +9,38 @@
  */
 
 import { createHash } from "crypto";
+import { intelligentItemIdForKey } from "./priceQuoteConsolidation";
 
 export type ItemStatus = "pendente" | "em_analise" | "aprovado" | "rejeitado";
 
+/** Estado do enriquecimento pós-commit (CATMAT sugerido/riscos/recomendações). Degradável. */
+export type EnrichmentStatus = "pending" | "processing" | "done" | "failed";
+
+/**
+ * Uma cotação que compõe o Item Inteligente. `value` em REAIS (2 casas) — NUNCA centavos (compatível com
+ * o JSON legado `{name, value}`). Campos adicionais são opcionais/aditivos (lineage da pesquisa).
+ */
 export interface IntelligentItemSupplier {
   readonly name: string;
   readonly value: number;
+  readonly brand?: string;
+  readonly model?: string;
+  readonly source?: string;
+  /** Id da linha canônica em price_research_items (lineage + merge idempotente por quoteId). */
+  readonly quoteId?: string;
+  readonly researchId?: string;
+  /** Hardening P0 — hash de CONTEÚDO da cotação (mesmo quoteId + conteúdo novo ⇒ cotação alterada). */
+  readonly contentHash?: string;
 }
+
+/**
+ * Hardening P0 — estado da FONTE do item frente à Pesquisa:
+ *  - current: o item reflete as cotações vigentes;
+ *  - source_changed: a pesquisa mudou para um item JÁ DECIDIDO (aprovado/rejeitado) — a decisão foi
+ *    preservada e o conjunto novo aguarda revisão (`pendingSuppliers`);
+ *  - review_required: identidade ambígua (reconciliação legado→v2) — nada foi fundido automaticamente.
+ */
+export type ItemSourceState = "current" | "source_changed" | "review_required";
 
 export interface IntelligentProcurementItem {
   readonly id: string;
@@ -85,10 +110,18 @@ export function createIntelligentItem(params: {
   recommendations?: string[];
   correlationId: string;
   createdAt?: string;
+  /**
+   * P0 piloto — chave lógica determinística (descrição normalizada | unidade canônica | quantidade). Quando
+   * informada, o id é derivado dela (v2) — mesmo item lógico ⇒ mesmo id, mesmo vindo de pesquisas/fontes
+   * diferentes. Sem ela, mantém o id legado (só descrição) por compatibilidade.
+   */
+  logicalKey?: string;
 }): IntelligentProcurementItem {
-  const id = createHash("sha256")
-    .update(`iitem:${params.organizationId}:${params.processId}:${params.description.toLowerCase().trim()}`)
-    .digest("hex").slice(0, 20);
+  const id = params.logicalKey
+    ? intelligentItemIdForKey(params.organizationId, params.processId, params.logicalKey)
+    : createHash("sha256")
+      .update(`iitem:${params.organizationId}:${params.processId}:${params.description.toLowerCase().trim()}`)
+      .digest("hex").slice(0, 20);
   const ts = params.createdAt ?? new Date().toISOString();
   return {
     id,

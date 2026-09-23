@@ -25,14 +25,34 @@ export type ProcessStage =
 
 export type ProcessStatus = "rascunho" | "em_andamento" | "em_revisao" | "emitido" | "arquivado";
 
-/** Como o servidor deseja iniciar o processo (nunca obriga DFD). */
+/**
+ * Como o servidor deseja iniciar o processo (nunca obriga DFD). P0 piloto — "o LiciGov entra no processo
+ * no ponto em que a Prefeitura já está": importar ETP/TR prontos, ou começar pela Pesquisa de Preços.
+ */
 export type StartOption =
   | "criar_dfd"
   | "importar_dfd"
   | "importar_oficio"
   | "importar_memorando"
   | "importar_pdf"
-  | "iniciar_etp";
+  | "iniciar_etp"
+  | "importar_etp"
+  | "iniciar_pesquisa"
+  | "importar_tr"
+  | "iniciar_tr";
+
+/**
+ * Etapa inicial por forma de início. Sem pré-requisito artificial: começar pelo ETP/Pesquisa/TR NÃO exige
+ * DFD (o que faltar aparece como pendência [REVISAR] na autoria, nunca como bloqueio).
+ */
+export function initialStageForStartOption(startOption: StartOption): ProcessStage {
+  switch (startOption) {
+    case "iniciar_etp": case "importar_etp": return "ETP";
+    case "iniciar_pesquisa": return "PRICE_RESEARCH";
+    case "importar_tr": case "iniciar_tr": return "TR";
+    default: return "NEW_PROCESS";
+  }
+}
 
 export interface ProcurementWorkspace {
   readonly id: string;
@@ -77,15 +97,15 @@ export function createProcurementWorkspace(params: {
     .update(`plp:${params.organizationId}:${params.processNumber}`)
     .digest("hex").slice(0, 20);
   const ts = params.createdAt ?? new Date().toISOString();
-  // Adaptive Process Engine: sem DFD, o fluxo começa direto no ETP.
-  const startsAtEtp = params.startOption === "iniciar_etp";
+  // Adaptive Process Engine: sem DFD, o fluxo começa direto na etapa escolhida (ETP / Pesquisa / TR).
+  const initialStage = initialStageForStartOption(params.startOption);
   return {
     id,
     organizationId: params.organizationId,
     processNumber: params.processNumber,
     object: params.object,
     modality: params.modality ?? "",
-    currentStage: startsAtEtp ? "ETP" : "NEW_PROCESS",
+    currentStage: initialStage,
     status: "rascunho",
     startOption: params.startOption,
     responsibleUser: params.responsibleUser,
@@ -125,7 +145,7 @@ export function isStageMandatory(stage: ProcessStage): boolean {
   return stage !== "DFD" && stage !== "ARCHIVED";
 }
 
-/** Indica se o DFD faz parte do fluxo escolhido. */
+/** Indica se o DFD faz parte do fluxo escolhido (início por ETP/Pesquisa/TR não o exige). */
 export function usesDFD(process: ProcurementWorkspace): boolean {
-  return process.startOption !== "iniciar_etp";
+  return initialStageForStartOption(process.startOption) === "NEW_PROCESS";
 }

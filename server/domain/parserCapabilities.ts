@@ -158,7 +158,9 @@ export const CSV_CAPABILITY: ParserCapability = {
 
 export const PDF_CAPABILITY: ParserCapability = {
   parserType:    "pdf",
-  parserVersion: "0.1.0",  // stub — OCR não implementado
+  // P0 piloto — metadado de CONFIANÇA semântica do parser REAL (pdf-parse; B.2.3 + modo documental 2.1.0).
+  // Não é mais stub; as confianças baixas refletem PDF (layout textual), não ausência de extração.
+  parserVersion: "2.1.0",
 
   supportsMultiSheet:   false,
   supportsMultiPage:    true,
@@ -174,7 +176,7 @@ export const PDF_CAPABILITY: ParserCapability = {
   priceConfidence:       0.30,
 
   limitations: [
-    "STUB: sem OCR implementado nesta versão",
+    "Sem OCR: PDF digitalizado (somente imagem) é recusado com OCR_REQUIRED",
     "Extração de texto apenas em PDFs com texto embutido",
     "Tabelas em PDF raramente têm estrutura semântica detectável",
     "Requer revisão manual obrigatória de todos os campos",
@@ -190,7 +192,8 @@ export const PDF_CAPABILITY: ParserCapability = {
 
 export const DOCX_CAPABILITY: ParserCapability = {
   parserType:    "docx",
-  parserVersion: "0.1.0",  // stub
+  // P0 piloto — parser REAL (mammoth; B.2.3 + modo documental 2.1.0). Não é mais stub.
+  parserVersion: "2.1.0",
 
   supportsMultiSheet:   false,
   supportsMultiPage:    true,
@@ -206,7 +209,7 @@ export const DOCX_CAPABILITY: ParserCapability = {
   priceConfidence:       0.30,
 
   limitations: [
-    "STUB: biblioteca DOCX completa não implementada nesta versão",
+    "Formato .doc (Word 97-2003) não suportado — apenas DOCX (OOXML)",
     "Tabelas em DOCX podem ter estrutura irregular",
     "Campos de descrição longa requerem truncamento",
     "Requer revisão manual obrigatória",

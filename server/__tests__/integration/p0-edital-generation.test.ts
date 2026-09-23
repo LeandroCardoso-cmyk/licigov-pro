@@ -41,9 +41,15 @@ const getGeneratedDocumentByKind = vi.fn(async (_pid: string, orgId: number, kin
 vi.mock("../../db/procurement", () => ({
   getProcess: vi.fn(async (_id: string, orgId: number) => (orgId === ORG ? { id: PID, organizationId: ORG, object: "Aquisição de material", processNumber: "2026/0007", modality: "pregao", currentStage: "NOTICE", status: "em_edital" } : null)),
   getGeneratedDocumentByKind: (...a: unknown[]) => getGeneratedDocumentByKind(...(a as [string, number, string])),
-  listIntelligentItems: vi.fn(async (_pid: string, orgId: number) => (orgId === ORG ? [{ id: "i1", description: "Papel A4", quantity: 100, unit: "resma", averagePrice: 2550, suggestedCATMAT: "12345", status: "aprovado" }] : [])),
+  // P0 piloto — averagePrice em REAIS (contrato monetário; o antigo 2550 casava com o bug `/100`).
+  listIntelligentItems: vi.fn(async (_pid: string, orgId: number) => (orgId === ORG ? [{ id: "i1", description: "Papel A4", quantity: 100, unit: "resma", averagePrice: 25.5, suggestedCATMAT: "12345", status: "aprovado", averagePriceCents: 2550, suppliers: [], quoteCount: 0, enrichmentStatus: "done", sourceResearchId: "r1" }] : [])),
   applyDraftContentMutationTx: vi.fn(async (_tx: unknown, input: { doc: unknown }) => ({ created: true, changed: true, document: input.doc })),
   recordProcessEvent: vi.fn(async () => {}),
+}));
+
+// P0 piloto — classificação CONFIRMADA vem do ledger catmat_decisions (nova dependência do Context Builder).
+vi.mock("../../db/catmatGovernance", () => ({
+  getLatestCatmatDecisionsForItems: vi.fn(async () => new Map()),
 }));
 
 vi.mock("../../services/documentEngineService", () => ({
