@@ -177,6 +177,15 @@ jobs:
       - name: Smoke — P0 piloto (document intake + pesquisa → itens → TR → Edital)
         run: pnpm exec vitest run server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts
 
+      # P0 PILOTO — hardening bloqueante: contrato monetário XLSX (NUMBER × TEXT), versionamento de cotação
+      # por contentHash, convergência de Itens (pendente atualiza / decidido → SOURCE_CHANGED), reconciliação
+      # legado→v2 fail-closed, dedup concorrente no BANCO (duas conexões reais), ledger documental append-only,
+      # digest do snapshot canônico consumido, contrato de idempotência do createSession, recuperação
+      # durável do enriquecimento, contagem de cotações válidas, cobertura documental e SoD do issueProcess.
+      # Goldens A–D. Também exige import_sessions canônico → antes da reconciliação da 0288.
+      - name: Smoke — P0 piloto hardening (dinheiro/cotações/itens/dedup/ledger/digest/idempotência)
+        run: pnpm exec vitest run server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts
