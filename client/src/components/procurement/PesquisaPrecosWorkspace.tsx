@@ -3,6 +3,7 @@ import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /**
  * PesquisaPrecosWorkspace.
@@ -37,7 +38,15 @@ export type PesquisaPrecosWorkspaceProps = {
  * "Itens Inteligentes" via procurementProcess.importPriceResearch. Mantido intacto: é a entrada
  * "manual" e o comportamento com a flag desligada.
  */
-function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: string; onReviewItems?: () => void }) {
+function LegacyPriceResearchPanel({
+  processId,
+  onReviewItems,
+  fileUploadAvailable = false,
+}: {
+  processId: string;
+  onReviewItems?: () => void;
+  fileUploadAvailable?: boolean;
+}) {
   const [source, setSource] = useState<ResearchSource>("colar");
   const [text, setText] = useState("");
   const importResearch = trpc.procurementProcess.importPriceResearch.useMutation();
@@ -51,7 +60,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <label className="mb-3 flex flex-col text-sm sm:max-w-xs">
-        <span className="mb-1 font-medium text-foreground">Fonte</span>
+        <span className="mb-1 font-medium text-foreground">Origem do texto colado</span>
         <select
           value={source}
           onChange={(e) => setSource(e.target.value as ResearchSource)}
@@ -62,6 +71,12 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           ))}
         </select>
       </label>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Esta entrada recebe texto já extraído e gera itens diretamente para revisão.
+        {fileUploadAvailable
+          ? " Para enviar o arquivo original, use a aba Enviar arquivo."
+          : " O envio do arquivo original não está disponível nesta organização."}
+      </p>
       <label className="flex flex-col text-sm">
         <span className="mb-1 font-medium text-foreground">Conteúdo da pesquisa</span>
         <textarea
@@ -78,7 +93,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
         disabled={!processId || !text.trim() || importResearch.isPending}
         className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
       >
-        {importResearch.isPending ? "Processando..." : "Importar e gerar Itens Inteligentes"}
+        {importResearch.isPending ? "Processando..." : "Importar texto e gerar Itens Inteligentes"}
       </button>
       {!processId && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
@@ -116,15 +131,18 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
 }
 
 export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems }: PesquisaPrecosWorkspaceProps) {
-  const { enabled, isLoading } = useIngestionCapabilities();
+  const { enabled, isLoading, error } = useIngestionCapabilities();
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Pesquisa de Preços</h1>
         <p className="text-sm text-muted-foreground">
-          Importe cotações por arquivo ou conteúdo colado. As linhas extraídas são sugestões que
-          passam por revisão humana antes de qualquer uso — nada é gravado automaticamente.
+          {error
+            ? "A disponibilidade da importação precisa ser verificada para a organização selecionada."
+            : enabled
+            ? "Envie um arquivo ou cole cotações para extrair e revisar antes da promoção supervisionada. A entrada manual por texto gera itens diretamente para revisão."
+            : "Cole cotações já extraídas para gerar Itens Inteligentes e revise cada item antes de aprová-lo."}
         </p>
       </div>
 
@@ -132,6 +150,11 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" /> Carregando…
         </div>
+      ) : error ? (
+        <Alert variant="destructive" role="alert">
+          <AlertTitle>Não foi possível verificar a disponibilidade da importação</AlertTitle>
+          <AlertDescription>Selecione a organização e recarregue a página antes de continuar.</AlertDescription>
+        </Alert>
       ) : enabled ? (
         <DocumentIngestionLauncher
           importType="price_research"
@@ -141,7 +164,7 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           description="Envie um arquivo (CSV, Excel, PDF ou DOCX — inclusive mapa comparativo com uma coluna por fornecedor) ou cole o conteúdo tabular. Você revisará as cotações extraídas antes de aprovar."
           allowPaste
           onReviewItems={onReviewItems}
-          manualSlot={<LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />}
+          manualSlot={<LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} fileUploadAvailable />}
         />
       ) : (
         <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />

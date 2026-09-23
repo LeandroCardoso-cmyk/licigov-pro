@@ -71,7 +71,7 @@ const USER_FACING_FORMATS: ReadonlyArray<{
   { key: "xlsx", label: "Excel (XLSX)", extensions: [".xlsx"],        mimeTypes: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
   { key: "xls",  label: "Excel (XLS)",  extensions: [".xls"],         mimeTypes: ["application/vnd.ms-excel"] },
   { key: "pdf",  label: "PDF",          extensions: [".pdf"],         mimeTypes: ["application/pdf"] },
-  { key: "docx", label: "Word (DOCX)",  extensions: [".docx", ".doc"],mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"] },
+  { key: "docx", label: "Word (DOCX)",  extensions: [".docx"], mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
 ];
 
 /** Metadado de capacidade EXPLÍCITO do parser que atende o formato (fonte da verdade). */

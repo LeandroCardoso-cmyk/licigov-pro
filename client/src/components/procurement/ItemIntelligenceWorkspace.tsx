@@ -7,8 +7,8 @@ import CatmatThresholdConfig from "./CatmatThresholdConfig";
  *
  * UX: esta é a tela central da experiência. O trabalho NÃO é preencher itens —
  * é VALIDAR (aprovar/rejeitar) os Itens Inteligentes que o servidor já
- * enriqueceu com CATMAT sugerido, preço médio e recomendações. O servidor
- * sempre decide o CATMAT; o operador valida.
+ * enriqueceu com CATMAT sugerido, preço médio e recomendações. A confirmação
+ * do CATMAT e a decisão sobre o item permanecem com o servidor público.
  */
 
 const ITEM_STATUS_LABELS: Record<string, string> = {
@@ -72,8 +72,8 @@ export default function ItemIntelligenceWorkspace({
         </span>
       </div>
       <p className="mb-6 text-sm text-muted-foreground">
-        Valide as recomendações do sistema. O servidor decide o CATMAT; você
-        aprova ou rejeita cada item.
+        Valide as recomendações do sistema. O CATMAT é uma sugestão; você
+        confirma a classificação e aprova ou rejeita cada item.
       </p>
 
       {processId && <CatmatThresholdConfig />}
