@@ -61,7 +61,6 @@ import {
   supersedeCandidates,
   buildExplanation,
   adjustedScore,
-  type CandidateSource,
 } from "../../domain/semanticCandidate";
 
 import {
@@ -69,7 +68,6 @@ import {
   XLSX_CAPABILITY,
   CSV_CAPABILITY,
   PDF_CAPABILITY,
-  DOCX_CAPABILITY,
   parserCapabilityRegistry,
 } from "../../domain/parserCapabilities";
 
@@ -82,7 +80,6 @@ import {
   SemanticIndex,
   createSearchEntry,
   incrementFrequency,
-  globalSemanticIndex,
 } from "../../domain/semanticIndex";
 
 import {
@@ -103,7 +100,7 @@ import {
 } from "../../services/importAnalyticsService";
 
 import { buildProvenance } from "../../domain/importProvenance";
-import { EMPTY_CONFIDENCE, buildFieldConfidence, aggregateConfidence } from "../../domain/importConfidence";
+import { buildFieldConfidence, aggregateConfidence } from "../../domain/importConfidence";
 import { createRawItem } from "../../domain/importExtraction";
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
@@ -920,7 +917,7 @@ describe("normalizationPipelineService", () => {
   it("pipeline fails gracefully on fatal extraction error", async () => {
     const item = makeRawItem();
     // Inject a fatal error
-    (item as any).extractionErrors = [{ code: "CORRUPT_FILE", message: "bad", fatal: true }];
+    item.extractionErrors = [{ code: "CORRUPT_FILE", message: "bad", fatal: true }];
     const result = await runNormalizationPipeline(item, opts);
     expect(result.stageResults[0].status).toBe("failed");
     expect(result.reviewFlags).toContain("PIPELINE_FAILED");
