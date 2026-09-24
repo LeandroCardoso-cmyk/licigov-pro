@@ -175,7 +175,14 @@ export type WideDetection =
  */
 export function detectWideFormat(headersRaw: string[], dataRows: string[][], map: ColumnMap): WideDetection {
   const headersNorm = headersRaw.map(normalizeHeader);
-  const structural = new Set([map.description, map.quantity, map.unit, map.brand, map.model, map.notes, map.source, map.totalPrice].filter((i) => i >= 0));
+  // Coluna casada como marca/modelo/obs./fonte cujos valores são TODOS preços é coluna de cotação (ex.: "Fonte 1"
+  // num mapa) — como já ocorria com "fornecedor"; nunca gravar "100,00" como fonte/marca.
+  const priceValued = (i: number) => {
+    const v = dataRows.map((r) => (r[i] ?? "").trim()).filter((x) => x !== "");
+    return v.length > 0 && v.every(isPriceCell);
+  };
+  const textual = [map.brand, map.model, map.notes, map.source].filter((i) => i >= 0 && !priceValued(i));
+  const structural = new Set([map.description, map.quantity, map.unit, ...textual, map.totalPrice].filter((i) => i >= 0));
   const candidates: number[] = [];
   headersNorm.forEach((h, i) => {
     if (!h || structural.has(i) || isStatHeader(h) || isIndexHeader(h)) return;
@@ -336,9 +343,11 @@ export function tableToRawItems(
   }
   // Coluna casada como "fornecedor" cujos VALORES são preços (ex.: "Empresa A") é coluna de PREÇO, não o
   // nome do fornecedor — nunca gravar "100,00" como fornecedor (no largo vira cotação; no ambíguo, revisão).
-  if (wide.kind !== "long" && map.supplier >= 0) {
+  if (wide.kind !== "long") {
     const priceCols = wide.kind === "wide" ? wide.supplierColumns : wide.candidateColumns;
-    if (priceCols.includes(map.supplier)) map = { ...map, supplier: -1 };
+    for (const role of ["supplier", "brand", "model", "notes", "source"] as const) {
+      if (map[role] >= 0 && priceCols.includes(map[role])) map = { ...map, [role]: -1 };
+    }
   }
   const at = (row: string[], idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || null) : null);
   const headerKeys = headersRaw.map((h, i) => h || `col${i}`);

@@ -52,8 +52,10 @@ const CORE_ROW_RATIO = 0.6;
 const IDENTITY_FILL = 0.6;
 /** Banda de moeda: ≥ CURRENCY_BAND das células são "R$"/"$" ⇒ funde com a banda à direita. */
 const CURRENCY_BAND = 0.8;
-/** Fragmento cobre ≥ PARTITION_COVER da largura de ≥ 2 partições ⇒ atravessa colunas. */
-const PARTITION_COVER = 0.5;
+/** Fragmento cobre ≥ PARTITION_COVER da largura de ≥ 2 partições ⇒ atravessa colunas (título/agrupador). */
+const PARTITION_COVER = 0.3;
+/** Rótulo textual SECUNDÁRIO de linha de resumo (a decisão primária é estrutural). */
+const SUMMARY_LABEL_RE = /^(?:VALOR\s+)?(?:SUB)?TOTAL\b|^SOMA\b|^TOTAL\s+GERAL\b|^VALOR\s+GLOBAL\b/i;
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────────
 export interface Box { x0: number; y0: number; x1: number; y1: number }
@@ -286,9 +288,39 @@ export function reconstructPageTable(tokensIn: readonly PositionedTextToken[], o
   if (core.length === 0) return noTable(page, tokens.length, rows.length, candidates.length, rows.length);
 
   // 4. Bandas por alinhamento repetido; banda de símbolo de moeda funde com a vizinha à direita.
-  let bands = mergeIntervals(core.flatMap((r) => r.fragments.map((f): [number, number] => [f.box.x0, f.box.x1])), 0.05 * em)
+  let bands: Array<Box & { satellite?: boolean }> = mergeIntervals(core.flatMap((r) => r.fragments.map((f): [number, number] => [f.box.x0, f.box.x1])), 0.05 * em)
     .map(([x0, x1]) => ({ x0, x1, y0: 0, y1: 0 }));
   const inBand = (b: Box, f: Fragment) => cx(f.box) >= b.x0 && cx(f.box) <= b.x1;
+  // Linhas-SATÉLITE (texto contíguo às linhas estruturais, ex.: descrição em 2 linhas com o preço centralizado
+  // entre elas): seus fragmentos que não caem em banda nenhuma criam bandas próprias (a coluna de descrição).
+  {
+    const rowIdx = new Map(rows.map((r, k) => [r, k]));
+    const satellite = new Set<number>();
+    const tight = (a: PhysicalRow, b: PhysicalRow) => b.box.y0 - a.box.y1 <= BLOCK_GAP * em;
+    for (const r of core) {
+      const k = rowIdx.get(r)!;
+      for (let u = k - 1; u >= 0 && valueCount(rows[u]) === 0 && tight(rows[u], rows[u + 1]); u--) satellite.add(u);
+      for (let d = k + 1; d < rows.length && valueCount(rows[d]) === 0 && tight(rows[d - 1], rows[d]); d++) satellite.add(d);
+    }
+    const extra = [...satellite].flatMap((k) => rows[k].fragments)
+      .filter((f) => f.kind === "text" && !bands.some((b) => f.box.x1 >= b.x0 && f.box.x0 <= b.x1))
+      .map((f): [number, number] => [f.box.x0, f.box.x1]);
+    if (extra.length > 0) {
+      bands = [...bands, ...mergeIntervals(extra, 0.05 * em).map(([x0, x1]) => ({ x0, x1, y0: 0, y1: 0, satellite: true }))].sort((a, b) => a.x0 - b.x0);
+    }
+  }
+  // Banda SÓ de marcadores de ausência (ex.: "-" alinhado de outro jeito) funde com a vizinha com a qual nunca
+  // divide a mesma linha — é a mesma coluna.
+  const cooccurs = (a: Box, b: Box) => core.some((r) => r.fragments.some((f) => inBand(a, f)) && r.fragments.some((f) => inBand(b, f)));
+  for (let i = 0; i < bands.length; i++) {
+    const cells = core.flatMap((r) => r.fragments.filter((f) => inBand(bands[i], f)));
+    if (cells.length === 0 || !cells.every((f) => f.kind === "placeholder")) continue;
+    const j = [i + 1, i - 1].find((n) => n >= 0 && n < bands.length && !cooccurs(bands[i], bands[n]));
+    if (j === undefined) continue;
+    bands[j] = { ...bands[j], x0: Math.min(bands[i].x0, bands[j].x0), x1: Math.max(bands[i].x1, bands[j].x1) };
+    bands = bands.filter((_, k) => k !== i);
+    i--;
+  }
   for (let i = 0; i < bands.length - 1; i++) {
     const cells = core.flatMap((r) => r.fragments.filter((f) => inBand(bands[i], f)));
     if (cells.length > 0 && cells.filter((f) => f.kind === "currency").length / cells.length >= CURRENCY_BAND) {
@@ -341,15 +373,21 @@ export function reconstructPageTable(tokensIn: readonly PositionedTextToken[], o
   // Coluna só de inteiros curtos (numeração 1, 2, 3…) é IDENTIFICAÇÃO, não valor.
   const firstValueCol = valueCnt.findIndex((v, c) => v > 0 && !intOnly[c] && v >= textCount[c] && fill[c] / core.length >= IDENTITY_FILL && valueCnt[c] / Math.max(1, fill[c]) >= 0.6);
   const identityCols = [...Array(C).keys()].filter((c) => (firstValueCol < 0 || c < firstValueCol) && fill[c] / core.length >= IDENTITY_FILL);
-  const textCols = new Set([...Array(C).keys()].filter((c) => textCount[c] > 0 && textCount[c] >= valueCnt[c]));
+  // Identificação do item = colunas à esquerda dos valores + a 1ª coluna de valores (quantidade, em geral).
+  const identitySet = firstValueCol >= 0 ? [...identityCols, firstValueCol] : identityCols;
+  const textCols = new Set([...Array(C).keys()].filter((c) => (textCount[c] > 0 && textCount[c] >= valueCnt[c]) || bands[c].satellite));
 
   const spans = (f: Fragment) => coveredPartitions(parts, f.box).length >= 2;
   const rowInside = (r: PhysicalRow) => r.fragments.filter((f) => insideTable(parts, f.box)).length >= Math.ceil(r.fragments.length * 0.8);
   const isAnchor = (r: PhysicalRow): boolean => {
     if (valueCount(r) < 2 || !rowInside(r)) return false;
-    if (identityCols.length === 0) return true;
+    // Sinal textual SECUNDÁRIO: rótulo de total sem numeração de item ("TOTAL GERAL", "SUBTOTAL", "SOMA").
+    const label = r.fragments.filter((f) => f.kind === "text").map((f) => f.text).join(" ");
+    if (SUMMARY_LABEL_RE.test(label.trim()) && !r.fragments.some((f) => /^\d{1,4}$/.test(f.text))) return false;
+    if (identitySet.length === 0) return true;
+    // Estrutural (primário): a linha preenche a MAIORIA das colunas de identificação (total/resumo não preenche).
     const cols = new Set(r.fragments.filter((f) => !spans(f)).map(colOf));
-    return identityCols.filter((c) => cols.has(c)).length / identityCols.length >= 0.5;
+    return identitySet.filter((c) => cols.has(c)).length / identitySet.length > 0.5;
   };
   const isSummary = (r: PhysicalRow) => rowInside(r) && r.fragments.some((f) => isAmountKind(f.kind));
   // Continuação: só fragmentos em colunas TEXTUAIS (ex.: "200 LITROS" na descrição), sem atravessar colunas.
@@ -448,7 +486,13 @@ export function reconstructPageTable(tokensIn: readonly PositionedTextToken[], o
   }
 
   const labelParts: Array<Array<{ key: number; x: number; text: string }>> = Array.from({ length: C }, () => []);
-  for (const k of headerRows) for (const f of rows[k].fragments) labelParts[colOf(f)].push({ key: f.box.y0, x: f.box.x0, text: f.text });
+  for (const k of headerRows) {
+    // Linha de cabeçalho com EXATAMENTE um rótulo por coluna ⇒ atribuição ordinal (rótulo alinhado à esquerda
+    // sobre números alinhados à direita não "escorrega" para a coluna anterior).
+    const frs = rows[k].fragments;
+    const ordinal = frs.length === C;
+    frs.forEach((f, i) => labelParts[ordinal ? i : colOf(f)].push({ key: f.box.y0, x: f.box.x0, text: f.text }));
+  }
   const verticalTop = new Map<number, number>();
   for (const v of usedVertical) {
     const c = colIndex(parts, cx(tokenBox(v)));

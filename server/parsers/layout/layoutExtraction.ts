@@ -119,8 +119,9 @@ export function inferHeaderlessRoles(table: NormalizedTableMatrix): { header: st
   let avg = -1;
   let twins: number[] = [];
   for (const c of [...rest].reverse()) {
+    // Colunas derivadas ficam à DIREITA das fontes: compara só com as colunas à esquerda (sem as gêmeas).
     const tw = rest.filter((o) => o !== c && same(o, c));
-    const others = rest.filter((o) => o !== c && !tw.includes(o));
+    const others = rest.filter((o) => o < c && !tw.includes(o));
     let tested = 0, hits = 0;
     for (const r of rows) {
       const v = moneyCents(r[c]);
