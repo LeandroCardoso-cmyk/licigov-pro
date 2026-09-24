@@ -2047,6 +2047,13 @@
       "when": 1790125784381,
       "tag": "0304_p0_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "5",
+      "when": 1790286217732,
+      "tag": "0305_canonical_procurement_context",
+      "breakpoints": true
     }
   ]
 }

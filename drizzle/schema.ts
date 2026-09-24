@@ -5489,6 +5489,36 @@ export const generatedDocumentEditsTable = mysqlTable("generated_document_edits"
   index("idx_generated_document_edits_scope").on(table.organizationId, table.processId, table.kind, table.createdAt),
 ]);
 
+/**
+ * Contexto Canônico da Contratação (0305) — ledger APPEND-ONLY de AFIRMAÇÕES de fato sobre um processo
+ * (unidade demandante, responsável, planejamento, itens da contratação e plannedQuantity), cada uma com
+ * PROVENIÊNCIA (fonte/versão/estado/ator/base). O contexto é RESOLVIDO a partir destas afirmações + projeções
+ * do Processo/Organização/Itens (nada duplicado). Nunca atualizado/removido: histórico e replay. Idempotente
+ * por (organization_id, dedup_key) — mesmo fato da mesma versão de fonte não duplica. Tenant-scoped.
+ */
+export const procurementContextFactsTable = mysqlTable("procurement_context_facts", {
+  id:              int("id").autoincrement().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  processId:       varchar("process_id", { length: 20 }).notNull(),
+  path:            varchar("path", { length: 120 }).notNull(),
+  valueJson:       text("value_json"),
+  valueHash:       varchar("value_hash", { length: 16 }).notNull(),
+  sourceType:      varchar("source_type", { length: 30 }).notNull(),
+  sourceId:        varchar("source_id", { length: 64 }).notNull(),
+  sourceVersion:   varchar("source_version", { length: 64 }).notNull(),
+  status:          varchar("status", { length: 20 }).notNull(),
+  actorUserId:     int("actor_user_id"),
+  basisValueHash:  varchar("basis_value_hash", { length: 16 }),
+  correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
+  dedupKey:        varchar("dedup_key", { length: 64 }).notNull(),
+  createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_procurement_context_facts_dedup").on(table.organizationId, table.dedupKey),
+  index("idx_procurement_context_facts_scope").on(table.organizationId, table.processId, table.id),
+]);
+
+export type ProcurementContextFactRow = typeof procurementContextFactsTable.$inferSelect;
+
 export type GeneratedDocumentEditRow = typeof generatedDocumentEditsTable.$inferSelect;
 export type InsertGeneratedDocumentEdit = typeof generatedDocumentEditsTable.$inferInsert;
 
