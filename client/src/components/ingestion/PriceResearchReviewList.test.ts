@@ -73,9 +73,9 @@ describe("revisão item-cêntrica — 5 itens × 30 cotações", () => {
       const escaped = item.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       expect(count(html, new RegExp(`>${escaped}<`, "g"))).toBe(1);
     }
-    expect(count(html, /Qtd\. <span class="tabular-nums">1,00<\/span> · Tambor/g)).toBe(3);
-    expect(html).toContain("Qtd. <span class=\"tabular-nums\">1,00</span> · Un");
-    expect(html).toContain("Qtd. <span class=\"tabular-nums\">1,00</span> · Fardo");
+    expect(count(html, /Qtd\. no documento: <span class="tabular-nums">1,00<\/span> · Tambor/g)).toBe(3);
+    expect(html).toContain("Qtd. no documento: <span class=\"tabular-nums\">1,00</span> · Un");
+    expect(html).toContain("Qtd. no documento: <span class=\"tabular-nums\">1,00</span> · Fardo");
     const averages = [...html.matchAll(/data-testid="price-research-item-average">([^<]+)</g)].map((m) => m[1]);
     expect(averages).toEqual(["R$ 950,31", "R$ 67,23", "R$ 1.134,28", "R$ 145,29", "R$ 1.052,82"]);
     const counts = [...html.matchAll(/data-testid="price-research-item-quote-count">([^<]+)</g)].map((m) => m[1]);

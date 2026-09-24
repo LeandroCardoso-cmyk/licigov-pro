@@ -99,7 +99,7 @@ export function PriceResearchItemCard({
             <Badge variant="outline" className={GROUP_STATUS_TONE[group.status]}>{GROUP_STATUS_LABEL[group.status]}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Qtd. <span className="tabular-nums">{formatQuantity(group.quantity)}</span> · {group.unit || "—"}
+            Qtd. no documento: <span className="tabular-nums">{formatQuantity(group.quantity)}</span> · {group.unit || "—"}
           </p>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <p className="text-sm">

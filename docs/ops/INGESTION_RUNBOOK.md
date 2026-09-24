@@ -160,6 +160,10 @@ por cotação; os contadores são separados ("Itens" × "Cotações"). Ver `docs
 | "Registros sem item identificado" | Linha extraída sem descrição | Revisar individualmente (em geral, rejeitar) |
 | `PRECONDITION_FAILED` na decisão por item | Sessão não está aguardando revisão (aprovada/promovida) | — |
 
+- **"Quantidade no documento"** (card e drawer de correção) é a quantidade do **documento-fonte** da Pesquisa de
+  Preços (ex.: 1,00 em mapas de valores unitários), **não** a quantidade a contratar. Corrigi-la = corrigir uma
+  extração que não corresponde ao documento (PDF = 10, extraído = 1). A quantidade prevista para contratação é
+  definida na necessidade/itens do processo e não é exibida nem alterada nesta revisão.
 - A decisão por item afeta **somente cotações pendentes** do item; decisões individuais anteriores são preservadas.
 - Auditoria: `activity_logs.action = import_item_group_reviewed` com cada cotação afetada (antes/depois), itens,
   motivo e correlationId. Log estruturado `price_research_review_grouped` (contagens e duração, sem conteúdo).
