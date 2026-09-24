@@ -113,7 +113,7 @@ O `status` persistido é o enum existente; o desfecho fica **explícito** em `st
 ## PDF digital layout-aware e reprocessamento seguro (Layout v2)
 
 - **PDF digital (com texto)**: extraído pela reconstrução geométrica (`extraction.layout.mode = positioned`,
-  `layoutVersion = 2`); OCR **não** roda. `extraction.layout.validation` mostra cotações válidas e a conferência
+  `layoutVersion = 3`); OCR **não** roda. `extraction.layout.validation` mostra cotações válidas e a conferência
   média/total (`totalMatches`). Páginas sem tabela aparecem em `pagesWithoutItemTable` e não geram itens.
 - **Log** `import_layout_reconstructed` (contagens de páginas/tokens/linhas/colunas/itens, versão, duração, avisos) —
   sem conteúdo do documento. Útil para comparar `candidateItemCount` × `validItemCount`.
@@ -124,6 +124,8 @@ O `status` persistido é o enum existente; o desfecho fica **explícito** em `st
 | `DOCUMENT_AVERAGE_MISMATCH` / `TOTAL_RECONCILIATION_MISMATCH` | Média/total impressos ≠ cálculo das cotações válidas | Conferir cotações com o original; o sistema **não** ajusta valores |
 | `SOURCE_IDENTITY_UNRESOLVED` | Rótulo da coluna de fonte ilegível (ex.: OCR) | Informar a fonte na revisão (valor foi preservado) |
 | `LAYOUT_HEADER_INFERRED` / `LAYOUT_VALUES_NOT_EXTRACTED` | Cabeçalho ilegível / coluna com leitura inconsistente | Conferir colunas com o original; preferir o PDF com texto ou a planilha |
+| `LAYOUT_STACKED_CELLS` (info) | Colunas com campos empilhados (unidade/qtde., média/total, anexo/lote/item) separadas | Esperado; conferir unidade/quantidade na revisão |
+| `LAYOUT_STACKED_CELL_INCOMPLETE` | Célula empilhada com nível faltando em algum item | Conferir unidade/quantidade e média/total do item com o original |
 | `LAYOUT_COLUMNS_UNRESOLVED` (info) | Texto com espaços sem colunas alinhadas | Esperado: extração pelas linhas de texto (comportamento anterior) |
 
 **Reprocessar extração (`ingestion.reprocessExtraction`)** — operator+, escopado por tenant + processo, motivo

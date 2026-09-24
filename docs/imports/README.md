@@ -110,7 +110,8 @@ uploaded → queued → parsing → extracted → normalized → awaiting_review
   antes do extrator canônico — o texto não é linearizado. OCR usa a MESMA reconstrução (palavras com caixa).
 - Página sem tabela de itens (assinatura/identificação) não gera itens. Média e total impressos são **conferência**
   (contrato monetário), nunca item nem preço. Fonte sem rótulo legível ⇒ valor preservado + aviso, sem inventar
-  fornecedor. `PDF_LAYOUT_VERSION` entra no fingerprint de replay.
+  fornecedor. Células empilhadas (unidade/qtde., média/total, anexo/lote/item), caixa de metadados acima do título e
+  itens de várias linhas físicas são tratados pela estrutura (Layout v3). `PDF_LAYOUT_VERSION` entra no fingerprint.
 - **Reprocessar extração**: sessão em revisão SEM nenhuma decisão humana pode ser reextraída na mesma sessão
   (troca atômica do staging não revisado, auditada). Qualquer item aceito/rejeitado/pulado/corrigido ou promoção ⇒
   proibido. Detalhes: [IMPORT_ENGINE.md](../architecture/IMPORT_ENGINE.md#reconstrução-tabular-geométrica-layout-v2).

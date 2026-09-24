@@ -183,7 +183,7 @@ describe.skipIf(!DB)("Layout v2 — PDF digital layout-aware + reprocessamento s
     expect(ocrCalls.n).toBe(0);
     expect(done).toMatchObject({ status: "awaiting_review", stage: "awaiting_review", parserVersion: "2.3.0" });
     const lineage = (done.extractionSummary as any).extraction;
-    expect(lineage).toMatchObject({ extractionMode: "native_text", layoutVersion: "2", lineageVersion: "2" });
+    expect(lineage).toMatchObject({ extractionMode: "native_text", layoutVersion: "3", lineageVersion: "2" });
     expect(lineage.layout).toMatchObject({ mode: "positioned", pagesWithoutItemTable: [2], validation: { validQuotes: 30, documentTotalCents: 334993, calculatedTotalCents: 334993, totalMatches: true } });
     const items = await getStagingItems(s.id, ORG);
     expect(items).toHaveLength(30);
@@ -217,18 +217,18 @@ describe.skipIf(!DB)("Layout v2 — PDF digital layout-aware + reprocessamento s
     expect([...byDesc.values()].map((q) => averageCents(q))).toEqual([95031, 6723, 113428, 14529, 105282]);
 
     const summary = after.extractionSummary as any;
-    expect(summary.extraction.layoutVersion).toBe("2");
+    expect(summary.extraction.layoutVersion).toBe("3");
     expect(summary.reextractions).toHaveLength(1);
     expect(summary.reextractions[0]).toMatchObject({
       actorUserId: users.operator, reason: "Layout v2: leitura tabular do mapa de apuração", sourceChecksum: s.checksum,
       previous: { parserVersion: "2.2.0", layoutVersion: null, fingerprint: "f".repeat(64), stagedCount: 10 },
-      next: { parserVersion: "2.3.0", layoutVersion: "2", stagedCount: 30 },
+      next: { parserVersion: "2.3.0", layoutVersion: "3", stagedCount: 30 },
     });
     // Auditoria: pedido + troca aplicada (com versões, contagens, motivo, correlationId, timestamp).
     const [logs] = await conn.execute<mysql.RowDataPacket[]>("SELECT action, userId, details, correlationId FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action LIKE 'import_reextract%' ORDER BY id", [ORG, s.id]);
     expect(logs.map((l: any) => l.action)).toEqual(["import_reextraction_requested", "import_reextracted"]);
     const d = JSON.parse((logs[1] as any).details);
-    expect(d).toMatchObject({ sessionId: s.id, procurementProcessId: pid, sourceChecksum: s.checksum, previousParserVersion: "2.2.0", previousLayoutVersion: null, newParserVersion: "2.3.0", newLayoutVersion: "2", previousStagedCount: 10, newStagedCount: 30 });
+    expect(d).toMatchObject({ sessionId: s.id, procurementProcessId: pid, sourceChecksum: s.checksum, previousParserVersion: "2.2.0", previousLayoutVersion: null, newParserVersion: "2.3.0", newLayoutVersion: "3", previousStagedCount: 10, newStagedCount: 30 });
     expect(d.timestamp).toBeTruthy();
     expect((logs[1] as any).userId).toBe(users.operator);
 

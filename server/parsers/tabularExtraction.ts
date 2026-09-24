@@ -49,7 +49,9 @@ const INDEX_PATTERNS       = ["ITEM", "#", "N°", "Nº", "NO.", "N", "SEQ", "LOT
 /** Casa um cabeçalho normalizado com um padrão: igualdade, prefixo, ou palavra inteira. */
 function headerMatches(h: string, p: string): boolean {
   if (!h) return false;
-  if (h === p || h.startsWith(p)) return true;
+  if (h === p) return true;
+  // Padrão de 1 caractere ("N", "#") só casa PALAVRA inteira — "NATURALLE" não é coluna de índice.
+  if (p.length > 1 && h.startsWith(p)) return true;
   return ` ${h} `.includes(` ${p} `);
 }
 

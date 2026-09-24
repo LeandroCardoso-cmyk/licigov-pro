@@ -31,6 +31,8 @@ export interface PositionedTextToken {
   source:      PositionedTextSource;
   /** Ordem original na página (desempate determinístico). */
   seq:         number;
+  /** Texto vertical: "up" lê de baixo para cima (rotação −90°), "down" de cima para baixo. */
+  direction?:  "up" | "down";
 }
 
 /** Subconjunto do item de texto do pdfjs usado aqui (TextItem de `getTextContent`). */
@@ -82,6 +84,7 @@ export function tokensFromPdfTextItems(items: readonly PdfTextItemLike[], page: 
     out.push({
       text, x: x0, y: y0, width: x1 - x0, height: y1 - y0, page, fontSize, orientation,
       confidence: null, source: "native", seq,
+      ...(orientation === "vertical" ? { direction: by1 < by0 ? "up" as const : "down" as const } : {}),
     });
   });
   return out;
@@ -108,6 +111,8 @@ export function tokensFromOcrPage(page: OcrPageResult): PositionedTextToken[] {
       out.push({
         text, x: w.bbox.x0, y: w.bbox.y0, width, height, page: page.pageNumber, fontSize: vertical ? width : height,
         orientation: vertical ? "vertical" : "horizontal", confidence: w.confidence, source: "ocr", seq: seq++,
+        // O OCR não informa o sentido da rotação: cabeçalhos verticais de tabela costumam ler de baixo para cima.
+        ...(vertical ? { direction: "up" as const } : {}),
       });
     }
   }

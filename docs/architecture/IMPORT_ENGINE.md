@@ -23,7 +23,7 @@ efeito no domínio. A promoção ao domínio (B.2.4) é transacional, idempotent
 > replay em `extractionSummary.extraction` (`server/domain/extractionLineage.ts`). Decisão e dependências:
 > [OCR_LOCAL.md](OCR_LOCAL.md); operação: [INGESTION_RUNBOOK.md](../ops/INGESTION_RUNBOOK.md).
 
-> **Layout v2 — PDF DIGITAL layout-aware (parser PDF 2.3.0, `PDF_LAYOUT_VERSION = 2`):** o texto nativo **não é
+> **Layout v2/v3 — PDF DIGITAL layout-aware (parser PDF 2.3.0, `PDF_LAYOUT_VERSION = 3`):** o texto nativo **não é
 > linearizado** antes da reconstrução da tabela. Ver a seção [Reconstrução tabular geométrica](#reconstrução-tabular-geométrica-layout-v2)
 > e [Reprocessamento seguro](#reprocessamento-seguro-da-extração-layout-v2).
 
@@ -149,6 +149,23 @@ PDF escaneado → OCR (OcrPort) → palavras com caixa + confiança ────
 7. **Matriz**: "/////", "-", "N/A" ⇒ célula **vazia** registrada (nunca 0); texto sem dígito em coluna monetária ⇒
    descartado com aviso; confiança por célula = mínimo das palavras (OCR).
 
+**Layout v3 (`PDF_LAYOUT_VERSION = 3`) — validado contra a geometria real de um mapa de apuração digital:**
+
+- **Região tabular por estrutura**: linhas densas separadas por cabeçalho (texto vertical) ou mudança de fonte formam
+  agrupamentos distintos; a tabela é o maior (empate ⇒ o último). O corpo começa no bloco da 1ª linha estrutural —
+  caixas de ID/data/"R$"/valor total, título e objeto acima dele são **preâmbulo**, mesmo quando densas.
+- **LogicalItemBlock**: um item pode ocupar 1, 2, 3 ou mais linhas físicas (descrição centrada, unidade acima e
+  quantidade abaixo, média acima e total abaixo, identificação em 3 níveis, preço centralizado entre elas). Bloco com
+  uma linha estrutural = um item; nova linha com número **não** cria item. Dois itens no mesmo bloco só com duas linhas
+  estruturais independentes (mesmas colunas de preço) — com `LAYOUT_ROW_BOUNDARY_INFERRED`.
+- **Células empilhadas / subcolunas virtuais**: uma banda X com k campos verticais (cabeçalho com "/" ou k linhas, ou
+  níveis texto × número consistentes entre itens) vira k colunas virtuais (ex.: `UNIDADE`/`QTDE.`,
+  `MÉDIA ARITMÉTICA`/`VALOR TOTAL`). Níveis só textuais são texto livre (descrição quebrada), nunca empilhados.
+  Pilha de identificação (anexo/lote/item) ⇒ `rawMetadata.layout.identifier` ("I / 001 / 003"), nunca cotação.
+- **Linhas de total por fonte** (rótulo + números em texto vertical) ⇒ resumo/rodapé; o total geral alimenta só a
+  conferência. Cabeçalho de 1 caractere (`N`, `#`) só casa palavra inteira (fonte "N…" não vira coluna de índice).
+- **Golden E v2** (`stackedMapPdf`) reproduz essa geometria (palavra a palavra, monoespaçada, 100% fictícia).
+
 **Páginas sem itens**: página sem tabela (identificação, assinatura, rodapé) ⇒ `pageHasNoItemTable`; havendo tabela
 em qualquer página (nativa ou OCR), essas páginas **não** passam pelo fallback de linhas (não geram item-lixo).
 
@@ -172,7 +189,7 @@ coluna textual mais longa; unidade = textual curta; quantidade = 1ª coluna de v
 de convergência). O fallback de linhas do OCR (`ocrLayout.ts` v1) só atua em página sem linhas-âncora e sem tabela
 no documento. **OCR não roda em PDF digital** com texto útil (`extractionMode = native_text`).
 
-**Versões e replay**: `PDF_LAYOUT_VERSION` (`2`) entra em `extraction.layoutVersion`, no fingerprint
+**Versões e replay**: `PDF_LAYOUT_VERSION` (`3`) entra em `extraction.layoutVersion`, no fingerprint
 (`extraction-lineage/v2`: checksum + modo por página + heurística + **layout** + parser + OCR quando aplicável) e
 em `parserMetadata.layoutVersion` de cada item. Mesmo arquivo + mesmas versões ⇒ mesma ordem item → cotações e
 mesmo fingerprint. Mudou o algoritmo ⇒ nova versão.

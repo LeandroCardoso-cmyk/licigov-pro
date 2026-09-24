@@ -93,7 +93,7 @@ describe("B — PDF digitalizado tabular (OCR)", () => {
     expect(it0.extractionWarnings.map((w) => w.code)).toContain("OCR_EXTRACTED");
     expect(it0.confidenceMetadata.requiresReview).toBe(true);
     expect(r.extraction?.ocr).toMatchObject({
-      engine: "tesseract.js", language: "por", pagesProcessed: 1, nondeterministic: true, failure: null, layoutVersion: "2",
+      engine: "tesseract.js", language: "por", pagesProcessed: 1, nondeterministic: true, failure: null, layoutVersion: "3",
     });
     expect(r.extraction?.ocr?.outputDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(r.extraction?.fingerprint).toMatch(/^[a-f0-9]{64}$/);

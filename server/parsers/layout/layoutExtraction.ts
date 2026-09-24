@@ -259,6 +259,7 @@ export function extractItemsFromLayoutTable(
         layout: {
           version: PDF_LAYOUT_VERSION, page: table.page, tableIndex: o.tableIndex, row: r + 1,
           lineText: meta.lineText.slice(0, 2000), bbox: meta.bbox, physicalRows: meta.physicalRows,
+          identifier: meta.identifier ?? null,
           discardedCells: discarded, reconciliation: recon,
         },
       };
