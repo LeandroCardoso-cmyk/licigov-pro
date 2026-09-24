@@ -281,7 +281,7 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     const pid = await newProcess(ORG, "Aquisição de cadeiras");
     await ingest(ORG, pid, "document_tr", "tr.pdf", "application/pdf", await pdfOf(["TERMO DE REFERÊNCIA", "1. OBJETO", "Aquisição de cadeiras giratórias.", "2. PRAZO", "Entrega em 20 dias."]));
     const v = await getDocumentIntake({ organizationId: ORG, processId: pid, kind: "tr" });
-    expect(v.staging!.parser).toBe("pdf@2.1.0");
+    expect(v.staging!.parser).toBe("pdf@2.2.0");
     expect(v.staging!.content).toContain("Entrega em 20 dias.");
     expect(v.staging!.stats.pages).toBe(1);
   }, 60_000);

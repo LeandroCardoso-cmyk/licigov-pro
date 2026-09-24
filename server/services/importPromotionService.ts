@@ -35,6 +35,7 @@ import {
 import { recordProcessEvent } from "../db/procurement";
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
+import { assertSessionPromotable, ImportInvariantViolation } from "../domain/importOutcome";
 
 const log = serviceLogger("ImportPromotionService");
 const toDb = (iso: string): string => toDbDatetime(iso) ?? iso;
@@ -167,7 +168,7 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
       .where(and(eq(importStagingItems.importSessionId, sessionId), eq(importStagingItems.organizationId, org), eq(importStagingItems.reviewStatus, "approved")))
       .orderBy(importStagingItems.id);
     if (approved.length === 0) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Nenhum item aprovado para promover." });
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NO_VALID_ITEMS_TO_PROMOTE: Nenhum item aprovado para promover." });
     }
 
     // 6) Research workspace (id determinístico por SESSÃO → replay-safe e isolado por sessão).
@@ -221,8 +222,13 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
         supplier: dom.supplier, brand: dom.brand, model: dom.model, source: dom.source, valueCents: unitCents,
       });
     }
-    if (quotes.length === 0) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Nenhum item aprovado com descrição para promover." });
+    // U2A — invariante de domínio: validItemCount === 0 ⇒ promoção PROIBIDA (a transação inteira é revertida,
+    // inclusive a reserva no ledger — nenhuma pesquisa/Item Inteligente vazio é materializado).
+    try {
+      assertSessionPromotable(quotes.length);
+    } catch (err) {
+      if (err instanceof ImportInvariantViolation) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${err.message} (nenhum item aprovado com descrição)` });
+      throw err;
     }
     await tx.update(priceResearchTable).set({ itemCount: quotes.length })
       .where(and(eq(priceResearchTable.id, researchId), eq(priceResearchTable.organizationId, org)));

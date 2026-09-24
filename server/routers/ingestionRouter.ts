@@ -57,6 +57,10 @@ import {
   isValidImportTransition,
   type ImportType,
 } from "../domain/importTypes";
+import {
+  assertSessionApprovable, ImportInvariantViolation, OUTCOME_MESSAGE, OUTCOME_STAGE,
+} from "../domain/importOutcome";
+import type { ExtractionLineage } from "../domain/extractionLineage";
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
@@ -109,6 +113,36 @@ export function createSessionPayloadHash(p: {
   ])).digest("hex");
 }
 
+/**
+ * U2A — Encerra (de forma AUDITÁVEL) uma sessão que ficaria como beco sem saída para o mesmo checksum:
+ *  - `awaiting_review` com ZERO itens (legado anterior ao U2A) → `rejected` (NO_VALID_ITEMS);
+ *  - `approved` com ZERO itens aceitos e nunca promovida → `archived`.
+ * Nenhum item revisado/promovido é tocado. Retorna true se a sessão foi encerrada (não deve ser reutilizada).
+ */
+async function retireEmptyDeadEndSession(
+  s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>,
+  audit: TrpcAuditCtx,
+): Promise<boolean> {
+  if (isDocumentImportType(s.importType)) return false;
+  let to: "rejected" | "archived" | null = null;
+  if (s.status === "awaiting_review" || s.status === "approved") {
+    const c = await getStagingSummary(s.id, s.organizationId);
+    if (s.status === "awaiting_review" && c.total === 0) to = "rejected";
+    if (s.status === "approved" && c.approved === 0 && (s.promotionStatus ?? "none") !== "promoted") to = "archived";
+  }
+  if (!to) return false;
+  await updateSessionStatus(s.id, s.organizationId, to, {
+    stage: OUTCOME_STAGE.NO_VALID_ITEMS,
+    errors: [{ code: "NO_VALID_ITEMS", message: OUTCOME_MESSAGE.NO_VALID_ITEMS, fatal: true }],
+  });
+  await logActivity({
+    organizationId: s.organizationId, userId: audit.user.id, action: "import_session_empty_retired",
+    entityType: "import_session", entityId: s.id, correlationId: audit.correlationId, requestId: audit.requestId,
+    details: { from: s.status, to, reason: "NO_VALID_ITEMS" },
+  });
+  return true;
+}
+
 /** Constrói o contexto de auditoria a partir do contexto tRPC autenticado + tenant. */
 function toAuditCtx(ctx: TrpcContext & { organizationId: number }): TrpcAuditCtx {
   return {
@@ -134,6 +168,20 @@ const DOCUMENT_MIMES = new Set([
 const REVIEW_ACTION = z.enum(["approved", "rejected", "skipped"]);
 const SHA256 = z.string().regex(/^[a-fA-F0-9]{64}$/, "checksum sha256 inválido");
 
+/** U2A-OCR — visão segura da linhagem (modo, páginas, motor, confiança média, falha). Nunca texto/artefato. */
+function extractionView(summary: unknown): {
+  mode: string; pageCount: number; ocrPages: number; engine: string | null; engineVersion: string | null;
+  meanConfidence: number | null; failureCode: string | null;
+} | null {
+  const e = (summary as { extraction?: ExtractionLineage } | null)?.extraction;
+  if (!e) return null;
+  return {
+    mode: e.extractionMode, pageCount: e.pageCount, ocrPages: e.ocrPages,
+    engine: e.ocr?.engine ?? null, engineVersion: e.ocr?.engineVersion ?? null,
+    meanConfidence: e.ocr?.meanConfidence ?? null, failureCode: e.ocr?.failure?.code ?? null,
+  };
+}
+
 /** Serializa a sessão para o cliente, ocultando nada sensível (não há segredos aqui). */
 function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>) {
   return {
@@ -153,6 +201,8 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     promotionRef:    s.promotionRef ?? null,
     // correlationId de rastreabilidade (para suporte/observabilidade — não é segredo/PII).
     correlationId: s.correlationId ?? null,
+    // U2A-OCR — resumo da linhagem da extração (sem conteúdo do documento): a UI explica OCR × texto nativo.
+    extraction: extractionView(s.extractionSummary),
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
     warnings:      Array.isArray(s.warnings) ? s.warnings : [],
     errors:        Array.isArray(s.errors)
@@ -276,7 +326,12 @@ export const ingestionRouter = router({
       try {
         // Dedup por checksum ESCOPADO ao processo canônico (nunca reutiliza entre processos).
         // P0 piloto — e ao MESMO importType (o mesmo arquivo como "TR" não adota a sessão de "Pesquisa").
-        const existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId, input.importType);
+        let existing = await findActiveSessionByChecksum(orgId, input.checksum, input.procurementProcessId, input.importType);
+        // U2A — sessão "beco sem saída" (vazia) nunca bloqueia o checksum: é encerrada de forma auditável e
+        // uma nova tentativa é criada. Sessão `failed` sem revisão é REUTILIZADA (reprocessamento seguro).
+        if (existing && await retireEmptyDeadEndSession(existing, toAuditCtx({ ...ctx, organizationId: orgId }))) {
+          existing = null;
+        }
         if (existing) {
           const dupResult = {
             sessionId:  existing.id,
@@ -646,11 +701,12 @@ export const ingestionRouter = router({
       }
 
       const summary = await getStagingSummary(input.sessionId, orgId);
-      if (summary.pending > 0) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: `Revisão incompleta: ${summary.pending} item(ns) pendente(s).`,
-        });
+      // U2A — invariantes de domínio: revisão completa E ≥1 item aceito (sessão vazia NUNCA é aprovável).
+      try {
+        assertSessionApprovable(summary);
+      } catch (err) {
+        if (err instanceof ImportInvariantViolation) throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message });
+        throw err;
       }
 
       await updateSessionStatus(input.sessionId, orgId, "approved", { progress: 100, stage: "approved", finishedAt: new Date() });

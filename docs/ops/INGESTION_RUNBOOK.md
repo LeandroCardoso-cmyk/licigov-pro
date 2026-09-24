@@ -41,6 +41,8 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
 | `412` "arquivo ainda não enviado" (enqueue) | `enqueueProcessing` antes do upload concluir | Fazer o upload antes de enfileirar |
 | `409` "estado terminal" (enqueue) | Sessão já aprovada/arquivada/rejeitada | Criar nova sessão |
 | `412` "revisão incompleta" (approve) | Há itens de staging `pending` | Revisar todos os itens antes de aprovar |
+| `412` `NO_VALID_ITEMS_TO_APPROVE` (approve) | Sessão sem itens, ou todos rejeitados/pulados | Aceitar ao menos um item, ou descartar e reenviar outro arquivo |
+| `412` `NO_VALID_ITEMS_TO_PROMOTE` (promote) | Nenhum item aprovado com descrição | Idem — a transação é revertida, nada é materializado |
 | `CONFLICT` "outro arquivo" (createSession) | `idempotencyKey` reusada com checksum diferente | Usar nova chave idempotente |
 
 ## Dedup e idempotência
@@ -50,6 +52,13 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
 - **Idempotência de `createSession`:** por `idempotencyKey` (+ payloadHash = checksum). Replay com
   a mesma chave e mesmo arquivo retorna a resposta cacheada; com arquivo diferente → `CONFLICT`.
 - **Replay do processamento:** `enqueueProcessing` é seguro para reexecutar; não duplica jobs em voo.
+- **Checksum nunca fica bloqueado (U2A):** uma sessão `failed` (OCR_REQUIRED/OCR_FAILED/PARSER_FAILED/
+  NO_VALID_ITEMS) é **reutilizada** pelo dedup — reenviar o mesmo arquivo ou "Tentar novamente" reprocessa a
+  MESMA sessão. A reextração **substitui só itens intocados** (pendentes, sem correção); havendo item
+  revisado/corrigido ela é bloqueada (`STAGING_ALREADY_REVIEWED`). Sessões "beco sem saída" legadas
+  (`awaiting_review` vazia → `rejected`; `approved` sem item aceito e não promovida → `archived`) são
+  encerradas de forma auditada (`import_session_empty_retired`) e uma nova é criada. A promoção continua
+  deduplicada pelo ledger (`import_promotions`) — nenhuma cotação duplicada.
 
 ## Fila (in-memory) e recuperação
 
@@ -60,7 +69,46 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
   limite de tentativas, DLQ e correlationId preservado. É **fail-closed por tenant** (só reprocessa
   orgs com `FF_CANONICAL_INGESTION` ligada) — em produção com a flag desligada, é no-op.
 - Os bytes são relidos do S3 durável — nada se perde no storage.
-- Sem GEMINI/LLM no caminho (extração é 100% local/AST-based).
+- Sem GEMINI/LLM no caminho (extração é 100% local/AST-based; o OCR também é local — ver abaixo).
+
+## Desfechos da extração (Pesquisa de Preços / itens) — U2A
+
+O `status` persistido é o enum existente; o desfecho fica **explícito** em `stage` + `errors[0].code`
+(sem migration). **Nunca** há `awaiting_review` com zero itens.
+
+| Desfecho | status / stage | Aprovável / promovível | Próximo passo |
+|---|---|---|---|
+| `OCR_PROCESSING` | `parsing` / `ocr_processing` | — | aguardar (PDF digitalizado em reconhecimento) |
+| `OCR_REQUIRED` | `failed` / `ocr_required` | não / não | OCR desligado: enviar PDF com texto ou planilha |
+| `OCR_FAILED` | `failed` / `ocr_failed` | não / não | "Tentar novamente" (mesma sessão) ou outro arquivo |
+| `PARSER_FAILED` | `failed` / `parser_failed` | não / não | arquivo corrompido/protegido: enviar arquivo válido (sem auto-retry se determinístico) |
+| `NO_VALID_ITEMS` | `failed` / `no_items` | não / não | enviar arquivo com a tabela de itens |
+| `REVIEW_REQUIRED` | `awaiting_review` / `review_required` | após revisão (≥1 aceito) | conferir itens lidos por OCR/avisos |
+| `READY_FOR_REVIEW` | `awaiting_review` / `awaiting_review` | após revisão (≥1 aceito) | revisar |
+
+## OCR local de PDF digitalizado (U2A-OCR)
+
+- **Onde:** só no modo de LINHAS (Pesquisa de Preços/itens). DFD/ETP/TR (modo documento) **não** usam OCR.
+- **Pipeline:** upload → assinatura `%PDF` → checksum → texto nativo; páginas sem **texto útil** (heurística
+  determinística `nativeTextAssessment.ts`: ≥30 alfanuméricos e ≥4 palavras, ou tabela estruturada) seguem
+  para OCR → texto normalizado → **o MESMO parser tabular** → staging → revisão → aprovação → promoção.
+- **Motor:** `tesseract.js` 7 (WASM) + `@tesseract.js-data/por` (português, lido do `node_modules`,
+  sem download, sem gravação em disco). Sem serviço externo, sem credencial, sem segredo.
+- **Onde roda:** no worker da fila existente, fora de qualquer transação de banco.
+- **Limites (env, sem segredo):** `OCR_MAX_PAGES` (20), `OCR_TIMEOUT_MS` (180000, render + OCR),
+  `OCR_RENDER_WIDTH` (2000 px, uma página por vez), `OCR_MIN_CONFIDENCE` (75), `OCR_MAX_CONCURRENCY` (1).
+  Tamanho: 50 MB (limite geral). **Kill-switch:** `OCR_ENABLED=false` ⇒ desfecho `OCR_REQUIRED`.
+- **Incerteza nunca vira dado:** valores ficam BRUTOS; confiança por campo; avisos `OCR_EXTRACTED`,
+  `OCR_LOW_CONFIDENCE`, `OCR_AMBIGUOUS_VALUE` (ex.: "1.2O4,56" — não é corrigido), `OCR_MULTILINE_MERGED`,
+  `MERGED_CELL`; o contrato monetário recusa valor ambíguo na promoção.
+- **Linhagem:** `extractionSummary.extraction` (modo `native_text`/`ocr`/`mixed` por página, motor, versões,
+  idioma, configuração, páginas, duração, avisos, `fingerprint`, `outputDigest`, correlationId, timestamps).
+  Texto bruto do OCR por página em artefato derivado `{storageKey}.ocr-{fingerprint16}.json` (o original é
+  imutável); cada item guarda o texto bruto da sua linha (`rawMetadata.ocr.lineText`).
+- **Log estruturado** `import_extraction_outcome`: correlationId, organizationId, processId, sessionId, checksum,
+  extractionMode, motor/versão, páginas, duração, nº de avisos, estado final — **sem** conteúdo do documento.
+- **Memória:** o worker Tesseract (~100–200 MB durante o reconhecimento) é criado por arquivo e encerrado
+  ao fim; a fila é serial por processo.
 
 ## Upload (multipart streaming)
 
@@ -103,14 +151,19 @@ manual do journal é necessária — o drizzle decide pela cadeia (`created_at <
 
 ## Observações
 
-- Parser **PDF/DOCX** ainda é *stub* (não extrai itens reais) — planejado para etapa posterior.
-- **Nenhuma** gravação direta no domínio: itens ficam em `import_staging_items` até promoção (futura).
+- Parsers **PDF/DOCX** são reais (B.2.3); PDF digitalizado da Pesquisa via OCR local (U2A-OCR).
+- **Nenhuma** gravação direta no domínio: itens ficam em `import_staging_items` até a **promoção governada**
+  (`promoteSession`, B.2.4 — transacional, idempotente, exige papel **manager+**; o operador revisa e aprova,
+  a UI oculta a ação para quem não é gestor e explica o motivo).
 - Logs **nunca** contêm URL assinada, credenciais ou conteúdo de documento.
 
 ### P0 piloto — importação documental e Itens Inteligentes
 | Sintoma | Causa provável | Ação |
 |---|---|---|
-| Importação de DFD/ETP/TR falha com `OCR_REQUIRED` | PDF digitalizado (só imagem) | Esperado (sem OCR): enviar o PDF original com texto ou o DOCX |
+| Importação de DFD/ETP/TR falha com `OCR_REQUIRED` | PDF digitalizado (só imagem) | Esperado (documento não usa OCR): enviar o PDF original com texto ou o DOCX |
+| Pesquisa falha com `OCR_REQUIRED` | PDF digitalizado e `OCR_ENABLED=false` | Religar o OCR ou enviar PDF com texto/planilha |
+| Pesquisa falha com `OCR_FAILED` | Motor/tempo de OCR (`ocrFailure` no log) | "Tentar novamente"; se persistir, reduzir páginas ou enviar planilha |
+| Pesquisa falha com `NO_VALID_ITEMS` | Arquivo sem tabela de itens reconhecível | Enviar arquivo com descrição/quantidade/unidade/valor |
 | `UNSUPPORTED_MEDIA_TYPE` ao importar documento | `.doc`, CSV ou planilha como DFD/ETP/TR | Documentos aceitam só PDF com texto ou DOCX |
 | "Usar como rascunho" retorna `CONFLICT` | Já existe rascunho do documento no processo | Usar "Substituir rascunho…" (confirmação + motivo); o anterior fica no histórico |
 | Substituição retorna `CONFLICT` | O rascunho mudou desde que foi carregado | Recarregar e confirmar de novo |

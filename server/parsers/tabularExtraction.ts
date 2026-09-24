@@ -61,6 +61,10 @@ function matchColumn(headers: string[], patterns: string[], taken: Set<number> =
   return -1;
 }
 
+/** Valores inteiros consecutivos a partir de 1 (≥ 2 linhas): numeração de itens, não valor monetário. */
+function isRowSequence(values: string[]): boolean {
+  return values.length >= 2 && values.every((v, k) => /^\d{1,4}$/.test(v) && Number(v) === k + 1);
+}
 function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
 function isIndexHeader(h: string): boolean { return INDEX_PATTERNS.some((p) => headerMatches(h, p)); }
 
@@ -178,6 +182,9 @@ export function detectWideFormat(headersRaw: string[], dataRows: string[][], map
     if (i === map.unitPrice) return;
     const values = dataRows.map((r) => (r[i] ?? "").trim()).filter((v) => v !== "");
     if (values.length === 0) return;
+    // Coluna de SEQUÊNCIA de linhas (1, 2, 3…) é índice mesmo com cabeçalho não reconhecido (ex.: "Item" lido
+    // como "tem" pelo OCR) — nunca é preço de fornecedor.
+    if (isRowSequence(values)) return;
     if (values.every(isPriceCell)) candidates.push(i);
   });
   if (candidates.length < 2) return { kind: "long" };

@@ -8,11 +8,20 @@
 > **Raw extraction NUNCA persiste diretamente no domínio.**
 
 ```
-Upload → Ingestão → Parsing → Staging → Validação → Revisão Humana → Aprovação → (Promoção — futura)
+Upload → Ingestão → Parsing (texto nativo | OCR governado) → Staging → Validação → Revisão Humana → Aprovação → Promoção governada
 ```
 
 Cada dado importado carrega proveniência completa e passa por revisão humana antes de qualquer
-efeito no domínio. A promoção ao domínio é uma etapa **posterior** (não implementada na B.2.1).
+efeito no domínio. A promoção ao domínio (B.2.4) é transacional, idempotente e exige papel **manager+**.
+
+> **U2A / U2A-OCR (Pesquisa de Preços):** desfechos explícitos da extração (`OCR_REQUIRED`, `OCR_PROCESSING`,
+> `OCR_FAILED`, `PARSER_FAILED`, `NO_VALID_ITEMS`, `REVIEW_REQUIRED`, `READY_FOR_REVIEW` — em `stage` +
+> `errors[0].code`, sem migration) e invariantes `validItemCount === 0 ⇒ aprovar/promover PROIBIDO`
+> (`server/domain/importOutcome.ts`). PDF digitalizado: porta `OcrPort` (`server/domain/ocr.ts`) com adapter
+> de infraestrutura Tesseract local (`server/providers/ocr/`); layout por geometria (`parsers/ocrLayout.ts`)
+> alimenta o **mesmo** parser tabular (`matrixToRawItems`/`linesToRawItems`). Linhagem + fingerprint de
+> replay em `extractionSummary.extraction` (`server/domain/extractionLineage.ts`). Decisão e dependências:
+> [OCR_LOCAL.md](OCR_LOCAL.md); operação: [INGESTION_RUNBOOK.md](../ops/INGESTION_RUNBOOK.md).
 
 ## Camadas
 

@@ -186,6 +186,13 @@ jobs:
       - name: Smoke — P0 piloto hardening (dinheiro/cotações/itens/dedup/ledger/digest/idempotência)
         run: pnpm exec vitest run server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts
 
+      # U2A / U2A-OCR — Pesquisa de Preços com PDF DIGITALIZADO: worker real + OCR LOCAL real (tesseract.js +
+      # português empacotado, offline, sem credencial) → MESMO parser tabular → staging → revisão → promoção.
+      # Zero itens ⇒ não aprovável/promovível; OCR_REQUIRED/OCR_FAILED + retry na mesma sessão (checksum nunca
+      # bloqueado); reextração nunca sobrescreve revisão; promoção sem duplicidade; isolamento multi-tenant.
+      - name: Smoke — U2A-OCR (PDF digitalizado → OCR governado → staging → promoção)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-ocr-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts

@@ -7,6 +7,8 @@
 import type { RawExtractedItem } from "../domain/importExtraction";
 import type { ImportWarning, ImportError, ExtractionSummary } from "../domain/importTypes";
 import type { DocumentProjection } from "../domain/documentProjection";
+import type { OcrPort } from "../domain/ocr";
+import type { ExtractionLineage } from "../domain/extractionLineage";
 
 // ─── Parser capabilities ──────────────────────────────────────────────────────
 
@@ -54,6 +56,19 @@ export interface ParseOptions {
    * títulos/parágrafos/listas/tabelas em ordem) em vez de linhas de item. Só PDF/DOCX suportam.
    */
   extractionMode?:  "rows" | "document";
+  /**
+   * U2A-OCR — OCR governado (somente PDF, modo "rows"). Injetado pelo worker a partir da infraestrutura;
+   * ausente ⇒ o PDF digitalizado termina em OCR_REQUIRED explícito (nunca sucesso vazio).
+   */
+  ocr?: {
+    port:          OcrPort;
+    maxPages:      number;
+    timeoutMs:     number;
+    renderWidth:   number;
+    minConfidence: number;
+  };
+  /** Notificação de estágio observável (ex.: "ocr_processing") — o worker persiste na sessão. */
+  onStage?:         (stage: string) => void | Promise<void>;
 }
 
 // ─── Parse result ─────────────────────────────────────────────────────────────
@@ -66,6 +81,10 @@ export interface ParseResult {
   rawMetadata:     Record<string, unknown>;
   /** Projeção documental (somente em `extractionMode: "document"`). Ausente em PDF escaneado (OCR). */
   documentProjection?: DocumentProjection;
+  /** U2A-OCR — linhagem da extração (texto nativo × OCR, motor, versões, fingerprint). */
+  extraction?:     ExtractionLineage;
+  /** U2A-OCR — texto BRUTO do OCR por página (artefato derivado para auditoria; o original é imutável). */
+  ocrArtifact?:    { pages: Array<{ pageNumber: number; confidence: number; text: string }> };
 }
 
 // ─── Observability hook ───────────────────────────────────────────────────────
