@@ -72,7 +72,7 @@ const STALE_WARNING = "Não foi possível atualizar os dados agora. As informaç
 describe("PesquisaPrecosWorkspace — capabilities governam SÓ a ingestão canônica por arquivo", () => {
   beforeEach(() => { state.capabilities = { enabled: false, isLoading: false, error: null, capabilities: undefined }; });
 
-  it("success + enabled → launcher canônico (com o legado como entrada manual dentro dele)", () => {
+  it("success + enabled → launcher canônico (U2B-MIN: arquivo + colar texto; sem painel legado)", () => {
     state.capabilities = { ...state.capabilities, enabled: true };
     const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
     expect(html).toContain("CANONICAL_LAUNCHER");

@@ -100,8 +100,9 @@ uploaded → queued → parsing → extracted → normalized → awaiting_review
 - **Status**: `supported` — extração real via `pdf-parse` (pdfjs-dist/legacy)
 - **Estratégia**: texto por página + tabelas estruturadas (`getTable`); heurística ancorada à direita
   para tabelas textuais; proveniência por página/linha/tabela.
-- **Limitações declaradas**: PDF escaneado (somente imagem) → aviso `OCR_REQUIRED`/`SCANNED_PDF_UNSUPPORTED`
-  (OCR **não** suportado, sem apresentar como extraído); limites de páginas/itens/tempo.
+- **Limitações declaradas**: PDF digitalizado (somente imagem) → na Pesquisa de Preços é lido por **OCR local**
+  (U2A-OCR, 2.2.0; revisão obrigatória, ver abaixo); sem OCR disponível ou em modo documento → `OCR_REQUIRED`/
+  `SCANNED_PDF_UNSUPPORTED` (nunca apresentado como extraído); limites de páginas/itens/tempo.
 
 ### DOCX Parser (real — B.2.3)
 - **MIME types**: `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
@@ -296,7 +297,7 @@ exposta) e reflete a capacidade REAL: `supported` de cada formato é **derivado 
 | CSV | `text/csv`, `application/csv`, `text/plain`, `.csv`/`.txt` | `csvParser 1.1.0` | ✅ **suportado** (longo + mapa comparativo) |
 | XLSX | OOXML spreadsheet, `.xlsx` | `xlsxParser 1.1.0` (SheetJS) | ✅ **suportado** (longo + mapa comparativo) |
 | XLS | `application/vnd.ms-excel`, `.xls` | `xlsxParser 1.1.0` (OLE via SheetJS) | ✅ **suportado** |
-| PDF | `application/pdf`, `.pdf` | `pdfParser 2.1.0` (pdf-parse/pdfjs) | ✅ **suportado** — linhas + modo **documento** (DFD/ETP/TR); OCR não |
+| PDF | `application/pdf`, `.pdf` | `pdfParser 2.2.0` (pdf-parse/pdfjs + OCR local) | ✅ **suportado** — linhas (texto nativo; digitalizado via **OCR** na Pesquisa) + modo **documento** (DFD/ETP/TR, sem OCR) |
 | DOCX | OOXML word, `.docx` | `docxParser 2.1.0` (mammoth) | ✅ **suportado** — linhas + modo **documento** (DFD/ETP/TR) |
 | Conteúdo colado | enviado como `text/csv` (bytes UTF-8) | `csvParser 1.1.0` | ✅ **suportado** |
 
@@ -305,8 +306,9 @@ exposta) e reflete a capacidade REAL: `supported` de cada formato é **derivado 
 > [architecture/P0_PILOT_FOUNDATION.md](../architecture/P0_PILOT_FOUNDATION.md).
 
 > `supported` é **derivado do `capabilityStatus` do parser**. PDF/DOCX passam a suportados na B.2.3, com
-> **limitações declaradas** (OCR de PDF escaneado não suportado; `.doc` legado rejeitado). OCR permanece
-> **não suportado** — um PDF só-imagem retorna aviso `OCR_REQUIRED`, nunca é apresentado como extraído.
+> **limitações declaradas** (`.doc` legado rejeitado e não anunciado). **U2A-OCR:** PDF só-imagem na Pesquisa é
+> reconhecido por OCR local e segue para revisão como `REVIEW_REQUIRED`; sem OCR (kill-switch `OCR_ENABLED=false`)
+> ou em modo documento retorna `OCR_REQUIRED` — nunca é apresentado como extraído.
 
 ### Pesquisa de Preços (fim a fim)
 Com a flag LIGADA, o `DocumentIngestionLauncher` (importType `price_research`) oferece três entradas:
@@ -423,8 +425,9 @@ Promoção **supervisionada** da sessão aprovada ao domínio canônico, reutili
   **estado persistido após reload**. Dark mode e acessibilidade.
 
 ### Limitações remanescentes (registradas)
-- **OCR** de PDF escaneado **não** suportado (aviso `OCR_REQUIRED`); DOCX prioriza tabelas (texto corrido
-  vira item de baixa confiança).
+- **OCR** só na Pesquisa de Preços (modo de linhas), local e sem credencial; DFD/ETP/TR digitalizados continuam
+  `OCR_REQUIRED`. Tabela digitalizada sem cabeçalho reconhecível cai na heurística de linhas (menor precisão).
+  DOCX prioriza tabelas (texto corrido vira item de baixa confiança).
 - Promoção ao domínio disponível **apenas para Pesquisa de Preços**; DFD/ETP não têm contêiner de linhas
   (capacidade registrada como indisponível — sem fabricar domínio).
 - Enriquecimento em **Itens Inteligentes** (CATMAT/IA) permanece o fluxo existente, separado da promoção.
@@ -433,7 +436,10 @@ Promoção **supervisionada** da sessão aprovada ao domínio canônico, reutili
 | Sintoma | Causa provável | Ação |
 |---|---|---|
 | Superfície canônica não aparece | Flag desligada para o tenant | Comportamento esperado (fail-closed); habilitar a flag por tenant fora de produção |
-| PDF importado sem itens + aviso `OCR_REQUIRED` | PDF escaneado (só imagem) | Esperado; OCR não suportado — enviar PDF textual ou planilha |
+| Pesquisa: sessão `failed` / `ocr_required` | PDF digitalizado com OCR desligado | Religar `OCR_ENABLED` ou enviar PDF textual/planilha |
+| Pesquisa: sessão `failed` / `ocr_failed` | Falha/tempo do motor de OCR | "Tentar novamente" (mesma sessão) ou enviar planilha |
+| Pesquisa: sessão `failed` / `no_items` | Nenhuma linha de item reconhecida | Enviar arquivo com a tabela de itens (não há o que aprovar) |
+| Aprovação `NO_VALID_ITEMS_TO_APPROVE` | Nenhum item aceito na revisão | Aceitar ao menos um item ou descartar a sessão |
 | DOCX rejeitado `ZIP_BOMB` | Expansão/entradas acima do limite de segurança | Esperado; revisar o arquivo |
 | Upload 413 | Arquivo acima de 50 MB | Reduzir o arquivo |
 | "Promover conteúdo revisado" não aparece | Sessão não aprovada / tipo não promovível / já promovida | Esperado (só price_research aprovada e não promovida) |
@@ -444,7 +450,8 @@ Promoção **supervisionada** da sessão aprovada ao domínio canônico, reutili
 Grafo canônico atualizado **após** código + testes + build verdes (regra Graphify 6). Estado das
 divergências: **resolvido** — vínculo canônico (0289), correção humana auditável (0290), **parsers reais
 PDF/DOCX (B.2.3)** e **promoção transacional ao domínio (0291)** implementados; capacidade de parser
-explícita. Sem pendências de escopo B.2.3/B.2.4 (OCR permanece fora de escopo, declarado como limitação).
+explícita. Sem pendências de escopo B.2.3/B.2.4. **U2A-OCR:** OCR local governado na Pesquisa de Preços
+(grafo não regenerado nesta mudança — atualizar na próxima rodada Graphify).
 
 ---
 

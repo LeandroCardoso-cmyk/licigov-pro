@@ -99,6 +99,8 @@ export interface ExtractionSummary {
   processingMs:        number;
   parserType:          string;
   parserVersion:       string;
+  /** U2A-OCR — linhagem da extração (modo native_text/ocr/mixed, motor OCR, versões, fingerprint). */
+  extraction?:         import("./extractionLineage").ExtractionLineage;
 }
 
 // ─── MIME type registry ───────────────────────────────────────────────────────

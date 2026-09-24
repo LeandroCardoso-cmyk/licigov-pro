@@ -20,6 +20,10 @@ export interface ParserMetadata {
   inferredHeaders?: string[];                 // cabeçalhos inferidos pelo parser
   sheetName?:       string;
   pageNumber?:      number;
+  /** U2A-OCR — origem do texto da linha (ausente = texto nativo/planilha, comportamento anterior). */
+  extractionMode?:  "native_text" | "ocr";
+  /** U2A-OCR — motor/versão e confiança mínima (0–100) da linha reconhecida por OCR. */
+  ocr?:             { engine: string; engineVersion: string; rowConfidence: number | null };
 }
 
 // ─── Raw extracted item ───────────────────────────────────────────────────────

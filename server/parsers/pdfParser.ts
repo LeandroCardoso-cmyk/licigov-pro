@@ -4,9 +4,13 @@
  * - Extrai texto por página e tabelas estruturadas (getTable) quando o PDF as expõe;
  *   caso contrário, reconstrói linhas de item a partir do texto (heurística determinística).
  * - Preserva proveniência por página/linha/tabela; confiança e avisos explícitos.
- * - Detecta PDF vazio, corrompido, protegido e composto só por imagem (escaneado → OCR_REQUIRED),
- *   SEM apresentar o escaneado como extraído. NÃO faz OCR. NÃO grava no domínio. NÃO inventa dados.
- * - Limites de segurança: tamanho, páginas, itens e tempo de processamento.
+ * - Detecta PDF vazio, corrompido, protegido e composto só por imagem, SEM apresentar o escaneado como
+ *   extraído. NÃO grava no domínio. NÃO inventa dados.
+ * - U2A-OCR (modo de linhas): texto nativo SEMPRE primeiro; páginas sem texto útil (heurística determinística,
+ *   nativeTextAssessment.ts) seguem para OCR pela porta `OcrPort` injetada (`opts.ocr`) e o texto reconhecido
+ *   passa pelo MESMO parser tabular canônico. Sem `opts.ocr` ⇒ aviso OCR_REQUIRED (desfecho explícito). Modo
+ *   documento (DFD/ETP/TR) não usa OCR. Linhagem (`extraction`) registra modo por página, motor e fingerprint.
+ * - Limites de segurança: tamanho, páginas, itens e tempo de processamento (inclusive orçamento de OCR).
  */
 import { BaseParser } from "./baseParser";
 import { matrixToRawItems, linesToRawItems, type TabularContext } from "./tabularExtraction";
@@ -14,13 +18,22 @@ import { buildDocumentProjection, pageTextToBlocks, type DocumentBlock } from ".
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
 import type { RawExtractedItem } from "../domain/importExtraction";
+import { assessDocumentText } from "./nativeTextAssessment";
+import { extractItemsFromOcrPage } from "./ocrExtraction";
+import { OCR_LAYOUT_VERSION } from "./ocrLayout";
+import { OcrError, type OcrPageImage } from "../domain/ocr";
+import {
+  EXTRACTION_LINEAGE_VERSION, computeExtractionFingerprint, deriveExtractionMode, sha256Hex,
+  type ExtractionLineage, type OcrLineageInfo, type PageExtractionMode,
+} from "../domain/extractionLineage";
 
 const MAX_SIZE   = 50 * 1024 * 1024; // 50 MB
 const MAX_PAGES  = 500;
 const MAX_ITEMS  = 5000;
 const TIMEOUT_MS = 60_000;
 
-const PARSER_VERSION = "2.1.0";
+/** 2.2.0 — U2A-OCR: fallback de OCR governado por página no modo de linhas + linhagem da extração. */
+const PARSER_VERSION = "2.2.0";
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -47,6 +60,23 @@ function mapError(err: unknown): ImportError {
 
 interface PdfTextResult { pages: Array<{ num: number; text: string }>; total: number }
 interface PdfTableResult { pages: Array<{ num: number; tables: string[][][] }>; total: number }
+interface PdfScreenshotResult { pages: Array<{ pageNumber: number; data: Uint8Array; width: number; height: number }> }
+interface PdfParseInstance {
+  getText(o?: unknown): Promise<PdfTextResult>;
+  getTable(o?: unknown): Promise<PdfTableResult>;
+  getScreenshot(o?: unknown): Promise<PdfScreenshotResult>;
+  destroy?: () => Promise<void> | void;
+}
+
+interface OcrRunOutcome {
+  items:          RawExtractedItem[];
+  warnings:       ImportWarning[];
+  rowsRead:       number;
+  skipped:        number;
+  pagesProcessed: number[];
+  info:           OcrLineageInfo;
+  artifact?:      { pages: Array<{ pageNumber: number; confidence: number; text: string }> };
+}
 
 export class PdfParser extends BaseParser {
   readonly parserType = "pdf";
@@ -60,7 +90,8 @@ export class PdfParser extends BaseParser {
     capabilityStatus:      "supported",
     supportsStructuredExtraction: true,
     limitations: [
-      "PDF escaneado (somente imagem) não é extraído — requer OCR, não suportado nesta versão.",
+      "PDF digitalizado (somente imagem): reconhecido por OCR local (Tesseract, português) na Pesquisa de Preços — revisão humana obrigatória; sem OCR disponível ⇒ OCR_REQUIRED.",
+      "Importação de DOCUMENTO (DFD/ETP/TR) digitalizado não usa OCR nesta versão (OCR_REQUIRED).",
       "Tabelas sem grade dependem de heurística de espaçamento; revise as colunas inferidas.",
       `Limite de ${MAX_PAGES} páginas e ${MAX_ITEMS} itens por importação.`,
     ],
@@ -78,11 +109,7 @@ export class PdfParser extends BaseParser {
       return this.fail({ code: "CORRUPT_FILE", message: "Arquivo não é um PDF válido (assinatura %PDF ausente).", fatal: true }, startMs);
     }
 
-    let PDFParseCtor: new (o: { data: Uint8Array; verbosity?: number }) => {
-      getText(o?: unknown): Promise<PdfTextResult>;
-      getTable(o?: unknown): Promise<PdfTableResult>;
-      destroy?: () => Promise<void> | void;
-    };
+    let PDFParseCtor: new (o: { data: Uint8Array; verbosity?: number }) => PdfParseInstance;
     try {
       ({ PDFParse: PDFParseCtor } = await import("pdf-parse") as unknown as { PDFParse: typeof PDFParseCtor });
     } catch {
@@ -113,9 +140,13 @@ export class PdfParser extends BaseParser {
         tablesByPage = new Map();
       }
 
-      // Detecção de PDF escaneado: há páginas, mas nenhum texto e nenhuma tabela.
+      // Heurística determinística de texto ÚTIL por página (decide texto nativo × OCR no modo de linhas).
+      const assessment = assessDocumentText(pages, tablesByPage);
+
+      // Detecção de PDF escaneado no modo DOCUMENTO (DFD/ETP/TR): há páginas, mas nenhum texto e nenhuma
+      // tabela. Documento importado não usa OCR nesta versão (desfecho explícito OCR_REQUIRED).
       const hasAnyText = pages.some(p => (p.text ?? "").trim().length > 0);
-      if (!hasAnyText && tablesByPage.size === 0) {
+      if (opts.extractionMode === "document" && !hasAnyText && tablesByPage.size === 0) {
         return this.empty([
           { code: "OCR_REQUIRED", message: "PDF parece ser escaneado (somente imagem). Extração requer OCR, não suportado nesta versão.", severity: "warning" },
           { code: "SCANNED_PDF_UNSUPPORTED", message: "Nenhum texto extraível encontrado; nenhum item foi extraído.", severity: "warning" },
@@ -156,10 +187,14 @@ export class PdfParser extends BaseParser {
 
       const items: RawExtractedItem[] = [];
       let rowsRead = 0, skipped = 0;
+      const pageModes: Record<string, PageExtractionMode> = {};
+      const itemsPerPage = new Map<number, number>();
 
+      // 1) TEXTO NATIVO (sempre primeiro): tabelas estruturadas ou linhas do getText.
       for (const page of pages) {
         if (items.length >= maxItems) break;
         ctx.maxItems = maxItems - items.length;
+        const before = items.length;
         const pageTables = tablesByPage.get(page.num);
         if (pageTables && pageTables.length) {
           pageTables.forEach((matrix, tableIndex) => {
@@ -178,19 +213,145 @@ export class PdfParser extends BaseParser {
           }));
           items.push(...out.items); warnings.push(...out.warnings); rowsRead += out.rowsRead; skipped += out.skipped;
         }
+        itemsPerPage.set(page.num, items.length - before);
+        pageModes[String(page.num)] = (page.text ?? "").trim() !== "" || (pageTables?.length ?? 0) > 0 ? "native_text" : "skipped";
       }
 
-      if (items.length === 0) {
-        warnings.push({ code: "NO_ITEMS_EXTRACTED", message: "Texto extraído, mas nenhuma linha de item foi reconhecida. Revise o documento.", severity: "warning" });
+      // 2) CANDIDATAS A OCR (heurística determinística — ver nativeTextAssessment.ts): páginas SEM texto útil
+      //    que não renderam item; se o documento inteiro não rendeu item, todas as páginas.
+      const noUseful = assessment.pages.filter((a) => !a.useful && (itemsPerPage.get(a.pageNumber) ?? 0) === 0).map((a) => a.pageNumber);
+      let ocrReason: ExtractionLineage["ocrReason"] = null;
+      let ocrTargets: number[] = [];
+      if (noUseful.length > 0) { ocrReason = "no_useful_text"; ocrTargets = items.length === 0 ? pages.map((p) => p.num) : noUseful; }
+      else if (items.length === 0) { ocrReason = "native_text_without_items"; ocrTargets = pages.map((p) => p.num); }
+
+      let ocrInfo: OcrLineageInfo | null = null;
+      let ocrArtifact: ParseResult["ocrArtifact"];
+      if (ocrTargets.length > 0 && ocrReason === "no_useful_text" && !opts.ocr) {
+        // Sem OCR disponível (desligado): desfecho EXPLÍCITO — nunca sucesso vazio.
+        warnings.push(items.length === 0
+          ? { code: "OCR_REQUIRED", message: "PDF parece ser digitalizado (somente imagem). A extração requer OCR, indisponível nesta instalação.", severity: "warning" }
+          : { code: "OCR_REQUIRED_PARTIAL", message: `${noUseful.length} página(s) digitalizada(s) não processada(s) (OCR indisponível); somente as páginas com texto foram extraídas.`, severity: "warning" });
+        if (items.length === 0) warnings.push({ code: "SCANNED_PDF_UNSUPPORTED", message: "Nenhum texto extraível encontrado; nenhum item foi extraído.", severity: "warning" });
+      } else if (ocrTargets.length > 0 && opts.ocr) {
+        const r = await this.runOcr(parser, ocrTargets, opts, ctx, maxItems - items.length);
+        ocrInfo = r.info; ocrArtifact = r.artifact;
+        warnings.push(...r.warnings);
+        rowsRead += r.rowsRead; skipped += r.skipped;
+        if (r.info.failure === null || r.info.failure === undefined) {
+          // Página reconhecida por OCR substitui a leitura nativa (que não rendeu item).
+          for (const n of r.pagesProcessed) pageModes[String(n)] = "ocr";
+          items.push(...r.items);
+        }
       }
+
+      if (items.length === 0 && !warnings.some((w) => w.code === "OCR_REQUIRED" || w.code === "OCR_FAILED")) {
+        warnings.push({ code: "NO_ITEMS_EXTRACTED", message: "Nenhuma linha de item foi reconhecida no PDF. Revise o documento.", severity: "warning" });
+      }
+
+      const ocrIdentity = opts.ocr ? opts.ocr.port.identity() : null;
+      const lineage: ExtractionLineage = {
+        lineageVersion:   EXTRACTION_LINEAGE_VERSION,
+        extractionMode:   deriveExtractionMode(pageModes),
+        pageModes,
+        sourceChecksum:   opts.sourceChecksum,
+        parserType:       this.parserType,
+        parserVersion:    PARSER_VERSION,
+        heuristicVersion: assessment.heuristicVersion,
+        pageCount,
+        nativePages:      Object.values(pageModes).filter((m) => m === "native_text").length,
+        ocrPages:         Object.values(pageModes).filter((m) => m === "ocr").length,
+        ocrReason,
+        ocr:              ocrInfo,
+        fingerprint:      computeExtractionFingerprint({
+          sourceChecksum: opts.sourceChecksum, parserType: this.parserType, parserVersion: PARSER_VERSION,
+          heuristicVersion: assessment.heuristicVersion, pageModes,
+          ocr: ocrInfo && ocrIdentity ? { ...ocrIdentity, renderWidth: opts.ocr!.renderWidth, layoutVersion: OCR_LAYOUT_VERSION } : null,
+        }),
+      };
 
       const processingMs = Date.now() - startMs;
       const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs, { pagesProcessed: pages.length });
-      return { items, warnings, errors: [], summary, rawMetadata: { pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION } };
+      return {
+        items, warnings, errors: [], summary, extraction: lineage, ocrArtifact,
+        rawMetadata: { pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION, extractionMode: lineage.extractionMode },
+      };
     } catch (err) {
       return this.fail(mapError(err), startMs);
     } finally {
       try { await parser.destroy?.(); } catch { /* noop */ }
+    }
+  }
+
+  /**
+   * OCR governado das páginas-alvo: renderiza UMA página por vez (memória limitada) com o pdf-parse já
+   * carregado (@napi-rs/canvas, dependência existente), reconhece pela porta `OcrPort` e converte cada página
+   * pelo parser tabular canônico. Limites: páginas (maxPages), orçamento TOTAL de tempo (render + OCR) e
+   * itens. Falha do motor/tempo ⇒ `info.failure` (o chamador decide o desfecho; nada é fingido).
+   */
+  private async runOcr(parser: PdfParseInstance, targets: number[], opts: ParseOptions, ctx: TabularContext, itemBudget: number): Promise<OcrRunOutcome> {
+    const cfg = opts.ocr!;
+    const id = cfg.port.identity();
+    const t0 = Date.now();
+    const warnings: ImportWarning[] = [];
+    const selected = targets.slice(0, cfg.maxPages);
+    if (targets.length > selected.length) {
+      warnings.push({ code: "OCR_PAGE_LIMIT", message: `${targets.length} páginas digitalizadas; o OCR processou as primeiras ${selected.length} (limite configurado).`, severity: "warning" });
+    }
+    const info: OcrLineageInfo = {
+      engine: id.engine, engineVersion: id.engineVersion, coreVersion: id.coreVersion, language: id.language,
+      languageDataVersion: id.languageDataVersion, config: id.config, renderWidth: cfg.renderWidth,
+      layoutVersion: OCR_LAYOUT_VERSION, pagesRequested: targets.length, pagesProcessed: 0, meanConfidence: 0,
+      durationMs: 0, warningsCount: 0, outputDigest: null, nondeterministic: true, failure: null,
+    };
+    const remaining = () => cfg.timeoutMs - (Date.now() - t0);
+
+    await opts.onStage?.("ocr_processing");
+    try {
+      const images: OcrPageImage[] = [];
+      for (const n of selected) {
+        if (remaining() <= 0) throw new OcrError("OCR_TIMEOUT", `Tempo de OCR excedido (${cfg.timeoutMs} ms) na renderização.`);
+        const shot = await withTimeout(
+          parser.getScreenshot({ partial: [n], desiredWidth: cfg.renderWidth, imageBuffer: true, imageDataUrl: false }),
+          Math.max(1, remaining()), "render",
+        );
+        const img = shot.pages[0];
+        if (img?.data?.length) images.push({ pageNumber: n, image: Buffer.from(img.data), width: img.width, height: img.height });
+      }
+      if (remaining() <= 0) throw new OcrError("OCR_TIMEOUT", `Tempo de OCR excedido (${cfg.timeoutMs} ms).`);
+      const result = await cfg.port.recognize(images, { timeoutMs: Math.max(1, remaining()) });
+
+      const items: RawExtractedItem[] = [];
+      let rowsRead = 0, skipped = 0;
+      for (const page of result.pages) {
+        ctx.maxItems = Math.max(0, itemBudget - items.length);
+        if (ctx.maxItems === 0) break;
+        const out = extractItemsFromOcrPage(page, ctx, { minConfidence: cfg.minConfidence, engine: result.engine, engineVersion: result.engineVersion });
+        items.push(...out.items); warnings.push(...out.warnings); rowsRead += out.rowsRead; skipped += out.skipped;
+      }
+      const lowConfidencePages = result.pages.filter((p) => p.confidence < cfg.minConfidence).map((p) => p.pageNumber);
+      if (lowConfidencePages.length) {
+        warnings.push({ code: "OCR_LOW_CONFIDENCE", message: `Confiança do OCR baixa na(s) página(s) ${lowConfidencePages.join(", ")} — confira cada valor com o documento original.`, severity: "warning" });
+      }
+      if (items.length === 0) {
+        warnings.push({ code: "OCR_NO_ITEMS", message: "O OCR leu o documento, mas nenhuma linha de item (descrição + valor) foi reconhecida.", severity: "warning" });
+      }
+      info.pagesProcessed = result.pages.length;
+      info.meanConfidence = Math.round(result.confidence * 100) / 100;
+      info.durationMs = Date.now() - t0;
+      info.warningsCount = result.warnings.length + items.reduce((a, i) => a + i.extractionWarnings.filter((w) => w.code !== "OCR_EXTRACTED").length, 0);
+      info.outputDigest = sha256Hex(result.text);
+      return {
+        items, warnings, rowsRead, skipped, pagesProcessed: result.pages.map((p) => p.pageNumber), info,
+        artifact: { pages: result.pages.map((p) => ({ pageNumber: p.pageNumber, confidence: p.confidence, text: p.text })) },
+      };
+    } catch (err) {
+      const code = err instanceof OcrError ? err.code : /^TIMEOUT:/.test(err instanceof Error ? err.message : "") ? "OCR_TIMEOUT" : "OCR_RENDER_FAILED";
+      const message = err instanceof Error ? err.message : String(err);
+      info.durationMs = Date.now() - t0;
+      info.failure = { code, message: message.slice(0, 300) };
+      warnings.push({ code: "OCR_FAILED", message: `OCR não concluído (${code}).`, severity: "warning" });
+      return { items: [], warnings, rowsRead: 0, skipped: 0, pagesProcessed: [], info };
     }
   }
 

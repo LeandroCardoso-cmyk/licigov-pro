@@ -76,10 +76,13 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     { procurementProcessId: opts.procurementProcessId, importType: opts.importType },
     { enabled: !!opts.procurementProcessId && sessionId == null, refetchOnWindowFocus: false },
   );
+  // U2A — sessão que o usuário DISPENSOU ("Enviar outro arquivo") não é readotada pela retomada; a sessão
+  // persistida continua íntegra (o mesmo arquivo reenviado a reutiliza pelo checksum).
+  const [dismissedSessionId, setDismissedSessionId] = useState<number | null>(null);
   useEffect(() => {
     const resumed = activeQuery.data?.session?.id;
-    if (sessionId == null && typeof resumed === "number") setSessionId(resumed);
-  }, [activeQuery.data, sessionId]);
+    if (sessionId == null && typeof resumed === "number" && resumed !== dismissedSessionId) setSessionId(resumed);
+  }, [activeQuery.data, sessionId, dismissedSessionId]);
 
   const session = statusQuery.data?.session ?? null;
   const staging = statusQuery.data?.staging ?? null;
@@ -154,6 +157,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
         importPurpose: opts.importPurpose,
       });
 
+      setDismissedSessionId(null);
       setSessionId(created.sessionId);
 
       if (!created.duplicate) {
@@ -241,6 +245,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
   }, [clientPhase]);
 
   const reset = useCallback(() => {
+    if (sessionId != null) setDismissedSessionId(sessionId);
     abortRef.current?.abort();
     abortRef.current = null;
     submittingRef.current = false;
@@ -250,7 +255,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     setClientPhase("idle");
     setClientError(null);
     setPromoteError(null);
-  }, []);
+  }, [sessionId]);
 
   return {
     sessionId,

@@ -379,3 +379,75 @@ describe("approveSession — exige revisão completa, sem promoção", () => {
     expect(r.idempotent).toBe(true);
   });
 });
+
+// ─── U2A — invariantes de sessão vazia + checksum nunca bloqueado ─────────────────────────
+
+describe("U2A — approveSession: validItemCount === 0 ⇒ aprovar PROIBIDO", () => {
+  it("sessão sem nenhum item → PRECONDITION_FAILED com código NO_VALID_ITEMS_TO_APPROVE", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "awaiting_review" }) as any);
+    vi.mocked(staging.getStagingSummary).mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 });
+    await expect(caller().approveSession({ sessionId: 100 })).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^NO_VALID_ITEMS_TO_APPROVE/) });
+    expect(ingestion.updateSessionStatus).not.toHaveBeenCalled();
+  });
+
+  it("todos os itens rejeitados → PRECONDITION_FAILED (aprovar 'nada' é sucesso fingido)", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "awaiting_review" }) as any);
+    vi.mocked(staging.getStagingSummary).mockResolvedValue({ total: 2, pending: 0, approved: 0, rejected: 1, skipped: 1 });
+    await expect(caller().approveSession({ sessionId: 100 })).rejects.toThrowError(/NO_VALID_ITEMS_TO_APPROVE/);
+  });
+
+  it("sessão OCR_REQUIRED (failed/ocr_required) não é aprovável", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ status: "failed", stage: "ocr_required" }) as any);
+    await expect(caller().approveSession({ sessionId: 100 })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+});
+
+describe("U2A — createSession: checksum nunca fica bloqueado", () => {
+  it("sessão falha (OCR_FAILED) sem revisão é REUTILIZADA (reprocessamento seguro, mesma sessão)", async () => {
+    vi.mocked(ingestion.findActiveSessionByChecksum).mockResolvedValue(sessionRow({ id: 61, status: "failed", stage: "ocr_failed" }) as any);
+    const r = await caller().createSession(validCreateInput);
+    expect(r).toMatchObject({ sessionId: 61, duplicate: true });
+    expect(ingestion.createImportSession).not.toHaveBeenCalled();
+  });
+
+  it("legado: sessão awaiting_review VAZIA é encerrada (rejected, auditado) e uma nova é criada", async () => {
+    vi.mocked(ingestion.findActiveSessionByChecksum).mockResolvedValue(sessionRow({ id: 62, status: "awaiting_review" }) as any);
+    vi.mocked(staging.getStagingSummary).mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 });
+    const r = await caller().createSession(validCreateInput);
+    expect(r).toMatchObject({ sessionId: 100, duplicate: false });
+    expect(ingestion.updateSessionStatus).toHaveBeenCalledWith(62, 1, "rejected", expect.objectContaining({ stage: "no_items" }));
+    expect(audit.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: "import_session_empty_retired", entityId: 62 }));
+  });
+
+  it("legado: sessão approved sem item aceito e não promovida é arquivada; nova sessão criada", async () => {
+    vi.mocked(ingestion.findActiveSessionByChecksum).mockResolvedValue(sessionRow({ id: 63, status: "approved", promotionStatus: "none" }) as any);
+    vi.mocked(staging.getStagingSummary).mockResolvedValue({ total: 2, pending: 0, approved: 0, rejected: 2, skipped: 0 });
+    const r = await caller().createSession(validCreateInput);
+    expect(r.duplicate).toBe(false);
+    expect(ingestion.updateSessionStatus).toHaveBeenCalledWith(63, 1, "archived", expect.any(Object));
+  });
+
+  it("sessão aprovada COM itens (ou promovida) continua sendo reutilizada — nada é descartado", async () => {
+    vi.mocked(ingestion.findActiveSessionByChecksum).mockResolvedValue(sessionRow({ id: 64, status: "approved", promotionStatus: "promoted" }) as any);
+    vi.mocked(staging.getStagingSummary).mockResolvedValue({ total: 2, pending: 0, approved: 0, rejected: 2, skipped: 0 });
+    const r = await caller().createSession(validCreateInput);
+    expect(r).toMatchObject({ sessionId: 64, duplicate: true });
+    expect(ingestion.updateSessionStatus).not.toHaveBeenCalled();
+  });
+
+  it("enqueueProcessing aceita retry de sessão failed (OCR_FAILED) — mesma sessão, sem nova promoção", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ id: 61, status: "failed", stage: "ocr_failed" }) as any);
+    const r = await caller().enqueueProcessing({ sessionId: 61 });
+    expect(r).toMatchObject({ enqueued: true, status: "queued" });
+    expect(queue.enqueueImport).toHaveBeenCalledWith(61, 1, expect.any(String), expect.any(Object));
+  });
+});
+
+describe("U2B — formatos reais expostos (sem .doc)", () => {
+  it("getCapabilities não anuncia .doc nem application/msword", async () => {
+    const caps = await caller().getCapabilities();
+    const exts = caps.formats.flatMap((f) => f.extensions);
+    expect(exts).not.toContain(".doc");
+    expect(caps.formats.flatMap((f) => f.mimeTypes)).not.toContain("application/msword");
+  });
+});

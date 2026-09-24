@@ -5,7 +5,7 @@
  * reflete o estado PERSISTIDO (após reload) via `status`; mostra sucesso/conflito/erro acionável; impede
  * duplo clique. Sem progresso fictício. Acessível e compatível com dark mode. Linguagem institucional.
  */
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { promotionConflictMessage } from "@/lib/ingestion/promotion";
@@ -25,6 +25,8 @@ interface PromoteToDomainPanelProps {
   importType: string;
   /** Elegibilidade calculada (sessão aprovada, sem pendências, tipo promovível, ainda não promovida). */
   canPromote: boolean;
+  /** Sessão elegível, mas o papel do usuário não permite a promoção. */
+  requiresManager?: boolean;
   isPromoting: boolean;
   error: string | null;
   result: PromoteResult | null;
@@ -34,7 +36,7 @@ interface PromoteToDomainPanelProps {
 }
 
 export function PromoteToDomainPanel({
-  status, importType, canPromote, isPromoting, error, result, onPromote, onReviewItems,
+  status, importType, canPromote, requiresManager = false, isPromoting, error, result, onPromote, onReviewItems,
 }: PromoteToDomainPanelProps) {
   const [confirming, setConfirming] = useState(false);
 
@@ -68,6 +70,14 @@ export function PromoteToDomainPanel({
       <p className="text-xs text-muted-foreground">
         A promoção ao domínio está disponível apenas para Pesquisa de Preços nesta versão. Para este tipo
         de documento, os itens permanecem em revisão e não são promovidos automaticamente.
+      </p>
+    );
+  }
+
+  if (requiresManager) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        A revisão está aprovada. A promoção das cotações à Pesquisa de Preços exige perfil Gestor ou superior na organização.
       </p>
     );
   }

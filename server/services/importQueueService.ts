@@ -21,8 +21,15 @@ import {
   claimSessionForRecovery,
 } from "./fileIngestionService";
 import { parserRegistry } from "../parsers/parserRegistry";
-import { persistStagingItems } from "./importStagingService";
-import { storageGetBytes } from "../storage";
+import { replaceUnreviewedStagingItems, StagingAlreadyReviewedError } from "./importStagingService";
+import { storageGetBytes, storagePut } from "../storage";
+import { getOcrAdapter } from "../providers/ocr";
+import { OCR_CONFIG } from "../config/ocr";
+import {
+  classifyRowsOutcome, isDeterministicParserError, OUTCOME_MESSAGE, OUTCOME_STAGE, type ImportOutcomeState,
+} from "../domain/importOutcome";
+import type { ExtractionLineage } from "../domain/extractionLineage";
+import type { ExtractionSummary } from "../domain/importTypes";
 import { isFeatureEnabled } from "./featureFlagService";
 import { CANONICAL_INGESTION_FLAG } from "./ingestionUploadService";
 import { MAX_FILE_SIZE_BYTES, type ParserType } from "../domain/importTypes";
@@ -167,11 +174,28 @@ async function processJob(job: ImportJob): Promise<void> {
     const documentMode = isDocumentImportType(session.importType);
     if (documentMode) opts.extractionMode = "document";
 
-    const result = await parser.safeParse(buffer, opts);
+    // U2A-OCR — OCR governado só no modo de LINHAS (Pesquisa de Preços/itens). Porta resolvida na
+    // infraestrutura (kill-switch OCR_ENABLED); o parser não conhece o motor. OCR roda AQUI, no worker da
+    // fila existente, fora de qualquer transação de banco; o estágio "ocr_processing" fica observável.
+    const ocrPort = documentMode ? null : getOcrAdapter();
+    if (ocrPort) {
+      opts.ocr = {
+        port: ocrPort, maxPages: OCR_CONFIG.maxPages, timeoutMs: OCR_CONFIG.timeoutMs,
+        renderWidth: OCR_CONFIG.renderWidth, minConfidence: OCR_CONFIG.minConfidence,
+      };
+      opts.onStage = async (stage) => {
+        await updateSessionStatus(job.sessionId, job.organizationId, "parsing", { progress: 30, stage }).catch(() => {});
+        log.info("job_stage", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId, correlationId: job.correlationId, stage });
+      };
+    }
 
-    if (result.errors.some(e => e.fatal)) {
-      const msg = result.errors.find(e => e.fatal)?.message ?? "Erro fatal no parser.";
-      throw new Error(msg);
+    const startedAtIso = new Date().toISOString();
+    const result = await parser.safeParse(buffer, opts);
+    const fatal = result.errors.find(e => e.fatal);
+
+    if (fatal && (documentMode || !isDeterministicParserError(fatal.code))) {
+      // Falha possivelmente TRANSITÓRIA → retry/backoff existente (e DLQ ao esgotar).
+      throw new Error(fatal.message ?? "Erro fatal no parser.");
     }
 
     if (documentMode) {
@@ -208,23 +232,96 @@ async function processJob(job: ImportJob): Promise<void> {
       return;
     }
 
+    // ── U2A — desfecho EXPLÍCITO da extração de linhas (nunca "revisão" com zero itens) ─────────────
+    const lineage: ExtractionLineage | undefined = result.extraction
+      ? { ...result.extraction, correlationId: job.correlationId ?? session.correlationId ?? null, startedAt: startedAtIso, finishedAt: new Date().toISOString() }
+      : undefined;
+    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}) };
+
+    // Artefato DERIVADO do OCR (texto bruto por página) — gravado ao lado do original, que é imutável.
+    // Fora de transação; falha não derruba a extração (cada item já preserva o texto bruto da sua linha).
+    if (result.ocrArtifact && lineage?.ocr) {
+      const artifactKey = `${job.storageKey}.ocr-${lineage.fingerprint.slice(0, 16)}.json`;
+      try {
+        await storagePut(artifactKey, JSON.stringify({ lineage, pages: result.ocrArtifact.pages }), "application/json");
+        lineage.ocr.artifactKey = artifactKey;
+      } catch {
+        lineage.ocr.artifactKey = null;
+        log.warn("ocr_artifact_not_stored", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
+      }
+    }
+
+    const outcome = classifyRowsOutcome({
+      itemCount:    result.items.length,
+      warningCodes: result.warnings.map(w => w.code),
+      fatalCode:    fatal?.code,
+      itemsNeedAttention:
+        (lineage?.extractionMode ?? "native_text") !== "native_text" ||
+        result.warnings.some(w => w.code === "OCR_REQUIRED_PARTIAL" || w.code === "OCR_FAILED" || w.code === "OCR_PAGE_LIMIT") ||
+        result.items.some(i => i.extractionWarnings.some(w => w.severity === "warning")),
+    });
+
+    const observe = (state: ImportOutcomeState, items: number) => log.info("import_extraction_outcome", {
+      jobId: job.jobId, correlationId: job.correlationId ?? session.correlationId ?? null,
+      organizationId: job.organizationId, processId: session.procurementProcessId ?? null, sessionId: job.sessionId,
+      checksum: session.checksum ?? null, extractionMode: lineage?.extractionMode ?? null,
+      ocrEngine: lineage?.ocr?.engine ?? null, ocrEngineVersion: lineage?.ocr?.engineVersion ?? null,
+      ocrFailure: lineage?.ocr?.failure?.code ?? null, pageCount: lineage?.pageCount ?? result.summary.pagesProcessed ?? null,
+      ocrPages: lineage?.ocrPages ?? 0, durationMs: result.summary.processingMs, ocrDurationMs: lineage?.ocr?.durationMs ?? null,
+      warningsCount: result.warnings.length, items, finalState: state, fingerprint: lineage?.fingerprint ?? null,
+    });
+
+    if (outcome !== "REVIEW_REQUIRED" && outcome !== "READY_FOR_REVIEW") {
+      // Terminal SEM staging: não aprovável, não promovível. Reprocessar/reenviar reutiliza a sessão (sem
+      // itens revisados) — o checksum nunca fica bloqueado. Sem auto-retry (resultado determinístico ou OCR
+      // pesado: a nova tentativa é explícita, via enqueueProcessing).
+      const state = outcome ?? "PARSER_FAILED";
+      const code = state === "PARSER_FAILED" && fatal ? fatal.code : state;
+      await updateSessionStatus(job.sessionId, job.organizationId, "failed", {
+        progress: 100, stage: OUTCOME_STAGE[state], warnings: result.warnings, extractionSummary: summary,
+        errors: [{ code, message: OUTCOME_MESSAGE[state as keyof typeof OUTCOME_MESSAGE], fatal: true }],
+        failedAt: new Date(),
+      });
+      if (rec) { rec.status = "failed"; rec.error = code; }
+      inFlight.delete(job.sessionId);
+      observe(state, 0);
+      return;
+    }
+
     await updateSessionStatus(job.sessionId, job.organizationId, "extracted", {
       progress: 60, stage: "extracted",
       warnings: result.warnings,
-      extractionSummary: result.summary,
+      extractionSummary: summary,
     });
 
-    const stagingIds = await persistStagingItems(result.items, job.organizationId);
+    let stagingIds: number[];
+    try {
+      ({ ids: stagingIds } = await replaceUnreviewedStagingItems(job.sessionId, job.organizationId, result.items));
+    } catch (err) {
+      if (!(err instanceof StagingAlreadyReviewedError)) throw err;
+      // Decisão humana já registrada: nunca sobrescrever. Falha explícita, sem retry.
+      await updateSessionStatus(job.sessionId, job.organizationId, "failed", {
+        stage: "staging_already_reviewed", failedAt: new Date(),
+        errors: [{ code: "STAGING_ALREADY_REVIEWED", message: err.message, fatal: true }],
+      });
+      if (rec) { rec.status = "failed"; rec.error = "STAGING_ALREADY_REVIEWED"; }
+      inFlight.delete(job.sessionId);
+      log.warn("job_staging_already_reviewed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
+      return;
+    }
 
     await updateSessionStatus(job.sessionId, job.organizationId, "awaiting_review", {
       progress:          90,
-      stage:             "awaiting_review",
+      stage:             OUTCOME_STAGE[outcome],
       finishedAt:        new Date(),
-      extractionSummary: result.summary,
+      warnings:          result.warnings,
+      extractionSummary: summary,
+      errors:            [],
     });
 
     if (rec) { rec.status = "done"; rec.result = { itemCount: stagingIds.length }; }
     inFlight.delete(job.sessionId);
+    observe(outcome, stagingIds.length);
     log.info("job_done", { jobId: job.jobId, sessionId: job.sessionId, items: stagingIds.length });
 
   } catch (err) {
@@ -249,6 +346,7 @@ async function processJob(job: ImportJob): Promise<void> {
       queue.push(job); // continua em voo (inFlight mantido)
     } else {
       await updateSessionStatus(job.sessionId, job.organizationId, "failed", {
+        stage:    OUTCOME_STAGE.PARSER_FAILED,
         errors:   [{ code: "PARSE_ERROR", message: msg, fatal: true }],
         failedAt: new Date(),
       }).catch(() => {});

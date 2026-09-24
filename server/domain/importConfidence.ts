@@ -40,7 +40,11 @@ export type ExtractionWarningCode =
   | "UNKNOWN_UNIT"
   | "PRICE_MISMATCH"    // unit_price * qty ≠ total_price
   | "WIDE_FORMAT_EXPANDED"   // P0 piloto — mapa comparativo: uma cotação por coluna de fornecedor
-  | "WIDE_FORMAT_AMBIGUOUS"; // P0 piloto — formato largo não determinável (sem chute)
+  | "WIDE_FORMAT_AMBIGUOUS"  // P0 piloto — formato largo não determinável (sem chute)
+  | "OCR_EXTRACTED"          // U2A-OCR — linha reconhecida por OCR (PDF digitalizado): revisão obrigatória
+  | "OCR_LOW_CONFIDENCE"     // U2A-OCR — célula com confiança de OCR abaixo do limiar
+  | "OCR_AMBIGUOUS_VALUE"    // U2A-OCR — valor numérico com caractere suspeito (ex.: "1.2O4,56"); nunca corrigido
+  | "OCR_MULTILINE_MERGED";  // U2A-OCR — descrição continuada na linha seguinte foi anexada (conferir)
 
 export type ExtractionErrorCode =
   | "PARSER_FAILURE"

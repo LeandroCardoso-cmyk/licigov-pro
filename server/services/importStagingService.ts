@@ -69,6 +69,43 @@ export async function persistStagingItems(
   return ids;
 }
 
+/**
+ * U2A — Persistência REPLAY-SAFE para o worker: uma nova tentativa de extração da MESMA sessão substitui os
+ * itens que NINGUÉM tocou (pendentes, sem correção) em vez de duplicá-los. Se houver QUALQUER item já
+ * revisado ou corrigido por humano, nada é alterado e a chamada falha (a decisão humana nunca é sobrescrita).
+ * Só DB (parse/OCR já terminaram, fora de qualquer transação). Falha entre a remoção e a inserção afeta
+ * apenas itens intocados — a tentativa seguinte (retry do worker) os recria; nunca há duplicação.
+ */
+export class StagingAlreadyReviewedError extends Error {
+  constructor(readonly touched: number) {
+    super(`STAGING_ALREADY_REVIEWED: ${touched} item(ns) já revisado(s)/corrigido(s) nesta sessão; a reextração foi bloqueada.`);
+    this.name = "StagingAlreadyReviewedError";
+  }
+}
+
+export async function replaceUnreviewedStagingItems(
+  importSessionId: number,
+  organizationId:  number,
+  items:           RawExtractedItem[],
+): Promise<{ ids: number[]; replaced: number }> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
+
+  const scope = and(eq(importStagingItems.importSessionId, importSessionId), eq(importStagingItems.organizationId, organizationId));
+  const existing = await db.select({
+    id: importStagingItems.id, reviewStatus: importStagingItems.reviewStatus, correctionRevision: importStagingItems.correctionRevision,
+  }).from(importStagingItems).where(scope);
+  const touched = existing.filter(i => i.reviewStatus !== "pending" || (i.correctionRevision ?? 0) > 0).length;
+  if (touched > 0) throw new StagingAlreadyReviewedError(touched);
+
+  if (existing.length > 0) {
+    await db.delete(importStagingItems).where(and(scope, inArray(importStagingItems.id, existing.map(i => i.id))));
+    log.info("staging_items_replaced", { sessionId: importSessionId, organizationId, removed: existing.length });
+  }
+  const ids = await persistStagingItems(items, organizationId);
+  return { ids, replaced: existing.length };
+}
+
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
 export async function getStagingItems(
