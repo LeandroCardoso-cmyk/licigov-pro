@@ -65,7 +65,7 @@ function matchColumn(headers: string[], patterns: string[], taken: Set<number> =
 function isRowSequence(values: string[]): boolean {
   return values.length >= 2 && values.every((v, k) => /^\d{1,4}$/.test(v) && Number(v) === k + 1);
 }
-function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
+export function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
 function isIndexHeader(h: string): boolean { return INDEX_PATTERNS.some((p) => headerMatches(h, p)); }
 
 // ─── Heurísticas de valor ───────────────────────────────────────────────────────
@@ -266,6 +266,8 @@ export interface TableOptions {
   positionalFallback: "five_columns" | "description_only";
   /** Força a linha de cabeçalho (0-based), quando informada pelo operador. */
   headerRow?: number;
+  /** A matriz NÃO tem cabeçalho (reconstrução geométrica sem rótulos): não procurar um entre os dados. */
+  noHeader?: boolean;
   sheetName?: string;
 }
 
@@ -306,7 +308,7 @@ export function tableToRawItems(
   const matrix = matrixIn.map((r) => (r ?? []).map((c) => String(c ?? "").trim()));
   if (matrix.length === 0) return { items, warnings, rowsRead, skipped };
 
-  const headerRowIdx = findHeaderRow(matrix, opts.headerRow);
+  const headerRowIdx = opts.noHeader ? -1 : findHeaderRow(matrix, opts.headerRow);
   const headersRaw = headerRowIdx >= 0 ? matrix[headerRowIdx] : [];
   const headersNorm = headersRaw.map(normalizeHeader);
   if (headerRowIdx < 0) warnings.push({ code: "HEADER_INFERENCE", message: "Cabeçalho não identificado; usando ordem posicional das colunas.", severity: "warning" });

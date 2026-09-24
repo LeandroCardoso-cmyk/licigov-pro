@@ -24,6 +24,10 @@ export interface ParserMetadata {
   extractionMode?:  "native_text" | "ocr";
   /** U2A-OCR — motor/versão e confiança mínima (0–100) da linha reconhecida por OCR. */
   ocr?:             { engine: string; engineVersion: string; rowConfidence: number | null };
+  /** Layout v2 — versão da reconstrução geométrica que produziu a linha (PDF nativo ou OCR). */
+  layoutVersion?:   string;
+  /** Layout v2 — origem dos tokens posicionados ("native" = texto do PDF; "ocr" = palavras do OCR). */
+  textSource?:      "native" | "ocr";
 }
 
 // ─── Raw extracted item ───────────────────────────────────────────────────────

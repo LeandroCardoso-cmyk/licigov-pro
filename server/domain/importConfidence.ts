@@ -44,7 +44,13 @@ export type ExtractionWarningCode =
   | "OCR_EXTRACTED"          // U2A-OCR — linha reconhecida por OCR (PDF digitalizado): revisão obrigatória
   | "OCR_LOW_CONFIDENCE"     // U2A-OCR — célula com confiança de OCR abaixo do limiar
   | "OCR_AMBIGUOUS_VALUE"    // U2A-OCR — valor numérico com caractere suspeito (ex.: "1.2O4,56"); nunca corrigido
-  | "OCR_MULTILINE_MERGED";  // U2A-OCR — descrição continuada na linha seguinte foi anexada (conferir)
+  | "OCR_MULTILINE_MERGED"   // U2A-OCR — descrição continuada na linha seguinte foi anexada (conferir)
+  | "LAYOUT_MULTILINE_MERGED"      // Layout v2 — célula montada a partir de várias linhas físicas (descrição multilinha)
+  | "LAYOUT_PLACEHOLDER_DISCARDED" // Layout v2 — marcador de ausência ("/////") descartado: não é preço, nunca vira 0
+  | "LAYOUT_ROW_BOUNDARY_INFERRED" // Layout v2 — limite entre itens inferido pelo alinhamento (tabela densa)
+  | "SOURCE_IDENTITY_UNRESOLVED"   // Layout v2 — valor preservado, mas a fonte/fornecedor da coluna não foi identificada
+  | "DOCUMENT_AVERAGE_MISMATCH"    // Layout v2 — média impressa ≠ média calculada das cotações válidas (conferência)
+  | "AMBIGUOUS_MONEY_VALUE";       // Layout v2 — valor monetário ambíguo pelo contrato monetário (ex.: "1,234")
 
 export type ExtractionErrorCode =
   | "PARSER_FAILURE"

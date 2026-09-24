@@ -107,7 +107,7 @@ describe("PdfParser (real)", () => {
     expect(first?.rawTotalPrice).toBe("150,00");
     // Proveniência real: página + versão do parser.
     expect(first?.sourceLocation.location.page).toBeGreaterThanOrEqual(1);
-    expect(first?.parserMetadata.parserVersion).toBe("2.2.0"); // 2.2.0 = 2.1.0 (modo "document") + fallback de OCR governado (U2A-OCR). Contrato de linhas inalterado.
+    expect(first?.parserMetadata.parserVersion).toBe("2.3.0"); // 2.3.0 = 2.2.0 (OCR governado) + reconstrução geométrica (Layout v2). Contrato de linhas inalterado.
   });
 
   it("PDF multipágina: provenance cobre mais de uma página", async () => {
