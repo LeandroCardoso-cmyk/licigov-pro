@@ -5,7 +5,7 @@
  * parserRegistry. Aqui só transformamos essa capacidade em regras de UI: `accept` do seletor,
  * validação de arquivo (tamanho/formato) e checagem de disponibilidade — NUNCA apresentando
  * como funcional um formato cujo parser não declara `supported` (hoje CSV/XLS/XLSX/PDF/DOCX são reais;
- * OCR de PDF digitalizado não existe).
+ * PDF digitalizado é lido por OCR local na Pesquisa de Preços — U2A-OCR; .doc não é oferecido).
  */
 
 export interface IngestionFormat {

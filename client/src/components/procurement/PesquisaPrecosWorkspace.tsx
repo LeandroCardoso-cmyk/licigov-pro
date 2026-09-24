@@ -8,11 +8,11 @@ import { Spinner } from "@/components/ui/spinner";
  * PesquisaPrecosWorkspace.
  *
  * B.2.2 — Ingestão canônica supervisionada (raw → staging → revisão humana) atrás da feature flag
- * tenant-aware `FF_CANONICAL_INGESTION` (fail-closed). Com a flag LIGADA, "colar conteúdo" e
- * "enviar arquivo" passam pela fundação canônica (upload multipart, fila, staging, revisão) e NÃO
- * gravam no domínio. A entrada "inserir manualmente" preserva o caminho legado (frozen). Com a flag
- * DESLIGADA (padrão de produção), a superfície canônica não é exposta e o comportamento legado
- * permanece idêntico.
+ * tenant-aware `FF_CANONICAL_INGESTION` (fail-closed). Com a flag LIGADA há exatamente DUAS entradas,
+ * ambas pela fundação canônica (fila, staging, revisão; nada grava direto no domínio): "Enviar arquivo"
+ * (padrão; formatos reais do parserRegistry, PDF digitalizado via OCR governado) e "Colar texto".
+ * U2B-MIN: o painel legado (gravação direta em Itens Inteligentes) NÃO é oferecido com a flag ligada.
+ * Com a flag DESLIGADA (ou falha ao consultar a capacidade), o comportamento legado permanece idêntico.
  */
 
 type ResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
@@ -37,15 +37,7 @@ export type PesquisaPrecosWorkspaceProps = {
  * "Itens Inteligentes" via procurementProcess.importPriceResearch. Mantido intacto: é a entrada
  * "manual" e o comportamento com a flag desligada.
  */
-function LegacyPriceResearchPanel({
-  processId,
-  onReviewItems,
-  fileUploadAvailable = false,
-}: {
-  processId: string;
-  onReviewItems?: () => void;
-  fileUploadAvailable?: boolean;
-}) {
+function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: string; onReviewItems?: () => void }) {
   const [source, setSource] = useState<ResearchSource>("colar");
   const [text, setText] = useState("");
   const importResearch = trpc.procurementProcess.importPriceResearch.useMutation();
@@ -90,7 +82,7 @@ function LegacyPriceResearchPanel({
         disabled={!processId || !text.trim() || importResearch.isPending}
         className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
       >
-        {importResearch.isPending ? "Processando..." : "Importar texto e gerar Itens Inteligentes"}
+        {importResearch.isPending ? "Processando..." : "Importar e gerar Itens Inteligentes"}
       </button>
       {!processId && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
@@ -160,10 +152,9 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           procurementProcessId={processId}
           importPurpose="price_research"
           title="Pesquisa de preços — ingestão supervisionada"
-          description="Envie CSV, Excel (XLS/XLSX), PDF com texto ou DOCX, ou cole uma tabela. Revise as cotações antes da promoção à pesquisa. PDF escaneado exige OCR, ainda indisponível; arquivos .doc não são suportados."
+          description="Envie a planilha (XLSX, XLS ou CSV), o PDF — com texto ou digitalizado — ou o DOCX com a tabela de cotações. PDF digitalizado é lido por reconhecimento de texto (OCR): confira cada valor. Todas as cotações passam por revisão antes da promoção à pesquisa."
           allowPaste
           onReviewItems={onReviewItems}
-          manualSlot={<LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} fileUploadAvailable />}
         />
       ) : (
         <div className="space-y-3">

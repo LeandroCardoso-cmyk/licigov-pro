@@ -1,7 +1,7 @@
 /**
  * PR B.2.2 — Launcher institucional da ingestão supervisionada (composição reutilizável).
  *
- * Orquestra: gate por capability (flag + formatos reais) → entrada (manual / colar / arquivo) →
+ * Orquestra: gate por capability (flag + formatos reais) → entrada (arquivo / colar texto [/ manual]) →
  * progresso persistido → revisão humana (staging) → aprovação da revisão → promoção supervisionada.
  * Capability-aware: só oferece formatos com parser real (derivado do parserRegistry no backend).
  * DFD/ETP/TR como DOCUMENTO usam o DocumentImportPanel (mesmo motor, projeção documental).
@@ -21,6 +21,7 @@ import { useSupervisedIngestion, type IngestionImportType } from "@/hooks/ingest
 import { useStagingReview } from "@/hooks/ingestion/useStagingReview";
 import { supportedFormatsLabel } from "@/lib/ingestion/capabilities";
 import { PHASE_META, INSTITUTIONAL_COPY, type IngestionPhase } from "@/lib/ingestion/status";
+import { describeOutcome } from "@/lib/ingestion/outcome";
 import type { StagingItem } from "@/lib/ingestion/staging";
 
 import { FileDropzone } from "./FileDropzone";
@@ -92,6 +93,7 @@ export function DocumentIngestionLauncher({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const hasSupportedFormats = (capabilities?.supportedFormats.length ?? 0) > 0;
+  const outcome = describeOutcome(ingestion.session as Parameters<typeof describeOutcome>[0]);
   const sessionWarnings = useMemo(
     () => (Array.isArray(ingestion.session?.warnings) ? (ingestion.session!.warnings as { code?: string; message?: string }[]) : []),
     [ingestion.session],
@@ -143,13 +145,13 @@ export function DocumentIngestionLauncher({
         <CardDescription>{description ?? `Formatos suportados: ${supportedFormatsLabel(capabilities)}.`}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Entrada: manual / colar / arquivo */}
+        {/* Entrada: arquivo (padrão) / colar texto (mesmo caminho canônico) / manual (só se o domínio fornecer) */}
         {showEntry && (
           <Tabs defaultValue="file">
             <TabsList>
-              {manualSlot && <TabsTrigger value="manual">Importar texto direto</TabsTrigger>}
-              {allowPaste && <TabsTrigger value="paste">Colar conteúdo</TabsTrigger>}
               <TabsTrigger value="file">Enviar arquivo</TabsTrigger>
+              {allowPaste && <TabsTrigger value="paste">Colar texto</TabsTrigger>}
+              {manualSlot && <TabsTrigger value="manual">Importar texto direto</TabsTrigger>}
             </TabsList>
 
             {manualSlot && <TabsContent value="manual" className="pt-3">{manualSlot}</TabsContent>}
@@ -159,15 +161,18 @@ export function DocumentIngestionLauncher({
                 <Textarea
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
-                  placeholder="Cole aqui o conteúdo tabular (linhas separadas por quebra de linha; colunas por vírgula/tabulação)…"
+                  placeholder="Cole aqui a tabela de cotações: uma linha por item, colunas separadas por tabulação, ponto e vírgula ou vírgula…"
                   rows={6}
-                  aria-label="Conteúdo a colar"
+                  aria-label="Texto a colar"
                 />
+                <p className="text-xs text-muted-foreground">
+                  O texto colado segue o mesmo caminho do arquivo: extração, revisão item a item e só então a promoção.
+                </p>
                 <Button
                   disabled={ingestion.isBusy || pasteText.trim().length === 0}
                   onClick={() => ingestion.start({ kind: "text", text: pasteText })}
                 >
-                  Processar conteúdo colado
+                  Processar texto colado
                 </Button>
               </TabsContent>
             )}
@@ -200,12 +205,38 @@ export function DocumentIngestionLauncher({
             retrying={ingestion.isBusy}
           />
         )}
-        {ingestion.phase === "failed" && !ingestion.clientError && (
-          <IngestionErrorState
-            message={PHASE_META.failed.description}
-            onRetry={ingestion.retry}
-            retrying={ingestion.isBusy}
-          />
+        {/* U2A — desfecho explícito (OCR em andamento / OCR indisponível / falha / nenhum item) */}
+        {outcome.kind === "ocr_processing" && (
+          <Alert>
+            <Info className="size-4" aria-hidden="true" />
+            <AlertTitle>{outcome.title}</AlertTitle>
+            <AlertDescription>{outcome.message}</AlertDescription>
+          </Alert>
+        )}
+        {(ingestion.phase === "failed" || ingestion.phase === "dlq") && !ingestion.clientError && (
+          outcome.kind !== "none" && outcome.kind !== "ocr_processing" && outcome.kind !== "review_required_ocr" ? (
+            <IngestionErrorState
+              title={outcome.title}
+              message={outcome.message}
+              correlationId={ingestion.session?.correlationId ?? null}
+              onRetry={outcome.canRetry ? ingestion.retry : undefined}
+              retrying={ingestion.isBusy}
+              onNewFile={outcome.suggestNewFile ? ingestion.reset : undefined}
+            />
+          ) : ingestion.phase === "failed" ? (
+            <IngestionErrorState
+              message={PHASE_META.failed.description}
+              onRetry={ingestion.retry}
+              retrying={ingestion.isBusy}
+            />
+          ) : null
+        )}
+        {outcome.kind === "review_required_ocr" && (
+          <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <Info className="size-4" aria-hidden="true" />
+            <AlertTitle>{outcome.title}</AlertTitle>
+            <AlertDescription>{outcome.message}</AlertDescription>
+          </Alert>
         )}
 
         <IngestionWarningsPanel warnings={sessionWarnings} />
