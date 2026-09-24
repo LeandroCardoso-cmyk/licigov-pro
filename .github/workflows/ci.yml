@@ -200,6 +200,12 @@ jobs:
       - name: Smoke — Layout v2 (PDF layout-aware + reprocessamento seguro)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-reextraction-mysql-smoke.test.ts
 
+      # Pesquisa de Preços — revisão por ITEM LÓGICO: 30 cotações ⇒ 5 itens (projeção de leitura); decisão por
+      # item atômica (só pendentes, CAS + revisão otimista + locks), auditoria de cada cotação, concorrência,
+      # injeção entre itens/tenants bloqueada, RBAC e promoção ⇒ 5 Itens Inteligentes (não 30).
+      - name: Smoke — revisão por item lógico (Pesquisa de Preços)
+        run: pnpm exec vitest run server/__tests__/integration/price-research-review-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts
