@@ -4,6 +4,8 @@ import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabili
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import { shouldRotateSaveKeyOnError } from "./saveKeyPolicy";
+import DFDFieldSources from "./DFDFieldSources";
+import { shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
 
 /**
  * DFDWorkspace — REAL (wired to tRPC).
@@ -39,6 +41,9 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
   const { key: saveKey, rotate: rotateSaveKey } = useIdempotencyKey();
+  const { key: reconcileKey, rotate: rotateReconcileKey } = useIdempotencyKey();
+  const { key: aiKey, rotate: rotateAiKey } = useIdempotencyKey();
+  const [reconcilingKey, setReconcilingKey] = useState<string | null>(null);
   const [source, setSource] = useState<DFDSource>("pdf");
   const [draft, setDraft] = useState("");
   const [saveConflict, setSaveConflict] = useState(false);
@@ -49,6 +54,11 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
     { enabled: !!processId },
   );
   const doc = data?.document ?? null;
+  // Contexto Canônico — estado por campo (read-only). Falha/indisponível ⇒ o DFD segue como antes.
+  const { data: assist } = trpc.procurementProcess.dfdAssistState.useQuery(
+    { processId },
+    { enabled: !!processId && !!doc, retry: false },
+  );
 
   // Sincroniza o editor com o rascunho carregado (sem sobrescrever edições em curso).
   useEffect(() => {
@@ -62,8 +72,11 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   const invalidate = () => {
     if (!processId) return;
     utils.procurementProcess.loadDFD.invalidate({ processId });
+    utils.procurementProcess.dfdAssistState.invalidate({ processId });
     utils.procurementProcess.loadProcess.invalidate({ processId }); // reflete na Visão Geral
   };
+  // Write explícito que altera o conteúdo no servidor: re-sincroniza o editor com o conteúdo persistido.
+  const reloadEditor = () => { loadedFor.current = null; invalidate(); };
 
   const generateDFD = trpc.procurementProcess.generateDFD.useMutation({ onSuccess: () => { invalidate(); rotateDfdKey(); } });
   const saveDFD = trpc.procurementProcess.saveDFD.useMutation({
@@ -82,6 +95,36 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
     },
   });
   const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
+  const reconcileField = trpc.procurementProcess.reconcileDFDField.useMutation({
+    onSuccess: () => { rotateReconcileKey(); reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateReconcileKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+    onSettled: () => setReconcilingKey(null),
+  });
+  const aiJustification = trpc.procurementProcess.generateDFDJustification.useMutation({
+    onSuccess: () => { rotateAiKey(); reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateAiKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+  });
+
+  const dirty = !!doc && draft !== doc.content;
+  const assistFields = (assist?.available ? assist.fields : []) as DFDFieldViewUI[];
+  const justificationByUser = assistFields.some((f) => f.key === "justificativa" && f.state === "user_modified");
+
+  const onFieldAction = (key: string, confirmReplace: boolean) => {
+    if (!processId || !doc) return;
+    if (confirmReplace && !window.confirm("Substituir o valor escrito no DFD pela informação de origem? O valor anterior fica no histórico.")) return;
+    setReconcilingKey(key);
+    reconcileField.mutate({ processId, fieldKey: key, expectedContentHash: doc.contentHash, idempotencyKey: reconcileKey });
+  };
+
+  const onGenerateJustification = () => {
+    if (!processId || !doc) return;
+    let confirmReplace = false;
+    if (justificationByUser) {
+      if (!window.confirm("A justificativa foi escrita por você. Substituí-la por um rascunho gerado por IA? O texto atual fica no histórico.")) return;
+      confirmReplace = true;
+    }
+    aiJustification.mutate({ processId, expectedContentHash: doc.contentHash, confirmReplace, idempotencyKey: aiKey });
+  };
 
   const state = doc ? (STATUS_LABELS[doc.status] ?? doc.status) : "Inexistente";
 
@@ -183,8 +226,9 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             <DocumentImportPanel kind="dfd" processId={processId} onPromoted={() => { loadedFor.current = null; invalidate(); }} />
           )}
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Rascunho estruturado do DFD. Revise,
-            edite e salve. A geração assistida por IA plena é evolução futura.
+            <strong>Revisão obrigatória.</strong> Rascunho estruturado do DFD, pré-preenchido com as
+            informações já conhecidas do processo. Revise, edite e salve. Textos sugeridos por IA são
+            rascunhos e nunca substituem a análise do servidor.
           </div>
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-foreground">Conteúdo do DFD</span>
@@ -195,6 +239,12 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
               className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </label>
+          {assistFields.length > 0 && (
+            <DFDFieldSources fields={assistFields} dirty={dirty} busyKey={reconcilingKey} onAction={onFieldAction} />
+          )}
+          {reconcileField.isError && reconcileField.error?.data?.code !== "CONFLICT" && (
+            <p className="text-sm text-destructive">{reconcileField.error?.message || "Falha ao atualizar o campo."}</p>
+          )}
           {saveConflict && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
               O rascunho mudou desde o carregamento. O conteúdo foi recarregado — revise novamente antes de salvar.
@@ -209,6 +259,17 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             >
               {saveDFD.isPending ? "Salvando..." : "Salvar rascunho"}
             </button>
+            {assist?.available && (
+              <button
+                type="button"
+                onClick={onGenerateJustification}
+                disabled={!processId || dirty || aiJustification.isPending}
+                title={dirty ? "Salve suas alterações antes de gerar o rascunho." : undefined}
+                className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+              >
+                {aiJustification.isPending ? "Gerando rascunho..." : "Gerar rascunho da justificativa (IA)"}
+              </button>
+            )}
             {saveDFD.isSuccess && !saveConflict && (
               <span className="text-sm text-green-600 dark:text-green-400">Rascunho salvo.</span>
             )}
@@ -218,6 +279,17 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
               </span>
             )}
           </div>
+          {aiJustification.isSuccess && (
+            <p className="text-xs text-muted-foreground">
+              Rascunho da justificativa inserido na seção 2 — revise e edite antes de prosseguir.
+              {aiJustification.data?.explanation.unverifiedNumbers.length
+                ? " Trechos marcados com [REVISAR: …] não foram confirmados pelo processo."
+                : ""}
+            </p>
+          )}
+          {aiJustification.isError && (
+            <p className="text-sm text-destructive">{aiJustification.error?.message || "Falha ao gerar o rascunho da justificativa."}</p>
+          )}
         </div>
       )}
     </div>
