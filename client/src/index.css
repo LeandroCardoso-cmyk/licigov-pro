@@ -163,6 +163,30 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+
+  /*
+   * <select> NATIVO: o preflight do Tailwind deixa o controle transparente e com cor herdada, e a lista
+   * de opções (desenhada pelo navegador/SO) caía em fundo claro no dark mode. Base semântica para TODOS
+   * os selects nativos — classes locais (bg-*, text-*) continuam sobrescrevendo, pois isto é @layer base.
+   */
+  select {
+    @apply bg-background text-foreground;
+  }
+  option,
+  optgroup {
+    @apply bg-popover text-popover-foreground;
+  }
+}
+
+/*
+ * color-scheme em CSS (reforço do valor inline aplicado por theme-init.js/ThemeContext): controles
+ * nativos (select, scrollbars, date pickers) seguem o tema mesmo sem depender só do JS.
+ */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
 }
 
 @layer components {

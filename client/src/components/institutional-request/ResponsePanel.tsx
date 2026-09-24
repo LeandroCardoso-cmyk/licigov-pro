@@ -94,7 +94,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
           <select
             value={responseType}
             onChange={(e) => setResponseType(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-foreground focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
           >
             {RESPONSE_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -109,7 +109,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
           <select
             value={responseStatus}
             onChange={(e) => setResponseStatus(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-foreground focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
           >
             {RESPONSE_STATUSES.map((s) => (
               <option key={s.value} value={s.value}>
@@ -136,7 +136,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
         <select
           value={sign}
           onChange={(e) => setSign(e.target.value)}
-          className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-foreground focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
         >
           {SIGNATURE_METHODS.map((m) => (
             <option key={m.value} value={m.value}>
