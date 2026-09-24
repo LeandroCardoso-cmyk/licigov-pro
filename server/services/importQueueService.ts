@@ -36,6 +36,8 @@ import { MAX_FILE_SIZE_BYTES, type ParserType } from "../domain/importTypes";
 import type { ParseOptions } from "../parsers/baseParser";
 import { isDocumentImportType } from "../domain/documentProjection";
 import { persistDocumentStaging } from "./documentIntakeService";
+import { commitReextraction, releaseReextraction, ReextractionAbortedError } from "./importReprocessService";
+import { REEXTRACTION_STAGE } from "../domain/importReprocess";
 
 const log = serviceLogger("ImportQueueService");
 
@@ -43,6 +45,14 @@ export const MAX_RETRIES    = 3;
 const BASE_BACKOFF_MS = 1_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Pedido de REEXTRAÇÃO governada (Layout v2) — só metadados; a reserva já foi feita no banco. */
+export interface ReextractionRequest {
+  actorUserId:   number;
+  reason:        string;
+  /** Estágio anterior à reserva (devolvido se a reextração não for aplicada). */
+  previousStage: string | null;
+}
 
 /** Job da fila — SOMENTE identificadores/metadados seguros. Nunca contém o arquivo. */
 export interface ImportJob {
@@ -54,6 +64,7 @@ export interface ImportJob {
   enqueuedAt:     Date;
   attempts:       number;
   lastError?:     string;
+  reextract?:     ReextractionRequest;
 }
 
 type JobStatus = "queued" | "processing" | "done" | "failed" | "dlq";
@@ -81,6 +92,8 @@ export interface EnqueueOptions {
   correlationId?: string;
   /** Tentativas já realizadas (usado pela recuperação para preservar o limite de retry). */
   attempt?:       number;
+  /** Reextração governada de sessão em revisão (reserva já feita por importReprocessService). */
+  reextract?:     ReextractionRequest;
 }
 
 /**
@@ -108,6 +121,7 @@ export function enqueueImport(
     correlationId: opts.correlationId,
     enqueuedAt:    new Date(),
     attempts:      opts.attempt ?? 0,
+    ...(opts.reextract ? { reextract: opts.reextract } : {}),
   };
 
   inFlight.add(sessionId);
@@ -136,9 +150,65 @@ async function drainQueue(): Promise<void> {
 
 // ─── Process ──────────────────────────────────────────────────────────────────
 
+/** Opções do parser a partir da sessão (mesmas para a extração inicial e a reextração). */
+function buildParseOptions(session: NonNullable<Awaited<ReturnType<typeof getImportSession>>>, job: ImportJob): { opts: ParseOptions; documentMode: boolean } {
+  const opts: ParseOptions = {
+    importSessionId: job.sessionId,
+    sourceFileId:    session.sourceFileId,
+    sourceFileName:  session.sourceFileName,
+    sourceMimeType:  session.sourceMimeType,
+    sourceChecksum:  session.checksum ?? "",
+    organizationId:  job.organizationId,
+  };
+  // P0 piloto — DFD/ETP/TR importados como DOCUMENTO: mesmo pipeline (sessão/storage/checksum/parser),
+  // projeção documental em vez de linhas. Sem IA; sem OCR (escaneado ⇒ falha terminal explícita).
+  const documentMode = isDocumentImportType(session.importType);
+  if (documentMode) opts.extractionMode = "document";
+  // U2A-OCR — OCR governado só no modo de LINHAS (Pesquisa de Preços/itens). Porta resolvida na
+  // infraestrutura (kill-switch OCR_ENABLED); o parser não conhece o motor. OCR roda no worker da fila,
+  // fora de qualquer transação de banco.
+  const ocrPort = documentMode ? null : getOcrAdapter();
+  if (ocrPort) {
+    opts.ocr = {
+      port: ocrPort, maxPages: OCR_CONFIG.maxPages, timeoutMs: OCR_CONFIG.timeoutMs,
+      renderWidth: OCR_CONFIG.renderWidth, minConfidence: OCR_CONFIG.minConfidence,
+    };
+  }
+  return { opts, documentMode };
+}
+
+/** Linhas com atenção obrigatória (OCR, avisos de página ou de item com severidade "warning"). */
+function itemsNeedAttention(result: Awaited<ReturnType<NonNullable<ReturnType<typeof parserRegistry.resolve>>["safeParse"]>>, lineage: ExtractionLineage | undefined): boolean {
+  return (lineage?.extractionMode ?? "native_text") !== "native_text" ||
+    result.warnings.some(w => ATTENTION_WARNINGS.has(w.code)) ||
+    result.items.some(i => i.extractionWarnings.some(w => w.severity === "warning"));
+}
+const ATTENTION_WARNINGS = new Set([
+  "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT",
+  // Layout v2 — conferência com o documento e estrutura incerta exigem revisão atenta.
+  "TOTAL_RECONCILIATION_MISMATCH", "DOCUMENT_AVERAGE_MISMATCH", "LAYOUT_ORPHAN_TEXT", "LAYOUT_ROW_BOUNDARY_INFERRED",
+  "LAYOUT_HEADER_INFERRED", "LAYOUT_VALUES_NOT_EXTRACTED", "LAYOUT_NON_NUMERIC_VALUE_DISCARDED",
+]);
+
+/**
+ * Evento estruturado da reconstrução geométrica (sem conteúdo do documento): contagens, versão e duração.
+ */
+function logLayoutReconstructed(job: ImportJob, session: { procurementProcessId: string | null; correlationId: string | null }, lineage: ExtractionLineage | undefined): void {
+  const l = lineage?.layout;
+  if (!l) return;
+  log.info("import_layout_reconstructed", {
+    organizationId: job.organizationId, processId: session.procurementProcessId ?? null, sessionId: job.sessionId,
+    correlationId: job.correlationId ?? session.correlationId ?? null, pageCount: l.pageCount, tokenCount: l.tokenCount,
+    rowCount: l.rowCount, columnCount: l.columnCount, candidateItemCount: l.candidateItemCount, validItemCount: l.validItemCount,
+    layoutVersion: l.layoutVersion, layoutMode: l.mode, durationMs: l.durationMs, warningsCount: l.warningsCount,
+    reextraction: job.reextract ? true : false,
+  });
+}
+
 async function processJob(job: ImportJob): Promise<void> {
   const rec = jobs.get(job.jobId);
   if (rec) rec.status = "processing";
+  if (job.reextract) { await processReextractJob(job); return; }
 
   job.attempts++;
   log.info("job_processing", { jobId: job.jobId, attempt: job.attempts, sessionId: job.sessionId, correlationId: job.correlationId });
@@ -160,29 +230,9 @@ async function processJob(job: ImportJob): Promise<void> {
     const parser = parserRegistry.resolve(session.sourceMimeType, session.sourceFileName, session.parserType as ParserType);
     if (!parser) throw new Error(`Parser não encontrado para ${session.parserType}`);
 
-    const opts: ParseOptions = {
-      importSessionId: job.sessionId,
-      sourceFileId:    session.sourceFileId,
-      sourceFileName:  session.sourceFileName,
-      sourceMimeType:  session.sourceMimeType,
-      sourceChecksum:  session.checksum ?? "",
-      organizationId:  job.organizationId,
-    };
-
-    // P0 piloto — DFD/ETP/TR importados como DOCUMENTO: mesmo pipeline (sessão/storage/checksum/parser),
-    // projeção documental em vez de linhas. Sem IA; sem OCR (escaneado ⇒ falha terminal explícita).
-    const documentMode = isDocumentImportType(session.importType);
-    if (documentMode) opts.extractionMode = "document";
-
-    // U2A-OCR — OCR governado só no modo de LINHAS (Pesquisa de Preços/itens). Porta resolvida na
-    // infraestrutura (kill-switch OCR_ENABLED); o parser não conhece o motor. OCR roda AQUI, no worker da
-    // fila existente, fora de qualquer transação de banco; o estágio "ocr_processing" fica observável.
-    const ocrPort = documentMode ? null : getOcrAdapter();
-    if (ocrPort) {
-      opts.ocr = {
-        port: ocrPort, maxPages: OCR_CONFIG.maxPages, timeoutMs: OCR_CONFIG.timeoutMs,
-        renderWidth: OCR_CONFIG.renderWidth, minConfidence: OCR_CONFIG.minConfidence,
-      };
+    const { opts, documentMode } = buildParseOptions(session, job);
+    // O estágio "ocr_processing" fica observável na sessão.
+    if (opts.ocr) {
       opts.onStage = async (stage) => {
         await updateSessionStatus(job.sessionId, job.organizationId, "parsing", { progress: 30, stage }).catch(() => {});
         log.info("job_stage", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId, correlationId: job.correlationId, stage });
@@ -255,11 +305,9 @@ async function processJob(job: ImportJob): Promise<void> {
       itemCount:    result.items.length,
       warningCodes: result.warnings.map(w => w.code),
       fatalCode:    fatal?.code,
-      itemsNeedAttention:
-        (lineage?.extractionMode ?? "native_text") !== "native_text" ||
-        result.warnings.some(w => w.code === "OCR_REQUIRED_PARTIAL" || w.code === "OCR_FAILED" || w.code === "OCR_PAGE_LIMIT") ||
-        result.items.some(i => i.extractionWarnings.some(w => w.severity === "warning")),
+      itemsNeedAttention: itemsNeedAttention(result, lineage),
     });
+    logLayoutReconstructed(job, session, lineage);
 
     const observe = (state: ImportOutcomeState, items: number) => log.info("import_extraction_outcome", {
       jobId: job.jobId, correlationId: job.correlationId ?? session.correlationId ?? null,
@@ -317,6 +365,7 @@ async function processJob(job: ImportJob): Promise<void> {
       warnings:          result.warnings,
       extractionSummary: summary,
       errors:            [],
+      parserVersion:     parser.capabilities.parserVersion,
     });
 
     if (rec) { rec.status = "done"; rec.result = { itemCount: stagingIds.length }; }
@@ -356,6 +405,87 @@ async function processJob(job: ImportJob): Promise<void> {
       inFlight.delete(job.sessionId);
       log.error("job_dlq", { jobId: job.jobId, sessionId: job.sessionId, error: msg });
     }
+  }
+}
+
+// ─── Reextração governada (Layout v2) ────────────────────────────────────────────
+
+/**
+ * Reextração de sessão EM REVISÃO sem decisão humana (reserva já feita em importReprocessService): parse/OCR FORA
+ * de transação; se o resultado for revisável, troca ATÔMICA do staging intocado + versão/linhagem + auditoria
+ * (commitReextraction). Sem item válido, falha, ou decisão humana no meio ⇒ nada muda (staging antigo intacto),
+ * a reserva é liberada e o motivo auditado. Sem auto-retry: a nova tentativa é explícita.
+ */
+async function processReextractJob(job: ImportJob): Promise<void> {
+  const rec = jobs.get(job.jobId);
+  const req = job.reextract!;
+  const correlationId = job.correlationId ?? null;
+  const finish = (status: JobStatus, error?: string) => {
+    if (rec) { rec.status = status; if (error) rec.error = error; }
+    inFlight.delete(job.sessionId);
+  };
+  const release = async (code: string, message: string) => {
+    await releaseReextraction({
+      sessionId: job.sessionId, organizationId: job.organizationId, previousStage: req.previousStage,
+      actorUserId: req.actorUserId, correlationId, code, message,
+    }).catch(() => {});
+    finish("failed", code);
+  };
+
+  try {
+    const session = await getImportSession(job.sessionId, job.organizationId);
+    if (!session || session.status !== "awaiting_review" || session.stage !== REEXTRACTION_STAGE) {
+      finish("failed", "SESSION_STATE_CHANGED");
+      log.warn("reextraction_skipped_state_changed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
+      return;
+    }
+    const buffer = await storageGetBytes(job.storageKey);
+    if (buffer.length > MAX_FILE_SIZE_BYTES) { await release("FILE_TOO_LARGE", "Arquivo excede o limite permitido."); return; }
+    const parser = parserRegistry.resolve(session.sourceMimeType, session.sourceFileName, session.parserType as ParserType);
+    if (!parser) { await release("PARSER_NOT_FOUND", `Parser não encontrado para ${session.parserType}`); return; }
+    const { opts, documentMode } = buildParseOptions(session, job);
+    if (documentMode) { await release("DOCUMENT_IMPORT", "Importação de documento não usa reextração de itens."); return; }
+
+    const startedAtIso = new Date().toISOString();
+    const result = await parser.safeParse(buffer, opts); // FORA de transação (parser/OCR pesado)
+    const fatal = result.errors.find(e => e.fatal);
+    const lineage: ExtractionLineage | undefined = result.extraction
+      ? { ...result.extraction, correlationId: correlationId ?? session.correlationId ?? null, startedAt: startedAtIso, finishedAt: new Date().toISOString() }
+      : undefined;
+    const outcome = classifyRowsOutcome({
+      itemCount: result.items.length, warningCodes: result.warnings.map(w => w.code), fatalCode: fatal?.code,
+      itemsNeedAttention: itemsNeedAttention(result, lineage),
+    });
+    logLayoutReconstructed(job, session, lineage);
+    if (outcome !== "REVIEW_REQUIRED" && outcome !== "READY_FOR_REVIEW") {
+      // Nunca troca uma extração revisável por "nada": mantém o staging atual e libera a reserva.
+      await release(`REEXTRACTION_${outcome ?? "PARSER_FAILED"}`, "A nova extração não produziu itens revisáveis; a extração anterior foi mantida.");
+      return;
+    }
+    if (result.ocrArtifact && lineage?.ocr) {
+      const artifactKey = `${job.storageKey}.ocr-${lineage.fingerprint.slice(0, 16)}.json`;
+      try { await storagePut(artifactKey, JSON.stringify({ lineage, pages: result.ocrArtifact.pages }), "application/json"); lineage.ocr.artifactKey = artifactKey; }
+      catch { lineage.ocr.artifactKey = null; }
+    }
+    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}) };
+    const committed = await commitReextraction({
+      sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, reason: req.reason,
+      correlationId, items: result.items, parserVersion: parser.capabilities.parserVersion,
+      outcomeStage: OUTCOME_STAGE[outcome], warnings: result.warnings, summary,
+    });
+    finish("done");
+    if (rec) rec.result = { itemCount: committed.newStagedCount };
+    log.info("import_reextraction_committed", {
+      jobId: job.jobId, correlationId, organizationId: job.organizationId, processId: session.procurementProcessId ?? null,
+      sessionId: job.sessionId, previousStagedCount: committed.previousStagedCount, newStagedCount: committed.newStagedCount,
+      previousLayoutVersion: committed.record.previous.layoutVersion, newLayoutVersion: committed.record.next.layoutVersion,
+      finalState: outcome,
+    });
+  } catch (err) {
+    if (err instanceof StagingAlreadyReviewedError) { await release("STAGING_ALREADY_REVIEWED", err.message); return; }
+    if (err instanceof ReextractionAbortedError) { await release(err.code, err.message); return; }
+    await release("REEXTRACTION_FAILED", err instanceof Error ? err.message : "Erro desconhecido.");
+    log.error("import_reextraction_failed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
   }
 }
 

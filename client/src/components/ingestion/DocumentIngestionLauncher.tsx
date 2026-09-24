@@ -32,6 +32,7 @@ import { IngestionAuditSummary } from "./IngestionAuditSummary";
 import { StagingReviewTable } from "./StagingReviewTable";
 import { StagingReviewDrawer } from "./StagingReviewDrawer";
 import { PromoteToDomainPanel } from "./PromoteToDomainPanel";
+import { ReprocessExtractionPanel } from "./ReprocessExtractionPanel";
 
 const REVIEW_PHASES: IngestionPhase[] = ["awaiting_review", "partially_reviewed", "reviewed", "approved"];
 
@@ -245,9 +246,17 @@ export function DocumentIngestionLauncher({
         {inReview && (
           <div className="space-y-3">
             <IngestionAuditSummary summary={summary} sessionId={ingestion.sessionId} procurementProcessId={procurementProcessId} />
+            {ingestion.phase !== "approved" && (
+              <ReprocessExtractionPanel
+                reprocess={ingestion.reprocessState}
+                isReprocessing={ingestion.isReprocessing}
+                error={ingestion.reprocessError}
+                onReprocess={ingestion.reprocess}
+              />
+            )}
             <StagingReviewTable
               items={review.items as unknown as StagingItem[]}
-              disabled={review.isReviewing || ingestion.phase === "approved"}
+              disabled={review.isReviewing || ingestion.phase === "approved" || !!ingestion.reprocessState?.inProgress}
               onReview={(id, action, note) => review.reviewItem(id, action, note)}
               onReviewBulk={(ids, action) => review.reviewBulk(ids, action)}
               onOpenDetail={openDetail}
