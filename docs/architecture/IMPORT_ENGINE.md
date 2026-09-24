@@ -23,6 +23,10 @@ efeito no domínio. A promoção ao domínio (B.2.4) é transacional, idempotent
 > replay em `extractionSummary.extraction` (`server/domain/extractionLineage.ts`). Decisão e dependências:
 > [OCR_LOCAL.md](OCR_LOCAL.md); operação: [INGESTION_RUNBOOK.md](../ops/INGESTION_RUNBOOK.md).
 
+> **Layout v2 — PDF DIGITAL layout-aware (parser PDF 2.3.0, `PDF_LAYOUT_VERSION = 2`):** o texto nativo **não é
+> linearizado** antes da reconstrução da tabela. Ver a seção [Reconstrução tabular geométrica](#reconstrução-tabular-geométrica-layout-v2)
+> e [Reprocessamento seguro](#reprocessamento-seguro-da-extração-layout-v2).
+
 ## Camadas
 
 ```
@@ -101,3 +105,121 @@ e remoção do caminho legado (`processes.parseItemsFile`).
 > **Atualização (histórico):** parsers reais PDF/DOCX (B.2.3), promoção da Pesquisa (B.2.4) e, no **P0
 > piloto**, importação DOCUMENTAL de DFD/ETP/TR (projeção documental → revisão → rascunho governado) e
 > materialização de Itens Inteligentes estão implementados — ver [P0_PILOT_FOUNDATION.md](P0_PILOT_FOUNDATION.md).
+
+## Reconstrução tabular geométrica (Layout v2)
+
+**Causa raiz que motivou a mudança:** PDFs digitais de mapa de apuração (título, cabeçalhos verticais por fonte,
+linha "R$", descrições multilinha com preço centralizado, "/////", média, total, percentual, página de assinatura)
+eram lidos como **texto linearizado** (`getText` linha a linha) ou pela grade do `getTable`. A linearização
+destruía a relação linha × coluna: "R$", fragmentos do título e cabeçalhos viravam "itens", e as colunas de
+fontes não eram expandidas em cotações. O problema **não** era OCR — o texto nativo era utilizável.
+
+```
+PDF digital   → pdfjs getTextContent (transform/width/height, ordem original) ─┐
+                                                                               ├→ PositionedTextToken
+PDF escaneado → OCR (OcrPort) → palavras com caixa + confiança ───────────────┘        (source: native | ocr)
+        → TableLayoutReconstructor (UMA reconstrução, neutra)  → NormalizedTableMatrix
+        → tableToRawItems (MESMO extrator canônico de CSV/XLSX/DOCX) → conferência média/total → staging
+```
+
+| Arquivo | Papel |
+|---|---|
+| `server/parsers/layout/positionedText.ts` | `PositionedTextToken`; adapters `tokensFromPdfTextItems` (caixa pela matriz de transformação — suporta texto rotacionado e `/Rotate`) e `tokensFromOcrPage` (palavra alta/estreita ⇒ vertical; traços de régua `\| [ ]` nas pontas descartados) |
+| `server/parsers/layout/tableLayoutReconstructor.ts` | geometria pura: linhas → fragmentos → bandas de coluna → cabeçalho → blocos multilinha → matriz |
+| `server/parsers/layout/layoutExtraction.ts` | matriz → `tableToRawItems`; anotação (linha física, células descartadas, fonte não identificada); conferência média/total; papéis por estrutura quando não há cabeçalho legível |
+
+**Algoritmo (genérico — sem conhecer órgão, fornecedor, sistema emissor ou coordenada):**
+
+1. **Linhas físicas**: tokens horizontais agrupados pelo centro vertical com tolerância **relativa à fonte**
+   (0,45 em). Texto vertical é separado (vira rótulo de coluna). Nunca `split("\n")`/ordem do array.
+2. **Fragmentos**: palavras com espaço ≤ 0,8 em formam uma célula física; dois valores nunca se fundem; "R$" é
+   **prefixo** (liga-se ao valor seguinte, nunca ao anterior).
+3. **Linhas estruturais**: candidatas = linhas com ≥ 2 valores; as mais densas (≥ 60% do máximo de fragmentos)
+   definem as colunas — linhas de total/rodapé, esparsas, não distorcem a estrutura.
+4. **Colunas**: bandas = união dos intervalos X das linhas estruturais (alinhamento repetido) + bandas de linhas
+   **satélite** (descrição contínua sem valores); banda só de "R$" funde à direita; banda só de marcadores funde com
+   a vizinha com a qual nunca coocorre. Número de colunas de preço **livre** (3, 5, 7, 8…). Dois valores da mesma
+   linha na mesma banda ⇒ colunas não alinhadas (texto com espaços) ⇒ a página usa as linhas de texto (compat.).
+5. **Papéis de linha (estruturais; texto só como sinal secundário)**: item = âncora que preenche a **maioria** das
+   colunas de identificação (índice/descrição/unidade + quantidade); resumo/total = tem valor sem identificação;
+   continuação = só texto em colunas textuais; cabeçalho = acima do corpo, alinhado às partições (inclui texto
+   vertical); título/agrupador = atravessa colunas (nunca rótulo); rodapé = após a última linha do corpo.
+6. **Descrição multilinha**: blocos por espaço vertical (> 0,5 em ⇒ nova célula); continuações vão para a âncora
+   do bloco (topo/centro/base detectados pelo próprio bloco; tabela densa ⇒ `LAYOUT_ROW_BOUNDARY_INFERRED`).
+7. **Matriz**: "/////", "-", "N/A" ⇒ célula **vazia** registrada (nunca 0); texto sem dígito em coluna monetária ⇒
+   descartado com aviso; confiança por célula = mínimo das palavras (OCR).
+
+**Páginas sem itens**: página sem tabela (identificação, assinatura, rodapé) ⇒ `pageHasNoItemTable`; havendo tabela
+em qualquer página (nativa ou OCR), essas páginas **não** passam pelo fallback de linhas (não geram item-lixo).
+
+**Fontes/cotações**: cada valor válido é uma cotação independente (formato largo do extrator canônico); fornecedor =
+rótulo da coluna (inclusive vertical). Coluna sem rótulo legível ⇒ valor preservado, `rawSupplier = null` +
+`SOURCE_IDENTITY_UNRESOLVED` (nunca inventa fornecedor). Coluna casada como "Fonte/Marca/Obs." cujos valores são
+todos preços é tratada como coluna de cotação.
+
+**Média e total impressos = evidência de conferência** (nunca item, nunca preço): média calculada das cotações
+válidas pelo contrato monetário (centavos inteiros, half-up **uma** vez) × média impressa (tolerância 1 centavo ⇒
+senão `DOCUMENT_AVERAGE_MISMATCH`); total calculado (Σ quantidade × média calculada) × total impresso (tolerância
+1 centavo/item ⇒ senão `TOTAL_RECONCILIATION_MISMATCH`). Resultado em `extraction.layout.validation`. Nada é
+ajustado para "bater". Valor fora do formato monetário estrito (ex.: `1.14000` de OCR) ⇒ `AMBIGUOUS_MONEY_VALUE`.
+
+**Sem cabeçalho legível** (ex.: rótulos verticais não lidos pelo OCR): papéis inferidos pela estrutura — descrição =
+coluna textual mais longa; unidade = textual curta; quantidade = 1ª coluna de valores; **média = coluna derivada**
+(média das colunas de valor à esquerda, ±1 centavo); total = quantidade × média; fontes sem identidade + aviso
+`LAYOUT_HEADER_INFERRED`. Estrutura inconclusiva ⇒ ordem posicional com `HEADER_INFERENCE`.
+
+**Convergência OCR**: as palavras do OCR entram no MESMO reconstrutor (mesma matriz para a mesma geometria — teste
+de convergência). O fallback de linhas do OCR (`ocrLayout.ts` v1) só atua em página sem linhas-âncora e sem tabela
+no documento. **OCR não roda em PDF digital** com texto útil (`extractionMode = native_text`).
+
+**Versões e replay**: `PDF_LAYOUT_VERSION` (`2`) entra em `extraction.layoutVersion`, no fingerprint
+(`extraction-lineage/v2`: checksum + modo por página + heurística + **layout** + parser + OCR quando aplicável) e
+em `parserMetadata.layoutVersion` de cada item. Mesmo arquivo + mesmas versões ⇒ mesma ordem item → cotações e
+mesmo fingerprint. Mudou o algoritmo ⇒ nova versão.
+
+**Complexidade**: ordenação + agrupamento ≈ **O(n log n)** por página (n = tokens), atribuição de coluna por busca
+binária (O(log c)); sem comparação par-a-par entre tokens. Golden E (≈ 130 tokens) ≈ 30 ms; 5.600 tokens < 1 s
+(teste de desempenho) — ordens de grandeza abaixo do OCR.
+
+**Observabilidade**: evento `import_layout_reconstructed` (organizationId, processId, sessionId, correlationId,
+pageCount, tokenCount, rowCount, columnCount, candidateItemCount, validItemCount, layoutVersion, layoutMode,
+durationMs, warningsCount) — **sem** conteúdo do documento.
+
+**Golden E** (`server/__tests__/fixtures/layoutPdfFixtures.ts`, gerado em tempo de teste, 100% fictício): 5 itens,
+30 cotações, médias 950,31 / 67,23 / 1.134,28 / 145,29 / 1.052,82, total 3.349,93 — com invariantes negativas,
+teste diferencial v1 × v2 e variantes geométricas (sem grade, cabeçalho horizontal, topo, densa, 3 fontes…).
+
+## Reprocessamento seguro da extração (Layout v2)
+
+Uma sessão `awaiting_review` pode ser **reextraída na MESMA sessão** (mesmo original, checksum e linhagem) somente
+se **nenhuma decisão humana** existe (`server/domain/importReprocess.ts`):
+
+| Bloqueio | Condição |
+|---|---|
+| `NOT_AWAITING_REVIEW` | status ≠ `awaiting_review` (aprovada/rejeitada/arquivada/falha) |
+| `DOCUMENT_IMPORT` | DFD/ETP/TR (projeção documental) |
+| `PROMOTED` | `promotionStatus ≠ none` ou linha no ledger `import_promotions` |
+| `ITEMS_REVIEWED` | qualquer item aceito, rejeitado ou pulado |
+| `ITEMS_CORRECTED` | item com `correctionRevision > 0` ou histórico em `import_item_corrections` |
+| `REPROCESS_IN_PROGRESS` | reserva `stage = reprocessing` vigente (15 min) |
+
+**Invariante: nenhuma decisão humana é sobrescrita.** Fluxo (`importReprocessService` + worker):
+
+```
+ingestion.reprocessExtraction (operator+, tenant + processo, motivo)
+  → reserva ATÔMICA (UPDATE condicional; status continua awaiting_review; staging antigo intacto)  [concorrência]
+  → worker: parse/OCR FORA de transação → sem item revisável? mantém o anterior, libera e audita
+  → TRANSAÇÃO: lock da sessão (FOR UPDATE) + reserva/estado/ledger/correções reconferidos
+               → itens da sessão FOR UPDATE, todos intocados → DELETE + INSERT (troca atômica)
+               → parserVersion, extractionSummary (linhagem nova + `reextractions[]`), stage, avisos
+               → activity_logs `import_reextracted` (mesma transação)
+  → revisão concorrente (review espera o lock; depois não acha o item antigo ⇒ CONFLICT) ou falha ⇒ rollback total
+```
+
+Não cria sessão, pesquisa, promoção, cotação nem Item Inteligente; a promoção continua deduplicada pelo ledger.
+**RBAC**: `operator+` — o mesmo papel que envia, enfileira e revisa a sessão; reprocessar não aprova nem promove
+(promoção segue `manager+`). **Auditoria**: `import_reextraction_requested` (ator, org, processo, sessão, checksum,
+versões anteriores, contagem anterior, motivo, correlationId, timestamp), `import_reextracted` (+ versões novas e
+nova contagem) ou `import_reextraction_not_applied` (motivo). **UI**: ação "Reprocessar extração" só quando elegível,
+com a explicação "Reprocessar substitui apenas a extração ainda não revisada. Nenhuma decisão humana será
+sobrescrita." e motivo obrigatório.

@@ -1,7 +1,7 @@
 # LiciGov Pro — Motor de Importação
 
 > Documentação do sistema de importação de dados externos: lifecycle, parsers, staging e canonicalização.
-> Atualizado em: 2026-05-27
+> Atualizado em: 2026-09-24 (Layout v2 — PDF digital layout-aware + reprocessamento seguro)
 
 ---
 
@@ -103,6 +103,17 @@ uploaded → queued → parsing → extracted → normalized → awaiting_review
 - **Limitações declaradas**: PDF digitalizado (somente imagem) → na Pesquisa de Preços é lido por **OCR local**
   (U2A-OCR, 2.2.0; revisão obrigatória, ver abaixo); sem OCR disponível ou em modo documento → `OCR_REQUIRED`/
   `SCANNED_PDF_UNSUPPORTED` (nunca apresentado como extraído); limites de páginas/itens/tempo.
+
+#### PDF digital layout-aware (Layout v2 — parser 2.3.0)
+- O texto nativo é lido **posicionado** (pdfjs `getTextContent`: transform/width/height) e a tabela é reconstruída
+  pela **geometria** (linhas × colunas, cabeçalho vertical, descrição multilinha, "R$" separado, "/////" descartado)
+  antes do extrator canônico — o texto não é linearizado. OCR usa a MESMA reconstrução (palavras com caixa).
+- Página sem tabela de itens (assinatura/identificação) não gera itens. Média e total impressos são **conferência**
+  (contrato monetário), nunca item nem preço. Fonte sem rótulo legível ⇒ valor preservado + aviso, sem inventar
+  fornecedor. `PDF_LAYOUT_VERSION` entra no fingerprint de replay.
+- **Reprocessar extração**: sessão em revisão SEM nenhuma decisão humana pode ser reextraída na mesma sessão
+  (troca atômica do staging não revisado, auditada). Qualquer item aceito/rejeitado/pulado/corrigido ou promoção ⇒
+  proibido. Detalhes: [IMPORT_ENGINE.md](../architecture/IMPORT_ENGINE.md#reconstrução-tabular-geométrica-layout-v2).
 
 ### DOCX Parser (real — B.2.3)
 - **MIME types**: `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
