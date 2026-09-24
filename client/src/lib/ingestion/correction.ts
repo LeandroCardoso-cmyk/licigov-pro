@@ -9,15 +9,34 @@ import type { StagingItem } from "./staging";
 export interface CorrectableField {
   logical: "description" | "quantity" | "unit" | "unitPrice" | "totalPrice";
   label: string;
+  /** Texto de apoio SEMPRE visível sob o campo (associado via aria-describedby). */
+  helpText?: string;
+  /** Ajuda contextual curta (ícone de informação com tooltip e rótulo acessível). */
+  contextHelp?: string;
   rawKey: keyof Pick<StagingItem, "rawDescription" | "rawQuantity" | "rawUnit" | "rawUnitPrice" | "rawTotalPrice">;
   kind: "text" | "decimal" | "unit";
 }
+
+/**
+ * Pesquisa de Preços — a quantidade revisada aqui é a do DOCUMENTO-FONTE (evidência importada; conceitualmente
+ * `sourceQuantity`), NÃO a quantidade a contratar. Corrigi-la significa corrigir uma extração que não corresponde
+ * ao documento (ex.: PDF = 10, extraído = 1). A quantidade prevista para contratação pertence ao planejamento do
+ * processo (necessidade/itens) e não é exibida nem alterada nesta revisão.
+ */
+export const SOURCE_QUANTITY_LABEL = "Quantidade no documento";
+export const SOURCE_QUANTITY_HELP = "Valor extraído do arquivo de origem. Altere somente se a extração não corresponder ao documento.";
+export const SOURCE_QUANTITY_CONTEXT =
+  "Esta quantidade pertence ao documento de Pesquisa de Preços. A quantidade efetivamente prevista para contratação é definida na necessidade/itens do processo.";
+
+/** Nota do bloco de correção: a revisão é da EVIDÊNCIA importada. */
+export const CORRECTION_SCOPE_NOTE = "Corrija apenas o que não corresponder ao documento importado.";
 
 /** Contrato por importType. Ausência ⇒ correção indisponível. */
 export const CORRECTABLE_FIELDS: Record<string, CorrectableField[]> = {
   price_research: [
     { logical: "description", label: "Descrição",     rawKey: "rawDescription", kind: "text" },
-    { logical: "quantity",    label: "Quantidade",    rawKey: "rawQuantity",    kind: "decimal" },
+    { logical: "quantity",    label: SOURCE_QUANTITY_LABEL, rawKey: "rawQuantity", kind: "decimal",
+      helpText: SOURCE_QUANTITY_HELP, contextHelp: SOURCE_QUANTITY_CONTEXT },
     { logical: "unit",        label: "Unidade",       rawKey: "rawUnit",        kind: "unit" },
     { logical: "unitPrice",   label: "Preço unitário",rawKey: "rawUnitPrice",   kind: "decimal" },
     { logical: "totalPrice",  label: "Preço total",   rawKey: "rawTotalPrice",  kind: "decimal" },
