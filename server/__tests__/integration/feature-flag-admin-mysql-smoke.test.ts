@@ -6,13 +6,18 @@
  * auditoria ATÔMICA e persistida com todos os campos), replay (mesma chave+payload → sem 2ª alteração,
  * sem 2ª linha de auditoria; chave+payload diferente → CONFLICT), invalidação de cache (leitura imediata
  * reflete o novo estado), isolamento multi-tenant (A ≠ B). Só roda com DATABASE_URL.
+ *
+ * PRODUÇÃO GOVERNADA (IS_PRODUCTION=true): FF_CANONICAL_INGESTION alterável SÓ por tenant (enable/disable,
+ * auditoria atômica, replay, isolamento A ≠ B, sem linha global); FF_DIRECT_CONTRACT_SHADOW continua
+ * FORBIDDEN sem efeito; falha da auditoria faz rollback do override (nunca flag sem auditoria).
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { setTenantFlag, resolveTenantFlag } from "../../services/featureFlagAdminService";
 import { FF_DIRECT_CONTRACT_SHADOW } from "../../services/directContractShadowService";
 import { isFeatureEnabled, invalidateAllFlagsForTenant } from "../../services/featureFlagService";
+import { CANONICAL_INGESTION_FLAG } from "../../services/ingestionUploadService";
 
 const DB = process.env.DATABASE_URL;
 const ORG_A = 970501;
@@ -235,4 +240,112 @@ describe.skipIf(!DB)("C.3A-OPS — Controle de feature flags (MySQL real)", () =
     }
     expect(code).toBe("NOT_FOUND");
   }, 60_000);
+});
+
+describe.skipIf(!DB)("Produção governada — FF_CANONICAL_INGESTION por tenant (MySQL real)", () => {
+  const ORG_P = 970511;
+  const ORG_Q = 970512;
+  const REASON = "Piloto — importação de PDF na Pesquisa de Preços";
+  let prod: typeof import("../../services/featureFlagAdminService");
+
+  const tenantRow = async (org: number, flag: string) => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT enabled FROM tenant_feature_flags WHERE organizationId = ? AND flagName = ?", [org, flag]);
+    return rows[0] ? Boolean((rows[0] as any).enabled) : null;
+  };
+  const audits = async (org: number) => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT action, userId, correlationId, requestId, details FROM activity_logs WHERE organizationId = ? AND entityType = 'feature_flag' ORDER BY id", [org]);
+    return rows as any[];
+  };
+  const effective = async (org: number) => { invalidateAllFlagsForTenant(org); return isFeatureEnabled(CANONICAL_INGESTION_FLAG, org); };
+  const write = (org: number, enabled: boolean, key: string, extra: Record<string, unknown> = {}) =>
+    prod.setTenantFlag({ organizationId: org, flagName: CANONICAL_INGESTION_FLAG, enabled, reason: REASON, idempotencyKey: key,
+      actorUserId: ACTOR, actorName: "Admin Plataforma", actorRole: "admin", correlationId: `corr-${key}`, requestId: `req-${key}`, ...extra });
+
+  async function cleanupProd() {
+    for (const org of [ORG_P, ORG_Q]) {
+      await conn.execute("DELETE FROM tenant_feature_flags WHERE organizationId = ?", [org]).catch(() => {});
+      await conn.execute("DELETE FROM activity_logs WHERE organizationId = ? AND entityType = 'feature_flag'", [org]).catch(() => {});
+      await conn.execute("DELETE FROM idempotency_keys WHERE organizationId = ?", [org]).catch(() => {});
+      invalidateAllFlagsForTenant(org);
+    }
+  }
+
+  beforeAll(async () => {
+    conn = await mysql.createConnection(DB!);
+    for (const [org, slug] of [[ORG_P, "ffprod-p"], [ORG_Q, "ffprod-q"]] as const) {
+      await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)",
+        [org, `FF Prod Org ${org}`, slug]).catch(() => {});
+    }
+    await cleanupProd();
+    vi.resetModules();
+    vi.doMock("../../config/env", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../config/env")>()), IS_PRODUCTION: true }));
+    prod = await import("../../services/featureFlagAdminService");
+  }, 120_000);
+
+  afterAll(async () => {
+    vi.doUnmock("../../config/env");
+    vi.resetModules();
+    await cleanupProd();
+    await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG_P, ORG_Q]).catch(() => {});
+    await conn.end().catch(() => {});
+  });
+
+  it("A/H/J/F: enable em produção cria override SÓ de P, audita atomicamente e Q não é afetado", async () => {
+    const r = await write(ORG_P, true, "ffprod-on-1");
+    expect(r).toMatchObject({ replayed: false, before: null, after: { enabled: true, percentage: 100 }, effectiveValue: true, origin: "tenant" });
+    expect(await tenantRow(ORG_P, CANONICAL_INGESTION_FLAG)).toBe(true);
+    expect(await effective(ORG_P)).toBe(true);
+    expect(await tenantRow(ORG_Q, CANONICAL_INGESTION_FLAG)).toBeNull();
+    expect(await effective(ORG_Q)).toBe(false);
+    const [a] = await audits(ORG_P);
+    expect(a).toMatchObject({ action: "feature_flag_enabled", userId: ACTOR, correlationId: "corr-ffprod-on-1", requestId: "req-ffprod-on-1" });
+    expect(JSON.parse(a.details)).toMatchObject({ flagName: CANONICAL_INGESTION_FLAG, organizationId: ORG_P, before: null, after: { enabled: true }, reason: REASON, idempotencyKey: "ffprod-on-1" });
+    expect(await audits(ORG_Q)).toHaveLength(0);
+  });
+
+  it("G: leitura administrativa em produção → origin tenant, efetivo true, writeAllowed true", async () => {
+    const v = await prod.resolveTenantFlag(CANONICAL_INGESTION_FLAG, ORG_P);
+    expect(v).toMatchObject({ origin: "tenant", effectiveValue: true, writeAllowed: true, override: { enabled: true } });
+    expect(await prod.resolveTenantFlag(CANONICAL_INGESTION_FLAG, ORG_Q)).toMatchObject({ origin: "default", effectiveValue: false });
+  });
+
+  it("I: replay (mesma chave + payload) é idempotente — sem 2ª auditoria, mesmo estado", async () => {
+    const before = (await audits(ORG_P)).length;
+    const r = await write(ORG_P, true, "ffprod-on-1");
+    expect(r.replayed).toBe(true);
+    expect((await audits(ORG_P)).length).toBe(before);
+    expect(await tenantRow(ORG_P, CANONICAL_INGESTION_FLAG)).toBe(true);
+  });
+
+  it("H/7: reversão pelo MESMO mecanismo (disable) → false, audita com before/after", async () => {
+    const r = await write(ORG_P, false, "ffprod-off-1");
+    expect(r).toMatchObject({ before: { enabled: true }, after: { enabled: false }, effectiveValue: false });
+    expect(await effective(ORG_P)).toBe(false);
+    const last = (await audits(ORG_P)).at(-1);
+    expect(last.action).toBe("feature_flag_disabled");
+    expect(JSON.parse(last.details)).toMatchObject({ before: { enabled: true }, after: { enabled: false } });
+  });
+
+  it("C: FF_DIRECT_CONTRACT_SHADOW continua FORBIDDEN em produção — sem override, sem auditoria", async () => {
+    const auditsBefore = (await audits(ORG_Q)).length;
+    await expect(prod.setTenantFlag({ organizationId: ORG_Q, flagName: FF_DIRECT_CONTRACT_SHADOW, enabled: true, reason: REASON,
+      idempotencyKey: "ffprod-shadow", actorUserId: ACTOR, correlationId: "corr-shadow" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await tenantRow(ORG_Q, FF_DIRECT_CONTRACT_SHADOW)).toBeNull();
+    expect((await audits(ORG_Q)).length).toBe(auditsBefore);
+  });
+
+  it("K: se a auditoria falhar, o override sofre rollback (nunca flag alterada sem auditoria)", async () => {
+    // correlationId excede varchar(36) em activity_logs → INSERT da auditoria falha (modo strict) DENTRO do tx.
+    await expect(write(ORG_Q, true, "ffprod-atomic", { correlationId: "c".repeat(60) })).rejects.toBeTruthy();
+    expect(await tenantRow(ORG_Q, CANONICAL_INGESTION_FLAG)).toBeNull();
+    expect(await audits(ORG_Q)).toHaveLength(0);
+    expect(await effective(ORG_Q)).toBe(false);
+  });
+
+  it("D: nenhuma linha GLOBAL criada em feature_flags para FF_CANONICAL_INGESTION", async () => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM feature_flags WHERE name = ?", [CANONICAL_INGESTION_FLAG]);
+    expect(Number((rows[0] as any).n)).toBe(0);
+  });
 });

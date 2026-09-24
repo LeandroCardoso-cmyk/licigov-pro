@@ -15,8 +15,10 @@
  * NÃO permitir nomes arbitrários, esta camada define um allowlist EXPLÍCITO de flags governáveis por
  * esta superfície. Escrever/consultar uma flag fora do allowlist é recusado com erro estável.
  *
- * Guarda de ambiente: LEITURA liberada em qualquer ambiente autorizado; ESCRITA BLOQUEADA em produção
- * no backend (`IS_PRODUCTION`, fonte canônica `server/config/env.ts`) — jamais confia em env do cliente.
+ * Guarda de ambiente: LEITURA liberada em qualquer ambiente autorizado; ESCRITA em produção BLOQUEADA
+ * por padrão no backend (`IS_PRODUCTION`, fonte canônica `server/config/env.ts`) — jamais confia em env
+ * do cliente. A ÚNICA exceção é o subconjunto explícito `PRODUCTION_GOVERNABLE_TENANT_FLAGS` (política
+ * centralizada em `tenantFlagWritePolicy`): ser governável em staging NÃO implica ser mutável em produção.
  */
 
 import { createHash } from "crypto";
@@ -29,20 +31,46 @@ import { runWithIdempotency } from "./idempotencyService";
 import { invalidateFlagCache } from "./featureFlagService";
 import { APP_ENV, IS_PRODUCTION, type AppEnv } from "../config/env";
 import { FF_DIRECT_CONTRACT_SHADOW } from "./directContractShadowService";
+import { CANONICAL_INGESTION_FLAG } from "./ingestionUploadService";
 import { serviceLogger } from "./observabilityService";
 
 const log = serviceLogger("FeatureFlagAdminService");
 
 /**
  * Allowlist canônico de flags governáveis por ESTA superfície institucional (decisão explícita).
- * Começa com a flag da C.3A (`FF_DIRECT_CONTRACT_SHADOW`) — o propósito declarado desta operação.
+ * Contém a flag da C.3A (`FF_DIRECT_CONTRACT_SHADOW`) e a ingestão canônica (`FF_CANONICAL_INGESTION`).
  * Ampliar este conjunto é decisão arquitetural explícita, nunca um atalho: um nome fora daqui é
  * recusado. As flags aqui NÃO são kill-switches globais (que seguem o caminho `isGlobalFlagEnabled`).
  */
-export const GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [FF_DIRECT_CONTRACT_SHADOW];
+export const GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [FF_DIRECT_CONTRACT_SHADOW, CANONICAL_INGESTION_FLAG];
+
+/**
+ * Subconjunto EXTREMAMENTE restrito de `GOVERNABLE_TENANT_FLAGS` cuja ESCRITA é permitida em PRODUÇÃO
+ * (sempre tenant-scoped, pelo mesmo caminho auditado). Match exato — sem wildcard, sem prefixo.
+ * `FF_DIRECT_CONTRACT_SHADOW` fica de fora de propósito: continua mutável só em development/staging.
+ */
+export const PRODUCTION_GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [CANONICAL_INGESTION_FLAG];
+
+/** Justificativa mínima (após trim) exigida para alterações em PRODUÇÃO. */
+export const PRODUCTION_REASON_MIN_LENGTH = 15;
 
 export function isGovernableFlag(flagName: string): boolean {
   return GOVERNABLE_TENANT_FLAGS.includes(flagName);
+}
+
+export function isProductionGovernableFlag(flagName: string): boolean {
+  return isGovernableFlag(flagName) && PRODUCTION_GOVERNABLE_TENANT_FLAGS.includes(flagName);
+}
+
+export type TenantFlagWriteDecision = "allowed" | "not_governable" | "forbidden_in_production";
+
+/**
+ * Política ÚNICA de escrita (pura, sem I/O): decide se `flagName` pode ser alterada no ambiente dado.
+ * Produção só aceita flags do subconjunto explícito de produção; os demais ambientes seguem o allowlist geral.
+ */
+export function tenantFlagWritePolicy(flagName: string, isProduction: boolean): TenantFlagWriteDecision {
+  if (isProduction) return isProductionGovernableFlag(flagName) ? "allowed" : "forbidden_in_production";
+  return isGovernableFlag(flagName) ? "allowed" : "not_governable";
 }
 
 function assertGovernable(flagName: string): void {
@@ -75,7 +103,7 @@ export interface TenantFlagView {
   origin: FlagOrigin;
   /** Ambiente CANÔNICO do backend (APP_ENV) — a UI nunca decide isso pelo hostname. */
   environment: AppEnv;
-  /** Se o backend permitiria uma ESCRITA neste ambiente (bloqueada em produção). Fonte: IS_PRODUCTION. */
+  /** Se o backend permitiria uma ESCRITA desta flag neste ambiente. Fonte: `tenantFlagWritePolicy` + IS_PRODUCTION. */
   writeAllowed: boolean;
 }
 
@@ -99,7 +127,7 @@ export async function resolveTenantFlag(
   // Aditivo/não-quebra-contrato: anexa o ambiente CANÔNICO do backend e a permissão de escrita
   // (defesa em profundidade — a UI recebe a autoridade do backend, não infere pelo hostname).
   const core = await resolveTenantFlagCore(flagName, organizationId);
-  return { ...core, environment: APP_ENV, writeAllowed: !IS_PRODUCTION };
+  return { ...core, environment: APP_ENV, writeAllowed: tenantFlagWritePolicy(flagName, IS_PRODUCTION) === "allowed" };
 }
 
 async function resolveTenantFlagCore(
@@ -219,7 +247,9 @@ function payloadHashOf(p: SetTenantFlagParams): string {
  * ALTERA (write) governada — UPSERT do override do tenant com auditoria ATÔMICA e idempotência.
  *
  * Fail-closed e não-negociáveis:
- *   - ESCRITA BLOQUEADA em produção (IS_PRODUCTION) — erro estável, sem write, sem bypass;
+ *   - ESCRITA em produção (IS_PRODUCTION) só para `PRODUCTION_GOVERNABLE_TENANT_FLAGS` — qualquer outra
+ *     flag recebe FORBIDDEN estável ANTES de qualquer efeito; em produção a reason exige
+ *     `PRODUCTION_REASON_MIN_LENGTH` caracteres;
  *   - flag precisa estar no allowlist governável (sem nomes arbitrários);
  *   - organização precisa existir (sem tenant desconhecido);
  *   - reason obrigatória não-vazia; idempotencyKey obrigatória;
@@ -227,13 +257,20 @@ function payloadHashOf(p: SetTenantFlagParams): string {
  *   - flag alterada + auditoria persistida ocorrem no MESMO `tx` (nunca flag-mudou-mas-auditoria-perdida).
  */
 export async function setTenantFlag(p: SetTenantFlagParams): Promise<SetTenantFlagResult> {
-  // 1) Guarda de ambiente — ESCRITA nunca em produção (fonte canônica, jamais env do cliente).
-  if (IS_PRODUCTION) {
+  // 1) Guarda de ambiente — política centralizada (fonte canônica, jamais env do cliente). Em produção,
+  //    somente o subconjunto explícito de produção passa; todo o resto falha ANTES de qualquer efeito.
+  if (tenantFlagWritePolicy(p.flagName, IS_PRODUCTION) === "forbidden_in_production") {
+    log.warn("feature_flag_set_denied_production", {
+      flagName: p.flagName,
+      organizationId: p.organizationId,
+      actorUserId: p.actorUserId,
+      correlationId: p.correlationId,
+    });
     throw new TRPCError({
       code: "FORBIDDEN",
       message:
-        "Alteração de feature flag bloqueada em produção. Esta superfície opera apenas em development/staging; " +
-        "mudanças de produção seguem processo institucional próprio.",
+        "Alteração desta feature flag bloqueada em produção. Em produção, apenas as flags autorizadas " +
+        `(${PRODUCTION_GOVERNABLE_TENANT_FLAGS.join(", ")}) podem ser alteradas, sempre por organização.`,
     });
   }
 
@@ -243,6 +280,12 @@ export async function setTenantFlag(p: SetTenantFlagParams): Promise<SetTenantFl
   const reason = (p.reason ?? "").trim();
   if (!reason) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Justificativa (reason) é obrigatória e não pode ser vazia." });
+  }
+  if (IS_PRODUCTION && reason.length < PRODUCTION_REASON_MIN_LENGTH) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Em produção, a justificativa (reason) deve ter ao menos ${PRODUCTION_REASON_MIN_LENGTH} caracteres.`,
+    });
   }
   if (!p.idempotencyKey?.trim()) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "idempotencyKey é obrigatória." });
@@ -369,6 +412,10 @@ export async function setTenantFlag(p: SetTenantFlagParams): Promise<SetTenantFl
       organizationId: p.organizationId,
       enabled: p.enabled,
       hasExpiry: expiresAt != null,
+      environment: APP_ENV,
+      actorUserId: p.actorUserId,
+      correlationId: p.correlationId,
+      origin: "featureFlagAdmin",
     });
   }
 
