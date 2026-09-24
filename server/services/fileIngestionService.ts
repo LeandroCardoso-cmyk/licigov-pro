@@ -332,6 +332,8 @@ export async function updateSessionStatus(
     failedAt?:          Date;
     finishedAt?:        Date;
     startedAt?:         Date;
+    /** Versão do parser que produziu a extração vigente (rastreabilidade/replay). */
+    parserVersion?:     string;
   },
 ): Promise<void> {
   const db = await getDb();
@@ -348,6 +350,7 @@ export async function updateSessionStatus(
     ...(extras?.failedAt          !== undefined ? { failedAt:          extras.failedAt }          : {}),
     ...(extras?.finishedAt        !== undefined ? { finishedAt:        extras.finishedAt }        : {}),
     ...(extras?.startedAt         !== undefined ? { startedAt:         extras.startedAt }         : {}),
+    ...(extras?.parserVersion     !== undefined ? { parserVersion:     extras.parserVersion }     : {}),
   }).where(and(
     eq(importSessions.id,             sessionId),
     eq(importSessions.organizationId, organizationId),

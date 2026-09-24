@@ -10,6 +10,12 @@
  *   nativeTextAssessment.ts) seguem para OCR pela porta `OcrPort` injetada (`opts.ocr`) e o texto reconhecido
  *   passa pelo MESMO parser tabular canônico. Sem `opts.ocr` ⇒ aviso OCR_REQUIRED (desfecho explícito). Modo
  *   documento (DFD/ETP/TR) não usa OCR. Linhagem (`extraction`) registra modo por página, motor e fingerprint.
+ * - Layout v2 (2.3.0): no modo de linhas o texto nativo NÃO é linearizado antes da reconstrução — os itens de
+ *   texto do pdfjs (transform/width/height) viram `PositionedTextToken` e a reconstrução GEOMÉTRICA
+ *   (`layout/tableLayoutReconstructor.ts`, a MESMA usada pelo OCR) produz a matriz linha × coluna entregue ao
+ *   extrator canônico. Páginas sem tabela de itens (assinatura, identificação) não geram itens
+ *   (`pageHasNoItemTable`). Só quando NENHUMA página tem tabela posicional o caminho anterior (getTable/linhas
+ *   do getText) é usado — compatibilidade com PDFs de texto corrido.
  * - Limites de segurança: tamanho, páginas, itens e tempo de processamento (inclusive orçamento de OCR).
  */
 import { BaseParser } from "./baseParser";
@@ -19,21 +25,27 @@ import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser
 import type { ImportWarning, ImportError } from "../domain/importTypes";
 import type { RawExtractedItem } from "../domain/importExtraction";
 import { assessDocumentText } from "./nativeTextAssessment";
-import { extractItemsFromOcrPage } from "./ocrExtraction";
-import { OCR_LAYOUT_VERSION } from "./ocrLayout";
+import { extractItemsFromOcrPage, reconstructOcrPage } from "./ocrExtraction";
 import { OcrError, type OcrPageImage } from "../domain/ocr";
 import {
   EXTRACTION_LINEAGE_VERSION, computeExtractionFingerprint, deriveExtractionMode, sha256Hex,
-  type ExtractionLineage, type OcrLineageInfo, type PageExtractionMode,
+  type ExtractionLineage, type LayoutLineageInfo, type LayoutValidationSummary, type OcrLineageInfo, type PageExtractionMode,
 } from "../domain/extractionLineage";
+import { tokensFromPdfTextItems, type PdfTextItemLike } from "./layout/positionedText";
+import { PDF_LAYOUT_VERSION, reconstructPageTable, type CarriedHeader, type PageLayoutResult } from "./layout/tableLayoutReconstructor";
+import { extractItemsFromLayoutTable, layoutWarningsToImport, type LayoutTableValidation } from "./layout/layoutExtraction";
 
 const MAX_SIZE   = 50 * 1024 * 1024; // 50 MB
 const MAX_PAGES  = 500;
 const MAX_ITEMS  = 5000;
 const TIMEOUT_MS = 60_000;
 
-/** 2.2.0 — U2A-OCR: fallback de OCR governado por página no modo de linhas + linhagem da extração. */
-const PARSER_VERSION = "2.2.0";
+/**
+ * 2.2.0 — U2A-OCR: fallback de OCR governado por página no modo de linhas + linhagem da extração.
+ * 2.3.0 — Layout v2: reconstrução tabular GEOMÉTRICA do texto nativo (tokens posicionados), convergente com o OCR.
+ */
+export const PDF_PARSER_VERSION = "2.3.0";
+const PARSER_VERSION = PDF_PARSER_VERSION;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -61,12 +73,25 @@ function mapError(err: unknown): ImportError {
 interface PdfTextResult { pages: Array<{ num: number; text: string }>; total: number }
 interface PdfTableResult { pages: Array<{ num: number; tables: string[][][] }>; total: number }
 interface PdfScreenshotResult { pages: Array<{ pageNumber: number; data: Uint8Array; width: number; height: number }> }
+/** Subconjunto do documento/página do pdfjs usado para ler o texto POSICIONADO (getTextContent). */
+interface PdfPageLike {
+  getViewport(o: { scale: number }): { convertToViewportPoint(x: number, y: number): number[] };
+  getTextContent(): Promise<{ items: unknown[] }>;
+  cleanup?: () => void;
+}
+interface PdfDocumentLike { getPage(n: number): Promise<PdfPageLike> }
 interface PdfParseInstance {
   getText(o?: unknown): Promise<PdfTextResult>;
   getTable(o?: unknown): Promise<PdfTableResult>;
   getScreenshot(o?: unknown): Promise<PdfScreenshotResult>;
+  load?: () => Promise<PdfDocumentLike>;
   destroy?: () => Promise<void> | void;
 }
+
+interface LayoutRun { pages: PageLayoutResult[]; durationMs: number; failed: boolean }
+
+const isTextItem = (i: unknown): i is PdfTextItemLike =>
+  !!i && typeof (i as PdfTextItemLike).str === "string" && Array.isArray((i as PdfTextItemLike).transform);
 
 interface OcrRunOutcome {
   items:          RawExtractedItem[];
@@ -76,6 +101,25 @@ interface OcrRunOutcome {
   pagesProcessed: number[];
   info:           OcrLineageInfo;
   artifact?:      { pages: Array<{ pageNumber: number; confidence: number; text: string }> };
+  layouts:        PageLayoutResult[];
+  validations:    LayoutTableValidation[];
+}
+
+/** Consolida a conferência (média/total impressos × calculados) de todas as tabelas. */
+function summarizeValidation(v: LayoutTableValidation[]): LayoutValidationSummary | null {
+  if (v.length === 0) return null;
+  const docs = v.map((t) => t.documentTotalCents).filter((c): c is number => c !== null);
+  const documentTotalCents = docs.length ? docs.reduce((a, b) => a + b, 0) : null;
+  const matches = v.map((t) => t.totalMatches).filter((m): m is boolean => m !== null);
+  return {
+    itemRows:             v.reduce((a, t) => a + t.itemRows, 0),
+    validQuotes:          v.reduce((a, t) => a + t.validQuotes, 0),
+    documentTotalCents,
+    calculatedTotalCents: v.reduce((a, t) => a + t.calculatedTotalCents, 0),
+    totalMatches:         matches.length ? matches.every(Boolean) : null,
+    averageChecks:        v.reduce((a, t) => a + t.averageChecks, 0),
+    averageMismatches:    v.reduce((a, t) => a + t.averageMismatches, 0),
+  };
 }
 
 export class PdfParser extends BaseParser {
@@ -189,14 +233,34 @@ export class PdfParser extends BaseParser {
       let rowsRead = 0, skipped = 0;
       const pageModes: Record<string, PageExtractionMode> = {};
       const itemsPerPage = new Map<number, number>();
+      const validations: LayoutTableValidation[] = [];
 
-      // 1) TEXTO NATIVO (sempre primeiro): tabelas estruturadas ou linhas do getText.
+      // 0) GEOMETRIA do texto nativo (tokens posicionados → reconstrução linha × coluna), sem linearizar.
+      const layoutRun = await this.reconstructNativeLayout(parser, pages.map((p) => p.num));
+      const layoutByPage = new Map(layoutRun.pages.map((l) => [l.page, l]));
+      const positioned = !layoutRun.failed && layoutRun.pages.some((l) => l.table !== null);
+      if (layoutRun.failed) {
+        warnings.push({ code: "LAYOUT_RECONSTRUCTION_UNAVAILABLE", message: "Texto posicionado indisponível neste PDF; extração pelas linhas de texto.", severity: "info" });
+      }
+
+      // 1) TEXTO NATIVO (sempre primeiro): tabela reconstruída pela geometria; sem tabela posicional em
+      //    nenhuma página → tabelas estruturadas (getTable) ou linhas do getText (comportamento anterior).
       for (const page of pages) {
         if (items.length >= maxItems) break;
         ctx.maxItems = maxItems - items.length;
         const before = items.length;
         const pageTables = tablesByPage.get(page.num);
-        if (pageTables && pageTables.length) {
+        const lp = layoutByPage.get(page.num);
+        if (positioned && !lp?.columnsUnresolved) {
+          if (lp) warnings.push(...layoutWarningsToImport(lp));
+          if (lp?.table) {
+            const out = extractItemsFromLayoutTable(lp.table, ctx, { tableIndex: 0, source: "native" });
+            items.push(...out.items); warnings.push(...out.warnings); rowsRead += out.rowsRead; skipped += out.skipped;
+            validations.push(out.validation);
+          }
+          // Página sem tabela de itens (identificação/assinatura/rodapé): nenhum item é gerado dela.
+        } else if (pageTables && pageTables.length) {
+          if (lp?.columnsUnresolved) warnings.push(...layoutWarningsToImport(lp));
           pageTables.forEach((matrix, tableIndex) => {
             const out = matrixToRawItems(matrix, ctx, (r) => ({
               location: { page: page.num, row: r + 1 },
@@ -206,6 +270,7 @@ export class PdfParser extends BaseParser {
             ctx.maxItems = maxItems - items.length;
           });
         } else {
+          if (lp?.columnsUnresolved) warnings.push(...layoutWarningsToImport(lp));
           const lines = (page.text ?? "").split(/\r?\n/);
           const out = linesToRawItems(lines, ctx, (lineIdx) => ({
             location: { page: page.num, row: lineIdx + 1 },
@@ -234,7 +299,7 @@ export class PdfParser extends BaseParser {
           : { code: "OCR_REQUIRED_PARTIAL", message: `${noUseful.length} página(s) digitalizada(s) não processada(s) (OCR indisponível); somente as páginas com texto foram extraídas.`, severity: "warning" });
         if (items.length === 0) warnings.push({ code: "SCANNED_PDF_UNSUPPORTED", message: "Nenhum texto extraível encontrado; nenhum item foi extraído.", severity: "warning" });
       } else if (ocrTargets.length > 0 && opts.ocr) {
-        const r = await this.runOcr(parser, ocrTargets, opts, ctx, maxItems - items.length);
+        const r = await this.runOcr(parser, ocrTargets, opts, ctx, maxItems - items.length, positioned);
         ocrInfo = r.info; ocrArtifact = r.artifact;
         warnings.push(...r.warnings);
         rowsRead += r.rowsRead; skipped += r.skipped;
@@ -242,6 +307,8 @@ export class PdfParser extends BaseParser {
           // Página reconhecida por OCR substitui a leitura nativa (que não rendeu item).
           for (const n of r.pagesProcessed) pageModes[String(n)] = "ocr";
           items.push(...r.items);
+          for (const l of r.layouts) layoutByPage.set(l.page, l);
+          validations.push(...r.validations);
         }
       }
 
@@ -250,6 +317,25 @@ export class PdfParser extends BaseParser {
       }
 
       const ocrIdentity = opts.ocr ? opts.ocr.port.identity() : null;
+      const layoutPages = [...layoutByPage.values()].sort((a, b) => a.page - b.page);
+      const layoutInfo: LayoutLineageInfo = {
+        layoutVersion:      PDF_LAYOUT_VERSION,
+        mode:               positioned || Object.values(pageModes).includes("ocr") ? "positioned" : "legacy_text",
+        durationMs:         layoutRun.durationMs,
+        pageCount:          layoutPages.length,
+        tokenCount:         layoutPages.reduce((a, l) => a + l.tokenCount, 0),
+        rowCount:           layoutPages.reduce((a, l) => a + l.rowCount, 0),
+        columnCount:        Math.max(0, ...layoutPages.map((l) => l.columnCount)),
+        candidateItemCount: layoutPages.reduce((a, l) => a + l.candidateRowCount, 0),
+        validItemCount:     layoutPages.reduce((a, l) => a + l.itemRowCount, 0),
+        warningsCount:      layoutPages.reduce((a, l) => a + l.warnings.length, 0),
+        pagesWithoutItemTable: layoutPages.filter((l) => l.pageHasNoItemTable).map((l) => l.page),
+        pages: layoutPages.map((l) => ({
+          page: l.page, tokenCount: l.tokenCount, rowCount: l.rowCount, columnCount: l.columnCount,
+          candidateRowCount: l.candidateRowCount, itemRowCount: l.itemRowCount, pageHasNoItemTable: l.pageHasNoItemTable,
+        })),
+        validation:         summarizeValidation(validations),
+      };
       const lineage: ExtractionLineage = {
         lineageVersion:   EXTRACTION_LINEAGE_VERSION,
         extractionMode:   deriveExtractionMode(pageModes),
@@ -258,6 +344,8 @@ export class PdfParser extends BaseParser {
         parserType:       this.parserType,
         parserVersion:    PARSER_VERSION,
         heuristicVersion: assessment.heuristicVersion,
+        layoutVersion:    PDF_LAYOUT_VERSION,
+        layout:           layoutInfo,
         pageCount,
         nativePages:      Object.values(pageModes).filter((m) => m === "native_text").length,
         ocrPages:         Object.values(pageModes).filter((m) => m === "ocr").length,
@@ -265,8 +353,8 @@ export class PdfParser extends BaseParser {
         ocr:              ocrInfo,
         fingerprint:      computeExtractionFingerprint({
           sourceChecksum: opts.sourceChecksum, parserType: this.parserType, parserVersion: PARSER_VERSION,
-          heuristicVersion: assessment.heuristicVersion, pageModes,
-          ocr: ocrInfo && ocrIdentity ? { ...ocrIdentity, renderWidth: opts.ocr!.renderWidth, layoutVersion: OCR_LAYOUT_VERSION } : null,
+          heuristicVersion: assessment.heuristicVersion, layoutVersion: PDF_LAYOUT_VERSION, pageModes,
+          ocr: ocrInfo && ocrIdentity ? { ...ocrIdentity, renderWidth: opts.ocr!.renderWidth, layoutVersion: PDF_LAYOUT_VERSION } : null,
         }),
       };
 
@@ -274,7 +362,10 @@ export class PdfParser extends BaseParser {
       const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs, { pagesProcessed: pages.length });
       return {
         items, warnings, errors: [], summary, extraction: lineage, ocrArtifact,
-        rawMetadata: { pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION, extractionMode: lineage.extractionMode },
+        rawMetadata: {
+          pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION,
+          extractionMode: lineage.extractionMode, layoutVersion: PDF_LAYOUT_VERSION, layoutMode: layoutInfo.mode,
+        },
       };
     } catch (err) {
       return this.fail(mapError(err), startMs);
@@ -289,7 +380,7 @@ export class PdfParser extends BaseParser {
    * pelo parser tabular canônico. Limites: páginas (maxPages), orçamento TOTAL de tempo (render + OCR) e
    * itens. Falha do motor/tempo ⇒ `info.failure` (o chamador decide o desfecho; nada é fingido).
    */
-  private async runOcr(parser: PdfParseInstance, targets: number[], opts: ParseOptions, ctx: TabularContext, itemBudget: number): Promise<OcrRunOutcome> {
+  private async runOcr(parser: PdfParseInstance, targets: number[], opts: ParseOptions, ctx: TabularContext, itemBudget: number, nativeHasTable: boolean): Promise<OcrRunOutcome> {
     const cfg = opts.ocr!;
     const id = cfg.port.identity();
     const t0 = Date.now();
@@ -301,7 +392,7 @@ export class PdfParser extends BaseParser {
     const info: OcrLineageInfo = {
       engine: id.engine, engineVersion: id.engineVersion, coreVersion: id.coreVersion, language: id.language,
       languageDataVersion: id.languageDataVersion, config: id.config, renderWidth: cfg.renderWidth,
-      layoutVersion: OCR_LAYOUT_VERSION, pagesRequested: targets.length, pagesProcessed: 0, meanConfidence: 0,
+      layoutVersion: PDF_LAYOUT_VERSION, pagesRequested: targets.length, pagesProcessed: 0, meanConfidence: 0,
       durationMs: 0, warningsCount: 0, outputDigest: null, nondeterministic: true, failure: null,
     };
     const remaining = () => cfg.timeoutMs - (Date.now() - t0);
@@ -322,12 +413,22 @@ export class PdfParser extends BaseParser {
       const result = await cfg.port.recognize(images, { timeoutMs: Math.max(1, remaining()) });
 
       const items: RawExtractedItem[] = [];
+      const layouts: PageLayoutResult[] = [];
+      const validations: LayoutTableValidation[] = [];
       let rowsRead = 0, skipped = 0;
-      for (const page of result.pages) {
+      // Mesma decisão por DOCUMENTO do texto nativo: havendo tabela de itens (nativa ou reconhecida), páginas
+      // sem tabela (assinatura, identificação) não geram itens pelo fallback de linhas.
+      const geometric = result.pages.map((p) => reconstructOcrPage(p));
+      const documentHasTable = nativeHasTable || geometric.some((g) => g.table !== null);
+      for (const [k, page] of result.pages.entries()) {
         ctx.maxItems = Math.max(0, itemBudget - items.length);
         if (ctx.maxItems === 0) break;
-        const out = extractItemsFromOcrPage(page, ctx, { minConfidence: cfg.minConfidence, engine: result.engine, engineVersion: result.engineVersion });
+        const out = extractItemsFromOcrPage(page, ctx, { minConfidence: cfg.minConfidence, engine: result.engine, engineVersion: result.engineVersion }, {
+          geometric: geometric[k], allowLinesFallback: !documentHasTable,
+        });
         items.push(...out.items); warnings.push(...out.warnings); rowsRead += out.rowsRead; skipped += out.skipped;
+        layouts.push(out.layout);
+        if (out.validation) validations.push(out.validation);
       }
       const lowConfidencePages = result.pages.filter((p) => p.confidence < cfg.minConfidence).map((p) => p.pageNumber);
       if (lowConfidencePages.length) {
@@ -344,6 +445,7 @@ export class PdfParser extends BaseParser {
       return {
         items, warnings, rowsRead, skipped, pagesProcessed: result.pages.map((p) => p.pageNumber), info,
         artifact: { pages: result.pages.map((p) => ({ pageNumber: p.pageNumber, confidence: p.confidence, text: p.text })) },
+        layouts, validations,
       };
     } catch (err) {
       const code = err instanceof OcrError ? err.code : /^TIMEOUT:/.test(err instanceof Error ? err.message : "") ? "OCR_TIMEOUT" : "OCR_RENDER_FAILED";
@@ -351,7 +453,38 @@ export class PdfParser extends BaseParser {
       info.durationMs = Date.now() - t0;
       info.failure = { code, message: message.slice(0, 300) };
       warnings.push({ code: "OCR_FAILED", message: `OCR não concluído (${code}).`, severity: "warning" });
-      return { items: [], warnings, rowsRead: 0, skipped: 0, pagesProcessed: [], info };
+      return { items: [], warnings, rowsRead: 0, skipped: 0, pagesProcessed: [], info, layouts: [], validations: [] };
+    }
+  }
+
+  /**
+   * Layout v2 — lê o texto POSICIONADO de cada página (pdfjs `getTextContent`: transform/width/height, na ordem
+   * original) e reconstrói a tabela pela geometria. Custo ≈ O(n log n) por página — ordens de grandeza abaixo do
+   * OCR. Falha em obter o texto posicionado não derruba o parse: o chamador usa o caminho de linhas anterior.
+   */
+  private async reconstructNativeLayout(parser: PdfParseInstance, pageNums: number[]): Promise<LayoutRun> {
+    const t0 = Date.now();
+    if (typeof parser.load !== "function") return { pages: [], durationMs: 0, failed: true };
+    try {
+      const doc = await withTimeout(parser.load(), TIMEOUT_MS, "layout");
+      const pages: PageLayoutResult[] = [];
+      let carried: CarriedHeader | null = null;
+      for (const n of pageNums) {
+        const page = await withTimeout(doc.getPage(n), TIMEOUT_MS, "layout");
+        const viewport = page.getViewport({ scale: 1 });
+        const content = await withTimeout(page.getTextContent(), TIMEOUT_MS, "layout");
+        const tokens = tokensFromPdfTextItems(content.items.filter(isTextItem), n, (x, y) => {
+          const [vx, vy] = viewport.convertToViewportPoint(x, y);
+          return [vx, vy];
+        });
+        const result = reconstructPageTable(tokens, { page: n, carriedHeader: carried });
+        if (result.table?.header) carried = { header: result.table.header, headerSynthesized: result.table.headerSynthesized, columnGroups: result.table.columnGroups };
+        pages.push(result);
+        try { page.cleanup?.(); } catch { /* noop */ }
+      }
+      return { pages, durationMs: Date.now() - t0, failed: false };
+    } catch {
+      return { pages: [], durationMs: Date.now() - t0, failed: true };
     }
   }
 

@@ -128,7 +128,7 @@ describe.skipIf(!DB)("U2A-OCR — Pesquisa de Preços com PDF digitalizado (MySQ
     const done = await runWorker(ORG, s);
     expect(done).toMatchObject({ status: "awaiting_review", stage: "review_required" });
     const lineage = (done.extractionSummary as any).extraction;
-    expect(lineage).toMatchObject({ extractionMode: "ocr", sourceChecksum: s.checksum, parserVersion: "2.2.0", ocr: { engine: "tesseract.js", language: "por", nondeterministic: true } });
+    expect(lineage).toMatchObject({ extractionMode: "ocr", sourceChecksum: s.checksum, parserVersion: "2.3.0", ocr: { engine: "tesseract.js", language: "por", nondeterministic: true } });
     expect(mem.has(lineage.ocr.artifactKey)).toBe(true);
     const items = await getStagingItems(s.id, ORG);
     expect(items.map((i) => [i.rawDescription, i.rawUnitPrice])).toEqual([["Cadeira giratoria", "1.234,56"], ["Mesa de reuniao", "850,00"], ["Papel A4 resma", "R$ 23,90"]]);

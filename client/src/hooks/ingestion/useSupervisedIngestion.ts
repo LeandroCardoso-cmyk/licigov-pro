@@ -64,6 +64,8 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
       enabled: sessionId != null,
       refetchInterval: (q) => {
         const s = q.state.data?.session?.status as IngestionSessionStatus | undefined;
+        // Layout v2 — reextração em andamento (sessão continua em revisão, estágio "reprocessing").
+        if (q.state.data?.session?.stage === "reprocessing") return 1500;
         return s && POLL_STATUSES.includes(s) ? 1500 : false;
       },
       refetchOnWindowFocus: false,
@@ -203,6 +205,29 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     }
   }, [sessionId, enqueue, statusQuery]);
 
+  // Layout v2 — reprocessar a extração da MESMA sessão (só quando elegível; motivo auditado; o servidor revalida).
+  const reprocessMut = trpc.ingestion.reprocessExtraction.useMutation();
+  const [reprocessError, setReprocessError] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+  const stage = (session as { stage?: string | null } | null)?.stage ?? null;
+  const prevStageRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Reextração concluída (ou não aplicada): recarrega a lista de itens do staging.
+    if (prevStageRef.current === "reprocessing" && stage !== "reprocessing") void utils.ingestion.listStagingItems.invalidate();
+    prevStageRef.current = stage;
+  }, [stage, utils]);
+  const reprocess = useCallback(async (reason: string) => {
+    if (sessionId == null || reprocessMut.isPending) return;
+    setReprocessError(null);
+    try {
+      await reprocessMut.mutateAsync({ sessionId, procurementProcessId: opts.procurementProcessId, reason });
+      void statusQuery.refetch();
+    } catch (err) {
+      setReprocessError(err instanceof Error ? err.message.replace(/^REPROCESS_FORBIDDEN:\s*/, "") : "Falha ao solicitar o reprocessamento.");
+      void statusQuery.refetch();
+    }
+  }, [sessionId, reprocessMut, opts.procurementProcessId, statusQuery]);
+
   // PR B.2.4 — promoção supervisionada ao domínio (só quando elegível; idempotente; anti-duplo-clique).
   const promoteMut = trpc.ingestion.promoteSession.useMutation();
   const promotingRef = useRef(false);
@@ -275,5 +300,10 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     isPromoting: promoteMut.isPending,
     promoteError,
     promotionResult: promoteMut.data ?? null,
+    // Layout v2 — reprocessamento governado da extração
+    reprocessState: statusQuery.data?.reprocess ?? null,
+    reprocess,
+    isReprocessing: reprocessMut.isPending,
+    reprocessError,
   };
 }

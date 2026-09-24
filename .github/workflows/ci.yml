@@ -193,6 +193,13 @@ jobs:
       - name: Smoke — U2A-OCR (PDF digitalizado → OCR governado → staging → promoção)
         run: pnpm exec vitest run server/__tests__/integration/ingestion-ocr-mysql-smoke.test.ts
 
+      # Layout v2 — PDF DIGITAL layout-aware (Golden E sanitizado: 5 itens / 30 cotações, OCR não roda) e
+      # REPROCESSAMENTO SEGURO: mesma sessão, troca atômica do staging não revisado, auditoria, FORBIDDEN com
+      # qualquer decisão humana, RBAC, isolamento multi-tenant, reservas concorrentes, rollback e sem duplicar.
+      # Exige import_sessions canônico → antes da reconciliação da 0288.
+      - name: Smoke — Layout v2 (PDF layout-aware + reprocessamento seguro)
+        run: pnpm exec vitest run server/__tests__/integration/ingestion-reextraction-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts

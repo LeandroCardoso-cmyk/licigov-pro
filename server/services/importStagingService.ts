@@ -18,22 +18,22 @@ const log = serviceLogger("ImportStagingService");
 
 const STAGING_TTL_DAYS = 30;
 
+type StagingDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+/** Conexão ou transação (a substituição do staging acontece DENTRO de uma transação). */
+export type StagingExecutor = StagingDb | Parameters<Parameters<StagingDb["transaction"]>[0]>[0];
+
 // ─── Persist ──────────────────────────────────────────────────────────────────
 
-export async function persistStagingItems(
+/** Insere os itens brutos no staging (pendentes) pelo executor informado — conexão ou transação. */
+export async function insertStagingRows(
+  exec:           StagingExecutor,
   items:          RawExtractedItem[],
   organizationId: number,
 ): Promise<number[]> {
-  if (items.length === 0) return [];
-
-  const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
-
   const expiresAt = addDays(new Date(), STAGING_TTL_DAYS);
   const ids: number[] = [];
-
   for (const item of items) {
-    const [row] = await db.insert(importStagingItems).values({
+    const [row] = await exec.insert(importStagingItems).values({
       importSessionId:    item.importSessionId,
       organizationId,
       rawDescription:     item.rawDescription ?? null,
@@ -59,6 +59,19 @@ export async function persistStagingItems(
     }).$returningId();
     ids.push(row.id);
   }
+  return ids;
+}
+
+export async function persistStagingItems(
+  items:          RawExtractedItem[],
+  organizationId: number,
+): Promise<number[]> {
+  if (items.length === 0) return [];
+
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
+
+  const ids = await insertStagingRows(db, items, organizationId);
 
   log.info("staging_items_persisted", {
     count:         items.length,
@@ -73,8 +86,8 @@ export async function persistStagingItems(
  * U2A — Persistência REPLAY-SAFE para o worker: uma nova tentativa de extração da MESMA sessão substitui os
  * itens que NINGUÉM tocou (pendentes, sem correção) em vez de duplicá-los. Se houver QUALQUER item já
  * revisado ou corrigido por humano, nada é alterado e a chamada falha (a decisão humana nunca é sobrescrita).
- * Só DB (parse/OCR já terminaram, fora de qualquer transação). Falha entre a remoção e a inserção afeta
- * apenas itens intocados — a tentativa seguinte (retry do worker) os recria; nunca há duplicação.
+ * Layout v2: a substituição é ATÔMICA (uma transação: bloqueia os itens da sessão, confere que ninguém os
+ * tocou, remove e insere) — nunca "metade antiga + metade nova". Parse/OCR continuam FORA da transação.
  */
 export class StagingAlreadyReviewedError extends Error {
   constructor(readonly touched: number) {
@@ -91,18 +104,33 @@ export async function replaceUnreviewedStagingItems(
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível." });
 
+  const result = await db.transaction((tx) => replaceUntouchedStagingTx(tx, importSessionId, organizationId, items));
+  if (result.replaced > 0) log.info("staging_items_replaced", { sessionId: importSessionId, organizationId, removed: result.replaced });
+  log.info("staging_items_persisted", { count: result.ids.length, sessionId: importSessionId, organizationId });
+  return result;
+}
+
+/**
+ * Substituição do staging INTOCADO dentro de uma transação existente: `SELECT … FOR UPDATE` dos itens da sessão
+ * (tenant-scoped), recusa se algum foi revisado/corrigido, remove e insere. Uma revisão concorrente espera o
+ * lock e, após o commit, não encontra mais o item antigo (CONFLICT/NOT_FOUND) — nunca sobrescreve a decisão.
+ */
+export async function replaceUntouchedStagingTx(
+  tx:              StagingExecutor,
+  importSessionId: number,
+  organizationId:  number,
+  items:           RawExtractedItem[],
+): Promise<{ ids: number[]; replaced: number }> {
   const scope = and(eq(importStagingItems.importSessionId, importSessionId), eq(importStagingItems.organizationId, organizationId));
-  const existing = await db.select({
+  const existing = await tx.select({
     id: importStagingItems.id, reviewStatus: importStagingItems.reviewStatus, correctionRevision: importStagingItems.correctionRevision,
-  }).from(importStagingItems).where(scope);
+  }).from(importStagingItems).where(scope).for("update");
   const touched = existing.filter(i => i.reviewStatus !== "pending" || (i.correctionRevision ?? 0) > 0).length;
   if (touched > 0) throw new StagingAlreadyReviewedError(touched);
-
   if (existing.length > 0) {
-    await db.delete(importStagingItems).where(and(scope, inArray(importStagingItems.id, existing.map(i => i.id))));
-    log.info("staging_items_replaced", { sessionId: importSessionId, organizationId, removed: existing.length });
+    await tx.delete(importStagingItems).where(and(scope, inArray(importStagingItems.id, existing.map(i => i.id))));
   }
-  const ids = await persistStagingItems(items, organizationId);
+  const ids = items.length > 0 ? await insertStagingRows(tx, items, organizationId) : [];
   return { ids, replaced: existing.length };
 }
 
@@ -160,7 +188,9 @@ export async function reviewStagingItem(
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Item já revisado: ${item.reviewStatus}.` });
   }
 
-  await db.update(importStagingItems).set({
+  // Compare-and-set: só revisa se o item AINDA existe e está pendente (uma reextração concorrente pode tê-lo
+  // substituído — nesse caso a decisão não é gravada "no vazio": CONFLICT acionável).
+  const result = await db.update(importStagingItems).set({
     reviewStatus: action,
     reviewedBy,
     reviewedAt:   new Date(),
@@ -168,7 +198,12 @@ export async function reviewStagingItem(
   }).where(and(
     eq(importStagingItems.id,             itemId),
     eq(importStagingItems.organizationId, organizationId),
+    eq(importStagingItems.reviewStatus,   "pending"),
   ));
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  if (header && typeof header.affectedRows === "number" && header.affectedRows === 0) {
+    throw new TRPCError({ code: "CONFLICT", message: "O item mudou durante a revisão (reextração ou outro revisor). Atualize a lista e revise novamente." });
+  }
 
   log.debug("staging_item_reviewed", { itemId, action, organizationId });
 }

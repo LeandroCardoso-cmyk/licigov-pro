@@ -61,6 +61,8 @@ import {
   assertSessionApprovable, ImportInvariantViolation, OUTCOME_MESSAGE, OUTCOME_STAGE,
 } from "../domain/importOutcome";
 import type { ExtractionLineage } from "../domain/extractionLineage";
+import { getReprocessEligibility, releaseReextraction, reserveReextraction } from "../services/importReprocessService";
+import { REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
@@ -172,14 +174,36 @@ const SHA256 = z.string().regex(/^[a-fA-F0-9]{64}$/, "checksum sha256 inválido"
 function extractionView(summary: unknown): {
   mode: string; pageCount: number; ocrPages: number; engine: string | null; engineVersion: string | null;
   meanConfidence: number | null; failureCode: string | null;
+  layoutVersion: string | null; layoutMode: string | null; pagesWithoutItemTable: number[];
+  validation: { validQuotes: number; documentTotalCents: number | null; calculatedTotalCents: number; totalMatches: boolean | null; averageMismatches: number } | null;
+  reextractions: number;
 } | null {
   const e = (summary as { extraction?: ExtractionLineage } | null)?.extraction;
   if (!e) return null;
+  const v = e.layout?.validation ?? null;
   return {
     mode: e.extractionMode, pageCount: e.pageCount, ocrPages: e.ocrPages,
     engine: e.ocr?.engine ?? null, engineVersion: e.ocr?.engineVersion ?? null,
     meanConfidence: e.ocr?.meanConfidence ?? null, failureCode: e.ocr?.failure?.code ?? null,
+    // Layout v2 — versão/modo da reconstrução, páginas sem itens e conferência média/total (sem conteúdo).
+    layoutVersion: e.layoutVersion ?? null, layoutMode: e.layout?.mode ?? null,
+    pagesWithoutItemTable: e.layout?.pagesWithoutItemTable ?? [],
+    validation: v ? { validQuotes: v.validQuotes, documentTotalCents: v.documentTotalCents, calculatedTotalCents: v.calculatedTotalCents, totalMatches: v.totalMatches, averageMismatches: v.averageMismatches } : null,
+    reextractions: ((summary as { reextractions?: unknown[] } | null)?.reextractions ?? []).length,
   };
+}
+
+/** Elegibilidade de reprocessamento exposta à UI (a ação é revalidada no servidor a cada pedido). */
+async function reprocessView(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>, orgId: number): Promise<{
+  eligible: boolean; inProgress: boolean; blockers: string[]; message: string;
+}> {
+  const inProgress = s.stage === REEXTRACTION_STAGE;
+  if (s.status !== "awaiting_review" || isDocumentImportType(s.importType)) {
+    return { eligible: false, inProgress: false, blockers: ["NOT_AWAITING_REVIEW"], message: "Reprocessamento disponível apenas para sessões aguardando revisão." };
+  }
+  const e = await getReprocessEligibility(s.id, orgId).catch(() => null);
+  if (!e) return { eligible: false, inProgress, blockers: ["UNAVAILABLE"], message: "Elegibilidade de reprocessamento indisponível." };
+  return { eligible: e.eligible, inProgress: inProgress && e.blockers.includes("REPROCESS_IN_PROGRESS"), blockers: e.blockers, message: e.message };
 }
 
 /** Serializa a sessão para o cliente, ocultando nada sensível (não há segredos aqui). */
@@ -386,7 +410,7 @@ export const ingestionRouter = router({
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
       assertSessionProcess(session, input.procurementProcessId);
       const summary = await getStagingSummary(input.sessionId, orgId);
-      return { session: toSessionStatus(session), staging: summary };
+      return { session: toSessionStatus(session), staging: summary, reprocess: await reprocessView(session, orgId) };
     }),
 
   /**
@@ -460,6 +484,47 @@ export const ingestionRouter = router({
       });
 
       return { sessionId: session.id, status: "queued" as const, enqueued: true, jobId };
+    }),
+
+  /**
+   * Layout v2 — REPROCESSAR EXTRAÇÃO de uma sessão em revisão SEM nenhuma decisão humana (nenhum item aceito/
+   * rejeitado/pulado/corrigido, nenhuma promoção). Reserva atômica (bloqueia pedidos simultâneos), reextração no
+   * worker FORA de transação e troca ATÔMICA do staging não revisado na MESMA sessão (mesmo original, checksum e
+   * linhagem; versão do parser/layout atualizada; auditoria). Havendo qualquer intervenção humana ⇒ FORBIDDEN.
+   * RBAC: operator+ — o mesmo papel que envia e revisa a sessão; reprocessar NÃO aprova nem promove (promoção
+   * continua manager+). Escopo: tenant (contexto) + processo canônico obrigatório.
+   */
+  reprocessExtraction: orgRoleProcedure("operator")
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      reason:               z.string().trim().min(10, "Informe o motivo do reprocessamento (mín. 10 caracteres).").max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+
+      const reserved = await reserveReextraction({
+        sessionId: session.id, organizationId: orgId, actorUserId: ctx.user!.id, reason: input.reason,
+        correlationId: ctx.correlationId ?? null, requestId: ctx.requestId ?? null,
+      });
+      const jobId = enqueueImport(session.id, orgId, session.sourceFileId, {
+        correlationId: ctx.correlationId,
+        reextract: { actorUserId: ctx.user!.id, reason: input.reason, previousStage: reserved.previousStage },
+      });
+      if (jobId === null) {
+        // Já há processamento em voo neste processo: devolve a reserva (nada muda) e informa.
+        await releaseReextraction({
+          sessionId: session.id, organizationId: orgId, previousStage: reserved.previousStage, actorUserId: ctx.user!.id,
+          correlationId: ctx.correlationId ?? null, code: "ALREADY_IN_FLIGHT", message: "Processamento já em andamento.",
+        });
+        throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um processamento em andamento para esta sessão." });
+      }
+      return { sessionId: session.id, status: "reprocessing" as const, enqueued: true, jobId, previousStagedCount: reserved.stagedCount, notice: REPROCESS_EXPLANATION };
     }),
 
   /** Lista itens de staging da sessão (paginado, tenant-safe) com confiança/proveniência/avisos. */

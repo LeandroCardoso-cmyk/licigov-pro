@@ -181,7 +181,7 @@ describe("token numérico suspeito (OCR) — sinaliza, nunca corrige", () => {
 
 describe("fingerprint de replay", () => {
   const ocr = { engine: "tesseract.js", engineVersion: "7.0.0", coreVersion: "7.0.0", language: "por", languageDataVersion: "por@1.0.0/4.0.0", config: { psm: "6", oem: 1 }, renderWidth: 2000, layoutVersion: "1" };
-  const base = { sourceChecksum: "A".repeat(64), parserType: "pdf", parserVersion: "2.2.0", heuristicVersion: "1", pageModes: { "2": "ocr" as const, "1": "native_text" as const }, ocr };
+  const base = { sourceChecksum: "A".repeat(64), parserType: "pdf", parserVersion: "2.2.0", heuristicVersion: "1", layoutVersion: "2", pageModes: { "2": "ocr" as const, "1": "native_text" as const }, ocr };
   it("estável (mesma entrada ⇒ mesmo hash; checksum case-insensitive; ordem de páginas irrelevante)", () => {
     const a = computeExtractionFingerprint(base);
     const b = computeExtractionFingerprint({ ...base, sourceChecksum: "a".repeat(64), pageModes: { "1": "native_text", "2": "ocr" }, ocr: { ...ocr, config: { oem: 1, psm: "6" } } });
@@ -192,6 +192,7 @@ describe("fingerprint de replay", () => {
     ["checksum", { sourceChecksum: "b".repeat(64) }],
     ["versão do parser", { parserVersion: "2.3.0" }],
     ["heurística", { heuristicVersion: "2" }],
+    ["versão da reconstrução geométrica (layout)", { layoutVersion: "3" }],
     ["versão do motor", { ocr: { ...ocr, engineVersion: "7.1.0" } }],
     ["idioma", { ocr: { ...ocr, language: "eng" } }],
     ["configuração", { ocr: { ...ocr, config: { psm: "4", oem: 1 } } }],

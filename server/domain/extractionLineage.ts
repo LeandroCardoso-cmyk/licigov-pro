@@ -2,8 +2,8 @@
  * U2A-OCR — LINHAGEM da extração de uma sessão (texto nativo × OCR) e FINGERPRINT de replay.
  *
  * O fingerprint fixa TUDO o que determina a saída: checksum do arquivo, modo por página, heurística de
- * texto útil, motor/versão/núcleo/idioma/dados de idioma/configuração do OCR, largura de renderização,
- * versão do layout e do parser. Reprocessar o MESMO arquivo com a MESMA configuração produz o MESMO
+ * texto útil, versão da reconstrução geométrica (layout), motor/versão/núcleo/idioma/dados de idioma/
+ * configuração do OCR, largura de renderização e versão do parser. Reprocessar o MESMO arquivo com a MESMA configuração produz o MESMO
  * fingerprint; qualquer mudança de motor/configuração muda o fingerprint (a linhagem registra o motivo).
  *
  * NÃO-DETERMINISMO registrado: o OCR pode variar entre CPUs/SIMD do WASM mesmo com a mesma configuração.
@@ -14,7 +14,8 @@ import { createHash } from "crypto";
 import type { ExtractionMode } from "./importOutcome";
 import type { OcrEngineIdentity } from "./ocr";
 
-export const EXTRACTION_LINEAGE_VERSION = "1";
+/** 2 — Layout v2: versão da reconstrução geométrica entra na linhagem e no fingerprint. */
+export const EXTRACTION_LINEAGE_VERSION = "2";
 
 export type PageExtractionMode = "native_text" | "ocr" | "skipped";
 
@@ -40,6 +41,46 @@ export interface OcrLineageInfo {
   failure?:            { code: string; message: string } | null;
 }
 
+/** Métricas por página da reconstrução geométrica (sem conteúdo do documento). */
+export interface LayoutPageInfo {
+  page:               number;
+  tokenCount:         number;
+  rowCount:           number;
+  columnCount:        number;
+  candidateRowCount:  number;
+  itemRowCount:       number;
+  pageHasNoItemTable: boolean;
+}
+
+/** Conferência com as evidências impressas (média/total) — nunca altera valores. */
+export interface LayoutValidationSummary {
+  itemRows:             number;
+  validQuotes:          number;
+  documentTotalCents:   number | null;
+  calculatedTotalCents: number;
+  totalMatches:         boolean | null;
+  averageChecks:        number;
+  averageMismatches:    number;
+}
+
+/** Layout v2 — como o texto nativo foi reconstruído em tabela. */
+export interface LayoutLineageInfo {
+  layoutVersion:      string;
+  /** "positioned" = reconstrução geométrica (tokens posicionados); "legacy_text" = linhas do getText/getTable. */
+  mode:               "positioned" | "legacy_text";
+  durationMs:         number;
+  pageCount:          number;
+  tokenCount:         number;
+  rowCount:           number;
+  columnCount:        number;
+  candidateItemCount: number;
+  validItemCount:     number;
+  warningsCount:      number;
+  pagesWithoutItemTable: number[];
+  pages:              LayoutPageInfo[];
+  validation:         LayoutValidationSummary | null;
+}
+
 export interface ExtractionLineage {
   lineageVersion:    string;
   extractionMode:    ExtractionMode;
@@ -48,6 +89,9 @@ export interface ExtractionLineage {
   parserType:        string;
   parserVersion:     string;
   heuristicVersion:  string;
+  /** Versão da reconstrução geométrica (texto nativo e OCR) — entra no fingerprint. */
+  layoutVersion:     string;
+  layout?:           LayoutLineageInfo | null;
   pageCount:         number;
   nativePages:       number;
   ocrPages:          number;
@@ -79,6 +123,7 @@ export function computeExtractionFingerprint(input: {
   parserType: string;
   parserVersion: string;
   heuristicVersion: string;
+  layoutVersion: string;
   pageModes: Record<string, PageExtractionMode>;
   ocr: Pick<OcrEngineIdentity, "engine" | "engineVersion" | "coreVersion" | "language" | "languageDataVersion" | "config"> & { renderWidth: number; layoutVersion: string } | null;
 }): string {
@@ -88,7 +133,7 @@ export function computeExtractionFingerprint(input: {
        Object.keys(input.ocr.config).sort().map((k) => [k, input.ocr!.config[k]]), input.ocr.renderWidth, input.ocr.layoutVersion]
     : null;
   return sha256Hex(JSON.stringify([
-    "extraction-lineage/v1", input.sourceChecksum.toLowerCase(), input.parserType, input.parserVersion,
-    input.heuristicVersion, pages, ocr,
+    "extraction-lineage/v2", input.sourceChecksum.toLowerCase(), input.parserType, input.parserVersion,
+    input.heuristicVersion, input.layoutVersion, pages, ocr,
   ]));
 }

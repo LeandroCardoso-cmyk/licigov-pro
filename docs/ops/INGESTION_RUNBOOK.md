@@ -110,6 +110,42 @@ O `status` persistido é o enum existente; o desfecho fica **explícito** em `st
 - **Memória:** o worker Tesseract (~100–200 MB durante o reconhecimento) é criado por arquivo e encerrado
   ao fim; a fila é serial por processo.
 
+## PDF digital layout-aware e reprocessamento seguro (Layout v2)
+
+- **PDF digital (com texto)**: extraído pela reconstrução geométrica (`extraction.layout.mode = positioned`,
+  `layoutVersion = 3`); OCR **não** roda. `extraction.layout.validation` mostra cotações válidas e a conferência
+  média/total (`totalMatches`). Páginas sem tabela aparecem em `pagesWithoutItemTable` e não geram itens.
+- **Log** `import_layout_reconstructed` (contagens de páginas/tokens/linhas/colunas/itens, versão, duração, avisos) —
+  sem conteúdo do documento. Útil para comparar `candidateItemCount` × `validItemCount`.
+
+| Sintoma | Causa provável | Ação |
+|---|---|---|
+| Itens como "R$", título ou cabeçalho numa sessão antiga | Extração anterior ao Layout v2 (parser ≤ 2.2.0) | Se **nenhum** item foi revisado: "Reprocessar extração" (mesma sessão). Senão: rejeitar os itens indevidos |
+| `DOCUMENT_AVERAGE_MISMATCH` / `TOTAL_RECONCILIATION_MISMATCH` | Média/total impressos ≠ cálculo das cotações válidas | Conferir cotações com o original; o sistema **não** ajusta valores |
+| `SOURCE_IDENTITY_UNRESOLVED` | Rótulo da coluna de fonte ilegível (ex.: OCR) | Informar a fonte na revisão (valor foi preservado) |
+| `LAYOUT_HEADER_INFERRED` / `LAYOUT_VALUES_NOT_EXTRACTED` | Cabeçalho ilegível / coluna com leitura inconsistente | Conferir colunas com o original; preferir o PDF com texto ou a planilha |
+| `LAYOUT_STACKED_CELLS` (info) | Colunas com campos empilhados (unidade/qtde., média/total, anexo/lote/item) separadas | Esperado; conferir unidade/quantidade na revisão |
+| `LAYOUT_STACKED_CELL_INCOMPLETE` | Célula empilhada com nível faltando em algum item | Conferir unidade/quantidade e média/total do item com o original |
+| `LAYOUT_COLUMNS_UNRESOLVED` (info) | Texto com espaços sem colunas alinhadas | Esperado: extração pelas linhas de texto (comportamento anterior) |
+
+**Reprocessar extração (`ingestion.reprocessExtraction`)** — operator+, escopado por tenant + processo, motivo
+obrigatório (≥ 10 caracteres). Permitido SOMENTE com a sessão em `awaiting_review`, todos os itens pendentes, sem
+correção humana e sem promoção. Retornos:
+
+| Retorno | Significado | Ação |
+|---|---|---|
+| `PRECONDITION_FAILED REPROCESS_FORBIDDEN` | Há decisão humana (aceito/rejeitado/pulado/corrigido) ou promoção | Não reprocessar; revisar item a item |
+| `CONFLICT REPROCESS_FORBIDDEN` | Reprocessamento já em andamento (reserva de 15 min) ou processamento em voo | Aguardar; a UI mostra "Reprocessando a extração" |
+| `NOT_FOUND` | Sessão de outro tenant/processo | — |
+
+- Durante o reprocessamento a sessão fica `awaiting_review` com `stage = reprocessing` e o staging antigo intacto.
+  Se alguém revisar um item nesse intervalo, a troca é **recusada** (a decisão humana vence) e nada muda.
+- A troca é **atômica** (uma transação); nova extração sem item revisável **nunca** substitui a anterior.
+- Auditoria em `activity_logs`: `import_reextraction_requested` → `import_reextracted` ou
+  `import_reextraction_not_applied` (com código). Histórico em `extractionSummary.reextractions[]`.
+- **Nunca** apagar/alterar staging por SQL para "reprocessar": use a ação governada (auditoria e atomicidade).
+- Reserva órfã (processo reiniciado no meio): expira em 15 min e um novo pedido pode retomá-la.
+
 ## Upload (multipart streaming)
 
 - `POST /api/ingestion/upload/:sessionId` — `multipart/form-data` (campo de arquivo único).

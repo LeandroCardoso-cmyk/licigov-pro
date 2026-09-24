@@ -49,7 +49,9 @@ const INDEX_PATTERNS       = ["ITEM", "#", "N°", "Nº", "NO.", "N", "SEQ", "LOT
 /** Casa um cabeçalho normalizado com um padrão: igualdade, prefixo, ou palavra inteira. */
 function headerMatches(h: string, p: string): boolean {
   if (!h) return false;
-  if (h === p || h.startsWith(p)) return true;
+  if (h === p) return true;
+  // Padrão de 1 caractere ("N", "#") só casa PALAVRA inteira — "NATURALLE" não é coluna de índice.
+  if (p.length > 1 && h.startsWith(p)) return true;
   return ` ${h} `.includes(` ${p} `);
 }
 
@@ -65,7 +67,7 @@ function matchColumn(headers: string[], patterns: string[], taken: Set<number> =
 function isRowSequence(values: string[]): boolean {
   return values.length >= 2 && values.every((v, k) => /^\d{1,4}$/.test(v) && Number(v) === k + 1);
 }
-function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
+export function isStatHeader(h: string): boolean { return STAT_PATTERNS.some((p) => headerMatches(h, p)); }
 function isIndexHeader(h: string): boolean { return INDEX_PATTERNS.some((p) => headerMatches(h, p)); }
 
 // ─── Heurísticas de valor ───────────────────────────────────────────────────────
@@ -175,7 +177,14 @@ export type WideDetection =
  */
 export function detectWideFormat(headersRaw: string[], dataRows: string[][], map: ColumnMap): WideDetection {
   const headersNorm = headersRaw.map(normalizeHeader);
-  const structural = new Set([map.description, map.quantity, map.unit, map.brand, map.model, map.notes, map.source, map.totalPrice].filter((i) => i >= 0));
+  // Coluna casada como marca/modelo/obs./fonte cujos valores são TODOS preços é coluna de cotação (ex.: "Fonte 1"
+  // num mapa) — como já ocorria com "fornecedor"; nunca gravar "100,00" como fonte/marca.
+  const priceValued = (i: number) => {
+    const v = dataRows.map((r) => (r[i] ?? "").trim()).filter((x) => x !== "");
+    return v.length > 0 && v.every(isPriceCell);
+  };
+  const textual = [map.brand, map.model, map.notes, map.source].filter((i) => i >= 0 && !priceValued(i));
+  const structural = new Set([map.description, map.quantity, map.unit, ...textual, map.totalPrice].filter((i) => i >= 0));
   const candidates: number[] = [];
   headersNorm.forEach((h, i) => {
     if (!h || structural.has(i) || isStatHeader(h) || isIndexHeader(h)) return;
@@ -266,6 +275,8 @@ export interface TableOptions {
   positionalFallback: "five_columns" | "description_only";
   /** Força a linha de cabeçalho (0-based), quando informada pelo operador. */
   headerRow?: number;
+  /** A matriz NÃO tem cabeçalho (reconstrução geométrica sem rótulos): não procurar um entre os dados. */
+  noHeader?: boolean;
   sheetName?: string;
 }
 
@@ -306,7 +317,7 @@ export function tableToRawItems(
   const matrix = matrixIn.map((r) => (r ?? []).map((c) => String(c ?? "").trim()));
   if (matrix.length === 0) return { items, warnings, rowsRead, skipped };
 
-  const headerRowIdx = findHeaderRow(matrix, opts.headerRow);
+  const headerRowIdx = opts.noHeader ? -1 : findHeaderRow(matrix, opts.headerRow);
   const headersRaw = headerRowIdx >= 0 ? matrix[headerRowIdx] : [];
   const headersNorm = headersRaw.map(normalizeHeader);
   if (headerRowIdx < 0) warnings.push({ code: "HEADER_INFERENCE", message: "Cabeçalho não identificado; usando ordem posicional das colunas.", severity: "warning" });
@@ -334,9 +345,11 @@ export function tableToRawItems(
   }
   // Coluna casada como "fornecedor" cujos VALORES são preços (ex.: "Empresa A") é coluna de PREÇO, não o
   // nome do fornecedor — nunca gravar "100,00" como fornecedor (no largo vira cotação; no ambíguo, revisão).
-  if (wide.kind !== "long" && map.supplier >= 0) {
+  if (wide.kind !== "long") {
     const priceCols = wide.kind === "wide" ? wide.supplierColumns : wide.candidateColumns;
-    if (priceCols.includes(map.supplier)) map = { ...map, supplier: -1 };
+    for (const role of ["supplier", "brand", "model", "notes", "source"] as const) {
+      if (map[role] >= 0 && priceCols.includes(map[role])) map = { ...map, [role]: -1 };
+    }
   }
   const at = (row: string[], idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || null) : null);
   const headerKeys = headersRaw.map((h, i) => h || `col${i}`);
