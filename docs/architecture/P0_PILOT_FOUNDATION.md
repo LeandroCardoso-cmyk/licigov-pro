@@ -6,6 +6,10 @@
 
 Constituição: [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) (IA supervisionada, Regra de Ouro, não-ERP).
 
+Evolução: o **Contexto Canônico da Contratação** ([`CANONICAL_PROCUREMENT_CONTEXT.md`](CANONICAL_PROCUREMENT_CONTEXT.md))
+passa a ser a base de fatos reutilizáveis entre documentos; o DFD é o 1º consumidor
+([`DFD_CANONICAL_PREFILL.md`](DFD_CANONICAL_PREFILL.md)).
+
 ---
 
 ## 1. DOCUMENT INTAKE (DFD / ETP / TR importados como documento)
