@@ -21,7 +21,7 @@ import { classifyRowsOutcome } from "../../domain/importOutcome";
 import type { OcrPort, OcrResult, OcrWord } from "../../domain/ocr";
 import type { ParseOptions, ParseResult } from "../../parsers/baseParser";
 import type { RawExtractedItem } from "../../domain/importExtraction";
-import { GOLDEN_E, GOLDEN_E_ITEMS, PLACEHOLDER, goldenEPdf, mapPdf } from "../fixtures/layoutPdfFixtures";
+import { GOLDEN_E, GOLDEN_E_ITEMS, GOLDEN_E_V2, PLACEHOLDER, goldenEPdf, goldenEV2Pdf, mapPdf } from "../fixtures/layoutPdfFixtures";
 import { rasterize } from "../fixtures/ocrPdfFixtures";
 import { TesseractOcrAdapter } from "../../providers/ocr/tesseractOcrAdapter";
 
@@ -64,7 +64,8 @@ function assertGoldenEContract(r: ParseResult) {
   const logical = logicalItems(r.items);
   expect(logical).toHaveLength(5);
   expect(r.items).toHaveLength(30);
-  expect(logical.map((l) => l.description)).toEqual(GOLDEN_E_ITEMS.map((i) => i.description));
+  // Descrição COMPLETA (todas as linhas físicas); a quebra de linha do documento pode cortar palavras.
+  expect(logical.map((l) => l.description.replace(/\s+/g, ""))).toEqual(GOLDEN_E_ITEMS.map((i) => i.description.replace(/\s+/g, "")));
   expect(logical.map((l) => l.unit)).toEqual(EXPECTED.units);
   expect(logical.map((l) => l.quantity)).toEqual(EXPECTED.quantities);
   expect(logical.map((l) => l.quotes.length)).toEqual(EXPECTED.quoteCounts);
@@ -238,6 +239,60 @@ describe("generalização — variantes geométricas do mapa (não passa só no 
   });
 });
 
+describe("GOLDEN E v2 — células EMPILHADAS (espelha a geometria real, 100% fictício)", () => {
+  let V2: Buffer;
+  let r: ParseResult;
+  beforeAll(async () => { V2 = await goldenEV2Pdf(); r = await parser.parse(V2, opts({ ocr: ocrCfg(spyPortV2) })); });
+  const spyPortV2 = spyPort();
+
+  it("contrato: 5 itens, 30 cotações, unidades/quantidades/médias e total 3.349,93; OCR não roda", () => {
+    expect(r.errors).toHaveLength(0);
+    assertGoldenEContract(r);
+    expect(spyPortV2.calls).toBe(0);
+    expect(r.extraction).toMatchObject({ extractionMode: "native_text", layoutVersion: PDF_LAYOUT_VERSION, ocr: null });
+    expect(r.extraction?.layout?.validation).toEqual({
+      itemRows: 5, validQuotes: 30, documentTotalCents: 334993, calculatedTotalCents: 334993, totalMatches: true, averageChecks: 5, averageMismatches: 0,
+    });
+    expect(r.extraction?.layout).toMatchObject({ pagesWithoutItemTable: [2], validItemCount: 5 });
+  });
+
+  it("fontes em texto vertical (várias linhas) viram fornecedor de cada cotação — inclusive nome iniciado por 'N'", () => {
+    const [first] = logicalItems(r.items);
+    const up = GOLDEN_E_V2.sources.map((x) => x.toUpperCase());
+    expect(first.suppliers).toEqual([up[0], up[1], up[2], up[4], up[5], up[6], up[7]]);
+    expect(r.items.every((i) => i.rawSupplier !== null)).toBe(true);
+  });
+
+  it("identificação hierárquica (I / 001 / 00n) preservada como identidade; unidade/qtde e média/total separadas", () => {
+    const ids = logicalItems(r.items).map((l) => (r.items.find((i) => i.rawDescription === l.description)!.rawMetadata.layout as { identifier: string }).identifier);
+    expect(ids).toEqual(["I / 001 / 001", "I / 001 / 002", "I / 001 / 003", "I / 001 / 004", "I / 001 / 005"]);
+    expect(r.warnings.map((w) => w.code)).toContain("LAYOUT_STACKED_CELLS");
+  });
+
+  it("invariantes negativas: ID/data/'R$'/total do topo, título, códigos, média, total, %, linhas de total, rodapé e página 2 nunca viram item/cotação", () => {
+    const prices = r.items.map((i) => (i.rawUnitPrice ?? "").trim());
+    const descs = r.items.map((i) => (i.rawDescription ?? "").toUpperCase());
+    for (const junk of ["900001", "01/01/2026", "R$", "3.349,93", "001", "002", "003", "004", "005"]) expect(prices).not.toContain(junk);
+    for (const avg of GOLDEN_E_ITEMS.map((i) => i.average)) expect(prices).not.toContain(avg);
+    expect(prices.some((p) => /%/.test(p))).toBe(false);
+    for (const t of ["MAPA DE APURA", "VALOR TOTAL", "ANEXO", "PÁGINA", "RETIRADO", "SERVIDOR", "MATRÍCULA", "ENTE PUBLICO", "OBJETO", "900001"]) {
+      expect(descs.some((d) => d.includes(t))).toBe(false);
+    }
+    expect(r.items.every((i) => i.sourceLocation.location.page === 1)).toBe(true);
+    expect(r.items.some((i) => (parseBRL(i.rawUnitPrice) ?? 0) <= 0)).toBe(false);
+  });
+
+  it("replay: mesmo arquivo ⇒ mesma ordem item → cotações e mesmo fingerprint", async () => {
+    const again = await parser.parse(V2, opts({ ocr: ocrCfg(spyPortV2) }));
+    expect(again.items.map((i) => [i.rawDescription, i.rawSupplier, i.rawUnitPrice])).toEqual(r.items.map((i) => [i.rawDescription, i.rawSupplier, i.rawUnitPrice]));
+    expect(again.extraction?.fingerprint).toBe(r.extraction?.fingerprint);
+  });
+
+  it("desempenho: reconstrução geométrica do Golden E v2 bem abaixo de 1 s (≈ O(n log n))", () => {
+    expect(r.extraction?.layout?.durationMs ?? Infinity).toBeLessThan(1000);
+  });
+});
+
 describe("convergência OCR — palavras com a MESMA geometria ⇒ os MESMOS itens (mesma reconstrução)", () => {
   /** "Digitaliza" o Golden E e devolve, como OCR, as palavras do próprio texto nativo (determinístico). */
   async function syntheticOcr(nativePdf: Buffer, renderWidth: number): Promise<OcrPort> {
@@ -290,6 +345,15 @@ describe("convergência OCR — palavras com a MESMA geometria ⇒ os MESMOS ite
     expect(r.items.every((i) => i.parserMetadata.extractionMode === "ocr" && i.parserMetadata.textSource === "ocr")).toBe(true);
     expect(r.items.every((i) => i.confidenceMetadata.requiresReview)).toBe(true);
     // Página de assinatura digitalizada também não gera item (mesma decisão por documento do texto nativo).
+    expect(r.items.every((i) => i.sourceLocation.location.page === 1)).toBe(true);
+  }, 60_000);
+
+  it("Golden E v2 digitalizado + OCR (mesma geometria, rótulos verticais como caixas altas) ⇒ contrato idêntico ao nativo", async () => {
+    const V2 = await goldenEV2Pdf();
+    const r = await parser.parse(await scannedOf(V2), opts({ ocr: ocrCfg(await syntheticOcr(V2, 2200)) }));
+    expect(r.extraction?.extractionMode).toBe("ocr");
+    assertGoldenEContract(r);
+    expect(r.items.every((i) => i.rawSupplier !== null)).toBe(true);
     expect(r.items.every((i) => i.sourceLocation.location.page === 1)).toBe(true);
   }, 60_000);
 

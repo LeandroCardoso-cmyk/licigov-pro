@@ -282,3 +282,110 @@ describe("tipos de célula", () => {
     expect(classifyFragmentText(text)).toBe(kind);
   });
 });
+
+// ─── Layout v3 — região tabular, LogicalItemBlock e células EMPILHADAS ───────────────────────────────────────
+describe("Layout v3 — região tabular, bloco lógico de item e células empilhadas", () => {
+  const FS7 = 7.2;
+  const t = (text: string, x: number, y: number, o: { align?: "left" | "right" | "center"; vertical?: boolean; size?: number } = {}) => tok(text, x, y, { size: o.size ?? FS7, align: o.align, vertical: o.vertical });
+  const SRC = [460, 500, 540, 580]; // bordas direitas das colunas de fonte
+  /** Item "empilhado": L0 = I + descrição + unidade + média; L1 = 001 + preços + %; L2 = 00n + quantidade + total. */
+  function stackedItem(y: number, n: number, desc: string[], unit: string, qty: string, quotes: string[], avg: string, total: string, pct: string) {
+    const L0 = y, L1 = y + 8.2, L2 = y + 16.4;
+    const d0 = L1 - ((desc.length - 1) / 2) * 8.2;
+    return [
+      t("I", 40, L0), t("001", 36, L1), t(String(n).padStart(3, "0"), 36, L2),
+      ...desc.map((d, i) => t(d, 60, d0 + i * 8.2)),
+      t(unit, 310, L0 + 2.3, { align: "center" }), t(qty, 310, L1 + 5.2, { align: "center" }),
+      ...quotes.map((q, i) => t(q, SRC[i], L1, { align: "right" })),
+      t(avg, 640, L0 + 2.3, { align: "right" }), t(total, 640, L1 + 5.2, { align: "right" }),
+      t(pct, 690, L1, { align: "right" }),
+    ];
+  }
+  const header = () => [
+    t("ANEXO", 34, 20), t("LOTE", 35, 28.2), t("ITEM", 35, 36.4),
+    t("PRODUTO / SERVIÇO", 150, 28.2),
+    t("UNIDADE", 310, 20, { align: "center" }), t("/", 310, 28.2, { align: "center" }), t("QTDE.", 310, 36.4, { align: "center" }),
+    ...["FONTE A", "FONTE B", "NORTE SUP", "FONTE D"].map((s, i) => t(s, SRC[i] - 12, 8, { vertical: true })),
+    t("ARITMÉTICA /", 612, 5, { vertical: true }), t("MÉDIA", 604, 12, { vertical: true }), t("VALOR TOTAL", 620, 5, { vertical: true }),
+    t("PERCENTUAL", 675, 5, { vertical: true }),
+  ];
+  const body = () => [
+    ...stackedItem(60, 1, ["OLEO LUBRIFICANTE PARA MOTOR", "DIESEL TAMBOR 200 LITROS", "CLASSE API CI-4"], "Tambor", "1,00", ["920,00", "/////", "985,50", "950,00"], "951,83", "951,83", "7,12%"),
+    ...stackedItem(95, 2, ["GRAXA DE LITIO POTE 1 KG"], "Un", "1,00", ["65,90", "69,00", "/////", "67,00"], "67,30", "67,30", "4,70%"),
+  ];
+  const ctx7 = ctx;
+
+  it("A. caixa de metadados (ID, data, 'R$', valor total) acima do título NÃO cria item nem cotação", () => {
+    const toks = [
+      t("ID", 36, -80, { size: 6.4 }), t("DATA", 90, -80, { size: 6.4 }), t("VALOR TOTAL", 600, -80, { size: 6.4 }),
+      t("900001", 34, -70, { size: 9.9 }), t("01/01/2026", 88, -70, { size: 9.9 }), t("R$", 600, -70, { size: 9.9 }), t("1.019,13", 620, -70, { size: 9.9 }),
+      t("MAPA DE APURAÇÃO DE PREÇOS", 250, -75, { size: 19.8 }),
+      t("OBJETO", 36, -50, { size: 6.4 }), t("Aquisição de materiais fictícios para teste", 34, -40, { size: 9.9 }),
+      ...header(), ...body(),
+    ];
+    const r = reconstructPageTable(toks);
+    expect(r.table?.rows).toHaveLength(2);
+    const out = extractItemsFromLayoutTable(r.table!, ctx7(), { tableIndex: 0, source: "native" });
+    const all = out.items.flatMap((i) => [i.rawDescription, i.rawUnitPrice, i.rawQuantity, i.rawUnit]);
+    for (const junk of ["900001", "01/01/2026", "R$", "1.019,13"]) expect(all).not.toContain(junk);
+    expect(r.roles.preamble).toBeGreaterThan(0);
+  });
+
+  it("B/C. UNIDADE / QTDE. e MÉDIA / VALOR TOTAL empilhadas ⇒ subcolunas virtuais (unidade, quantidade, média, total)", () => {
+    const r = reconstructPageTable([...header(), ...body()]);
+    expect(r.table?.header).toEqual(["ANEXO", "LOTE", "ITEM", "PRODUTO / SERVIÇO", "UNIDADE", "QTDE.", "FONTE A", "FONTE B", "NORTE SUP", "FONTE D", "MÉDIA ARITMÉTICA", "VALOR TOTAL", "PERCENTUAL"]);
+    const out = extractItemsFromLayoutTable(r.table!, ctx7(), { tableIndex: 0, source: "native" });
+    const first = out.items.filter((i) => i.rawDescription?.startsWith("OLEO"));
+    expect(first.map((i) => [i.rawUnit, i.rawQuantity])).toEqual(first.map(() => ["Tambor", "1,00"]));
+    // Média e total impressos: conferência, nunca cotação.
+    expect(out.items.map((i) => i.rawUnitPrice)).not.toContain("951,83");
+    expect(out.items.map((i) => i.rawUnitPrice)).not.toContain("67,30");
+    expect(out.validation.rows.map((x) => x.documentAverageCents)).toEqual([95183, 6730]);
+    expect(out.validation.rows.map((x) => x.averageMatches)).toEqual([true, true]);
+    expect(r.warnings.map((w) => w.code)).toContain("LAYOUT_STACKED_CELLS");
+  });
+
+  it("D. identificação hierárquica empilhada (I / 001 / 00n) é identidade, nunca cotação", () => {
+    const r = reconstructPageTable([...header(), ...body()]);
+    expect(r.table?.rowMeta.map((m) => m.identifier)).toEqual(["I / 001 / 001", "I / 001 / 002"]);
+    const out = extractItemsFromLayoutTable(r.table!, ctx7(), { tableIndex: 0, source: "native" });
+    expect(out.items.some((i) => /^00\d$/.test(i.rawUnitPrice ?? ""))).toBe(false);
+    expect(out.items.map((i) => i.rawSupplier)).toEqual(["FONTE A", "NORTE SUP", "FONTE D", "FONTE A", "FONTE B", "FONTE D"]);
+  });
+
+  it("E/G. preços centralizados entre unidade e quantidade + descrição de 3 linhas ⇒ UM item (bloco lógico)", () => {
+    const r = reconstructPageTable([...header(), ...body()]);
+    expect(r.table?.rows.map((x) => x[3])).toEqual(["OLEO LUBRIFICANTE PARA MOTOR DIESEL TAMBOR 200 LITROS CLASSE API CI-4", "GRAXA DE LITIO POTE 1 KG"]);
+    expect(r.table?.rowMeta.map((m) => m.physicalRows)).toEqual([3, 3]);
+    expect(r.itemRowCount).toBe(2);
+  });
+
+  it("F. linhas de total com números VERTICAIS por fonte + total geral: resumo/rodapé, nunca item", () => {
+    const toks = [...header(), ...body(),
+      t("Valor total do anexo após análise", 100, 150),
+      ...["985,90", "69,00", "985,50", "1.017,00"].map((v, i) => t(v, SRC[i] - 10, 140, { vertical: true })),
+      t("R$", 600, 165), t("1.019,13", 640, 165, { align: "right" }),
+      t("Valor total geral do anexo", 100, 190),
+      ...["985,90", "69,00", "985,50", "1.017,00"].map((v, i) => t(v, SRC[i] - 10, 180, { vertical: true })),
+    ];
+    const r = reconstructPageTable(toks);
+    expect(r.table?.rows).toHaveLength(2);
+    const out = extractItemsFromLayoutTable(r.table!, ctx7(), { tableIndex: 0, source: "native" });
+    expect(out.items.map((i) => i.rawDescription)).not.toContain("Valor total do anexo após análise");
+    expect(out.items.map((i) => i.rawUnitPrice)).not.toContain("1.019,13");
+    expect(out.validation).toMatchObject({ documentTotalCents: 101913, calculatedTotalCents: 95183 + 6730, totalMatches: true });
+    expect(r.warnings.map((w) => w.code)).not.toContain("LAYOUT_ORPHAN_TEXT");
+  });
+
+  it("H. dois itens REALMENTE distintos muito próximos (duas linhas estruturais no mesmo bloco) ⇒ dois itens", () => {
+    const toks = [...header(),
+      t("I", 40, 60), t("001", 36, 60), t("ITEM ALFA", 60, 60), t("UN", 310, 60, { align: "center" }), t("1,00", 330, 60),
+      ...["10,00", "11,00", "12,00", "13,00"].map((q, i) => t(q, SRC[i], 60, { align: "right" })), t("11,50", 640, 60, { align: "right" }), t("5%", 690, 60, { align: "right" }),
+      t("I", 40, 68.2), t("002", 36, 68.2), t("ITEM BETA", 60, 68.2), t("UN", 310, 68.2, { align: "center" }), t("1,00", 330, 68.2),
+      ...["20,00", "21,00", "22,00", "23,00"].map((q, i) => t(q, SRC[i], 68.2, { align: "right" })), t("21,50", 640, 68.2, { align: "right" }), t("5%", 690, 68.2, { align: "right" }),
+    ];
+    const r = reconstructPageTable(toks);
+    expect(r.itemRowCount).toBe(2);
+    expect(r.table?.rows.map((x) => x.find((c) => c.startsWith("ITEM")))).toEqual(["ITEM ALFA", "ITEM BETA"]);
+  });
+});
