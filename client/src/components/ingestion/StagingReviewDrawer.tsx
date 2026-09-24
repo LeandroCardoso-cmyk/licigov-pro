@@ -27,7 +27,7 @@ import {
 import { INSTITUTIONAL_COPY } from "@/lib/ingestion/status";
 import {
   CORRECTABLE_FIELDS, isCorrectable, originalValue, effectiveValue, isCorrected, buildCorrectionPatch,
-  SOURCE_QUANTITY_LABEL, SOURCE_QUANTITY_HELP, CORRECTION_SCOPE_NOTE, type CorrectableField,
+  SOURCE_QUANTITY_LABEL, SOURCE_QUANTITY_HELP, CORRECTION_SCOPE_NOTE, CORRECTION_SECTION_TITLE, type CorrectableField,
 } from "@/lib/ingestion/correction";
 import { newIdempotencyKey } from "@/lib/ingestion/sha256";
 
@@ -104,6 +104,16 @@ export function CorrectionFieldInput({ itemId, field, value, original, disabled,
         Original: <span className="font-mono">{original || "—"}</span>
       </p>
       {field.helpText && <p id={helpId} className="text-xs text-muted-foreground">{field.helpText}</p>}
+    </div>
+  );
+}
+
+/** Cabeçalho do bloco de correção: deixa explícito que se corrige a EXTRAÇÃO do documento-fonte. */
+export function CorrectionSectionHeader({ itemId }: { itemId: number }) {
+  return (
+    <div>
+      <p id={`corr-title-${itemId}`} className="text-sm font-medium text-foreground">{CORRECTION_SECTION_TITLE}</p>
+      <p id={`corr-scope-${itemId}`} className="text-xs text-muted-foreground">{CORRECTION_SCOPE_NOTE}</p>
     </div>
   );
 }
@@ -196,11 +206,13 @@ export function StagingReviewDrawer({
 
           {/* Correção de campos autorizados (Original × Atual) */}
           {canCorrect ? (
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Corrigir campos</p>
-                <p className="text-xs text-muted-foreground">{CORRECTION_SCOPE_NOTE}</p>
-              </div>
+            <div
+              className="space-y-3 rounded-md border border-border p-3"
+              role="group"
+              aria-labelledby={`corr-title-${item.id}`}
+              aria-describedby={`corr-scope-${item.id}`}
+            >
+              <CorrectionSectionHeader itemId={item.id} />
               {fields.map((f) => (
                 <CorrectionFieldInput
                   key={f.logical}
