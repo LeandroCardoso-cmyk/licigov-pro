@@ -240,3 +240,67 @@ versões anteriores, contagem anterior, motivo, correlationId, timestamp), `impo
 nova contagem) ou `import_reextraction_not_applied` (motivo). **UI**: ação "Reprocessar extração" só quando elegível,
 com a explicação "Reprocessar substitui apenas a extração ainda não revisada. Nenhuma decisão humana será
 sobrescrita." e motivo obrigatório.
+
+## Revisão por ITEM LÓGICO (Pesquisa de Preços)
+
+O staging guarda **uma linha por COTAÇÃO** (evidência de preço individual: fonte, valor, lineage, warnings,
+confiança, status, correção). A revisão humana, porém, é sobre o **ITEM**: descrição/unidade/quantidade + cotações +
+média + reconciliação. **5 itens ≠ 30 cotações**: a interface nunca apresenta `quoteCount` como `itemCount`.
+
+O agrupamento é uma **projeção de leitura** (nenhum dado novo persistido; zero migration):
+
+```
+Pesquisa de Preços
+  └─ Item lógico  (server/domain/priceResearchReviewGroups.ts — puro, determinístico)
+       ├─ Cotação 1 … N   (linhas de staging, inalteradas)
+       ├─ média do documento (evidência, reconciliação do layout)
+       ├─ média calculada (todas as cotações com valor válido)
+       └─ média considerada (sem rejeitadas/puladas — só quando há exclusão)
+```
+
+**Identidade do item** (sem fuzzy/LLM/similaridade): a chave lógica **canônica** do domínio,
+`intelligentItemLogicalKey` (descrição normalizada | unidade canônica | quantidade em milésimos), sobre o conteúdo
+EFETIVO (raw + correção) — a MESMA que a promoção usa para consolidar cotações em Itens Inteligentes, logo
+**N itens revisados = N Itens Inteligentes promovidos**. `groupKey` = hash dessa chave (estável; não é PK nem
+identidade oficial). A chave é **conferida** contra a identidade estrutural do parser (página/tabela/linha do
+documento e identificador hierárquico do layout):
+
+| Situação | Sinal | Efeito |
+|---|---|---|
+| Duas linhas distintas do documento (com várias cotações) na mesma chave | `ITEM_IDENTITY_COLLISION` | item `ambiguous`: decisão em lote bloqueada; cotações revisáveis individualmente |
+| Uma linha do documento repartida em chaves diferentes (ex.: correção de descrição em uma cotação) | `ITEM_IDENTITY_SPLIT` | idem |
+| Duas chaves lógicas com o mesmo `groupKey` | `ReviewGroupKeyCollision` | projeção interrompida (fail closed) |
+| Linha sem descrição efetiva | `unassignedQuotes` | não forma item (como na promoção), mas segue listada e revisável |
+
+**Status derivado do item** (nunca persistido): `pending` (nada decidido) · `partially_reviewed` (há decididas e
+pendentes) · `reviewed` (nenhuma pendente, ≥ 1 aceita) · `rejected` (nenhuma pendente, nenhuma aceita).
+
+**Contratos** (`ingestionRouter`):
+
+| Procedure | Papel | Descrição |
+|---|---|---|
+| `getPriceResearchReview({sessionId, procurementProcessId})` | tenant (leitura) | `counts` (`logicalItems`, `quotes`, `items` por status, `quoteStatus`), `groups[]` com `quotes[]` (cada uma com a linha de staging original para inspeção/correção) e `unassignedQuotes[]` |
+| `reviewPriceResearchGroups({sessionId, procurementProcessId, action, groups:[{groupKey, expectedRevision}], note?})` | operator+ | decisão ATÔMICA sobre 1..100 itens |
+
+`reviewPriceResearchGroups` (`server/services/priceResearchReviewService.ts`) — **uma transação**:
+lock da sessão (`FOR UPDATE`, mesma ordem de locks da reextração) → tenant/processo/tipo/`awaiting_review`/sem
+promoção → linhas da sessão `FOR UPDATE` → reprojeção no servidor → `planGroupReview`: a `groupKey` precisa existir
+**nesta** projeção (os IDs das cotações são derivados no servidor, nunca aceitos do browser ⇒ injeção entre
+itens/sessões/tenants impossível), `expectedRevision` precisa bater (membros + status + revisão de correção), identidade
+consistente → compare-and-set das cotações **pendentes** (contagem exata, senão rollback) → `activity_logs`
+`import_item_group_reviewed` na MESMA transação com usuário, itens (`groupKey`, identificadores, linhas do documento),
+**cada cotação afetada** (`pending → ação`), decisões preservadas, motivo, correlationId e timestamp. Decisões
+anteriores em cotações individuais são preservadas; replay sem pendentes não altera nada nem gera registro.
+
+A revisão individual de cotação continua em `reviewItem` / `correctItem`. Regras de promoção, preço de referência,
+parser, OCR e `PDF_LAYOUT_VERSION` **não** mudam. Observabilidade: `price_research_review_grouped`
+(org, processo, sessão, `logicalItemCount`, `quoteCount`, itens ambíguos, `warningsCount`, `durationMs`,
+correlationId — sem conteúdo documental) e `price_research_group_reviewed`.
+
+**UI** (`PriceResearchReviewList` / `PriceResearchItemCard`): contadores "Itens · Cotações · Itens pendentes · Itens
+revisados · Itens rejeitados" + linha de status das cotações; um card por item (descrição uma vez, quantidade,
+unidade, preço médio, nº de cotações, status, média do documento × calculada, "✓ Valores reconciliados" ou
+"⚠ Divergência na média"); cotações recolhidas por padrão ("Ver N cotações"), cada uma com fonte real
+("Fonte não identificada" + aviso quando ausente), valor, status e ações próprias; "Aceitar item"/"Rejeitar item" e
+seleção de itens com confirmação explícita do que será afetado. Observações técnicas da extração e "Reprocessar
+extração" ficam em áreas secundárias recolhidas ("observações da extração", "Ações da extração").

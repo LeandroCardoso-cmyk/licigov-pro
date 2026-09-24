@@ -252,6 +252,8 @@ approveSession (tRPC)               → aprova após revisão (NÃO promove ao d
 | `ingestion.getSessionStatus` | query | Status, progresso, parser+versão, warnings, erro **sanitizado**, tentativas, timestamps + resumo de staging. |
 | `ingestion.listStagingItems` | query | Itens de staging paginados, tenant-safe, com confiança/proveniência/avisos. |
 | `ingestion.reviewItem` / `reviewBulk` | mutation | Revisão humana (aceitar/rejeitar/pular) com ator, justificativa e transição auditados. Idempotente. |
+| `ingestion.getPriceResearchReview` | query | Pesquisa de Preços: projeção por **item lógico** (itens × cotações em contadores separados; cotações subordinadas com fonte, valor, status e lineage). Sem persistência nova. |
+| `ingestion.reviewPriceResearchGroups` | mutation | Decisão **atômica** sobre itens lógicos (operator+): todas as cotações pendentes do item ou nada; revisão otimista por item; auditoria de cada cotação. |
 | `ingestion.approveSession` | mutation | Aprova **após** revisão completa (bloqueia se há itens pendentes). **Não promove** ao domínio. |
 
 **Garantias de segurança:** isolamento multi-tenant em todas as queries; autorização por processo
