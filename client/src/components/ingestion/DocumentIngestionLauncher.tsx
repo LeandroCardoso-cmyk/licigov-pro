@@ -19,6 +19,7 @@ import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabili
 import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import { useSupervisedIngestion, type IngestionImportType } from "@/hooks/ingestion/useSupervisedIngestion";
 import { useStagingReview } from "@/hooks/ingestion/useStagingReview";
+import { usePriceResearchReview } from "@/hooks/ingestion/usePriceResearchReview";
 import { supportedFormatsLabel } from "@/lib/ingestion/capabilities";
 import { PHASE_META, INSTITUTIONAL_COPY, type IngestionPhase } from "@/lib/ingestion/status";
 import { describeOutcome } from "@/lib/ingestion/outcome";
@@ -32,7 +33,8 @@ import { IngestionAuditSummary } from "./IngestionAuditSummary";
 import { StagingReviewTable } from "./StagingReviewTable";
 import { StagingReviewDrawer } from "./StagingReviewDrawer";
 import { PromoteToDomainPanel } from "./PromoteToDomainPanel";
-import { ReprocessExtractionPanel } from "./ReprocessExtractionPanel";
+import { PriceResearchReviewList, PriceResearchReviewSummary } from "./PriceResearchReviewList";
+import { ExtractionActionsPanel, ExtractionObservationsPanel } from "./ExtractionDetailsPanels";
 
 const REVIEW_PHASES: IngestionPhase[] = ["awaiting_review", "partially_reviewed", "reviewed", "approved"];
 
@@ -88,6 +90,9 @@ export function DocumentIngestionLauncher({
   });
   const inReview = REVIEW_PHASES.includes(ingestion.phase);
   const review = useStagingReview(ingestion.sessionId, inReview, procurementProcessId ?? "");
+  // Pesquisa de Preços: revisão ITEM-CÊNTRICA (itens lógicos com cotações subordinadas).
+  const itemCentric = importType === "price_research";
+  const priceReview = usePriceResearchReview(ingestion.sessionId, inReview && itemCentric, procurementProcessId ?? "");
 
   const [pasteText, setPasteText] = useState("");
   const [detailItem, setDetailItem] = useState<StagingItem | null>(null);
@@ -240,27 +245,58 @@ export function DocumentIngestionLauncher({
           </Alert>
         )}
 
-        <IngestionWarningsPanel warnings={sessionWarnings} />
+        {itemCentric ? <ExtractionObservationsPanel warnings={sessionWarnings} /> : <IngestionWarningsPanel warnings={sessionWarnings} />}
 
         {/* Revisão humana */}
         {inReview && (
           <div className="space-y-3">
-            <IngestionAuditSummary summary={summary} sessionId={ingestion.sessionId} procurementProcessId={procurementProcessId} />
-            {ingestion.phase !== "approved" && (
-              <ReprocessExtractionPanel
+            {itemCentric && ingestion.reprocessState?.inProgress && (
+              <ExtractionActionsPanel
                 reprocess={ingestion.reprocessState}
                 isReprocessing={ingestion.isReprocessing}
                 error={ingestion.reprocessError}
                 onReprocess={ingestion.reprocess}
               />
             )}
-            <StagingReviewTable
-              items={review.items as unknown as StagingItem[]}
-              disabled={review.isReviewing || ingestion.phase === "approved" || !!ingestion.reprocessState?.inProgress}
-              onReview={(id, action, note) => review.reviewItem(id, action, note)}
-              onReviewBulk={(ids, action) => review.reviewBulk(ids, action)}
-              onOpenDetail={openDetail}
-            />
+            {itemCentric ? (
+              priceReview.review ? (
+                <>
+                  <PriceResearchReviewSummary counts={priceReview.review.counts} sessionId={ingestion.sessionId} procurementProcessId={procurementProcessId} />
+                  <PriceResearchReviewList
+                    review={priceReview.review}
+                    disabled={review.isReviewing || ingestion.phase === "approved" || !!ingestion.reprocessState?.inProgress}
+                    isDeciding={priceReview.isDeciding}
+                    decisionError={priceReview.decisionError}
+                    onDecideGroups={(action, groups) => priceReview.decideGroups(action, groups)}
+                    onReviewQuote={(id, action) => review.reviewItem(id, action)}
+                    onOpenQuote={(q) => { if (q.stagingItem) openDetail(q.stagingItem as unknown as StagingItem); }}
+                  />
+                </>
+              ) : priceReview.error ? (
+                <IngestionErrorState message={priceReview.error.message} onRetry={priceReview.refresh} />
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" /> Carregando itens…</div>
+              )
+            ) : (
+              <>
+                <IngestionAuditSummary summary={summary} sessionId={ingestion.sessionId} procurementProcessId={procurementProcessId} />
+                {ingestion.phase !== "approved" && (
+                  <ExtractionActionsPanel
+                    reprocess={ingestion.reprocessState}
+                    isReprocessing={ingestion.isReprocessing}
+                    error={ingestion.reprocessError}
+                    onReprocess={ingestion.reprocess}
+                  />
+                )}
+                <StagingReviewTable
+                  items={review.items as unknown as StagingItem[]}
+                  disabled={review.isReviewing || ingestion.phase === "approved" || !!ingestion.reprocessState?.inProgress}
+                  onReview={(id, action, note) => review.reviewItem(id, action, note)}
+                  onReviewBulk={(ids, action) => review.reviewBulk(ids, action)}
+                  onOpenDetail={openDetail}
+                />
+              </>
+            )}
 
             {ingestion.phase === "approved" ? (
               <div className="space-y-3">
@@ -292,7 +328,22 @@ export function DocumentIngestionLauncher({
                 >
                   {review.isApproving ? "Aprovando revisão…" : INSTITUTIONAL_COPY.reviewApproval}
                 </Button>
+                {itemCentric && priceReview.review && priceReview.review.counts.quoteStatus.pending > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Para aprovar a revisão, decida todos os itens: {priceReview.review.counts.items.pending + priceReview.review.counts.items.partially_reviewed} item(ns)
+                    com {priceReview.review.counts.quoteStatus.pending} cotação(ões) pendente(s).
+                  </p>
+                )}
                 {review.approveError && <p className="text-sm text-destructive">{review.approveError.message}</p>}
+                {/* Ação técnica secundária: não compete com a revisão normal. */}
+                {itemCentric && !ingestion.reprocessState?.inProgress && (
+                  <ExtractionActionsPanel
+                    reprocess={ingestion.reprocessState}
+                    isReprocessing={ingestion.isReprocessing}
+                    error={ingestion.reprocessError}
+                    onReprocess={ingestion.reprocess}
+                  />
+                )}
               </div>
             )}
           </div>

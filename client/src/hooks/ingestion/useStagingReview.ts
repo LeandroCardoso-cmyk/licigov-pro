@@ -25,6 +25,8 @@ export function useStagingReview(sessionId: number | null, enabled: boolean, pro
   const invalidate = useCallback(() => {
     void utils.ingestion.listStagingItems.invalidate();
     void utils.ingestion.getSessionStatus.invalidate();
+    // Pesquisa de Preços: a revisão por item é uma projeção das mesmas linhas — decisão/correção de cotação a atualiza.
+    void utils.ingestion.getPriceResearchReview.invalidate();
   }, [utils]);
 
   const reviewItem = trpc.ingestion.reviewItem.useMutation({ onSuccess: invalidate });
