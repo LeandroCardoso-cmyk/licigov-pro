@@ -7,8 +7,22 @@ altera produção/secrets. Arquitetura em [`../architecture/IMPORT_ENGINE.md`](.
 
 A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
 
-- Habilitar para um tenant: criar/ligar o registro em `tenant_feature_flags`
-  (`featureFlagService.isFeatureEnabled(flagName, organizationId)`), default **desligado**.
+- Avaliação: `featureFlagService.isFeatureEnabled(flagName, organizationId)` — override do tenant em
+  `tenant_feature_flags` → flag global → default **desligado**.
+- **Habilitar/desabilitar para um tenant (qualquer ambiente, inclusive produção):** somente pela
+  superfície institucional `featureFlagAdmin` (admin de plataforma), por organização:
+  1. `featureFlagAdmin.getTenantFlag { organizationId, flagName: "FF_CANONICAL_INGESTION" }` — conferir
+     `origin`/`effectiveValue`/`writeAllowed` antes.
+  2. `featureFlagAdmin.setTenantFlag { organizationId, flagName: "FF_CANONICAL_INGESTION", enabled: true,
+     reason: "<justificativa ≥ 15 caracteres em produção>", idempotencyKey: "<uuid novo>" }`.
+  3. Conferir de novo com `getTenantFlag` → `origin: "tenant"`, `effectiveValue: true`.
+  4. Reversão: o mesmo `setTenantFlag` com `enabled: false` (nova `idempotencyKey`).
+  Cada alteração grava override + auditoria (`activity_logs`, com antes/depois, ator, reason,
+  correlationId, requestId, idempotencyKey) na MESMA transação.
+- `FF_CANONICAL_INGESTION` é a única flag em `PRODUCTION_GOVERNABLE_TENANT_FLAGS`: governável em produção,
+  sempre por tenant (nunca global). Demais flags continuam bloqueadas em produção (`FORBIDDEN`).
+- **Nunca** SQL manual (INSERT/UPDATE em `tenant_feature_flags` ou `feature_flags`) — perde a auditoria
+  atômica, a idempotência e a invalidação de cache.
 - Kill-switch global: uma flag global desligada mantém todos os tenants bloqueados.
 - Verificação rápida: `getSessionStatus` retorna `FORBIDDEN` → flag desligada para o tenant.
 
@@ -16,7 +30,7 @@ A superfície é **fail-closed** pela flag `FF_CANONICAL_INGESTION`.
 
 | Sintoma (HTTP/tRPC) | Causa provável | Ação |
 |---|---|---|
-| `FORBIDDEN` "não habilitada" | Flag `FF_CANONICAL_INGESTION` desligada p/ o tenant | Ligar a flag do tenant |
+| `FORBIDDEN` "não habilitada" | Flag `FF_CANONICAL_INGESTION` desligada p/ o tenant | Ligar a flag do tenant via `featureFlagAdmin.setTenantFlag` (acima) |
 | `401` no upload | Cookie JWT ausente/expirado | Reautenticar; conferir `sdk.authenticateRequest` |
 | `403` no upload | Usuário sem membership ativo na org | Conferir `organization_members.ativo` |
 | `415` "não suportado" | MIME fora de `ALLOWED_MIME_TYPES` | Enviar XLSX/CSV/PDF/DOCX válido |

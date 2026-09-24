@@ -96,3 +96,22 @@ Autenticado como **admin de plataforma**, em ambiente **staging** (nunca produç
 3. Coletar as comparações do shadow em `cognitive_observability` (ver
    [`C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md`](./C3A_DIRECT_CONTRACT_SHADOW_DELIVERY.md)).
 4. Ao encerrar a janela: `setTenantFlag` `{ enabled: false, ... }` (nova `idempotencyKey`).
+
+## Produção governada por tenant (`PRODUCTION_GOVERNABLE_TENANT_FLAGS`)
+O bloqueio geral de escrita em produção **permanece**. A política é centralizada em
+`tenantFlagWritePolicy(flagName, isProduction)` (`featureFlagAdminService.ts`):
+
+| Ambiente | Flag | Decisão |
+|---|---|---|
+| produção | em `PRODUCTION_GOVERNABLE_TENANT_FLAGS` (hoje só `FF_CANONICAL_INGESTION`) | permitido, por tenant |
+| produção | qualquer outra (inclusive `FF_DIRECT_CONTRACT_SHADOW`) | `FORBIDDEN` antes de qualquer efeito |
+| development/staging | em `GOVERNABLE_TENANT_FLAGS` | permitido |
+| development/staging | fora do allowlist | `BAD_REQUEST` |
+
+- Match exato (sem wildcard/prefixo/caixa); `organizationId` inteiro positivo obrigatório; nunca escreve em
+  `feature_flags` (global).
+- Em produção, `reason` exige ao menos 15 caracteres (após trim) e é persistida na auditoria.
+- `getTenantFlag.writeAllowed` segue a mesma política (a UI shadow continua sem escrita em produção).
+- Logs estruturados: `feature_flag_set` (flag, org, enabled, environment, actorUserId, correlationId) e
+  `feature_flag_set_denied_production` (tentativa bloqueada).
+- Procedimento operacional e proibição de SQL manual: [`../ops/INGESTION_RUNBOOK.md`](../ops/INGESTION_RUNBOOK.md).

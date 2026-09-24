@@ -24,7 +24,10 @@ export const featureFlagAdminRouter = router({
       return resolveTenantFlag(input.flagName, input.organizationId);
     }),
 
-  /** ALTERA: UPSERT auditável e idempotente do override do tenant (bloqueado em produção). */
+  /**
+   * ALTERA: UPSERT auditável e idempotente do override do tenant. Em produção, só as flags de
+   * `PRODUCTION_GOVERNABLE_TENANT_FLAGS` (demais → FORBIDDEN); organizationId sempre obrigatório.
+   */
   setTenantFlag: adminProcedure
     .input(
       z.object({
