@@ -146,6 +146,25 @@ correção humana e sem promoção. Retornos:
 - **Nunca** apagar/alterar staging por SQL para "reprocessar": use a ação governada (auditoria e atomicidade).
 - Reserva órfã (processo reiniciado no meio): expira em 15 min e um novo pedido pode retomá-la.
 
+## Revisão por item lógico (Pesquisa de Preços)
+
+A tela de revisão mostra **itens** (ex.: 5) com as **cotações** subordinadas (ex.: 30). O staging continua uma linha
+por cotação; os contadores são separados ("Itens" × "Cotações"). Ver `docs/architecture/IMPORT_ENGINE.md`.
+
+| Sintoma | Causa provável | Ação |
+|---|---|---|
+| "Aceitar item" → `CONFLICT` ("O item mudou desde a última leitura") | Outro revisor, correção ou reextração alterou o item após a leitura | Atualizar a revisão e decidir de novo (nada foi aplicado) |
+| "Decisão em lote indisponível para este item" (`ITEM_IDENTITY_COLLISION` / `ITEM_IDENTITY_SPLIT`) | Linhas distintas do documento com a mesma descrição/unidade/quantidade, ou correção que separou cotações de uma linha | Decidir as cotações individualmente (expandir o item); conferir com o original |
+| "⚠ Divergência na média" (`GROUP_AVERAGE_MISMATCH`) | Média impressa ≠ média calculada das cotações | Conferir cotações com o original; o sistema não ajusta valores |
+| "Preço médio (após revisão)" diferente da média do documento | Há cotação rejeitada/pulada no item | Esperado: a média do documento e a calculada seguem visíveis como evidência |
+| "Registros sem item identificado" | Linha extraída sem descrição | Revisar individualmente (em geral, rejeitar) |
+| `PRECONDITION_FAILED` na decisão por item | Sessão não está aguardando revisão (aprovada/promovida) | — |
+
+- A decisão por item afeta **somente cotações pendentes** do item; decisões individuais anteriores são preservadas.
+- Auditoria: `activity_logs.action = import_item_group_reviewed` com cada cotação afetada (antes/depois), itens,
+  motivo e correlationId. Log estruturado `price_research_review_grouped` (contagens e duração, sem conteúdo).
+- **Nunca** aprovar cotações por SQL: use a revisão (atomicidade + auditoria).
+
 ## Upload (multipart streaming)
 
 - `POST /api/ingestion/upload/:sessionId` — `multipart/form-data` (campo de arquivo único).

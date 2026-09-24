@@ -7,7 +7,7 @@
  * tenant-aware (fail-closed) e não estende `processes.*` nem `documents.*`.
  *
  * Contratos: createSession · getSessionStatus · enqueueProcessing · listStagingItems ·
- *            reviewItem · reviewBulk · approveSession.
+ *            reviewItem · reviewBulk · approveSession · getPriceResearchReview · reviewPriceResearchGroups.
  *
  * O byte-upload NÃO trafega por aqui (proibido base64 no tRPC): é feito pela rota Express
  * server-side `POST /api/ingestion/upload/:sessionId` (ver server/routes/ingestionUploadRoute.ts).
@@ -63,6 +63,8 @@ import {
 import type { ExtractionLineage } from "../domain/extractionLineage";
 import { getReprocessEligibility, releaseReextraction, reserveReextraction } from "../services/importReprocessService";
 import { REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
+import { getPriceResearchReview, reviewPriceResearchGroups } from "../services/priceResearchReviewService";
+import type { PriceResearchReviewProjection } from "../domain/priceResearchReviewGroups";
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
@@ -246,6 +248,61 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
  * contexto de OUTRO processo do mesmo tenant: exige que o chamador informe o mesmo id. Sessões sem
  * processo (legado/B.2.1) mantêm a validação apenas por tenant. Retorna NOT_FOUND (não vaza existência).
  */
+/** DTO de uma linha de staging (cotação) — mesmo contrato do listStagingItems (drawer/correção reutilizam). */
+function toStagingItemDto(i: Awaited<ReturnType<typeof getStagingItems>>[number]) {
+  return {
+    id:                 i.id,
+    rawDescription:     i.rawDescription,
+    rawQuantity:        i.rawQuantity,
+    rawUnit:            i.rawUnit,
+    rawUnitPrice:       i.rawUnitPrice,
+    rawTotalPrice:      i.rawTotalPrice,
+    // Hardening P0 — valor NATIVO de células numéricas (o que o contrato monetário usa).
+    rawTypedValues:     i.rawTypedValues ?? null,
+    rawSupplier:        i.rawSupplier ?? null,
+    rawBrand:           i.rawBrand ?? null,
+    rawModel:           i.rawModel ?? null,
+    rawNotes:           i.rawNotes ?? null,
+    rawSource:          i.rawSource ?? null,
+    sourceLocation:     i.sourceLocation,
+    confidenceMetadata: i.confidenceMetadata,
+    extractionWarnings: i.extractionWarnings,
+    reviewStatus:       i.reviewStatus,
+    reviewedBy:         i.reviewedBy,
+    reviewedAt:         i.reviewedAt,
+    reviewNote:         i.reviewNote,
+    // Correção humana (overlay sobre os raw* imutáveis) — o cliente computa o efetivo.
+    correctionRevision: i.correctionRevision,
+    correctedPayload:   i.correctedPayload,
+    correctedAt:        i.correctedAt,
+    correctedByUserId:  i.correctedByUserId,
+  };
+}
+
+/**
+ * DTO institucional da revisão por item: ITENS lógicos (com cotações subordinadas) e contadores SEPARADOS de
+ * itens e de cotações. Cada cotação carrega a linha de staging original (`stagingItem`) para inspeção/correção.
+ */
+function toPriceResearchReviewDto(projection: PriceResearchReviewProjection, rows: Awaited<ReturnType<typeof getStagingItems>>) {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const withItem = <T extends { stagingRowId: number }>(q: T) => {
+    const row = byId.get(q.stagingRowId);
+    return { ...q, stagingItem: row ? toStagingItemDto(row) : null };
+  };
+  return {
+    counts: {
+      logicalItems: projection.logicalItemCount,
+      quotes:       projection.quoteCount,
+      items:        projection.itemStatusCounts,
+      quoteStatus:  projection.quoteStatusCounts,
+      unassignedQuotes: projection.unassignedQuotes.length,
+      ambiguousItems:   projection.ambiguousGroupCount,
+    },
+    groups: projection.groups.map((g) => ({ ...g, quotes: g.quotes.map(withItem) })),
+    unassignedQuotes: projection.unassignedQuotes.map(withItem),
+  };
+}
+
 function assertSessionProcess(
   session: { procurementProcessId: string | null },
   procurementProcessId: string | undefined,
@@ -551,33 +608,7 @@ export const ingestionRouter = router({
 
       const total = filtered.length;
       const start = (input.page - 1) * input.pageSize;
-      const items = filtered.slice(start, start + input.pageSize).map(i => ({
-        id:                 i.id,
-        rawDescription:     i.rawDescription,
-        rawQuantity:        i.rawQuantity,
-        rawUnit:            i.rawUnit,
-        rawUnitPrice:       i.rawUnitPrice,
-        rawTotalPrice:      i.rawTotalPrice,
-        // Hardening P0 — valor NATIVO de células numéricas (o que o contrato monetário usa).
-        rawTypedValues:     i.rawTypedValues ?? null,
-        rawSupplier:        i.rawSupplier ?? null,
-        rawBrand:           i.rawBrand ?? null,
-        rawModel:           i.rawModel ?? null,
-        rawNotes:           i.rawNotes ?? null,
-        rawSource:          i.rawSource ?? null,
-        sourceLocation:     i.sourceLocation,
-        confidenceMetadata: i.confidenceMetadata,
-        extractionWarnings: i.extractionWarnings,
-        reviewStatus:       i.reviewStatus,
-        reviewedBy:         i.reviewedBy,
-        reviewedAt:         i.reviewedAt,
-        reviewNote:         i.reviewNote,
-        // Correção humana (overlay sobre os raw* imutáveis) — o cliente computa o efetivo.
-        correctionRevision: i.correctionRevision,
-        correctedPayload:   i.correctedPayload,
-        correctedAt:        i.correctedAt,
-        correctedByUserId:  i.correctedByUserId,
-      }));
+      const items = filtered.slice(start, start + input.pageSize).map(toStagingItemDto);
 
       return {
         items,
@@ -735,6 +766,65 @@ export const ingestionRouter = router({
       });
 
       return { sessionId: input.sessionId, action: input.action, requested: input.itemIds.length, affected };
+    }),
+
+  /**
+   * Pesquisa de Preços — revisão por ITEM LÓGICO (projeção de leitura). O staging continua uma linha por
+   * cotação; aqui elas são apresentadas como itens (descrição/unidade/quantidade + média + reconciliação) com
+   * as cotações subordinadas. Contadores de ITENS e de COTAÇÕES são separados (nunca quoteCount como itemCount).
+   */
+  getPriceResearchReview: tenantProcedure
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+      if (session.importType !== "price_research") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Revisão por item disponível apenas para Pesquisa de Preços." });
+      }
+      const { projection, rows } = await getPriceResearchReview({
+        organizationId: orgId, sessionId: input.sessionId,
+        procurementProcessId: session.procurementProcessId ?? input.procurementProcessId, correlationId: ctx.correlationId,
+      });
+      return toPriceResearchReviewDto(projection, rows);
+    }),
+
+  /**
+   * Decisão sobre ITEM(NS) LÓGICO(S) — ATÔMICA: aceita/rejeita/pula todas as cotações PENDENTES de cada item
+   * (decisões anteriores preservadas), com revisão otimista por item e auditoria de cada cotação afetada na
+   * mesma transação. O cliente envia só `groupKey` + `expectedRevision`; os IDs das cotações são derivados no
+   * servidor (tenant + sessão + processo). operator+ (mesmo papel da revisão por cotação). Não promove.
+   */
+  reviewPriceResearchGroups: orgRoleProcedure("operator")
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+      action:               REVIEW_ACTION,
+      groups:               z.array(z.object({
+        groupKey:         z.string().regex(/^[0-9a-f]{32}$/),
+        expectedRevision: z.string().regex(/^[0-9a-f]{16}$/),
+      })).min(1).max(100),
+      note:                 z.string().trim().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const result = await reviewPriceResearchGroups({
+        organizationId: orgId, sessionId: input.sessionId, procurementProcessId: input.procurementProcessId,
+        actorUserId: ctx.user!.id, action: input.action as ReviewAction, groups: input.groups,
+        note: input.note || null, correlationId: ctx.correlationId, requestId: ctx.requestId,
+      });
+      return {
+        action: result.action,
+        affectedQuoteCount: result.affectedQuoteCount,
+        groups: result.groups,
+        review: toPriceResearchReviewDto(result.projection, result.rows),
+      };
     }),
 
   /**

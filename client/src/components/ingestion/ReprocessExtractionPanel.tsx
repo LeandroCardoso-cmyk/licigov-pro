@@ -3,7 +3,7 @@
  * elegível (nenhum item aceito/rejeitado/pulado/corrigido, nenhuma promoção). Exige confirmação explícita e
  * motivo (auditado). Explica o efeito antes da confirmação. Acessível e compatível com dark mode.
  */
-import { useState } from "react";
+import React, { useState } from "react";
 import { RefreshCw, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
