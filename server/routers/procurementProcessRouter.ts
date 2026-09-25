@@ -16,7 +16,11 @@ import {
   type ProcessStage,
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
-import { generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState } from "../services/procurementProcessService";
+import {
+  generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState,
+  getDFDAssistState, reconcileDFDFieldDraft, generateDFDJustificationDraft,
+} from "../services/procurementProcessService";
+import { resolveProcurementContext, recordContextAssertions } from "../services/canonicalContextService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
@@ -72,9 +76,12 @@ export const procurementProcessRouter = router({
       object: z.string().min(1),
       startOption: z.enum(START_OPTIONS),
       modality: z.string().optional(),
+      /** Contexto Canônico — setor/unidade demandante informado UMA vez, na criação (opcional). */
+      requestingUnit: z.string().trim().max(200).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      const requestingUnit = input.requestingUnit?.trim() || null;
       const process = createProcurementWorkspace({
         organizationId: orgId, processNumber: input.processNumber, object: input.object,
         modality: input.modality, startOption: input.startOption as StartOption,
@@ -89,6 +96,19 @@ export const procurementProcessRouter = router({
           eventType: "workspace_created",
           actor: String(ctx.user!.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
           refId: process.id, correlationId: ctx.correlationId,
+        }, requestingUnit ? async (tx) => {
+          // Fato informado na criação (fonte = Processo, confirmado pelo servidor) — MESMA transação.
+          await recordContextAssertions({
+            organizationId: orgId, processId: process.id, correlationId: ctx.correlationId, executor: tx,
+            facts: [{
+              path: "demand.requestingUnit", value: requestingUnit, sourceType: "process", sourceId: process.id,
+              sourceVersion: "create", status: "confirmed", actorUserId: ctx.user!.id, basisValueHash: null,
+            }],
+          });
+        } : undefined);
+        log.info("canonical_context_initialized", {
+          organizationId: orgId, processId: process.id, correlationId: ctx.correlationId,
+          actorUserId: ctx.user!.id, informedFields: requestingUnit ? 1 : 0,
         });
       } catch (err) {
         // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
@@ -262,6 +282,69 @@ export const procurementProcessRouter = router({
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
       });
       return { document };
+    }),
+
+  /**
+   * Contexto Canônico da Contratação (read-only, tenant-scoped): fatos resolvidos com proveniência, estado,
+   * conflitos, versão e digest. Base reutilizável para DFD → ETP → TR → Edital.
+   */
+  canonicalContext: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const context = await resolveProcurementContext({ organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId });
+      return { context };
+    }),
+
+  /** Estado assistido do DFD por campo (origem, alterado por você, desatualizado, conflito…). Read-only. */
+  dfdAssistState: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getDFDAssistState({ organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId });
+    }),
+
+  /** "Atualizar no rascunho" — ação EXPLÍCITA, campo a campo (write governado; nunca em DFD aprovado). */
+  reconcileDFDField: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      fieldKey: z.string().trim().min(1).max(80).regex(/^[a-z.]+$|^item(lot)?:[a-f0-9]{24}$/),
+      expectedContentHash: z.string().trim().min(1),
+      idempotencyKey: z.string().trim().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const { document } = await reconcileDFDFieldDraft({
+        organizationId: orgId, processId: input.processId, object: process.object, fieldKey: input.fieldKey,
+        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+      });
+      return { document };
+    }),
+
+  /**
+   * Rascunho SUPERVISIONADO de IA da justificativa do DFD (AIExecutionEngine; contexto governado). Nunca
+   * aprova, nunca decide; substituir justificativa escrita pelo servidor exige `confirmReplace`.
+   */
+  generateDFDJustification: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      expectedContentHash: z.string().trim().min(1),
+      confirmReplace: z.boolean().optional(),
+      idempotencyKey: z.string().trim().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const { document, explanation } = await generateDFDJustificationDraft({
+        organizationId: orgId, processId: input.processId, object: process.object,
+        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash, confirmReplace: input.confirmReplace,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+      });
+      return { document, explanation };
     }),
 
   generateETP: orgRoleProcedure("operator")

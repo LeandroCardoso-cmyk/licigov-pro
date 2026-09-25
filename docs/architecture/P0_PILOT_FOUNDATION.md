@@ -6,6 +6,10 @@
 
 Constituição: [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) (IA supervisionada, Regra de Ouro, não-ERP).
 
+Evolução: o **Contexto Canônico da Contratação** ([`CANONICAL_PROCUREMENT_CONTEXT.md`](CANONICAL_PROCUREMENT_CONTEXT.md))
+passa a ser a base de fatos reutilizáveis entre documentos; o DFD é o 1º consumidor
+([`DFD_CANONICAL_PREFILL.md`](DFD_CANONICAL_PREFILL.md)).
+
 ---
 
 ## 1. DOCUMENT INTAKE (DFD / ETP / TR importados como documento)
@@ -98,6 +102,10 @@ CATMAT/CATSER: código só quando CONFIRMADO; senão "a revisar (sugestão não 
 ```
 
 O prompt instrui a IA a NÃO redigir quantidades/preços/totais. O mesmo quadro é usado pelo **Edital**.
+
+> **Contexto Canônico (P0.3):** com Itens da contratação, a quantidade do quadro (TR/Edital) e do prompt (ETP)
+> é a **quantidade PREVISTA** — o ETP não infere quantidade da Pesquisa e o Edital exige `plannedQuantity`
+> quando o item precisa de quantitativo oficial. Ver `CANONICAL_PROCUREMENT_CONTEXT.md` §13.
 
 ## 5. TR SOURCE DIGEST + SOURCE_CHANGED
 
@@ -264,3 +272,23 @@ Provado no smoke: upgrade com dados legados, replay no-op, fail-closed; `drizzle
 - Consolidação por chave lógica EXATA: itens parecidos mas não idênticos ficam separados (polimento humano);
   identidade ambígua é resolvida por humano (`resolveItemIdentity`), nunca por similaridade.
 - `FF_CANONICAL_INGESTION` continua desligado em produção; ativação é decisão do owner (fora deste PR).
+
+---
+
+## Itens da contratação (operação)
+
+Aba **Itens da contratação** do processo, disponível em qualquer etapa (inclusive quando o processo começa
+pela Pesquisa de Preços, sem DFD):
+
+1. **Preparar a partir da pesquisa** — lista os itens já revisados/promovidos da Pesquisa (um por item
+   lógico, não por cotação). Descrição e unidade vêm preenchidas; normalmente só se informa a
+   **quantidade prevista**. "Quantidade no documento" é só informação da fonte; "Usar N" adota-a de forma
+   explícita. Nada é gravado até "Confirmar".
+2. **+ Adicionar item** — para item que o documento não trouxe; fica marcado como informado manualmente e a
+   Pesquisa não é alterada.
+3. **+ Criar lote** (opcional) — organize os itens em lotes; mover de lote não cria item novo.
+4. O DFD, o ETP, o TR e o Edital consomem esses itens (quantidade PREVISTA); mudar uma quantidade deixa o rascunho do DFD
+   desatualizado ("Atualizar no rascunho"). Depois de TR/Edital emitido ou de documento aprovado que usou a
+   informação, a alteração exige o fluxo governado (`GOVERNED_CHANGE_REQUIRED`).
+
+Detalhes: [`CANONICAL_PROCUREMENT_CONTEXT.md`](CANONICAL_PROCUREMENT_CONTEXT.md) §11.

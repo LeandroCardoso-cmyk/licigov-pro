@@ -60,9 +60,12 @@ function sortItems(items: readonly AuthoritativeItemInput[]): AuthoritativeItemI
   });
 }
 
-/** Calcula as estimativas autoritativas (centavos, half-up). */
-export function computeItemEstimates(items: readonly AuthoritativeItemInput[]): AuthoritativeItemsEstimate {
-  const rows: AuthoritativeItemRow[] = sortItems(items).map((it, i) => ({
+/**
+ * Calcula as estimativas autoritativas (centavos, half-up). `preserveOrder` mantém a ORDEM OFICIAL recebida
+ * (Itens da contratação: lote → ordinal); sem ele, ordem histórica por descrição (legado).
+ */
+export function computeItemEstimates(items: readonly AuthoritativeItemInput[], opts: { preserveOrder?: boolean } = {}): AuthoritativeItemsEstimate {
+  const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
     index: i + 1,
     estimatedTotalCents: it.averagePriceCents > 0 ? multiplyQuantityCents(it.quantity, it.averagePriceCents) : 0,
@@ -97,8 +100,12 @@ function cell(s: string): string {
  * Renderiza o bloco markdown AUTORITATIVO (tabela + total global + origem). Determinístico: mesmos itens
  * ⇒ mesmo texto (bytes). Delimitado por marcadores para verificação de integridade.
  */
-export function renderAuthoritativeItemsBlock(estimate: AuthoritativeItemsEstimate, opts: { heading?: string } = {}): string {
+export function renderAuthoritativeItemsBlock(
+  estimate: AuthoritativeItemsEstimate,
+  opts: { heading?: string; quantitySource?: "canonical_planned" } = {},
+): string {
   const heading = opts.heading ?? "Itens e estimativa de valor (dados autoritativos do processo)";
+  const canonical = opts.quantitySource === "canonical_planned";
   const lines: string[] = [AUTHORITATIVE_ITEMS_BEGIN, `## ${heading}`, ""];
   if (estimate.itemCount === 0) {
     lines.push("> [REVISAR: nenhum Item Inteligente aprovado no processo — quantitativos e valores não foram definidos.]");
@@ -106,10 +113,18 @@ export function renderAuthoritativeItemsBlock(estimate: AuthoritativeItemsEstima
     return lines.join("\n");
   }
   lines.push(
-    "> Tabela gerada pelo sistema a partir dos Itens Inteligentes APROVADOS e da Pesquisa de Preços. " +
-    "Os valores NÃO foram redigidos por IA. Valor estimado do item = quantidade × preço médio.",
+    canonical
+      // Contexto Canônico: a quantidade é a PREVISTA (Itens da contratação); o preço é a referência da
+      // Pesquisa vinculada ao item. A quantidade da cotação NUNCA entra aqui.
+      ? "> Tabela gerada pelo sistema a partir dos Itens da contratação (quantidade PREVISTA) e do preço de " +
+        "referência da Pesquisa de Preços vinculado a cada item. Os valores NÃO foram redigidos por IA. " +
+        "Valor estimado do item = quantidade prevista × preço de referência."
+      : "> Tabela gerada pelo sistema a partir dos Itens Inteligentes APROVADOS e da Pesquisa de Preços. " +
+        "Os valores NÃO foram redigidos por IA. Valor estimado do item = quantidade × preço médio.",
     "",
-    "| Item | Descrição | Qtd. | Unid. | Valor médio (R$) | Valor estimado (R$) | CATMAT/CATSER | Cotações |",
+    canonical
+      ? "| Item | Descrição | Qtd. prevista | Unid. | Valor de referência (R$) | Valor estimado (R$) | CATMAT/CATSER | Cotações |"
+      : "| Item | Descrição | Qtd. | Unid. | Valor médio (R$) | Valor estimado (R$) | CATMAT/CATSER | Cotações |",
     "|---:|---|---:|---|---:|---:|---|---:|",
   );
   for (const r of estimate.rows) {
@@ -124,7 +139,7 @@ export function renderAuthoritativeItemsBlock(estimate: AuthoritativeItemsEstima
   lines.push(`**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
   // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
-  lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) aprovado(s).`);
+  lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
   if (estimate.unpricedItemCount > 0) {
     lines.push(`- [REVISAR: ${estimate.unpricedItemCount} item(ns) sem preço de referência — excluído(s) do total.]`);
   }

@@ -94,6 +94,8 @@ export async function insertProcess(p: ProcurementWorkspace, executor?: Procurem
 export async function createProcessWithInitialEvent(
   p: ProcurementWorkspace,
   event: { eventType: string; actor: string; summary: string; refId?: string; correlationId: string },
+  /** Contexto Canônico — efeitos adicionais na MESMA transação (ex.: fatos informados na criação). */
+  withinTx?: (tx: ProcurementExecutor) => Promise<void>,
 ): Promise<ProcurementWorkspace> {
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — criação de processo não persistida (fail-closed).");
@@ -105,6 +107,7 @@ export async function createProcessWithInitialEvent(
       refId: event.refId, correlationId: event.correlationId,
       idempotencyKey: "initial", // evento SINGLETON de criação — id estável, retry (mesmo concorrente) não duplica
     }, tx);
+    if (withinTx) await withinTx(tx);
   });
   return p;
 }
@@ -450,9 +453,11 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   human_edit      = reservado para o editor humano de ETP/TR/Edital (C.4B.3B).
 //   import_promote  = P0 piloto — documento IMPORTADO (DFD/ETP/TR) promovido a rascunho (criação);
 //   import_replace  = P0 piloto — substituição EXPLÍCITA e confirmada do rascunho por documento importado.
+//   dfd_context_reconcile = Contexto Canônico — "Atualizar no rascunho" (ação explícita, campo a campo);
+//   dfd_ai_draft    = Contexto Canônico — rascunho SUPERVISIONADO de IA da justificativa do DFD.
 export type DraftEditOperation =
   | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
-  | "import_promote" | "import_replace";
+  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):

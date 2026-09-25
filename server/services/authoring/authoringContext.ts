@@ -16,6 +16,9 @@
  *
  * Regras mantidas: fonte ausente → `[REVISAR: …]` explícito; números NÃO são da IA (quadro autoritativo do
  * servidor); documento importado ≡ documento gerado; tenant-scoped.
+ *
+ * Contexto Canônico: processo com Itens da contratação ⇒ ETP/TR (e o Edital, em `editalContext`) consomem a
+ * MESMA projeção (`canonicalDocumentItems`): quantidade = PREVISTA, nunca a da cotação.
  */
 import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
@@ -26,6 +29,9 @@ import {
 import { formatBRL, reaisToCents } from "../../domain/money";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { canonicalDigest, selectDocumentExcerpt, sha256Hex, type CanonicalValue } from "../../domain/canonicalJson";
+import { listProcurementItems } from "../../db/procurementItems";
+import { resolveProcurementContext } from "../canonicalContextService";
+import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
 
 export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
 
@@ -59,6 +65,8 @@ export interface ContextItem extends AuthoritativeItemInput {
   readonly quotes: readonly ContextQuote[];
   /** current | source_changed | review_required */
   readonly sourceState: string;
+  /** Modo canônico: código do lote do Item da contratação (pertencimento; nunca identidade). */
+  readonly lotCode?: string | null;
 }
 
 export interface DocumentAuthoringInputs {
@@ -73,6 +81,21 @@ export interface DocumentAuthoringInputs {
   readonly approvedItems: readonly ContextItem[];
   /** Itens ainda não aprovados (o TR usa SÓ os aprovados; a contagem aparece no prompt ⇒ entra no digest). */
   readonly pendingItemCount: number;
+  /**
+   * Contexto Canônico (ETP/TR) — presente ⇔ o processo tem Itens da contratação. Nesse modo `approvedItems`
+   * já vem dos ITENS CANÔNICOS (`canonicalDocumentItems`: quantidade = PREVISTA; preço = referência
+   * vinculada) e a ordem é a oficial (lote → ordinal).
+   */
+  readonly canonical?: CanonicalItemsState;
+}
+
+/** Estado do modo canônico dos documentos (ver `canonicalDocumentItems`). */
+export interface CanonicalItemsState {
+  readonly contextDigest: string;
+  /** Itens canônicos SEM quantidade prevista (ou em conflito). TR/Edital: bloqueiam; ETP: "[a definir]". */
+  readonly missingPlannedQuantity: ReadonlyArray<{ id: string; description: string }>;
+  /** Itens Inteligentes aprovados que NÃO estão vinculados a nenhum item da contratação (nunca necessidade). */
+  readonly unlinkedApprovedItemCount: number;
 }
 
 export interface SourceVersion {
@@ -95,6 +118,9 @@ export interface DocumentAuthoringContext {
   readonly authoritativeBlock: string | null;
   readonly estimate: AuthoritativeItemsEstimate;
   readonly pendingItemCount: number;
+  /** "canonical_planned" = quantidade PREVISTA dos Itens da contratação; "legacy" = quantidade da cotação (processos sem Itens Canônicos). */
+  readonly quantitySource: "canonical_planned" | "legacy";
+  readonly canonical: CanonicalItemsState | null;
 }
 
 function short(hash: string | null): string {
@@ -128,8 +154,10 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
   const objeto = input.object?.trim() || input.processObject?.trim() || "";
   const dfd = docSnapshot(input.dfd);
   const etp = input.kind === "tr" ? docSnapshot(input.etp) : { snap: null, excerpt: null };
-  const estimate = computeItemEstimates(input.approvedItems);
+  const canonical = input.canonical ?? null;
+  const estimate = computeItemEstimates(input.approvedItems, { preserveOrder: !!canonical });
   const byId = new Map(input.approvedItems.map((i) => [i.id, i]));
+  const undefinedQty = new Set((canonical?.missingPlannedQuantity ?? []).map((m) => m.id));
 
   // (1) SNAPSHOT canônico — itens na ordem determinística do quadro; cotações por quoteId.
   const snapshot: CanonicalValue = {
@@ -146,9 +174,18 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
         sourceState: src.sourceState,
         // Só campos RENDERIZADOS no prompt (o quoteId não aparece no prompt ⇒ não entra no digest).
         quotes: sortQuotes(src.quotes).map((q) => ({ supplier: q.supplier.trim(), brand: q.brand.trim(), model: q.model.trim(), valueCents: q.valueCents })),
+        // Lote (pertencimento) só no modo canônico: legado byte-idêntico.
+        ...(canonical ? { lot: src.lotCode ?? null } : {}),
       };
     }),
     pendingItemCount: input.pendingItemCount,
+    // Modo canônico: a quantidade é a PREVISTA e entra no digest (replay/CONFLICT/SOURCE_CHANGED). Chaves só
+    // presentes neste modo ⇒ o snapshot (e o digest) dos processos legados permanece byte-idêntico.
+    ...(canonical ? {
+      qs: "canonical_planned",
+      missingPlanned: canonical.missingPlannedQuantity.map((m) => m.id).sort(),
+      unlinked: canonical.unlinkedApprovedItemCount,
+    } : {}),
   };
   const sourcesDigest = canonicalDigest(snapshot);
 
@@ -181,19 +218,25 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     usedSources.push("itens");
     if (estimate.quoteCount > 0) usedSources.push("pesquisa_precos");
     const shown = estimate.rows.slice(0, MAX_ITEMS_IN_PROMPT);
-    lines.push(`## Itens Inteligentes aprovados (${estimate.itemCount}${estimate.itemCount > MAX_ITEMS_IN_PROMPT ? `, exibindo ${MAX_ITEMS_IN_PROMPT}; o quadro do sistema traz todos` : ""}) — referência, NÃO redigir valores`);
+    lines.push(canonical
+      ? `## Itens da contratação (${estimate.itemCount}${estimate.itemCount > MAX_ITEMS_IN_PROMPT ? `, exibindo ${MAX_ITEMS_IN_PROMPT}; o quadro do sistema traz todos` : ""}) — quantidade PREVISTA; referência, NÃO redigir valores`
+      : `## Itens Inteligentes aprovados (${estimate.itemCount}${estimate.itemCount > MAX_ITEMS_IN_PROMPT ? `, exibindo ${MAX_ITEMS_IN_PROMPT}; o quadro do sistema traz todos` : ""}) — referência, NÃO redigir valores`);
     for (const r of shown) {
       const src = byId.get(r.id)!;
       const catalog = r.confirmedCatalogCode ? ` · catálogo confirmado: ${r.confirmedCatalogCode}` : " · catálogo: a revisar";
       const flag = src.sourceState !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
-      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${formatQuantity(r.quantity)} ${r.unit} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}`);
+      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}`);
       for (const q of sortQuotes(src.quotes)) {
         const bm = [q.brand.trim(), q.model.trim()].filter(Boolean).join(" / ");
         lines.push(`  - ${q.supplier.trim() || "Fornecedor não identificado"}${bm ? ` (${bm})` : ""}: ${q.valueCents !== null && q.valueCents > 0 ? formatBRL(q.valueCents) : "sem preço"}`);
       }
       if (src.sourceState !== "current") missing.push(`fonte_alterada:${r.index}`);
     }
-    lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`, "");
+    lines.push(undefinedQty.size > 0
+      // Estimativa parcial NUNCA é apresentada como global (e a quantidade da Pesquisa nunca completa a lacuna).
+      ? `- Valor estimado global: [REVISAR: ${undefinedQty.size} item(ns) sem quantidade prevista em "Itens da contratação" — estimativa não calculada; NÃO inferir quantidades]`
+      : `- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`, "");
+    if (undefinedQty.size > 0) missing.push("quantidade_prevista");
   } else {
     missing.push("itens");
     lines.push("## Itens Inteligentes aprovados");
@@ -204,6 +247,9 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
   }
   if (input.pendingItemCount > 0) {
     lines.push(`> Há ${input.pendingItemCount} Item(ns) Inteligente(s) ainda NÃO aprovado(s) — não considerados.`, "");
+  }
+  if (canonical && canonical.unlinkedApprovedItemCount > 0) {
+    lines.push(`> Há ${canonical.unlinkedApprovedItemCount} Item(ns) Inteligente(s) aprovado(s) da Pesquisa NÃO vinculado(s) aos Itens da contratação — NÃO representam a necessidade; não considerados.`, "");
   }
 
   const sourceVersions = {
@@ -219,15 +265,89 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     ...(input.kind === "tr" && sourceVersions.etp.coverage ? [`coverage:etp=${sourceVersions.etp.coverage}`] : []),
     `itens:${estimate.itemCount}`,
     `cotacoes:${estimate.quoteCount}`,
+    ...(canonical ? ["qtd:prevista", `ctxdigest:${canonical.contextDigest.slice(0, 16)}`] : []),
   ];
 
   return {
     contractVersion: AUTHORING_CONTEXT_VERSION, kind: input.kind,
     promptContext: lines.join("\n"),
     usedSources, missing, sourcesDigest, snapshot, sourceVersions, lineageMarkers,
-    authoritativeBlock: input.kind === "tr" ? renderAuthoritativeItemsBlock(estimate) : null,
+    authoritativeBlock: input.kind === "tr"
+      ? renderAuthoritativeItemsBlock(estimate, canonical ? { quantitySource: "canonical_planned" } : {})
+      : null,
     estimate, pendingItemCount: input.pendingItemCount,
+    quantitySource: canonical ? "canonical_planned" : "legacy", canonical,
   };
+}
+
+/** Texto da quantidade de um item no prompt: PREVISTA no modo canônico ("[a definir]" se ausente); legado = cotação. */
+function canonicalQuantityText(r: { id: string; quantity: number; unit: string }, canonical: boolean, undefinedQty: ReadonlySet<string>): string {
+  if (!canonical) return `${formatQuantity(r.quantity)} ${r.unit}`;
+  if (undefinedQty.has(r.id)) return `quantidade prevista: [a definir] (${r.unit}) — NÃO inferir nem usar a quantidade da Pesquisa`;
+  return `${formatQuantity(r.quantity)} ${r.unit} (quantidade prevista)`;
+}
+
+/**
+ * PROJEÇÃO DOCUMENTAL ÚNICA dos Itens da contratação — consumida por ETP, TR e Edital (nenhum documento tem
+ * regra própria de quantidade). Pura e determinística:
+ *  - id = canonicalItemId; ordem oficial (lote → ordinal); `lotCode` = pertencimento;
+ *  - quantidade = `plannedQuantity` (necessidade). NUNCA `sourceQuantity`/`intelligent_items.quantity`;
+ *  - preço = `unitReferencePriceCents` já vinculado ao item (consumido do Item Inteligente aprovado; sem
+ *    regra nova; ambíguo ⇒ sem preço, [REVISAR]); estimativa = prevista × referência (no quadro);
+ *  - cotações/classificação = as dos Itens Inteligentes APROVADOS vinculados ao item (evidência).
+ * Sem quantidade prevista (ou em conflito) ⇒ listado em `missingPlannedQuantity` (TR/Edital bloqueiam; ETP
+ * exibe "[a definir]"). Item Inteligente aprovado sem vínculo ⇒ `unlinkedApprovedItemCount` (nunca necessidade).
+ */
+export function canonicalDocumentItems(
+  ctx: ProcurementCanonicalContext,
+  approved: readonly ContextItem[],
+): { items: ContextItem[]; state: CanonicalItemsState } {
+  const byII = new Map(approved.map((i) => [i.id, i]));
+  const lotCode = new Map((ctx.lots ?? []).map((l) => [l.id, l.code]));
+  const linked = new Set<string>();
+  const missing: Array<{ id: string; description: string }> = [];
+  const items = ctx.items.map((it) => {
+    const evid = it.priceContext.intelligentItemIds.map((id) => byII.get(id)).filter((x): x is ContextItem => !!x);
+    evid.forEach((e) => linked.add(e.id));
+    const description = String(it.description.value ?? "");
+    const planned = it.plannedQuantity.status === "conflict" ? null : it.plannedQuantity.value;
+    if (planned === null || !(planned > 0)) missing.push({ id: it.key, description });
+    const catalogs = [...new Set(evid.map((e) => e.confirmedCatalogCode).filter((c): c is string => !!c))];
+    return {
+      id: it.key, description, unit: String(it.unit.value ?? ""),
+      quantity: planned !== null && planned > 0 ? planned : 0,
+      averagePriceCents: it.priceContext.unitReferencePriceCents ?? 0,
+      quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
+      confirmedCatalogCode: catalogs.length === 1 ? catalogs[0] : null,
+      suggestedCatalogCode: evid.find((e) => e.suggestedCatalogCode)?.suggestedCatalogCode ?? null,
+      sourceState: evid.find((e) => e.sourceState !== "current")?.sourceState ?? "current",
+      quotes: evid.flatMap((e) => e.quotes),
+      lotCode: it.lotId ? lotCode.get(it.lotId) ?? null : null,
+    } satisfies ContextItem;
+  });
+  return {
+    items,
+    state: {
+      contextDigest: ctx.digest,
+      missingPlannedQuantity: missing,
+      unlinkedApprovedItemCount: approved.filter((a) => !linked.has(a.id)).length,
+    },
+  };
+}
+
+/**
+ * GATE DETERMINÍSTICO (sem feature flag), compartilhado por ETP/TR/Edital: o processo tem Itens da contratação
+ * ATIVOS ⇒ modo canônico obrigatório (projeção única acima, via `resolveProcurementContext`); sem Itens
+ * Canônicos ⇒ `null` (modo legado inalterado). Tenant-scoped: (organizationId, processId) do servidor.
+ */
+export async function resolveCanonicalDocumentItems(
+  params: { organizationId: number; processId: string },
+  approved: readonly ContextItem[],
+): Promise<{ items: ContextItem[]; state: CanonicalItemsState } | null> {
+  const active = (await listProcurementItems(params.organizationId, params.processId)).some((i) => i.status === "active");
+  if (!active) return null;
+  const ctx = await resolveProcurementContext({ organizationId: params.organizationId, processId: params.processId });
+  return canonicalDocumentItems(ctx, approved);
 }
 
 function draftOrigin(sources: readonly string[]): "import" | "generated" | "manual" {
@@ -279,11 +399,14 @@ export async function resolveDocumentAuthoringContext(params: {
       valueCents: Number(s.value) > 0 ? reaisToCents(s.value) : null,
     })),
   }));
+  // Modo canônico (ETP e TR) pelo gate determinístico compartilhado; sem Itens Canônicos ⇒ legado inalterado.
+  const projected = await resolveCanonicalDocumentItems(params, approvedItems);
   return buildDocumentAuthoringContext({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     object: params.object, processObject: process?.object ?? null, processNumber: process?.processNumber ?? null,
-    dfd: toUpstream(dfd), etp: toUpstream(etp), approvedItems,
+    dfd: toUpstream(dfd), etp: toUpstream(etp), approvedItems: projected?.items ?? approvedItems,
     pendingItemCount: items.filter((i) => i.status !== "aprovado" && i.status !== "rejeitado").length,
+    canonical: projected?.state,
   });
 }
 

@@ -24,6 +24,7 @@ export default function NovoProcessoWizard({
 }: NovoProcessoWizardProps) {
   const [processNumber, setProcessNumber] = useState("");
   const [object, setObject] = useState("");
+  const [requestingUnit, setRequestingUnit] = useState("");
   const [startOption, setStartOption] = useState<StartOption | null>(null);
 
   const createProcess = trpc.procurementProcess.createProcess.useMutation({
@@ -45,6 +46,8 @@ export default function NovoProcessoWizard({
       processNumber: processNumber.trim(),
       object: object.trim(),
       startOption,
+      // Contexto Canônico — opcional; informado uma vez, reaproveitado no DFD e nas etapas seguintes.
+      ...(requestingUnit.trim() ? { requestingUnit: requestingUnit.trim() } : {}),
     });
   };
 
@@ -78,6 +81,19 @@ export default function NovoProcessoWizard({
             value={object}
             onChange={(e) => setObject(e.target.value)}
             placeholder="Aquisição de equipamentos de informática"
+            className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
+        <label className="flex flex-col text-sm sm:col-span-2">
+          <span className="mb-1 font-medium text-foreground">
+            Unidade requisitante <span className="font-normal text-muted-foreground">(opcional)</span>
+          </span>
+          <input
+            type="text"
+            value={requestingUnit}
+            onChange={(e) => setRequestingUnit(e.target.value)}
+            maxLength={200}
+            placeholder="Secretaria Municipal de Educação"
             className="rounded-lg border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>

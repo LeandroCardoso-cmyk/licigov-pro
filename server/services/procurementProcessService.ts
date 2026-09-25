@@ -13,7 +13,7 @@ import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
 import { resolveEditalSources } from "./authoring/editalContext";
-import { resolveDocumentAuthoringContext, storedSourcesDigest } from "./authoring/authoringContext";
+import { resolveDocumentAuthoringContext, storedSourcesDigest, type CanonicalItemsState } from "./authoring/authoringContext";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -35,8 +35,22 @@ import {
 } from "../db/procurement";
 // V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
 import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
+// Contexto Canônico da Contratação — DFD como 1º consumidor (prefill, estado por campo, reconciliação, IA).
+import { serviceLogger } from "./observabilityService";
+import { resolveProcurementContext, recordContextAssertions } from "./canonicalContextService";
+import { generateDFDJustificationText, DFD_JUSTIFICATION_PROMPT_VERSION } from "./authoring/dfdJustificationAuthoring";
+import type { NewFactAssertion } from "../db/procurementContext";
+import type { ProcurementCanonicalContext } from "../domain/canonicalProcurementContext";
+import { canonicalDigest } from "../domain/canonicalJson";
+import {
+  buildDFDPrefill, renderDFDContent, prefillMarkers, writeMarkers, readMarkers, isAssistMarker,
+  computeDFDFieldStates, reconcileDFDField, applyAIJustification, extractDFDAssertions, summarizeFieldStates,
+  parseDFD, fieldHash, linkDFDRows, unlinkedDFDRows, refreshRowLineage, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
+  type DFDFieldView, type DFDFieldState, type DFDPrefill,
+} from "../domain/dfdPrefill";
 
 const DOMAIN = "processo_licitatorio" as const;
+const log = serviceLogger("ProcurementProcessService");
 
 // ─── C.4A — Replay-safe generation contract ───────────────────────────────────
 // Toda geração documental canônica é idempotente por (org, user, idempotencyKey). O commit documental
@@ -170,35 +184,102 @@ function reviveIdempotent<T>(raw: unknown): T {
   return (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
 }
 
+// ─── Contexto Canônico → DFD ─────────────────────────────────────────────────────────────
+
+const DFD_BASE_SOURCE = "estrutura:art_12_par_1_lei_14133";
+
+/** Marcadores que indicam conteúdo que NÃO foi posto pelo sistema (edição humana, importação, IA). */
+function dfdHasNonSystemContent(sources: readonly string[]): boolean {
+  return sources.some((s) => s === "edicao_manual" || s === "edicao_humana" || s === "origem:import" || s.startsWith("ai:"));
+}
+
+/** DFD aprovado nunca é alterado silenciosamente (nem por prefill, reconciliação, IA ou regeneração). */
+function assertDFDMutable(doc: { status: string } | null): void {
+  if (doc && doc.status === "aprovado") {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "DFD_APPROVED: o DFD aprovado não pode ser alterado por esta operação.",
+    });
+  }
+}
+
 /**
- * "Criar DFD do zero" (production-ready mínimo): estrutura um RASCUNHO editável do
- * DFD (art. 12, §1º) e persiste como documento canônico (kind "dfd", status
- * "rascunho"). NÃO usa Kernel/IA (template determinístico) — a geração assistida
- * por IA plena fica como evolução. Supervisão humana: sempre rascunho, nunca
- * aprovação automática. Idempotente: id determinístico por (processo, kind) →
- * retry não duplica.
+ * Resolve o contexto de forma TOLERANTE para os fluxos históricos (criar/salvar DFD): indisponibilidade
+ * do contexto NUNCA bloqueia o DFD — degrada para o comportamento anterior (template só com o objeto).
+ * Ações que DEPENDEM do contexto (reconciliar, IA) usam a resolução estrita.
+ */
+async function resolveContextSoft(p: { organizationId: number; processId: string; correlationId: string }): Promise<ProcurementCanonicalContext | null> {
+  try {
+    return await resolveProcurementContext(p);
+  } catch (err) {
+    log.warn("canonical_context_unavailable", {
+      organizationId: p.organizationId, processId: p.processId, correlationId: p.correlationId,
+      error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+    });
+    return null;
+  }
+}
+
+function withContextMarkers(sources: readonly string[], ctx: ProcurementCanonicalContext): string[] {
+  const mk = readMarkers(sources);
+  mk.contextDigest = ctx.digest.slice(0, 16);
+  mk.contextVersion = ctx.version;
+  return writeMarkers(sources, mk);
+}
+
+/**
+ * "Criar DFD do zero": estrutura um RASCUNHO editável do DFD (art. 12, §1º) e persiste como documento
+ * canônico (kind "dfd", status "rascunho"). Contexto Canônico: o MESMO template é PRÉ-PREENCHIDO
+ * deterministicamente com o que o processo já sabe (unidade, responsável, itens e quantidades previstas,
+ * planejamento, estimativa derivada) — sem IA para fatos; a origem de cada campo fica nos marcadores
+ * `sources` (ctx/ctxdigest/ctxv/pf). Supervisão humana: sempre rascunho. Idempotente (id determinístico
+ * + digest do contexto no payload). Regeneração NUNCA sobrescreve edição humana/importação/IA.
  */
 export async function generateDFDDraft(params: {
   organizationId: number; processId: string; object: string; correlationId: string;
   idempotencyKey: string; actorUserId: number;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
-  const payloadHash = generatePayloadHash({ organizationId: params.organizationId, processId: params.processId, kind: "dfd", object: params.object });
+  const ctx = await resolveContextSoft(params);
+  const payloadHash = generatePayloadHash({
+    organizationId: params.organizationId, processId: params.processId, kind: "dfd", object: params.object,
+    // Contexto consumido entra no payload: retry com o MESMO contexto replaya; contexto diferente sob a
+    // mesma chave → CONFLICT (nunca devolve um DFD montado com contexto antigo).
+    sourcesDigest: ctx ? `${DFD_PREFILL_VERSION}:${ctx.digest}` : undefined,
+  });
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
     reviveIdempotent,
     async () => {
       // Estado de partida (sentinel explícito de ausência) revalidado sob lock na persistência.
       const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+      assertDFDMutable(before);
+      if (before && dfdHasNonSystemContent(before.sources ?? [])) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "DFD_HAS_HUMAN_CONTENT: o DFD já contém edição humana, importação ou rascunho de IA — a regeneração não sobrescreve. Use \"Atualizar no rascunho\" campo a campo.",
+        });
+      }
       const expectedState = before ? { type: "present" as const, contentHash: draftContentHash(before.content) } : { type: "absent" as const };
+      let content: string;
+      let sources: string[];
+      if (ctx) {
+        const prefill = buildDFDPrefill(ctx);
+        const withObject = { ...prefill, object: prefill.object ?? (params.object.trim() || null) };
+        content = renderDFDContent(withObject);
+        sources = writeMarkers([DFD_BASE_SOURCE], prefillMarkers(withObject));
+      } else {
+        content = buildDFDDraft(params.object);
+        sources = [DFD_BASE_SOURCE];
+      }
       const doc = createGeneratedDocument({
         processId: params.processId, organizationId: params.organizationId,
         kind: "dfd", title: `DFD — ${params.object}`,
-        content: buildDFDDraft(params.object),
-        sources: ["estrutura:art_12_par_1_lei_14133"],
+        content, sources,
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
+      const prefilledCount = Object.keys(readMarkers(sources).prefill).length;
       return {
         response: doc,
         persist: async (tx) => {
@@ -211,9 +292,22 @@ export async function generateDFDDraft(params: {
           });
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "change",
-            actor: "sistema", summary: "DFD criado (rascunho estruturado).", refId: doc.id,
-            correlationId: params.correlationId,
+            actor: "sistema",
+            summary: prefilledCount > 0
+              ? `DFD criado (rascunho estruturado, ${prefilledCount} campo(s) pré-preenchido(s) a partir do processo).`
+              : "DFD criado (rascunho estruturado).",
+            refId: doc.id, correlationId: params.correlationId,
           }, tx);
+          if (ctx) {
+            // Auditoria/métrica: SÓ contagens e digest (nunca conteúdo).
+            log.info("dfd_prefill_generated", {
+              organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+              actorUserId: params.actorUserId, documentId: doc.id, contextVersion: ctx.version,
+              contextDigest: ctx.digest.slice(0, 16), prefilledFields: prefilledCount,
+              knownFields: ctx.stats.knownFields, unknownFields: ctx.stats.unknownFields,
+              conflictCount: ctx.stats.conflictCount, items: ctx.items.length,
+            });
+          }
           return document;
         },
       };
@@ -241,6 +335,8 @@ async function runGovernedDraftEdit(p: {
   organizationId: number; processId: string; kind: DocumentKind;
   title: string; sources: string[]; content: string;
   actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+  /** Efeitos adicionais na MESMA transação, só quando houve mudança material (ex.: fatos do DFD). */
+  afterPersist?: (tx: ProcurementExecutor, document: GeneratedDocument) => Promise<void>;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   const payloadHash = createHash("sha256").update(JSON.stringify({
     op: p.op, o: p.organizationId, pr: p.processId, k: p.kind,
@@ -288,6 +384,7 @@ async function runGovernedDraftEdit(p: {
           organizationId: p.organizationId, processId: p.processId, eventType: "change",
           actor: String(p.actorUserId), summary: p.timelineSummary, refId: doc.id, correlationId: p.correlationId,
         }, tx);
+        if (p.afterPersist) await p.afterPersist(tx, document);
       }
       // Cacheia o SNAPSHOT CANÔNICO (originador preservado) — resposta = cache = estado persistido.
       await saveIdempotencyResult(p.idempotencyKey, p.actorUserId, p.organizationId, persisted, tx);
@@ -302,18 +399,305 @@ async function runGovernedDraftEdit(p: {
 /**
  * C.4B.3A — Edição MANUAL governada do rascunho de DFD (operation = dfd_manual_edit). DFD permanece
  * fora do lifecycle de emissão. Fino wrapper sobre o runner governado comum.
+ *
+ * Contexto Canônico: preserva os marcadores de linhagem por campo; o que o servidor INFORMOU/ALTEROU nos
+ * campos afirmáveis (unidade, responsável, planejamento, prioridade, prazo, itens e quantidade PREVISTA)
+ * vira afirmação `dfd`/confirmed no ledger do contexto — na MESMA transação do save (tudo-ou-nada) — com
+ * `basisValueHash` = o valor que o humano viu (superação consciente; divergência posterior = conflito).
  */
 export async function saveDFDDraft(params: {
   organizationId: number; processId: string; object: string; content: string;
   actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+  assertDFDMutable(existing);
+  const previousSources = existing?.sources ?? [];
+  let sources = ["edicao_manual", ...previousSources.filter(isAssistMarker)];
+  const ctx = await resolveContextSoft(params);
+
+  let facts: NewFactAssertion[] = [];
+  let overridden: Array<{ field: string; beforeHash: string; afterHash: string; previousOrigin: string }> = [];
+  let changedFields: string[] = [];
+  if (ctx) {
+    const { generatedId } = canonicalDocumentIdentity({ organizationId: params.organizationId, processId: params.processId, kind: "dfd" });
+    const version = draftContentHash(params.content).slice(0, 64);
+    facts = extractDFDAssertions(params.content, sources, ctx).map((d) => ({
+      path: d.path, value: d.value, sourceType: "dfd" as const, sourceId: generatedId, sourceVersion: version,
+      status: "confirmed" as const, actorUserId: params.actorUserId, basisValueHash: d.basisValueHash,
+    }));
+    ({ overridden, changedFields } = diffDFDFields(existing?.content ?? "", params.content, previousSources, buildDFDPrefill(ctx).items));
+    // A linha editada pelo servidor continua sendo o MESMO Item Canônico: regrava a linhagem (pr:).
+    sources = refreshRowLineage(params.content, sources, buildDFDPrefill(ctx).items);
+  }
+  const labels = changedFields.map((k) => DFD_FIELD_LABELS[k] ?? (k.startsWith("item:") ? "quantidade prevista" : k));
   return runGovernedDraftEdit({
-    op: DFD_SAVE_OP, operation: "dfd_manual_edit", timelineSummary: "DFD salvo (rascunho).",
+    op: DFD_SAVE_OP, operation: "dfd_manual_edit",
+    timelineSummary: changedFields.length
+      ? `DFD salvo (rascunho). Campos informados/alterados pelo servidor: ${[...new Set(labels)].join(", ")}.`
+      : "DFD salvo (rascunho).",
     organizationId: params.organizationId, processId: params.processId, kind: "dfd",
-    title: `DFD — ${params.object}`, sources: ["edicao_manual"], content: params.content,
+    title: `DFD — ${params.object}`, sources, content: params.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+    afterPersist: ctx ? async (tx) => {
+      if (facts.length) {
+        await recordContextAssertions({
+          organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+          facts, executor: tx,
+        });
+      }
+      if (overridden.length) {
+        // Override humano PRESERVADO e auditável: antes/depois (hash), origem anterior, ator, correlação.
+        // O conteúdo integral anterior fica no ledger (generated_document_edits.previous_content).
+        log.info("dfd_field_overridden", {
+          organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+          actorUserId: params.actorUserId, fields: overridden.slice(0, 50),
+        });
+      }
+    } : undefined,
+  });
+}
+
+/** Campos cujo valor mudou entre dois conteúdos do DFD; "overridden" = o anterior era do sistema/IA. */
+function diffDFDFields(before: string, after: string, previousSources: readonly string[], items: DFDPrefill["items"]): {
+  changedFields: string[]; overridden: Array<{ field: string; beforeHash: string; afterHash: string; previousOrigin: string }>;
+} {
+  const a = parseDFD(before);
+  const b = parseDFD(after);
+  const mk = readMarkers(previousSources);
+  // Linhagem persistida (canonicalItemId) do documento anterior liga as linhas dos dois lados.
+  const qty = (p: ReturnType<typeof parseDFD>) => Object.fromEntries(
+    linkDFDRows(p, items, previousSources).filter((l) => l.itemId !== null).map((l) => [`item:${l.itemId}`, l.row.quantity]));
+  const av: Record<string, string | number | null> = { ...a.values, ...qty(a) };
+  const bv: Record<string, string | number | null> = { ...b.values, ...qty(b) };
+  const changedFields: string[] = [];
+  const overridden: Array<{ field: string; beforeHash: string; afterHash: string; previousOrigin: string }> = [];
+  for (const k of [...new Set([...Object.keys(av), ...Object.keys(bv)])].sort()) {
+    const bh = fieldHash(av[k] ?? null);
+    const ah = fieldHash(bv[k] ?? null);
+    if (bh === ah || bv[k] === null || bv[k] === undefined) continue;
+    changedFields.push(k);
+    const prior = mk.ai[k] && mk.ai[k].hash === bh ? "ai_draft" : mk.prefill[k] && mk.prefill[k].hash === bh ? mk.prefill[k].origin : null;
+    if (prior) overridden.push({ field: k, beforeHash: bh, afterHash: ah, previousOrigin: prior });
+  }
+  return { changedFields, overridden };
+}
+
+// ─── Contexto Canônico: estado assistido, reconciliação explícita e rascunho de IA do DFD ─────────
+
+export interface DFDAssistState {
+  /** false = contexto indisponível (o DFD segue funcionando como antes). */
+  available: boolean;
+  contextVersion: number | null;
+  contextDigest: string | null;
+  /** Versão/digest do contexto consumido pelo documento (marcadores gravados). */
+  consumedContextVersion: number | null;
+  consumedContextDigest: string | null;
+  /** Algum campo pré-preenchido ficou desatualizado ou há informação nova disponível. */
+  stale: boolean;
+  fields: DFDFieldView[];
+  summary: Record<DFDFieldState, number>;
+  context: { knownFields: number; unknownFields: number; conflictCount: number; items: number } | null;
+  aiDraft: { justification: { executionId: string; contextDigest: string } | null };
+  /** Linhas da tabela do DFD sem Item Canônico correspondente (podem ser preparadas em Itens da contratação). */
+  unlinkedItemRows: number;
+}
+
+/** Read-only: estado por campo do DFD = f(conteúdo salvo, marcadores, contexto ATUAL). Nada é gravado. */
+export async function getDFDAssistState(params: {
+  organizationId: number; processId: string; correlationId: string;
+}): Promise<DFDAssistState> {
+  const doc = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+  const ctx = await resolveContextSoft(params);
+  const empty = { prefilled: 0, ai_draft: 0, user_modified: 0, stale: 0, conflict: 0, available: 0, unknown: 0 };
+  const mk = readMarkers(doc?.sources ?? []);
+  if (!ctx) {
+    return {
+      available: false, contextVersion: null, contextDigest: null,
+      consumedContextVersion: mk.contextVersion, consumedContextDigest: mk.contextDigest,
+      stale: false, fields: [], summary: empty, context: null, aiDraft: { justification: mk.ai.justificativa ?? null },
+      unlinkedItemRows: 0,
+    };
+  }
+  const prefillNow = buildDFDPrefill(ctx);
+  const fields = doc ? computeDFDFieldStates(doc.content, doc.sources ?? [], prefillNow) : [];
+  const summary = summarizeFieldStates(fields);
+  const stale = summary.stale > 0 || summary.available > 0;
+  if (doc && stale) {
+    log.info("document_context_stale", {
+      organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+      documentKind: "dfd", staleFields: summary.stale, availableFields: summary.available,
+      conflictFields: summary.conflict, contextVersion: ctx.version, consumedContextVersion: mk.contextVersion,
+    });
+  }
+  return {
+    available: true, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
+    consumedContextVersion: mk.contextVersion, consumedContextDigest: mk.contextDigest,
+    stale, fields, summary,
+    context: { knownFields: ctx.stats.knownFields, unknownFields: ctx.stats.unknownFields, conflictCount: ctx.stats.conflictCount, items: ctx.items.length },
+    aiDraft: { justification: mk.ai.justificativa ?? null },
+    unlinkedItemRows: doc ? unlinkedDFDRows(doc.content, doc.sources ?? [], prefillNow).length : 0,
+  };
+}
+
+const DFD_RECONCILE_OP = "procurement.dfd.reconcile";
+
+/**
+ * "Atualizar no rascunho" — aplica, por AÇÃO EXPLÍCITA do servidor, o valor ATUAL do contexto a UM campo
+ * do DFD (nenhum outro campo é tocado). Governado como qualquer edição: concorrência otimista, ledger
+ * (`dfd_context_reconcile`, com conteúdo anterior), idempotência, timeline. Nunca em DFD aprovado.
+ */
+export async function reconcileDFDFieldDraft(params: {
+  organizationId: number; processId: string; object: string; fieldKey: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "DFD inexistente — crie o DFD antes de atualizar campos." });
+  assertDFDMutable(existing);
+  const ctx = await resolveProcurementContext(params);
+  const prefill = buildDFDPrefill(ctx);
+  const view = computeDFDFieldStates(existing.content, existing.sources ?? [], prefill).find((f) => f.key === params.fieldKey);
+  if (!view || !view.reconcilable) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "FIELD_NOT_RECONCILABLE: não há informação de origem atualizada para este campo." });
+  }
+  const next = reconcileDFDField(existing.content, existing.sources ?? [], params.fieldKey, prefill);
+  if (!next) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "FIELD_NOT_RECONCILABLE: não há informação de origem atualizada para este campo." });
+  }
+  const result = await runGovernedDraftEdit({
+    op: DFD_RECONCILE_OP, operation: "dfd_context_reconcile",
+    timelineSummary: `DFD: campo "${view.label}" atualizado a partir da informação de origem (ação explícita).`,
+    organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+    title: existing.title || `DFD — ${params.object}`, sources: withContextMarkers(next.sources, ctx), content: next.content,
     actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
     idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
   });
+  log.info("document_context_reconciled", {
+    organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+    actorUserId: params.actorUserId, documentKind: "dfd", field: params.fieldKey, previousState: view.state,
+    contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16), replayed: result.replayed,
+  });
+  return result;
+}
+
+export interface DFDAIDraftExplanation {
+  field: "justificativa";
+  executionId: string;
+  provider: string | null;
+  model: string | null;
+  promptVersion: string;
+  contextVersion: number;
+  contextDigest: string;
+  inputDigest: string;
+  unverifiedNumbers: string[];
+  actorUserId: number;
+  correlationId: string;
+  generatedAt: string;
+}
+
+/**
+ * Rascunho SUPERVISIONADO de IA da "Justificativa da necessidade" (seção 2) — ação EXPLÍCITA do servidor.
+ * IA exclusivamente via AIExecutionEngine (dfdJustificationAuthoring), com contexto GOVERNADO (só fatos
+ * canônicos; sem preços/pessoas). Saída = rascunho editável marcado (`ai:`), nunca decisão/aprovação.
+ * Replay-safe: idempotência da geração + idempotência do Engine (retry não duplica chamada de IA).
+ * Nunca sobrescreve justificativa escrita por humano sem confirmação explícita (`confirmReplace`).
+ */
+export async function generateDFDJustificationDraft(params: {
+  organizationId: number; processId: string; object: string;
+  actorUserId: number; expectedContentHash: string; confirmReplace?: boolean;
+  idempotencyKey: string; correlationId: string;
+  /** Seam determinístico (testes) — substitui a chamada ao Engine; proveniência deixa de ser obrigatória. */
+  invoke?: (prompt: string) => Promise<string>;
+}): Promise<{ document: GeneratedDocument; explanation: DFDAIDraftExplanation; replayed: boolean }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "DFD inexistente — crie o DFD antes de gerar o rascunho da justificativa." });
+  assertDFDMutable(existing);
+  const ctx = await resolveProcurementContext(params);
+  const payloadHash = generatePayloadHash({
+    organizationId: params.organizationId, processId: params.processId, kind: "dfd", object: params.object,
+    sourcesDigest: canonicalDigest({
+      op: "dfd_ai_justification", pv: DFD_JUSTIFICATION_PROMPT_VERSION, ctx: ctx.digest,
+      exp: params.expectedContentHash, rep: params.confirmReplace === true,
+    }),
+  });
+
+  type Out = { document: GeneratedDocument; explanation: DFDAIDraftExplanation };
+  const { result, replayed } = await runReplaySafeGeneration<Out>(
+    { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
+    reviveIdempotent,
+    async () => {
+      // Pré-condições ANTES da cognição (nenhuma chamada de IA desperdiçada / nenhuma sobrescrita).
+      if (draftContentHash(existing.content) !== params.expectedContentHash) {
+        throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue antes de gerar." });
+      }
+      const view = computeDFDFieldStates(existing.content, existing.sources ?? [], buildDFDPrefill(ctx)).find((f) => f.key === "justificativa");
+      if (view?.state === "user_modified" && params.confirmReplace !== true) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "USER_MODIFIED_FIELD: a justificativa foi escrita por você — confirme para substituí-la pelo rascunho da IA.",
+        });
+      }
+      // Cognição FORA da transação, via AIExecutionEngine (ou seam).
+      const draft = await generateDFDJustificationText({
+        organizationId: params.organizationId, processId: params.processId, ctx,
+        correlationId: params.correlationId, actorUserId: params.actorUserId,
+        idempotencyKey: params.idempotencyKey, invoke: params.invoke,
+      });
+      if (!draft.text.trim()) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu rascunho utilizável — nada foi alterado." });
+      }
+      const applied = applyAIJustification(existing.content, existing.sources ?? [], draft.text, draft.executionId, ctx.digest);
+      const doc = createGeneratedDocument({
+        processId: params.processId, organizationId: params.organizationId, kind: "dfd",
+        title: existing.title || `DFD — ${params.object}`, content: applied.content,
+        sources: withContextMarkers(applied.sources, ctx), correlationId: params.correlationId,
+      });
+      const explanation: DFDAIDraftExplanation = {
+        field: "justificativa", executionId: draft.executionId, provider: draft.provider, model: draft.model,
+        promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
+        inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers,
+        actorUserId: params.actorUserId, correlationId: params.correlationId, generatedAt: new Date().toISOString(),
+      };
+      return {
+        response: { document: doc, explanation },
+        persist: async (tx) => {
+          const { document } = await applyDraftContentMutationTx(tx, {
+            organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+            actorUserId: params.actorUserId, doc, operation: "dfd_ai_draft",
+            expectedState: { type: "present", contentHash: params.expectedContentHash },
+            idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+          });
+          // A1 — proveniência cognitiva → artefato (MESMA transação). Cognição real ⇒ obrigatória.
+          const { linked } = await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
+            organizationId: params.organizationId, correlationId: params.correlationId,
+            artifactKind: "dfd", artifactId: document.id,
+          });
+          if (params.invoke === undefined && linked === 0) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Proveniência cognitiva obrigatória ausente para esta geração — operação abortada (fail-closed).",
+            });
+          }
+          await recordProcessEvent({
+            organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
+            actor: String(params.actorUserId),
+            summary: `DFD: rascunho da justificativa gerado por IA a pedido do servidor (revisão obrigatória; execução ${draft.executionId.slice(0, 24)}).`,
+            refId: document.id, correlationId: params.correlationId,
+          }, tx);
+          log.info("dfd_ai_draft_generated", {
+            organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+            actorUserId: params.actorUserId, documentId: document.id, field: "justificativa",
+            executionId: draft.executionId, provider: draft.provider, model: draft.model,
+            promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
+            inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers.length,
+            replaced: view?.state === "user_modified", engineReplayed: draft.replayed,
+          });
+          return { document, explanation };
+        },
+      };
+    },
+  );
+  return { ...result, replayed };
 }
 
 /**
@@ -371,8 +755,16 @@ export async function generateDocument(params: {
     organizationId: params.organizationId, processId: params.processId, kind: params.kind, object: params.object,
   });
 
+  // Contexto Canônico — TR com Itens da contratação: FAIL-CLOSED antes de qualquer reserva de idempotência
+  // ou cognição (guarda compartilhada com o Edital). O ETP NÃO bloqueia: exibe "[a definir]" e nunca usa a
+  // quantidade da Pesquisa.
+  if (params.kind === "tr") {
+    assertCanonicalQuantitiesComplete("tr", sourceContext.canonical, params);
+  }
+
   // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
-  // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT.
+  // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT. No modo canônico o
+  // `sourcesDigest` já inclui a quantidade PREVISTA de cada item.
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
@@ -483,6 +875,42 @@ export async function generateDocument(params: {
 }
 
 /**
+ * Guarda COMPARTILHADA (TR e Edital) do modo canônico, antes de qualquer reserva de idempotência ou cognição:
+ * nunca substitui a quantidade PREVISTA ausente pela da cotação, nem assume 1, nem presume que um Item
+ * Inteligente sem vínculo represente a necessidade (nenhum vínculo é criado aqui). Legado (sem Itens da
+ * contratação) ⇒ `canonical = null` ⇒ no-op.
+ */
+function assertCanonicalQuantitiesComplete(
+  documentKind: "tr" | "edital",
+  canonical: CanonicalItemsState | null,
+  ids: { organizationId: number; processId: string; correlationId: string },
+): void {
+  if (!canonical) return;
+  const docName = documentKind === "tr" ? "o Termo de Referência" : "o Edital";
+  const { missingPlannedQuantity, unlinkedApprovedItemCount } = canonical;
+  if (missingPlannedQuantity.length > 0) {
+    log.warn("document_generation_blocked_missing_planned_quantity", {
+      organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+      documentKind, missingItemCount: missingPlannedQuantity.length,
+    });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `PLANNED_QUANTITY_REQUIRED: ${documentKind === "tr" ? "Defina a quantidade prevista do item antes de gerar o Termo de Referência." : "Defina a quantidade prevista dos itens antes de gerar o Edital."} (${missingPlannedQuantity.length} item(ns) sem quantidade prevista em "Itens da contratação").`,
+    });
+  }
+  if (unlinkedApprovedItemCount > 0) {
+    log.warn("document_generation_blocked_unlinked_price_research_items", {
+      organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+      documentKind, unlinkedItemCount: unlinkedApprovedItemCount,
+    });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `PRICE_RESEARCH_ITEM_UNLINKED: ${unlinkedApprovedItemCount} item(ns) aprovado(s) da Pesquisa de Preços não estão em "Itens da contratação". Prepare-os ou associe-os antes de gerar ${docName}.`,
+    });
+  }
+}
+
+/**
  * P0 — Gera o Edital após o TR, REAPROVEITANDO o contexto do processo (DFD/ETP/TR/itens/parâmetros) e
  * produzindo uma minuta ESTRUTURADA e fundamentada pelo Kernel cognitivo (AIExecutionEngine + RAG
  * governado), no MESMO pipeline replay-safe do ETP/TR. Presencial exige justificativa legal automática;
@@ -530,6 +958,8 @@ export async function generateNotice(params: {
     organizationId: params.organizationId, processId: params.processId, object: params.object,
     modality: params.modality, form: params.form, platform,
   });
+  // Modo canônico (Itens da contratação): Edital nunca sai com quantidade da Pesquisa por fallback.
+  assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params);
 
   // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
   const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");

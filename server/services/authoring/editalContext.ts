@@ -24,7 +24,9 @@ import { formatBRL, reaisToCents } from "../../domain/money";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
 } from "../../domain/authoritativeItems";
-import { confirmedCatalogFromDecision } from "./authoringContext";
+import {
+  confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
+} from "./authoringContext";
 import { selectDocumentExcerpt, sha256Hex } from "../../domain/canonicalJson";
 
 /**
@@ -85,6 +87,12 @@ export interface EditalSourceInputs {
   /** Parâmetros complementares do edital, quando existirem no espaço canônico (senão REVISAR). */
   readonly criterioJulgamento: string | null;
   readonly regimeContratacao: string | null;
+  /**
+   * Contexto Canônico — presente ⇔ o processo tem Itens da contratação. Os itens vêm da MESMA projeção do
+   * ETP/TR (`canonicalDocumentItems`): quantidade = PREVISTA, preço = referência vinculada, ordem oficial.
+   * `approvedItems` continua sendo lido apenas como evidência (nunca como necessidade).
+   */
+  readonly canonical?: { readonly items: readonly ContextItem[]; readonly state: CanonicalItemsState };
 }
 
 /** Estado de UMA fonte-base para lineage + detecção de desatualização. */
@@ -109,6 +117,9 @@ export interface EditalSourceContext {
   readonly lineageMarkers: string[];
   /** Bloco AUTORITATIVO de itens/valores (servidor, determinístico) — anexado à minuta, nunca redigido pela IA. */
   readonly authoritativeBlock: string;
+  /** "canonical_planned" = quantidade PREVISTA dos Itens da contratação; "legacy" = quantidade da cotação. */
+  readonly quantitySource: "canonical_planned" | "legacy";
+  readonly canonical: CanonicalItemsState | null;
 }
 
 function short(hash: string | null): string {
@@ -180,22 +191,32 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
   renderDoc("Documento de Formalização da Demanda (DFD)", "dfd", input.dfd);
 
   // Estimativa AUTORITATIVA (mesmo renderer do TR): centavos half-up; preço lido em REAIS (sem /100).
-  const estimate = computeItemEstimates(input.approvedItems.map((i) => ({
-    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
-    confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
-  })));
+  // Modo canônico: MESMA projeção do ETP/TR (quantidade PREVISTA × referência vinculada; ordem oficial).
+  const canonical = input.canonical ?? null;
+  const estimate = canonical
+    ? computeItemEstimates(canonical.items, { preserveOrder: true })
+    : computeItemEstimates(input.approvedItems.map((i) => ({
+      id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
+      averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+      confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
+    })));
+  const itemCount = canonical ? canonical.items.length : input.approvedItems.length;
+  const stateOf = (id: string) => (canonical ? canonical.items.find((c) => c.id === id)?.sourceState : input.approvedItems.find((a) => a.id === id)?.sourceState);
+  const lotOf = (id: string) => (canonical ? canonical.items.find((c) => c.id === id)?.lotCode ?? null : null);
   const items = estimate.rows.slice(0, MAX_ITEMS);
   if (items.length > 0) {
     usedSources.push("itens");
-    lines.push(`## Itens aprovados (${items.length}${input.approvedItems.length > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""}) — referência, NÃO redigir valores`);
+    lines.push(canonical
+      ? `## Itens da contratação (${items.length}${itemCount > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""}) — quantidade PREVISTA; referência, NÃO redigir valores`
+      : `## Itens aprovados (${items.length}${input.approvedItems.length > MAX_ITEMS ? `, exibindo ${MAX_ITEMS}` : ""}) — referência, NÃO redigir valores`);
     for (const it of items) {
-      const price = it.averagePriceCents > 0 ? ` · valor médio est.: ${formatBRL(it.averagePriceCents)}` : "";
+      const price = it.averagePriceCents > 0 ? ` · ${canonical ? "valor de referência" : "valor médio est."}: ${formatBRL(it.averagePriceCents)}` : "";
       // Sugestão automática NÃO é apresentada como código oficial.
       const catmat = it.confirmedCatalogCode ? ` · CATMAT/CATSER: ${it.confirmedCatalogCode}` : it.suggestedCatalogCode ? " · CATMAT/CATSER: a revisar (sugestão não confirmada)" : "";
-      const changed = input.approvedItems.find((a) => a.id === it.id)?.sourceState;
+      const changed = stateOf(it.id);
       const flag = changed && changed !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${price}${catmat}${flag}`);
+      const lot = lotOf(it.id);
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
     }
     lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
@@ -221,7 +242,13 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       rc: input.regimeContratacao ?? null,
       // Recorte EFETIVAMENTE consumido de cada documento (hash + cobertura), não o documento inteiro.
       dfd: excerpts.dfd, etp: excerpts.etp, tr: excerpts.tr,
-      items: itemsSignature(input.approvedItems),
+      items: canonical ? canonicalItemsSignature(canonical.items) : itemsSignature(input.approvedItems),
+      // Chaves só no modo canônico ⇒ o digest dos processos legados permanece byte-idêntico.
+      ...(canonical ? {
+        qs: "canonical_planned",
+        missingPlanned: canonical.state.missingPlannedQuantity.map((m) => m.id).sort(),
+        unlinked: canonical.state.unlinkedApprovedItemCount,
+      } : {}),
     }))
     .digest("hex");
 
@@ -236,7 +263,8 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     `base:tr@${short(sourceVersions.tr.contentHash)}`,
     `base:etp@${short(sourceVersions.etp.contentHash)}`,
     `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
-    `itens:${input.approvedItems.length}`,
+    `itens:${itemCount}`,
+    ...(canonical ? ["qtd:prevista", `ctxdigest:${canonical.state.contextDigest.slice(0, 16)}`] : []),
   ];
 
   return {
@@ -246,8 +274,21 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     sourcesDigest,
     sourceVersions,
     lineageMarkers,
-    authoritativeBlock: renderAuthoritativeItemsBlock(estimate, { heading: "Itens, quantitativos e valor estimado (dados autoritativos do processo)" }),
+    authoritativeBlock: renderAuthoritativeItemsBlock(estimate, {
+      heading: "Itens, quantitativos e valor estimado (dados autoritativos do processo)",
+      ...(canonical ? { quantitySource: "canonical_planned" as const } : {}),
+    }),
+    quantitySource: canonical ? "canonical_planned" : "legacy",
+    canonical: canonical?.state ?? null,
   };
+}
+
+/** Assinatura dos itens CANÔNICOS na ordem OFICIAL (a ordem/lote é renderizada ⇒ entra no digest). */
+function canonicalItemsSignature(items: readonly ContextItem[]): Array<Record<string, unknown>> {
+  return items.map((i) => ({
+    id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: i.averagePriceCents, l: i.lotCode ?? null,
+    cm: i.suggestedCatalogCode ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount, ss: i.sourceState,
+  }));
 }
 
 function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>): EditalUpstreamDoc | null {
@@ -290,6 +331,13 @@ export async function resolveEditalSources(params: {
     suggestedCATMAT: i.suggestedCATMAT, confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
     quoteCount: i.quoteCount, sourceState: i.sourceState,
   }));
+  // Gate determinístico COMPARTILHADO com ETP/TR: Itens da contratação ativos ⇒ modo canônico obrigatório.
+  const canonical = await resolveCanonicalDocumentItems(params, approvedItems.map((i) => ({
+    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
+    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+    confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
+    sourceState: i.sourceState ?? "current", quotes: [],
+  })));
 
   return buildEditalSourceContext({
     organizationId: params.organizationId,
@@ -307,6 +355,7 @@ export async function resolveEditalSources(params: {
     approvedItems,
     criterioJulgamento: params.criterioJulgamento ?? null,
     regimeContratacao: params.regimeContratacao ?? null,
+    canonical: canonical ?? undefined,
   });
 }
 
