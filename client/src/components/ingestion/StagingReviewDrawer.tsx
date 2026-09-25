@@ -7,7 +7,8 @@
  * rascunho local (sem reaplicar) e sinalizando refetch. A correção NÃO aprova o item nem promove ao
  * domínio; aceitar/rejeitar continua sendo passo explícito. Não expõe JSON bruto ao usuário.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import React, { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Info } from "lucide-react";
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
 } from "@/components/ui/drawer";
@@ -16,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfidenceBadge, scoreToLevel } from "@/components/ui/ConfidenceBadge";
 import { IngestionWarningsPanel } from "./IngestionWarningsPanel";
 import {
@@ -25,6 +27,7 @@ import {
 import { INSTITUTIONAL_COPY } from "@/lib/ingestion/status";
 import {
   CORRECTABLE_FIELDS, isCorrectable, originalValue, effectiveValue, isCorrected, buildCorrectionPatch,
+  SOURCE_QUANTITY_LABEL, SOURCE_QUANTITY_HELP, CORRECTION_SCOPE_NOTE, CORRECTION_SECTION_TITLE, type CorrectableField,
 } from "@/lib/ingestion/correction";
 import { newIdempotencyKey } from "@/lib/ingestion/sha256";
 
@@ -42,14 +45,90 @@ interface StagingReviewDrawerProps {
   ) => Promise<unknown> | undefined;
 }
 
-function Field({ label, value }: { label: string; value: ReactNode }) {
+function Field({ label, value, help }: { label: string; value: ReactNode; help?: string }) {
   return (
     <div className="space-y-0.5">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="text-sm text-foreground">{value ?? "—"}</div>
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
     </div>
   );
 }
+
+/** Ajuda contextual curta: ícone acessível (rótulo = texto completo) com tooltip. */
+function ContextHelp({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label={text} className="inline-flex text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+          <Info className="size-3.5" aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{text}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface CorrectionFieldInputProps {
+  itemId: number;
+  field: CorrectableField;
+  value: string;
+  original: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}
+
+/**
+ * Um campo corrigível (overlay sobre o raw imutável). Mostra o valor ORIGINAL extraído e, quando o campo define,
+ * texto de apoio e ajuda contextual — ex.: "Quantidade no documento" é a quantidade do DOCUMENTO-FONTE, não a
+ * quantidade a contratar.
+ */
+export function CorrectionFieldInput({ itemId, field, value, original, disabled, onChange }: CorrectionFieldInputProps) {
+  const inputId = `corr-${itemId}-${field.logical}`;
+  const origId = `orig-${itemId}-${field.logical}`;
+  const helpId = `help-${itemId}-${field.logical}`;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={inputId}>{field.label}</Label>
+        {field.contextHelp && <ContextHelp text={field.contextHelp} />}
+      </div>
+      <Input
+        id={inputId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-describedby={field.helpText ? `${origId} ${helpId}` : origId}
+      />
+      <p id={origId} className="text-xs text-muted-foreground">
+        Original: <span className="font-mono">{original || "—"}</span>
+      </p>
+      {field.helpText && <p id={helpId} className="text-xs text-muted-foreground">{field.helpText}</p>}
+    </div>
+  );
+}
+
+/** Cabeçalho do bloco de correção: deixa explícito que se corrige a EXTRAÇÃO do documento-fonte. */
+export function CorrectionSectionHeader({ itemId }: { itemId: number }) {
+  return (
+    <div>
+      <p id={`corr-title-${itemId}`} className="text-sm font-medium text-foreground">{CORRECTION_SECTION_TITLE}</p>
+      <p id={`corr-scope-${itemId}`} className="text-xs text-muted-foreground">{CORRECTION_SCOPE_NOTE}</p>
+    </div>
+  );
+}
+
+/** Leitura (tipos não corrigíveis): quantidade/unidade/preço como extraídos do documento. */
+export function ExtractedValuesSummary({ item }: { item: Pick<StagingItem, "rawQuantity" | "rawUnit" | "rawUnitPrice"> }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <Field label={SOURCE_QUANTITY_LABEL} value={item.rawQuantity} help={SOURCE_QUANTITY_HELP} />
+      <Field label="Unidade" value={item.rawUnit} />
+      <Field label="Preço unitário" value={item.rawUnitPrice} />
+    </div>
+  );
+}
+
 
 export function StagingReviewDrawer({
   item, open, disabled, importType, isCorrecting, correctError, onOpenChange, onReview, onCorrect,
@@ -127,26 +206,24 @@ export function StagingReviewDrawer({
 
           {/* Correção de campos autorizados (Original × Atual) */}
           {canCorrect ? (
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <p className="text-sm font-medium text-foreground">Corrigir campos</p>
-              {fields.map((f) => {
-                const original = originalValue(item, f) ?? "";
-                return (
-                  <div key={f.logical} className="space-y-1">
-                    <Label htmlFor={`corr-${item.id}-${f.logical}`}>{f.label}</Label>
-                    <Input
-                      id={`corr-${item.id}-${f.logical}`}
-                      value={draft[f.logical] ?? ""}
-                      onChange={(e) => setDraft((d) => ({ ...d, [f.logical]: e.target.value }))}
-                      disabled={disabled || isCorrecting}
-                      aria-describedby={`orig-${item.id}-${f.logical}`}
-                    />
-                    <p id={`orig-${item.id}-${f.logical}`} className="text-xs text-muted-foreground">
-                      Original: <span className="font-mono">{original || "—"}</span>
-                    </p>
-                  </div>
-                );
-              })}
+            <div
+              className="space-y-3 rounded-md border border-border p-3"
+              role="group"
+              aria-labelledby={`corr-title-${item.id}`}
+              aria-describedby={`corr-scope-${item.id}`}
+            >
+              <CorrectionSectionHeader itemId={item.id} />
+              {fields.map((f) => (
+                <CorrectionFieldInput
+                  key={f.logical}
+                  itemId={item.id}
+                  field={f}
+                  value={draft[f.logical] ?? ""}
+                  original={originalValue(item, f) ?? ""}
+                  disabled={disabled || isCorrecting}
+                  onChange={(v) => setDraft((d) => ({ ...d, [f.logical]: v }))}
+                />
+              ))}
               <div className="space-y-1">
                 <Label htmlFor={`corr-just-${item.id}`}>Justificativa da correção (obrigatória)</Label>
                 <Textarea
@@ -175,11 +252,7 @@ export function StagingReviewDrawer({
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Quantidade" value={item.rawQuantity} />
-              <Field label="Unidade" value={item.rawUnit} />
-              <Field label="Preço unitário" value={item.rawUnitPrice} />
-            </div>
+            <ExtractedValuesSummary item={item} />
           )}
 
           <div className="space-y-1.5">

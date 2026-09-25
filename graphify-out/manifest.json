@@ -10435,8 +10435,8 @@
     "semantic_hash": ""
   },
   "docs/ops/INGESTION_RUNBOOK.md": {
-    "mtime": 1790281839.9630888,
-    "ast_hash": "181b497aa64d88c03f28d8046e6f0a6c",
+    "mtime": 1790284904.8609092,
+    "ast_hash": "9baa8ea1a61f1c28a5fb127d27f78edc",
     "semantic_hash": ""
   },
   "tools/graphify/README.md": {
@@ -10515,8 +10515,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/StagingReviewDrawer.tsx": {
-    "mtime": 1790269614.8323169,
-    "ast_hash": "2358ef8f5e2dcf2087fe8f773b99bd6d",
+    "mtime": 1790287179.5433764,
+    "ast_hash": "a737aed9ca83848c305438f347ae3e5f",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/StagingReviewTable.tsx": {
@@ -10610,8 +10610,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/correction.ts": {
-    "mtime": 1790269614.848328,
-    "ast_hash": "fcea28d36a06923fd89b8fe022181b6f",
+    "mtime": 1790287179.543148,
+    "ast_hash": "7a34b0b76047d3327eb560e49b9fb0fc",
     "semantic_hash": ""
   },
   "drizzle/0290_import_item_corrections.sql": {
@@ -11890,13 +11890,13 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PriceResearchItemCard.tsx": {
-    "mtime": 1790281610.3374894,
-    "ast_hash": "9c62fed2c2be2825b29366c06314f0d8",
+    "mtime": 1790284864.1642196,
+    "ast_hash": "bfd417a93c96460d796c32a29e86b94c",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PriceResearchReviewList.test.ts": {
-    "mtime": 1790281593.8729873,
-    "ast_hash": "01cac0b05a6a132fbc9336189a21efc2",
+    "mtime": 1790284867.6285598,
+    "ast_hash": "e7ec80bcd9cb1fe899914332ed7c7dfd",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PriceResearchReviewList.tsx": {
@@ -12117,6 +12117,11 @@
   "docs/architecture/OCR_LOCAL.md": {
     "mtime": 1790269615.0999904,
     "ast_hash": "66bf7887903b79c4164557316a708759",
+    "semantic_hash": ""
+  },
+  "client/src/components/ingestion/StagingReviewDrawer.test.ts": {
+    "mtime": 1790287196.955744,
+    "ast_hash": "7e170f4a58a5dae95c25fe9cc1e00ace",
     "semantic_hash": ""
   }
 }
