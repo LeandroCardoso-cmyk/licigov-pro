@@ -46,7 +46,7 @@ const workspace = (items: ItemView[], lots: LotView[] = [], over: Record<string,
   items, lots, withdrawn: [], hasLots: lots.length > 0,
   stats: { itemCount: items.length, lotCount: lots.length, unassignedItemCount: 0, unknownQuantityCount: 0, conflictCount: 0 },
   estimatedTotalCents: null, contextVersion: 1, contextDigest: "d", governance: { locked: false, reason: null, officialEmittedKinds: [] },
-  sources: { priceResearchItems: 5, dfdRows: 0 }, ...over,
+  sources: { priceResearchItems: 5, priceResearchSessionsPending: 0, dfdRows: 0 }, ...over,
 });
 const render = () => renderToStaticMarkup(createElement(ProcurementItemsWorkspace, { processId: "p1" }));
 
@@ -85,6 +85,29 @@ describe("ProcurementItemsWorkspace — estados", () => {
     expect(html).toContain("+ Criar lote");
     expect(html).toContain("5 item(ns) identificado(s) na Pesquisa de Preços");
     expect(html).toContain("Nenhum item da contratação ainda");
+  });
+
+  it("Pesquisa em revisão, 0 itens elegíveis (legado não governado não conta): sem 'Preparar', com orientação clara", () => {
+    state.ws = workspace([], [], { sources: { priceResearchItems: 0, priceResearchSessionsPending: 1, dfdRows: 0 } });
+    const html = render();
+    expect(html).not.toContain("Preparar a partir da pesquisa");
+    expect(html).not.toContain("identificado(s) na Pesquisa de Preços");
+    expect(html).toContain("Nenhum item elegível da Pesquisa de Preços ainda. Conclua a revisão da Pesquisa de Preços para aproveitar os itens.");
+    expect(html).toContain('role="status"');
+    expect(html).toContain("+ Adicionar item");
+  });
+
+  it("sem Pesquisa pendente e 0 elegíveis: nenhuma orientação extra (processos sem Pesquisa ficam como antes)", () => {
+    state.ws = workspace([], [], { sources: { priceResearchItems: 0, priceResearchSessionsPending: 0, dfdRows: 0 } });
+    const html = render();
+    expect(html).not.toContain("Preparar a partir da pesquisa");
+    expect(html).not.toContain("Nenhum item elegível");
+  });
+
+  it("painel de candidatos da Pesquisa vazio ⇒ estado vazio explicativo (nunca lista itens não elegíveis)", () => {
+    state.cands = { sourceDigest: "0".repeat(32), counts: { sourceItemCount: 0 }, candidates: [] };
+    const html = renderToStaticMarkup(createElement(CandidatesPanel, { processId: "p1", source: "price_research", lots: [], items: [], onClose: () => {}, onDone: () => {}, onError: () => {} }));
+    expect(html).toContain("Nenhum item elegível da Pesquisa de Preços ainda.");
   });
 
   it("sem lotes: lista simples com quantidade prevista vazia, quantidade do documento e 'Usar 1'", () => {

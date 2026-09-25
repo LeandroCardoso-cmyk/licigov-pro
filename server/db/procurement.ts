@@ -245,7 +245,7 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
 export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
   id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
   averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; enrichmentStatus: string; sourceResearchId: string;
-  sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null;
+  sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null; approvedBy: number | null;
 }>> {
   const db = await getDb();
   if (!db) return [];
@@ -263,6 +263,7 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
       enrichmentStatus: r.enrichmentStatus ?? "done", sourceResearchId: r.sourceResearchId,
       sourceState: r.sourceState ?? "current", sourceStateReason: r.sourceStateReason ?? null,
       pendingQuoteCount: pending ? pending.filter((x) => Number(x.value) > 0).length : null,
+      approvedBy: r.approvedBy ?? null,
     };
   });
 }

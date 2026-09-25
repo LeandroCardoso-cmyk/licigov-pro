@@ -274,6 +274,12 @@ jobs:
       - name: Smoke — ETP/TR/Edital × quantidade prevista (fonte única)
         run: pnpm exec vitest run server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts
 
+      # Hotfix — elegibilidade dos candidatos da Pesquisa: legado de importação manual sem revisão + Pesquisa em
+      # revisão (5 itens / 30 cotações) ⇒ 0 candidatos; revisão + aprovação + promoção ⇒ EXATAMENTE 5; nova sessão
+      # não mistura; rejeição parcial ⇒ 4; manual aprovado por humano ⇒ elegível; tenant.
+      - name: Smoke — candidatos da Pesquisa exigem lineage governado
+        run: pnpm exec vitest run server/__tests__/integration/procurement-candidate-eligibility-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

@@ -111,6 +111,11 @@ export default function ProcurementItemsWorkspace({ processId = "" }: Procuremen
           {data.sources.priceResearchItems} item(ns) identificado(s) na Pesquisa de Preços. Use “Preparar a partir da pesquisa” para aproveitá-los.
         </p>
       )}
+      {data.sources.priceResearchItems === 0 && data.sources.priceResearchSessionsPending > 0 && !preparing && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Nenhum item elegível da Pesquisa de Preços ainda. Conclua a revisão da Pesquisa de Preços para aproveitar os itens.
+        </p>
+      )}
 
       {preparing && (
         <CandidatesPanel processId={processId} source={preparing} lots={lots} items={items}
@@ -379,7 +384,11 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
       {isLoading || !data ? (
         <div className="h-16 animate-pulse rounded-lg bg-muted" />
       ) : candidates.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum item identificado nesta fonte.</p>
+        <p className="text-sm text-muted-foreground">
+          {source === "price_research"
+            ? "Nenhum item elegível da Pesquisa de Preços ainda. Conclua a revisão da Pesquisa de Preços para aproveitar os itens."
+            : "Nenhum item identificado nesta fonte."}
+        </p>
       ) : (
         <>
           <p className="mb-3 text-sm text-muted-foreground">
