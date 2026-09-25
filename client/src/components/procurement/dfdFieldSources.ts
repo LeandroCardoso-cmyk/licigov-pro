@@ -37,6 +37,9 @@ export function originLabel(origin: string | null | undefined): string {
 
 export type FieldTone = "neutral" | "info" | "warning" | "muted";
 
+/** Linha de explicação exibida ANTES de qualquer ação (valor atual × valor de origem × origem). */
+export interface FieldDetail { label: string; value: string }
+
 export interface FieldIndicator {
   key: string;
   label: string;
@@ -44,29 +47,66 @@ export interface FieldIndicator {
   tone: FieldTone;
   /** Rótulo do botão de ação explícita (null = sem ação). */
   action: string | null;
+  /** Rótulo acessível do botão: campo + valor atual + valor de origem + origem. */
+  actionAriaLabel: string | null;
   /** A ação substitui um valor escrito pelo servidor → exige confirmação. */
   confirmAction: boolean;
+  /** Texto da confirmação (com os valores) — null quando a ação não exige confirmação. */
+  confirmMessage: string | null;
+  /** Valor atual / valor de origem / origem — sempre presente quando há divergência ou ação. */
+  details: FieldDetail[] | null;
+}
+
+const EMPTY_VALUE = "não preenchido";
+
+function shown(v: string | null | undefined): string {
+  const t = (v ?? "").trim();
+  return t === "" ? EMPTY_VALUE : t;
+}
+
+/** Explicação genérica (qualquer campo): o que está no DFD, o que a origem diz e de onde vem. */
+export function fieldDetails(f: DFDFieldViewUI): FieldDetail[] {
+  return [
+    { label: "Valor atual no DFD", value: shown(f.documentValue) },
+    { label: "Valor de origem", value: shown(f.contextValue) },
+    { label: "Origem", value: originLabel(f.contextOrigin) },
+  ];
 }
 
 export function fieldIndicator(f: DFDFieldViewUI): FieldIndicator {
-  const base = { key: f.key, label: f.label };
+  const none = { action: null, actionAriaLabel: null, confirmAction: false, confirmMessage: null, details: null };
+  const base = { key: f.key, label: f.label, ...none };
+  // Ação SÓ com valor de origem válido e reconciliação permitida pelo servidor (nunca troca "às cegas").
+  const canAct = f.reconcilable && f.contextValue !== null;
+  const act = (action: string, confirm: boolean) => canAct ? {
+    action,
+    actionAriaLabel: `${action} em "${f.label}": substituir "${shown(f.documentValue)}" por "${shown(f.contextValue)}" (origem: ${originLabel(f.contextOrigin)})`,
+    confirmAction: confirm,
+    confirmMessage: confirm
+      ? `Substituir o valor de "${f.label}" no DFD?\n\nValor atual no DFD: ${shown(f.documentValue)}\nValor de origem: ${shown(f.contextValue)}\nOrigem: ${originLabel(f.contextOrigin)}\n\nO valor anterior fica no histórico.`
+      : null,
+  } : none;
   switch (f.state) {
     case "prefilled":
-      return { ...base, text: `Preenchido pelo ${originLabel(f.origin)}`, tone: "neutral", action: null, confirmAction: false };
+      return { ...base, text: `Preenchido pelo ${originLabel(f.origin)}`, tone: "neutral" };
     case "ai_draft":
-      return { ...base, text: "Rascunho gerado por IA — revise antes de prosseguir", tone: "info", action: null, confirmAction: false };
+      return { ...base, text: "Rascunho gerado por IA — revise antes de prosseguir", tone: "info" };
     case "user_modified":
-      return { ...base, text: "Alterado por você", tone: "neutral", action: null, confirmAction: false };
+      return f.origin === null
+        ? { ...base, text: "Informado no DFD (sem informação de origem válida) — revise", tone: "neutral" }
+        : { ...base, text: "Alterado por você", tone: "neutral" };
     case "stale":
-      return { ...base, text: "Informação de origem atualizada", tone: "warning", action: f.reconcilable ? "Atualizar no rascunho" : null, confirmAction: false };
+      return { ...base, text: "Informação de origem atualizada", tone: "warning", details: fieldDetails(f), ...act("Atualizar no rascunho", false) };
     case "available":
-      return { ...base, text: `Informação disponível (${originLabel(f.contextOrigin)})`, tone: "info", action: "Atualizar no rascunho", confirmAction: false };
+      return canAct
+        ? { ...base, text: `Informação disponível (${originLabel(f.contextOrigin)})`, tone: "info", details: fieldDetails(f), ...act("Atualizar no rascunho", false) }
+        : { ...base, text: "Informação ainda não definida", tone: "muted" };
     case "conflict":
-      return f.contextValue !== null && f.reconcilable
-        ? { ...base, text: `Diverge da informação de origem (${originLabel(f.contextOrigin)})`, tone: "warning", action: "Usar informação de origem", confirmAction: true }
-        : { ...base, text: "Fontes em conflito — defina o valor no DFD", tone: "warning", action: null, confirmAction: false };
+      return canAct
+        ? { ...base, text: `Diverge da informação de origem (${originLabel(f.contextOrigin)})`, tone: "warning", details: fieldDetails(f), ...act("Usar informação de origem", true) }
+        : { ...base, text: "Fontes em conflito — defina o valor no DFD", tone: "warning" };
     default:
-      return { ...base, text: "Informação ainda não definida", tone: "muted", action: null, confirmAction: false };
+      return { ...base, text: "Informação ainda não definida", tone: "muted" };
   }
 }
 

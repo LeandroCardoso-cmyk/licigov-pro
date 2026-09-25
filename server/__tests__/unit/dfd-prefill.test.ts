@@ -50,7 +50,6 @@ function fixture(extra: FactAssertion[] = [], over: Partial<ContextInputs> = {})
   return resolveCanonicalContext({
     organizationId: 7, processId: "proc-1",
     process: { number: "2026/0001", object: "Mobiliário escolar", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-    responsibleUserName: "Servidora Responsável",
     organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     // Afirmações extras são POSTERIORES às da fixture (ledger monotônico).
     assertions: [...base, ...extra.map((e) => ({ ...e, id: ++seq }))], intelligentItems: ITEMS,
@@ -67,11 +66,12 @@ function open(ctx = fixture()) {
 const stateOf = (views: DFDFieldView[], key: string) => views.find((v) => v.key === key)!;
 
 describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
-  it("1) fixture do enunciado: DFD abre PRÉ-PREENCHIDO (unidade, responsável, 3 itens com quantidade prevista, planejamento, estimativa)", () => {
+  it("1) fixture do enunciado: DFD abre PRÉ-PREENCHIDO (unidade, 3 itens com quantidade prevista, planejamento, estimativa)", () => {
     const { content, prefill, sources } = open();
     expect(content).toContain("Objeto: Mobiliário escolar");
     expect(content).toContain("Setor/unidade demandante: Secretaria Municipal de Educação");
-    expect(content).toContain("Responsável pela demanda: Servidora Responsável");
+    // O operador que criou o Processo NÃO pré-preenche o responsável pela demanda (sem fonte válida).
+    expect(content).toContain("Responsável pela demanda: [preencher]");
     expect(content).toContain("| Item | Descrição | Unidade | Quantidade prevista |");
     expect(content).toContain("| Cadeira giratória | UN | 30 |");
     expect(content).toContain("| Mesa de escritório | UN | 10 |");
@@ -82,8 +82,8 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
     expect(content).toContain("R$ 27.500,00");
     const views = computeDFDFieldStates(content, sources, prefill);
     const s = summarizeFieldStates(views);
-    expect(s.prefilled).toBeGreaterThanOrEqual(10); // maioria dos campos já preenchida
-    expect(s.unknown).toBe(2);                      // justificativa (narrativa) + prazo pretendido
+    expect(s.prefilled).toBeGreaterThanOrEqual(9); // maioria dos campos já preenchida
+    expect(s.unknown).toBe(3);                     // justificativa (narrativa) + prazo pretendido + responsável
   });
 
   it("2) MESMO template: mesmas seções, rótulos, ordem e rodapé do DFD histórico", () => {
@@ -94,7 +94,7 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
   it("3) sem contexto além do objeto: placeholders históricos preservados (nada inventado)", () => {
     const ctx = resolveCanonicalContext({
       organizationId: 7, processId: "p", process: { number: "1", object: "Objeto X", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-      responsibleUserName: null, organization: null, assertions: [], intelligentItems: [],
+      organization: null, assertions: [], intelligentItems: [],
     });
     const content = renderDFDContent(buildDFDPrefill(ctx));
     expect(content).toContain("Setor/unidade demandante: [preencher]");
@@ -180,7 +180,7 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
   it("11) quantidade da Pesquisa NUNCA aparece como prevista: sem previsto → [a definir]", () => {
     const ctx = resolveCanonicalContext({
       organizationId: 7, processId: "p", process: { number: "1", object: "Mobiliário", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-      responsibleUserName: null, organization: null, assertions: [],
+      organization: null, assertions: [],
       intelligentItems: [{ ...ITEMS[0], quantity: 250 }], procurementItems: [PITEMS[0]], priceLinks: [LINKS[0]],
     });
     const content = renderDFDContent(buildDFDPrefill(ctx));

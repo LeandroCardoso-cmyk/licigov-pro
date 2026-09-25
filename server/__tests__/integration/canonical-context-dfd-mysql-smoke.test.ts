@@ -147,7 +147,8 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const { context } = await c.procurementProcess.canonicalContext({ processId });
     expect(context.demand.requestingUnit.value).toBe("Secretaria Municipal de Educação");
-    expect(context.demand.responsibleParty.value).toBe("Servidora Responsável");
+    // Quem criou o Processo (operador) NÃO é o "Responsável pela demanda": sem fonte válida ⇒ desconhecido.
+    expect(context.demand.responsibleParty).toMatchObject({ value: null, status: "unknown" });
     expect(context.items.map((i: any) => [i.description.value, i.plannedQuantity.value, i.priceContext.sourceQuantities])).toEqual([
       ["Armário de aço", 5, [1]], ["Cadeira giratória", 30, [1]], ["Mesa de escritório", 10, [1]],
     ]);
@@ -159,7 +160,8 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     const c = await caller(owner);
     const { document } = await c.procurementProcess.generateDFD({ processId, idempotencyKey: `gen-${processId}` });
     expect(document.content).toContain("Setor/unidade demandante: Secretaria Municipal de Educação");
-    expect(document.content).toContain("Responsável pela demanda: Servidora Responsável");
+    expect(document.content).toContain("Responsável pela demanda: [preencher]");
+    expect(document.content).not.toContain("Servidora Responsável");
     expect(document.content).toContain("| 2 | Cadeira giratória | UN | 30 |");
     expect(document.content).toContain("R$ 27.500,00");
     expect(document.status).toBe("rascunho");
@@ -169,7 +171,7 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     const st = await c.procurementProcess.dfdAssistState({ processId });
     expect(st.available).toBe(true);
     expect(st.stale).toBe(false);
-    expect(st.summary.prefilled).toBeGreaterThanOrEqual(8);
+    expect(st.summary.prefilled).toBeGreaterThanOrEqual(7); // responsável pela demanda: sem fonte válida (não é o operador)
     expect(await ledger(processId)).toEqual([]); // criação não gera ledger (contrato C.4B.3A)
   }, 60_000);
 

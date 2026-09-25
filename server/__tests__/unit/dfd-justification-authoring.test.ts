@@ -12,7 +12,7 @@ const K = "a1a1a1a1a1a1a1a1a1a1a1a1"; // id estável do Item Canônico
 const ctx = resolveCanonicalContext({
   organizationId: 7, processId: "p1",
   process: { number: "2026/0001", object: "Mobiliário escolar", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-  responsibleUserName: "Fulana de Tal", organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
+  organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
   assertions: [{
     id: 1, path: itemPath(K, "plannedQuantity"), value: 30, valueHash: factValueHash(30), sourceType: "user", sourceId: "u", sourceVersion: "v",
     status: "confirmed", actorUserId: 3, basisValueHash: null, createdAt: "2026-01-02T00:00:00.000Z",

@@ -41,7 +41,7 @@
 |---|---|---|
 | `prefilled` | Preenchido pelo *Processo / Cadastro do órgão / DFD salvo / cálculo do sistema…* | — |
 | `ai_draft` | Rascunho gerado por IA — revise antes de prosseguir | — |
-| `user_modified` | Alterado por você | — |
+| `user_modified` | Alterado por você (ou "Informado no DFD (sem informação de origem válida) — revise") | — |
 | `stale` | Informação de origem atualizada | Atualizar no rascunho |
 | `available` | Informação disponível (origem) | Atualizar no rascunho |
 | `conflict` | Diverge da informação de origem / Fontes em conflito | Usar informação de origem (com confirmação) |
@@ -49,6 +49,17 @@
 
 A lista fica num bloco recolhível **"Origem das informações"** abaixo do editor. Com edição não salva, as
 ações ficam bloqueadas ("Salve suas alterações…") para nunca perder texto do servidor.
+
+**Explicabilidade (genérica, todo campo):** em `stale`/`available`/`conflict` a linha mostra, ANTES de qualquer
+clique, **Valor atual no DFD**, **Valor de origem** e **Origem**; o botão tem rótulo acessível com esses valores
+e "Usar informação de origem" pede confirmação que os repete. Sem valor de origem válido não há botão (nunca
+troca "às cegas"). A substituição é auditada pelo mesmo evento `dfd_context_reconcile`.
+
+**Marcador de origem não autorizada:** um `pf:<campo>=<hash>@<origem>` cuja origem a `AUTHORITY_POLICY` do fato
+hoje não aceita (ex.: `pf:identificacao.responsavel=…@process`, gravado quando o operador do Processo era
+projetado como responsável) deixa de valer como linhagem: não gera `prefilled`/`stale`/divergência contra essa
+fonte, e o valor intocado não é afirmado como fato humano ao salvar. Regra única (`isPrefillOriginAuthorized`).
+Nenhum documento é reescrito: o valor escrito pelo servidor permanece.
 
 ## 3. Linhagem no documento (zero schema novo para o DFD)
 

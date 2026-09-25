@@ -62,10 +62,17 @@ planejamento, quantidade prevista) vai para o ledger de fatos.
 |---|---|
 | `process.*` | `process` |
 | `organization.*` | `organization` |
-| `demand.requestingUnit`, `demand.responsibleParty` | `process`, `user`, `dfd`, `etp`, `tr`, `approved_document` |
+| `demand.requestingUnit` | `process` (só quando informada na abertura), `user`, `dfd`, `etp`, `tr`, `approved_document` |
+| `demand.responsibleParty` | `user`, `dfd`, `etp`, `tr`, `approved_document` — **NUNCA** `process` |
 | `planning.*` | `user`, `dfd`, `etp`, `approved_document` |
 | `items.*.description`, `items.*.unit` | `user`, `dfd`, `etp`, `tr`, `approved_document`, `intelligent_item` |
 | `items.*.plannedQuantity` | `user`, `dfd`, `etp`, `tr`, `approved_document` — **NUNCA** `price_research`/`intelligent_item`/`ai_draft` |
+
+> **Responsável pela demanda ≠ operador do Processo.** `procurement_processes.responsibleUser` é quem criou/opera
+> o processo no LiciGov, não a pessoa da unidade demandante responsável pela necessidade. Até este hardening o
+> resolvedor projetava o nome desse usuário como `demand.responsibleParty` (fonte `process`), o que gerava no DFD
+> uma divergência falsa ("Diverge da informação de origem (Processo)"). O Processo não é mais fonte desse fato;
+> o responsável só vem do humano (DFD) ou de documentos posteriores.
 
 Aplicada **na escrita** (`recordContextAssertions` recusa com `CONTEXT_SOURCE_NOT_ALLOWED`) e **na leitura**
 (o resolvedor ignora — defesa em profundidade).

@@ -52,7 +52,7 @@ function ctxWith(extra: FactAssertion[] = []) {
   return resolveCanonicalContext({
     organizationId: ORG, processId: PID,
     process: { number: "2026/0001", object: "Mobiliário escolar", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-    responsibleUserName: "Servidora Responsável", organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
+    organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     assertions: [fact("demand.requestingUnit", "Secretaria de Educação", "process", { sourceId: PID }), fact(itemPath(K, "plannedQuantity"), 30, "user"), ...extra.map((e) => ({ ...e, id: ++seq }))],
     intelligentItems: [{ id: "i1", description: "Cadeira giratória", unit: "UN", quantity: 1, status: "aprovado", averagePriceCents: 45_000, quoteCount: 3 }],
     procurementItems: [{ id: K, description: "Cadeira giratória", unit: "UN", lotId: null, ordinal: 1, status: "active", revision: 1, fingerprint: canonicalItemKey("Cadeira giratória", "UN") }],
@@ -179,6 +179,44 @@ describe("Desatualização e reconciliação explícita", () => {
     await expect(reconcileDFDFieldDraft({ ...base, fieldKey: "identificacao.unidade", expectedContentHash: draftContentHash(row.content), idempotencyKey: "rec-2" }))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(n);
+  });
+});
+
+describe("Responsável pela demanda — operador do Processo não é fonte (piloto)", () => {
+  const HUMAN = "Aristides Fernandes Junior";
+  /** DFD legado: valor humano + marcador de prefill gravado quando o Processo "preenchia" o operador. */
+  async function legacyRow() {
+    const row = await createdDFD();
+    const content = row.content.replace("Responsável pela demanda: [preencher]", `Responsável pela demanda: ${HUMAN}`);
+    const sources = [...row.sources.filter((x) => !x.startsWith("pf:identificacao.responsavel=")), `pf:identificacao.responsavel=${factValueHash("Operador LiciGov")}@process`];
+    return { ...row, content, sources };
+  }
+
+  it("sem fonte válida: nenhuma divergência, nenhuma ação, e a reconciliação é recusada sem gravar nada", async () => {
+    const row = await legacyRow();
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
+    const st = await getDFDAssistState({ organizationId: ORG, processId: PID, correlationId: "c" });
+    expect(st.fields.find((f) => f.key === "identificacao.responsavel")).toMatchObject({ state: "user_modified", documentValue: HUMAN, contextValue: null, reconcilable: false });
+    expect(st.summary.conflict).toBe(0);
+    const n = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.length;
+    await expect(reconcileDFDFieldDraft({ ...base, fieldKey: "identificacao.responsavel", expectedContentHash: draftContentHash(row.content), idempotencyKey: "rec-r0" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(procDb.applyDraftContentMutationTx).toHaveBeenCalledTimes(n);
+  });
+
+  it("fonte válida (ETP): substituição só por ação explícita, auditada no MESMO evento de reconciliação e escopada por org+processo", async () => {
+    const row = await legacyRow();
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
+    vi.mocked(ctxSvc.resolveProcurementContext).mockResolvedValue(ctxWith([fact("demand.responsibleParty", "Maria Souza", "etp")]));
+    const st = await getDFDAssistState({ organizationId: ORG, processId: PID, correlationId: "c" });
+    expect(st.fields.find((f) => f.key === "identificacao.responsavel")).toMatchObject({ state: "conflict", documentValue: HUMAN, contextValue: "Maria Souza", contextOrigin: "etp", reconcilable: true });
+    const { document } = await reconcileDFDFieldDraft({ ...base, fieldKey: "identificacao.responsavel", expectedContentHash: draftContentHash(row.content), idempotencyKey: "rec-r1" });
+    expect(parseDFD(document.content).values["identificacao.responsavel"]).toBe("Maria Souza");
+    expect(parseDFD(document.content).values["identificacao.unidade"]).toBe("Secretaria de Educação");
+    const write = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)![1];
+    expect(write.operation).toBe("dfd_context_reconcile");
+    expect(procDb.getGeneratedDocumentByKind).toHaveBeenCalledWith(PID, ORG, "dfd");
+    expect(vi.mocked(ctxSvc.resolveProcurementContext).mock.calls.at(-1)![0]).toMatchObject({ organizationId: ORG, processId: PID });
   });
 });
 

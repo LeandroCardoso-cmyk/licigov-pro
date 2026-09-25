@@ -148,7 +148,7 @@ describe("Lotes — opcionais, explícitos na fonte, nunca parte da identidade",
     const id = procurementItemId(ORG, PID, "price_research:ii1:k");
     const mk = (lotId: string | null) => resolveCanonicalContext({
       organizationId: ORG, processId: PID, process: { number: "1", object: "Obj", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-      responsibleUserName: null, organization: null, assertions: [], intelligentItems: [],
+      organization: null, assertions: [], intelligentItems: [],
       procurementItems: [{ id, description: "Detergente", unit: "UN", lotId, ordinal: 1, status: "active", revision: 1, fingerprint: itemFingerprint("Detergente", "UN") }],
       lots: [{ id: "L1", code: "01", name: "Limpeza", ordinal: 1, status: "active" }, { id: "L2", code: "02", name: "Químicos", ordinal: 2, status: "active" }],
     });
@@ -185,7 +185,7 @@ describe("DFD consome os Itens da contratação (lotes, sem quantidade, desatual
   });
   const ctxOf = (facts: FactAssertion[]) => resolveCanonicalContext({
     organizationId: ORG, processId: PID, process: { number: "1", object: "Limpeza", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-    responsibleUserName: null, organization: null, assertions: facts, intelligentItems: [],
+    organization: null, assertions: facts, intelligentItems: [],
     procurementItems: [
       { id: A, description: "Detergente", unit: "UN", lotId: "L1", ordinal: 1, status: "active", revision: 1, fingerprint: itemFingerprint("Detergente", "UN") },
       { id: B, description: "Detergente", unit: "UN", lotId: "L2", ordinal: 2, status: "active", revision: 1, fingerprint: itemFingerprint("Detergente", "UN") },
