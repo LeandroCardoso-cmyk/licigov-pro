@@ -183,13 +183,35 @@ fonte + chave estrutural) ⇒ `linked`; (3) fingerprint EXATO ⇒ apenas PROPOST
 `ItemCandidate { candidateKey, sourceType, sourceId, sourceItemKey, sourceDigest, description, unit,
 sourceQuantity, sourceLotCode, fingerprint, match, duplicateOfCandidateKey }` — projeção **read-only e
 determinística** (mesma fonte ⇒ mesmos candidatos e mesmo `sourceDigest`).
-- **Pesquisa**: a fonte são os **Itens Inteligentes materializados** — só existem após promoção de sessão
-  **aprovada** (revisão humana concluída, sem linhas pendentes) ou importação manual pelo operador. É o menor
-  gate seguro: staging/OCR não revisado NUNCA é fonte. Rejeitados não entram; identidade em revisão
-  (`review_required`) ⇒ `blocked`. 5 itens lógicos / 30 cotações ⇒ **5** candidatos.
+- **Pesquisa**: a fonte são Itens Inteligentes com **lineage governado** — existir em `intelligent_items`
+  NÃO basta (ver §11.4.1). Staging/OCR não revisado NUNCA é fonte. Identidade em revisão (`review_required`)
+  ⇒ `blocked`. 5 itens lógicos / 30 cotações ⇒ **5** candidatos.
 - **DFD**: linhas da tabela de itens do DFD (inclusive coluna "Lote"), para quem começou pelo DFD.
 - Confirmar: o servidor RECALCULA a projeção e exige o mesmo `sourceDigest` (senão `STALE_CANDIDATES`);
   valida cada decisão (create / link / skip) — o browser nunca escolhe ids arbitrários.
+
+#### 11.4.1 Elegibilidade (hotfix do piloto — lineage + workflow, nunca conteúdo)
+Incidente: no piloto, um Item Inteligente LEGADO criado pela importação manual de texto (`importPriceResearch`:
+cada linha vira cotação sem revisão; qtd 0, R$ 0, 0 cotações válidas, `pendente`) aparecia como candidato,
+enquanto a Pesquisa real (5 itens lógicos / 30 cotações) ainda estava em revisão. Causa: o gate só excluía
+`rejeitado`. Regra central `priceResearchCandidateEligibility` (domínio puro), com a proveniência das pesquisas
+comprovada pelo servidor (`listPriceResearchProvenance`, tenant + processo):
+1. `rejeitado` ⇒ inelegível;
+2. evidência = `source_research_id` ∪ `suppliers[].researchId`; nenhuma ⇒ **órfão**, inelegível;
+3. alguma pesquisa de **sessão promovida** — `import_promotions` (price_research, targetRef = pesquisa) cuja
+   sessão é do mesmo tenant/processo, `approved` (revisão humana concluída) e `promotionStatus = promoted` ⇒
+   elegível (a decisão do Item Inteligente pode estar pendente: a revisão já ocorreu no staging);
+4. só **importação manual** (pesquisa do processo sem promoção) ⇒ elegível **apenas** com o Item aprovado por
+   humano (`status = aprovado` + `approvedBy`) — "manual" não é bypass;
+5. pesquisa desconhecida/sem sessão comprovável ⇒ inelegível (**fail-closed**).
+Descrição, quantidade, preço e nº de cotações nunca decidem; sem IA, sem fuzzy. Sessão em revisão ou aprovada e
+não promovida não gera Item Inteligente ⇒ 0 candidatos (a aba informa "Nenhum item elegível da Pesquisa de
+Preços ainda. Conclua a revisão…"). Promoção é única e irreversível; várias sessões promovidas são todas
+evidência válida (o Item Inteligente consolida por chave lógica). Rejeição parcial: só os itens aprovados são
+promovidos. O legado **não é apagado nem alterado** — continua em Itens Inteligentes, apenas não é candidato.
+Log `procurement_items_candidates_prepared` passa a trazer só contagens: `intelligentItemCount`, `eligibleCount`,
+`ineligibleCount`, `rejectedCount`, `legacyOrUnlinkedCount`, `manualUnreviewedCount`, `promotedSessionCount`,
+`pendingReviewSessionCount`. Sem migration.
 
 ### 11.5 sourceQuantity × plannedQuantity
 `sourceQuantity` (1, 35, nula, outra) é preservada no vínculo e exibida como "Quantidade no documento: N".

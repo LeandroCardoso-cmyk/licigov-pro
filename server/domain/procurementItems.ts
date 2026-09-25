@@ -178,20 +178,100 @@ export interface ItemCandidate {
 export interface IntelligentItemSource {
   id: string; description: string; unit: string; quantity: number; status: string;
   sourceState?: string | null; averagePriceCents?: number; quoteCount?: number;
+  /** Decisão humana do Item Inteligente (quem aprovou). */
+  approvedBy?: number | null;
+  /** Pesquisa de origem do item (`intelligent_items.source_research_id`). */
+  sourceResearchId?: string | null;
+  /** Pesquisas das COTAÇÕES do item (`suppliers[].researchId`) — lineage por cotação. */
+  evidenceResearchIds?: readonly string[];
 }
 
 function digest(parts: Array<string | number | null>): string {
   return h(JSON.stringify(parts), 32);
 }
 
+// ─── Elegibilidade de candidatos da Pesquisa de Preços (lineage + workflow) ───────────────────
+
 /**
- * GATE da Pesquisa de Preços (menor gate seguro): Itens Inteligentes só existem após (a) promoção de sessão
- * de importação APROVADA (revisão humana concluída, sem linhas pendentes) ou (b) importação manual feita
- * pelo operador. Rejeitados não entram; identidade em revisão (`review_required`) fica BLOQUEADA.
- * Staging/OCR não revisado NUNCA é fonte de candidato.
+ * Proveniência de uma pesquisa (`price_research`) do processo, RESOLVIDA PELO SERVIDOR (tenant-scoped):
+ *  - `promoted_session`: pesquisa criada pela PROMOÇÃO GOVERNADA de uma sessão de importação — sessão
+ *    `approved` (revisão humana concluída, nenhuma linha pendente) e `promotionStatus = promoted`, com ledger
+ *    `import_promotions` (targetKind price_research, targetRef = pesquisa) no MESMO tenant e processo;
+ *  - `manual_import`: pesquisa registrada pelo caminho manual/colar (`importPriceResearch`), sem sessão de
+ *    importação — o texto vira cotações SEM revisão prévia; a revisão humana é a DECISÃO do Item Inteligente.
+ * Pesquisa ausente do mapa ⇒ desconhecida (outro processo/tenant, removida ou nunca registrada).
  */
-export function priceResearchCandidateSources(items: readonly IntelligentItemSource[]): Array<Omit<ItemCandidate, "match" | "duplicateOfCandidateKey" | "sourceLotId" | "candidateKey"> & { blocked: boolean }> {
-  return items.filter((i) => i.status !== "rejeitado").map((i) => {
+export type PriceResearchProvenance = "promoted_session" | "manual_import";
+export interface PriceResearchRecord { researchId: string; provenance: PriceResearchProvenance; importSessionId: number | null }
+
+export type CandidateIneligibility =
+  | "rejected"                  // Item Inteligente rejeitado
+  | "no_lineage"                // sem pesquisa de origem nem cotações com pesquisa (órfão)
+  | "unknown_research"          // pesquisa(s) de origem não pertencem ao processo/tenant ou não existem
+  | "manual_import_unreviewed"; // importação manual cujo Item ainda NÃO foi aprovado por um humano
+
+export type CandidateEligibility =
+  | { eligible: true; via: "promoted_session" | "approved_manual_import"; importSessionIds: number[] }
+  | { eligible: false; reason: CandidateIneligibility };
+
+/**
+ * REGRA CENTRAL de elegibilidade de um Item Inteligente como candidato a Item da contratação. Existir em
+ * `intelligent_items` NÃO basta: é preciso lineage comprovável até uma origem governada.
+ *  1. rejeitado ⇒ inelegível;
+ *  2. pesquisas de evidência = origem do item ∪ pesquisas das cotações; nenhuma ⇒ inelegível (órfão);
+ *  3. alguma pesquisa de SESSÃO PROMOVIDA (revisão humana aprovada + promoção) ⇒ elegível;
+ *  4. só importação manual ⇒ elegível apenas com o Item APROVADO por humano (status `aprovado` + `approvedBy`);
+ *  5. caso contrário (pesquisas desconhecidas) ⇒ inelegível — FAIL-CLOSED, sem inferência.
+ * Nunca usa descrição, quantidade, preço ou nº de cotações como critério; sem IA, sem fuzzy.
+ */
+export function priceResearchCandidateEligibility(
+  item: IntelligentItemSource, researches: ReadonlyMap<string, PriceResearchRecord>,
+): CandidateEligibility {
+  if (item.status === "rejeitado") return { eligible: false, reason: "rejected" };
+  const ids = [...new Set([item.sourceResearchId ?? "", ...(item.evidenceResearchIds ?? [])].filter((x) => x.trim() !== ""))];
+  if (ids.length === 0) return { eligible: false, reason: "no_lineage" };
+  const known = ids.map((id) => researches.get(id)).filter((r): r is PriceResearchRecord => !!r);
+  const promoted = known.filter((r) => r.provenance === "promoted_session");
+  if (promoted.length > 0) {
+    return { eligible: true, via: "promoted_session", importSessionIds: [...new Set(promoted.map((r) => r.importSessionId).filter((x): x is number => x !== null))].sort((a, b) => a - b) };
+  }
+  if (known.some((r) => r.provenance === "manual_import")) {
+    return item.status === "aprovado" && item.approvedBy != null
+      ? { eligible: true, via: "approved_manual_import", importSessionIds: [] }
+      : { eligible: false, reason: "manual_import_unreviewed" };
+  }
+  return { eligible: false, reason: "unknown_research" };
+}
+
+export interface PriceResearchEligibilitySummary {
+  intelligentItemCount: number; eligibleCount: number; ineligibleCount: number;
+  rejectedCount: number; legacyOrUnlinkedCount: number; manualUnreviewedCount: number;
+  promotedSessionCount: number;
+}
+
+export function summarizePriceResearchEligibility(
+  items: readonly IntelligentItemSource[], researches: ReadonlyMap<string, PriceResearchRecord>,
+): PriceResearchEligibilitySummary {
+  const results = items.map((i) => priceResearchCandidateEligibility(i, researches));
+  const why = (r: CandidateIneligibility) => results.filter((x) => !x.eligible && x.reason === r).length;
+  const sessions = new Set(results.flatMap((x) => (x.eligible ? x.importSessionIds : [])));
+  const eligibleCount = results.filter((x) => x.eligible).length;
+  return {
+    intelligentItemCount: items.length, eligibleCount, ineligibleCount: items.length - eligibleCount,
+    rejectedCount: why("rejected"), legacyOrUnlinkedCount: why("no_lineage") + why("unknown_research"),
+    manualUnreviewedCount: why("manual_import_unreviewed"), promotedSessionCount: sessions.size,
+  };
+}
+
+/**
+ * Fonte de candidatos da Pesquisa de Preços: SOMENTE Itens Inteligentes ELEGÍVEIS
+ * (`priceResearchCandidateEligibility`). Identidade em revisão (`review_required`) fica BLOQUEADA.
+ * Staging/OCR não revisado NUNCA é fonte de candidato (não gera Item Inteligente).
+ */
+export function priceResearchCandidateSources(
+  items: readonly IntelligentItemSource[], researches: ReadonlyMap<string, PriceResearchRecord>,
+): Array<Omit<ItemCandidate, "match" | "duplicateOfCandidateKey" | "sourceLotId" | "candidateKey"> & { blocked: boolean }> {
+  return items.filter((i) => priceResearchCandidateEligibility(i, researches).eligible).map((i) => {
     const sourceItemKey = h(intelligentItemLogicalKey({ description: i.description, unit: i.unit, quantity: i.quantity }), 32);
     const q = Number.isFinite(i.quantity) && i.quantity > 0 ? i.quantity : null;
     return {

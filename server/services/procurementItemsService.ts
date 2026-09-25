@@ -22,16 +22,17 @@ import {
 } from "../db/procurement";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import {
-  listProcurementItems, listProcurementLots, listItemSourceLinks, lockItem, lockLot, nextItemOrdinal, nextLotOrdinal,
+  listProcurementItems, listProcurementLots, listItemSourceLinks, listPriceResearchProvenance, lockItem, lockLot, nextItemOrdinal, nextLotOrdinal,
   insertItemIfAbsent, insertLotIfAbsent, updateItemCAS, updateLotCAS, insertSourceLinkIfAbsent, appendItemEvents,
   type ItemEvent,
 } from "../db/procurementItems";
 import {
-  priceResearchCandidateSources, dfdCandidateSources, matchCandidates, planCandidateDecisions, parsePlannedQuantity,
+  priceResearchCandidateSources, summarizePriceResearchEligibility, dfdCandidateSources, matchCandidates, planCandidateDecisions, parsePlannedQuantity,
   procurementItemId, procurementLotId, itemFingerprint, lotCodeKey, governedChangeReason, stateHash, ItemDomainError,
   GOVERNED_CHANGE_REQUIRED,
   type ItemCandidate, type CandidateDecision, type CandidateSourceType, type ProcurementItem, type ProcurementLot,
   type ItemSourceLink, type ItemProvenance, type GovernanceState, type NeedChange,
+  type IntelligentItemSource, type PriceResearchEligibilitySummary,
 } from "../domain/procurementItems";
 import { factValueHash, itemPath, normalizeText, type CanonicalField, type ProcurementCanonicalContext } from "../domain/canonicalProcurementContext";
 import { buildDFDPrefill, parseDFD, linkDFDRows, readMarkers } from "../domain/dfdPrefill";
@@ -168,16 +169,35 @@ export interface ItemsWorkspace {
   estimatedTotalCents: number | null;
   contextVersion: number | null; contextDigest: string | null;
   governance: { locked: boolean; reason: string | null; officialEmittedKinds: string[] };
-  sources: { priceResearchItems: number; dfdRows: number };
+  /**
+   * `priceResearchItems` = Itens Inteligentes ELEGÍVEIS (lineage governado); `priceResearchSessionsPending` =
+   * sessões de Pesquisa de Preços do processo ainda não promovidas (em revisão/aguardando promoção).
+   */
+  sources: { priceResearchItems: number; priceResearchSessionsPending: number; dfdRows: number };
+}
+
+/**
+ * Itens Inteligentes do processo + proveniência COMPROVADA das pesquisas (tenant-scoped) → elegibilidade
+ * central (`priceResearchCandidateEligibility`). Única porta de entrada da Pesquisa como fonte de candidatos.
+ */
+async function priceResearchEvidence(org: number, pid: string, executor?: ProcurementExecutor) {
+  const [iis, prov] = await Promise.all([listIntelligentItems(pid, org), listPriceResearchProvenance(org, pid, executor)]);
+  const items: IntelligentItemSource[] = iis.map((i) => ({
+    id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status, sourceState: i.sourceState,
+    approvedBy: i.approvedBy, sourceResearchId: i.sourceResearchId,
+    evidenceResearchIds: i.suppliers.map((q) => q.researchId ?? "").filter((x) => x !== ""),
+  }));
+  const researches = new Map(prov.researches.map((r) => [r.researchId, r]));
+  return { items, researches, summary: summarizePriceResearchEligibility(items, researches), sessionsPending: prov.sessionsAwaitingPromotion };
 }
 
 export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">): Promise<ItemsWorkspace> {
   const t0 = Date.now();
   const actor = { ...a, actorUserId: 0 };
-  const [items, lots, links, ctx, iis, dfd] = await Promise.all([
+  const [items, lots, links, ctx, research, dfd] = await Promise.all([
     listProcurementItems(a.organizationId, a.processId), listProcurementLots(a.organizationId, a.processId),
     listItemSourceLinks(a.organizationId, a.processId), ctxOrNull(actor),
-    listIntelligentItems(a.processId, a.organizationId).catch(() => []),
+    priceResearchEvidence(a.organizationId, a.processId).catch(() => null),
     getGeneratedDocumentByKind(a.processId, a.organizationId, "dfd").catch(() => null),
   ]);
   const gov = await loadGovernance(a.organizationId, a.processId, ctx);
@@ -230,7 +250,8 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     contextVersion: ctx?.version ?? null, contextDigest: ctx ? ctx.digest.slice(0, 16) : null,
     governance: { locked: govReason !== null, reason: govReason, officialEmittedKinds: [...gov.officialEmittedKinds] },
     sources: {
-      priceResearchItems: (iis ?? []).filter((i) => i.status !== "rejeitado").length,
+      priceResearchItems: research?.summary.eligibleCount ?? 0,
+      priceResearchSessionsPending: research?.sessionsPending ?? 0,
       dfdRows: dfd ? unlinkedRows(dfd, items, lots, links).length : 0,
     },
   };
@@ -272,6 +293,8 @@ export interface CandidateProjection {
   candidates: ItemCandidate[];
   sourceDigest: string;
   counts: { sourceItemCount: number; matchedCount: number; newCandidateCount: number; ambiguousCount: number; blockedCount: number };
+  /** Pesquisa de Preços: elegibilidade (só contagens) — por que itens existentes NÃO viraram candidatos. */
+  eligibility?: PriceResearchEligibilitySummary & { sessionsPending: number };
 }
 
 async function projectCandidates(org: number, pid: string, source: CandidateSourceType, executor?: ProcurementExecutor): Promise<CandidateProjection> {
@@ -279,9 +302,13 @@ async function projectCandidates(org: number, pid: string, source: CandidateSour
     listProcurementItems(org, pid, executor), listProcurementLots(org, pid, executor), listItemSourceLinks(org, pid, executor),
   ]);
   let sources;
+  let eligibility: CandidateProjection["eligibility"];
   if (source === "price_research") {
-    const iis = await listIntelligentItems(pid, org);
-    sources = priceResearchCandidateSources(iis.map((i) => ({ id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status, sourceState: i.sourceState })));
+    // SOMENTE evidência governada: lineage até sessão promovida (revisão humana aprovada) ou importação manual
+    // com Item aprovado por humano. Existir em intelligent_items NÃO basta.
+    const ev = await priceResearchEvidence(org, pid, executor);
+    sources = priceResearchCandidateSources(ev.items, ev.researches);
+    eligibility = { ...ev.summary, sessionsPending: ev.sessionsPending };
   } else {
     const dfd = await getGeneratedDocumentByKind(pid, org, "dfd");
     // Só linhas do DFD que AINDA não correspondem a um Item Canônico (as demais já são o próprio item).
@@ -296,7 +323,7 @@ async function projectCandidates(org: number, pid: string, source: CandidateSour
     ambiguousCount: candidates.filter((c) => c.match.status === "ambiguous" || c.match.status === "possible_match").length,
     blockedCount: candidates.filter((c) => c.match.status === "blocked").length,
   };
-  return { source, candidates, sourceDigest, counts };
+  return { source, candidates, sourceDigest, counts, ...(eligibility ? { eligibility } : {}) };
 }
 
 /** "Preparar itens da contratação" — projeção determinística (mesma fonte ⇒ mesmos candidatos). Não grava nada. */
@@ -305,6 +332,13 @@ export async function prepareItemCandidates(a: Omit<Actor, "actorUserId"> & { so
   log.info("procurement_items_candidates_prepared", {
     organizationId: a.organizationId, processId: a.processId, correlationId: a.correlationId, source: a.source,
     sourceDigest: p.sourceDigest.slice(0, 16), ...p.counts,
+    // Só CONTAGENS (sem descrições): elegíveis × inelegíveis por motivo; sessões ainda não promovidas.
+    ...(p.eligibility ? {
+      intelligentItemCount: p.eligibility.intelligentItemCount, eligibleCount: p.eligibility.eligibleCount,
+      ineligibleCount: p.eligibility.ineligibleCount, rejectedCount: p.eligibility.rejectedCount,
+      legacyOrUnlinkedCount: p.eligibility.legacyOrUnlinkedCount, manualUnreviewedCount: p.eligibility.manualUnreviewedCount,
+      promotedSessionCount: p.eligibility.promotedSessionCount, pendingReviewSessionCount: p.eligibility.sessionsPending,
+    } : {}),
   });
   return p;
 }

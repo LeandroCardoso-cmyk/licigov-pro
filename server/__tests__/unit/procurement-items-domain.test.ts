@@ -13,16 +13,18 @@ import { resolveCanonicalContext, itemPath, factValueHash, type FactAssertion } 
 import { buildDFDPrefill, renderDFDContent, parseDFD, linkDFDRows, computeDFDFieldStates, writeMarkers, prefillMarkers } from "../../domain/dfdPrefill";
 
 const ORG = 7, PID = "proc-1";
-/** Fixture sanitizada: 5 itens lógicos (30 cotações ao todo) já materializados após revisão aprovada. */
+/** Fixture sanitizada: 5 itens lógicos (30 cotações ao todo) já materializados após revisão aprovada + promoção. */
 const RESEARCH = [
   { id: "ii1", description: "Concentrado ativado", unit: "Tambor", quantity: 1, status: "aprovado", quoteCount: 6 },
   { id: "ii2", description: "Detergente automotivo", unit: "Galão", quantity: 20, status: "pendente", quoteCount: 6 },
   { id: "ii3", description: "Pano de microfibra", unit: "UN", quantity: 0, status: "aprovado", quoteCount: 6 },
   { id: "ii4", description: "Cera líquida", unit: "Litro", quantity: 35, status: "aprovado", quoteCount: 6 },
   { id: "ii5", description: "Escova de cerdas", unit: "UN", quantity: 1, status: "aprovado", quoteCount: 6 },
-];
+].map((i) => ({ ...i, sourceResearchId: "rs-promoted" }));
+/** Lineage governado: a pesquisa veio da PROMOÇÃO de uma sessão aprovada (revisão humana concluída). */
+const RESEARCHES = new Map([["rs-promoted", { researchId: "rs-promoted", provenance: "promoted_session" as const, importSessionId: 1 }]]);
 const lots: ProcurementLot[] = [];
-const sources = () => priceResearchCandidateSources(RESEARCH);
+const sources = () => priceResearchCandidateSources(RESEARCH, RESEARCHES);
 const cands = (items = [] as Parameters<typeof matchCandidates>[1], links = [] as Parameters<typeof matchCandidates>[2], l = lots as Parameters<typeof matchCandidates>[3]) => matchCandidates(sources(), items, links, l);
 const plan = (candidates: ItemCandidate[], decisions: Parameters<typeof planCandidateDecisions>[0]["decisions"], items: Array<{ id: string; status: "active" | "withdrawn" }> = [], l: Array<Pick<ProcurementLot, "id" | "codeKey" | "status">> = []) =>
   planCandidateDecisions({ organizationId: ORG, processId: PID, candidates, decisions, items, lots: l });
@@ -99,13 +101,13 @@ describe("Itens da contratação — identidade, candidatos e quantidades", () =
     const c = cands();
     expect(() => plan(c, [{ candidateKey: "f".repeat(24), action: "create" }])).toThrow(/STALE_CANDIDATES/);
     expect(() => plan(c, [{ candidateKey: c[0].candidateKey, action: "link", canonicalItemId: "nao-existe" }])).toThrow(/ITEM_NOT_FOUND/);
-    const blocked = matchCandidates(priceResearchCandidateSources([{ ...RESEARCH[0], sourceState: "review_required" }]), [], [], []);
+    const blocked = matchCandidates(priceResearchCandidateSources([{ ...RESEARCH[0], sourceState: "review_required" }], RESEARCHES), [], [], []);
     expect(blocked[0].match.status).toBe("blocked");
     expect(() => plan(blocked, [{ candidateKey: blocked[0].candidateKey, action: "create" }])).toThrow(/CANDIDATE_BLOCKED/);
   });
 
   it("rejeitados na Pesquisa não viram candidatos (gate: só Itens Inteligentes materializados e não rejeitados)", () => {
-    expect(priceResearchCandidateSources([{ ...RESEARCH[0], status: "rejeitado" }])).toHaveLength(0);
+    expect(priceResearchCandidateSources([{ ...RESEARCH[0], status: "rejeitado" }], RESEARCHES)).toHaveLength(0);
   });
 
   it("1) item pode existir sem quantidade; validação decimal (DECIMAL(14,3), sem float canônico)", () => {

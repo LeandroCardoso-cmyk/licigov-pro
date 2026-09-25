@@ -16,6 +16,7 @@ import mysql from "mysql2/promise";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runMigrations } from "../../bootstrap";
+import { governedResearchId, GOVERNED_RESEARCH_TABLES, forgetGovernedResearch } from "../helpers/governedPriceResearch";
 import { resolveProcurementContext } from "../../services/canonicalContextService";
 
 const DB = process.env.DATABASE_URL;
@@ -52,13 +53,14 @@ const RESEARCH = [
 ];
 
 async function seedResearch(processId: string) {
+  const rid = await governedResearchId(conn, ORG, processId, owner);
   for (const r of RESEARCH) {
-    const suppliers = Array.from({ length: 6 }, (_, i) => ({ name: `Fornecedor ${i + 1}`, value: r.v, quoteId: `${r.id}-q${i}`, researchId: "sm-r" }));
+    const suppliers = Array.from({ length: 6 }, (_, i) => ({ name: `Fornecedor ${i + 1}`, value: r.v, quoteId: `${r.id}-q${i}`, researchId: rid }));
     await conn.execute(
       `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
          suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-       VALUES (?, ?, ?, 'sm-r', ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'items-smoke')`,
-      [`${r.id}-${ORG}`, ORG, processId, r.d, r.q, r.u, r.v.toFixed(2), JSON.stringify(suppliers), r.st],
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'items-smoke')`,
+      [`${r.id}-${ORG}`, ORG, processId, rid, r.d, r.q, r.u, r.v.toFixed(2), JSON.stringify(suppliers), r.st],
     );
   }
 }
@@ -70,7 +72,9 @@ async function count(sql: string, params: unknown[]): Promise<number> {
 
 async function cleanup() {
   for (const org of [ORG, ORG_B]) {
+    forgetGovernedResearch(org);
     for (const [t, col] of [
+      ...GOVERNED_RESEARCH_TABLES,
       ["procurement_item_events", "organization_id"], ["procurement_item_source_links", "organization_id"], ["procurement_items", "organization_id"],
       ["procurement_lots", "organization_id"], ["procurement_context_facts", "organization_id"], ["generated_document_edits", "organization_id"],
       ["generated_documents", "organization_id"], ["process_timeline", "organization_id"], ["intelligent_items", "organization_id"],

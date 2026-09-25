@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
+import { governedResearchId, GOVERNED_RESEARCH_TABLES, forgetGovernedResearch } from "../helpers/governedPriceResearch";
 import { generateDocument, getAuthoringSourceState } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { resolveDocumentAuthoringContext } from "../../services/authoring/authoringContext";
@@ -44,12 +45,13 @@ async function insertUser(tag: string, name: string): Promise<number> {
 }
 
 async function seedItem(processId: string, id: string, description: string, unit: string, quantity: number, price: number, status = "aprovado") {
-  const suppliers = Array.from({ length: 3 }, (_, i) => ({ name: `Fornecedor ${i + 1}`, value: price, quoteId: `${id}-q${i}`, researchId: "trq-r" }));
+  const rid = await governedResearchId(conn, ORG, processId, owner);
+  const suppliers = Array.from({ length: 3 }, (_, i) => ({ name: `Fornecedor ${i + 1}`, value: price, quoteId: `${id}-q${i}`, researchId: rid }));
   await conn.execute(
     `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
        suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-     VALUES (?, ?, ?, 'trq-r', ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'tr-qty-smoke')`,
-    [`${id}-${ORG}`, ORG, processId, description, quantity, unit, price.toFixed(2), JSON.stringify(suppliers), status],
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'tr-qty-smoke')`,
+    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, unit, price.toFixed(2), JSON.stringify(suppliers), status],
   );
 }
 
@@ -68,7 +70,9 @@ async function trRow(processId: string) {
 
 async function cleanup() {
   for (const org of [ORG, ORG_B]) {
+    forgetGovernedResearch(org);
     for (const [t, col] of [
+      ...GOVERNED_RESEARCH_TABLES,
       ["official_document_promotions", "organization_id"], ["official_document_timeline", "tenant_id"], ["official_documents", "tenant_id"],
       ["procurement_item_events", "organization_id"], ["procurement_item_source_links", "organization_id"], ["procurement_items", "organization_id"],
       ["procurement_lots", "organization_id"], ["procurement_context_facts", "organization_id"], ["generated_document_edits", "organization_id"],

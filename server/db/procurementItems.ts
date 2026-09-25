@@ -3,16 +3,18 @@
  * procurement_item_events. TODA leitura e escrita é escopada por (organizationId, processId). Sem regra de
  * negócio aqui: só persistência tx-aware, locks (FOR UPDATE) e CAS por `revision`.
  */
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { getDb } from "./connection";
 import {
   procurementItemsTable, procurementLotsTable, procurementItemSourceLinksTable, procurementItemEventsTable,
+  priceResearchTable, importPromotions, importSessions,
   type ProcurementItemRow, type ProcurementLotRow,
 } from "../../drizzle/schema";
 import { fromDbDatetime } from "./institutionalConsultations";
 import type { ProcurementExecutor } from "./procurement";
 import type {
   ProcurementItem, ProcurementLot, ItemSourceLink, ItemProvenance, ItemOrigin, ItemStatus, LotStatus, CandidateSourceType,
+  PriceResearchRecord,
 } from "../domain/procurementItems";
 
 async function exec(executor?: ProcurementExecutor): Promise<ProcurementExecutor> {
@@ -192,3 +194,44 @@ export async function listItemEvents(org: number, pid: string, executor?: Procur
     .where(and(eq(procurementItemEventsTable.organizationId, org), eq(procurementItemEventsTable.processId, pid)))
     .orderBy(asc(procurementItemEventsTable.id));
 }
+
+// ─── Proveniência das pesquisas do processo (fonte de candidatos) ────────────────────────────
+
+/**
+ * Pesquisas (`price_research`) do processo com a proveniência COMPROVADA pelo ledger — só leitura, tudo por
+ * (organizationId, processId), revalidando sessão e promoção no mesmo escopo:
+ *  - `promoted_session`: há `import_promotions` (targetKind price_research, targetRef = pesquisa) cuja sessão
+ *    é do MESMO tenant/processo, `approved` e `promotionStatus = promoted`;
+ *  - `manual_import`: pesquisa do processo SEM nenhuma promoção associada (caminho manual/colar).
+ * Pesquisa com promoção cuja sessão não se comprova ⇒ omitida (desconhecida ⇒ inelegível, fail-closed).
+ * Também conta as sessões de Pesquisa de Preços ainda NÃO promovidas (em revisão/aguardando promoção).
+ */
+export async function listPriceResearchProvenance(org: number, pid: string, executor?: ProcurementExecutor): Promise<{
+  researches: PriceResearchRecord[]; sessionsAwaitingPromotion: number;
+}> {
+  const db = await exec(executor);
+  const researches = await db.select({ id: priceResearchTable.id }).from(priceResearchTable)
+    .where(and(eq(priceResearchTable.organizationId, org), eq(priceResearchTable.processId, pid)));
+  const ids = researches.map((r) => r.id);
+  const promotions = ids.length === 0 ? [] : await db.select({ targetRef: importPromotions.targetRef, sessionId: importPromotions.importSessionId })
+    .from(importPromotions)
+    .where(and(eq(importPromotions.organizationId, org), eq(importPromotions.procurementProcessId, pid),
+      eq(importPromotions.targetKind, "price_research"), isNotNull(importPromotions.targetRef), inArray(importPromotions.targetRef, ids)));
+  const sessionIds = [...new Set(promotions.map((p) => p.sessionId))];
+  const validSessions = new Set((sessionIds.length === 0 ? [] : await db.select({ id: importSessions.id }).from(importSessions)
+    .where(and(eq(importSessions.organizationId, org), eq(importSessions.procurementProcessId, pid), inArray(importSessions.id, sessionIds),
+      eq(importSessions.status, "approved"), eq(importSessions.promotionStatus, "promoted")))).map((r) => r.id));
+  const out: PriceResearchRecord[] = [];
+  for (const id of ids) {
+    const promos = promotions.filter((p) => p.targetRef === id);
+    if (promos.length === 0) { out.push({ researchId: id, provenance: "manual_import", importSessionId: null }); continue; }
+    const ok = promos.find((p) => validSessions.has(p.sessionId));
+    if (ok) out.push({ researchId: id, provenance: "promoted_session", importSessionId: ok.sessionId });
+  }
+  const [{ n }] = await db.select({ n: sql<number>`COUNT(*)` }).from(importSessions)
+    .where(and(eq(importSessions.organizationId, org), eq(importSessions.procurementProcessId, pid),
+      eq(importSessions.importType, "price_research"), eq(importSessions.promotionStatus, "none"),
+      notInArray(importSessions.status, ["rejected", "failed", "archived"])));
+  return { researches: out, sessionsAwaitingPromotion: Number(n) };
+}
+
