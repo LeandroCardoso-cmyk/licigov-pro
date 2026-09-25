@@ -265,8 +265,8 @@ sem FK física (convenção do repositório), replay-safe (`CREATE TABLE IF NOT 
 
 ### 11.15 Futuro
 ETP/TR/Edital consomem `ctx.items`/`ctx.lots` (§10). A Alteração Governada da Necessidade substituirá a
-guarda do §11.11 por um workflow de solicitação/aprovação. O TR já consome `plannedQuantity` (§12.1);
-ETP e Edital ainda não (achado registrado no §12.4).
+guarda do §11.11 por um workflow de solicitação/aprovação. ETP, TR e Edital já consomem `plannedQuantity`
+pela mesma projeção (§12.1 e §13).
 
 ## 12. Fechamento P0 — TR, linhagem do DFD e lotes na importação
 
@@ -290,8 +290,9 @@ Fail-closed em `generateDocument`, **antes** de reservar idempotência ou chamar
   "Defina a quantidade prevista do item antes de gerar o Termo de Referência." (nunca assume 1, nunca usa a fonte);
 - Item Inteligente aprovado **sem vínculo** com um Item Canônico ⇒ `PRICE_RESEARCH_ITEM_UNLINKED` (não é
   presumido como necessidade; nenhum vínculo é criado silenciosamente).
-Logs: `tr_generation_blocked_missing_planned_quantity` (missingItemCount) e
-`tr_generation_blocked_unlinked_price_research_items` (unlinkedItemCount).
+Logs (genéricos, compartilhados com o Edital — §13): `document_generation_blocked_missing_planned_quantity`
+(documentKind, missingItemCount) e `document_generation_blocked_unlinked_price_research_items` (documentKind,
+unlinkedItemCount), com organizationId/processId/correlationId e sem conteúdo.
 
 Replay: `plannedQuantity` entra no snapshot/`sourcesDigest` ⇒ no `payloadHash`. Mesma chave + mesma
 quantidade ⇒ replay; mesma chave + quantidade diferente ⇒ `CONFLICT`; TR gerado antes de a quantidade mudar ⇒
@@ -319,6 +320,49 @@ TR aprovado/oficial **nunca** é mutado; com TR oficial, mudar itens exige alter
 - Sem informação de lote ⇒ atribuição **humana** ("Lote não identificado"); nada é inferido.
 - Adaptadores futuros podem fornecer estrutura de lote (`sourceLotCode`) sem mudança de domínio.
 
-### 12.4 Achados fora do escopo (não alterados)
-ETP (prompt) e Edital (`editalContext`) ainda usam a quantidade da cotação dos Itens Inteligentes aprovados;
-deverão consumir `plannedQuantity` pelo mesmo contrato do §12.1 em entrega própria.
+### 12.4 Achados do fechamento P0
+O achado anterior (ETP e Edital usando a quantidade da cotação) foi resolvido no §13.
+
+## 13. Contrato final da quantidade (P0.3 — fonte semântica única)
+
+- **SOURCE QUANTITY** (`sourceQuantity`, `intelligent_items.quantity`) = **evidência** observada na fonte
+  (documento, Pesquisa de Preços). Continua visível na proveniência; nunca é quantidade da contratação.
+- **PLANNED QUANTITY** (`plannedQuantity`, ledger do contexto) = **necessidade institucional**: o que a
+  Administração pretende contratar. Podem ser iguais, diferentes ou uma delas inexistente (fonte = 1, prevista = 50).
+
+| Consumidor | Quantidade da contratação | Sem prevista |
+|---|---|---|
+| Pesquisa de Preços | `sourceQuantity` (evidência) | — |
+| Itens da contratação / Contexto | `plannedQuantity` | "[a definir]" |
+| DFD | `plannedQuantity` | "[a definir]" |
+| ETP | `plannedQuantity` | "[a definir]" no prompt + "não inferir"; estimativa global não calculada (`[REVISAR]`); **não bloqueia** |
+| TR | `plannedQuantity` | `PLANNED_QUANTITY_REQUIRED` (bloqueia) |
+| Edital | `plannedQuantity` | `PLANNED_QUANTITY_REQUIRED` — "Defina a quantidade prevista dos itens antes de gerar o Edital." (bloqueia) |
+
+Nenhum consumidor usa `sourceQuantity` como fallback silencioso, nem assume 1.
+
+**Projeção documental única.** `canonicalDocumentItems(ctx, evidências)` (em `authoringContext.ts`) é a ÚNICA
+regra de quantidade dos documentos: `canonicalItemId`, descrição, unidade, `plannedQuantity`, lote
+(pertencimento, ordem lote → ordinal), `unitReferencePrice` vinculado e evidências (cotações/CATMAT). O gate
+determinístico `resolveCanonicalDocumentItems` (Itens da contratação ativos ⇒ modo canônico) é compartilhado
+por ETP, TR (`resolveDocumentAuthoringContext`) e Edital (`resolveEditalSources`), sempre com
+(organizationId, processId) do servidor, lendo o contexto por `resolveProcurementContext` (sem consulta direta
+ao ledger nem regra paralela). `estimatedTotal = plannedQuantity × unitReferencePrice` por item (derivado, não
+persistido); total = soma.
+
+- **Nunca misto:** com Itens da contratação, todos os itens vêm da projeção canônica — nunca "4 canônicos + 1 da
+  Pesquisa". Item Inteligente aprovado **sem vínculo** nunca é necessidade: TR/Edital ⇒
+  `PRICE_RESEARCH_ITEM_UNLINKED`; ETP ⇒ sinalizado no prompt e desconsiderado. Nenhum vínculo é criado na geração.
+- **Guarda compartilhada** (`assertCanonicalQuantitiesComplete`, TR e Edital) antes de reservar idempotência ou
+  chamar a IA; erros de domínio reutilizados (`PLANNED_QUANTITY_REQUIRED`, `PRICE_RESEARCH_ITEM_UNLINKED`).
+- **Replay/stale:** no modo canônico a quantidade prevista (e o lote) entram no `sourcesDigest` ⇒ `payloadHash`
+  de ETP, TR e Edital: mesma chave + mesmo contexto ⇒ replay; quantidade mudou ⇒ `CONFLICT` sob a mesma chave e
+  `source_changed` nos rascunhos (`getAuthoringSourceState` / `getEditalSourceState`). Conteúdo nunca é
+  atualizado sozinho. Linhagem: `qtd:prevista` e `ctxdigest:<16>` em `sources`.
+- **Aprovados/oficiais:** ETP aprovado, TR/Edital aprovados ou oficiais nunca são reescritos. Um ETP/TR/Edital
+  **aprovado** gerado no modo canônico (`qtd:prevista`) consome a quantidade prevista de todos os itens ⇒ alterar
+  quantidade já definida exige `GOVERNED_CHANGE_REQUIRED` (mesma regra do DFD, §11.11); TR/Edital **oficial** ⇒
+  qualquer mudança nos itens exige alteração governada.
+- **Legado:** processo SEM Itens da contratação ⇒ ETP/TR/Edital inalterados (mesmo prompt, snapshot, digest e
+  quadro — chaves canônicas só existem no modo canônico).
+- **UI:** a mensagem de erro exibida no TR/Edital omite o código estável (`domainErrorMessage`); nenhuma tela nova.

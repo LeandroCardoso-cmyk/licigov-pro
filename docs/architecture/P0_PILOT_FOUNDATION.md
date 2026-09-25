@@ -103,6 +103,10 @@ CATMAT/CATSER: código só quando CONFIRMADO; senão "a revisar (sugestão não 
 
 O prompt instrui a IA a NÃO redigir quantidades/preços/totais. O mesmo quadro é usado pelo **Edital**.
 
+> **Contexto Canônico (P0.3):** com Itens da contratação, a quantidade do quadro (TR/Edital) e do prompt (ETP)
+> é a **quantidade PREVISTA** — o ETP não infere quantidade da Pesquisa e o Edital exige `plannedQuantity`
+> quando o item precisa de quantitativo oficial. Ver `CANONICAL_PROCUREMENT_CONTEXT.md` §13.
+
 ## 5. TR SOURCE DIGEST + SOURCE_CHANGED
 
 `sourcesDigest` = SHA-256 do **snapshot canônico efetivamente consumido pelo prompt** (§10.7) — regra:
@@ -283,7 +287,7 @@ pela Pesquisa de Preços, sem DFD):
 2. **+ Adicionar item** — para item que o documento não trouxe; fica marcado como informado manualmente e a
    Pesquisa não é alterada.
 3. **+ Criar lote** (opcional) — organize os itens em lotes; mover de lote não cria item novo.
-4. O DFD (e, no futuro, ETP/TR/Edital) consome esses itens; mudar uma quantidade deixa o rascunho do DFD
+4. O DFD, o ETP, o TR e o Edital consomem esses itens (quantidade PREVISTA); mudar uma quantidade deixa o rascunho do DFD
    desatualizado ("Atualizar no rascunho"). Depois de TR/Edital emitido ou de documento aprovado que usou a
    informação, a alteração exige o fluxo governado (`GOVERNED_CHANGE_REQUIRED`).
 
