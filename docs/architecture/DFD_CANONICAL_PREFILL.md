@@ -13,17 +13,20 @@
    (`renderDFDContent`) pré-preenchido, sem IA para fatos:
    - Seção 1: objeto, unidade demandante, responsável (nome do usuário responsável pelo processo);
    - Seção 3: objeto + dica de detalhamento;
-   - Seção 4: tabela `| Item | Descrição | Unidade | Quantidade prevista |` com os itens do contexto;
-     quantidade **prevista** ou `[a definir]` (a quantidade da cotação **nunca** é copiada);
+   - Seção 4: tabela `| Item | Descrição | Unidade | Quantidade prevista |` com os **Itens da contratação**
+     (coluna `Lote` à esquerda quando há lotes); quantidade **prevista** ou `[a definir]` (a quantidade da
+     cotação **nunca** é copiada). Cada linha é ligada ao Item Canônico por fingerprint (+ lote); linhas sem
+     item correspondente não criam item — o DFD indica "N linha(s) … ainda não estão em Itens da contratação"
+     e elas podem ser preparadas lá ("Preparar a partir do DFD");
    - Seção 5/7: planejamento, prioridade e prazo quando informados;
    - Seção 6: estimativa **derivada** (previsto × preço de referência) só quando completa;
    - Seção 2 (justificativa): permanece o texto-guia — narrativa é do servidor (ou rascunho de IA a pedido).
    Sem contexto disponível: exatamente o template histórico (`buildDFDDraft`), sem bloquear.
 3. **Editar e salvar** — `saveDFDDraft` (ledger `dfd_manual_edit`, concorrência otimista, idempotência
    inalterados) preserva os marcadores e, **na mesma transação**, afirma no contexto o que o servidor
-   informou/alterou nos campos afirmáveis (unidade, responsável, planejamento, prioridade, prazo, itens e
-   quantidade prevista) com fonte `dfd`, `confirmed`, ator e `basisValueHash`. A justificativa (narrativa)
-   nunca vira fato.
+   informou/alterou nos campos afirmáveis (unidade, responsável, planejamento, prioridade, prazo e a
+   quantidade prevista de linhas ligadas a um Item Canônico) com fonte `dfd`, `confirmed`, ator e
+   `basisValueHash`. O DFD não cria itens (dono = Itens da contratação). A justificativa nunca vira fato.
 4. **Recarregar** — o estado de cada campo é função pura de (conteúdo salvo, marcadores, contexto atual):
    reload/polling nunca "voltam" um valor.
 5. **Contexto mudou** — campo intocado cujo valor de origem mudou ⇒ **"Informação de origem atualizada"**
@@ -88,3 +91,11 @@ ações ficam bloqueadas ("Salve suas alterações…") para nunca perder texto 
 | `reconcileDFDField` | mutation | operator |
 | `generateDFDJustification` | mutation | operator |
 | `generateDFD` / `saveDFD` / `loadDFD` | inalterados (contrato preservado) | — |
+
+## 7. Itens da contratação (0306)
+
+A quantidade prevista também pode ser informada — e normalmente é — na aba **Itens da contratação**, sem
+editar o markdown do DFD e sem precisar do DFD (processo iniciado na Pesquisa). Mudanças lá geram nova versão
+do contexto; o DFD em rascunho mostra o campo como desatualizado ("Atualizar no rascunho"); DFD aprovado não
+muda e bloqueia a alteração da quantidade que consumiu (`GOVERNED_CHANGE_REQUIRED`). Ver
+[`CANONICAL_PROCUREMENT_CONTEXT.md`](CANONICAL_PROCUREMENT_CONTEXT.md) §11.
