@@ -255,6 +255,13 @@ jobs:
       - name: Smoke — Contexto Canônico × DFD (prefill, stale, reconcile, IA supervisionada)
         run: pnpm exec vitest run server/__tests__/integration/canonical-context-dfd-mysql-smoke.test.ts
 
+      # Itens da Contratação (0306) — router real: processo iniciado na Pesquisa → candidatos determinísticos →
+      # 5 Itens Canônicos (não 30) → replay/CONFLICT → item manual (Pesquisa intacta) → quantidade prevista
+      # (informar/"Usar N", concorrência por revision) → lotes (mover mantém id) → preço POR item → DFD → stale →
+      # reconciliar → DFD aprovado ⇒ GOVERNED_CHANGE_REQUIRED → tenant/RBAC → 0306 replay-safe.
+      - name: Smoke — Itens da Contratação + Lotes (candidatos, quantidade prevista, governança)
+        run: pnpm exec vitest run server/__tests__/integration/procurement-items-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts
