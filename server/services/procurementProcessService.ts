@@ -13,7 +13,7 @@ import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
 import { resolveEditalSources } from "./authoring/editalContext";
-import { resolveDocumentAuthoringContext, storedSourcesDigest } from "./authoring/authoringContext";
+import { resolveDocumentAuthoringContext, storedSourcesDigest, type CanonicalItemsState } from "./authoring/authoringContext";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -756,30 +756,10 @@ export async function generateDocument(params: {
   });
 
   // Contexto Canônico — TR com Itens da contratação: FAIL-CLOSED antes de qualquer reserva de idempotência
-  // ou cognição. Nunca substitui a quantidade PREVISTA ausente pela da cotação, nem assume 1, nem presume que
-  // um Item Inteligente sem vínculo represente a necessidade.
-  if (params.kind === "tr" && sourceContext.canonical) {
-    const { missingPlannedQuantity, unlinkedApprovedItemCount } = sourceContext.canonical;
-    if (missingPlannedQuantity.length > 0) {
-      log.warn("tr_generation_blocked_missing_planned_quantity", {
-        organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
-        missingItemCount: missingPlannedQuantity.length,
-      });
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: `PLANNED_QUANTITY_REQUIRED: Defina a quantidade prevista do item antes de gerar o Termo de Referência (${missingPlannedQuantity.length} item(ns) sem quantidade prevista em "Itens da contratação").`,
-      });
-    }
-    if (unlinkedApprovedItemCount > 0) {
-      log.warn("tr_generation_blocked_unlinked_price_research_items", {
-        organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
-        unlinkedItemCount: unlinkedApprovedItemCount,
-      });
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: `PRICE_RESEARCH_ITEM_UNLINKED: ${unlinkedApprovedItemCount} item(ns) aprovado(s) da Pesquisa de Preços não estão em "Itens da contratação". Prepare-os ou associe-os antes de gerar o Termo de Referência.`,
-      });
-    }
+  // ou cognição (guarda compartilhada com o Edital). O ETP NÃO bloqueia: exibe "[a definir]" e nunca usa a
+  // quantidade da Pesquisa.
+  if (params.kind === "tr") {
+    assertCanonicalQuantitiesComplete("tr", sourceContext.canonical, params);
   }
 
   // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
@@ -895,6 +875,42 @@ export async function generateDocument(params: {
 }
 
 /**
+ * Guarda COMPARTILHADA (TR e Edital) do modo canônico, antes de qualquer reserva de idempotência ou cognição:
+ * nunca substitui a quantidade PREVISTA ausente pela da cotação, nem assume 1, nem presume que um Item
+ * Inteligente sem vínculo represente a necessidade (nenhum vínculo é criado aqui). Legado (sem Itens da
+ * contratação) ⇒ `canonical = null` ⇒ no-op.
+ */
+function assertCanonicalQuantitiesComplete(
+  documentKind: "tr" | "edital",
+  canonical: CanonicalItemsState | null,
+  ids: { organizationId: number; processId: string; correlationId: string },
+): void {
+  if (!canonical) return;
+  const docName = documentKind === "tr" ? "o Termo de Referência" : "o Edital";
+  const { missingPlannedQuantity, unlinkedApprovedItemCount } = canonical;
+  if (missingPlannedQuantity.length > 0) {
+    log.warn("document_generation_blocked_missing_planned_quantity", {
+      organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+      documentKind, missingItemCount: missingPlannedQuantity.length,
+    });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `PLANNED_QUANTITY_REQUIRED: ${documentKind === "tr" ? "Defina a quantidade prevista do item antes de gerar o Termo de Referência." : "Defina a quantidade prevista dos itens antes de gerar o Edital."} (${missingPlannedQuantity.length} item(ns) sem quantidade prevista em "Itens da contratação").`,
+    });
+  }
+  if (unlinkedApprovedItemCount > 0) {
+    log.warn("document_generation_blocked_unlinked_price_research_items", {
+      organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+      documentKind, unlinkedItemCount: unlinkedApprovedItemCount,
+    });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `PRICE_RESEARCH_ITEM_UNLINKED: ${unlinkedApprovedItemCount} item(ns) aprovado(s) da Pesquisa de Preços não estão em "Itens da contratação". Prepare-os ou associe-os antes de gerar ${docName}.`,
+    });
+  }
+}
+
+/**
  * P0 — Gera o Edital após o TR, REAPROVEITANDO o contexto do processo (DFD/ETP/TR/itens/parâmetros) e
  * produzindo uma minuta ESTRUTURADA e fundamentada pelo Kernel cognitivo (AIExecutionEngine + RAG
  * governado), no MESMO pipeline replay-safe do ETP/TR. Presencial exige justificativa legal automática;
@@ -942,6 +958,8 @@ export async function generateNotice(params: {
     organizationId: params.organizationId, processId: params.processId, object: params.object,
     modality: params.modality, form: params.form, platform,
   });
+  // Modo canônico (Itens da contratação): Edital nunca sai com quantidade da Pesquisa por fallback.
+  assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params);
 
   // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
   const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");

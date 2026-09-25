@@ -6,6 +6,7 @@ import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
 
 /**
  * TRWorkspace — REAL (wired to tRPC).
@@ -87,7 +88,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
           </p>
         )}
         {generateTR.isError && (
-          <p className="mt-2 text-sm text-destructive">{generateTR.error?.message || "Falha ao gerar o TR."}</p>
+          <p className="mt-2 text-sm text-destructive">{domainErrorMessage(generateTR.error?.message, "Falha ao gerar o TR.")}</p>
         )}
       </div>
 

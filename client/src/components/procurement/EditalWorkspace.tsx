@@ -4,6 +4,7 @@ import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
 
 const SOURCE_LABELS: Record<string, string> = {
   tr: "Termo de Referência (TR)", etp: "Estudo Técnico Preliminar (ETP)",
@@ -197,7 +198,7 @@ export default function EditalWorkspace({
         )}
         {generateNotice.isError && (
           <p className="text-sm text-destructive">
-            {generateNotice.error.message || "Falha ao gerar o edital."}
+            {domainErrorMessage(generateNotice.error.message, "Falha ao gerar o edital.")}
           </p>
         )}
       </div>

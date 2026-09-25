@@ -19,6 +19,10 @@ const fakeTx = { __tx: true };
 
 vi.mock("../../services/kernelAccessService", () => ({ assertKernelAccess: vi.fn() }));
 
+// Processo LEGADO (sem Itens da contratação): o gate canônico compartilhado de ETP/TR/Edital lê a lista
+// (vazia ⇒ modo legado inalterado).
+vi.mock("../../db/procurementItems", () => ({ listProcurementItems: vi.fn(async () => []) }));
+
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));

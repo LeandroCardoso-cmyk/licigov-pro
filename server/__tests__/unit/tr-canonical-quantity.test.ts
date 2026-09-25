@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  buildDocumentAuthoringContext, canonicalTRItems, type ContextItem, type DocumentAuthoringInputs,
+  buildDocumentAuthoringContext, canonicalDocumentItems, type ContextItem, type DocumentAuthoringInputs,
 } from "../../services/authoring/authoringContext";
 import {
   resolveCanonicalContext, canonicalItemKey, itemPath, factValueHash, type FactAssertion,
@@ -37,7 +37,7 @@ const base = (approvedItems: ContextItem[], canonical?: DocumentAuthoringInputs[
 });
 const build = (items: Array<{ id: string; d: string; source: ContextItem }>, facts: FactAssertion[]) => {
   const approved = items.map((x) => x.source);
-  const p = canonicalTRItems(ctxOf(items, facts), approved);
+  const p = canonicalDocumentItems(ctxOf(items, facts), approved);
   return { p, tr: buildDocumentAuthoringContext(base(p.items, p.state)) };
 };
 
@@ -94,7 +94,7 @@ describe("P0.1 — TR consome a quantidade PREVISTA do Contexto Canônico", () =
   it("Item Inteligente aprovado SEM vínculo com Itens da contratação é contado (nunca presumido como necessidade)", () => {
     const linked = ii("ii1", "Detergente", 1, 10_000);
     const orphan = ii("ii9", "Desinfetante", 12, 5_000);
-    const p = canonicalTRItems(ctxOf([{ id: A, d: "Detergente", source: linked }], [planned(A, 5)]), [linked, orphan]);
+    const p = canonicalDocumentItems(ctxOf([{ id: A, d: "Detergente", source: linked }], [planned(A, 5)]), [linked, orphan]);
     expect(p.state.unlinkedApprovedItemCount).toBe(1);
     expect(p.items.map((i) => i.id)).toEqual([A]);
   });

@@ -63,6 +63,9 @@ async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonica
     const doc = await getGeneratedDocumentByKind(pid, org, k).catch(() => null);
     if (!doc || doc.status !== "aprovado") continue;
     for (const key of Object.keys(readMarkers(doc.sources ?? []).prefill)) if (key.startsWith("item:")) consumed.add(key.slice(5));
+    // ETP/TR/Edital APROVADO gerado no modo canônico (`qtd:prevista`) consumiu a quantidade PREVISTA de todos
+    // os Itens da contratação — mesma regra do DFD (definir 1ª vez um "a definir" continua permitido).
+    if (k !== "dfd" && ctx && (doc.sources ?? []).includes("qtd:prevista")) for (const it of ctx.items) consumed.add(it.key);
     if (k === "dfd" && ctx) for (const l of linkDFDRows(parseDFD(doc.content), buildDFDPrefill(ctx).items, doc.sources ?? [])) if (l.itemId) consumed.add(l.itemId);
   }
   return { officialEmittedKinds, itemsConsumedByApproved: consumed };
