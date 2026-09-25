@@ -242,6 +242,12 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
           {assistFields.length > 0 && (
             <DFDFieldSources fields={assistFields} dirty={dirty} busyKey={reconcilingKey} onAction={onFieldAction} />
           )}
+          {assist?.available && (assist.unlinkedItemRows ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {assist.unlinkedItemRows} linha(s) da tabela de itens deste DFD ainda não estão em “Itens da contratação”.
+              Use “Preparar a partir do DFD” naquela aba para aproveitá-las.
+            </p>
+          )}
           {reconcileField.isError && reconcileField.error?.data?.code !== "CONFLICT" && (
             <p className="text-sm text-destructive">{reconcileField.error?.message || "Falha ao atualizar o campo."}</p>
           )}

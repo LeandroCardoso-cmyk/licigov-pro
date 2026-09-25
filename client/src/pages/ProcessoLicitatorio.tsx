@@ -6,6 +6,7 @@ import {
   FileText,
   FileSearch,
   ListChecks,
+  ListOrdered,
   FileSignature,
   ScrollText,
   Gauge,
@@ -17,6 +18,7 @@ import ProcessOverview from "@/components/procurement/ProcessOverview";
 import DFDWorkspace from "@/components/procurement/DFDWorkspace";
 import PesquisaPrecosWorkspace from "@/components/procurement/PesquisaPrecosWorkspace";
 import ItemIntelligenceWorkspace from "@/components/procurement/ItemIntelligenceWorkspace";
+import ProcurementItemsWorkspace from "@/components/procurement/ProcurementItemsWorkspace";
 import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
@@ -44,6 +46,7 @@ type StageTab =
   | "overview"
   | "dfd"
   | "price"
+  | "contract_items"
   | "items"
   | "etp"
   | "tr"
@@ -53,6 +56,8 @@ const STAGE_TABS: { key: StageTab; label: string; icon: typeof FileText }[] = [
   { key: "overview", label: "Visão Geral", icon: Gauge },
   { key: "dfd", label: "DFD", icon: FileText },
   { key: "price", label: "Pesquisa de Preços", icon: FileSearch },
+  // Área transversal: disponível qualquer que seja a etapa em que o processo começou.
+  { key: "contract_items", label: "Itens da contratação", icon: ListOrdered },
   { key: "items", label: "Itens Inteligentes", icon: ListChecks },
   { key: "etp", label: "ETP", icon: FileSignature },
   { key: "tr", label: "TR", icon: ScrollText },
@@ -248,6 +253,8 @@ function StagePanel({
       return <DFDWorkspace processId={processId} startWithImport={startWithImport} />;
     case "price":
       return <PesquisaPrecosWorkspace processId={processId} onReviewItems={() => onNavigate?.("items")} />;
+    case "contract_items":
+      return <ProcurementItemsWorkspace processId={processId} />;
     case "items":
       return (
         <ItemIntelligenceWorkspace
