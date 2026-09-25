@@ -268,6 +268,12 @@ jobs:
       - name: Smoke — TR × quantidade prevista (Itens da contratação)
         run: pnpm exec vitest run server/__tests__/integration/tr-canonical-quantity-mysql-smoke.test.ts
 
+      # P0.3 — quantidade da contratação com UMA fonte: Pesquisa (fonte = 1) → Itens (prevista = 50) ⇒ DFD, ETP,
+      # TR e Edital expressam 50; ETP sem prevista ⇒ "[a definir]"; Edital sem prevista ⇒ PLANNED_QUANTITY_REQUIRED;
+      # replay/source_changed/CONFLICT; ETP aprovado e Edital oficial intactos (GOVERNED_CHANGE_REQUIRED); legado; tenant.
+      - name: Smoke — ETP/TR/Edital × quantidade prevista (fonte única)
+        run: pnpm exec vitest run server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts
