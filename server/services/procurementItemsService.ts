@@ -228,7 +228,7 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     governance: { locked: govReason !== null, reason: govReason, officialEmittedKinds: [...gov.officialEmittedKinds] },
     sources: {
       priceResearchItems: (iis ?? []).filter((i) => i.status !== "rejeitado").length,
-      dfdRows: dfd ? parseDFD(dfd.content).items.length : 0,
+      dfdRows: dfd ? unlinkedRows(dfd.content, items, lots).length : 0,
     },
   };
   log.info("procurement_items_workspace_resolved", {
@@ -241,6 +241,16 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
 }
 
 // ─── Candidatos (projeção read-only) ─────────────────────────────────────────────────────
+
+/** Linhas da tabela do DFD sem Item Canônico correspondente (mesma ligação usada pelo DFD assistido). */
+function unlinkedRows(content: string, items: readonly ProcurementItem[], lots: readonly ProcurementLot[]) {
+  const code = new Map(lots.filter((l) => l.status === "active").map((l) => [l.id, l.code]));
+  const linkable = items.filter((i) => i.status === "active").map((i) => ({
+    key: i.id, fingerprint: i.fingerprint, lotCode: i.lotId ? code.get(i.lotId) ?? null : null,
+    description: i.description, unit: i.unit, plannedQuantity: null, qtyOrigin: null, qtyConflict: false,
+  }));
+  return linkDFDRows(parseDFD(content), linkable).filter((l) => l.itemId === null).map((l) => l.row);
+}
 
 export interface CandidateProjection {
   source: CandidateSourceType;
@@ -259,7 +269,8 @@ async function projectCandidates(org: number, pid: string, source: CandidateSour
     sources = priceResearchCandidateSources(iis.map((i) => ({ id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status, sourceState: i.sourceState })));
   } else {
     const dfd = await getGeneratedDocumentByKind(pid, org, "dfd");
-    sources = dfd ? dfdCandidateSources(dfd.id, parseDFD(dfd.content).items.map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode }))) : [];
+    // Só linhas do DFD que AINDA não correspondem a um Item Canônico (as demais já são o próprio item).
+    sources = dfd ? dfdCandidateSources(dfd.id, unlinkedRows(dfd.content, items, lots).map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode }))) : [];
   }
   const candidates = matchCandidates(sources, items, links, lots);
   const sourceDigest = createHash("sha256").update(JSON.stringify(candidates.map((c) => [c.candidateKey, c.sourceDigest, c.match.status, c.match.candidateItemIds]))).digest("hex").slice(0, 32);

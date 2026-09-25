@@ -249,6 +249,34 @@ describe.skipIf(!DB)("Itens da contratação — fluxo integrado (MySQL estrito)
     expect(w.contextVersion).toBeGreaterThan(0);
   }, 60_000);
 
+  it("7b) lotes EXPLÍCITOS na fonte (coluna Lote do DFD) ⇒ proposta de 2 lotes / 3 itens; linhas já ligadas não são repropostas", async () => {
+    const c = await caller(owner);
+    expect((await c.procurementItems.candidates({ processId: pid, source: "dfd" })).candidates).toHaveLength(0);
+    const cur = (await c.procurementProcess.loadDFD({ processId: pid })).document!;
+    const lines = cur.content.split("\n");
+    const last = lines.reduce((acc, l, i) => (/^\| (01|02) \|/.test(l) ? i : acc), -1);
+    lines.splice(last + 1, 0, "| 03 | 7 | Sabão em pó | Kg | 40 |", "| 03 | 8 | Esponja dupla face | UN | [a definir] |", "| 04 | 9 | Luva de borracha | Par | 10 |");
+    await c.procurementProcess.saveDFD({ processId: pid, content: lines.join("\n"), expectedContentHash: cur.contentHash, idempotencyKey: `dfd-rows-${pid}` });
+    const p = await c.procurementItems.candidates({ processId: pid, source: "dfd" });
+    expect(p.candidates.map((x: any) => [x.description, x.sourceLotCode, x.sourceQuantity, x.match.status])).toEqual([
+      ["Sabão em pó", "03", 40, "new"], ["Esponja dupla face", "03", null, "new"], ["Luva de borracha", "04", 10, "new"],
+    ]);
+    const lotsBefore = (await ws()).lots.length;
+    const r = await c.procurementItems.confirmCandidates({
+      processId: pid, source: "dfd", expectedSourceDigest: p.sourceDigest, idempotencyKey: `dfd-conf-${pid}`,
+      decisions: p.candidates.map((x: any) => ({ candidateKey: x.candidateKey, action: "create" as const, lot: { kind: "source" as const } })),
+    });
+    expect(r.created).toHaveLength(3);
+    expect(r.lotsCreated).toHaveLength(2);
+    const w = await ws();
+    expect(w.lots.length).toBe(lotsBefore + 2);
+    const lot3 = w.lots.find((l: any) => l.code === "03")!;
+    expect(w.items.filter((i: any) => i.lotId === lot3.id).map((i: any) => i.description).sort()).toEqual(["Esponja dupla face", "Sabão em pó"]);
+    // Quantidade do DFD é evidência: não vira prevista sem decisão explícita.
+    expect(byDesc(w, "Sabão em pó")).toMatchObject({ plannedQuantity: { value: null }, sources: [{ sourceType: "dfd", sourceQuantity: 40 }] });
+    expect(await count("SELECT COUNT(*) n FROM procurement_item_events WHERE organization_id = ? AND process_id = ? AND event_type = 'procurement_item_assigned_to_lot' AND source = 'source_structure'", [ORG, pid])).toBe(3);
+  }, 60_000);
+
   it("8) DFD APROVADO consumiu o item ⇒ alterar quantidade/descrição exige alteração governada; definir 'a definir' é permitido", async () => {
     await conn.execute("UPDATE generated_documents SET status = 'aprovado' WHERE organization_id = ? AND process_id = ? AND kind = 'dfd'", [ORG, pid]);
     const c = await caller(owner);
@@ -273,7 +301,7 @@ describe.skipIf(!DB)("Itens da contratação — fluxo integrado (MySQL estrito)
     await expect(b.procurementItems.createLot({ processId: pid, code: "09", name: "X", idempotencyKey: "b2" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     const v = await caller(viewer);
     const w = await v.procurementItems.workspace({ processId: pid });
-    expect(w.stats.itemCount).toBe(6);
+    expect(w.stats.itemCount).toBe(9);
     await expect(v.procurementItems.setQuantities({ processId: pid, idempotencyKey: "v1", changes: [{ itemId: w.items[0].id, expectedRevision: w.items[0].revision, mode: "informed", quantity: "1" }] })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(v.procurementItems.assignLot({ processId: pid, itemId: w.items[0].id, expectedRevision: w.items[0].revision, lotId: null, idempotencyKey: "v2" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await count("SELECT COUNT(*) n FROM procurement_items WHERE organization_id = ?", [ORG_B])).toBe(0);
