@@ -181,13 +181,13 @@ function cmp(a: FactAssertion, b: FactAssertion): number {
   return (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0);
 }
 
-// ─── Identidade canônica de item (necessidade ≠ cotação) ──────────────────────────────
+// ─── Fingerprint de item (necessidade ≠ cotação) ─────────────────────────────────────
 
 /**
- * Identidade do ITEM DA CONTRATAÇÃO: descrição normalizada + unidade canônica — SEM quantidade.
- * Reutiliza as mesmas normalizações da chave lógica do Item Inteligente (`descrição|unidade|qtd`), cuja
- * quantidade é a da COTAÇÃO. Assim, Itens Inteligentes do mesmo produto com quantidades de documento
- * diferentes convergem para UM item da contratação (sem fuzzy, sem LLM; igualdade exata normalizada).
+ * FINGERPRINT determinístico do item da contratação: descrição normalizada + unidade canônica — SEM
+ * quantidade. NÃO é identidade: a identidade persistente é o `id` estável do Item Canônico
+ * (`procurement_items`). O fingerprint só PROPÕE vínculo (igualdade exata normalizada, sem fuzzy, sem
+ * LLM); colisão/ambiguidade exige decisão humana. Reusa as normalizações da chave do Item Inteligente.
  */
 export function canonicalItemKey(description: string, unit: string | null | undefined): string {
   return createHash("sha256")
@@ -227,20 +227,41 @@ export interface ContextInputs {
   organization: { name: string | null; municipio: string | null; uf: string | null } | null;
   /** Afirmações do ledger (JÁ filtradas por organizationId + processId pelo chamador). */
   assertions: readonly FactAssertion[];
+  /** Itens Inteligentes (Pesquisa de Preços) — EVIDÊNCIA de preço/quantidade da fonte, nunca a necessidade. */
   intelligentItems: ReadonlyArray<{
     id: string; description: string; unit: string; quantity: number; status: string;
     averagePriceCents: number; quoteCount: number;
   }>;
+  /** Itens Canônicos da Contratação (entidade persistente com id estável). */
+  procurementItems?: ReadonlyArray<{
+    id: string; description: string; unit: string; lotId: string | null; ordinal: number;
+    status: string; revision: number; fingerprint: string;
+  }>;
+  /** Lotes (opcionais). */
+  lots?: ReadonlyArray<{ id: string; code: string; name: string; ordinal: number; status: string }>;
+  /** Vínculos Item Canônico → Item Inteligente (evidência de preço), decididos por humano. */
+  priceLinks?: ReadonlyArray<{ itemId: string; intelligentItemId: string }>;
 }
 
 export interface CanonicalItem {
+  /** Id ESTÁVEL do Item Canônico (procurement_items.id) — identidade persistente. */
   key: string;
+  /** Fingerprint (descrição+unidade) — só para proposta de vínculo, nunca identidade. */
+  fingerprint: string;
+  lotId: string | null;
+  ordinal: number;
   description: CanonicalField<string>;
   unit: CanonicalField<string>;
   plannedQuantity: CanonicalField<number>;
   priceContext: {
-    /** Preço de referência unitário: média (ponderada por cotações) dos Itens Inteligentes APROVADOS. */
+    /**
+     * Preço de referência unitário CONSUMIDO do domínio da Pesquisa de Preços: o `averagePriceCents` do
+     * Item Inteligente APROVADO vinculado a ESTE item (média das cotações DESTE item, calculada lá). O
+     * contexto não cria regra de preço: nunca faz média entre itens diferentes nem entre Itens Inteligentes.
+     * Vários vinculados com preços distintos ⇒ null + `priceAmbiguous` (decisão humana).
+     */
     unitReferencePriceCents: number | null;
+    priceAmbiguous: boolean;
     evidenceCount: number;
     /** Quantidades vistas nos documentos da pesquisa (distintas; null = documento sem quantidade). */
     sourceQuantities: Array<number | null>;
@@ -256,6 +277,8 @@ export interface ProcurementCanonicalContext {
   processId: string;
   process: { number: CanonicalField<string>; object: CanonicalField<string> };
   organization: { name: CanonicalField<string>; location: CanonicalField<string> };
+  /** Lotes ativos, em ordem. Vazio = contratação sem lotes. */
+  lots: Array<{ id: string; code: string; name: string; ordinal: number }>;
   demand: { requestingUnit: CanonicalField<string>; responsibleParty: CanonicalField<string> };
   planning: { pcaAlignment: CanonicalField<string>; priority: CanonicalField<string>; desiredDate: CanonicalField<string> };
   items: CanonicalItem[];
@@ -295,7 +318,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       "organization", String(input.organizationId), "confirmed", t0),
   ].filter((x): x is FactAssertion => x !== null);
 
-  // Itens Inteligentes (não rejeitados) → OBSERVAÇÃO de descrição/unidade + evidência de preço.
+  // Itens Inteligentes (não rejeitados) → EVIDÊNCIA de preço e de quantidade da fonte (sourceQuantity).
   const evidence: PriceEvidence[] = input.intelligentItems
     .filter((i) => i.status !== "rejeitado")
     .map((i) => ({
@@ -305,9 +328,17 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       unitAmountCents: i.averagePriceCents > 0 ? i.averagePriceCents : null,
       quoteCount: i.quoteCount, approved: i.status === "aprovado",
     }));
-  for (const e of evidence) {
-    const d = projection(itemPath(e.itemKey, "description"), e.description, "intelligent_item", e.intelligentItemId, "observed", t0);
-    const u = projection(itemPath(e.itemKey, "unit"), e.unit, "intelligent_item", e.intelligentItemId, "observed", t0);
+  const evidenceById = new Map(evidence.map((e) => [e.intelligentItemId, e]));
+
+  // Itens Canônicos ATIVOS → descrição/unidade projetadas da ENTIDADE (confirmadas por humano ao criar).
+  const pItems = (input.procurementItems ?? []).filter((i) => i.status === "active");
+  const lots = (input.lots ?? []).filter((l) => l.status === "active")
+    .map((l) => ({ id: l.id, code: l.code, name: l.name, ordinal: l.ordinal }))
+    .sort((a, b) => a.ordinal - b.ordinal || (a.id < b.id ? -1 : 1));
+  const lotOrder = new Map(lots.map((l, i) => [l.id, i]));
+  for (const it of pItems) {
+    const d = projection(itemPath(it.id, "description"), it.description, "user", `pitem:${it.id}`, "confirmed", t0);
+    const u = projection(itemPath(it.id, "unit"), it.unit, "user", `pitem:${it.id}`, "confirmed", t0);
     if (d) proj.push(d);
     if (u) proj.push(u);
   }
@@ -315,37 +346,34 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
   const all = [...proj, ...input.assertions];
   const f = (p: ContextPath) => resolveField(p, all);
 
-  const keys = new Set<string>(evidence.map((e) => e.itemKey));
-  for (const a of input.assertions) {
-    const m = /^items\.([^.]+)\./.exec(a.path);
-    if (m) keys.add(m[1]);
-  }
-
-  const items: CanonicalItem[] = [...keys].map((key) => {
-    const ev = evidence.filter((e) => e.itemKey === key);
+  const items: CanonicalItem[] = pItems.map((it) => {
+    const ev = (input.priceLinks ?? []).filter((l) => l.itemId === it.id)
+      .map((l) => evidenceById.get(l.intelligentItemId)).filter((e): e is PriceEvidence => !!e);
     const priced = ev.filter((e) => e.approved && e.unitAmountCents !== null && e.quoteCount > 0);
-    const weight = priced.reduce((s, e) => s + e.quoteCount, 0);
-    const unitReferencePriceCents = weight > 0
-      ? Math.round(priced.reduce((s, e) => s + (e.unitAmountCents as number) * e.quoteCount, 0) / weight)
-      : null;
+    const distinct = [...new Set(priced.map((e) => e.unitAmountCents as number))];
+    const unitReferencePriceCents = distinct.length === 1 ? distinct[0] : null;
     const sourceQuantities = [...new Set(ev.map((e) => e.sourceQuantity))].sort((a, b) => (a ?? -1) - (b ?? -1));
-    const plannedQuantity = asNumberField(f(itemPath(key, "plannedQuantity")));
+    const plannedQuantity = asNumberField(f(itemPath(it.id, "plannedQuantity")));
     const pq = plannedQuantity.value;
+    const lotId = it.lotId && lotOrder.has(it.lotId) ? it.lotId : null;
     return {
-      key,
-      description: f(itemPath(key, "description")) as CanonicalField<string>,
-      unit: f(itemPath(key, "unit")) as CanonicalField<string>,
+      key: it.id, fingerprint: it.fingerprint, lotId, ordinal: it.ordinal,
+      description: f(itemPath(it.id, "description")) as CanonicalField<string>,
+      unit: f(itemPath(it.id, "unit")) as CanonicalField<string>,
       plannedQuantity,
       priceContext: {
-        unitReferencePriceCents, evidenceCount: ev.reduce((s, e) => s + e.quoteCount, 0),
+        unitReferencePriceCents, priceAmbiguous: distinct.length > 1,
+        evidenceCount: ev.reduce((s, e) => s + e.quoteCount, 0),
         sourceQuantities, intelligentItemIds: ev.map((e) => e.intelligentItemId).sort(),
       },
       estimatedTotalCents: pq !== null && pq > 0 && unitReferencePriceCents !== null
         ? multiplyQuantityCents(pq, unitReferencePriceCents) : null,
     };
   }).sort((a, b) => {
-    const da = normalizeDescription(String(a.description.value ?? "")), db = normalizeDescription(String(b.description.value ?? ""));
-    return da < db ? -1 : da > db ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+    // Ordem oficial: lotes (ordinal) → itens sem lote → ordinal do item → id (desempate estável).
+    const la = a.lotId === null ? Number.MAX_SAFE_INTEGER : lotOrder.get(a.lotId)!;
+    const lb = b.lotId === null ? Number.MAX_SAFE_INTEGER : lotOrder.get(b.lotId)!;
+    return la - lb || a.ordinal - b.ordinal || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   });
 
   const ctx: Omit<ProcurementCanonicalContext, "stats" | "version" | "digest" | "priceContext"> = {
@@ -354,6 +382,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
     processId: input.processId,
     process: { number: f("process.number") as CanonicalField<string>, object: f("process.object") as CanonicalField<string> },
     organization: { name: f("organization.name") as CanonicalField<string>, location: f("organization.location") as CanonicalField<string> },
+    lots,
     demand: {
       requestingUnit: f("demand.requestingUnit") as CanonicalField<string>,
       responsibleParty: f("demand.responsibleParty") as CanonicalField<string>,
@@ -409,7 +438,7 @@ function fieldSnap(f: CanonicalField): CanonicalValue {
 
 /** Snapshot canônico do digest — FATOS (valor + origem + estado), sem timestamps/atores/ordem de leitura. */
 function digestSnapshot(
-  ctx: Pick<ProcurementCanonicalContext, "contractVersion" | "organizationId" | "processId" | "process" | "organization" | "demand" | "planning" | "items">,
+  ctx: Pick<ProcurementCanonicalContext, "contractVersion" | "organizationId" | "processId" | "process" | "organization" | "lots" | "demand" | "planning" | "items">,
   price: ProcurementCanonicalContext["priceContext"],
 ): CanonicalValue {
   return {
@@ -418,9 +447,11 @@ function digestSnapshot(
     org: { name: fieldSnap(ctx.organization.name), loc: fieldSnap(ctx.organization.location) },
     demand: { unit: fieldSnap(ctx.demand.requestingUnit), resp: fieldSnap(ctx.demand.responsibleParty) },
     planning: { pca: fieldSnap(ctx.planning.pcaAlignment), prio: fieldSnap(ctx.planning.priority), date: fieldSnap(ctx.planning.desiredDate) },
+    lots: ctx.lots.map((l) => ({ id: l.id, c: l.code, n: l.name })),
     items: ctx.items.map((i) => ({
-      k: i.key, d: fieldSnap(i.description), u: fieldSnap(i.unit), q: fieldSnap(i.plannedQuantity),
-      ref: i.priceContext.unitReferencePriceCents, sq: i.priceContext.sourceQuantities, n: i.priceContext.evidenceCount,
+      k: i.key, l: i.lotId, d: fieldSnap(i.description), u: fieldSnap(i.unit), q: fieldSnap(i.plannedQuantity),
+      ref: i.priceContext.unitReferencePriceCents, amb: i.priceContext.priceAmbiguous,
+      sq: i.priceContext.sourceQuantities, n: i.priceContext.evidenceCount,
     })),
     total: price.estimatedTotalCents,
   };

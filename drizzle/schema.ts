@@ -5519,6 +5519,98 @@ export const procurementContextFactsTable = mysqlTable("procurement_context_fact
 
 export type ProcurementContextFactRow = typeof procurementContextFactsTable.$inferSelect;
 
+// ─── Itens da Contratação (0306) — Item Canônico, Lote, vínculos de fonte e ledger de eventos ─────────
+// Item Canônico = entidade com id ESTÁVEL (identidade ≠ fingerprint ≠ lote). A quantidade PREVISTA NÃO
+// tem coluna aqui: vive no ledger procurement_context_facts (items.<id>.plannedQuantity) — fonte única.
+export const procurementLotsTable = mysqlTable("procurement_lots", {
+  id: varchar("id", { length: 24 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  processId: varchar("process_id", { length: 20 }).notNull(),
+  code: varchar("code", { length: 40 }).notNull(),
+  codeKey: varchar("code_key", { length: 40 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  ordinal: int("ordinal").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  revision: int("revision").notNull().default(1),
+  createdBy: int("created_by").notNull(),
+  updatedBy: int("updated_by").notNull(),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_procurement_lots_code").on(table.organizationId, table.processId, table.codeKey),
+  index("idx_procurement_lots_scope").on(table.organizationId, table.processId, table.ordinal),
+]);
+export type ProcurementLotRow = typeof procurementLotsTable.$inferSelect;
+
+export const procurementItemsTable = mysqlTable("procurement_items", {
+  id: varchar("id", { length: 24 }).primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  processId: varchar("process_id", { length: 20 }).notNull(),
+  description: text("description").notNull(),
+  unit: varchar("unit", { length: 30 }).notNull(),
+  lotId: varchar("lot_id", { length: 24 }),
+  ordinal: int("ordinal").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  fingerprint: varchar("fingerprint", { length: 16 }).notNull(),
+  origin: varchar("origin", { length: 20 }).notNull(),
+  provenanceJson: text("provenance_json").notNull(),
+  withdrawnReason: varchar("withdrawn_reason", { length: 500 }),
+  revision: int("revision").notNull().default(1),
+  createdBy: int("created_by").notNull(),
+  updatedBy: int("updated_by").notNull(),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  updatedAt: datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  index("idx_procurement_items_scope").on(table.organizationId, table.processId, table.ordinal),
+  index("idx_procurement_items_fingerprint").on(table.organizationId, table.processId, table.fingerprint),
+]);
+export type ProcurementItemRow = typeof procurementItemsTable.$inferSelect;
+
+export const procurementItemSourceLinksTable = mysqlTable("procurement_item_source_links", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  processId: varchar("process_id", { length: 20 }).notNull(),
+  itemId: varchar("item_id", { length: 24 }).notNull(),
+  sourceType: varchar("source_type", { length: 30 }).notNull(),
+  sourceId: varchar("source_id", { length: 64 }).notNull(),
+  sourceItemKey: varchar("source_item_key", { length: 64 }).notNull(),
+  sourceDigest: varchar("source_digest", { length: 32 }).notNull(),
+  sourceQuantity: decimal("source_quantity", { precision: 14, scale: 3 }),
+  sourceDescription: text("source_description").notNull(),
+  sourceUnit: varchar("source_unit", { length: 30 }).notNull(),
+  sourceLotCode: varchar("source_lot_code", { length: 40 }),
+  createdBy: int("created_by").notNull(),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_pitem_links_source").on(table.organizationId, table.processId, table.sourceType, table.sourceId, table.sourceItemKey),
+  index("idx_pitem_links_item").on(table.organizationId, table.processId, table.itemId),
+]);
+export type ProcurementItemSourceLinkRow = typeof procurementItemSourceLinksTable.$inferSelect;
+
+export const procurementItemEventsTable = mysqlTable("procurement_item_events", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  processId: varchar("process_id", { length: 20 }).notNull(),
+  itemId: varchar("item_id", { length: 24 }),
+  lotId: varchar("lot_id", { length: 24 }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  actorUserId: int("actor_user_id").notNull(),
+  beforeHash: varchar("before_hash", { length: 16 }),
+  afterHash: varchar("after_hash", { length: 16 }),
+  source: varchar("source", { length: 40 }),
+  reason: varchar("reason", { length: 500 }),
+  detailsJson: text("details_json"),
+  correlationId: varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt: datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  index("idx_pitem_events_scope").on(table.organizationId, table.processId, table.id),
+]);
+export type ProcurementItemEventRow = typeof procurementItemEventsTable.$inferSelect;
+
 export type GeneratedDocumentEditRow = typeof generatedDocumentEditsTable.$inferSelect;
 export type InsertGeneratedDocumentEdit = typeof generatedDocumentEditsTable.$inferInsert;
 

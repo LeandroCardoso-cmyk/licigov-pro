@@ -25,14 +25,32 @@ function iitem(id: string, description: string, quantity: number, over: Partial<
   return { id, description, unit: "UN", quantity, status: "aprovado", averagePriceCents: 10_000, quoteCount: 3, ...over };
 }
 
+/**
+ * Fixture: quando o teste só informa Itens Inteligentes, simula a CONFIRMAÇÃO HUMANA na Área de Itens — um
+ * Item Canônico por fingerprint (id = fingerprint, só para legibilidade do teste) vinculado às evidências.
+ */
 function inputs(over: Partial<ContextInputs> = {}): ContextInputs {
-  return {
+  const base: ContextInputs = {
     organizationId: 7, processId: "proc-1",
     process: { number: "2026/0001", object: "Aquisição de cadeiras", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
     responsibleUserName: "Servidora Responsável",
     organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     assertions: [], intelligentItems: [], ...over,
   };
+  if (!over.procurementItems && base.intelligentItems.length) {
+    const live = base.intelligentItems.filter((i) => i.status !== "rejeitado");
+    const fps = [...new Set(live.map((i) => canonicalItemKey(i.description, i.unit)))].sort();
+    base.procurementItems = fps.map((fp, n) => {
+      const ii = live.find((i) => canonicalItemKey(i.description, i.unit) === fp)!;
+      return { id: fp, description: ii.description, unit: ii.unit, lotId: null, ordinal: n + 1, status: "active", revision: 1, fingerprint: fp };
+    });
+    base.priceLinks = base.intelligentItems.map((i) => ({ itemId: canonicalItemKey(i.description, i.unit), intelligentItemId: i.id }));
+  }
+  return base;
+}
+
+function pitem(id: string, description: string, over: Partial<NonNullable<ContextInputs["procurementItems"]>[number]> = {}) {
+  return { id, description, unit: "UN", lotId: null, ordinal: 1, status: "active", revision: 1, fingerprint: canonicalItemKey(description, "UN"), ...over };
 }
 
 const KEY_CADEIRA = canonicalItemKey("Cadeira giratória", "UN");
@@ -136,30 +154,66 @@ describe("Contexto Canônico — domínio", () => {
     expect(resolveCanonicalContext(inputs({ assertions: [f] })).version).toBe(42);
   });
 
-  it("13) identidade do item SEM quantidade: cotações com quantidades distintas convergem para UM item", () => {
+  it("13) várias evidências (cotações com quantidades distintas) vinculadas a UM item canônico; quantidade não é identidade", () => {
     const ctx = resolveCanonicalContext(inputs({
       intelligentItems: [iitem("i1", "Cadeira giratória", 1), iitem("i2", "cadeira GIRATÓRIA.", 10, { unit: "un" })],
     }));
     expect(ctx.items).toHaveLength(1);
-    expect(ctx.items[0].key).toBe(KEY_CADEIRA);
+    expect(ctx.items[0].fingerprint).toBe(KEY_CADEIRA);
     expect(ctx.items[0].priceContext.sourceQuantities).toEqual([1, 10]);
     expect(ctx.items[0].priceContext.intelligentItemIds).toEqual(["i1", "i2"]);
   });
 
-  it("14) itens REJEITADOS não entram no contexto", () => {
-    const ctx = resolveCanonicalContext(inputs({ intelligentItems: [iitem("i1", "Cadeira giratória", 1, { status: "rejeitado" })] }));
-    expect(ctx.items).toHaveLength(0);
+  it("13b) fingerprint igual NÃO funde: dois itens canônicos com a mesma descrição/unidade coexistem (ids estáveis distintos)", () => {
+    const ctx = resolveCanonicalContext(inputs({
+      procurementItems: [pitem("aaaa", "Cadeira giratória", { lotId: "L1", ordinal: 1 }), pitem("bbbb", "Cadeira giratória", { lotId: "L2", ordinal: 2 })],
+      lots: [{ id: "L1", code: "01", name: "Sala A", ordinal: 1, status: "active" }, { id: "L2", code: "02", name: "Sala B", ordinal: 2, status: "active" }],
+    }));
+    expect(ctx.items.map((i) => [i.key, i.lotId])).toEqual([["aaaa", "L1"], ["bbbb", "L2"]]);
+    expect(ctx.items[0].fingerprint).toBe(ctx.items[1].fingerprint);
+    expect(ctx.lots.map((l) => l.code)).toEqual(["01", "02"]);
   });
 
-  it("15) preço de referência = média ponderada por cotações só de itens APROVADOS", () => {
+  it("14) evidência REJEITADA não fornece preço nem quantidade da fonte; item retirado sai do contexto", () => {
     const ctx = resolveCanonicalContext(inputs({
+      intelligentItems: [iitem("i1", "Cadeira giratória", 1, { status: "rejeitado" })],
+      procurementItems: [pitem("aaaa", "Cadeira giratória"), pitem("zzzz", "Mesa", { status: "withdrawn" })],
+      priceLinks: [{ itemId: "aaaa", intelligentItemId: "i1" }],
+    }));
+    expect(ctx.items.map((i) => i.key)).toEqual(["aaaa"]);
+    expect(ctx.items[0].priceContext).toMatchObject({ unitReferencePriceCents: null, sourceQuantities: [], evidenceCount: 0 });
+  });
+
+  it("15) preço de referência é CONSUMIDO do Item Inteligente aprovado (sem média nova); preços distintos ⇒ ambíguo", () => {
+    const one = resolveCanonicalContext(inputs({
       intelligentItems: [
         iitem("i1", "Cadeira giratória", 1, { averagePriceCents: 10_000, quoteCount: 3 }),
-        iitem("i2", "Cadeira giratória", 5, { averagePriceCents: 20_000, quoteCount: 1 }),
         iitem("i3", "Cadeira giratória", 7, { averagePriceCents: 99_999, quoteCount: 5, status: "pendente" }),
       ],
     }));
-    expect(ctx.items[0].priceContext.unitReferencePriceCents).toBe(12_500); // (3×100 + 1×200)/4
+    expect(one.items[0].priceContext).toMatchObject({ unitReferencePriceCents: 10_000, priceAmbiguous: false });
+    const two = resolveCanonicalContext(inputs({
+      intelligentItems: [
+        iitem("i1", "Cadeira giratória", 1, { averagePriceCents: 10_000, quoteCount: 3 }),
+        iitem("i2", "Cadeira giratória", 5, { averagePriceCents: 20_000, quoteCount: 1 }),
+      ],
+    }));
+    // NUNCA (3×100 + 1×200)/4: o contexto não cria regra de preço — exige decisão humana.
+    expect(two.items[0].priceContext).toMatchObject({ unitReferencePriceCents: null, priceAmbiguous: true });
+    expect(two.items[0].estimatedTotalCents).toBeNull();
+  });
+
+  it("15b) REGRESSÃO preço por item: A (10 × R$100) e B (5 × R$20) ⇒ R$1.000 e R$100; total R$1.100 — nunca média entre itens", () => {
+    const A = pitem("aaaa", "Cadeira giratória", { ordinal: 1 });
+    const B = pitem("bbbb", "Mesa de escritório", { ordinal: 2, fingerprint: canonicalItemKey("Mesa de escritório", "UN") });
+    const ctx = resolveCanonicalContext(inputs({
+      procurementItems: [A, B],
+      intelligentItems: [iitem("ia", "Cadeira giratória", 1, { averagePriceCents: 10_000 }), iitem("ib", "Mesa de escritório", 1, { averagePriceCents: 2_000 })],
+      priceLinks: [{ itemId: "aaaa", intelligentItemId: "ia" }, { itemId: "bbbb", intelligentItemId: "ib" }],
+      assertions: [fact(itemPath("aaaa", "plannedQuantity"), 10, "user"), fact(itemPath("bbbb", "plannedQuantity"), 5, "user")],
+    }));
+    expect(ctx.items.map((i) => [i.key, i.priceContext.unitReferencePriceCents, i.estimatedTotalCents])).toEqual([["aaaa", 10_000, 100_000], ["bbbb", 2_000, 10_000]]);
+    expect(ctx.priceContext).toMatchObject({ complete: true, estimatedTotalCents: 110_000 });
   });
 
   it("16) estatísticas e isolamento de escopo: contexto carrega organizationId/processId do chamador", () => {
@@ -217,9 +271,10 @@ describe("Contexto Canônico — quantidade: Pesquisa de Preços (sourceQuantity
   it("F) humano altera o previsto VENDO o valor anterior → supera; duas fontes divergentes sem base → conflito", () => {
     const first = fact(itemPath(KEY_CADEIRA, "plannedQuantity"), 30, "dfd", { sourceId: "gdoc-1" });
     const etp = fact(itemPath(KEY_CADEIRA, "plannedQuantity"), 40, "etp", { sourceId: "etp-1", basisValueHash: first.valueHash });
-    expect(q(resolveCanonicalContext(inputs({ assertions: [first, etp] }))).plannedQuantity.value).toBe(40);
+    const items = { procurementItems: [pitem(KEY_CADEIRA, "Cadeira giratória")] };
+    expect(q(resolveCanonicalContext(inputs({ ...items, assertions: [first, etp] }))).plannedQuantity.value).toBe(40);
     const blind = fact(itemPath(KEY_CADEIRA, "plannedQuantity"), 50, "tr", { sourceId: "tr-1" });
-    const conflicted = q(resolveCanonicalContext(inputs({ assertions: [first, etp, blind] })));
+    const conflicted = q(resolveCanonicalContext(inputs({ ...items, assertions: [first, etp, blind] })));
     expect(conflicted.plannedQuantity.status).toBe("conflict");
     expect(conflicted.plannedQuantity.value).toBeNull();
     expect(conflicted.estimatedTotalCents).toBeNull();

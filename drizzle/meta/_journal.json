@@ -2054,6 +2054,13 @@
       "when": 1790286217732,
       "tag": "0305_canonical_procurement_context",
       "breakpoints": true
+    },
+    {
+      "idx": 306,
+      "version": "5",
+      "when": 1790305491873,
+      "tag": "0306_canonical_procurement_items_lots",
+      "breakpoints": true
     }
   ]
 }

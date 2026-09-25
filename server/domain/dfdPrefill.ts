@@ -87,7 +87,12 @@ function isPlaceholder(v: string | null | undefined): boolean {
 export interface DFDPrefillValue { value: string | null; origin: DFDFieldOrigin | null; conflict: boolean }
 
 export interface DFDPrefillItem {
+  /** Id estável do Item Canônico. */
   key: string;
+  /** Fingerprint (descrição+unidade) — só para ligar linhas do DFD ao item. */
+  fingerprint: string;
+  /** Código do lote (quando a contratação é por lotes). */
+  lotCode: string | null;
   description: string;
   unit: string;
   plannedQuantity: number | null;
@@ -102,6 +107,8 @@ export interface DFDPrefill {
   object: string | null;
   values: Record<string, DFDPrefillValue>;
   items: DFDPrefillItem[];
+  /** Contratação por lotes ⇒ a tabela do DFD ganha a coluna "Lote". */
+  hasLots: boolean;
 }
 
 function pv(f: CanonicalField): DFDPrefillValue {
@@ -112,10 +119,13 @@ function pv(f: CanonicalField): DFDPrefillValue {
 /** DFDPrefillProjection — o que o contexto sabe, no vocabulário do DFD. Fatos em conflito NÃO entram. */
 export function buildDFDPrefill(ctx: ProcurementCanonicalContext): DFDPrefill {
   const obj = pv(ctx.process.object);
+  const lotCode = new Map((ctx.lots ?? []).map((l) => [l.id, l.code]));
   const items = ctx.items
     .filter((i) => i.description.value !== null)
     .map((i) => ({
       key: i.key,
+      fingerprint: i.fingerprint ?? canonicalItemKey(String(i.description.value), String(i.unit.value ?? "UN")),
+      lotCode: i.lotId ? lotCode.get(i.lotId) ?? null : null,
       description: String(i.description.value),
       unit: String(i.unit.value ?? "UN"),
       plannedQuantity: i.plannedQuantity.status === "conflict" ? null : i.plannedQuantity.value,
@@ -139,6 +149,7 @@ export function buildDFDPrefill(ctx: ProcurementCanonicalContext): DFDPrefill {
       "prioridade.prazo": pv(ctx.planning.desiredDate),
     },
     items,
+    hasLots: items.some((i) => i.lotCode !== null),
   };
 }
 
@@ -158,7 +169,14 @@ function cell(s: string): string {
   return normalizeText(s).replace(/\|/g, "/");
 }
 
-function itemsTable(items: readonly DFDPrefillItem[]): string[] {
+function itemsTable(items: readonly DFDPrefillItem[], hasLots: boolean): string[] {
+  if (hasLots) {
+    return [
+      "| Lote | Item | Descrição | Unidade | Quantidade prevista |",
+      "| --- | --- | --- | --- | --- |",
+      ...items.map((it, i) => `| ${cell(it.lotCode ?? "—")} | ${i + 1} | ${cell(it.description)} | ${cell(it.unit)} | ${formatQuantity(it.plannedQuantity)} |`),
+    ];
+  }
   return [
     "| Item | Descrição | Unidade | Quantidade prevista |",
     "| --- | --- | --- | --- |",
@@ -188,7 +206,7 @@ export function renderDFDContent(prefill: DFDPrefill, justification?: string | n
     ...(prefill.object ? [prefill.object.trim(), HINT_DESC] : [`${obj} — detalhar características essenciais, natureza (bem/serviço) e finalidade. ${P}`]),
     "",
     "## 4. Quantitativo estimado e unidade",
-    ...(prefill.items.length ? itemsTable(prefill.items) : [`Quantidade estimada: ${P} · Unidade: ${P}`]),
+    ...(prefill.items.length ? itemsTable(prefill.items, prefill.hasLots) : [`Quantidade estimada: ${P} · Unidade: ${P}`]),
     `Memória de cálculo/critério da estimativa: ${P}`,
     "",
     "## 5. Previsão da contratação no planejamento",
@@ -207,7 +225,7 @@ export function renderDFDContent(prefill: DFDPrefill, justification?: string | n
 
 // ─── Leitura do DFD (campo a campo) ──────────────────────────────────────────────────────
 
-export interface ParsedDFDItem { key: string; description: string; unit: string; quantityRaw: string; quantity: number | null }
+export interface ParsedDFDItem { fingerprint: string; lotCode: string | null; description: string; unit: string; quantityRaw: string; quantity: number | null }
 export interface ParsedDFD { values: Record<string, string | null>; items: ParsedDFDItem[]; hasItemsTable: boolean }
 
 interface Section { n: number; start: number; end: number } // [start, end) em linhas, start = heading
@@ -281,16 +299,53 @@ export function parseDFD(content: string): ParsedDFD {
 
   const s4 = sectionBody(lines, byN(4));
   const rows = s4.filter((l) => /^\|/.test(l.trim()));
-  const hasItemsTable = rows.some((r) => /quantidade prevista/i.test(r));
+  const splitRow = (r: string) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  const header = rows.map(splitRow).find((c) => c.some((x) => /quantidade prevista/i.test(x)));
+  const hasItemsTable = !!header;
   const items: ParsedDFDItem[] = [];
-  for (const r of rows) {
-    const cells = r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
-    if (cells.length < 4 || /^-+$/.test(cells[0].replace(/\s|:/g, "")) || /^item$/i.test(cells[0])) continue;
-    const [, description, unit, quantityRaw] = cells;
-    if (!description || isPlaceholder(description)) continue;
-    items.push({ key: canonicalItemKey(description, unit), description, unit: unit || "UN", quantityRaw, quantity: parseQuantityPtBr(quantityRaw) });
+  if (header) {
+    // Colunas pelo NOME do cabeçalho (com ou sem "Lote") — robusto a reordenação manual.
+    const col = (re: RegExp) => header.findIndex((x) => re.test(x));
+    const iLot = col(/^lote$/i), iDesc = col(/^descri/i), iUnit = col(/^unidade$/i), iQty = col(/quantidade prevista/i);
+    for (const r of rows) {
+      const cells = splitRow(r);
+      if (cells === header || cells.length < header.length || cells.every((c) => /^:?-+:?$/.test(c)) || cells.join("|") === header.join("|")) continue;
+      const description = cells[iDesc] ?? "";
+      const unit = cells[iUnit] ?? "";
+      const quantityRaw = cells[iQty] ?? "";
+      if (!description || isPlaceholder(description)) continue;
+      const lotRaw = iLot >= 0 ? (cells[iLot] ?? "").trim() : "";
+      items.push({
+        fingerprint: canonicalItemKey(description, unit), lotCode: lotRaw && lotRaw !== "—" && lotRaw !== "-" ? lotRaw : null,
+        description, unit: unit || "UN", quantityRaw, quantity: parseQuantityPtBr(quantityRaw),
+      });
+    }
   }
   return { values, items, hasItemsTable };
+}
+
+/** Normaliza código de lote para comparação ("Lote 01" ≡ "01" ≡ "1"). */
+function lotKey(code: string | null): string | null {
+  if (!code) return null;
+  const t = normalizeText(code).toUpperCase().replace(/^LOTE\s*/, "").trim();
+  return /^\d+$/.test(t) ? String(Number(t)) : t;
+}
+
+export interface LinkedDFDRow { row: ParsedDFDItem; itemId: string | null; ambiguous: boolean }
+
+/**
+ * Liga cada linha da tabela do DFD a UM Item Canônico: mesmo fingerprint (+ mesmo lote, quando a linha tem
+ * lote). Exatamente um ⇒ ligada; nenhum/vários ⇒ não ligada (nunca adivinha). Cada item liga-se a no
+ * máximo uma linha (a primeira).
+ */
+export function linkDFDRows(parsed: ParsedDFD, items: readonly DFDPrefillItem[]): LinkedDFDRow[] {
+  const used = new Set<string>();
+  return parsed.items.map((row) => {
+    const lk = lotKey(row.lotCode);
+    const same = items.filter((i) => i.fingerprint === row.fingerprint && (lk === null || lotKey(i.lotCode) === lk) && !used.has(i.key));
+    if (same.length === 1) { used.add(same[0].key); return { row, itemId: same[0].key, ambiguous: false }; }
+    return { row, itemId: null, ambiguous: same.length > 1 };
+  });
 }
 
 // ─── Marcadores de linhagem (generated_documents.sources) ───────────────────────────────
@@ -381,9 +436,9 @@ function prefillValueOf(prefill: DFDPrefill, key: string): DFDPrefillValue {
   return prefill.values[key] ?? { value: null, origin: null, conflict: false };
 }
 
-function docValueOf(parsed: ParsedDFD, key: string): string | null {
+function docValueOf(parsed: ParsedDFD, linked: readonly LinkedDFDRow[], key: string): string | null {
   if (key.startsWith("item:")) {
-    const it = parsed.items.find((i) => `item:${i.key}` === key);
+    const it = linked.find((l) => l.itemId !== null && `item:${l.itemId}` === key)?.row;
     return it && it.quantity !== null ? formatQuantity(it.quantity) : null;
   }
   return parsed.values[key] ?? null;
@@ -398,9 +453,9 @@ function hashOfField(key: string, v: string | null): string {
   return fieldHash(v);
 }
 
-function itemLabel(prefill: DFDPrefill, parsed: ParsedDFD, key: string): string {
+function itemLabel(prefill: DFDPrefill, key: string): string {
   const k = key.slice(5);
-  const d = prefill.items.find((i) => i.key === k)?.description ?? parsed.items.find((i) => i.key === k)?.description ?? "item";
+  const d = prefill.items.find((i) => i.key === k)?.description ?? "item";
   return `Quantidade prevista — ${d}`;
 }
 
@@ -410,19 +465,17 @@ function itemLabel(prefill: DFDPrefill, parsed: ParsedDFD, key: string): string 
  */
 export function computeDFDFieldStates(content: string, sources: readonly string[], current: DFDPrefill): DFDFieldView[] {
   const parsed = parseDFD(content);
+  const linked = linkDFDRows(parsed, current.items);
   const mk = readMarkers(sources);
-  const keys: string[] = [
-    ...Object.keys(DFD_FIELD_LABELS),
-    ...[...new Set([...current.items.map((i) => `item:${i.key}`), ...parsed.items.map((i) => `item:${i.key}`)])],
-  ];
+  const keys: string[] = [...Object.keys(DFD_FIELD_LABELS), ...current.items.map((i) => `item:${i.key}`)];
   return keys.map((key) => {
-    const doc = docValueOf(parsed, key);
+    const doc = docValueOf(parsed, linked, key);
     const ctx = prefillValueOf(current, key);
     const pf = mk.prefill[key];
     const ai = mk.ai[key];
     const docH = hashOfField(key, doc);
     const ctxH = ctx.value === null ? null : hashOfField(key, ctx.value);
-    const label = key.startsWith("item:") ? itemLabel(current, parsed, key) : DFD_FIELD_LABELS[key] ?? key;
+    const label = key.startsWith("item:") ? itemLabel(current, key) : DFD_FIELD_LABELS[key] ?? key;
     const base = { key, label, documentValue: doc, contextValue: ctx.value, contextOrigin: ctx.origin };
     // Campo sem fato canônico (narrativa) não tem "contexto" a reconciliar.
     const narrative = key === "justificativa";
@@ -446,6 +499,11 @@ export function computeDFDFieldStates(content: string, sources: readonly string[
     }
     return { ...base, state: "user_modified" as const, origin: "user" as const, reconcilable: false };
   });
+}
+
+/** Linhas da tabela do DFD sem Item Canônico correspondente (o DFD não cria itens sozinho). */
+export function unlinkedDFDRows(content: string, current: DFDPrefill): ParsedDFDItem[] {
+  return linkDFDRows(parseDFD(content), current.items).filter((l) => l.itemId === null).map((l) => l.row);
 }
 
 // ─── Reconciliação explícita e rascunho de IA ─────────────────────────────────────────────
@@ -500,26 +558,43 @@ function reconcileItemRow(lines: string[], content: string, itemKey: string, cur
   if (!it) return lines;
   const parsed = parseDFD(content);
   if (!parsed.hasItemsTable) {
-    // Sem tabela ainda: materializa a tabela com os itens do DOCUMENTO + este item (nada é removido).
+    // Sem tabela ainda: materializa a tabela com este item (nada do documento é removido).
     const s = sections(lines).find((x) => x.n === 4);
     if (!s) return lines;
     const body = lines.slice(s.start + 1, s.end).filter((l) => l.trim() !== "" && !/^Quantidade estimada:/.test(l));
-    return replaceSectionBody(lines, 4, [...itemsTable([it]), ...body]);
+    return replaceSectionBody(lines, 4, [...itemsTable([it], current.hasLots), ...body]);
   }
   const s = sections(lines).find((x) => x.n === 4)!;
-  const rowIdx = lines.findIndex((l, i) => i > s.start && i < s.end && /^\|/.test(l.trim()) && (() => {
-    const c = l.trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim());
-    return c.length >= 4 && canonicalItemKey(c[1], c[2]) === itemKey;
-  })());
-  if (rowIdx >= 0) {
-    const c = lines[rowIdx].trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim());
-    return lines.map((l, i) => (i === rowIdx ? `| ${c[0]} | ${c[1]} | ${c[2]} | ${formatQuantity(it.plannedQuantity)} |` : l));
+  const tableRows: number[] = [];
+  lines.forEach((l, i) => { if (i > s.start && i < s.end && /^\|/.test(l.trim())) tableRows.push(i); });
+  const split = (l: string) => l.trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim());
+  const header = split(lines[tableRows.find((i) => /quantidade prevista/i.test(lines[i]))!]);
+  const iQty = header.findIndex((x) => /quantidade prevista/i.test(x));
+  const hasLotCol = header.some((x) => /^lote$/i.test(x));
+  const linked = linkDFDRows(parsed, current.items);
+  const idx = linked.findIndex((l) => l.itemId === itemKey);
+  // Linhas de dados na MESMA ordem em que parseDFD as leu.
+  const dataRows = tableRows.filter((i) => {
+    const c = split(lines[i]);
+    return !(/quantidade prevista/i.test(lines[i]) || c.every((x) => /^:?-+:?$/.test(x))) && c.length >= header.length;
+  }).filter((i) => {
+    const c = split(lines[i]);
+    const d = c[header.findIndex((x) => /^descri/i.test(x))] ?? "";
+    return !!d && !isPlaceholder(d);
+  });
+  if (idx >= 0 && dataRows[idx] !== undefined) {
+    const c = split(lines[dataRows[idx]]);
+    c[iQty] = formatQuantity(it.plannedQuantity);
+    return lines.map((l, i) => (i === dataRows[idx] ? `| ${c.join(" | ")} |` : l));
   }
   // Item conhecido pelo contexto e ausente no DFD: adiciona a linha ao fim da tabela.
-  const lastRow = lines.reduce((acc, l, i) => (i > s.start && i < s.end && /^\|/.test(l.trim()) ? i : acc), -1);
+  const lastRow = tableRows[tableRows.length - 1];
   const n = parsed.items.length + 1;
+  const row = hasLotCol
+    ? `| ${cell(it.lotCode ?? "—")} | ${n} | ${cell(it.description)} | ${cell(it.unit)} | ${formatQuantity(it.plannedQuantity)} |`
+    : `| ${n} | ${cell(it.description)} | ${cell(it.unit)} | ${formatQuantity(it.plannedQuantity)} |`;
   const out = [...lines];
-  out.splice(lastRow + 1, 0, `| ${n} | ${cell(it.description)} | ${cell(it.unit)} | ${formatQuantity(it.plannedQuantity)} |`);
+  out.splice(lastRow + 1, 0, row);
   return out;
 }
 
@@ -556,11 +631,6 @@ export function extractDFDAssertions(content: string, sources: readonly string[]
   const mk = readMarkers(sources);
   const out: DFDAssertionDraft[] = [];
   const resolved = (path: ContextPath): CanonicalField => {
-    const m = /^items\.([^.]+)\.(description|unit|plannedQuantity)$/.exec(path);
-    if (m) {
-      const it = ctx.items.find((i) => i.key === m[1]);
-      return (it?.[m[2] as "description" | "unit" | "plannedQuantity"] ?? { valueHash: null }) as CanonicalField;
-    }
     const [a, b] = path.split(".") as [keyof ProcurementCanonicalContext, string];
     return ((ctx[a] as unknown as Record<string, CanonicalField>)[b]);
   };
@@ -570,18 +640,15 @@ export function extractDFDAssertions(content: string, sources: readonly string[]
     if (fieldHash(v) === resolved(path).valueHash) continue;
     out.push({ path, value: normalizeText(v), basisValueHash: mk.prefill[fieldKey]?.hash ?? resolved(path).valueHash ?? null, fieldKey });
   }
-  for (const it of parsed.items) {
-    const known = ctx.items.find((i) => i.key === it.key);
-    if (!known || known.description.value === null) {
-      out.push({ path: itemPath(it.key, "description"), value: normalizeText(it.description), basisValueHash: null, fieldKey: `item:${it.key}` });
-      out.push({ path: itemPath(it.key, "unit"), value: normalizeText(it.unit), basisValueHash: null, fieldKey: `item:${it.key}` });
-    }
-    if (it.quantity !== null && fieldHash(it.quantity) !== (known?.plannedQuantity.valueHash ?? null)) {
-      out.push({
-        path: itemPath(it.key, "plannedQuantity"), value: it.quantity,
-        basisValueHash: mk.prefill[`item:${it.key}`]?.hash ?? known?.plannedQuantity.valueHash ?? null, fieldKey: `item:${it.key}`,
-      });
-    }
+  // Itens: o DFD NÃO cria itens (dono = Itens da contratação). Só a quantidade PREVISTA de linhas ligadas
+  // a UM Item Canônico é afirmada; linhas sem item ficam como "sem correspondência" (candidatos).
+  for (const l of linkDFDRows(parsed, buildDFDPrefill(ctx).items)) {
+    if (!l.itemId || l.row.quantity === null) continue;
+    const known = ctx.items.find((i) => i.key === l.itemId)!;
+    if (fieldHash(l.row.quantity) === (known.plannedQuantity.valueHash ?? null)) continue;
+    const basis = known.plannedQuantity.status === "conflict" ? mk.prefill[`item:${l.itemId}`]?.hash ?? null
+      : mk.prefill[`item:${l.itemId}`]?.hash ?? known.plannedQuantity.valueHash ?? null;
+    out.push({ path: itemPath(l.itemId, "plannedQuantity"), value: l.row.quantity, basisValueHash: basis, fieldKey: `item:${l.itemId}` });
   }
   return out;
 }

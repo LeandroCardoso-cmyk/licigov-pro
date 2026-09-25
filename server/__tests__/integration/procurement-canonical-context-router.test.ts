@@ -61,8 +61,8 @@ describe("Contexto Canônico — RBAC e tenant", () => {
 
   it("operator executa; organizationId e ator vêm SEMPRE do ctx (nunca do cliente)", async () => {
     role.value = "operator";
-    await caller().reconcileDFDField({ processId: "p1", fieldKey: "item:0123456789abcdef", expectedContentHash: "h", idempotencyKey: "k" });
-    expect(vi.mocked(svc.reconcileDFDFieldDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, fieldKey: "item:0123456789abcdef" });
+    await caller().reconcileDFDField({ processId: "p1", fieldKey: "item:0123456789abcdef01234567", expectedContentHash: "h", idempotencyKey: "k" });
+    expect(vi.mocked(svc.reconcileDFDFieldDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, fieldKey: "item:0123456789abcdef01234567" });
     await caller().generateDFDJustification({ processId: "p1", expectedContentHash: "h", confirmReplace: true, idempotencyKey: "k2" });
     expect(vi.mocked(svc.generateDFDJustificationDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, confirmReplace: true });
   });

@@ -45,8 +45,8 @@ import { canonicalDigest } from "../domain/canonicalJson";
 import {
   buildDFDPrefill, renderDFDContent, prefillMarkers, writeMarkers, readMarkers, isAssistMarker,
   computeDFDFieldStates, reconcileDFDField, applyAIJustification, extractDFDAssertions, summarizeFieldStates,
-  parseDFD, fieldHash, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
-  type DFDFieldView, type DFDFieldState,
+  parseDFD, fieldHash, linkDFDRows, unlinkedDFDRows, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
+  type DFDFieldView, type DFDFieldState, type DFDPrefill,
 } from "../domain/dfdPrefill";
 
 const DOMAIN = "processo_licitatorio" as const;
@@ -425,7 +425,7 @@ export async function saveDFDDraft(params: {
       path: d.path, value: d.value, sourceType: "dfd" as const, sourceId: generatedId, sourceVersion: version,
       status: "confirmed" as const, actorUserId: params.actorUserId, basisValueHash: d.basisValueHash,
     }));
-    ({ overridden, changedFields } = diffDFDFields(existing?.content ?? "", params.content, previousSources));
+    ({ overridden, changedFields } = diffDFDFields(existing?.content ?? "", params.content, previousSources, buildDFDPrefill(ctx).items));
   }
   const labels = changedFields.map((k) => DFD_FIELD_LABELS[k] ?? (k.startsWith("item:") ? "quantidade prevista" : k));
   return runGovernedDraftEdit({
@@ -457,13 +457,14 @@ export async function saveDFDDraft(params: {
 }
 
 /** Campos cujo valor mudou entre dois conteúdos do DFD; "overridden" = o anterior era do sistema/IA. */
-function diffDFDFields(before: string, after: string, previousSources: readonly string[]): {
+function diffDFDFields(before: string, after: string, previousSources: readonly string[], items: DFDPrefill["items"]): {
   changedFields: string[]; overridden: Array<{ field: string; beforeHash: string; afterHash: string; previousOrigin: string }>;
 } {
   const a = parseDFD(before);
   const b = parseDFD(after);
   const mk = readMarkers(previousSources);
-  const qty = (p: ReturnType<typeof parseDFD>) => Object.fromEntries(p.items.map((i) => [`item:${i.key}`, i.quantity]));
+  const qty = (p: ReturnType<typeof parseDFD>) => Object.fromEntries(
+    linkDFDRows(p, items).filter((l) => l.itemId !== null).map((l) => [`item:${l.itemId}`, l.row.quantity]));
   const av: Record<string, string | number | null> = { ...a.values, ...qty(a) };
   const bv: Record<string, string | number | null> = { ...b.values, ...qty(b) };
   const changedFields: string[] = [];
@@ -495,6 +496,8 @@ export interface DFDAssistState {
   summary: Record<DFDFieldState, number>;
   context: { knownFields: number; unknownFields: number; conflictCount: number; items: number } | null;
   aiDraft: { justification: { executionId: string; contextDigest: string } | null };
+  /** Linhas da tabela do DFD sem Item Canônico correspondente (podem ser preparadas em Itens da contratação). */
+  unlinkedItemRows: number;
 }
 
 /** Read-only: estado por campo do DFD = f(conteúdo salvo, marcadores, contexto ATUAL). Nada é gravado. */
@@ -510,9 +513,11 @@ export async function getDFDAssistState(params: {
       available: false, contextVersion: null, contextDigest: null,
       consumedContextVersion: mk.contextVersion, consumedContextDigest: mk.contextDigest,
       stale: false, fields: [], summary: empty, context: null, aiDraft: { justification: mk.ai.justificativa ?? null },
+      unlinkedItemRows: 0,
     };
   }
-  const fields = doc ? computeDFDFieldStates(doc.content, doc.sources ?? [], buildDFDPrefill(ctx)) : [];
+  const prefillNow = buildDFDPrefill(ctx);
+  const fields = doc ? computeDFDFieldStates(doc.content, doc.sources ?? [], prefillNow) : [];
   const summary = summarizeFieldStates(fields);
   const stale = summary.stale > 0 || summary.available > 0;
   if (doc && stale) {
@@ -528,6 +533,7 @@ export async function getDFDAssistState(params: {
     stale, fields, summary,
     context: { knownFields: ctx.stats.knownFields, unknownFields: ctx.stats.unknownFields, conflictCount: ctx.stats.conflictCount, items: ctx.items.length },
     aiDraft: { justification: mk.ai.justificativa ?? null },
+    unlinkedItemRows: doc ? unlinkedDFDRows(doc.content, prefillNow).length : 0,
   };
 }
 

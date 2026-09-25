@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 import { runMigrations } from "../../bootstrap";
 import { recordContextAssertions, resolveProcurementContext } from "../../services/canonicalContextService";
 import { appendContextFacts } from "../../db/procurementContext";
-import { canonicalItemKey, itemPath } from "../../domain/canonicalProcurementContext";
+import { itemPath } from "../../domain/canonicalProcurementContext";
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -72,6 +72,8 @@ async function facts(org: number, pid: string) {
 async function cleanup() {
   for (const org of [ORG, ORG_B]) {
     for (const [t, col] of [
+      ["procurement_item_events", "organization_id"], ["procurement_item_source_links", "organization_id"], ["procurement_items", "organization_id"],
+      ["procurement_lots", "organization_id"],
       ["procurement_context_facts", "organization_id"], ["generated_document_edits", "organization_id"], ["generated_documents", "organization_id"],
       ["process_timeline", "organization_id"], ["intelligent_items", "organization_id"], ["procurement_processes", "organization_id"],
       ["cognitive_provenance", "organization_id"], ["idempotency_keys", "organizationId"], ["organization_members", "organizationId"],
@@ -81,7 +83,8 @@ async function cleanup() {
   }
 }
 
-const K = ["Armário de aço", "Cadeira giratória", "Mesa de escritório"].map((d) => canonicalItemKey(d, "UN"));
+/** Ids ESTÁVEIS dos Itens Canônicos (Armário, Cadeira, Mesa) — preenchidos no passo 2 pela Área de Itens. */
+let K: string[] = [];
 
 describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estrito)", () => {
   beforeAll(async () => {
@@ -120,20 +123,25 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     ]);
   }, 60_000);
 
-  it("2) itens da Pesquisa (quantidade da cotação = 1) + quantidade PREVISTA informada → contexto resolvido", async () => {
+  it("2) Pesquisa (quantidade da cotação = 1) → Itens da contratação confirmados + quantidade PREVISTA → contexto resolvido", async () => {
     await insertItem(processId, `ctx-i1-${ORG}`, "Cadeira giratória", 450);
     await insertItem(processId, `ctx-i2-${ORG}`, "Mesa de escritório", 800);
     await insertItem(processId, `ctx-i3-${ORG}`, "Armário de aço", 1200);
+    const c = await caller(owner);
+    const cand = await c.procurementItems.candidates({ processId, source: "price_research" });
+    const planned: Record<string, string> = { "Armário de aço": "5", "Cadeira giratória": "30", "Mesa de escritório": "10" };
+    const ordered = [...cand.candidates].sort((a: any, b: any) => (a.description < b.description ? -1 : 1));
+    await c.procurementItems.confirmCandidates({
+      processId, source: "price_research", expectedSourceDigest: cand.sourceDigest, idempotencyKey: `conf-${processId}`,
+      decisions: ordered.map((x: any) => ({ candidateKey: x.candidateKey, action: "create" as const, plannedQuantity: planned[x.description] })),
+    });
+    const w = await c.procurementItems.workspace({ processId });
+    K = ["Armário de aço", "Cadeira giratória", "Mesa de escritório"].map((d) => w.items.find((i: any) => i.description === d)!.id);
     // Pesquisa NUNCA é autoridade da quantidade prevista (recusado na escrita).
     await expect(recordContextAssertions({
       organizationId: ORG, processId, correlationId: "ctx", facts: [{ path: itemPath(K[1], "plannedQuantity"), value: 1, sourceType: "price_research", sourceId: "r", sourceVersion: "v", status: "confirmed", actorUserId: owner, basisValueHash: null }],
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    const planned: Array<[number, number]> = [[0, 5], [1, 30], [2, 10]];
-    await recordContextAssertions({
-      organizationId: ORG, processId, correlationId: "ctx",
-      facts: planned.map(([i, q]) => ({ path: itemPath(K[i], "plannedQuantity"), value: q, sourceType: "user" as const, sourceId: `u${owner}`, sourceVersion: "v1", status: "confirmed" as const, actorUserId: owner, basisValueHash: null })),
-    });
-    const { context } = await (await caller(owner)).procurementProcess.canonicalContext({ processId });
+    const { context } = await c.procurementProcess.canonicalContext({ processId });
     expect(context.demand.requestingUnit.value).toBe("Secretaria Municipal de Educação");
     expect(context.demand.responsibleParty.value).toBe("Servidora Responsável");
     expect(context.items.map((i: any) => [i.description.value, i.plannedQuantity.value, i.priceContext.sourceQuantities])).toEqual([
@@ -188,12 +196,10 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
   }, 60_000);
 
   it("5) contexto muda → DESATUALIZADO → 'Atualizar no rascunho' só no campo (ledger dfd_context_reconcile)", async () => {
-    const before = await resolveProcurementContext({ organizationId: ORG, processId });
-    const mesa = before.items.find((i) => i.key === K[2])!;
-    await recordContextAssertions({
-      organizationId: ORG, processId, correlationId: "ctx",
-      facts: [{ path: itemPath(K[2], "plannedQuantity"), value: 12, sourceType: "user", sourceId: `u${owner}`, sourceVersion: "v2", status: "confirmed", actorUserId: owner, basisValueHash: mesa.plannedQuantity.valueHash }],
-    });
+    // Quantidade alterada na Área de Itens (caminho operacional real) → nova versão do contexto.
+    const w0 = await (await caller(owner)).procurementItems.workspace({ processId });
+    const mesa = w0.items.find((i: any) => i.id === K[2])!;
+    await (await caller(owner)).procurementItems.setQuantities({ processId, idempotencyKey: `mesa-${processId}`, changes: [{ itemId: mesa.id, expectedRevision: mesa.revision, mode: "informed", quantity: "12" }] });
     const c = await caller(owner);
     const st = await c.procurementProcess.dfdAssistState({ processId });
     expect(st.stale).toBe(true);

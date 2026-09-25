@@ -42,7 +42,7 @@ import { buildDFDDraft, draftContentHash } from "../../domain/generatedDocument"
 
 const ORG = 7;
 const PID = "proc-1";
-const K = canonicalItemKey("Cadeira giratória", "UN");
+const K = "a1a1a1a1a1a1a1a1a1a1a1a1"; // id estável do Item Canônico
 let seq = 0;
 const fact = (path: ContextPath, value: FactValue, sourceType: ContextSourceType, extra: Partial<FactAssertion> = {}): FactAssertion => ({
   id: ++seq, path, value, valueHash: factValueHash(value), sourceType, sourceId: `${sourceType}-1`, sourceVersion: "v1",
@@ -55,6 +55,8 @@ function ctxWith(extra: FactAssertion[] = []) {
     responsibleUserName: "Servidora Responsável", organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     assertions: [fact("demand.requestingUnit", "Secretaria de Educação", "process", { sourceId: PID }), fact(itemPath(K, "plannedQuantity"), 30, "user"), ...extra.map((e) => ({ ...e, id: ++seq }))],
     intelligentItems: [{ id: "i1", description: "Cadeira giratória", unit: "UN", quantity: 1, status: "aprovado", averagePriceCents: 45_000, quoteCount: 3 }],
+    procurementItems: [{ id: K, description: "Cadeira giratória", unit: "UN", lotId: null, ordinal: 1, status: "active", revision: 1, fingerprint: canonicalItemKey("Cadeira giratória", "UN") }],
+    priceLinks: [{ itemId: K, intelligentItemId: "i1" }],
   });
 }
 

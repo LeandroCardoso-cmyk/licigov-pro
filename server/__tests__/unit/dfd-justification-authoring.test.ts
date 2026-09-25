@@ -8,7 +8,7 @@ import {
 } from "../../services/authoring/dfdJustificationAuthoring";
 import { resolveCanonicalContext, canonicalItemKey, itemPath, factValueHash } from "../../domain/canonicalProcurementContext";
 
-const K = canonicalItemKey("Cadeira giratória", "UN");
+const K = "a1a1a1a1a1a1a1a1a1a1a1a1"; // id estável do Item Canônico
 const ctx = resolveCanonicalContext({
   organizationId: 7, processId: "p1",
   process: { number: "2026/0001", object: "Mobiliário escolar", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
@@ -18,6 +18,8 @@ const ctx = resolveCanonicalContext({
     status: "confirmed", actorUserId: 3, basisValueHash: null, createdAt: "2026-01-02T00:00:00.000Z",
   }],
   intelligentItems: [{ id: "i1", description: "Cadeira giratória", unit: "UN", quantity: 1, status: "aprovado", averagePriceCents: 45_000, quoteCount: 3 }],
+  procurementItems: [{ id: K, description: "Cadeira giratória", unit: "UN", lotId: null, ordinal: 1, status: "active", revision: 1, fingerprint: canonicalItemKey("Cadeira giratória", "UN") }],
+  priceLinks: [{ itemId: K, intelligentItemId: "i1" }],
 });
 
 describe("DFD — autoria supervisionada da justificativa", () => {

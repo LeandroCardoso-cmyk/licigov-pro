@@ -64,6 +64,7 @@ import { workspaceGovernanceRouter } from "./routers/workspaceGovernanceRouter";
 import { businessDomainRouter } from "./routers/businessDomainRouter";
 import { moduleLicensingRouter } from "./routers/moduleLicensingRouter";
 import { procurementProcessRouter } from "./routers/procurementProcessRouter";
+import { procurementItemsRouter } from "./routers/procurementItemsRouter";
 import { itemIntelligenceRouter } from "./routers/itemIntelligenceRouter";
 import { documentReviewRouter } from "./routers/documentReviewRouter";
 import { institutionalRequestRouter } from "./routers/institutionalRequestRouter";
@@ -149,6 +150,7 @@ export const appRouter = router({
   businessDomain:      businessDomainRouter,
   moduleLicensing:     moduleLicensingRouter,
   procurementProcess:  procurementProcessRouter,
+  procurementItems:    procurementItemsRouter,
   itemIntelligence:    itemIntelligenceRouter,
   institutionalRequest: institutionalRequestRouter,
   legalOpinionWorkspace: legalOpinionWorkspaceRouter,

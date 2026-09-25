@@ -10,7 +10,7 @@ import {
 } from "../../domain/canonicalProcurementContext";
 import {
   buildDFDPrefill, renderDFDContent, prefillMarkers, writeMarkers, readMarkers, computeDFDFieldStates,
-  reconcileDFDField, applyAIJustification, extractDFDAssertions, parseDFD, summarizeFieldStates, parseQuantityPtBr,
+  reconcileDFDField, applyAIJustification, extractDFDAssertions, parseDFD, summarizeFieldStates, parseQuantityPtBr, unlinkedDFDRows,
   type DFDFieldView,
 } from "../../domain/dfdPrefill";
 import { buildDFDDraft } from "../../domain/generatedDocument";
@@ -28,7 +28,14 @@ const ITEMS = [
   { id: "i2", description: "Mesa de escritório", unit: "UN", quantity: 1, status: "aprovado", averagePriceCents: 80_000, quoteCount: 3 },
   { id: "i3", description: "Armário de aço", unit: "UN", quantity: 1, status: "aprovado", averagePriceCents: 120_000, quoteCount: 3 },
 ];
-const K = ITEMS.map((i) => canonicalItemKey(i.description, i.unit));
+/** Ids ESTÁVEIS dos Itens Canônicos (24 hex, como no sistema) — nunca derivados da descrição. */
+const K = ["a1a1a1a1a1a1a1a1a1a1a1a1", "b2b2b2b2b2b2b2b2b2b2b2b2", "c3c3c3c3c3c3c3c3c3c3c3c3"];
+/** Itens confirmados na Área de Itens, vinculados às evidências da Pesquisa (preço por item). */
+const PITEMS = ITEMS.map((i, n) => ({
+  id: K[n], description: i.description, unit: i.unit, lotId: null, ordinal: n + 1, status: "active", revision: 1,
+  fingerprint: canonicalItemKey(i.description, i.unit),
+}));
+const LINKS = ITEMS.map((i, n) => ({ itemId: K[n], intelligentItemId: i.id }));
 
 /** Fixture do enunciado: objeto, unidade requisitante, responsável, 3 itens com quantidade prevista e contexto básico. */
 function fixture(extra: FactAssertion[] = [], over: Partial<ContextInputs> = {}) {
@@ -46,7 +53,8 @@ function fixture(extra: FactAssertion[] = [], over: Partial<ContextInputs> = {})
     responsibleUserName: "Servidora Responsável",
     organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     // Afirmações extras são POSTERIORES às da fixture (ledger monotônico).
-    assertions: [...base, ...extra.map((e) => ({ ...e, id: ++seq }))], intelligentItems: ITEMS, ...over,
+    assertions: [...base, ...extra.map((e) => ({ ...e, id: ++seq }))], intelligentItems: ITEMS,
+    procurementItems: PITEMS, priceLinks: LINKS, ...over,
   });
 }
 
@@ -173,7 +181,7 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
     const ctx = resolveCanonicalContext({
       organizationId: 7, processId: "p", process: { number: "1", object: "Mobiliário", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
       responsibleUserName: null, organization: null, assertions: [],
-      intelligentItems: [{ ...ITEMS[0], quantity: 250 }],
+      intelligentItems: [{ ...ITEMS[0], quantity: 250 }], procurementItems: [PITEMS[0]], priceLinks: [LINKS[0]],
     });
     const content = renderDFDContent(buildDFDPrefill(ctx));
     expect(content).toContain("| 1 | Cadeira giratória | UN | [a definir] |");
@@ -204,10 +212,10 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
     const qty = d.find((x) => x.path === itemPath(K[1], "plannedQuantity"))!;
     expect(qty.value).toBe(12);
     expect(qty.basisValueHash).toBe(readMarkers(sources).prefill[`item:${K[1]}`].hash);
-    // item novo digitado pelo humano vira item da contratação (descrição/unidade/quantidade)
-    const withNew = edited.replace(/^(\| \d+ \| Mesa de escritório .*)$/m, "$1\n| 4 | Estante | UN | 1.200 |");
-    const n = extractDFDAssertions(withNew, sources, ctx).filter((x) => x.fieldKey === `item:${canonicalItemKey("Estante", "UN")}`);
-    expect(n.map((x) => x.value)).toEqual(["Estante", "UN", 1200]);
+    // Linha nova digitada no DFD NÃO cria item nem fato: fica "sem correspondência" (candidata na Área de Itens).
+    const withNew = edited.replace(/^(\| \d+ \| Armário de aço .*)$/m, "$1\n| 4 | Estante | UN | 1.200 |");
+    expect(extractDFDAssertions(withNew, sources, ctx).map((x) => x.path).sort()).toEqual(d.map((x) => x.path).sort());
+    expect(unlinkedDFDRows(withNew, buildDFDPrefill(ctx)).map((r) => [r.description, r.quantity])).toEqual([["Estante", 1200]]);
     expect(parseQuantityPtBr("1.200")).toBe(1200);
     expect(parseQuantityPtBr("2,5")).toBe(2.5);
     expect(parseQuantityPtBr("[a definir]")).toBeNull();

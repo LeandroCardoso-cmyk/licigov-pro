@@ -15,6 +15,7 @@ import { getProcess, listIntelligentItems, type ProcurementExecutor } from "../d
 import { getOrganizationById } from "../db/organizations";
 import { getUserById } from "../db/users";
 import { appendContextFacts, listContextFacts, type NewFactAssertion } from "../db/procurementContext";
+import { listProcurementItems, listProcurementLots, listItemSourceLinks } from "../db/procurementItems";
 import {
   isSourceAllowed, resolveCanonicalContext, type ProcurementCanonicalContext,
 } from "../domain/canonicalProcurementContext";
@@ -28,11 +29,14 @@ export async function resolveProcurementContext(p: {
   const process = await getProcess(p.processId, p.organizationId);
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
 
-  const [org, user, items, assertions] = await Promise.all([
+  const [org, user, items, assertions, pItems, lots, links] = await Promise.all([
     getOrganizationById(p.organizationId).catch(() => null),
     process.responsibleUser ? getUserById(process.responsibleUser).catch(() => undefined) : Promise.resolve(undefined),
     listIntelligentItems(p.processId, p.organizationId),
     listContextFacts(p.organizationId, p.processId, p.executor),
+    listProcurementItems(p.organizationId, p.processId, p.executor),
+    listProcurementLots(p.organizationId, p.processId, p.executor),
+    listItemSourceLinks(p.organizationId, p.processId, p.executor),
   ]);
 
   const ctx = resolveCanonicalContext({
@@ -49,13 +53,20 @@ export async function resolveProcurementContext(p: {
       id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status,
       averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount,
     })),
+    procurementItems: (pItems ?? []).map((i) => ({
+      id: i.id, description: i.description, unit: i.unit, lotId: i.lotId, ordinal: i.ordinal,
+      status: i.status, revision: i.revision, fingerprint: i.fingerprint,
+    })),
+    lots: (lots ?? []).map((l) => ({ id: l.id, code: l.code, name: l.name, ordinal: l.ordinal, status: l.status })),
+    // Evidência de preço = vínculo HUMANO item canônico → Item Inteligente (Pesquisa de Preços).
+    priceLinks: (links ?? []).filter((l) => l.sourceType === "price_research").map((l) => ({ itemId: l.itemId, intelligentItemId: l.sourceId })),
   });
 
   log.info("canonical_context_resolved", {
     organizationId: p.organizationId, processId: p.processId, correlationId: p.correlationId,
     contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
     knownFields: ctx.stats.knownFields, unknownFields: ctx.stats.unknownFields, conflictCount: ctx.stats.conflictCount,
-    items: ctx.items.length, durationMs: Date.now() - t0,
+    items: ctx.items.length, lots: ctx.lots.length, durationMs: Date.now() - t0,
   });
   return ctx;
 }
