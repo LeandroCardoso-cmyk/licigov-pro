@@ -45,7 +45,7 @@ import { canonicalDigest } from "../domain/canonicalJson";
 import {
   buildDFDPrefill, renderDFDContent, prefillMarkers, writeMarkers, readMarkers, isAssistMarker,
   computeDFDFieldStates, reconcileDFDField, applyAIJustification, extractDFDAssertions, summarizeFieldStates,
-  parseDFD, fieldHash, linkDFDRows, unlinkedDFDRows, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
+  parseDFD, fieldHash, linkDFDRows, unlinkedDFDRows, refreshRowLineage, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
   type DFDFieldView, type DFDFieldState, type DFDPrefill,
 } from "../domain/dfdPrefill";
 
@@ -412,7 +412,7 @@ export async function saveDFDDraft(params: {
   const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
   assertDFDMutable(existing);
   const previousSources = existing?.sources ?? [];
-  const sources = ["edicao_manual", ...previousSources.filter(isAssistMarker)];
+  let sources = ["edicao_manual", ...previousSources.filter(isAssistMarker)];
   const ctx = await resolveContextSoft(params);
 
   let facts: NewFactAssertion[] = [];
@@ -426,6 +426,8 @@ export async function saveDFDDraft(params: {
       status: "confirmed" as const, actorUserId: params.actorUserId, basisValueHash: d.basisValueHash,
     }));
     ({ overridden, changedFields } = diffDFDFields(existing?.content ?? "", params.content, previousSources, buildDFDPrefill(ctx).items));
+    // A linha editada pelo servidor continua sendo o MESMO Item Canônico: regrava a linhagem (pr:).
+    sources = refreshRowLineage(params.content, sources, buildDFDPrefill(ctx).items);
   }
   const labels = changedFields.map((k) => DFD_FIELD_LABELS[k] ?? (k.startsWith("item:") ? "quantidade prevista" : k));
   return runGovernedDraftEdit({
@@ -463,8 +465,9 @@ function diffDFDFields(before: string, after: string, previousSources: readonly 
   const a = parseDFD(before);
   const b = parseDFD(after);
   const mk = readMarkers(previousSources);
+  // Linhagem persistida (canonicalItemId) do documento anterior liga as linhas dos dois lados.
   const qty = (p: ReturnType<typeof parseDFD>) => Object.fromEntries(
-    linkDFDRows(p, items).filter((l) => l.itemId !== null).map((l) => [`item:${l.itemId}`, l.row.quantity]));
+    linkDFDRows(p, items, previousSources).filter((l) => l.itemId !== null).map((l) => [`item:${l.itemId}`, l.row.quantity]));
   const av: Record<string, string | number | null> = { ...a.values, ...qty(a) };
   const bv: Record<string, string | number | null> = { ...b.values, ...qty(b) };
   const changedFields: string[] = [];
@@ -533,7 +536,7 @@ export async function getDFDAssistState(params: {
     stale, fields, summary,
     context: { knownFields: ctx.stats.knownFields, unknownFields: ctx.stats.unknownFields, conflictCount: ctx.stats.conflictCount, items: ctx.items.length },
     aiDraft: { justification: mk.ai.justificativa ?? null },
-    unlinkedItemRows: doc ? unlinkedDFDRows(doc.content, prefillNow).length : 0,
+    unlinkedItemRows: doc ? unlinkedDFDRows(doc.content, doc.sources ?? [], prefillNow).length : 0,
   };
 }
 
@@ -752,8 +755,36 @@ export async function generateDocument(params: {
     organizationId: params.organizationId, processId: params.processId, kind: params.kind, object: params.object,
   });
 
+  // Contexto Canônico — TR com Itens da contratação: FAIL-CLOSED antes de qualquer reserva de idempotência
+  // ou cognição. Nunca substitui a quantidade PREVISTA ausente pela da cotação, nem assume 1, nem presume que
+  // um Item Inteligente sem vínculo represente a necessidade.
+  if (params.kind === "tr" && sourceContext.canonical) {
+    const { missingPlannedQuantity, unlinkedApprovedItemCount } = sourceContext.canonical;
+    if (missingPlannedQuantity.length > 0) {
+      log.warn("tr_generation_blocked_missing_planned_quantity", {
+        organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+        missingItemCount: missingPlannedQuantity.length,
+      });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `PLANNED_QUANTITY_REQUIRED: Defina a quantidade prevista do item antes de gerar o Termo de Referência (${missingPlannedQuantity.length} item(ns) sem quantidade prevista em "Itens da contratação").`,
+      });
+    }
+    if (unlinkedApprovedItemCount > 0) {
+      log.warn("tr_generation_blocked_unlinked_price_research_items", {
+        organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+        unlinkedItemCount: unlinkedApprovedItemCount,
+      });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `PRICE_RESEARCH_ITEM_UNLINKED: ${unlinkedApprovedItemCount} item(ns) aprovado(s) da Pesquisa de Preços não estão em "Itens da contratação". Prepare-os ou associe-os antes de gerar o Termo de Referência.`,
+      });
+    }
+  }
+
   // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
-  // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT.
+  // aprovado relevante muda o payloadHash e, sob a mesma chave, resulta em CONFLICT. No modo canônico o
+  // `sourcesDigest` já inclui a quantidade PREVISTA de cada item.
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,

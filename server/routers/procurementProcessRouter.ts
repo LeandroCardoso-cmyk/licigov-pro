@@ -310,7 +310,7 @@ export const procurementProcessRouter = router({
   reconcileDFDField: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
-      fieldKey: z.string().trim().min(1).max(80).regex(/^[a-z.]+$|^item:[a-f0-9]{24}$/),
+      fieldKey: z.string().trim().min(1).max(80).regex(/^[a-z.]+$|^item(lot)?:[a-f0-9]{24}$/),
       expectedContentHash: z.string().trim().min(1),
       idempotencyKey: z.string().trim().min(1),
     }))

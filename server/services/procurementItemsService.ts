@@ -63,7 +63,7 @@ async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonica
     const doc = await getGeneratedDocumentByKind(pid, org, k).catch(() => null);
     if (!doc || doc.status !== "aprovado") continue;
     for (const key of Object.keys(readMarkers(doc.sources ?? []).prefill)) if (key.startsWith("item:")) consumed.add(key.slice(5));
-    if (k === "dfd" && ctx) for (const l of linkDFDRows(parseDFD(doc.content), buildDFDPrefill(ctx).items)) if (l.itemId) consumed.add(l.itemId);
+    if (k === "dfd" && ctx) for (const l of linkDFDRows(parseDFD(doc.content), buildDFDPrefill(ctx).items, doc.sources ?? [])) if (l.itemId) consumed.add(l.itemId);
   }
   return { officialEmittedKinds, itemsConsumedByApproved: consumed };
 }
@@ -228,7 +228,7 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     governance: { locked: govReason !== null, reason: govReason, officialEmittedKinds: [...gov.officialEmittedKinds] },
     sources: {
       priceResearchItems: (iis ?? []).filter((i) => i.status !== "rejeitado").length,
-      dfdRows: dfd ? unlinkedRows(dfd.content, items, lots).length : 0,
+      dfdRows: dfd ? unlinkedRows(dfd, items, lots, links).length : 0,
     },
   };
   log.info("procurement_items_workspace_resolved", {
@@ -242,14 +242,26 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
 
 // ─── Candidatos (projeção read-only) ─────────────────────────────────────────────────────
 
-/** Linhas da tabela do DFD sem Item Canônico correspondente (mesma ligação usada pelo DFD assistido). */
-function unlinkedRows(content: string, items: readonly ProcurementItem[], lots: readonly ProcurementLot[]) {
+/**
+ * Linhas da tabela do DFD sem Item Canônico correspondente — mesma ligação do DFD assistido, na MESMA ordem de
+ * autoridade: linhagem persistida (canonicalItemId) → vínculo de fonte persistido (linha já confirmada como
+ * item) → recuperação por fingerprint exato (legado). Linha já ligada NÃO volta a ser candidata.
+ */
+function unlinkedRows(
+  doc: { id: string; content: string; sources?: string[] | null },
+  items: readonly ProcurementItem[], lots: readonly ProcurementLot[], links: readonly ItemSourceLink[],
+) {
   const code = new Map(lots.filter((l) => l.status === "active").map((l) => [l.id, l.code]));
   const linkable = items.filter((i) => i.status === "active").map((i) => ({
     key: i.id, fingerprint: i.fingerprint, lotCode: i.lotId ? code.get(i.lotId) ?? null : null,
     description: i.description, unit: i.unit, plannedQuantity: null, qtyOrigin: null, qtyConflict: false,
   }));
-  return linkDFDRows(parseDFD(content), linkable).filter((l) => l.itemId === null).map((l) => l.row);
+  const sourceLinks = links.filter((l) => l.sourceType === "dfd" && l.sourceId === doc.id).map((l) => {
+    const sep = l.sourceItemKey.indexOf(":"); // `${fingerprint}:${lotKey}` — fingerprint é hex (sem ":")
+    const lot = sep >= 0 ? l.sourceItemKey.slice(sep + 1) : "";
+    return { fingerprint: sep >= 0 ? l.sourceItemKey.slice(0, sep) : l.sourceItemKey, lotKey: lot || null, itemId: l.itemId };
+  });
+  return linkDFDRows(parseDFD(doc.content), linkable, doc.sources ?? [], sourceLinks).filter((l) => l.itemId === null).map((l) => l.row);
 }
 
 export interface CandidateProjection {
@@ -270,7 +282,7 @@ async function projectCandidates(org: number, pid: string, source: CandidateSour
   } else {
     const dfd = await getGeneratedDocumentByKind(pid, org, "dfd");
     // Só linhas do DFD que AINDA não correspondem a um Item Canônico (as demais já são o próprio item).
-    sources = dfd ? dfdCandidateSources(dfd.id, unlinkedRows(dfd.content, items, lots).map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode }))) : [];
+    sources = dfd ? dfdCandidateSources(dfd.id, unlinkedRows(dfd, items, lots, links).map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode }))) : [];
   }
   const candidates = matchCandidates(sources, items, links, lots);
   const sourceDigest = createHash("sha256").update(JSON.stringify(candidates.map((c) => [c.candidateKey, c.sourceDigest, c.match.status, c.match.candidateItemIds]))).digest("hex").slice(0, 32);

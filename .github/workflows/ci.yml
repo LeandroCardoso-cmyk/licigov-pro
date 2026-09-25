@@ -262,6 +262,12 @@ jobs:
       - name: Smoke — Itens da Contratação + Lotes (candidatos, quantidade prevista, governança)
         run: pnpm exec vitest run server/__tests__/integration/procurement-items-mysql-smoke.test.ts
 
+      # P0 final — TR consome a quantidade PREVISTA dos Itens da contratação (fonte = 1, prevista = 50 ⇒ TR 50 ×
+      # preço) → PLANNED_QUANTITY_REQUIRED / PRICE_RESEARCH_ITEM_UNLINKED fail-closed → replay/CONFLICT pela
+      # quantidade → TR oficial ⇒ GOVERNED_CHANGE_REQUIRED → processo legado preservado → tenant.
+      - name: Smoke — TR × quantidade prevista (Itens da contratação)
+        run: pnpm exec vitest run server/__tests__/integration/tr-canonical-quantity-mysql-smoke.test.ts
+
       # PR C.2B — revisão/aprovação documental version-aware (SoD, idempotência, multi-tenant).
       - name: Smoke — revisão/aprovação documental version-aware (PR C.2B)
         run: pnpm exec vitest run server/__tests__/integration/document-review-mysql-smoke.test.ts

@@ -229,8 +229,9 @@ opacos) — por isso candidatos da Pesquisa chegam sem lote e o servidor escolhe
 Quantidade definida na Área alimenta o MESMO ledger ⇒ nova versão/digest do contexto; drafts que consumiram
 o valor (ex.: DFD, via marcadores `pf:item:<id>`) ficam **desatualizados** e são reconciliados por ação
 explícita. O DFD pré-preenche descrição/unidade/quantidade prevista dos Itens Canônicos (coluna "Lote"
-quando há lotes; "[a definir]" sem quantidade). Linhas do DFD são ligadas ao item por fingerprint (+ lote);
-linha sem item correspondente não cria item — fica como candidata ("Preparar a partir do DFD").
+quando há lotes; "[a definir]" sem quantidade). Linhas do DFD são ligadas ao item pela **linhagem persistida
+por `canonicalItemId`** (§12.2) — fingerprint só como recuperação; linha sem item correspondente não cria
+item — fica como candidata ("Preparar a partir do DFD").
 
 ### 11.11 Guarda de governança (antecipa a Alteração Governada da Necessidade)
 Regra temporária de domínio (`governedChangeReason`), com erro estável `GOVERNED_CHANGE_REQUIRED`:
@@ -264,5 +265,60 @@ sem FK física (convenção do repositório), replay-safe (`CREATE TABLE IF NOT 
 
 ### 11.15 Futuro
 ETP/TR/Edital consomem `ctx.items`/`ctx.lots` (§10). A Alteração Governada da Necessidade substituirá a
-guarda do §11.11 por um workflow de solicitação/aprovação. Achado para a próxima etapa: o bloco de itens do TR
-(`authoritativeItems`) ainda multiplica a quantidade da COTAÇÃO — deverá passar a usar `plannedQuantity`.
+guarda do §11.11 por um workflow de solicitação/aprovação. O TR já consome `plannedQuantity` (§12.1);
+ETP e Edital ainda não (achado registrado no §12.4).
+
+## 12. Fechamento P0 — TR, linhagem do DFD e lotes na importação
+
+### 12.1 Contrato do TR (quantidade PREVISTA)
+Gate **determinístico** (sem feature flag): processo com ao menos um Item da contratação `active` ⇒ o TR entra
+no modo canônico (`quantitySource = "canonical_planned"`); sem Itens Canônicos ⇒ caminho legado inalterado
+(mesmo quadro, mesmo snapshot, mesmo digest — nenhum TR histórico muda).
+
+No modo canônico o quadro autoritativo do TR (`authoritativeItems`) consome, **por Item Canônico**:
+- `canonicalItemId` — identidade da linha (ordem = ordinal da Área de Itens);
+- `plannedQuantity` — quantidade a contratar (fato do ledger, proveniência própria);
+- `unitReferencePrice` — preço de referência **já vinculado** ao item (evidência aprovada da Pesquisa; nenhuma
+  regra nova de preço);
+- `estimatedTotal = plannedQuantity × unitReferencePrice`, por item; total global = soma dos itens.
+
+O TR **não usa** `sourceQuantity` / quantidade da cotação (`intelligent_items.quantity`) — ela continua só como
+evidência na proveniência. Cotações, CATMAT/CATSER e estado das fontes vêm apenas das evidências vinculadas ao item.
+
+Fail-closed em `generateDocument`, **antes** de reservar idempotência ou chamar IA:
+- item ativo sem quantidade prevista (ausente, em conflito ou ≤ 0) ⇒ `PLANNED_QUANTITY_REQUIRED` —
+  "Defina a quantidade prevista do item antes de gerar o Termo de Referência." (nunca assume 1, nunca usa a fonte);
+- Item Inteligente aprovado **sem vínculo** com um Item Canônico ⇒ `PRICE_RESEARCH_ITEM_UNLINKED` (não é
+  presumido como necessidade; nenhum vínculo é criado silenciosamente).
+Logs: `tr_generation_blocked_missing_planned_quantity` (missingItemCount) e
+`tr_generation_blocked_unlinked_price_research_items` (unlinkedItemCount).
+
+Replay: `plannedQuantity` entra no snapshot/`sourcesDigest` ⇒ no `payloadHash`. Mesma chave + mesma
+quantidade ⇒ replay; mesma chave + quantidade diferente ⇒ `CONFLICT`; TR gerado antes de a quantidade mudar ⇒
+`source_changed` (`getAuthoringSourceState`). Linhagem no TR: `qtd:prevista` e `ctxdigest:<16>` em `sources`.
+TR aprovado/oficial **nunca** é mutado; com TR oficial, mudar itens exige alteração governada (§11.11).
+
+### 12.2 Linhagem do DFD (identidade das linhas)
+- **Identidade = `canonicalItemId`**, persistida em `generated_documents.sources` como
+  `pr:<canonicalItemId>=<nº do item>:<rowKey>` (gravada ao gerar o DFD e regravada a cada save/reconciliação a
+  partir do vínculo atual — sem schema novo, sem migration).
+- **Fingerprint = matching** (descrição+unidade normalizadas); **lotId = pertencimento** — nenhum dos dois é identidade.
+- Ordem de ligação de cada linha: (1) linhagem persistida — nº+rowKey, depois só rowKey, depois só nº, sempre
+  única e apenas para itens ativos; (2) vínculo de fonte persistido (linha do DFD já confirmada na Área de Itens);
+  (3) **recuperação** por fingerprint (+ lote) só quando não há id persistido: 1 ⇒ liga; 0 ⇒ não liga; >1 ⇒
+  **ambíguo** (nunca escolhe).
+- Linha ligada a X continua em X quando descrição, unidade, lote, ordem ou fingerprint mudam (no item ou no texto).
+- Mudança de lote do item ⇒ campo `itemlot:<id>` desatualizado; "Atualizar no rascunho" altera só a célula
+  "Lote" (id inalterado, nenhuma linha nova).
+- Candidatos "Preparar a partir do DFD" decidem "já ligado" por `canonicalItemId`/vínculo persistido antes do fingerprint.
+
+### 12.3 Lotes na importação (limitação documentada)
+- Lotes são entidades canônicas (`procurement_lots`) e podem ser geridos manualmente na Área de Itens.
+- Estrutura **explícita** vinda da fonte/adaptador é usada quando existe — o DFD tabular (coluna "Lote") já suporta.
+- A Pesquisa de Preços **não** tem parser genérico de lotes: seus candidatos chegam sem lote.
+- Sem informação de lote ⇒ atribuição **humana** ("Lote não identificado"); nada é inferido.
+- Adaptadores futuros podem fornecer estrutura de lote (`sourceLotCode`) sem mudança de domínio.
+
+### 12.4 Achados fora do escopo (não alterados)
+ETP (prompt) e Edital (`editalContext`) ainda usam a quantidade da cotação dos Itens Inteligentes aprovados;
+deverão consumir `plannedQuantity` pelo mesmo contrato do §12.1 em entrega própria.

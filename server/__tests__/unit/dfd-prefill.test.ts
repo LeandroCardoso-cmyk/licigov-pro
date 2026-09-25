@@ -215,7 +215,7 @@ describe("DFD assistido — prefill a partir do Contexto Canônico", () => {
     // Linha nova digitada no DFD NÃO cria item nem fato: fica "sem correspondência" (candidata na Área de Itens).
     const withNew = edited.replace(/^(\| \d+ \| Armário de aço .*)$/m, "$1\n| 4 | Estante | UN | 1.200 |");
     expect(extractDFDAssertions(withNew, sources, ctx).map((x) => x.path).sort()).toEqual(d.map((x) => x.path).sort());
-    expect(unlinkedDFDRows(withNew, buildDFDPrefill(ctx)).map((r) => [r.description, r.quantity])).toEqual([["Estante", 1200]]);
+    expect(unlinkedDFDRows(withNew, sources, buildDFDPrefill(ctx)).map((r) => [r.description, r.quantity])).toEqual([["Estante", 1200]]);
     expect(parseQuantityPtBr("1.200")).toBe(1200);
     expect(parseQuantityPtBr("2,5")).toBe(2.5);
     expect(parseQuantityPtBr("[a definir]")).toBeNull();

@@ -54,7 +54,10 @@ ações ficam bloqueadas ("Salve suas alterações…") para nunca perder texto 
 
 `generated_documents.sources` (primitive existente) recebe, além de `estrutura:…`/`edicao_manual`:
 `ctx:canonical-context/1`, `ctxdigest:<16>` e `ctxv:<n>` (**contexto consumido**), `pf:<campo>=<hash>@<origem>`
-(valor posto pelo sistema) e `ai:justificativa=<hash>@<executionId>@<ctxdigest16>` (rascunho de IA).
+(valor posto pelo sistema), `ai:justificativa=<hash>@<executionId>@<ctxdigest16>` (rascunho de IA) e
+`pr:<canonicalItemId>=<nº do item>:<rowKey>` (**linhagem das linhas de item**: a linha é o Item Canônico
+`canonicalItemId`; fingerprint só recupera documentos sem linhagem — 1 ⇒ liga, 0 ⇒ não liga, >1 ⇒ ambíguo;
+lote é pertencimento, reconciliável pelo campo `itemlot:<id>`). Ver `CANONICAL_PROCUREMENT_CONTEXT.md` §12.2.
 `draftOrigin` (authoringContext) continua lendo `edicao_manual`/`origem:import` como antes.
 
 ## 4. Garantias

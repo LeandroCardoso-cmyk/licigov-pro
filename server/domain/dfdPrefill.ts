@@ -225,7 +225,11 @@ export function renderDFDContent(prefill: DFDPrefill, justification?: string | n
 
 // ─── Leitura do DFD (campo a campo) ──────────────────────────────────────────────────────
 
-export interface ParsedDFDItem { fingerprint: string; lotCode: string | null; description: string; unit: string; quantityRaw: string; quantity: number | null }
+export interface ParsedDFDItem {
+  fingerprint: string; lotCode: string | null; description: string; unit: string; quantityRaw: string; quantity: number | null;
+  /** Número da coluna "Item" (posição exibida), quando presente. */
+  itemNo: number | null;
+}
 export interface ParsedDFD { values: Record<string, string | null>; items: ParsedDFDItem[]; hasItemsTable: boolean }
 
 interface Section { n: number; start: number; end: number } // [start, end) em linhas, start = heading
@@ -306,7 +310,7 @@ export function parseDFD(content: string): ParsedDFD {
   if (header) {
     // Colunas pelo NOME do cabeçalho (com ou sem "Lote") — robusto a reordenação manual.
     const col = (re: RegExp) => header.findIndex((x) => re.test(x));
-    const iLot = col(/^lote$/i), iDesc = col(/^descri/i), iUnit = col(/^unidade$/i), iQty = col(/quantidade prevista/i);
+    const iLot = col(/^lote$/i), iNo = col(/^item$/i), iDesc = col(/^descri/i), iUnit = col(/^unidade$/i), iQty = col(/quantidade prevista/i);
     for (const r of rows) {
       const cells = splitRow(r);
       if (cells === header || cells.length < header.length || cells.every((c) => /^:?-+:?$/.test(c)) || cells.join("|") === header.join("|")) continue;
@@ -318,6 +322,7 @@ export function parseDFD(content: string): ParsedDFD {
       items.push({
         fingerprint: canonicalItemKey(description, unit), lotCode: lotRaw && lotRaw !== "—" && lotRaw !== "-" ? lotRaw : null,
         description, unit: unit || "UN", quantityRaw, quantity: parseQuantityPtBr(quantityRaw),
+        itemNo: iNo >= 0 && /^\d+$/.test(cells[iNo] ?? "") ? Number(cells[iNo]) : null,
       });
     }
   }
@@ -331,21 +336,73 @@ function lotKey(code: string | null): string | null {
   return /^\d+$/.test(t) ? String(Number(t)) : t;
 }
 
-export interface LinkedDFDRow { row: ParsedDFDItem; itemId: string | null; ambiguous: boolean }
+export interface LinkedDFDRow {
+  row: ParsedDFDItem;
+  itemId: string | null;
+  ambiguous: boolean;
+  /** Como a linha foi ligada: linhagem persistida (id), vínculo de fonte persistido, ou recuperação por fingerprint. */
+  via: "lineage" | "source_link" | "fingerprint" | null;
+}
+
+/** Chave estrutural da LINHA como escrita no DFD (descrição+unidade normalizadas + lote) — não é identidade do item. */
+export function dfdRowKey(fingerprint: string, lotCode: string | null): string {
+  return factValueHash(`dfd-row:v1:${fingerprint}:${lotKey(lotCode) ?? ""}`);
+}
 
 /**
- * Liga cada linha da tabela do DFD a UM Item Canônico: mesmo fingerprint (+ mesmo lote, quando a linha tem
- * lote). Exatamente um ⇒ ligada; nenhum/vários ⇒ não ligada (nunca adivinha). Cada item liga-se a no
- * máximo uma linha (a primeira).
+ * Liga cada linha da tabela do DFD a UM Item Canônico. IDENTIDADE = `canonicalItemId` persistido na linhagem
+ * do documento (marcador `pr:<canonicalItemId>=<itemNo>:<rowKey>` em `generated_documents.sources`):
+ *  1. linhagem: (nº do item + chave da linha) exatos; depois só a chave da linha; depois só o nº — sempre
+ *     sem ambiguidade e apenas para itens ATIVOS. Mudar descrição/unidade/lote do item na Área de Itens
+ *     NÃO desfaz o vínculo (a linha continua apontando para o mesmo id);
+ *  2. vínculo de fonte persistido (linha do DFD confirmada como item na Área de Itens);
+ *  3. RECUPERAÇÃO controlada (documento legado/linha sem linhagem): fingerprint (+ lote) exato contra itens
+ *     ainda não ligados — 1 ⇒ liga; 0 ⇒ não liga; >1 ⇒ AMBÍGUO (nunca escolhe).
+ * Cada item liga-se a no máximo uma linha.
  */
-export function linkDFDRows(parsed: ParsedDFD, items: readonly DFDPrefillItem[]): LinkedDFDRow[] {
+export function linkDFDRows(
+  parsed: ParsedDFD, items: readonly DFDPrefillItem[], sources: readonly string[],
+  sourceLinks: ReadonlyArray<{ fingerprint: string; lotKey: string | null; itemId: string }> = [],
+): LinkedDFDRow[] {
+  const active = new Set(items.map((i) => i.key));
+  const lineage = Object.entries(readMarkers(sources).rows).filter(([id]) => active.has(id));
   const used = new Set<string>();
-  return parsed.items.map((row) => {
-    const lk = lotKey(row.lotCode);
-    const same = items.filter((i) => i.fingerprint === row.fingerprint && (lk === null || lotKey(i.lotCode) === lk) && !used.has(i.key));
-    if (same.length === 1) { used.add(same[0].key); return { row, itemId: same[0].key, ambiguous: false }; }
-    return { row, itemId: null, ambiguous: same.length > 1 };
+  const out: LinkedDFDRow[] = parsed.items.map((row) => ({ row, itemId: null, ambiguous: false, via: null }));
+  const assign = (i: number, id: string, via: LinkedDFDRow["via"]) => { out[i] = { ...out[i], itemId: id, via }; used.add(id); };
+  const pass = (pred: (row: ParsedDFDItem, m: { itemNo: number; rowKey: string }) => boolean) => {
+    out.forEach((o, i) => {
+      if (o.itemId) return;
+      const hits = lineage.filter(([id, m]) => !used.has(id) && pred(o.row, m));
+      if (hits.length === 1) assign(i, hits[0][0], "lineage");
+    });
+  };
+  const rk = (r: ParsedDFDItem) => dfdRowKey(r.fingerprint, r.lotCode);
+  pass((r, m) => r.itemNo !== null && r.itemNo === m.itemNo && rk(r) === m.rowKey);
+  pass((r, m) => rk(r) === m.rowKey);
+  pass((r, m) => r.itemNo !== null && r.itemNo === m.itemNo);
+  out.forEach((o, i) => {
+    if (o.itemId) return;
+    const hits = sourceLinks.filter((l) => active.has(l.itemId) && !used.has(l.itemId) && l.fingerprint === o.row.fingerprint && (l.lotKey ?? null) === lotKey(o.row.lotCode));
+    if (hits.length === 1) assign(i, hits[0].itemId, "source_link");
   });
+  out.forEach((o, i) => {
+    if (o.itemId) return;
+    const lk = lotKey(o.row.lotCode);
+    const same = items.filter((it) => it.fingerprint === o.row.fingerprint && (lk === null || lotKey(it.lotCode) === lk) && !used.has(it.key));
+    if (same.length === 1) assign(i, same[0].key, "fingerprint");
+    else out[i] = { ...o, ambiguous: same.length > 1 };
+  });
+  return out;
+}
+
+/** Regrava a linhagem (`pr:`) a partir do vínculo ATUAL das linhas — preserva a identidade após edições. */
+export function refreshRowLineage(content: string, sources: readonly string[], items: readonly DFDPrefillItem[]): string[] {
+  const mk = readMarkers(sources);
+  mk.rows = {};
+  for (const l of linkDFDRows(parseDFD(content), items, sources)) {
+    if (l.itemId && l.row.itemNo !== null) mk.rows[l.itemId] = { itemNo: l.row.itemNo, rowKey: dfdRowKey(l.row.fingerprint, l.row.lotCode) };
+  }
+  return writeMarkers(sources, mk);
 }
 
 // ─── Marcadores de linhagem (generated_documents.sources) ───────────────────────────────
@@ -357,22 +414,25 @@ export interface DFDMarkers {
   prefill: Record<string, { hash: string; origin: DFDFieldOrigin }>;
   /** Rascunho de IA por campo: hash do texto + execução + digest do contexto usado. */
   ai: Record<string, { hash: string; executionId: string; contextDigest: string }>;
+  /** LINHAGEM das linhas de item: canonicalItemId → (nº do item, chave da linha como escrita). */
+  rows: Record<string, { itemNo: number; rowKey: string }>;
 }
 
-const MARKER_PREFIXES = ["ctx:", "ctxdigest:", "ctxv:", "pf:", "ai:"];
+const MARKER_PREFIXES = ["ctx:", "ctxdigest:", "ctxv:", "pf:", "ai:", "pr:"];
 
 export function isAssistMarker(m: string): boolean {
   return MARKER_PREFIXES.some((p) => m.startsWith(p));
 }
 
 export function readMarkers(sources: readonly string[]): DFDMarkers {
-  const out: DFDMarkers = { contextDigest: null, contextVersion: null, prefill: {}, ai: {} };
+  const out: DFDMarkers = { contextDigest: null, contextVersion: null, prefill: {}, ai: {}, rows: {} };
   for (const s of sources ?? []) {
     let m: RegExpExecArray | null;
     if ((m = /^ctxdigest:([a-f0-9]+)$/.exec(s))) out.contextDigest = m[1];
     else if ((m = /^ctxv:(\d+)$/.exec(s))) out.contextVersion = Number(m[1]);
     else if ((m = /^pf:([^=]+)=([a-f0-9∅]+)@([a-z_]+)$/.exec(s))) out.prefill[m[1]] = { hash: m[2], origin: m[3] as DFDFieldOrigin };
     else if ((m = /^ai:([^=]+)=([a-f0-9]+)@([A-Za-z0-9_-]+)@([a-f0-9]+)$/.exec(s))) out.ai[m[1]] = { hash: m[2], executionId: m[3], contextDigest: m[4] };
+    else if ((m = /^pr:([a-f0-9]+)=(\d+):([a-f0-9]{16})$/.exec(s))) out.rows[m[1]] = { itemNo: Number(m[2]), rowKey: m[3] };
   }
   return out;
 }
@@ -384,6 +444,7 @@ export function writeMarkers(base: readonly string[], mk: DFDMarkers): string[] 
   if (mk.contextVersion !== null) out.push(`ctxv:${mk.contextVersion}`);
   for (const k of Object.keys(mk.prefill).sort()) out.push(`pf:${k}=${mk.prefill[k].hash}@${mk.prefill[k].origin}`);
   for (const k of Object.keys(mk.ai).sort()) out.push(`ai:${k}=${mk.ai[k].hash}@${mk.ai[k].executionId}@${mk.ai[k].contextDigest}`);
+  for (const k of Object.keys(mk.rows ?? {}).sort()) out.push(`pr:${k}=${mk.rows[k].itemNo}:${mk.rows[k].rowKey}`);
   return out;
 }
 
@@ -394,13 +455,16 @@ export function fieldHash(v: FactValue): string {
 
 /** Marcadores de prefill para o conteúdo recém-renderizado (só campos com valor vindo do contexto). */
 export function prefillMarkers(prefill: DFDPrefill): DFDMarkers {
-  const mk: DFDMarkers = { contextDigest: prefill.contextDigest.slice(0, 16), contextVersion: prefill.contextVersion, prefill: {}, ai: {} };
+  const mk: DFDMarkers = { contextDigest: prefill.contextDigest.slice(0, 16), contextVersion: prefill.contextVersion, prefill: {}, ai: {}, rows: {} };
   for (const [k, v] of Object.entries(prefill.values)) {
     if (v.value !== null && v.origin) mk.prefill[k] = { hash: fieldHash(v.value), origin: v.origin };
   }
-  for (const it of prefill.items) {
+  prefill.items.forEach((it, i) => {
     if (it.plannedQuantity !== null && it.qtyOrigin) mk.prefill[`item:${it.key}`] = { hash: fieldHash(it.plannedQuantity), origin: it.qtyOrigin };
-  }
+    if (prefill.hasLots) mk.prefill[`itemlot:${it.key}`] = { hash: lotFieldHash(it.lotCode), origin: "user" };
+    // Linhagem: a linha i+1 da tabela É o Item Canônico `it.key` (identidade persistida no documento).
+    mk.rows[it.key] = { itemNo: i + 1, rowKey: dfdRowKey(it.fingerprint, it.lotCode) };
+  });
   return mk;
 }
 
@@ -427,7 +491,15 @@ export interface DFDFieldView {
   reconcilable: boolean;
 }
 
+function lotFieldHash(code: string | null): string {
+  return fieldHash(lotKey(code === "—" ? null : code) ?? "—");
+}
+
 function prefillValueOf(prefill: DFDPrefill, key: string): DFDPrefillValue {
+  if (key.startsWith("itemlot:")) {
+    const it = prefill.items.find((i) => `itemlot:${i.key}` === key);
+    return it ? { value: it.lotCode ?? "—", origin: "user", conflict: false } : { value: null, origin: null, conflict: false };
+  }
   if (key.startsWith("item:")) {
     const it = prefill.items.find((i) => `item:${i.key}` === key);
     if (!it) return { value: null, origin: null, conflict: false };
@@ -437,6 +509,10 @@ function prefillValueOf(prefill: DFDPrefill, key: string): DFDPrefillValue {
 }
 
 function docValueOf(parsed: ParsedDFD, linked: readonly LinkedDFDRow[], key: string): string | null {
+  if (key.startsWith("itemlot:")) {
+    const it = linked.find((l) => l.itemId !== null && `itemlot:${l.itemId}` === key)?.row;
+    return it ? it.lotCode ?? "—" : null;
+  }
   if (key.startsWith("item:")) {
     const it = linked.find((l) => l.itemId !== null && `item:${l.itemId}` === key)?.row;
     return it && it.quantity !== null ? formatQuantity(it.quantity) : null;
@@ -446,6 +522,7 @@ function docValueOf(parsed: ParsedDFD, linked: readonly LinkedDFDRow[], key: str
 
 function hashOfField(key: string, v: string | null): string {
   if (v === null) return fieldHash(null);
+  if (key.startsWith("itemlot:")) return lotFieldHash(v);
   if (key.startsWith("item:")) {
     const n = parseQuantityPtBr(v);
     return fieldHash(n);
@@ -454,9 +531,10 @@ function hashOfField(key: string, v: string | null): string {
 }
 
 function itemLabel(prefill: DFDPrefill, key: string): string {
-  const k = key.slice(5);
+  const lot = key.startsWith("itemlot:");
+  const k = key.slice(lot ? 8 : 5);
   const d = prefill.items.find((i) => i.key === k)?.description ?? "item";
-  return `Quantidade prevista — ${d}`;
+  return lot ? `Lote — ${d}` : `Quantidade prevista — ${d}`;
 }
 
 /**
@@ -465,9 +543,14 @@ function itemLabel(prefill: DFDPrefill, key: string): string {
  */
 export function computeDFDFieldStates(content: string, sources: readonly string[], current: DFDPrefill): DFDFieldView[] {
   const parsed = parseDFD(content);
-  const linked = linkDFDRows(parsed, current.items);
+  const linked = linkDFDRows(parsed, current.items, sources);
   const mk = readMarkers(sources);
-  const keys: string[] = [...Object.keys(DFD_FIELD_LABELS), ...current.items.map((i) => `item:${i.key}`)];
+  // Lote por item só quando a tabela do DFD tem a coluna "Lote" e a contratação usa lotes.
+  const lotCol = current.hasLots && parsed.items.length > 0 && hasLotColumn(content);
+  const keys: string[] = [
+    ...Object.keys(DFD_FIELD_LABELS), ...current.items.map((i) => `item:${i.key}`),
+    ...(lotCol ? current.items.map((i) => `itemlot:${i.key}`) : []),
+  ];
   return keys.map((key) => {
     const doc = docValueOf(parsed, linked, key);
     const ctx = prefillValueOf(current, key);
@@ -475,7 +558,7 @@ export function computeDFDFieldStates(content: string, sources: readonly string[
     const ai = mk.ai[key];
     const docH = hashOfField(key, doc);
     const ctxH = ctx.value === null ? null : hashOfField(key, ctx.value);
-    const label = key.startsWith("item:") ? itemLabel(current, key) : DFD_FIELD_LABELS[key] ?? key;
+    const label = key.startsWith("item") && key.includes(":") ? itemLabel(current, key) : DFD_FIELD_LABELS[key] ?? key;
     const base = { key, label, documentValue: doc, contextValue: ctx.value, contextOrigin: ctx.origin };
     // Campo sem fato canônico (narrativa) não tem "contexto" a reconciliar.
     const narrative = key === "justificativa";
@@ -502,8 +585,12 @@ export function computeDFDFieldStates(content: string, sources: readonly string[
 }
 
 /** Linhas da tabela do DFD sem Item Canônico correspondente (o DFD não cria itens sozinho). */
-export function unlinkedDFDRows(content: string, current: DFDPrefill): ParsedDFDItem[] {
-  return linkDFDRows(parseDFD(content), current.items).filter((l) => l.itemId === null).map((l) => l.row);
+export function unlinkedDFDRows(content: string, sources: readonly string[], current: DFDPrefill): ParsedDFDItem[] {
+  return linkDFDRows(parseDFD(content), current.items, sources).filter((l) => l.itemId === null).map((l) => l.row);
+}
+
+function hasLotColumn(content: string): boolean {
+  return /^\|\s*Lote\s*\|/im.test(content);
 }
 
 // ─── Reconciliação explícita e rascunho de IA ─────────────────────────────────────────────
@@ -545,15 +632,54 @@ export function reconcileDFDField(
     const grau = key === "prioridade.grau" ? ctx.value : p["prioridade.grau"] ?? PRIORITY_PLACEHOLDER;
     const prazo = key === "prioridade.prazo" ? ctx.value : p["prioridade.prazo"] ?? P;
     lines = replaceLine(lines, 7, PRIORITY_RE, `Prioridade: ${grau} · Prazo pretendido para a contratação: ${prazo}`);
+  } else if (key.startsWith("itemlot:")) {
+    const next = reconcileItemLot(lines, content, sources, key.slice(8), current);
+    if (!next) return null;
+    lines = next;
   } else if (key.startsWith("item:")) {
-    lines = reconcileItemRow(lines, content, key.slice(5), current);
+    lines = reconcileItemRow(lines, content, sources, key.slice(5), current);
   } else return null;
   const mk = readMarkers(sources);
   mk.prefill[key] = { hash: hashOfField(key, ctx.value), origin: ctx.origin ?? "derived" };
-  return { content: lines.join("\n"), sources: writeMarkers(sources, mk) };
+  const newContent = lines.join("\n");
+  let newSources = writeMarkers(sources, mk);
+  // A linha continua sendo o MESMO Item Canônico: a linhagem é regravada a partir do vínculo atual.
+  if (key.startsWith("item")) newSources = refreshRowLineage(newContent, newSources, current.items);
+  return { content: newContent, sources: newSources };
 }
 
-function reconcileItemRow(lines: string[], content: string, itemKey: string, current: DFDPrefill): string[] {
+/** Atualiza a célula "Lote" da linha ligada ao item (o item e o id NÃO mudam — só o pertencimento exibido). */
+function reconcileItemLot(lines: string[], content: string, sources: readonly string[], itemKey: string, current: DFDPrefill): string[] | null {
+  const it = current.items.find((i) => i.key === itemKey);
+  if (!it || !hasLotColumn(content)) return null;
+  const rows = itemTableRows(lines);
+  if (!rows) return null;
+  const idx = linkDFDRows(parseDFD(content), current.items, sources).findIndex((l) => l.itemId === itemKey);
+  if (idx < 0 || rows.data[idx] === undefined) return null;
+  const c = rows.split(lines[rows.data[idx]]);
+  c[rows.header.findIndex((x) => /^lote$/i.test(x))] = cell(it.lotCode ?? "—");
+  return lines.map((l, i) => (i === rows.data[idx] ? `| ${c.join(" | ")} |` : l));
+}
+
+/** Linhas físicas da tabela de itens: cabeçalho e linhas de dados na MESMA ordem em que parseDFD as lê. */
+function itemTableRows(lines: string[]): { header: string[]; data: number[]; all: number[]; split: (l: string) => string[] } | null {
+  const s = sections(lines).find((x) => x.n === 4);
+  if (!s) return null;
+  const all: number[] = [];
+  lines.forEach((l, i) => { if (i > s.start && i < s.end && /^\|/.test(l.trim())) all.push(i); });
+  const split = (l: string) => l.trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim());
+  const hi = all.find((i) => /quantidade prevista/i.test(lines[i]));
+  if (hi === undefined) return null;
+  const header = split(lines[hi]);
+  const iDesc = header.findIndex((x) => /^descri/i.test(x));
+  const data = all.filter((i) => {
+    const c = split(lines[i]);
+    return !(/quantidade prevista/i.test(lines[i]) || c.every((x) => /^:?-+:?$/.test(x))) && c.length >= header.length && !!c[iDesc] && !isPlaceholder(c[iDesc]);
+  });
+  return { header, data, all, split };
+}
+
+function reconcileItemRow(lines: string[], content: string, sources: readonly string[], itemKey: string, current: DFDPrefill): string[] {
   const it = current.items.find((i) => i.key === itemKey);
   if (!it) return lines;
   const parsed = parseDFD(content);
@@ -571,7 +697,7 @@ function reconcileItemRow(lines: string[], content: string, itemKey: string, cur
   const header = split(lines[tableRows.find((i) => /quantidade prevista/i.test(lines[i]))!]);
   const iQty = header.findIndex((x) => /quantidade prevista/i.test(x));
   const hasLotCol = header.some((x) => /^lote$/i.test(x));
-  const linked = linkDFDRows(parsed, current.items);
+  const linked = linkDFDRows(parsed, current.items, sources);
   const idx = linked.findIndex((l) => l.itemId === itemKey);
   // Linhas de dados na MESMA ordem em que parseDFD as leu.
   const dataRows = tableRows.filter((i) => {
@@ -642,7 +768,7 @@ export function extractDFDAssertions(content: string, sources: readonly string[]
   }
   // Itens: o DFD NÃO cria itens (dono = Itens da contratação). Só a quantidade PREVISTA de linhas ligadas
   // a UM Item Canônico é afirmada; linhas sem item ficam como "sem correspondência" (candidatos).
-  for (const l of linkDFDRows(parsed, buildDFDPrefill(ctx).items)) {
+  for (const l of linkDFDRows(parsed, buildDFDPrefill(ctx).items, sources)) {
     if (!l.itemId || l.row.quantity === null) continue;
     const known = ctx.items.find((i) => i.key === l.itemId)!;
     if (fieldHash(l.row.quantity) === (known.plannedQuantity.valueHash ?? null)) continue;

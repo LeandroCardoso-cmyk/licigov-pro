@@ -197,7 +197,7 @@ describe("DFD consome os Itens da contratação (lotes, sem quantidade, desatual
     expect(content).toContain("| Lote | Item | Descrição | Unidade | Quantidade prevista |");
     expect(content).toContain("| 01 | 1 | Detergente | UN | 10 |");
     expect(content).toContain("| 02 | 2 | Detergente | UN | [a definir] |");
-    const linked = linkDFDRows(parseDFD(content), pf.items);
+    const linked = linkDFDRows(parseDFD(content), pf.items, writeMarkers([], prefillMarkers(pf)));
     expect(linked.map((l) => l.itemId)).toEqual([A, B]);
   });
 
