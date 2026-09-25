@@ -28,8 +28,12 @@ export const SOURCE_QUANTITY_HELP = "Valor extraído do arquivo de origem. Alter
 export const SOURCE_QUANTITY_CONTEXT =
   "Esta quantidade pertence ao documento de Pesquisa de Preços. A quantidade efetivamente prevista para contratação é definida na necessidade/itens do processo.";
 
-/** Nota do bloco de correção: a revisão é da EVIDÊNCIA importada. */
-export const CORRECTION_SCOPE_NOTE = "Corrija apenas o que não corresponder ao documento importado.";
+/**
+ * Bloco de correção: corrige a EXTRAÇÃO do documento-fonte (ex.: documento = 10, extraído = 1 → 10), nunca edita
+ * dados da contratação (a quantidade prevista pertence ao planejamento/necessidade do processo).
+ */
+export const CORRECTION_SECTION_TITLE = "Corrigir extração do documento";
+export const CORRECTION_SCOPE_NOTE = "Altere somente informações que foram extraídas incorretamente do arquivo de origem.";
 
 /** Contrato por importType. Ausência ⇒ correção indisponível. */
 export const CORRECTABLE_FIELDS: Record<string, CorrectableField[]> = {

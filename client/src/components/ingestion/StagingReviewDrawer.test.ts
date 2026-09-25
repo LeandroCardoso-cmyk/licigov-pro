@@ -6,11 +6,13 @@
  * correção (chave lógica `quantity`, overlay auditado) permanece o MESMO.
  */
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CorrectionFieldInput, ExtractedValuesSummary } from "./StagingReviewDrawer";
+import { CorrectionFieldInput, CorrectionSectionHeader, ExtractedValuesSummary } from "./StagingReviewDrawer";
 import {
-  CORRECTABLE_FIELDS, SOURCE_QUANTITY_CONTEXT, SOURCE_QUANTITY_HELP, SOURCE_QUANTITY_LABEL, buildCorrectionPatch,
+  CORRECTABLE_FIELDS, CORRECTION_SCOPE_NOTE, CORRECTION_SECTION_TITLE, SOURCE_QUANTITY_CONTEXT, SOURCE_QUANTITY_HELP, SOURCE_QUANTITY_LABEL, buildCorrectionPatch,
 } from "@/lib/ingestion/correction";
 import type { StagingItem } from "@/lib/ingestion/staging";
 import { CORRECTABLE_FIELDS as SERVER_CORRECTABLE_FIELDS } from "../../../../server/domain/importCorrectionFields";
@@ -99,5 +101,41 @@ describe("contrato de correção inalterado", () => {
       expect(server[f.logical].rawKey).toBe(f.rawKey);
     }
     expect(server.quantity).toMatchObject({ logical: "quantity", rawKey: "rawQuantity", kind: "decimal" });
+  });
+});
+
+describe("bloco de correção = correção da EXTRAÇÃO do documento-fonte", () => {
+  const drawerSource = readFileSync(resolve(__dirname, "StagingReviewDrawer.tsx"), "utf8");
+
+  it("título 'Corrigir extração do documento' e orientação sempre visível", () => {
+    const html = renderToStaticMarkup(createElement(CorrectionSectionHeader, { itemId: 7 }));
+    expect(CORRECTION_SECTION_TITLE).toBe("Corrigir extração do documento");
+    expect(CORRECTION_SCOPE_NOTE).toBe("Altere somente informações que foram extraídas incorretamente do arquivo de origem.");
+    expect(html).toContain(`<p id="corr-title-7" class="text-sm font-medium text-foreground">${CORRECTION_SECTION_TITLE}</p>`);
+    expect(html).toContain(`<p id="corr-scope-7" class="text-xs text-muted-foreground">${CORRECTION_SCOPE_NOTE}</p>`);
+  });
+
+  it("'Corrigir campos' não aparece mais; o bloco é um grupo rotulado e descrito pelo título/orientação", () => {
+    expect(drawerSource).not.toContain("Corrigir campos");
+    expect(renderToStaticMarkup(createElement(CorrectionSectionHeader, { itemId: 7 }))).not.toContain("Corrigir campos");
+    expect(drawerSource).toContain('role="group"');
+    expect(drawerSource).toContain("aria-labelledby={`corr-title-${item.id}`}");
+    expect(drawerSource).toContain("aria-describedby={`corr-scope-${item.id}`}");
+    expect(drawerSource).toContain("<CorrectionSectionHeader itemId={item.id} />");
+  });
+
+  it("quantidade do documento e seu texto de apoio continuam (semântica da #254 preservada)", () => {
+    const html = render("quantity");
+    expect(labelText(html)).toBe(SOURCE_QUANTITY_LABEL);
+    expect(html).toContain(SOURCE_QUANTITY_HELP);
+  });
+
+  it("salvar/fechar, fluxo de correção e superfície de API inalterados (nenhuma chamada nova)", () => {
+    expect(drawerSource).toContain("onClick={saveCorrection}");
+    expect(drawerSource).toContain('"Salvar correção"');
+    expect(drawerSource).toContain(">Fechar</Button>");
+    expect(drawerSource).toContain("await onCorrect(item.id, revision, patch, justification.trim(), newIdempotencyKey());");
+    expect(drawerSource).not.toMatch(/from "@\/lib\/trpc"|trpc\./);
+    expect(drawerSource.match(/<Button/g)).toHaveLength(5); // Salvar correção · Aceitar · Pular · Rejeitar · Fechar
   });
 });
