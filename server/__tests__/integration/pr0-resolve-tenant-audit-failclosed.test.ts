@@ -15,7 +15,7 @@ vi.mock("../../db", () => ({
   createAuditLog: vi.fn(),
   getProcessByIdForOrganization: vi.fn(),
   getProcessMember: vi.fn(),
-  getProcessMembers: vi.fn(),
+  getProcessMembersForOrganization: vi.fn(),
 }));
 
 import * as db from "../../db";
