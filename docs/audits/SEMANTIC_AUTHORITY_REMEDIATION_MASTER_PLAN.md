@@ -341,8 +341,17 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R0.7 | PASS | plano de PRs consolidado (19 funcionais + 1 documental) — §6 | esta PR | 2026-09-26 |
 | R0.8 | PASS | INV-01…INV-17 — §7 | esta PR | 2026-09-26 |
 | R0.9 | PASS | PR documental aberta: #259 | PR #259 | 2026-09-26 |
-| R0.10 | TODO | reaberto pela correção factual: o CI verde do head `1f81fe7` não vale para o novo conteúdo; o CI do novo head é evidenciado no relatório da execução e registrado aqui na execução seguinte | PR #259 | — |
-| R1.1 – R1.10 | TODO | — | — | — |
+| R0.10 | PASS | CI verde no head final `6b9c17d` da PR #259 (Typecheck+Lint, Testes, Smoke MySQL + Isolamento, Build, Auditoria de Dependências); merge em `ba810d1` | PR #259 | 2026-09-26 |
+| R1.1 | PASS | reprodução controlada em MySQL real (fixtures diretas; sem `processes.create`): no código anterior, 15/18 casos do smoke falhavam — `addMember` com usuário de outro órgão era **aceito**; `assignStage` cross-tenant **gravava** a atribuição; mensagens distintas para e-mail inexistente × de outro órgão (enumeração); `listMembers`/`getStageAssignments` expunham id/nome/e-mail de associação histórica cross-tenant; associação estrangeira podia ser elevada (`updatePermission`/`updateFunctionalRole`); nome estrangeiro gravado no activity log; nenhum evento de negação | PR-01 (`collaboration-tenant-isolation-mysql-smoke.test.ts`) | 2026-09-26 |
+| R1.2 | PASS | contrato tenant-scoped documentado no cabeçalho de `collaborationRouter.ts` (tenant = `ctx.organizationId`; processo por (id, org) com o mesmo NOT_FOUND; alvo com membership ATIVA em `organization_members`; escrita/notificação/log só após os gates; leituras sem identidade estrangeira; remoção de associação histórica permitida) | PR-01 | 2026-09-26 |
+| R1.3 | PASS | DB: `getActiveOrganizationUserByEmail/ById` (join `organization_members`, `ativo`), `getProcessMembersForOrganization`, `getStageAssignmentsForOrganization` (omitem associação estrangeira + `hiddenCount`); leituras não escopadas removidas | PR-01 | 2026-09-26 |
+| R1.4 | PASS | router: todas as procedures em `tenantProcedure`; boundary único (processo no tenant → permissão → alvo no tenant); nenhum `getProcessById`/`getUserByEmail`/`getUserById` global no router | PR-01 | 2026-09-26 |
+| R1.5 | PASS (N/A) | callers de UI (`MembersDialog`, `StageAssignmentPanel` via `DocTabContent`) existem só sob `ProcessDetails`, **não roteado** (teste `pr-b-canonical-wiring.test.ts` proíbe o import); nenhuma mudança de frontend necessária | PR-01 | 2026-09-26 |
+| R1.6 | PASS | smoke MySQL T1–T25 (cross-tenant: adição/atribuição recusadas sem efeito colateral, processo de outro órgão com o mesmo NOT_FOUND, leituras sem PII estrangeira, anti-enumeração) + teste de router com DB mockado (ordem dos gates, replay negado sem escrita, lookups globais proibidos) | PR-01 | 2026-09-26 |
+| R1.7 | PASS | regressão same-tenant (T3, T5, T22, multi-org, approver, checkPermission) + smoke de segurança completo 126/126 + suíte completa | PR-01 | 2026-09-26 |
+| R1.8 | PASS | evento `tenant_authorization_denied` (procedure, organizationId, actorUserId, processId, correlationId, reason) sem e-mail/nome do alvo (T24/T25); `collaboration_cross_tenant_rows_hidden` só com contagem; activity log de sucesso com `organizationId` + `correlationId` | PR-01 | 2026-09-26 |
+| R1.9 | IN_PROGRESS | CI da PR-01 (evidenciado no relatório); CI da main pós-merge pendente | PR-01 | — |
+| R1.10 | TODO | produção validada (após merge + deploy autorizados) | — | — |
 | R2.1 – R2.7 | TODO | — | — | — |
 | R3.1 – R3.6 | TODO | — | — | — |
 | R4.1 – R4.7 | TODO | — | — | — |
@@ -367,6 +376,12 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 | 2026-09-26 | SEM-001 — correção da evidência de alcance e da pré-condição de exploração | SEM-001 | A versão anterior deste plano afirmava que `processes.create` permitia a qualquer usuário criar um processo legado próprio e, a partir dele, explorar `collaboration.*`. Isso é **incorreto**: `processes.create` executa `throwLegacyProcessPipelineDisabled()` (`LEGACY_PROCESS_PIPELINE_DISABLED`). Registrado agora: superfície API-reachable; exploração exige processo legado preexistente ao qual o chamador tenha acesso; presença dessas linhas em produção não verificada. | P0 · FIX · PR-01 (primeira PR funcional) · LEGACY_REACHABLE (superfície) · 92 achados (26/54/12) · distribuições | R0.4 (reconfirmado → PASS); R0.10 (reaberto até CI verde do novo head) |
 
 ---
+
+### 9.2 Achados novos durante a remediação (não alteram o baseline nem as contagens 92/26/54/12)
+
+| ID | Data | Achado | Severidade proposta | Estado | Observação |
+|---|---|---|---|---|---|
+| NEW-001 | 2026-09-26 | Drift de schema: `drizzle/schema.ts` declara `notifications.type = 'stage_assigned'`, mas nenhuma migration adiciona o valor ao ENUM (só `0004` cria o ENUM, sem ele). No banco migrado, `collaboration.assignStage` grava a atribuição e **falha** no insert da notificação (escrita parcial). | P2 (a triar; fluxo sem UI roteada) | registrado para backlog (R9/R10) | Correção exige migration — fora do escopo da PR-01. O smoke da PR-01 documenta o comportamento; o contrato de sucesso completo é coberto com DB mockado. |
 
 ## 10. Histórico de versões do roadmap
 
