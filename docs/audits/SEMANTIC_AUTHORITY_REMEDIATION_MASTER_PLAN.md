@@ -197,7 +197,7 @@ receber correção profunda (CUTOVER/DISABLE), e PRs multi-módulo foram dividid
 | PR | Objetivo | Achados | Tipo | Dependências | Migration | Risco | Gate de validação |
 |---|---|---|---|---|---|---|---|
 | **PR-01** | Tenant Isolation — Collaboration | SEM-001 | SECURITY | — | Não | baixo | teste que reproduz o cross-tenant falha antes/passa depois; regressão same-tenant; smoke de segurança; CI verde; validação em produção |
-| PR-01A | Notification Schema Consistency — `stage_assigned` (subordinada à R1; desbloqueia R1.7) | NEW-001 (P1 operacional, fora dos 92) | SCHEMA / WORKFLOW | merge da PR #260 | **Sim** (mínima) | médio | T5 estrito em MySQL real; migration em banco limpo e migrado; retry sem duplicação — §6.1 |
+| PR-01A | Notification Schema Consistency — `stage_assigned` (subordinada à R1; desbloqueia R1.7) | NEW-001 (P1 operacional, fora dos 92) | SCHEMA / WORKFLOW | merge da PR #260 (feito: `1a6c925`) | **Sim** (0307) | médio | T5 estrito em MySQL real; migration em banco limpo e migrado; retry sem duplicação — §6.1. **Implementada, aguardando merge** |
 | PR-02 | Retirar endpoints inseguros sem uso | SEM-015, SEM-018 | CUTOVER (DISABLE) | — | Não | baixo | chamadas retornam erro governado; `issueProcess` intacto; freeze test das rotas |
 | PR-03 | Cutover do parecer legado | SEM-016, SEM-017 | CUTOVER | R2.3 (uso de `legal_opinions`) | Provável | médio | deep links redirecionam ao workspace canônico; mutações legadas bloqueadas; histórico legível |
 | PR-04 | Cutover da pesquisa colada | SEM-005 | CUTOVER | R2.2 (decisão sobre a flag) | Não | médio | colagem passa pela ingestão supervisionada; sem sobrescrita de cotações |
@@ -238,7 +238,7 @@ parecer prévio), e — para R9 — SEM-084 (limites de aditivos no fluxo canôn
 - **Migration:** **Sim**, mínima.
 - **Posição:** logo após o merge da PR #260.
 - **Numeração:** subordinada à R1. **Não** renumera PR-02…PR-20 e **não** altera os 87 checkpoints: é a PR que desbloqueia R1.7.
-- **Estado:** planejada. Nesta execução não há branch, migration nem correção.
+- **Estado:** **implementada, aguardando merge** (branch `fix/r1-notification-stage-assigned`, base main `1a6c925`). Merge e deploy exigem autorização própria. Resultado em §6.1.1.
 
 **Escopo futuro, em ordem:**
 1. Confirmar o schema declarado (`drizzle/schema.ts`), as migrations `.sql` existentes e os snapshots `drizzle/meta`, e verificar se `db:generate` emite a alteração.
@@ -265,6 +265,70 @@ parecer prévio), e — para R9 — SEM-084 (limites de aditivos no fluxo canôn
 - smoke de segurança e suíte completa verdes;
 - CI verde;
 - R1.7 → PASS só depois disso.
+
+#### 6.1.1 PR-01A — resultado (2026-09-26)
+
+**Reprodução na main `1a6c925` (MySQL real migrado, antes da correção).** `assignStage` no mesmo órgão passa pelos gates de tenant e retorna `INTERNAL_SERVER_ERROR` (insert de `notifications` recusado pelo ENUM). O estado fica 1 atribuição, 0 notificação e 0 activity log de sucesso. O **retry** retorna o mesmo erro e deixa **2 atribuições**.
+
+**Achado adicional, confirmado:** `stage_assignments` não tem chave única em `(processId, docType)`. Por isso o antigo `onDuplicateKeyUpdate` nunca colidia e cada chamada **inseria** uma linha nova.
+
+**Auditoria do ENUM:**
+- A tabela foi criada pela `0004` com `enum('member_added','document_edited','document_approved','comment_added','general') NOT NULL DEFAULT 'general'` (utf8mb4).
+- Nenhuma migration posterior altera a coluna.
+- `drizzle/schema.ts` declara `stage_assigned`.
+- Os snapshots `drizzle/meta` contêm `stage_assigned` desde `0298_snapshot.json`, e o `0297` não.
+- Só 38 das 307 migrations têm snapshot, então snapshot por migration não é convenção do repositório.
+- Conclusão: `drizzle-kit generate` não emitiria o ALTER.
+
+**Migration `0307_notifications_stage_assigned`:**
+- Escrita à mão, com uma entrada no journal (`idx` 307). O runner de release (`migrateWithAdvisoryLock` → ledger `__drizzle_migrations`) a aplica uma única vez.
+- `ALTER TABLE notifications MODIFY COLUMN type enum(…,'stage_assigned','general') NOT NULL DEFAULT 'general'` preserva todos os valores, a nulidade e o default. Não há DROP, UPDATE, DELETE nem snapshot novo.
+- Evidência em MySQL real (INFORMATION_SCHEMA):
+  - banco **limpo**, cadeia completa: tipo final correto e `collectSchemaProblems` = `[]`;
+  - **upgrade** a partir do estado pré-0307 com uma linha por valor antigo: só a 0307 é aplicada, as linhas ficam idênticas, a PK é mantida, `stage_assigned` passa a ser aceito e um valor inválido continua recusado;
+  - **rerun**: o ledger não cresce e o tipo não muda;
+  - `db:audit` alinhado; smoke de migration safety (reconciliation) verde.
+
+**Respostas de atomicidade:**
+- **(A)** `upsertStageAssignment`, `createNotification` e `createActivityLogForOrganization` são inserts **locais** no MySQL.
+- **(B)** `notifications` não tem side effect remoto. Nenhum dispatcher lê essa tabela (o EmailDispatcher lê `email_outbox`). O único leitor é o `notificationsRouter`, que trata o tipo como opaco. O `NotificationBell` (só sob o `ProcessDetails` não roteado) não tem ícone para o tipo e não lança erro; foi deixado inalterado.
+- **(C)** O activity log é persistência local.
+- **(D)** Cada helper abria o próprio `getDb()`, sem transação.
+- **(E)** Não há dispatcher assíncrono de `notifications`.
+
+**Decisão:** uma transação local (`services/stageAssignmentService.ts`, `assignStageAtomically`), COMMIT ALL ou ROLLBACK ALL:
+1. `SELECT … FOR UPDATE` na linha-pai `processes` por `(processId, organizationId)`. É um mutex por processo, no mesmo padrão do `documentVersionService`, e re-verifica o tenant sob lock.
+2. Lê as linhas da etapa.
+3. Decide com a regra pura `decideStageAssignment` (`server/domain/stageAssignment.ts`).
+4. Grava atribuição + notificação `stage_assigned` + activity log por primitivas `*Tx`, que recebem o executor e nunca chamam `getDb()`.
+
+Nenhuma operação remota entra na transação. Os gates da #260 (processo no tenant → permissão → alvo no tenant) continuam rodando **antes**. O texto da notificação, o truncamento do `correlationId` (36) e os `details` do log foram preservados.
+
+**Contrato de replay** (sem nova coluna nem chave de idempotência, porque o estado de `(processId, docType)` basta):
+- **Nenhuma linha:** insere.
+- **Todas as linhas já expressam o pedido** (mesmo usuário e mesma nota; nota ausente, `null` e vazia são equivalentes): sucesso idempotente `changed: false`, sem escrita, notificação ou log.
+- **Qualquer divergência:** **todas** as linhas da etapa convergem ao pedido (duplicatas históricas não são apagadas), com notificação e log da mudança real.
+- **Concorrência:** o lock do processo serializa, e 4 chamadas idênticas simultâneas produzem exatamente 1 atribuição, 1 notificação e 1 log.
+
+**Testes:**
+- `collaboration-stage-assignment-atomicity-mysql-smoke` (T1–T15, MySQL real, em `test:smoke:security`):
+  - rollback provado por trigger **temporário no banco de teste** (removido no teardown; nenhum hook no código), tanto com falha na notificação quanto com falha no activity log;
+  - contra o código anterior, 8/12 testes de comportamento falham.
+- T5 do smoke da #260 agora **estrito**, sem ramo de tolerância.
+- Teste de router com DB mockado atualizado para o boundary.
+- Unitário da regra, mais guarda estática: primitivas `*Tx` sem `getDb`, uma única transação, nenhum lookup global.
+
+**Gates locais (MariaDB 10.11):**
+- typecheck ✅ e lint dos arquivos alterados ✅;
+- smoke de segurança **141/141** ✅ (126 + 15);
+- migration safety **313/313** ✅;
+- suíte completa **5843** ✅;
+- build ✅.
+
+**Riscos residuais, registrados e não corrigidos (fora do escopo):**
+- Não há chave única em `stage_assignments`. O índice único exigiria deduplicar dados existentes em produção (mutação), e fica para R9.
+- `unassignStage` não participa do lock. A corrida assign × unassign simultâneos é residual.
+- A presença de duplicatas em produção não foi verificada.
 
 ---
 
@@ -385,10 +449,10 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R1.4 | PASS | router: todas as procedures em `tenantProcedure`; boundary único (processo no tenant → permissão → alvo no tenant); nenhum `getProcessById`/`getUserByEmail`/`getUserById` global no router | PR-01 | 2026-09-26 |
 | R1.5 | PASS (N/A) | callers de UI (`MembersDialog`, `StageAssignmentPanel` via `DocTabContent`) existem só sob `ProcessDetails`, **não roteado** (teste `pr-b-canonical-wiring.test.ts` proíbe o import); nenhuma mudança de frontend necessária | PR-01 | 2026-09-26 |
 | R1.6 | PASS | smoke MySQL T1–T25 (cross-tenant: adição/atribuição recusadas sem efeito colateral, processo de outro órgão com o mesmo NOT_FOUND, leituras sem PII estrangeira, anti-enumeração) + teste de router com DB mockado (ordem dos gates, replay negado sem escrita, lookups globais proibidos) | PR-01 | 2026-09-26 |
-| R1.7 | BLOCKED | **bloqueado por NEW-001 (§9.2).** A regressão same-tenant passa como *suíte de testes* (T3, T22, multi-org, approver, checkPermission; smoke 126/126; suíte completa), mas **não** como *comportamento de negócio*: em MySQL real migrado, `assignStage` no mesmo órgão grava a atribuição e falha no insert da notificação `stage_assigned`, e a requisição retorna erro. O T5 atual tolera essa falha só para documentar o drift. Desbloqueio: PR-01A com T5 estrito (ver §6.1) | PR-01 → PR-01A | 2026-09-26 |
+| R1.7 | PASS | **BUSINESS BEHAVIOR PASS** (§9.2.2) em MySQL real, com os 14 critérios satisfeitos: migration 0307 no ENUM físico; banco limpo, upgrade e rerun verdes; dados preservados; T5 estrito (1 atribuição + 1 notificação `stage_assigned` + 1 activity log); escrita parcial eliminada (transação única); rollback provado com falha na notificação e no log; retry sequencial e concorrente idempotente; regressão cross-tenant verde; smoke de segurança 141/141; suíte 5843; build. Antes: BLOCKED por NEW-001. Ver §6.1.1 | PR-01A | 2026-09-26 |
 | R1.8 | PASS | evento `tenant_authorization_denied` (procedure, organizationId, actorUserId, processId, correlationId, reason) sem e-mail/nome do alvo (T24/T25); `collaboration_cross_tenant_rows_hidden` só com contagem; activity log de sucesso com `organizationId` + `correlationId` | PR-01 | 2026-09-26 |
-| R1.9 | IN_PROGRESS | CI da PR-01 (evidenciado no relatório); CI da main pós-merge pendente | PR-01 | — |
-| R1.10 | TODO | produção validada (após merge + deploy autorizados) | — | — |
+| R1.9 | IN_PROGRESS | **Reaberto pela PR-01A.** Histórico: PASS com a #260, com CI da PR (run `36276135627`, head `b4e94ea`) e CI da main pós-merge (run #655 `36278720231`, main `1a6c925`) verdes; deploy Railway `8d506202` SUCCESS. A implementação final da R1 passou a incluir código e migration (PR-01A) ainda não validados na main pós-merge. **Revalidação final necessária para a PR-01A** (CI da PR + CI da main pós-merge) | PR-01 → PR-01A | — |
+| R1.10 | TODO | produção validada para a fase R1 concluída. O deploy intermediário da #260 foi validado (read-only, `8d506202`), mas a validação final aguarda merge + CI da main + deploy da PR-01A, com a migration 0307 aplicada pelo predeploy | — | — |
 | R2.1 – R2.7 | TODO | — | — | — |
 | R3.1 – R3.6 | TODO | — | — | — |
 | R4.1 – R4.7 | TODO | — | — | — |
@@ -412,6 +476,7 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 |---|---|---|---|---|---|
 | 2026-09-26 | SEM-001 — correção da evidência de alcance e da pré-condição de exploração | SEM-001 | A versão anterior deste plano afirmava que `processes.create` permitia a qualquer usuário criar um processo legado próprio e, a partir dele, explorar `collaboration.*`. Isso é **incorreto**: `processes.create` executa `throwLegacyProcessPipelineDisabled()` (`LEGACY_PROCESS_PIPELINE_DISABLED`). Registrado agora: superfície API-reachable; exploração exige processo legado preexistente ao qual o chamador tenha acesso; presença dessas linhas em produção não verificada. | P0 · FIX · PR-01 (primeira PR funcional) · LEGACY_REACHABLE (superfície) · 92 achados (26/54/12) · distribuições | R0.4 (reconfirmado → PASS); R0.10 (reaberto até CI verde do novo head) |
 | 2026-09-26 | R1.7 reavaliado e NEW-001 reclassificado | NEW-001 / R1.7 | R1.7 passou de `PASS` para `BLOCKED`, porque o PASS se apoiava em TEST SUITE PASS e não em BUSINESS BEHAVIOR PASS (§9.2.2): `assignStage` same-tenant falha em MySQL real migrado. NEW-001 passou de P2 para **P1 operacional / BLOCKER_R1_7** (§9.2.1). Foi planejada a PR-01A (§6.1). | definição e total de checkpoints (87) · fases · baseline 92/26/54/12 (NEW-001 fora dele) · SEM-001 (P0 · FIX · PR-01) · numeração PR-02…PR-20 · correção funcional da PR-01 | R1.7 (PASS → BLOCKED); R1 7/10; global 17/87 |
+| 2026-09-26 | PR-01A implementada (aguardando merge) | NEW-001 / R1.7 / R1.9 | R1.9 ficou PASS com a evidência da #260 (CI PR + CI main `1a6c925` + deploy `8d506202`) e foi **reaberto** para IN_PROGRESS, porque a R1 passou a incluir código e migration novos (PR-01A). R1.7 passou de `BLOCKED` para `PASS` (§6.1.1). NEW-001 → `FIX_IMPLEMENTED_PENDING_MERGE`. | definição e total de checkpoints (87) · fases · baseline 92/26/54/12 · severidade de NEW-001 (P1 operacional) · numeração PR-02…PR-20 · R1.10 (TODO) | R1.7 (BLOCKED → PASS); R1.9 (PASS → IN_PROGRESS); R1 8/10; global 18/87 |
 
 ---
 
@@ -419,7 +484,7 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 
 | ID | Data | Achado | Severidade proposta | Estado | Observação |
 |---|---|---|---|---|---|
-| NEW-001 | 2026-09-26 | Drift de schema: `drizzle/schema.ts` declara `notifications.type = 'stage_assigned'`, mas nenhuma migration SQL adiciona o valor ao ENUM (só `0004` cria o ENUM, sem ele). No banco migrado, `collaboration.assignStage` grava a atribuição e **falha** no insert da notificação (escrita parcial). | **P1 operacional** (reclassificado; antes P2) | **BLOCKER_R1_7** | Detalhes em §9.2.1. Correção exige migration e fica fora da PR-01, na PR-01A (§6.1). |
+| NEW-001 | 2026-09-26 | Drift de schema: `drizzle/schema.ts` declara `notifications.type = 'stage_assigned'`, mas nenhuma migration SQL adiciona o valor ao ENUM (só `0004` cria o ENUM, sem ele). No banco migrado, `collaboration.assignStage` grava a atribuição e **falha** no insert da notificação (escrita parcial). | **P1 operacional** (reclassificado; antes P2) | **FIX_IMPLEMENTED_PENDING_MERGE** (antes BLOCKER_R1_7) | Detalhes em §9.2.1. Corrigido na PR-01A (migration 0307 + `assignStage` atômico): §6.1.1. Fechamento exige merge + CI da main + migration aplicada pelo deploy + produção validada. |
 
 #### 9.2.1 NEW-001 — ficha
 
@@ -429,13 +494,13 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 | Classe | Schema consistency / partial write / workflow consistency |
 | Severidade | **P1 operacional** (reclassificado de P2 em 2026-09-26) |
 | Origem | descoberto durante R1 / PR-01 |
-| Status | **BLOCKER_R1_7** |
+| Status | **FIX_IMPLEMENTED_PENDING_MERGE** (antes BLOCKER_R1_7; **não** CLOSED nem RESOLVED_IN_PRODUCTION) |
 | Escopo | `collaboration.assignStage` |
-| Evidência | MySQL real migrado (`pnpm db:migrate:release` em banco limpo). ENUM real: `('member_added','document_edited','document_approved','comment_added','general')`. `drizzle/schema.ts` declara `stage_assigned`. Os snapshots `drizzle/meta/0298_snapshot.json` em diante também já contêm `stage_assigned`, sem nenhuma migration `.sql` correspondente. Por isso `db:generate` provavelmente **não** emitiria a alteração, o que deve ser confirmado na PR-01A. |
+| Evidência | MySQL real migrado (`pnpm db:migrate:release` em banco limpo). ENUM real: `('member_added','document_edited','document_approved','comment_added','general')`. `drizzle/schema.ts` declara `stage_assigned`. Os snapshots `drizzle/meta/0298_snapshot.json` em diante também já contêm `stage_assigned`, sem nenhuma migration `.sql` correspondente. Por isso `db:generate` **não** emite a alteração, o que foi confirmado na PR-01A. Reprodução na main `1a6c925`: erro + 1 atribuição e 0 notificação; o retry deixa 2 atribuições (§6.1.1). |
 | Impacto | a atribuição é persistida, o insert da notificação falha e a requisição falha |
 | Migration necessária | SIM |
-| Correção | PR-01A (§6.1) |
-| Produção verificada | NÃO |
+| Correção | PR-01A (§6.1.1): migration `0307_notifications_stage_assigned` + `assignStageAtomically` (transação local, replay determinístico) |
+| Produção verificada | NÃO (nenhuma leitura de produção; a migration ainda não foi aplicada em produção) |
 
 - **Pré-existente:** a PR-01 **expôs/detectou** o problema; **não o introduziu.** A sequência upsert da atribuição → notificação → activity log já existia antes do SEM-001, e o drift do ENUM vem de migrations anteriores.
 - **Por que P1 e não P2:**
@@ -448,6 +513,7 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 - **Bloqueios:**
   - bloqueia **R1.7** e, portanto, o **fechamento da R1**;
   - **não bloqueia necessariamente o merge da PR #260**, que tem valor de segurança independente: fecha o SEM-001 fail-closed e não piora o NEW-001.
+  - **Atualização (PR-01A):** o bloqueio de R1.7 foi removido pela correção da PR-01A (R1.7 PASS). O fechamento de NEW-001 e da R1 continua pendente de merge, CI da main, deploy com a 0307 e validação em produção (R1.9 e R1.10).
 
 #### 9.2.2 TEST SUITE PASS × BUSINESS BEHAVIOR PASS
 
@@ -455,7 +521,7 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 - **BUSINESS BEHAVIOR PASS:** o comportamento de negócio esperado acontece de ponta a ponta, no banco real.
 - Um checkpoint funcional só é `PASS` com **BUSINESS BEHAVIOR PASS**.
 - O T5 atual do smoke MySQL tem um ramo de tolerância: se a chamada falhar, exige apenas que a mensagem cite `notifications`. Com isso, o T5 comprova o drift, mas não comprova o comportamento.
-- Na PR-01A, o T5 passa a ser **estrito**, **sem** ramo de tolerância a erro, e exige:
+- Na PR-01A, o T5 passou a ser **estrito** (feito), **sem** ramo de tolerância a erro, e exige:
   - `code === "RESOLVED"`;
   - 1 atribuição;
   - 1 notificação `stage_assigned`;
