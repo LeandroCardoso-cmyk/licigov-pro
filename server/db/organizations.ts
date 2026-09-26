@@ -192,6 +192,46 @@ export async function setMemberAtivo(organizationId: number, userId: number, ati
     .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, userId)));
 }
 
+/**
+ * R1 / SEM-001 — resolução TENANT-SCOPED do usuário-alvo de uma colaboração (adicionar membro, atribuir etapa).
+ * O usuário só é resolvido se tiver membership ATIVA em `organization_members` na organização do contexto
+ * (modelo N:N — um usuário de A e B é resolvido em A quando a sessão está em A). Inexistente, de outro órgão ou
+ * com membership inativa ⇒ `undefined` (o chamador responde com o MESMO erro — anti-enumeração). Retorna só o
+ * mínimo necessário (id + nome), nunca e-mail.
+ */
+export async function getActiveOrganizationUserByEmail(email: string, organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select({ id: users.id, name: users.name })
+    .from(organizationMembers)
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
+    .where(and(
+      eq(organizationMembers.organizationId, organizationId),
+      eq(organizationMembers.ativo, true),
+      eq(users.email, email.trim().toLowerCase()),
+    ))
+    .limit(1);
+  return rows[0];
+}
+
+/** R1 / SEM-001 — mesmo contrato de `getActiveOrganizationUserByEmail`, pelo id do usuário. */
+export async function getActiveOrganizationUserById(userId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select({ id: users.id, name: users.name })
+    .from(organizationMembers)
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
+    .where(and(
+      eq(organizationMembers.organizationId, organizationId),
+      eq(organizationMembers.ativo, true),
+      eq(users.id, userId),
+    ))
+    .limit(1);
+  return rows[0];
+}
+
 export async function getUserOrganizations(userId: number) {
   const db = await getDb();
   if (!db) return [];
