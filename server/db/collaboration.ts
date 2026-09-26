@@ -1,7 +1,7 @@
 import { eq, and, desc } from "drizzle-orm";
 import {
   activityLogs, documentSettings, processMembers, notifications, stageAssignments,
-  processes, users,
+  processes, users, organizationMembers,
   InsertActivityLog, InsertDocumentSettings, InsertProcessMember, InsertNotification,
   InsertStageAssignment,
 } from "../../drizzle/schema";
@@ -125,21 +125,34 @@ export async function updateProcessMemberPermission(
     .where(and(eq(processMembers.processId, processId), eq(processMembers.userId, userId)));
 }
 
-export async function getProcessMembers(processId: number) {
+/**
+ * R1 / SEM-001 — membros do processo VISÍVEIS no tenant: só associações cujo usuário tem membership (ativa ou não)
+ * na organização do contexto. Associações HISTÓRICAS com usuário de outro órgão nunca têm identidade exposta: são
+ * omitidas da lista (nada é apagado — saneamento é operação governada à parte) e contadas em `hiddenCount` para o
+ * aviso de integridade sem PII. O chamador DEVE ter resolvido o processo no mesmo `organizationId`.
+ */
+export async function getProcessMembersForOrganization(processId: number, organizationId: number) {
   const db = await getDb();
-  if (!db) return [];
-  return await db
+  if (!db) return { members: [], hiddenCount: 0 };
+  const rows = await db
     .select({
       id: processMembers.id, userId: processMembers.userId,
       permission: processMembers.permission,
       functionalRole: processMembers.functionalRole,
       invitedBy: processMembers.invitedBy,
       createdAt: processMembers.createdAt, userName: users.name, userEmail: users.email,
+      tenantMembershipId: organizationMembers.id,
     })
     .from(processMembers)
+    .leftJoin(organizationMembers, and(
+      eq(organizationMembers.userId, processMembers.userId),
+      eq(organizationMembers.organizationId, organizationId),
+    ))
     .leftJoin(users, eq(processMembers.userId, users.id))
     .where(eq(processMembers.processId, processId))
     .orderBy(desc(processMembers.createdAt));
+  const members = rows.filter((r) => r.tenantMembershipId !== null).map(({ tenantMembershipId: _t, ...m }) => m);
+  return { members, hiddenCount: rows.length - members.length };
 }
 
 export async function updateProcessMemberFunctionalRole(
@@ -181,13 +194,14 @@ export async function removeStageAssignment(
     .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType)));
 }
 
-export async function getStageAssignments(processId: number) {
+/**
+ * R1 / SEM-001 — atribuições de etapa VISÍVEIS no tenant (mesmo contrato de `getProcessMembersForOrganization`):
+ * atribuição histórica a usuário de outro órgão é omitida (id/nome nunca expostos) e contada em `hiddenCount`.
+ */
+export async function getStageAssignmentsForOrganization(processId: number, organizationId: number) {
   const db = await getDb();
-  if (!db) return [];
-  // PR 0 (Security Emergency Closure): não seleciona mais `assignedUserEmail` — o único
-  // consumidor (StageAssignmentPanel.tsx) só usa `assignedUserName`; e-mail não precisa
-  // trafegar por este boundary.
-  return await db
+  if (!db) return { assignments: [], hiddenCount: 0 };
+  const rows = await db
     .select({
       id: stageAssignments.id,
       processId: stageAssignments.processId,
@@ -197,10 +211,17 @@ export async function getStageAssignments(processId: number) {
       note: stageAssignments.note,
       createdAt: stageAssignments.createdAt,
       assignedUserName: users.name,
+      tenantMembershipId: organizationMembers.id,
     })
     .from(stageAssignments)
+    .leftJoin(organizationMembers, and(
+      eq(organizationMembers.userId, stageAssignments.assignedUserId),
+      eq(organizationMembers.organizationId, organizationId),
+    ))
     .leftJoin(users, eq(stageAssignments.assignedUserId, users.id))
     .where(eq(stageAssignments.processId, processId));
+  const assignments = rows.filter((r) => r.tenantMembershipId !== null).map(({ tenantMembershipId: _t, ...a }) => a);
+  return { assignments, hiddenCount: rows.length - assignments.length };
 }
 
 export async function getProcessMember(processId: number, userId: number) {
