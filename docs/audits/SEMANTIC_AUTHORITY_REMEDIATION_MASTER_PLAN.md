@@ -1,0 +1,374 @@
+# Programa Mestre de Remediação — Autoridade Semântica (documento vivo)
+
+> **Roadmap:** v1.0 — congelado em 2026-09-26 (esta PR documental).
+> **Baseline:** [`SEMANTIC_AUTHORITY_CROSS_MODULE_AUDIT.md`](./SEMANTIC_AUTHORITY_CROSS_MODULE_AUDIT.md) —
+> auditoria sobre a main `5903cda`, versionada **byte-idêntica** ao arquivo produzido na auditoria
+> (sha256 `08edc7344c9038889978e1b2f9204f4fd523e3fef36e6b29b47ff324ae0810b3`). O baseline **não** é editado para
+> acomodar decisões: ele responde "o que foi encontrado naquele momento". Frases do baseline como "este arquivo NÃO
+> está commitado" descrevem o estado na data da auditoria.
+> **Escopo desta versão:** triagem dos 26 P0 (FIX / CUTOVER / DISABLE / LEGAL REVIEW), reachability, dependências,
+> plano de PRs, invariantes, fases R0–R11, checkpoints e Master Progress Ledger. **Nenhuma correção implementada.**
+
+---
+
+## 1. Regras de governança do programa
+
+1. **Pergunta obrigatória antes de qualquer correção:** *"Este caminho deve continuar existindo?"* — considerar
+   REACHABILITY + USO + CAMINHO CANÔNICO + IMPACTO DE DESATIVAÇÃO. Não remendar profundamente fluxo legado que deve sair.
+2. **Estratégias (exatamente quatro):**
+   - **FIX** — fluxo válido/estratégico que continua no produto (ou infraestrutura compartilhada necessária) e remover não resolve.
+   - **CUTOVER** — comportamento em fluxo legado ou ramo legado com substituto canônico definido; redirecionar/bloquear o antigo preservando a operação.
+   - **DISABLE** — caminho redundante/inseguro/sem justificativa de continuidade; bloquear/retirar de forma governada.
+   - **LEGAL REVIEW** — depende de interpretação jurídica/normativa; técnica não decide.
+3. **Alcance (reachability):** `CANONICAL` · `LEGACY_REACHABLE` · `LEGACY_INERT` · `SHARED_INFRA` · `UNKNOWN`.
+   "Arquivo existe" ≠ "fluxo operacionalmente acessível". Rota tRPC montada é alcançável por qualquer cliente autenticado
+   mesmo sem botão — isso é registrado explicitamente.
+4. **Progresso** = checkpoints `PASS` / checkpoints congelados. Nada de percentual subjetivo. `IN_PROGRESS`, `BLOCKED` e
+   `SUPERSEDED` não contam. PR aberta ≠ CI verde ≠ merge ≠ deploy SUCCESS ≠ comportamento validado em produção.
+5. **Controle de mudança:** checkpoints congelados só mudam com nova versão do roadmap (v1.1, v2.0…), registrando
+   motivo, data e checkpoints afetados (ver §10). Checkpoint removido vira `SUPERSEDED`, nunca some.
+6. **Proibições permanentes até autorização explícita:** mutação de dados de produção, SQL manual, alteração de feature
+   flag, migration não revisada, merge/deploy sem autorização humana.
+7. **Bloco obrigatório:** toda execução desta frente termina com o bloco *PROGRESSO MESTRE — REMEDIAÇÃO DA AUDITORIA
+   SEMÂNTICA* (§11), com todos os percentuais.
+
+---
+
+## 2. Evidência de reachability usada na triagem (main `5903cda`)
+
+- **Menu (DashboardLayout):** `/dashboard`, `/centro-operacoes`, `/processos`, `/contratacao-direta`, `/parecer`,
+  `/contratos`, `/tirar-duvidas`, `/templates`, `/usuarios`*, `/configuracoes`*, `/admin/platforms`**, `/admin/organizacoes`**.
+- **Canônicos por rota de menu:** `/processos` → `ProcessoLicitatorio`; `/contratacao-direta` → `DirectProcurement`
+  (`DirectProcurementHome`); `/parecer` → `ParecerJuridico` (`LegalOpinionHome`); `/contratos` → `ContratosWorkspace`
+  (`ContractsHome`/`ContractWorkspace`).
+- **Legados roteados só por deep link (sem entrada de menu nem link do fluxo canônico):** `/contratacao-direta/novo`
+  (`NewDirectContract`), `/contratacao-direta/analytics`, `/contratacao-direta/:id` (`DirectContractDetails`),
+  `/contratos/novo|alertas|:id` (`NewContract`, `ContractAlerts`, `ContractDetails`), `/parecer/novo|analytics|:id`
+  (`NewLegalOpinion`, `LegalOpinionsAnalytics`, `LegalOpinionDetails`), `/analytics`, `/auditoria`, `/gestao-departamento`.
+  Único link encontrado entre eles: `DirectContractDetails` → `/contratos/novo` e `/parecer/novo` (legado→legado).
+- **Não roteado:** `pages/ProcessDetails.tsx` (e sua subárvore: `MembersDialog`, `DocTabContent` → `StageAssignmentPanel`);
+  teste `pr-b-canonical-wiring.test.ts:32` proíbe importá-lo em `App.tsx`.
+- **Routers montados** (`server/routers.ts`): inclusive os legados `processes`, `documents`, `collaboration`,
+  `directContracts`, `contracts`, `legalOpinions`, `approvalWorkflow` → alcançáveis por API.
+
+---
+
+## 3. Inventário mestre dos 26 P0 (Fase R0)
+
+Estado inicial de todos: **TRIAGED** (classificação comprovada pela evidência abaixo e no baseline).
+
+| ID | Módulo | Problema resumido | Reachable? (evidência) | Canônico/Legado | Estratégia | Dependência | Migration? | Legal review? | PR alvo | Estado |
+|---|---|---|---|---|---|---|---|---|---|---|
+| SEM-001 | Colaboração | `addMember`/`assignStage` com lookups globais (e-mail/id), membro e responsável de outro tenant, enumeração de e-mail | Sim, **por API**: `processes.create` (tenant, montado) cria processo legado do próprio usuário → `collaboration.addMember` (`protectedProcedure`). UI (`ProcessDetails`) não roteada | LEGACY_REACHABLE | **FIX** (isolamento mínimo, fail-closed; desativação da superfície avaliada em R2) | — | Não (auditoria read-only de linhas cross-org, se autorizada) | Não | PR-01 | TRIAGED |
+| SEM-002 | Processo Licitatório | `createProcess` com número existente reseta etapa/status | Sim: `NovoProcessoWizard` em `/processos` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-05 | TRIAGED |
+| SEM-003 | Contratação Direta | `createProcess` reseta workspace (tipo, fundamento, etapa, flags) | Sim: `NewDirectProcurementWizard` em `/contratacao-direta` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-05 | TRIAGED |
+| SEM-004 | Contratação Direta | Ratificação: default "ratificado", clicante como autoridade, upsert mantém 1º responsável | Sim: `RatificationWorkspace` | CANONICAL | **FIX** | R3 (upsert) + insumo jurídico sobre competência | **Sim** (ledger de decisão) | Parcial (quem é autoridade competente) | PR-07 | TRIAGED |
+| SEM-005 | Pesquisa de Preços | 2ª colagem sobrescreve cotações da 1ª | Sim: `LegacyPriceResearchPanel` quando a ingestão por arquivo está desligada ou a consulta de capabilities falha | LEGACY_REACHABLE | **CUTOVER** → `DocumentIngestionLauncher` (`allowPaste`) | Decisão humana sobre `FF_CANONICAL_INGESTION` por tenant | Não | Não | PR-04 | TRIAGED |
+| SEM-006 | Parecer (canônico) | `createDraft` reseta parecer assinado | Sim: `LegalOpinionEditor` em `/parecer` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-06 | TRIAGED |
+| SEM-007 | Contratos | Upsert por (origem, número) sobrescreve contrato vigente | Sim: `NewContractWizard` em `/contratos` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-06 | TRIAGED |
+| SEM-008 | ETP/TR/Edital | Sem Itens da Contratação, quantidade da cotação vira quantidade da contratação | Sim: ramo legado dentro do fluxo canônico (`authoringContext`/`editalContext`) | CANONICAL (ramo legado) | **CUTOVER** → Itens da Contratação obrigatórios (fail-closed) | Inventário read-only de processos sem Itens + decisão humana | Não | Não | PR-13 | TRIAGED |
+| SEM-009 | Edital | Parâmetros não hidratados; "Gerar edital" usa padrões | Sim: `EditalWorkspace` | CANONICAL | **FIX** | — | Não | Não | PR-09 | TRIAGED |
+| SEM-010 | Contratação Direta (legado) | Catálogo mistura hipóteses da Lei 8.666 na numeração 14.133; mapeamento por substring | Sim, deep link `/contratacao-direta/novo` + API `directContracts` | LEGACY_REACHABLE | **LEGAL REVIEW** | Parecer jurídico; reference set governado (estado em produção não confirmado) | Dados (a definir) | **Sim** | PR-18 → PR-19 | TRIAGED |
+| SEM-011 | Contratos (legado) | Limite de aditivo 50% para todo contrato; supressão compensada; prazo 120 meses | Sim, deep link `/contratos/:id` (`NewAmendmentModal`) + API `contracts` | LEGACY_REACHABLE | **LEGAL REVIEW** | Parecer jurídico (art. 125) — também informa limites dos aditivos canônicos (SEM-084, P1) | Não | **Sim** | PR-18 → PR-20 | TRIAGED |
+| SEM-012 | Contratação Direta (legado) / relatórios | Centavos exibidos como reais; valor estimado rotulado "Valor Total Contratado" | Sim, deep link `/contratacao-direta/analytics`, `AuditTimeline` em `/contratacao-direta/:id`; relatório de processo só via API | LEGACY_REACHABLE | **CUTOVER** → Contratação Direta canônica / Centro de Operações (formatador monetário único vira invariante) | Verificação read-only de uso de `direct_contracts` | Não | Não | PR-14 | TRIAGED |
+| SEM-013 | Document Engine | Versões emitidas reexportam cabeçalho com identidade institucional atual | Sim: `OfficialPromotionSection` + export oficial | CANONICAL | **FIX** | — | Não (decisão de backfill documentada) | Não | PR-15 | TRIAGED |
+| SEM-014 | ETP/TR/Edital | Regerar sobrescreve rascunho editado por humano sem confirmação | Sim: workspaces ETP/TR/Edital | CANONICAL | **FIX** | — | Não | Não | PR-09 | TRIAGED |
+| SEM-015 | Processo Licitatório | `updateStage` leva a ISSUED/"emitido" sem Edital oficial | API apenas (`orgRoleProcedure("operator")`); **nenhum caller de UI** | CANONICAL (endpoint sem uso) | **DISABLE** (endpoint genérico de salto de etapa; emissão só por `issueProcess`) | — | Não | Não | PR-02 | TRIAGED |
+| SEM-016 | Parecer (legado) | Aprovador do cliente, autor aprova, aprovado editável, export acompanha, assinado excluível | Sim, deep link `/parecer/:id` (`LegalOpinionDetails`) + API `legalOpinions` | LEGACY_REACHABLE | **CUTOVER** → workspace canônico do parecer (`/parecer`) | Verificação read-only de uso de `legal_opinions` | Não | Não | PR-03 | TRIAGED |
+| SEM-017 | Parecer (legado) | IA sobrescreve parecer assinado, inclusive a conclusão | Idem SEM-016 | LEGACY_REACHABLE | **CUTOVER** → workspace canônico (IA só como apoio) | Idem SEM-016 | Provável (se o legado precisar de modo somente-leitura com versão) | Não | PR-03 | TRIAGED |
+| SEM-018 | Documentos (legado) | `documents.approveDocument` aprova de qualquer status, sem SoD/papel | API apenas; **nenhum caller de UI** | LEGACY_INERT (API montada) | **DISABLE** | — | Não | Não | PR-02 | TRIAGED |
+| SEM-019 | Parecer (canônico) | Editor abre vazio e com "Favorável"; salvar apaga campos | Sim: `LegalOpinionEditor` | CANONICAL | **FIX** | PR-06 (mesma persistência) | Não | Não | PR-10 | TRIAGED |
+| SEM-020 | Contratação Direta | "Anexar/Validar" grava referência fictícia `s3://anexo` | Sim: `RequiredDocumentsWorkspace` | CANONICAL | **FIX** | — | Não | Não | PR-16 | TRIAGED |
+| SEM-021 | Contratação Direta | Justificativa por copilotos vira documento oficial sem aceite | Sim: `ContractJustificationWorkspace` | CANONICAL | **FIX** | padrão R3 (upsert) | Não | Não | PR-11 | TRIAGED |
+| SEM-022 | Contratação Direta | Justificativa de preço: formulário vazio sobrescreve e emite oficial | Sim: `PriceJustificationWorkspace` | CANONICAL | **FIX** | padrão R3 (upsert) | Não | Não | PR-11 | TRIAGED |
+| SEM-023 | Contratos | "Salvar contrato" altera valor/contratado/objeto de vigente sem aditivo e sem CAS | Sim: `ContractEditor` | CANONICAL | **FIX** | — | Não | Não | PR-12 | TRIAGED |
+| SEM-024 | Contratos | Termo Aditivo/Apostilamento ignora os dados do instrumento | Sim: `DocumentsWorkspace`/`AddendumWorkspace` | CANONICAL | **FIX** | — | Não | Não | PR-17 | TRIAGED |
+| SEM-025 | Contratos | Aditivo/apostilamento muda status contornando a máquina de estados (ressuscita rescindido) | Sim: `AddendumWorkspace`/`ApostilleWorkspace` | CANONICAL | **FIX** | — | Não | Não | PR-08 | TRIAGED |
+| SEM-026 | Itens Inteligentes | `approveItem`/`decidirCATMAT` com `tenantProcedure` (viewer aprova) | `decidirCATMAT` **usado pela UI** (`ProcurementItemPanel`); `itemIntelligence.approveItem` sem caller (UI usa `procurementProcess.approveItem`, que exige operator) | CANONICAL | **FIX** (paridade RBAC em `decidirCATMAT`; rota duplicada `approveItem` retirada no mesmo PR) | — | Não | Não | PR-08 | TRIAGED |
+
+### 3.1 Distribuições
+
+| Estratégia | Qtd | IDs |
+|---|---:|---|
+| FIX | 17 | 001, 002, 003, 004, 006, 007, 009, 013, 014, 019, 020, 021, 022, 023, 024, 025, 026 |
+| CUTOVER | 5 | 005, 008, 012, 016, 017 |
+| DISABLE | 2 | 015, 018 |
+| LEGAL REVIEW | 2 | 010, 011 |
+| **Total** | **26** | |
+
+| Alcance | Qtd | IDs |
+|---|---:|---|
+| CANONICAL | 18 | 002, 003, 004, 006, 007, 008, 009, 013, 014, 015, 019, 020, 021, 022, 023, 024, 025, 026 |
+| LEGACY_REACHABLE | 7 | 001, 005, 010, 011, 012, 016, 017 |
+| LEGACY_INERT | 1 | 018 |
+| SHARED_INFRA | 0 | — |
+| UNKNOWN | 0 | — |
+
+**Correção de reachability em relação ao baseline (registrada aqui, baseline intocado):** o baseline descreve SEM-001
+como "canônico/legado-UI (usado por MembersDialog, StageAssignmentPanel)". A triagem confirmou que esses componentes
+só existem sob `ProcessDetails`, **não roteado**; a exposição real é **por API** (`processes.create` + `collaboration.*`),
+o que mantém o risco e a severidade P0. Igualmente, SEM-026: a rota `itemIntelligence.approveItem` não tem caller de UI,
+mas `decidirCATMAT` (mesma falha de papel) tem.
+
+### 3.2 SEM-001 — confirmação e decisão
+
+- **Confirmado:** `collaborationRouter.addMember/removeMember/updatePermission/updateFunctionalRole/assignStage/unassignStage`
+  são `protectedProcedure`; `addMember` usa `db.getProcessById` (global) e `db.getUserByEmail` (global); `assignStage`
+  usa `getUserById` (global); `listMembers` devolve nome/e-mail sem filtro de tenant. `processes.create` (`tenantProcedure`,
+  montado) permite a qualquer usuário autenticado obter um processo legado próprio, satisfazendo a checagem de dono.
+- **Exposição possível:** enumeração de e-mails de todos os tenants; inclusão de usuário de outro órgão como
+  membro/"responsável pela etapa"; nome do processo enviado em notificação a pessoa de outro órgão; nome de pessoa de
+  outro órgão gravado no activity log. Não há evidência de exploração ativa (não verificado em produção — exigiria
+  leitura autorizada).
+- **Classificação final:** **FIX** — correção mínima e fail-closed do isolamento (tenant-scoped lookups; usuário-alvo
+  precisa ser membro do tenant; mensagens neutras). Não é investimento no fluxo legado: é fechar a exposição. A
+  **desativação** da superfície legada (`collaboration`, `processes.create`) é decisão de R2 (checkpoint R2.1) e não
+  precisa esperar para o isolamento ser corrigido.
+- **Prioridade:** **primeira PR funcional (PR-01 — Tenant Isolation — Collaboration).**
+
+---
+
+## 4. Classes dos P0
+
+| Classe | P0 | Observação |
+|---|---|---|
+| **Segurança / tenant** | 001 | isolado; primeira PR |
+| **Create ≠ Reset** (ID determinístico + upsert) | 002, 003, 005, 006, 007 (+ parte de 004, 021, 022) | distinguir: (A) idempotência correta — mesmo payload converge; (B) **upsert destrutivo** — 002/003/005/006/007 e o registro de 004/021/022; (C) criação duplicada — não é o caso atual; (D) recuperação de registro — `insertItemIfAbsent` dos Itens (P1 SEM-069); (E) atualização legítima — deve ser uma operação `update` explícita, nunca um `create` |
+| **Autoridade** (quem clicou = autoridade) | 004, 016, 026 (+ 001 responsável de outro tenant, 018 aprovação sem SoD) | mesma classe corrigida na #258 (`responsibleUser` ≠ responsável pela demanda) |
+| **Decisão humana** (editor vazio, regenerar, default decisório, formulário que sobrescreve, IA substituindo revisado) | 009, 014, 017, 019, 021, 022, 023 | 017 e 021 envolvem IA |
+| **Fallback semântico** | 008 (qtd cotada → necessidade), 012 (centavos/estimado → contratado), 009 (modalidade/plataforma padrão) | 009 também em "decisão humana" |
+| **Documento oficial / evidência** | 013 (cabeçalho vivo), 016 (aprovado editável), 020 (evidência fictícia), 024 (termo ignora instrumento) | |
+| **Workflow / máquina de estados** | 015, 025 (+ 004) | |
+| **Jurídica (LEGAL REVIEW)** | 010, 011 (+ insumo em 004: competência da autoridade) | não decidir solução jurídica tecnicamente |
+
+---
+
+## 5. Dependências reais (DAG conceitual)
+
+```
+R0 baseline/triagem
+ ├─► R1 SEM-001 (independente; primeira PR funcional)
+ ├─► R2 reachability & cutover ──► decisões humanas: FF_CANONICAL_INGESTION (SEM-005);
+ │        uso de legal_opinions/direct_contracts/contracts/processes (SEM-016/017/012) — leitura autorizada
+ │        PR-02 (SEM-015, SEM-018) sem dependência
+ ├─► R3 create≠reset (PR-05, PR-06) ──► R4 ratificação (PR-07; também depende de insumo jurídico)
+ │                                   └─► R5 PR-10 (editor do parecer usa a persistência do PR-06)
+ │                                   └─► R5 PR-11 (justificativas usam o mesmo padrão de upsert)
+ ├─► R4 PR-08 (RBAC/estados; independente)
+ ├─► R5 PR-09 (regerar/Edital; independente), PR-12 (contrato; independente)
+ ├─► R6 PR-13 (depende de inventário read-only + decisão sobre processos legados); PR-14 (depende de R2)
+ ├─► R7 PR-15, PR-16, PR-17 (independentes entre si)
+ └─► R8 PR-18 (pacote jurídico) ──► parecer jurídico ──► PR-19, PR-20
+R9 (P1) após R1–R8 por classe; R10 (P2/docs) após R9; R11 (guards + re-auditoria) fecha o programa.
+```
+
+O código **não** exige a ordem "tenant → cutover → authority → human-state → fallbacks → snapshots" de forma estrita:
+R3 é pré-requisito real de R4 (ratificação) e de parte de R5; R7 e PR-08/09/12 são independentes e podem correr em paralelo
+depois de R1, respeitando revisão humana e uma PR por vez em produção.
+
+---
+
+## 6. Plano consolidado de PRs para os P0
+
+O plano inicial de 17 PRs do baseline foi **revisado** após a triagem: parecer e contratação direta legados deixaram de
+receber correção profunda (CUTOVER/DISABLE), e PRs multi-módulo foram divididas para manter escopo limitado.
+
+| PR | Objetivo | Achados | Tipo | Dependências | Migration | Risco | Gate de validação |
+|---|---|---|---|---|---|---|---|
+| **PR-01** | Tenant Isolation — Collaboration | SEM-001 | SECURITY | — | Não | baixo | teste que reproduz o cross-tenant falha antes/passa depois; regressão same-tenant; smoke de segurança; CI verde; validação em produção |
+| PR-02 | Retirar endpoints inseguros sem uso | SEM-015, SEM-018 | CUTOVER (DISABLE) | — | Não | baixo | chamadas retornam erro governado; `issueProcess` intacto; freeze test das rotas |
+| PR-03 | Cutover do parecer legado | SEM-016, SEM-017 | CUTOVER | R2.3 (uso de `legal_opinions`) | Provável | médio | deep links redirecionam ao workspace canônico; mutações legadas bloqueadas; histórico legível |
+| PR-04 | Cutover da pesquisa colada | SEM-005 | CUTOVER | R2.2 (decisão sobre a flag) | Não | médio | colagem passa pela ingestão supervisionada; sem sobrescrita de cotações |
+| PR-05 | Create ≠ Reset — processos | SEM-002, SEM-003 | DOMAIN | — | Não | médio | smoke MySQL: 2º create com mesmo número ⇒ CONFLICT; retry idempotente converge |
+| PR-06 | Create ≠ Reset — parecer e contrato | SEM-006, SEM-007 | DOMAIN | — | Não | médio | idem; parecer assinado imutável na persistência |
+| PR-07 | Ratificação governada | SEM-004 | WORKFLOW | PR-05, R8/insumo de competência | **Sim** (ledger de decisão) | médio | decisão obrigatória; `decidedBy` ≠ `recordedBy`; superação explícita; teste que protegia o default reescrito |
+| PR-08 | Paridade RBAC e máquina de estados do contrato | SEM-026, SEM-025 | WORKFLOW | — | Não | baixo | viewer recusado; estado terminal não reabre |
+| PR-09 | Regerar sem perder edição + parâmetros do Edital hidratados | SEM-014, SEM-009 | UX-EXPLAINABILITY | — | Não | médio | regerar sobre edição humana sem `confirmReplace` ⇒ recusa; diff visível; parâmetros persistidos |
+| PR-10 | Editor do parecer hidrata e não impõe conclusão | SEM-019 | UX-EXPLAINABILITY | PR-06 | Não | baixo | teste de hidratação; vazio não apaga conteúdo |
+| PR-11 | Justificativas da Contratação Direta supervisionadas | SEM-021, SEM-022 | UX-EXPLAINABILITY | PR-05 | Não | médio | IA vira sugestão; oficial só após aceite; formulário hidrata |
+| PR-12 | Contrato vigente só muda por instrumento | SEM-023 | DOMAIN | — | Não | médio | CAS de revisão; campos econômicos bloqueados fora de aditivo/apostila |
+| PR-13 | Quantidade cotada nunca vira necessidade | SEM-008 | CUTOVER | R6.1/R6.2 | Não | médio | TR/Edital fail-closed sem Itens; testes legados reescritos |
+| PR-14 | Saídas legadas de valor da Contratação Direta | SEM-012 | CUTOVER | R2.3 | Não | baixo | saídas legadas redirecionadas/retiradas; formatador único coberto por teste |
+| PR-15 | Snapshot institucional na emissão | SEM-013 | DOCUMENT | — | Não (backfill documentado à parte) | baixo | versão emitida exporta cabeçalho da época |
+| PR-16 | Evidência documental real | SEM-020 | DOCUMENT | — | Não | médio | anexar exige upload S3 real; validar exige anexo |
+| PR-17 | Termos a partir do instrumento | SEM-024 | DOCUMENT | — | Não | médio | termo reflete justificativa/novo valor/prazo do instrumento; IA rotulada |
+| PR-18 | Pacote de consulta jurídica (documental) | SEM-010, SEM-011 | LEGAL | — | Não | nenhum (docs) | pacote enviado; parecer recebido e registrado |
+| PR-19 | Catálogo legal conforme parecer | SEM-010 | LEGAL | PR-18 + parecer | Dados | alto | conferência jurídica do conteúdo |
+| PR-20 | Limites de aditivo conforme parecer | SEM-011 | LEGAL | PR-18 + parecer | Não | alto | conferência jurídica; testes de limite |
+
+**Resultado:** **19 PRs funcionais** (PR-01..PR-17, PR-19, PR-20 — as duas últimas condicionadas ao parecer jurídico)
++ **1 PR documental** (PR-18). P1/P2 ficam para R9/R10, com plano próprio a aprovar (R9.1).
+
+**Migrations futuras previstas:** P0 — PR-07 (ledger de decisão da ratificação), PR-03 (provável), PR-19 (dados).
+P1 (R9, a planejar) — método/exclusão de cotação (SEM-027), `contractedValue` (SEM-032), lineage de aditivos (SEM-040),
+itens do contrato (SEM-062), índice de lotes (SEM-067), sequência de timeline (SEM-076), backfill + NOT NULL de
+`organizationId` em `documents` (SEM-079), unicidade de `contracts.number` por órgão (SEM-085).
+
+**Itens para validação jurídica:** SEM-010 (hipóteses e incisos dos arts. 74/75 e limites de valor), SEM-011 (art. 125:
+limites de acréscimo/supressão, prazos), insumo em SEM-004 (autoridade competente para ratificar; obrigatoriedade de
+parecer prévio), e — para R9 — SEM-084 (limites de aditivos no fluxo canônico) e SEM-091 (credenciamento como regime).
+
+---
+
+## 7. Invariantes mestres
+
+| ID | Invariante | Base na auditoria |
+|---|---|---|
+| INV-01 | Toda fonte só pode afirmar fatos autorizados semanticamente (e toda escrita no ledger passa pela política). | #258, SEM-037 |
+| INV-02 | Create nunca reseta estado institucional existente silenciosamente. | SEM-002/003/005/006/007 |
+| INV-03 | Todo lookup sensível é tenant-scoped (`organizationId` do contexto, nunca do input). | SEM-001, SEM-073, SEM-079 |
+| INV-04 | Nenhuma substituição ocorre sem exibir valor atual, valor proposto e origem. | #258, SEM-052/055 |
+| INV-05 | Decisão humana não é apagada por reload/regenerate. | SEM-009/014/019/022/023 |
+| INV-06 | IA não afirma decisão institucional (fato, conclusão, status, preço, quantidade, documento oficial) sem aprovação humana. | SEM-017/021/024/034 |
+| INV-07 | Documento oficial consome snapshot/versão imutável. | SEM-013 |
+| INV-08 | Status de um domínio não implica status de outro sem transição institucional explícita. | SEM-015/025/030/064/065 |
+| INV-09 | `sourceQuantity` nunca afirma `plannedQuantity`. | SEM-008 |
+| INV-10 | Fingerprint é matching, não identidade. | verificado OK nos Itens; manter |
+| INV-11 | Mesma chave de idempotência + payload diferente = conflito. | SEM-048, SEM-075 |
+| INV-12 | Documento aprovado/oficial nunca é reescrito silenciosamente. | SEM-013/016/051/078 |
+| INV-13 | Autor/operador/criador não vira autoridade institucional por conveniência. | #258, SEM-004/016 |
+| INV-14 | Valor derivado não ganha autoridade apenas por estar disponível. | SEM-027/028/032 |
+| INV-15 | Fluxo legado sem função estratégica é retirado, não perpetuamente remendado. | triagem §3 |
+| INV-16 | Valor monetário persistido em centavos é formatado por um único formatador e rotulado pelo significado (estimado, referência, adjudicado, contratado). | SEM-012 |
+| INV-17 | Regra institucional crítica existe no servidor/domínio; esconder botão não é controle. | SEM-017, SEM-026 |
+
+---
+
+## 8. Fases e checkpoints (congelados em v1.0)
+
+Cada fase: início = checkpoint 1 em `IN_PROGRESS`; gate = último checkpoint; 100% = todos `PASS`.
+"merged" sempre implica CI verde na PR **e** na main pós-merge; "produção validada" = deploy SUCCESS + health + logs +
+verificação comportamental read-only do caso.
+
+**R0 — Baseline e triagem (10)**
+R0.1 relatório baseline versionado · R0.2 26 P0 extraídos e conferidos · R0.3 26 P0 classificados
+FIX/CUTOVER/DISABLE/LEGAL REVIEW · R0.4 reachability registrada para os 26 · R0.5 canônico/legado/shared infra registrado ·
+R0.6 dependências mapeadas · R0.7 plano de PRs consolidado · R0.8 invariantes mestres documentadas · R0.9 PR documental
+aberta · R0.10 PR documental com CI verde.
+
+**R1 — Tenant Isolation / Security (10)**
+R1.1 reproduzir SEM-001 em teste controlado · R1.2 contrato tenant-scoped definido · R1.3 correção Domain/DB ·
+R1.4 correção Service/router · R1.5 frontend/member resolution (se necessário; senão registrar N/A com evidência → PASS) ·
+R1.6 testes cross-tenant · R1.7 regressão same-tenant · R1.8 auditoria/observabilidade · R1.9 CI verde (PR e main) ·
+R1.10 produção validada.
+
+**R2 — Legacy Reachability & Cutover (7)**
+R2.1 inventário congelado de superfícies legadas montadas (rota, menu, caller, API) com decisão FIX/CUTOVER/DISABLE por
+superfície (inclui `collaboration`/`processes.create`) · R2.2 decisão humana registrada sobre `FF_CANONICAL_INGESTION` por
+tenant (SEM-005) · R2.3 verificação read-only **autorizada** de uso de dados legados (`legal_opinions`, `direct_contracts`,
+`contracts`, `processes`) · R2.4 PR-02 merged · R2.5 PR-03 merged · R2.6 PR-04 merged · R2.7 produção validada
+(superfícies retiradas respondem erro governado; fluxo canônico intacto).
+
+**R3 — Create ≠ Reset (6)**
+R3.1 testes MySQL que reproduzem o reset de SEM-002/003/006/007 (falham antes) · R3.2 contrato "CONFLICT em chave natural
+existente; convergência só com mesmo payload" documentado · R3.3 PR-05 merged · R3.4 PR-06 merged · R3.5 regressão de
+retry idempotente verde · R3.6 produção validada.
+
+**R4 — Authority & Institutional Roles (7)**
+R4.1 contrato de autoridade definido (`decidedBy`/`recordedBy`, papéis mínimos) · R4.2 insumo jurídico sobre competência
+da ratificação registrado · R4.3 migration aditiva do ledger de decisão revisada · R4.4 PR-07 merged · R4.5 PR-08 merged ·
+R4.6 testes que protegiam o default "ratificado" reescritos · R4.7 produção validada.
+
+**R5 — Human State Preservation (7)**
+R5.1 guard de hidratação de formulário (teste) criado · R5.2 PR-09 merged · R5.3 PR-10 merged · R5.4 PR-11 merged ·
+R5.5 PR-12 merged · R5.6 teste "regerar sobre edição humana sem confirmação ⇒ recusa" verde · R5.7 produção validada.
+
+**R6 — Semantic Fallbacks: Quantity/Price/Unit (6)**
+R6.1 inventário read-only autorizado de processos sem Itens da Contratação · R6.2 decisão humana sobre esses processos ·
+R6.3 PR-13 merged · R6.4 testes que codificavam o legado reescritos · R6.5 PR-14 merged · R6.6 produção validada.
+
+**R7 — Official Document Snapshot & Immutability (6)**
+R7.1 PR-15 merged · R7.2 decisão documentada de backfill de snapshot das versões já emitidas · R7.3 PR-16 merged ·
+R7.4 PR-17 merged · R7.5 guard de imutabilidade de documento aprovado/emitido (teste) · R7.6 produção validada.
+
+**R8 — Legal Rules Review (6)**
+R8.1 PR-18 (pacote de consulta) merged · R8.2 parecer jurídico sobre catálogo arts. 74/75 recebido e registrado ·
+R8.3 parecer sobre art. 125 recebido e registrado · R8.4 PR-19 merged · R8.5 PR-20 merged · R8.6 produção validada.
+
+**R9 — P1 Structural Remediation (10)**
+R9.1 plano de PRs dos 54 P1 aprovado (com triagem FIX/CUTOVER/DISABLE/LEGAL REVIEW) · R9.2 grupo autoridade/fonte merged ·
+R9.3 grupo proveniência/lineage merged · R9.4 grupo stale/reconciliação merged · R9.5 grupo ações cegas/explicabilidade
+merged · R9.6 grupo ownership merged · R9.7 grupo relatórios/operações/exports merged · R9.8 grupo workflow/replay/auditoria
+merged · R9.9 grupo tenant/export merged · R9.10 os 54 P1 com estado final registrado (corrigido, cutover, desativado ou
+risco aceito formalmente).
+
+**R10 — P2 / Documentation / UX Debt (4)**
+R10.1 12 P2 triados · R10.2 PR de P2 técnicos merged · R10.3 documentação arquitetural alinhada ao código (PR merged) ·
+R10.4 12 P2 com estado final registrado.
+
+**R11 — Permanent Guards & Closure (8)**
+R11.1 guard semantic-authority · R11.2 guard no-upsert-on-create · R11.3 guard tenant-source · R11.4 guard blind-action de
+UI · R11.5 guard AI-never-decides · R11.6 guard de imutabilidade de aprovado/emitido · R11.7 re-auditoria de fechamento
+(mesma metodologia) sem P0 aberto · R11.8 relatório de fechamento merged.
+
+**Total congelado v1.0:** 10 + 10 + 7 + 6 + 7 + 7 + 6 + 6 + 6 + 10 + 4 + 8 = **87 checkpoints**.
+
+---
+
+## 9. Master Progress Ledger
+
+Registro técnico versionado de governança (não é sistema de workflow). Atualizado ao fim de cada execução desta frente.
+
+| Checkpoint | Status | Evidência | PR/commit | Data |
+|---|---|---|---|---|
+| R0.1 | PASS | baseline versionado byte-idêntico (sha256 `08edc734…810b3`) | esta PR (commit documental) | 2026-09-26 |
+| R0.2 | PASS | 26 P0 extraídos e conferidos (26 P0 · 54 P1 · 12 P2 = 92) — §3 | esta PR | 2026-09-26 |
+| R0.3 | PASS | FIX 17 · CUTOVER 5 · DISABLE 2 · LEGAL REVIEW 2 — §3.1 | esta PR | 2026-09-26 |
+| R0.4 | PASS | reachability por P0 com evidência (rotas, menu, callers, routers) — §2/§3 | esta PR | 2026-09-26 |
+| R0.5 | PASS | CANONICAL 18 · LEGACY_REACHABLE 7 · LEGACY_INERT 1 · SHARED_INFRA 0 · UNKNOWN 0 — §3.1 | esta PR | 2026-09-26 |
+| R0.6 | PASS | DAG de dependências — §5 | esta PR | 2026-09-26 |
+| R0.7 | PASS | plano de PRs consolidado (19 funcionais + 1 documental) — §6 | esta PR | 2026-09-26 |
+| R0.8 | PASS | INV-01…INV-17 — §7 | esta PR | 2026-09-26 |
+| R0.9 | TODO | PR documental aberta (registrar número na próxima execução) | — | — |
+| R0.10 | TODO | CI verde da PR documental (registrar na próxima execução) | — | — |
+| R1.1 – R1.10 | TODO | — | — | — |
+| R2.1 – R2.7 | TODO | — | — | — |
+| R3.1 – R3.6 | TODO | — | — | — |
+| R4.1 – R4.7 | TODO | — | — | — |
+| R5.1 – R5.7 | TODO | — | — | — |
+| R6.1 – R6.6 | TODO | — | — | — |
+| R7.1 – R7.6 | TODO | — | — | — |
+| R8.1 – R8.6 | TODO | — | — | — |
+| R9.1 – R9.10 | TODO | — | — | — |
+| R10.1 – R10.4 | TODO | — | — | — |
+| R11.1 – R11.8 | TODO | — | — | — |
+
+Nota: R0.9 e R0.10 não podem ser gravados como PASS dentro do próprio commit que os origina; são evidenciados no
+relatório da execução (número da PR e resultado do CI) e registrados neste ledger na execução seguinte.
+
+---
+
+## 10. Histórico de versões do roadmap
+
+| Versão | Data | Mudança | Checkpoints afetados | Motivo |
+|---|---|---|---|---|
+| v1.0 | 2026-09-26 | Criação: triagem dos 26 P0, fases R0–R11, 87 checkpoints | todos | baseline da remediação |
+
+---
+
+## 11. Modelo do bloco obrigatório
+
+```
+==================================================
+PROGRESSO MESTRE — REMEDIAÇÃO DA AUDITORIA SEMÂNTICA
+==================================================
+Baseline: <versão do roadmap / commit do plano>
+R0 — Baseline e triagem: X%
+R1 — Tenant Isolation / Security: X%
+R2 — Legacy Reachability & Cutover: X%
+R3 — Create ≠ Reset: X%
+R4 — Authority & Institutional Roles: X%
+R5 — Human State Preservation: X%
+R6 — Semantic Fallbacks: X%
+R7 — Official Document Snapshot & Immutability: X%
+R8 — Legal Rules Review: X%
+R9 — P1 Structural Remediation: X%
+R10 — P2 / Documentation / UX Debt: X%
+R11 — Permanent Guards & Closure: X%
+Progresso global: PASS / 87 checkpoints = X%
+Fase atual: …   Gate atual: …
+Concluído nesta execução: …
+Próximo passo autorizado: …
+Bloqueios: …   Riscos: …   Desvios de escopo: …
+Achados abertos: P0: …  P1: …  P2: …
+```
