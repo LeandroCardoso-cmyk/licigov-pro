@@ -210,7 +210,19 @@ describe("Responsável pela demanda — operador do Processo não é fonte (pilo
     vi.mocked(ctxSvc.resolveProcurementContext).mockResolvedValue(ctxWith([fact("demand.responsibleParty", "Maria Souza", "etp")]));
     const st = await getDFDAssistState({ organizationId: ORG, processId: PID, correlationId: "c" });
     expect(st.fields.find((f) => f.key === "identificacao.responsavel")).toMatchObject({ state: "conflict", documentValue: HUMAN, contextValue: "Maria Souza", contextOrigin: "etp", reconcilable: true });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const { document } = await reconcileDFDFieldDraft({ ...base, fieldKey: "identificacao.responsavel", expectedContentHash: draftContentHash(row.content), idempotencyKey: "rec-r1" });
+    const event = info.mock.calls.map((c) => JSON.parse(String(c[0]))).find((e) => e.operation === "document_context_reconciled");
+    info.mockRestore();
+    // Auditoria no evento EXISTENTE: campo, origem aplicada, hashes antes/depois, ator, correlação, timestamp — sem conteúdo.
+    expect(event).toMatchObject({
+      field: "identificacao.responsavel", sourceType: "etp", previousState: "conflict",
+      beforeHash: factValueHash(HUMAN), afterHash: factValueHash("Maria Souza"), actorUserId: 5, correlationId: "corr-1",
+      organizationId: ORG, processId: PID,
+    });
+    expect(typeof event.ts).toBe("string");
+    expect(JSON.stringify(event)).not.toContain(HUMAN);
+    expect(JSON.stringify(event)).not.toContain("Maria Souza");
     expect(parseDFD(document.content).values["identificacao.responsavel"]).toBe("Maria Souza");
     expect(parseDFD(document.content).values["identificacao.unidade"]).toBe("Secretaria de Educação");
     const write = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)![1];

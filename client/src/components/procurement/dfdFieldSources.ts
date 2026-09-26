@@ -110,6 +110,18 @@ export function fieldIndicator(f: DFDFieldViewUI): FieldIndicator {
   }
 }
 
+/**
+ * Decide se a ação de origem prossegue. Substituição de valor escrito pelo servidor SÓ com confirmação que
+ * mostra os valores; cancelar = MANTER o valor do rascunho (nada é enviado). Sem valores ⇒ nunca prossegue.
+ */
+export function shouldProceedWithFieldAction(f: DFDFieldViewUI | undefined, confirm: (message: string) => boolean): boolean {
+  if (!f) return false;
+  const ind = fieldIndicator(f);
+  if (!ind.action) return false;
+  if (!ind.confirmAction) return true;
+  return ind.confirmMessage !== null && confirm(ind.confirmMessage);
+}
+
 export interface AssistSummary { filled: number; pending: number; attention: number }
 
 export function assistSummary(fields: readonly DFDFieldViewUI[]): AssistSummary {

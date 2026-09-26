@@ -575,6 +575,8 @@ export async function reconcileDFDFieldDraft(params: {
   log.info("document_context_reconciled", {
     organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
     actorUserId: params.actorUserId, documentKind: "dfd", field: params.fieldKey, previousState: view.state,
+    // Proveniência da substituição SEM conteúdo integral: origem aplicada + hashes antes/depois do campo.
+    sourceType: view.contextOrigin, beforeHash: fieldHash(view.documentValue), afterHash: fieldHash(view.contextValue),
     contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16), replayed: result.replayed,
   });
   return result;

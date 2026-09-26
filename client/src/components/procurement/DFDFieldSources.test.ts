@@ -9,7 +9,7 @@ import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fieldIndicator, assistSummary, originLabel, shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
+import { fieldIndicator, assistSummary, originLabel, shouldRotateAssistKeyOnError, shouldProceedWithFieldAction, type DFDFieldViewUI } from "./dfdFieldSources";
 import DFDFieldSources from "./DFDFieldSources";
 
 const f = (over: Partial<DFDFieldViewUI>): DFDFieldViewUI => ({
@@ -138,6 +138,19 @@ describe("Explicabilidade da reconciliação — valor atual × valor de origem 
     );
     // "Atualizar no rascunho" (valor do sistema/vazio) mostra os valores mas não exige confirmação
     expect(fieldIndicator(f({ state: "stale", reconcilable: true, documentValue: "10", contextValue: "12", contextOrigin: "user" }))).toMatchObject({ confirmAction: false, confirmMessage: null, action: "Atualizar no rascunho" });
+  });
+
+  it("E2) MANTER × USAR: cancelar a confirmação mantém o rascunho (nada enviado); confirmar prossegue; sem valores nunca", () => {
+    const seen: string[] = [];
+    expect(shouldProceedWithFieldAction(divergent, (m) => { seen.push(m); return false; })).toBe(false); // Manter valor do rascunho
+    expect(seen[0]).toContain("Valor de origem: Maria Souza");
+    expect(shouldProceedWithFieldAction(divergent, () => true)).toBe(true); // Usar valor de origem
+    const noSource = f({ ...RESP, state: "conflict", contextValue: null, reconcilable: true });
+    expect(shouldProceedWithFieldAction(noSource, () => true)).toBe(false);
+    expect(shouldProceedWithFieldAction(undefined, () => true)).toBe(false);
+    const confirm = vi.fn(() => false);
+    expect(shouldProceedWithFieldAction(f({ state: "available", documentValue: null, contextValue: "x", reconcilable: true }), confirm)).toBe(true);
+    expect(confirm).not.toHaveBeenCalled(); // preencher campo vazio não substitui valor humano
   });
 
   it("F) edição não salva: botão desabilitado, valores continuam visíveis", () => {

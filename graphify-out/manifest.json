@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1790369974.189273,
-    "ast_hash": "fc947695cc3706bb0acd2b32395c2f3d",
+    "mtime": 1790440984.5709414,
+    "ast_hash": "02148e1f2eb729f0ef962c52efa573f9",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
@@ -6015,8 +6015,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1790344512.5788388,
-    "ast_hash": "b41836487c427d2e64b3e68a1923352e",
+    "mtime": 1790440984.5699534,
+    "ast_hash": "ef4c9c7caebcec9c17a8ad7f4cab5b70",
     "semantic_hash": ""
   },
   "server/services/promptOrchestratorService.ts": {
@@ -12125,8 +12125,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDFieldSources.test.ts": {
-    "mtime": 1790370120.9582317,
-    "ast_hash": "12324b3670e535fb87d523b81f2abcd2",
+    "mtime": 1790441005.2782133,
+    "ast_hash": "3503577b833c337c726938e6e4d36c82",
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDFieldSources.tsx": {
@@ -12145,8 +12145,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/dfdFieldSources.ts": {
-    "mtime": 1790369956.1781394,
-    "ast_hash": "2374ab408fb60c5c9d8baae875358401",
+    "mtime": 1790440984.5706146,
+    "ast_hash": "96c488ece0756efb18d318a4a4c0c76b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/procurementItemsView.ts": {
@@ -12200,8 +12200,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/dfd-canonical-context-service.test.ts": {
-    "mtime": 1790370090.1054187,
-    "ast_hash": "145833b3e4496074e07f70df62dace02",
+    "mtime": 1790441005.0623786,
+    "ast_hash": "c8182de2e495af7e920587d5088eb078",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-candidate-eligibility-mysql-smoke.test.ts": {
