@@ -5,7 +5,7 @@ import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import { shouldRotateSaveKeyOnError } from "./saveKeyPolicy";
 import DFDFieldSources from "./DFDFieldSources";
-import { shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
+import { shouldProceedWithFieldAction, shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
 
 /**
  * DFDWorkspace — REAL (wired to tRPC).
@@ -109,9 +109,10 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   const assistFields = (assist?.available ? assist.fields : []) as DFDFieldViewUI[];
   const justificationByUser = assistFields.some((f) => f.key === "justificativa" && f.state === "user_modified");
 
-  const onFieldAction = (key: string, confirmReplace: boolean) => {
+  const onFieldAction = (key: string) => {
     if (!processId || !doc) return;
-    if (confirmReplace && !window.confirm("Substituir o valor escrito no DFD pela informação de origem? O valor anterior fica no histórico.")) return;
+    // Confirmação com valor atual × valor de origem; cancelar mantém o rascunho (nada é enviado).
+    if (!shouldProceedWithFieldAction(assistFields.find((f) => f.key === key), (m) => window.confirm(m))) return;
     setReconcilingKey(key);
     reconcileField.mutate({ processId, fieldKey: key, expectedContentHash: doc.contentHash, idempotencyKey: reconcileKey });
   };

@@ -11,7 +11,7 @@
  * Puro e determinístico (sem I/O).
  */
 import {
-  CANONICAL_CONTEXT_VERSION, factValueHash, normalizeText, itemPath, canonicalItemKey,
+  CANONICAL_CONTEXT_VERSION, factValueHash, normalizeText, itemPath, canonicalItemKey, isSourceAllowed,
   type ProcurementCanonicalContext, type CanonicalField, type ContextSourceType, type ContextPath, type FactValue,
 } from "./canonicalProcurementContext";
 import { formatBRL } from "./money";
@@ -538,6 +538,18 @@ function itemLabel(prefill: DFDPrefill, key: string): string {
 }
 
 /**
+ * Origem de marcador de prefill AINDA válida pela POLÍTICA DE AUTORIDADE do fato que o campo reflete.
+ * Genérico (sem regra por campo): um marcador gravado quando a política aceitava uma fonte que hoje não
+ * aceita (ex.: operador do Processo como "Responsável pela demanda") deixa de valer como linhagem — o valor
+ * no documento não tem origem válida e nunca gera divergência/ação contra essa fonte.
+ */
+export function isPrefillOriginAuthorized(key: string, origin: DFDFieldOrigin): boolean {
+  if (origin === "derived") return true;
+  const path: ContextPath | null | undefined = key.startsWith("item:") ? itemPath(key.slice(5), "plannedQuantity") : DFD_FIELD_FACT[key];
+  return path ? isSourceAllowed(path, origin) : true;
+}
+
+/**
  * Estado de cada campo = f(conteúdo atual, marcadores gravados, projeção ATUAL do contexto). Nada é
  * persistido: reload/polling nunca "voltam" um valor — só o conteúdo salvo manda.
  */
@@ -554,7 +566,8 @@ export function computeDFDFieldStates(content: string, sources: readonly string[
   return keys.map((key) => {
     const doc = docValueOf(parsed, linked, key);
     const ctx = prefillValueOf(current, key);
-    const pf = mk.prefill[key];
+    const rawPf = mk.prefill[key];
+    const pf = rawPf && isPrefillOriginAuthorized(key, rawPf.origin) ? rawPf : undefined;
     const ai = mk.ai[key];
     const docH = hashOfField(key, doc);
     const ctxH = ctx.value === null ? null : hashOfField(key, ctx.value);
@@ -568,6 +581,11 @@ export function computeDFDFieldStates(content: string, sources: readonly string[
     if (pf && doc !== null && docH === pf.hash) {
       const stale = !narrative && ctxH !== pf.hash;
       return { ...base, state: stale ? "stale" as const : "prefilled" as const, origin: pf.origin, reconcilable: stale && ctx.value !== null };
+    }
+    // Valor posto pelo sistema a partir de fonte hoje NÃO autorizada, intocado, e sem fonte válida: não é
+    // do humano nem do contexto — sem origem, sem divergência, sem ação (o servidor revisa no DFD).
+    if (rawPf && !pf && doc !== null && docH === rawPf.hash && ctxH === null) {
+      return { ...base, state: "user_modified" as const, origin: null, reconcilable: false };
     }
     if (doc === null) {
       return ctx.value !== null && !narrative
@@ -764,7 +782,11 @@ export function extractDFDAssertions(content: string, sources: readonly string[]
     const v = parsed.values[fieldKey];
     if (v === null) continue;
     if (fieldHash(v) === resolved(path).valueHash) continue;
-    out.push({ path, value: normalizeText(v), basisValueHash: mk.prefill[fieldKey]?.hash ?? resolved(path).valueHash ?? null, fieldKey });
+    // Valor intocado posto a partir de fonte hoje não autorizada: não é afirmação humana (não vira fato).
+    const raw = mk.prefill[fieldKey];
+    const pf = raw && isPrefillOriginAuthorized(fieldKey, raw.origin) ? raw : undefined;
+    if (raw && !pf && fieldHash(v) === raw.hash) continue;
+    out.push({ path, value: normalizeText(v), basisValueHash: pf?.hash ?? resolved(path).valueHash ?? null, fieldKey });
   }
   // Itens: o DFD NÃO cria itens (dono = Itens da contratação). Só a quantidade PREVISTA de linhas ligadas
   // a UM Item Canônico é afirmada; linhas sem item ficam como "sem correspondência" (candidatos).

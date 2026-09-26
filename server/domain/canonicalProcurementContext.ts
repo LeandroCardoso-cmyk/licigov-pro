@@ -46,19 +46,23 @@ export type ContextPath = ScalarPath | ItemPath;
 /**
  * POLÍTICA DE AUTORIDADE — quais fontes podem AFIRMAR cada fato. Explícita, testável e documentada.
  *  - process.* e organization.*: só a própria fonte estruturada;
- *  - necessidade (unidade, responsável, planejamento): Processo, humano, DFD e documentos posteriores;
+ *  - unidade demandante: Processo (quando INFORMADA na abertura), humano, DFD e documentos posteriores;
+ *  - responsável pela demanda: SOMENTE humano, DFD e documentos posteriores — NUNCA o Processo. O
+ *    `responsibleUser` do Processo é quem o criou/opera no LiciGov (operador), não a pessoa da unidade
+ *    demandante responsável pela necessidade; projetá-lo aqui gerava divergência falsa no DFD;
  *  - plannedQuantity: SOMENTE humano/documentos da necessidade — NUNCA price_research/intelligent_item
  *    (a quantidade da cotação é `sourceQuantity`, evidência) e NUNCA ai_draft;
  *  - descrição/unidade do item: também observáveis a partir do Item Inteligente (evidência consolidada).
  */
 const NEED_SOURCES: readonly ContextSourceType[] = ["process", "user", "dfd", "etp", "tr", "approved_document"];
+const HUMAN_NEED_SOURCES: readonly ContextSourceType[] = ["user", "dfd", "etp", "tr", "approved_document"];
 export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceType[]>> = {
   "process.number":          ["process"],
   "process.object":          ["process"],
   "organization.name":       ["organization"],
   "organization.location":   ["organization"],
   "demand.requestingUnit":   NEED_SOURCES,
-  "demand.responsibleParty": NEED_SOURCES,
+  "demand.responsibleParty": HUMAN_NEED_SOURCES,
   "planning.pcaAlignment":   ["user", "dfd", "etp", "approved_document"],
   "planning.priority":       ["user", "dfd", "etp", "approved_document"],
   "planning.desiredDate":    ["user", "dfd", "etp", "approved_document"],
@@ -222,8 +226,8 @@ export interface PriceEvidence {
 export interface ContextInputs {
   organizationId: number;
   processId: string;
+  /** `responsibleUserId` = operador que criou o Processo — NUNCA projetado como "Responsável pela demanda". */
   process: { number: string; object: string; responsibleUserId: number; createdAt: string };
-  responsibleUserName: string | null;
   organization: { name: string | null; municipio: string | null; uf: string | null } | null;
   /** Afirmações do ledger (JÁ filtradas por organizationId + processId pelo chamador). */
   assertions: readonly FactAssertion[];
@@ -311,7 +315,6 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
   const proj: FactAssertion[] = [
     projection("process.number", input.process.number, "process", input.processId, "confirmed", t0),
     projection("process.object", input.process.object, "process", input.processId, "confirmed", t0),
-    projection("demand.responsibleParty", input.responsibleUserName, "process", input.processId, "confirmed", t0),
     projection("organization.name", input.organization?.name, "organization", String(input.organizationId), "confirmed", t0),
     projection("organization.location",
       [input.organization?.municipio, input.organization?.uf].filter(Boolean).join("/") || null,

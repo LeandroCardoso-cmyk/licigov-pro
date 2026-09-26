@@ -2,7 +2,8 @@ import { assistSummary, fieldIndicator, type DFDFieldViewUI, type FieldTone } fr
 
 /**
  * Indicadores DISCRETOS de origem dos campos do DFD (Contexto Canônico). Fica abaixo do editor — não muda
- * o layout, as seções nem o fluxo do DFD. Ações são sempre explícitas ("Atualizar no rascunho").
+ * o layout, as seções nem o fluxo do DFD. Ações são sempre explícitas ("Atualizar no rascunho") e, havendo
+ * divergência ou ação, o valor atual no DFD, o valor de origem e a origem ficam visíveis ANTES do clique.
  */
 
 const TONE_CLASS: Record<FieldTone, string> = {
@@ -37,6 +38,7 @@ export default function DFDFieldSources({ fields, dirty, busyKey, onAction }: DF
       <ul className="mt-2 divide-y divide-border">
         {fields.map((f) => {
           const ind = fieldIndicator(f);
+          const detailsId = `dfd-field-${f.key.replace(/[^A-Za-z0-9_-]/g, "-")}-details`;
           return (
             <li key={f.key} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-field={f.key} data-state={f.state}>
               <span className="text-foreground">{ind.label}</span>
@@ -47,12 +49,24 @@ export default function DFDFieldSources({ fields, dirty, busyKey, onAction }: DF
                     type="button"
                     onClick={() => onAction(f.key, ind.confirmAction)}
                     disabled={dirty || busyKey !== null}
+                    aria-label={ind.actionAriaLabel ?? undefined}
+                    aria-describedby={ind.details ? detailsId : undefined}
                     className="rounded-md border border-input px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                   >
                     {busyKey === f.key ? "Atualizando..." : ind.action}
                   </button>
                 )}
               </span>
+              {ind.details && (
+                <dl id={detailsId} className="grid w-full grid-cols-1 gap-x-3 gap-y-0.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs sm:grid-cols-[max-content_1fr]" data-testid="dfd-field-details">
+                  {ind.details.map((d) => (
+                    <div key={d.label} className="contents">
+                      <dt className="text-muted-foreground">{d.label}</dt>
+                      <dd className="break-words text-foreground">{d.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </li>
           );
         })}

@@ -33,7 +33,6 @@ function inputs(over: Partial<ContextInputs> = {}): ContextInputs {
   const base: ContextInputs = {
     organizationId: 7, processId: "proc-1",
     process: { number: "2026/0001", object: "Aquisição de cadeiras", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-    responsibleUserName: "Servidora Responsável",
     organization: { name: "Prefeitura de Teste", municipio: "Teste", uf: "PR" },
     assertions: [], intelligentItems: [], ...over,
   };
@@ -63,11 +62,12 @@ describe("Contexto Canônico — domínio", () => {
     expect(ctx.process.number.value).toBe("2026/0001");
     expect(ctx.organization.name.value).toBe("Prefeitura de Teste");
     expect(ctx.organization.location.value).toBe("Teste/PR");
-    expect(ctx.demand.responsibleParty).toMatchObject({ value: "Servidora Responsável", source: { type: "process" } });
+    // O operador que criou o Processo (responsibleUserId) NÃO é o "Responsável pela demanda".
+    expect(ctx.demand.responsibleParty).toMatchObject({ value: null, status: "unknown", source: null });
   });
 
   it("2) campo sem fonte fica UNKNOWN (nunca inventado)", () => {
-    const ctx = resolveCanonicalContext(inputs({ responsibleUserName: null, organization: null }));
+    const ctx = resolveCanonicalContext(inputs({ organization: null }));
     expect(ctx.demand.requestingUnit).toMatchObject({ value: null, status: "unknown", source: null });
     expect(ctx.planning.priority.status).toBe("unknown");
     expect(ctx.organization.name.status).toBe("unknown");
@@ -99,10 +99,11 @@ describe("Contexto Canônico — domínio", () => {
   });
 
   it("6) superação consciente: humano altera no DFD o valor pré-preenchido do Processo", () => {
-    const ctx0 = resolveCanonicalContext(inputs());
-    const human = fact("demand.responsibleParty", "Outro Servidor", "dfd", { basisValueHash: ctx0.demand.responsibleParty.valueHash });
-    const ctx = resolveCanonicalContext(inputs({ assertions: [human] }));
-    expect(ctx.demand.responsibleParty).toMatchObject({ value: "Outro Servidor", source: { type: "dfd" }, actorUserId: 3 });
+    const opened = fact("demand.requestingUnit", "Secretaria de Obras", "process", { sourceId: "proc-1" });
+    const ctx0 = resolveCanonicalContext(inputs({ assertions: [opened] }));
+    const human = fact("demand.requestingUnit", "Secretaria de Educação", "dfd", { basisValueHash: ctx0.demand.requestingUnit.valueHash });
+    const ctx = resolveCanonicalContext(inputs({ assertions: [opened, human] }));
+    expect(ctx.demand.requestingUnit).toMatchObject({ value: "Secretaria de Educação", source: { type: "dfd" }, actorUserId: 3 });
     expect(ctx.stats.conflictCount).toBe(0);
   });
 
@@ -220,7 +221,7 @@ describe("Contexto Canônico — domínio", () => {
     const ctx = resolveCanonicalContext(inputs({ assertions: [fact("demand.requestingUnit", "Sec. Saúde", "process", { sourceId: "proc-1" })] }));
     expect(ctx.organizationId).toBe(7);
     expect(ctx.processId).toBe("proc-1");
-    expect(ctx.stats.knownFields).toBe(6); // número, objeto, órgão, localidade, unidade, responsável
+    expect(ctx.stats.knownFields).toBe(5); // número, objeto, órgão, localidade, unidade (responsável: sem fonte)
     expect(ctx.stats.conflictCount).toBe(0);
     const other = resolveCanonicalContext({ ...inputs(), organizationId: 8 });
     expect(other.digest).not.toBe(resolveCanonicalContext(inputs()).digest);

@@ -29,7 +29,7 @@ type Row = { id: string; d: string; source: ContextItem; lot?: string | null; or
 function ctxOf(rows: Row[], facts: FactAssertion[], lots = false) {
   return resolveCanonicalContext({
     organizationId: 7, processId: "p1", process: { number: "1", object: "Limpeza", responsibleUserId: 3, createdAt: "2026-01-01T00:00:00.000Z" },
-    responsibleUserName: null, organization: null, assertions: facts,
+    organization: null, assertions: facts,
     intelligentItems: rows.map((x) => ({ id: x.source.id, description: x.source.description, unit: "UN", quantity: x.source.quantity, status: "aprovado", averagePriceCents: x.source.averagePriceCents, quoteCount: 3 })),
     procurementItems: rows.map((x, n) => ({ id: x.id, description: x.d, unit: "UN", lotId: x.lot ?? null, ordinal: x.ord ?? n + 1, status: "active", revision: 1, fingerprint: canonicalItemKey(x.d, "UN") })),
     priceLinks: rows.map((x) => ({ itemId: x.id, intelligentItemId: x.source.id })),

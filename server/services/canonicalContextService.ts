@@ -1,7 +1,7 @@
 /**
  * Contexto Canônico da Contratação — serviço de RESOLUÇÃO (leitura) e de REGISTRO de afirmações.
  *
- * Resolve a partir das fontes EXISTENTES (nada duplicado): Processo (número/objeto/responsável),
+ * Resolve a partir das fontes EXISTENTES (nada duplicado): Processo (número/objeto),
  * Organização (identidade institucional), Itens Inteligentes (evidência de preço + descrição/unidade
  * observadas) e o ledger `procurement_context_facts` (fatos informados por humanos, com proveniência).
  * Toda a política de autoridade/conflito está no domínio (canonicalProcurementContext.ts).
@@ -13,7 +13,6 @@ import { TRPCError } from "@trpc/server";
 import { serviceLogger } from "./observabilityService";
 import { getProcess, listIntelligentItems, type ProcurementExecutor } from "../db/procurement";
 import { getOrganizationById } from "../db/organizations";
-import { getUserById } from "../db/users";
 import { appendContextFacts, listContextFacts, type NewFactAssertion } from "../db/procurementContext";
 import { listProcurementItems, listProcurementLots, listItemSourceLinks } from "../db/procurementItems";
 import {
@@ -29,9 +28,9 @@ export async function resolveProcurementContext(p: {
   const process = await getProcess(p.processId, p.organizationId);
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
 
-  const [org, user, items, assertions, pItems, lots, links] = await Promise.all([
+  // O usuário que criou/opera o Processo NÃO é o "Responsável pela demanda" (não é lido aqui).
+  const [org, items, assertions, pItems, lots, links] = await Promise.all([
     getOrganizationById(p.organizationId).catch(() => null),
-    process.responsibleUser ? getUserById(process.responsibleUser).catch(() => undefined) : Promise.resolve(undefined),
     listIntelligentItems(p.processId, p.organizationId),
     listContextFacts(p.organizationId, p.processId, p.executor),
     listProcurementItems(p.organizationId, p.processId, p.executor),
@@ -46,7 +45,6 @@ export async function resolveProcurementContext(p: {
       number: process.processNumber, object: process.object,
       responsibleUserId: process.responsibleUser, createdAt: process.createdAt,
     },
-    responsibleUserName: user?.name ?? null,
     organization: org ? { name: org.nome ?? null, municipio: org.municipio ?? null, uf: org.uf ?? null } : null,
     assertions: assertions ?? [],
     intelligentItems: (items ?? []).map((i) => ({
