@@ -2,9 +2,10 @@
  * R1 / PR-01 — SEM-001: contrato do boundary tenant-scoped do `collaborationRouter` com a camada de dados MOCKADA
  * (complementa o smoke MySQL real `collaboration-tenant-isolation-mysql-smoke.test.ts`).
  *
- * Cobre o que o banco migrado não permite verificar hoje (drift pré-existente do ENUM `notifications.type`, sem
- * `stage_assigned`) e a ORDEM dos gates: tenant do processo → permissão no processo → alvo no tenant → escrita →
- * notificação → activity log. Negação ⇒ nenhuma chamada de escrita, inclusive em retry (replay).
+ * Cobre a ORDEM dos gates: tenant do processo → permissão no processo → alvo no tenant → escrita. Negação ⇒
+ * nenhuma chamada de escrita, inclusive em retry (replay). Desde a PR-01A (NEW-001), a escrita de `assignStage`
+ * (atribuição + notificação + activity log) é UMA chamada ao boundary transacional `assignStageAtomically` — o
+ * comportamento transacional/replay real é provado em MySQL (`collaboration-stage-assignment-atomicity-mysql-smoke`).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -13,6 +14,10 @@ vi.mock("../../services/tenantService", () => ({
     organizationId: 7,
     membership: { id: 1, organizationId: 7, userId: 10, role: "operator", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
   }),
+}));
+
+vi.mock("../../services/stageAssignmentService", () => ({
+  assignStageAtomically: vi.fn().mockResolvedValue({ decision: "insert", changed: true }),
 }));
 
 vi.mock("../../db", () => ({
@@ -24,7 +29,6 @@ vi.mock("../../db", () => ({
   removeProcessMember: vi.fn(),
   updateProcessMemberPermission: vi.fn(),
   updateProcessMemberFunctionalRole: vi.fn(),
-  upsertStageAssignment: vi.fn(),
   removeStageAssignment: vi.fn(),
   createNotification: vi.fn(),
   createActivityLogForOrganization: vi.fn(),
@@ -37,6 +41,7 @@ vi.mock("../../db", () => ({
 }));
 
 import * as db from "../../db";
+import { assignStageAtomically } from "../../services/stageAssignmentService";
 import { collaborationRouter } from "../../routers/collaborationRouter";
 
 const ORG = 7;
@@ -45,7 +50,7 @@ const PROCESS = { id: 100, name: "Processo X", ownerId: OWNER };
 const m = vi.mocked;
 const writes = () => [
   db.addProcessMember, db.removeProcessMember, db.updateProcessMemberPermission, db.updateProcessMemberFunctionalRole,
-  db.upsertStageAssignment, db.removeStageAssignment, db.createNotification, db.createActivityLogForOrganization,
+  assignStageAtomically, db.removeStageAssignment, db.createNotification, db.createActivityLogForOrganization,
 ].map((f) => m(f).mock.calls.length);
 
 function caller(userId = OWNER, correlationId = "corr-router") {
@@ -77,12 +82,29 @@ describe("R1 / SEM-001 — boundary tenant-scoped (DB mockado)", () => {
       expect.objectContaining({ processId: PROCESS.id, userId: OWNER, correlationId: "corr-router" }), ORG);
   });
 
-  it("T5 — assignStage no mesmo órgão: atribuição → notificação 'stage_assigned' → activity log (contrato completo)", async () => {
-    await caller().assignStage({ processId: PROCESS.id, docType: "tr", assignedUserId: 11, note: "revisar" });
+  it("T5 — assignStage no mesmo órgão: gates do tenant e, só então, UMA chamada ao boundary transacional", async () => {
+    const out = await caller().assignStage({ processId: PROCESS.id, docType: "tr", assignedUserId: 11, note: "revisar" });
+    expect(out).toEqual({ success: true, changed: true });
     expect(db.getActiveOrganizationUserById).toHaveBeenCalledWith(11, ORG);
-    expect(db.upsertStageAssignment).toHaveBeenCalledWith(expect.objectContaining({ processId: PROCESS.id, docType: "tr", assignedUserId: 11 }));
-    expect(db.createNotification).toHaveBeenCalledWith(expect.objectContaining({ userId: 11, type: "stage_assigned" }));
-    expect(db.createActivityLogForOrganization).toHaveBeenCalledWith(expect.objectContaining({ processId: PROCESS.id }), ORG);
+    expect(assignStageAtomically).toHaveBeenCalledTimes(1);
+    expect(assignStageAtomically).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: ORG, processId: PROCESS.id, docType: "tr", assignedUserId: 11, assignedBy: OWNER, note: "revisar",
+      notification: expect.objectContaining({ title: "Você foi designado como responsável por uma etapa" }),
+      activity: expect.objectContaining({ correlationId: "corr-router", details: JSON.stringify({ docType: "tr", assignedUserId: 11 }) }),
+    }));
+    // nenhuma escrita fora do boundary transacional
+    expect(db.createNotification).not.toHaveBeenCalled();
+    expect(db.createActivityLogForOrganization).not.toHaveBeenCalled();
+  });
+
+  it("assignStage: replay idempotente do boundary ⇒ `changed: false` repassado ao cliente", async () => {
+    vi.mocked(assignStageAtomically).mockResolvedValueOnce({ decision: "unchanged", changed: false });
+    expect(await caller().assignStage({ processId: PROCESS.id, docType: "tr", assignedUserId: 11 })).toEqual({ success: true, changed: false });
+  });
+
+  it("assignStage: correlationId longo é truncado a 36 também no activity log transacional", async () => {
+    await caller(OWNER, "y".repeat(80)).assignStage({ processId: PROCESS.id, docType: "etp", assignedUserId: 11 });
+    expect(vi.mocked(assignStageAtomically).mock.calls[0][0].activity.correlationId).toBe("y".repeat(36));
   });
 
   it("T1/T2 — alvo de outro órgão e alvo inexistente ⇒ contrato externo IDÊNTICO e nenhuma escrita", async () => {

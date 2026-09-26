@@ -4,6 +4,7 @@ import { z } from "zod";
 import * as db from "../db";
 import type { TrpcContext } from "../_core/context";
 import { serviceLogger } from "../services/observabilityService";
+import { assignStageAtomically } from "../services/stageAssignmentService";
 
 const authzLog = serviceLogger("collaborationRouter");
 
@@ -22,6 +23,8 @@ const authzLog = serviceLogger("collaborationRouter");
  *     apenas o evento técnico `tenant_authorization_denied` (sem e-mail/nome do alvo).
  *  5. Leituras nunca expõem identidade de associação histórica com usuário de outro órgão (omitida + aviso de
  *     integridade sem PII). Remoção dessas associações continua possível (saneamento), sem expor o nome.
+ *  6. R1 / PR-01A (NEW-001): `assignStage` persiste atribuição + notificação + activity log numa ÚNICA transação
+ *     local (`services/stageAssignmentService.ts`), com replay determinístico; os gates acima rodam ANTES dela.
  */
 
 type TenantCtx = Pick<TrpcContext, "organizationId" | "user" | "correlationId">;
@@ -96,11 +99,15 @@ async function requireProcessMembership(ctx: TenantCtx, procedure: string, proce
 }
 
 /** Activity log do processo com organização e correlação do contexto (só após sucesso). */
+// `activity_logs.correlationId` é varchar(36); o header do cliente pode ser maior — nunca falhar após a escrita.
+function normalizeCorrelationId(ctx: TenantCtx): string | null {
+  return ctx.correlationId ? ctx.correlationId.slice(0, 36) : null;
+}
+
 async function logActivity(ctx: TenantCtx, processId: number, action: string, details?: string) {
   await db.createActivityLogForOrganization({
     processId, userId: ctx.user!.id, action,
-    // `activity_logs.correlationId` é varchar(36); o header do cliente pode ser maior — nunca falhar após a escrita.
-    correlationId: ctx.correlationId ? ctx.correlationId.slice(0, 36) : null,
+    correlationId: normalizeCorrelationId(ctx),
     ...(details ? { details } : {}),
   }, ctx.organizationId!);
 }
@@ -297,30 +304,27 @@ export const collaborationRouter = router({
       await requireProcessManager(ctx, op, process, { allowApprover: false, forbiddenMessage: "Apenas o proprietário pode atribuir responsáveis por etapa." });
       const assignedUser = await resolveTargetUserById(ctx, op, process.id, input.assignedUserId);
 
-      await db.upsertStageAssignment({
+      // R1 / PR-01A (NEW-001): atribuição + notificação + activity log numa ÚNICA transação local (tudo-ou-nada),
+      // com replay determinístico — repetir o mesmo pedido não duplica nem notifica de novo (`changed: false`).
+      const { changed } = await assignStageAtomically({
+        organizationId: ctx.organizationId!,
         processId: process.id,
         docType: input.docType,
         assignedUserId: assignedUser.id,
         assignedBy: ctx.user.id,
-        note: input.note || null,
+        note: input.note,
+        notification: {
+          title: "Você foi designado como responsável por uma etapa",
+          message: `${ctx.user.name} designou você como responsável pela etapa ${input.docType.toUpperCase()} no processo "${process.name}"${input.note ? `. Nota: ${input.note}` : ""}`,
+        },
+        activity: {
+          action: `designou ${assignedUser.name} como responsável pela etapa ${input.docType.toUpperCase()}`,
+          details: JSON.stringify({ docType: input.docType, assignedUserId: assignedUser.id }),
+          correlationId: normalizeCorrelationId(ctx),
+        },
       });
 
-      await db.createNotification({
-        userId: assignedUser.id,
-        title: "Você foi designado como responsável por uma etapa",
-        message: `${ctx.user.name} designou você como responsável pela etapa ${input.docType.toUpperCase()} no processo "${process.name}"${input.note ? `. Nota: ${input.note}` : ""}`,
-        type: "stage_assigned",
-        processId: process.id,
-        isRead: false,
-      });
-
-      await logActivity(
-        ctx, process.id,
-        `designou ${assignedUser.name} como responsável pela etapa ${input.docType.toUpperCase()}`,
-        JSON.stringify({ docType: input.docType, assignedUserId: assignedUser.id }),
-      );
-
-      return { success: true };
+      return { success: true, changed };
     }),
 
   unassignStage: tenantProcedure
