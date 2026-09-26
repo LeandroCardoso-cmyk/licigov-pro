@@ -22,7 +22,10 @@
    - **LEGAL REVIEW** — depende de interpretação jurídica/normativa; técnica não decide.
 3. **Alcance (reachability):** `CANONICAL` · `LEGACY_REACHABLE` · `LEGACY_INERT` · `SHARED_INFRA` · `UNKNOWN`.
    "Arquivo existe" ≠ "fluxo operacionalmente acessível". Rota tRPC montada é alcançável por qualquer cliente autenticado
-   mesmo sem botão — isso é registrado explicitamente.
+   mesmo sem botão — isso é registrado explicitamente. **Alcance ≠ explorabilidade:** `LEGACY_REACHABLE` significa
+   "superfície (rota de UI ou API) ainda montada/alcançável", **não** "explorável por qualquer usuário sem pré-condição".
+   Pré-condições de exploração (dados preexistentes, permissões) são registradas à parte, como
+   **Exploitability / Preconditions**.
 4. **Progresso** = checkpoints `PASS` / checkpoints congelados. Nada de percentual subjetivo. `IN_PROGRESS`, `BLOCKED` e
    `SUPERSEDED` não contam. PR aberta ≠ CI verde ≠ merge ≠ deploy SUCCESS ≠ comportamento validado em produção.
 5. **Controle de mudança:** checkpoints congelados só mudam com nova versão do roadmap (v1.1, v2.0…), registrando
@@ -49,7 +52,10 @@
 - **Não roteado:** `pages/ProcessDetails.tsx` (e sua subárvore: `MembersDialog`, `DocTabContent` → `StageAssignmentPanel`);
   teste `pr-b-canonical-wiring.test.ts:32` proíbe importá-lo em `App.tsx`.
 - **Routers montados** (`server/routers.ts`): inclusive os legados `processes`, `documents`, `collaboration`,
-  `directContracts`, `contracts`, `legalOpinions`, `approvalWorkflow` → alcançáveis por API.
+  `directContracts`, `contracts`, `legalOpinions`, `approvalWorkflow` → alcançáveis por API. Estar montado não implica que
+  toda mutation execute: `processes.create` permanece registrada, mas chama `throwLegacyProcessPipelineDisabled()`
+  (`server/routers/processesRouter.ts:84`, `server/domain/legacyPipeline.ts`) e responde com o erro governado
+  `LEGACY_PROCESS_PIPELINE_DISABLED` — não cria processo legado.
 
 ---
 
@@ -59,7 +65,7 @@ Estado inicial de todos: **TRIAGED** (classificação comprovada pela evidência
 
 | ID | Módulo | Problema resumido | Reachable? (evidência) | Canônico/Legado | Estratégia | Dependência | Migration? | Legal review? | PR alvo | Estado |
 |---|---|---|---|---|---|---|---|---|---|---|
-| SEM-001 | Colaboração | `addMember`/`assignStage` com lookups globais (e-mail/id), membro e responsável de outro tenant, enumeração de e-mail | Sim, **por API**: `processes.create` (tenant, montado) cria processo legado do próprio usuário → `collaboration.addMember` (`protectedProcedure`). UI (`ProcessDetails`) não roteada | LEGACY_REACHABLE | **FIX** (isolamento mínimo, fail-closed; desativação da superfície avaliada em R2) | — | Não (auditoria read-only de linhas cross-org, se autorizada) | Não | PR-01 | TRIAGED |
+| SEM-001 | Colaboração | `addMember`/`assignStage` (e demais mutations do router) com lookups globais (processo, e-mail/id do usuário-alvo): membro e responsável de outro tenant, enumeração de e-mail | Superfície **API-reachable** (router `collaboration` montado, `protectedProcedure`); UI (`ProcessDetails`) não roteada. **Exploitability / Preconditions:** exige processo legado **preexistente** ao qual o chamador tenha autorização (dono/approver); `processes.create` está **desativado** (`LEGACY_PROCESS_PIPELINE_DISABLED`); existência dessas linhas em produção **não verificada** | LEGACY_REACHABLE (superfície API) | **FIX** (isolamento mínimo, fail-closed; desativação da superfície avaliada em R2) | — | Não (auditoria read-only de linhas cross-org, se autorizada) | Não | PR-01 | TRIAGED |
 | SEM-002 | Processo Licitatório | `createProcess` com número existente reseta etapa/status | Sim: `NovoProcessoWizard` em `/processos` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-05 | TRIAGED |
 | SEM-003 | Contratação Direta | `createProcess` reseta workspace (tipo, fundamento, etapa, flags) | Sim: `NewDirectProcurementWizard` em `/contratacao-direta` | CANONICAL | **FIX** | padrão R3 | Não | Não | PR-05 | TRIAGED |
 | SEM-004 | Contratação Direta | Ratificação: default "ratificado", clicante como autoridade, upsert mantém 1º responsável | Sim: `RatificationWorkspace` | CANONICAL | **FIX** | R3 (upsert) + insumo jurídico sobre competência | **Sim** (ledger de decisão) | Parcial (quem é autoridade competente) | PR-07 | TRIAGED |
@@ -106,24 +112,39 @@ Estado inicial de todos: **TRIAGED** (classificação comprovada pela evidência
 
 **Correção de reachability em relação ao baseline (registrada aqui, baseline intocado):** o baseline descreve SEM-001
 como "canônico/legado-UI (usado por MembersDialog, StageAssignmentPanel)". A triagem confirmou que esses componentes
-só existem sob `ProcessDetails`, **não roteado**; a exposição real é **por API** (`processes.create` + `collaboration.*`),
-o que mantém o risco e a severidade P0. Igualmente, SEM-026: a rota `itemIntelligence.approveItem` não tem caller de UI,
+só existem sob `ProcessDetails`, **não roteado**; a superfície permanece **alcançável por API** (`collaboration.*`
+montado). A exploração bem-sucedida depende de um processo legado preexistente ao qual o chamador tenha acesso — não é
+possível criá-lo hoje por `processes.create` (bloqueado por `LEGACY_PROCESS_PIPELINE_DISABLED`), e a existência dessas
+linhas em produção não foi verificada. A severidade P0 se mantém: o isolamento de tenant incompleto é falha estrutural e
+deve ser fail-closed independentemente do estado atual dos dados (ver §3.2 e o registro de correção factual em §9.1). Igualmente, SEM-026: a rota `itemIntelligence.approveItem` não tem caller de UI,
 mas `decidirCATMAT` (mesma falha de papel) tem.
 
 ### 3.2 SEM-001 — confirmação e decisão
 
-- **Confirmado:** `collaborationRouter.addMember/removeMember/updatePermission/updateFunctionalRole/assignStage/unassignStage`
-  são `protectedProcedure`; `addMember` usa `db.getProcessById` (global) e `db.getUserByEmail` (global); `assignStage`
-  usa `getUserById` (global); `listMembers` devolve nome/e-mail sem filtro de tenant. `processes.create` (`tenantProcedure`,
-  montado) permite a qualquer usuário autenticado obter um processo legado próprio, satisfazendo a checagem de dono.
-- **Exposição possível:** enumeração de e-mails de todos os tenants; inclusão de usuário de outro órgão como
-  membro/"responsável pela etapa"; nome do processo enviado em notificação a pessoa de outro órgão; nome de pessoa de
-  outro órgão gravado no activity log. Não há evidência de exploração ativa (não verificado em produção — exigiria
-  leitura autorizada).
+- **A. Alcance por API (confirmado):** o router `collaboration` está montado. `addMember`, `removeMember`,
+  `updatePermission`, `updateFunctionalRole`, `assignStage` e `unassignStage` são `protectedProcedure` e resolvem o
+  processo com `db.getProcessById` (global). O usuário-alvo é resolvido por `db.getUserByEmail` (global, em `addMember`) ou
+  `db.getUserById` (global, em `removeMember`/`updatePermission`/`updateFunctionalRole`/`assignStage`). Nenhum desses pontos
+  exige que o usuário-alvo pertença ao tenant do chamador. `listMembers`/`checkPermission` resolvem o processo por
+  organização, mas devolvem nome/e-mail dos membros sem verificar se pertencem ao tenant.
+- **B. Explorabilidade:** para as mutations passarem das checagens atuais de dono/membro/permissão, é preciso existir um
+  processo legado ao qual o chamador tenha autorização suficiente. Com isso satisfeito, o código permite enumerar e-mails
+  de outros tenants ("Usuário não encontrado"), incluir usuário de outro órgão como membro ou "responsável pela etapa",
+  enviar notificação com o nome do processo a pessoa de outro órgão e gravar no activity log o nome de pessoa de outro órgão.
+- **C. Bootstrap:** **não** é possível criar hoje esse processo por `processes.create`: a mutation está registrada, mas
+  executa `throwLegacyProcessPipelineDisabled()` e responde com `LEGACY_PROCESS_PIPELINE_DISABLED`.
+- **D. Produção:** **não verificado** se existem processos legados persistidos que satisfaçam a pré-condição. Nenhuma
+  leitura de produção foi feita; ela exigiria autorização explícita. Não há evidência de exploração ativa.
 - **Classificação final:** **FIX** — correção mínima e fail-closed do isolamento (tenant-scoped lookups; usuário-alvo
-  precisa ser membro do tenant; mensagens neutras). Não é investimento no fluxo legado: é fechar a exposição. A
-  **desativação** da superfície legada (`collaboration`, `processes.create`) é decisão de R2 (checkpoint R2.1) e não
-  precisa esperar para o isolamento ser corrigido.
+  precisa ser membro do tenant; mensagens neutras). Não é investimento no fluxo legado: é fechar a exposição. A segurança
+  não pode depender de "provavelmente não há dados legados" — uma reativação futura, uma linha legada existente ou uma
+  chamada legítima do fluxo reexporia o problema. **Severidade P0 mantida.** A **retirada definitiva** das superfícies
+  legadas (`collaboration`, o pipeline `processes` legado e os demais endpoints antigos) é decisão de lifecycle da **R2**
+  (checkpoint R2.1); a **R1** corrige a segurança. As duas fases não se misturam.
+- **Teste de reprodução (R1.1, não implementado):** **não** deve depender de `processes.create`. Deve montar fixtures de
+  banco controladas — tenant A, tenant B, processo legado do tenant A, usuário do tenant A (dono), usuário do tenant B — e
+  demonstrar diretamente a resolução cross-tenant do usuário-alvo ou a inclusão de membro/atribuição de etapa cross-tenant,
+  conforme o código real permitir.
 - **Prioridade:** **primeira PR funcional (PR-01 — Tenant Isolation — Collaboration).**
 
 ---
@@ -254,7 +275,7 @@ R1.10 produção validada.
 
 **R2 — Legacy Reachability & Cutover (7)**
 R2.1 inventário congelado de superfícies legadas montadas (rota, menu, caller, API) com decisão FIX/CUTOVER/DISABLE por
-superfície (inclui `collaboration`/`processes.create`) · R2.2 decisão humana registrada sobre `FF_CANONICAL_INGESTION` por
+superfície (inclui `collaboration`, o pipeline `processes` legado — cuja criação já está desativada — e os demais endpoints antigos) · R2.2 decisão humana registrada sobre `FF_CANONICAL_INGESTION` por
 tenant (SEM-005) · R2.3 verificação read-only **autorizada** de uso de dados legados (`legal_opinions`, `direct_contracts`,
 `contracts`, `processes`) · R2.4 PR-02 merged · R2.5 PR-03 merged · R2.6 PR-04 merged · R2.7 produção validada
 (superfícies retiradas respondem erro governado; fluxo canônico intacto).
@@ -314,13 +335,13 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R0.1 | PASS | baseline versionado byte-idêntico (sha256 `08edc734…810b3`) | esta PR (commit documental) | 2026-09-26 |
 | R0.2 | PASS | 26 P0 extraídos e conferidos (26 P0 · 54 P1 · 12 P2 = 92) — §3 | esta PR | 2026-09-26 |
 | R0.3 | PASS | FIX 17 · CUTOVER 5 · DISABLE 2 · LEGAL REVIEW 2 — §3.1 | esta PR | 2026-09-26 |
-| R0.4 | PASS | reachability por P0 com evidência (rotas, menu, callers, routers) — §2/§3 | esta PR | 2026-09-26 |
+| R0.4 | PASS | reachability por P0 com evidência (rotas, menu, callers, routers) — §2/§3; **corrigido** para SEM-001 (alcance × explorabilidade; `processes.create` desativado; SEM-001 reconfirmado no código) — §9.1 | PR #259 (commit de correção) | 2026-09-26 |
 | R0.5 | PASS | CANONICAL 18 · LEGACY_REACHABLE 7 · LEGACY_INERT 1 · SHARED_INFRA 0 · UNKNOWN 0 — §3.1 | esta PR | 2026-09-26 |
 | R0.6 | PASS | DAG de dependências — §5 | esta PR | 2026-09-26 |
 | R0.7 | PASS | plano de PRs consolidado (19 funcionais + 1 documental) — §6 | esta PR | 2026-09-26 |
 | R0.8 | PASS | INV-01…INV-17 — §7 | esta PR | 2026-09-26 |
-| R0.9 | TODO | PR documental aberta (registrar número na próxima execução) | — | — |
-| R0.10 | TODO | CI verde da PR documental (registrar na próxima execução) | — | — |
+| R0.9 | PASS | PR documental aberta: #259 | PR #259 | 2026-09-26 |
+| R0.10 | TODO | reaberto pela correção factual: o CI verde do head `1f81fe7` não vale para o novo conteúdo; o CI do novo head é evidenciado no relatório da execução e registrado aqui na execução seguinte | PR #259 | — |
 | R1.1 – R1.10 | TODO | — | — | — |
 | R2.1 – R2.7 | TODO | — | — | — |
 | R3.1 – R3.6 | TODO | — | — | — |
@@ -333,8 +354,17 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R10.1 – R10.4 | TODO | — | — | — |
 | R11.1 – R11.8 | TODO | — | — | — |
 
-Nota: R0.9 e R0.10 não podem ser gravados como PASS dentro do próprio commit que os origina; são evidenciados no
-relatório da execução (número da PR e resultado do CI) e registrados neste ledger na execução seguinte.
+Nota: o CI de um commit não pode ser gravado como PASS dentro do próprio commit; R0.10 é evidenciado no relatório da
+execução (resultado do CI do head) e registrado neste ledger na execução seguinte.
+
+### 9.1 Registro de correções factuais (sem mudança de roadmap)
+
+Correções de evidência que **não** alteram checkpoints, fases, total (87), estratégias, severidades nem o mapeamento de
+PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byte-idêntico.
+
+| Data | Correção | Achado | O que mudou | O que **não** mudou | Checkpoints reavaliados |
+|---|---|---|---|---|---|
+| 2026-09-26 | SEM-001 — correção da evidência de alcance e da pré-condição de exploração | SEM-001 | A versão anterior deste plano afirmava que `processes.create` permitia a qualquer usuário criar um processo legado próprio e, a partir dele, explorar `collaboration.*`. Isso é **incorreto**: `processes.create` executa `throwLegacyProcessPipelineDisabled()` (`LEGACY_PROCESS_PIPELINE_DISABLED`). Registrado agora: superfície API-reachable; exploração exige processo legado preexistente ao qual o chamador tenha acesso; presença dessas linhas em produção não verificada. | P0 · FIX · PR-01 (primeira PR funcional) · LEGACY_REACHABLE (superfície) · 92 achados (26/54/12) · distribuições | R0.4 (reconfirmado → PASS); R0.10 (reaberto até CI verde do novo head) |
 
 ---
 
