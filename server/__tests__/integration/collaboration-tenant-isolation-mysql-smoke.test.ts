@@ -165,20 +165,16 @@ describe.skipIf(!DB)("R1 / SEM-001 — collaboration tenant isolation (MySQL rea
     expect(await activityOf(pA)).toBe(before.a);                // T13
   }, 30000);
 
-  it("T5 — assignStage para usuário do MESMO órgão passa pelos gates de tenant e grava a atribuição", async () => {
-    const c = await caller(aOwner, ORG_A);
+  it("T5 — assignStage para usuário do MESMO órgão: sucesso COMPLETO e estrito (atribuição + notificação + activity log)", async () => {
+    // PR-01A (NEW-001): sem ramo de tolerância — a migration 0307 adiciona `stage_assigned` ao ENUM físico e a
+    // atribuição é atômica. Qualquer erro aqui é falha real.
+    const c = await caller(aOwner, ORG_A, "user", "r1-t5-corr");
     const err = await errOf(() => c.collaboration.assignStage({ processId: pA, docType: "tr", assignedUserId: aMember, note: "revisar" }));
-    expect(["NOT_FOUND", "FORBIDDEN"]).not.toContain(err.code);   // nenhum gate de tenant/permissão recusa o mesmo órgão
-    expect(await count(`SELECT COUNT(*) n FROM stage_assignments WHERE processId = ? AND docType = 'tr' AND assignedUserId = ?`, [pA, aMember])).toBe(1);
-    if (err.code === "RESOLVED") {
-      expect(await count(`SELECT COUNT(*) n FROM notifications WHERE userId = ? AND type = 'stage_assigned'`, [aMember])).toBe(1);
-    } else {
-      // DRIFT PRÉ-EXISTENTE (independente do SEM-001, registrado para o backlog): `drizzle/schema.ts` declara
-      // `notifications.type = 'stage_assigned'`, mas nenhuma migration adiciona o valor ao ENUM — no banco migrado o
-      // insert da notificação falha DEPOIS da atribuição. Corrigir exige migration (fora do escopo da PR-01). O
-      // contrato de sucesso completo (notificação + activity log) é coberto no teste de router com DB mockado.
-      expect(err.message).toContain("notifications");
-    }
+    expect(err).toEqual({ code: "RESOLVED", message: "" });
+    expect(await count(`SELECT COUNT(*) n FROM stage_assignments WHERE processId = ? AND docType = 'tr'`, [pA])).toBe(1);
+    expect(await count(`SELECT COUNT(*) n FROM stage_assignments WHERE processId = ? AND docType = 'tr' AND assignedUserId = ? AND note = 'revisar'`, [pA, aMember])).toBe(1);
+    expect(await count(`SELECT COUNT(*) n FROM notifications WHERE userId = ? AND processId = ? AND type = 'stage_assigned'`, [aMember, pA])).toBe(1);
+    expect(await count(`SELECT COUNT(*) n FROM activity_logs WHERE processId = ? AND organizationId = ? AND correlationId = 'r1-t5-corr' AND action LIKE 'designou % etapa TR'`, [pA, ORG_A])).toBe(1);
   }, 30000);
 
   // ── Processo de outro órgão ───────────────────────────────────────────────────

@@ -1,0 +1,15 @@
+-- 0307 — NEW-001 (P1 operacional, R1 / PR-01A): consistência física do ENUM `notifications.type`.
+--
+-- Drift pré-existente: `drizzle/schema.ts` (e os snapshots `drizzle/meta` desde 0298) declaram
+-- `stage_assigned`, mas nenhuma migration SQL o adicionou — o ENUM físico criado pela 0004 é
+-- ('member_added','document_edited','document_approved','comment_added','general'). Como o snapshot já
+-- contém o valor, `drizzle-kit generate` NÃO emite o ALTER: esta migration é escrita à mão e registrada no
+-- journal (o migrator aplica por timestamp do journal; o ledger `__drizzle_migrations` garante execução única).
+--
+-- Preserva TODOS os valores existentes (lista derivada da 0004 + SHOW COLUMNS no banco migrado), a nulidade
+-- (NOT NULL) e o default ('general'). A ordem é a do schema.ts (`stage_assigned` antes de `general`); a
+-- conversão do ENUM é por valor textual, então linhas existentes mantêm exatamente o mesmo valor.
+-- Nenhum DROP, nenhum UPDATE/DELETE. O próprio statement é idempotente (reaplicar produz o mesmo tipo).
+-- MySQL 8.4 e MariaDB.
+--> statement-breakpoint
+ALTER TABLE `notifications` MODIFY COLUMN `type` enum('member_added','document_edited','document_approved','comment_added','stage_assigned','general') NOT NULL DEFAULT 'general';

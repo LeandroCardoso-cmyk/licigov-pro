@@ -168,19 +168,63 @@ export async function updateProcessMemberFunctionalRole(
     .where(and(eq(processMembers.processId, processId), eq(processMembers.userId, userId)));
 }
 
-export async function upsertStageAssignment(assignment: InsertStageAssignment) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db
-    .insert(stageAssignments)
-    .values(assignment)
-    .onDuplicateKeyUpdate({
-      set: {
-        assignedUserId: assignment.assignedUserId,
-        assignedBy: assignment.assignedBy,
-        note: assignment.note,
-      },
-    });
+// ─── R1 / PR-01A (NEW-001) — atribuição de etapa ATÔMICA ─────────────────────────────────────────────────
+// Primitivas que RECEBEM o executor da transação (nunca chamam `getDb()` por dentro): atribuição, notificação e
+// activity log são escritas LOCAIS correlacionadas e precisam compartilhar a MESMA conexão/transação. A
+// orquestração (transação + regra de replay) fica em `services/stageAssignmentService.ts`.
+
+type CollaborationDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type CollaborationExecutor = CollaborationDb | Parameters<Parameters<CollaborationDb["transaction"]>[0]>[0];
+export type StageDocType = InsertStageAssignment["docType"];
+
+/**
+ * Lock da linha-pai `processes` (mutex por processo, mesmo padrão do `documentVersionService`), re-verificando o
+ * tenant DENTRO da transação. `stage_assignments` não tem chave única em (processId, docType); serializar pelo
+ * processo impede que duas atribuições concorrentes da mesma etapa insiram linhas duplicadas.
+ */
+export async function lockProcessForOrganizationTx(tx: CollaborationExecutor, processId: number, organizationId: number) {
+  const rows = await tx
+    .select({ id: processes.id })
+    .from(processes)
+    .where(and(eq(processes.id, processId), eq(processes.organizationId, organizationId)))
+    .for("update");
+  return rows.length > 0;
+}
+
+export async function getStageAssignmentRowsTx(tx: CollaborationExecutor, processId: number, docType: StageDocType) {
+  return tx
+    .select({ id: stageAssignments.id, assignedUserId: stageAssignments.assignedUserId, note: stageAssignments.note })
+    .from(stageAssignments)
+    .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType)));
+}
+
+export async function insertStageAssignmentTx(tx: CollaborationExecutor, assignment: InsertStageAssignment) {
+  await tx.insert(stageAssignments).values(assignment);
+}
+
+/** Converge TODAS as linhas da etapa (inclusive duplicatas históricas) ao estado pedido — nenhuma é apagada. */
+export async function updateStageAssignmentTx(
+  tx: CollaborationExecutor,
+  processId: number,
+  docType: StageDocType,
+  set: { assignedUserId: number; assignedBy: number; note: string | null },
+) {
+  await tx
+    .update(stageAssignments)
+    .set(set)
+    .where(and(eq(stageAssignments.processId, processId), eq(stageAssignments.docType, docType)));
+}
+
+export async function insertNotificationTx(tx: CollaborationExecutor, notification: InsertNotification) {
+  await tx.insert(notifications).values(notification);
+}
+
+export async function insertActivityLogForOrganizationTx(
+  tx: CollaborationExecutor,
+  log: Omit<InsertActivityLog, "organizationId">,
+  organizationId: number,
+) {
+  await tx.insert(activityLogs).values({ ...log, organizationId });
 }
 
 export async function removeStageAssignment(
