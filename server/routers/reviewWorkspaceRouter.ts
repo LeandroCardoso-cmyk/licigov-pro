@@ -4,7 +4,9 @@
  * Procedimentos para a central de revisão semântica de ItemTR.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import { createHash } from "crypto";
 import type { ItemTR } from "../domain/itemTR";
@@ -129,7 +131,7 @@ const itemReviewStateSchema = z.enum([
 ]);
 
 export const reviewWorkspaceRouter = router({
-  getQueue: protectedProcedure
+  getQueue: experimentalProtectedProcedure
     .input(z.object({
       organizationId: z.number(),
       processId:      z.number().optional(),
@@ -148,7 +150,7 @@ export const reviewWorkspaceRouter = router({
       });
     }),
 
-  getReviewHistory: protectedProcedure
+  getReviewHistory: experimentalProtectedProcedure
     .input(z.object({
       itemId:         z.string(),
       organizationId: z.number(),
@@ -169,7 +171,7 @@ export const reviewWorkspaceRouter = router({
       };
     }),
 
-  getSummary: protectedProcedure
+  getSummary: experimentalProtectedProcedure
     .input(z.object({
       organizationId: z.number(),
       processId:      z.number().optional(),

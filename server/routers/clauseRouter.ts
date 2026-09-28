@@ -4,13 +4,13 @@
  * Procedimentos para recomendação e override de cláusulas do TR.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
-import { TRPCError } from "@trpc/server";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 
 import {
   recommendClauses,
-  selectClauseTemplate,
   inferProcurementType,
   type ClauseRecommendation,
   type ClauseTemplate,
@@ -120,7 +120,7 @@ const clauseOverrideStore = new Map<string, ClauseOverrideRecord>();
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const clauseRouter = router({
-  getRecommendations: protectedProcedure
+  getRecommendations: experimentalProtectedProcedure
     .input(z.object({
       itemId:         z.string(),
       organizationId: z.number(),
@@ -169,7 +169,7 @@ export const clauseRouter = router({
       });
     }),
 
-  getTemplates: protectedProcedure
+  getTemplates: experimentalProtectedProcedure
     .input(z.object({
       organizationId:  z.number(),
       procurementType: z.string().optional(),
@@ -181,7 +181,7 @@ export const clauseRouter = router({
       );
     }),
 
-  overrideClause: protectedProcedure
+  overrideClause: experimentalProtectedProcedure
     .input(z.object({
       itemId:         z.string(),
       clauseId:       z.string(),

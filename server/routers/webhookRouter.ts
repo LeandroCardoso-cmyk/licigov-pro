@@ -5,7 +5,9 @@
  * Multi-tenant: organizationId required.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   createEndpoint,
@@ -56,7 +58,7 @@ const webhookEventTypeSchema = z.enum([
 ]);
 
 export const webhookRouter = router({
-  registerEndpoint: protectedProcedure
+  registerEndpoint: experimentalProtectedProcedure
     .input(
       z.object({
         organizationId: z.number(),
@@ -76,7 +78,7 @@ export const webhookRouter = router({
       return endpoint satisfies WebhookEndpoint;
     }),
 
-  dispatchTestEvent: protectedProcedure
+  dispatchTestEvent: experimentalProtectedProcedure
     .input(
       z.object({
         endpointId: z.string(),
@@ -99,7 +101,7 @@ export const webhookRouter = router({
       return processed satisfies WebhookDelivery;
     }),
 
-  getDeliveries: protectedProcedure
+  getDeliveries: experimentalProtectedProcedure
     .input(
       z.object({
         organizationId: z.number(),
@@ -115,7 +117,7 @@ export const webhookRouter = router({
       return deliveries.slice(-input.limit);
     }),
 
-  getStats: protectedProcedure
+  getStats: experimentalProtectedProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }) => {
       const deliveries = getDeliveries(input.organizationId);
