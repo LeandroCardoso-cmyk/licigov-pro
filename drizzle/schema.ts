@@ -5948,7 +5948,15 @@ export const contractWorkspacesTable = mysqlTable("contract_workspaces", {
   createdBy:      int("created_by"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-});
+  /**
+   * R3 / PR-06 (0308) — número oficial NORMALIZADO (só trim das pontas), coluna GERADA pelo banco (STORED, colação
+   * binária utf8mb4_bin, NULL quando o número é vazio). Nunca gravada pela aplicação: acompanha `contract_number` em
+   * QUALQUER escrita (criação, edição, upsert legado). Chave da unicidade institucional por organização.
+   */
+  normalizedNumber: varchar("normalized_number", { length: 80 }).generatedAlwaysAs(sql`nullif(trim(\`contract_number\`),'')`, { mode: "stored" }),
+}, (table) => [
+  unique("uq_ctw_org_normalized_number").on(table.organizationId, table.normalizedNumber),
+]);
 
 export const contractWsDocumentsTable = mysqlTable("contract_ws_documents", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),

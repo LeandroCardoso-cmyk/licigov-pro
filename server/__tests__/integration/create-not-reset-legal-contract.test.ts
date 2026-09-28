@@ -13,10 +13,12 @@ import {
   decideLegalOpinionDraftCreate, isSameLegalOpinionDraftCreate,
   LEGAL_OPINION_ALREADY_EXISTS, LEGAL_OPINION_ALREADY_SIGNED, LEGAL_OPINION_STAGE_INVALID,
   LEGAL_OPINION_ALREADY_EXISTS_MESSAGE, LEGAL_OPINION_ALREADY_SIGNED_MESSAGE, legalOpinionStageInvalidMessage,
+  LEGAL_OPINION_ONE_PER_REQUEST_RULE,
 } from "../../domain/legalOpinionDraft";
 import { createContractWorkspace } from "../../domain/contractWorkspace";
 import {
   CONTRACT_ALREADY_EXISTS, contractAlreadyExistsMessage, isSameContractCreate, decideContractCreateOnExisting,
+  normalizeContractNumber, CONTRACT_NUMBER_REQUIRED, CONTRACT_NUMBER_REQUIRED_MESSAGE,
 } from "../../domain/contractCreation";
 import { ContractAlreadyExistsError, ManualContractConflictError } from "../../services/contractService";
 
@@ -64,6 +66,26 @@ describe("R3 / PR-06 — parecer: decisão de criação (SEM-006)", () => {
       .toEqual({ kind: "conflict", reason: LEGAL_OPINION_ALREADY_SIGNED });
   });
 
+  it("ONE_CURRENT_LEGAL_OPINION_PER_REQUEST — um único parecer vigente por solicitação: qualquer 2º parecer no mesmo workspace (qualquer tipo, qualquer estado) ⇒ CONFLICT; a mensagem manda editar/versionar ou abrir nova solicitação", () => {
+    expect(LEGAL_OPINION_ONE_PER_REQUEST_RULE).toBe("ONE_CURRENT_LEGAL_OPINION_PER_REQUEST");
+    const initial = createLegalOpinionDraft(base);
+    const edited = updateLegalOpinionDraft(initial, { report: "R v2" });
+    const signed = signLegalOpinionDraft(edited, "manual", 11);
+    for (const existing of [initial, edited, signed]) {
+      for (const opinionType of ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"] as const) {
+        const d = decideLegalOpinionDraftCreate([existing], createLegalOpinionDraft({ ...base, opinionType, report: "outro parecer" }));
+        expect(d.kind).toBe("conflict");
+      }
+    }
+    for (const msg of [LEGAL_OPINION_ALREADY_EXISTS_MESSAGE, LEGAL_OPINION_ALREADY_SIGNED_MESSAGE]) {
+      expect(msg).toMatch(/único parecer vigente/);
+      expect(msg).toMatch(/nova solicitação/);
+    }
+    expect(LEGAL_OPINION_ALREADY_EXISTS_MESSAGE).toMatch(/nova versão/);
+    // Outro workspace (= outra solicitação) é uma criação independente.
+    expect(decideLegalOpinionDraftCreate([], createLegalOpinionDraft({ ...base, workspaceId: "ws-2", requestId: "req-2" })).kind).toBe("create");
+  });
+
   it("mensagens pt-BR estáveis carregam o token", () => {
     expect(LEGAL_OPINION_ALREADY_EXISTS_MESSAGE).toContain(LEGAL_OPINION_ALREADY_EXISTS);
     expect(LEGAL_OPINION_ALREADY_EXISTS_MESSAGE).toMatch(/^Já existe um parecer/);
@@ -103,16 +125,38 @@ describe("R3 / PR-06 — contrato: decisão de criação (SEM-007)", () => {
     expect(decideContractCreateOnExisting(legacy, createContractWorkspace({ ...p, createdBy: null }))).toEqual({ kind: "conflict" });
   });
 
+  it("normalização do número: só trim das pontas — sem mexer em zeros, caixa, ano ou espaços internos", () => {
+    expect(normalizeContractNumber(" CT-1 ")).toBe("CT-1");
+    expect(normalizeContractNumber("\tCT-1\n")).toBe("CT-1");
+    expect(normalizeContractNumber("CT-001/2026")).toBe("CT-001/2026");
+    expect(normalizeContractNumber("ct-001/26")).toBe("ct-001/26");
+    expect(normalizeContractNumber("CT 1 / 2026")).toBe("CT 1 / 2026");
+    expect(normalizeContractNumber("   ")).toBe("");
+    expect(normalizeContractNumber(undefined)).toBe("");
+    expect(CONTRACT_NUMBER_REQUIRED_MESSAGE).toContain(CONTRACT_NUMBER_REQUIRED);
+  });
+
+  it("mesmo número por OUTRA origem na mesma organização nunca converge (nem com payload idêntico) ⇒ CONFLICT", () => {
+    const existing = createContractWorkspace(p);
+    for (const originType of ["contratacao_direta", "avulso", "externo"] as const) {
+      const other = createContractWorkspace({ ...p, originType });
+      expect(decideContractCreateOnExisting(existing, other)).toEqual({ kind: "conflict" });
+    }
+  });
+
   it("mensagem estável com token e \"(id: …)\" parseável; erros de serviço são CONFLICT", () => {
     const ws = createContractWorkspace(p);
     const msg = contractAlreadyExistsMessage(ws);
     expect(msg).toMatch(/^Já existe um contrato do Processo Licitatório com o número "CT-1" nesta organização\./);
     expect(msg).toContain(CONTRACT_ALREADY_EXISTS);
+    expect(msg).toMatch(/único na organização, qualquer que seja a origem/);
     expect(msg.match(/\(id: ([a-f0-9]+)\)/)?.[1]).toBe(ws.id);
     const err = new ContractAlreadyExistsError(ws);
     expect(err.code).toBe("CONFLICT");
     expect(err.existingId).toBe(ws.id);
     expect(new ManualContractConflictError("abc", "CT-9").message).toContain(CONTRACT_ALREADY_EXISTS);
+    expect(new ManualContractConflictError("abc", "CT-9").message).toMatch(/^Já existe um contrato avulso com o número "CT-9"/);
+    expect(new ManualContractConflictError("abc", "CT-9", "processo_licitatorio").message).toMatch(/^Já existe um contrato do Processo Licitatório/);
   });
 });
 
@@ -137,6 +181,11 @@ describe("R3 / PR-06 — freeze: caminhos de criação não usam upsert", () => 
     const creation = svc.slice(svc.indexOf("export async function createFromProcurement"), svc.indexOf("// ─── Geração inteligente de minutas"));
     expect(creation).not.toContain("insertContractWorkspace(");
     expect((creation.match(/persistNewContract\(/g) ?? []).length).toBe(4);
+    // decisão B: a chave institucional é o número normalizado na organização (qualquer origem) — checada no servidor
+    // antes do INSERT, e todos os fluxos normalizam o número.
+    const persist = svc.slice(svc.indexOf("async function persistNewContract"), svc.indexOf("export interface Recommendation"));
+    expect(persist).toContain("findContractByNormalizedNumber(ws.organizationId, ws.contractNumber)");
+    expect((creation.match(/requireContractNumber\(/g) ?? []).length).toBe(4);
     const db = src("db/contractWorkspace.ts");
     const fn = db.slice(db.indexOf("export async function insertNewContractWorkspace"), db.indexOf("export async function getContractWorkspace"));
     expect(fn).not.toContain("onDuplicateKeyUpdate");

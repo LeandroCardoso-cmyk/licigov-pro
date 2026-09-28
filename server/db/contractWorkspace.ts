@@ -8,7 +8,9 @@
  */
 
 import { and, asc, desc, eq } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
+import { CONTRACT_ALREADY_EXISTS } from "../domain/contractCreation";
 import {
   contractWorkspacesTable, contractWsDocumentsTable, contractAddendaTable,
   contractWsApostillesTable, contractOccurrencesTable, importedContractsTable,
@@ -48,25 +50,51 @@ function fromDbDatetime(v: string): string {
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
+/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle. */
+function isDuplicateKeyError(err: unknown): boolean {
+  let x: unknown = err;
+  for (let i = 0; i < 4 && x && typeof x === "object"; i++) {
+    const e = x as { code?: string; errno?: number; cause?: unknown };
+    if (e.code === "ER_DUP_ENTRY" || e.errno === 1062) return true;
+    x = e.cause;
+  }
+  return false;
+}
+
+/**
+ * Upsert legado — usado SÓ pela edição (`updateContract`, escopo da PR-12). R3 / PR-06 (0308): a coluna gerada
+ * `normalized_number` acompanha `contract_number`; renomear para um número que outro contrato da organização já usa
+ * viola UNIQUE(organization_id, normalized_number) — o statement falha INTEIRO (nada gravado) e vira CONFLICT governado
+ * `CONTRACT_ALREADY_EXISTS` em vez de 500.
+ */
 export async function insertContractWorkspace(ws: ContractWorkspace): Promise<ContractWorkspace | null> {
   const db = await getDb();
   if (!db) return null;
-  await db.insert(contractWorkspacesTable).values({
-    id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
-    contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
-    term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
-    correlationId: ws.correlationId, createdBy: ws.createdBy,
-    createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
-  }).onDuplicateKeyUpdate({ set: {
-    contractor: ws.contractor, object: ws.object, value: String(ws.value), term: ws.term, status: ws.status,
-    manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: toDbDatetime(ws.updatedAt),
-  } });
+  try {
+    await db.insert(contractWorkspacesTable).values({
+      id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
+      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
+      correlationId: ws.correlationId, createdBy: ws.createdBy,
+      createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
+    }).onDuplicateKeyUpdate({ set: {
+      contractor: ws.contractor, object: ws.object, value: String(ws.value), term: ws.term, status: ws.status,
+      manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: toDbDatetime(ws.updatedAt),
+    } });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Já existe outro contrato com o número "${ws.contractNumber}" nesta organização. O número do contrato é único na organização, qualquer que seja a origem; nada foi alterado (${CONTRACT_ALREADY_EXISTS}).`,
+    });
+  }
   return ws;
 }
 
 /**
- * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre chave existente (PRIMARY KEY =
- * hash(org, origem, número)) devolve "duplicate" sem escrever nada — o serviço decide convergir ou CONFLICT.
+ * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre chave existente — UNIQUE(organization_id,
+ * normalized_number) (0308: número único na organização, qualquer origem) ou PRIMARY KEY hash(org, origem, número) —
+ * devolve "duplicate" sem escrever nada; o serviço decide convergir ou CONFLICT.
  * (`insertContractWorkspace`, o upsert, segue restrito à edição `updateContract` — escopo da PR-12.) Sem DB ⇒ null.
  */
 export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise<"inserted" | "duplicate" | null> {
@@ -82,14 +110,25 @@ export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise
     });
     return "inserted";
   } catch (err) {
-    let x: unknown = err;
-    for (let i = 0; i < 4 && x && typeof x === "object"; i++) {
-      const e = x as { code?: string; errno?: number; cause?: unknown };
-      if (e.code === "ER_DUP_ENTRY" || e.errno === 1062) return "duplicate";
-      x = e.cause;
-    }
+    if (isDuplicateKeyError(err)) return "duplicate";
     throw err;
   }
+}
+
+/**
+ * R3 / PR-06 — contrato da organização com o MESMO número oficial normalizado, QUALQUER origem (chave institucional).
+ * `normalizedNumber` já vem normalizado (`normalizeContractNumber`); compara com a coluna gerada `normalized_number`
+ * (utf8mb4_bin — exata). Sem DB ⇒ null (degrada).
+ */
+export async function findContractByNormalizedNumber(orgId: number, normalizedNumber: string): Promise<ContractWorkspace | null> {
+  const db = await getDb();
+  if (!db || !normalizedNumber) return null;
+  const rows = await db.select({ id: contractWorkspacesTable.id }).from(contractWorkspacesTable)
+    .where(and(
+      eq(contractWorkspacesTable.organizationId, orgId),
+      eq(contractWorkspacesTable.normalizedNumber, normalizedNumber),
+    )).limit(1);
+  return rows.length > 0 ? getContractWorkspace(rows[0].id, orgId) : null;
 }
 
 export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {

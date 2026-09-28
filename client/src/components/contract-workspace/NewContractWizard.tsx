@@ -177,7 +177,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       )}
       {conflictExistingId && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          <span>Já existe um contrato com este número para esta origem. Nada foi alterado no contrato existente.</span>
+          <span>Já existe um contrato com este número nesta organização (o número é único, qualquer que seja a origem). Nada foi alterado no contrato existente.</span>
           <button type="button" onClick={() => onCreated?.(conflictExistingId)} className="shrink-0 rounded-md border border-amber-300 px-2 py-1 font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900">
             Abrir contrato existente
           </button>
