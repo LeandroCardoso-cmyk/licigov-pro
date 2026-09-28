@@ -196,15 +196,24 @@ export async function countContractAddendaByOrg(orgId: number): Promise<number> 
   return rows.length;
 }
 
-export async function insertContractAddendum(a: ContractAddendum, executor?: ContractWsExecutor): Promise<ContractAddendum | null> {
+/**
+ * Opções do writer de instrumento. `failOnDuplicate` (caminho governado SEM-025): INSERT puro — um id já
+ * existente (mesma sequência calculada por duas criações concorrentes) falha com ER_DUP_ENTRY em vez de
+ * fundir silenciosamente duas solicitações numa linha híbrida. Ausente ⇒ upsert legado (compatível).
+ */
+export interface InstrumentInsertOptions { readonly failOnDuplicate?: boolean }
+
+export async function insertContractAddendum(a: ContractAddendum, executor?: ContractWsExecutor, opts: InstrumentInsertOptions = {}): Promise<ContractAddendum | null> {
   const db = executor ?? await getDb();
   if (!db) return null;
-  await db.insert(contractAddendaTable).values({
+  const insert = db.insert(contractAddendaTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, addendumType: a.addendumType, sequence: a.sequence,
     justification: a.justification, newValue: String(a.newValue), newTerm: a.newTerm, status: a.status, requestOrigin: a.requestOrigin,
     documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, correlationId: a.correlationId,
     createdAt: toDbDatetime(a.createdAt), updatedAt: toDbDatetime(a.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: toDbDatetime(a.updatedAt) } });
+  });
+  if (opts.failOnDuplicate) await insert;
+  else await insert.onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: toDbDatetime(a.updatedAt) } });
   return a;
 }
 
@@ -227,14 +236,16 @@ export async function countContractApostilles(contractId: string, orgId: number)
   return rows.length;
 }
 
-export async function insertContractApostille(a: ContractApostille, executor?: ContractWsExecutor): Promise<ContractApostille | null> {
+export async function insertContractApostille(a: ContractApostille, executor?: ContractWsExecutor, opts: InstrumentInsertOptions = {}): Promise<ContractApostille | null> {
   const db = executor ?? await getDb();
   if (!db) return null;
-  await db.insert(contractWsApostillesTable).values({
+  const insert = db.insert(contractWsApostillesTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, kind: a.kind, sequence: a.sequence,
     description: a.description, newValue: String(a.newValue), newManager: a.newManager, newInspector: a.newInspector,
     documentReference: a.documentReference, correlationId: a.correlationId, createdAt: toDbDatetime(a.createdAt),
-  }).onDuplicateKeyUpdate({ set: { description: a.description, documentReference: a.documentReference } });
+  });
+  if (opts.failOnDuplicate) await insert;
+  else await insert.onDuplicateKeyUpdate({ set: { description: a.description, documentReference: a.documentReference } });
   return a;
 }
 

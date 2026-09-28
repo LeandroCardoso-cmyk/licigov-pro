@@ -235,10 +235,23 @@ function titleForKind(kind: ContractDocumentKind): string {
  * casou) e o novo status ainda ADMITIRIA o instrumento. Nada foi gravado; o cliente pode repetir.
  */
 export class ContractStatusConflictError extends Error {
-  constructor(public readonly contractId: string) {
-    super("O status do contrato foi alterado durante a operação; nada foi gravado. Recarregue e tente novamente.");
+  constructor(public readonly contractId: string, public readonly reason: "status" | "sequence" = "status") {
+    super(reason === "sequence"
+      ? "Outro instrumento foi registrado para este contrato durante a operação; nada foi gravado. Recarregue e tente novamente."
+      : "O status do contrato foi alterado durante a operação; nada foi gravado. Recarregue e tente novamente.");
     this.name = "ContractStatusConflictError";
   }
+}
+
+/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle (`cause`). */
+function isDuplicateKeyError(err: unknown): boolean {
+  let e: unknown = err;
+  for (let i = 0; i < 4 && e; i++) {
+    const x = e as { code?: string; errno?: number; cause?: unknown };
+    if (x.code === "ER_DUP_ENTRY" || x.errno === 1062) return true;
+    e = x.cause;
+  }
+  return false;
 }
 
 /** Sentinela interna: força o ROLLBACK da transação quando o compare-and-set de status não casa. */
@@ -254,6 +267,9 @@ class InstrumentStatusCasMiss extends Error {
  * CAS não casa ⇒ ROLLBACK (nenhuma linha do instrumento, nenhum status, nenhum evento) e a máquina é
  * reavaliada contra o status REAL: recusa ⇒ `ContractStatusTransitionError`; ainda admissível ⇒
  * `ContractStatusConflictError`. Nunca grava instrumento pela metade.
+ * Instrumentos sucessivos concorrentes (mesma sequência ⇒ mesmo id determinístico): o INSERT é puro
+ * (`failOnDuplicate`), o segundo recebe ER_DUP_ENTRY ⇒ ROLLBACK ⇒ `ContractStatusConflictError("sequence")`
+ * — nunca funde duas solicitações numa linha híbrida.
  */
 async function persistInstrumentWithGovernedStatus(params: {
   ws: ContractWorkspace;
@@ -266,14 +282,6 @@ async function persistInstrumentWithGovernedStatus(params: {
   const { ws, plan } = params;
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — instrumento contratual não persistido (fail-closed).");
-  if (plan.mode === "minuta_pending_human_decision") {
-    // Comportamento pré-existente MANTIDO (minuta → aditado/apostilado não está na máquina, mas não há
-    // caminho de UI para `vigente`) — observável até a decisão humana registrada na PR-08.
-    log.warn("contract_instrument_status_from_minuta", {
-      contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, to: plan.to,
-      correlationId: params.event.correlationId,
-    });
-  }
   try {
     await db.transaction(async (tx) => {
       await params.write(tx);
@@ -287,10 +295,18 @@ async function persistInstrumentWithGovernedStatus(params: {
       }, tx);
     });
   } catch (e) {
-    if (!(e instanceof InstrumentStatusCasMiss)) throw e;
+    const duplicate = isDuplicateKeyError(e);
+    if (!(e instanceof InstrumentStatusCasMiss) && !duplicate) throw e;
     const fresh = await requireContract(ws.id, ws.organizationId);
     planInstrumentStatusChange(fresh.status, params.instrument); // lança ContractStatusTransitionError se recusado
-    throw new ContractStatusConflictError(ws.id);
+    throw new ContractStatusConflictError(ws.id, duplicate ? "sequence" : "status");
+  }
+  if (plan.mode === "deferred_pending_legal_opinion") {
+    // Fail-closed observável: instrumento registrado aguardando parecer; status do contrato NÃO efetivado.
+    log.info("contract_instrument_status_deferred_pending_legal_opinion", {
+      contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, status: plan.from,
+      instrumentStatus: plan.instrumentStatus, refId: params.event.refId, correlationId: params.event.correlationId,
+    });
   }
 }
 
@@ -303,17 +319,24 @@ async function persistInstrumentWithGovernedStatus(params: {
  * o servidor sempre decide — nunca há bloqueio.
  *
  * SEM-025 — o status do contrato passa pela máquina de estados ANTES de qualquer efeito: contrato
- * encerrado/rescindido/arquivado ⇒ `ContractStatusTransitionError` sem gravar aditivo, minuta, status
+ * minuta/encerrado/rescindido/arquivado ⇒ `ContractStatusTransitionError` sem gravar aditivo, minuta, status
  * ou evento. Aditivo + status + evento são atômicos; a minuta é gerada depois, a partir do aditivo já
- * persistido (regerável por `generateDocuments` se a geração falhar).
+ * persistido (regerável por `generateDocuments` se a geração falhar). Aditivos sucessivos são admitidos em
+ * vigente/aditado/apostilado. Quando o próprio fluxo exige parecer (`requiresLegalOpinion`), o aditivo é
+ * registrado `aguardando_parecer` e o status do contrato NÃO é efetivado (fail-closed) — não há, ainda,
+ * comando de finalização pós-parecer (dívida registrada em docs/design/CONTRACT_ACTIVATION_TRANSITION.md).
  */
 export async function createAddendum(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
   newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string;
 }): Promise<{ addendum: Awaited<ReturnType<typeof insertContractAddendum>>; requiresLegalOpinion: boolean }> {
   const ws = await requireContract(params.contractId, params.organizationId);
-  // Máquina de estados PRIMEIRO — recusa antes de qualquer leitura adicional, escrita, IA ou evento.
-  const plan = planInstrumentStatusChange(ws.status, "aditivo");
+  // Adaptive Process Engine (regra PRÉ-EXISTENTE, não definida juridicamente aqui — PR-18/PR-20 são donas do
+  // insumo jurídico): valor/quantitativo exigem parecer; prazo/qualitativo não.
+  const requiresLegalOpinion = params.addendumType === "valor" || params.addendumType === "quantitativo";
+  // Máquina de estados PRIMEIRO — recusa antes de qualquer leitura adicional, escrita, IA ou evento. Parecer
+  // exigido e ausente ⇒ o status do contrato não é efetivado (fail-closed; `deferred_pending_legal_opinion`).
+  const plan = planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion });
   const sequence = (await countContractAddenda(ws.id, params.organizationId)) + 1;
   let addendum = createContractAddendum({
     organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence,
@@ -321,14 +344,11 @@ export async function createAddendum(params: {
     requestOrigin: params.requestOrigin, correlationId: params.correlationId,
   });
   addendum = advanceAddendum(addendum, "minuta");
-
-  // Adaptive Process Engine: valor/quantitativo exigem parecer; prazo/qualitativo não.
-  const requiresLegalOpinion = params.addendumType === "valor" || params.addendumType === "quantitativo";
   const updated = advanceAddendum(addendum, requiresLegalOpinion ? "aguardando_parecer" : "finalizado");
   await persistInstrumentWithGovernedStatus({
     ws, plan, instrument: "aditivo", at: updated.updatedAt,
-    write: (tx) => insertContractAddendum(updated, tx),
-    event: { summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? "requer parecer" : "finalizado"}.`, refId: updated.id, correlationId: params.correlationId },
+    write: (tx) => insertContractAddendum(updated, tx, { failOnDuplicate: true }),
+    event: { summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? `requer parecer; status do contrato mantido (${plan.to}) até o parecer` : "finalizado"}.`, refId: updated.id, correlationId: params.correlationId },
   });
   await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "aditivo", refId: updated.id, correlationId: params.correlationId });
   return { addendum: updated, requiresLegalOpinion };
@@ -354,7 +374,7 @@ export async function createApostille(params: {
   });
   await persistInstrumentWithGovernedStatus({
     ws, plan, instrument: "apostilamento", at: apostille.createdAt,
-    write: (tx) => insertContractApostille(apostille, tx),
+    write: (tx) => insertContractApostille(apostille, tx, { failOnDuplicate: true }),
     event: { summary: `Apostilamento ${sequence} (${params.kind}).`, refId: apostille.id, correlationId: params.correlationId },
   });
   await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "apostilamento", refId: apostille.id, correlationId: params.correlationId });

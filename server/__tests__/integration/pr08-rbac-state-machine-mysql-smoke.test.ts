@@ -8,9 +8,11 @@
  *     decide e o efeito persiste; outro tenant ⇒ NOT_FOUND sem efeito.
  *  B. `itemIntelligence.approveItem`: TODOS os papéis ⇒ FORBIDDEN `LEGACY_ENDPOINT_DISABLED`, item intocado;
  *     a rota canônica `procurementProcess.approveItem` (operator) segue aprovando.
- *  C. Aditivo/apostilamento em contrato encerrado/rescindido/arquivado ⇒ BAD_REQUEST
+ *  C. Aditivo/apostilamento em contrato minuta/encerrado/rescindido/arquivado ⇒ BAD_REQUEST
  *     `CONTRACT_STATUS_TRANSITION_INVALID`; linha do contrato, aditivos, apostilamentos, minutas, documentos
- *     oficiais e timeline INALTERADOS. Transições válidas continuam funcionando; cross-tenant ⇒ NOT_FOUND.
+ *     oficiais e timeline INALTERADOS (rev. 2: sem exceção para `minuta`). Instrumentos sucessivos em
+ *     vigente/aditado/apostilado funcionam; parecer exigido pelo fluxo ⇒ status do contrato NÃO efetivado;
+ *     mesma sequência concorrente ⇒ CONFLICT sem linha híbrida; cross-tenant ⇒ NOT_FOUND.
  *  D. Corrida: contrato rescindido entre a avaliação e a escrita ⇒ o compare-and-set real não casa, a transação
  *     real faz ROLLBACK (nenhum aditivo gravado) e a recusa é a da máquina contra o status real.
  */
@@ -21,7 +23,7 @@ import mysql from "mysql2/promise";
 // contrato que antecede uma rescisão concorrente. Por padrão delega à implementação real.
 vi.mock("../../db/contractWorkspace", async (orig) => {
   const real = await orig<typeof import("../../db/contractWorkspace")>();
-  return { ...real, getContractWorkspace: vi.fn(real.getContractWorkspace) };
+  return { ...real, getContractWorkspace: vi.fn(real.getContractWorkspace), countContractAddenda: vi.fn(real.countContractAddenda) };
 });
 
 import { runMigrations, validateSchema } from "../../bootstrap";
@@ -29,7 +31,7 @@ import { createIntelligentItem } from "../../domain/intelligentItem";
 import { insertIntelligentItem, getIntelligentItem } from "../../db/procurement";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
 import { createManualContract, createAddendum } from "../../services/contractService";
-import { getContractWorkspace, compareAndSetContractWorkspaceStatus } from "../../db/contractWorkspace";
+import { getContractWorkspace, compareAndSetContractWorkspaceStatus, countContractAddenda } from "../../db/contractWorkspace";
 import { ContractStatusTransitionError, CONTRACT_STATUS_TRANSITION_INVALID } from "../../domain/contractWorkspace";
 import { LEGACY_ENDPOINT_DISABLED } from "../../services/legacyEndpointGuard";
 
@@ -201,7 +203,7 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     };
   }
 
-  it.each(["encerrado", "rescindido", "arquivado"])("C1) contrato %s: aditivo e apostilamento recusados; contrato e tabelas inalterados", async (status) => {
+  it.each(["minuta", "encerrado", "rescindido", "arquivado"])("C1) contrato %s: aditivo e apostilamento recusados; contrato e tabelas inalterados", async (status) => {
     const id = await seedContract(`c1-${status}`, status);
     const before = await contractSnapshot(id);
     const api = await caller(users.owner, ORG_A);
@@ -216,31 +218,60 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     expect(JSON.parse(before.row).status).toBe(status); // nunca ressuscita
   }, 120_000);
 
-  it("C2) transições válidas continuam: vigente → aditado → apostilado → aditado (2º aditivo mantém aditado)", async () => {
+  it("C2) instrumentos sucessivos: vigente → aditivo → aditivo → apostilamento → aditivo → apostilamento → aditivo c/ parecer", async () => {
     const id = await seedContract("c2", "vigente");
-    const api = await caller(users.owner, ORG_A);
+    const corr = `pr08-c2-${stamp}`;
+    const api = await caller(users.owner, ORG_A, corr);
+    const status = async () => (await getContractWorkspace(id, ORG_A))?.status;
     const r1 = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Prorrogação.", newTerm: "18 meses" });
     expect(r1.addendum?.status).toBe("finalizado");
-    expect((await getContractWorkspace(id, ORG_A))?.status).toBe("aditado");
+    expect(await status()).toBe("aditado");
     await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "qualitativo", justification: "Ajuste." });
-    expect((await getContractWorkspace(id, ORG_A))?.status).toBe("aditado");
+    expect(await status()).toBe("aditado"); // `aditado` não bloqueia novo aditivo
     await api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" });
-    expect((await getContractWorkspace(id, ORG_A))?.status).toBe("apostilado");
-    const r4 = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Acréscimo.", newValue: 1000 });
-    expect(r4.requiresLegalOpinion).toBe(true);
-    expect((await getContractWorkspace(id, ORG_A))?.status).toBe("aditado");
+    expect(await status()).toBe("apostilado");
+    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "2ª prorrogação.", newTerm: "24 meses" });
+    expect(await status()).toBe("aditado");
+    await api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", newValue: 110000 });
+    expect(await status()).toBe("apostilado");
+    const r6 = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Acréscimo.", newValue: 1000 });
+    expect(r6.requiresLegalOpinion).toBe(true);
+    expect(r6.addendum?.status).toBe("aguardando_parecer");
+    expect(await status()).toBe("apostilado"); // parecer exigido e ausente ⇒ status NÃO efetivado (fail-closed)
     const snap = await contractSnapshot(id);
-    expect(snap.addenda).toBe(3);
-    expect(snap.apostilles).toBe(1);
-    expect(snap.minutas).toBe(4); // minuta gerada para cada instrumento persistido
+    expect(snap.addenda).toBe(4);
+    expect(snap.apostilles).toBe(2);
+    expect(snap.minutas).toBe(6); // minuta gerada para cada instrumento persistido
     const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT sequence, status FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
-    expect(rows.map((r) => r.status)).toEqual(["finalizado", "finalizado", "aguardando_parecer"]);
-  }, 180_000);
+    expect(rows.map((r) => `${r.sequence}:${r.status}`)).toEqual(["1:finalizado", "2:finalizado", "3:finalizado", "4:aguardando_parecer"]);
+    // Rastreabilidade: cada instrumento gera evento de timeline com o correlationId da requisição.
+    const [ev] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT summary, correlation_id FROM process_timeline WHERE organization_id = ? AND process_id = ? AND event_type = 'change'", [ORG_A, id]);
+    expect(ev.length).toBe(6);
+    expect(ev.every((r) => r.correlation_id === corr)).toBe(true);
+    expect(ev.filter((r) => String(r.summary).includes("status do contrato mantido (apostilado)")).length).toBe(1);
+  }, 240_000);
 
-  it("C3) minuta: comportamento de hoje mantido (minuta → aditado) até decisão humana", async () => {
+  it("C3) minuta: aditivo/apostilamento recusados (sem exceção); nenhuma linha, IA, minuta, documento oficial ou timeline", async () => {
     const id = await seedContract("c3", "minuta");
-    await (await caller(users.owner, ORG_A)).contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Prorrogação.", newTerm: "18 meses" });
-    expect((await getContractWorkspace(id, ORG_A))?.status).toBe("aditado");
+    const before = await contractSnapshot(id);
+    const api = await caller(users.owner, ORG_A);
+    for (const addendumType of ["prazo", "valor", "quantitativo", "qualitativo"] as const) {
+      const a = await err(api.contractWorkspace.createAddendum({ contractId: id, addendumType, justification: "Prorrogação.", newTerm: "18 meses", newValue: 1 }));
+      expect(a?.code, addendumType).toBe("BAD_REQUEST");
+      expect(a?.message).toContain("Transição de contrato inválida: minuta → aditado");
+      expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
+    }
+    for (const kind of ["reajuste", "gestor", "fiscal", "legal"] as const) {
+      const p = await err(api.contractWorkspace.createApostille({ contractId: id, kind, newManager: "Maria", newInspector: "João", newValue: 1 }));
+      expect(p?.code, kind).toBe("BAD_REQUEST");
+      expect(p?.message).toContain("minuta → apostilado");
+    }
+    const after = await contractSnapshot(id);
+    expect(after).toEqual(before);
+    expect(after.minutas).toBe(0);
+    expect(after.official).toBe(0);
+    expect(JSON.parse(after.row).status).toBe("minuta");
   }, 120_000);
 
   it("C4) cross-tenant inalterado: owner da Org B ⇒ NOT_FOUND sobre contrato da Org A, sem efeito", async () => {
@@ -251,6 +282,21 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     expect((await err(apiB.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "x" })))?.code).toBe("NOT_FOUND");
     expect(await contractSnapshot(id)).toEqual(before);
   }, 60_000);
+
+  it("C5) aditivo concorrente com a MESMA sequência (contrato aditado): INSERT puro ⇒ ER_DUP_ENTRY real ⇒ ROLLBACK + CONFLICT; 1º aditivo intacto", async () => {
+    const id = await seedContract("c5", "vigente");
+    const api = await caller(users.owner, ORG_A);
+    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Primeiro.", newTerm: "18 meses" });
+    const before = await contractSnapshot(id);
+    const [firstRow] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ?", [id]);
+    // A 2ª solicitação contou os aditivos ANTES do commit da 1ª (mesma sequência ⇒ mesmo id determinístico).
+    vi.mocked(countContractAddenda).mockResolvedValueOnce(0);
+    const e = await err(api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Concorrente.", newValue: 999 }));
+    expect(e?.code).toBe("CONFLICT");
+    expect(await contractSnapshot(id)).toEqual(before);
+    const [afterRow] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ?", [id]);
+    expect(JSON.stringify(afterRow)).toBe(JSON.stringify(firstRow)); // nenhuma fusão silenciosa
+  }, 120_000);
 
   // ─── D. Corrida: compare-and-set + rollback reais ───────────────────────────
   it("D1) CAS real: só grava a partir do status esperado", async () => {

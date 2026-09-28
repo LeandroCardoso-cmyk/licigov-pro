@@ -138,33 +138,46 @@ export const INSTRUMENT_CONTRACT_STATUS = { aditivo: "aditado", apostilamento: "
 export type ContractInstrumentKind = keyof typeof INSTRUMENT_CONTRACT_STATUS;
 
 /**
- * Como o status do contrato muda ao registrar um instrumento:
- *  - `machine`   — transição DEFINIDA em `STATUS_TRANSITIONS` (ex.: vigente → aditado);
+ * Como o status do contrato muda ao registrar um instrumento (decisão do responsável pelo produto, PR-08 rev. 2):
+ *  - `machine`   — transição DEFINIDA em `STATUS_TRANSITIONS` (ex.: vigente → aditado; apostilado → aditado);
  *  - `unchanged` — o contrato já está no status do instrumento (ex.: 2º aditivo em contrato `aditado`).
  *                  Não é transição: mesma convenção de `contractWorkspace.updateContract` (status igual ⇒
- *                  a máquina não é consultada);
- *  - `minuta_pending_human_decision` — contrato em `minuta`. A máquina NÃO lista minuta → aditado/apostilado,
- *                  mas o produto não oferece hoje nenhum caminho de UI para levar o contrato a `vigente`
- *                  (todos os fluxos nascem `minuta`); recusar aqui tornaria Aditivos/Apostilamentos
- *                  inutilizáveis. O comportamento de hoje é MANTIDO, de forma explícita e auditável, até
- *                  decisão humana (PR-08, questão aberta) — nunca reabre estado encerrado.
- * Qualquer outro caso (encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina)
- * é RECUSADO com `ContractStatusTransitionError`, antes de qualquer efeito.
+ *                  a máquina não é consultada). Instrumentos SUCESSIVOS são histórico/filhos do contrato:
+ *                  `aditado`/`apostilado` nunca bloqueiam um novo aditivo/apostilamento;
+ *  - `deferred_pending_legal_opinion` — o instrumento é ADMISSÍVEL no status atual (um dos dois casos acima),
+ *                  mas o próprio fluxo declarou que ele exige parecer jurídico (`requiresLegalOpinion`) e o
+ *                  parecer ainda não existe. Fail-closed: o instrumento é registrado aguardando parecer e o
+ *                  status do contrato NÃO muda (`to === from`). A efetivação posterior depende do comando de
+ *                  finalização do instrumento, que ainda não existe (PR-18/PR-20 — ver
+ *                  docs/design/CONTRACT_ACTIVATION_TRANSITION.md).
+ * Qualquer outro caso é RECUSADO com `ContractStatusTransitionError`, antes de qualquer efeito:
+ *  - `minuta` — contrato ainda não formalizado. A máquina NÃO lista minuta → aditado/apostilado e não há exceção:
+ *               aditivo/apostilamento só existem sobre contrato formalizado (a ativação minuta → vigente é uma
+ *               transição institucional explícita, proposta em docs/design/CONTRACT_ACTIVATION_TRANSITION.md);
+ *  - encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina; nunca reabrem.
  */
-export type InstrumentStatusChangeMode = "machine" | "unchanged" | "minuta_pending_human_decision";
+export type InstrumentStatusChangeMode = "machine" | "unchanged" | "deferred_pending_legal_opinion";
 
 export interface InstrumentStatusChangePlan {
   readonly from: ContractStatus;
+  /** Status que o contrato terá ao final da operação (igual a `from` em `unchanged` e `deferred_pending_legal_opinion`). */
   readonly to: ContractStatus;
+  /** Status que o instrumento imprime no contrato quando efetivado (`aditado`/`apostilado`). */
+  readonly instrumentStatus: ContractStatus;
   readonly mode: InstrumentStatusChangeMode;
 }
 
-export function planInstrumentStatusChange(from: ContractStatus, instrument: ContractInstrumentKind): InstrumentStatusChangePlan {
-  const to: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
-  if (from === to) return { from, to, mode: "unchanged" };
-  if (canContractTransition(from, to)) return { from, to, mode: "machine" };
-  if (from === "minuta") return { from, to, mode: "minuta_pending_human_decision" };
-  throw new ContractStatusTransitionError(from, to);
+export function planInstrumentStatusChange(
+  from: ContractStatus,
+  instrument: ContractInstrumentKind,
+  opts: { readonly requiresLegalOpinion?: boolean } = {},
+): InstrumentStatusChangePlan {
+  const instrumentStatus: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
+  const admissible = from === instrumentStatus || canContractTransition(from, instrumentStatus);
+  if (!admissible) throw new ContractStatusTransitionError(from, instrumentStatus);
+  if (opts.requiresLegalOpinion === true) return { from, to: from, instrumentStatus, mode: "deferred_pending_legal_opinion" };
+  if (from === instrumentStatus) return { from, to: from, instrumentStatus, mode: "unchanged" };
+  return { from, to: instrumentStatus, instrumentStatus, mode: "machine" };
 }
 
 /** Atualiza campos editáveis do contrato (sempre supervisionado). */

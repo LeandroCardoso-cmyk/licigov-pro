@@ -10,8 +10,11 @@
  *     continua registrada com o MESMO input, e toda chamada — de qualquer papel — recebe FORBIDDEN com o token
  *     `LEGACY_ENDPOINT_DISABLED`, sem tocar serviço/DB.
  * SEM-025:
- *   - `planInstrumentStatusChange` só admite o que a máquina `STATUS_TRANSITIONS` define (+ "status igual" e o
- *     caso `minuta` mantido até decisão humana); estados encerrado/rescindido/arquivado nunca reabrem.
+ *   - `planInstrumentStatusChange` só admite o que a máquina `STATUS_TRANSITIONS` define (+ "status igual", que
+ *     não é transição). Rev. 2 (decisão do responsável pelo produto): SEM exceção para `minuta` — aditivo/
+ *     apostilamento em contrato não formalizado é recusado (BAD_REQUEST `CONTRACT_STATUS_TRANSITION_INVALID`,
+ *     zero efeitos); estados encerrado/rescindido/arquivado nunca reabrem; instrumentos sucessivos são admitidos
+ *     em vigente/aditado/apostilado; parecer exigido pelo próprio fluxo e ausente ⇒ status NÃO efetivado.
  *   - `createAddendum`/`createApostille` recusam ANTES de qualquer efeito (sem contagem, escrita, IA, evento);
  *     corrida perdida no compare-and-set ⇒ ROLLBACK e recusa estável; router mapeia BAD_REQUEST/CONFLICT.
  */
@@ -99,6 +102,8 @@ async function err(p: Promise<unknown>): Promise<{ code: string; message: string
 const ALL_ROLES = ["viewer", "operator", "manager", "admin", "owner"] as const;
 const STATUSES: ContractStatus[] = ["minuta", "vigente", "aditado", "apostilado", "encerrado", "rescindido", "arquivado"];
 const CLOSED: ContractStatus[] = ["encerrado", "rescindido", "arquivado"];
+/** Estados que NÃO admitem aditivo/apostilamento (rev. 2: `minuta` incluída — sem exceção). */
+const REFUSING: ContractStatus[] = ["minuta", ...CLOSED];
 
 function contractWith(status: string) {
   return { ...createContractWorkspace({ organizationId: role.org, originType: "avulso", contractNumber: "CT-PR08", correlationId: "c" }), status };
@@ -189,7 +194,7 @@ describe("SEM-026 — itemIntelligence.approveItem desligado de forma governada 
 describe("SEM-025 — planInstrumentStatusChange só admite o que a máquina define", () => {
   it("tabela completa: status × instrumento", () => {
     const expected: Record<ContractStatus, Record<"aditivo" | "apostilamento", string>> = {
-      minuta:     { aditivo: "minuta_pending_human_decision", apostilamento: "minuta_pending_human_decision" },
+      minuta:     { aditivo: "REFUSED",   apostilamento: "REFUSED" }, // rev. 2: exceção removida
       vigente:    { aditivo: "machine",   apostilamento: "machine" },
       aditado:    { aditivo: "unchanged", apostilamento: "machine" },
       apostilado: { aditivo: "machine",   apostilamento: "unchanged" },
@@ -207,6 +212,35 @@ describe("SEM-025 — planInstrumentStatusChange só admite o que a máquina def
         expect(`${s}/${inst}=${got}`).toBe(`${s}/${inst}=${expected[s][inst]}`);
       }
     }
+  });
+
+  it("parecer exigido pelo fluxo ⇒ `deferred_pending_legal_opinion` (to === from) só onde o instrumento é admissível", () => {
+    for (const s of STATUSES) {
+      for (const inst of ["aditivo", "apostilamento"] as const) {
+        let got: string;
+        try {
+          const plan = planInstrumentStatusChange(s, inst, { requiresLegalOpinion: true });
+          expect(plan.to).toBe(s); // status do contrato NÃO efetivado
+          expect(plan.instrumentStatus).toBe(inst === "aditivo" ? "aditado" : "apostilado");
+          got = plan.mode;
+        } catch (e) {
+          expect(e).toBeInstanceOf(ContractStatusTransitionError);
+          got = "REFUSED";
+        }
+        const expected = REFUSING.includes(s) ? "REFUSED" : "deferred_pending_legal_opinion";
+        expect(`${s}/${inst}=${got}`).toBe(`${s}/${inst}=${expected}`);
+      }
+    }
+    // Sem a flag (ou false) o plano é o da máquina — a flag nunca é inferida por default.
+    expect(planInstrumentStatusChange("vigente", "aditivo").mode).toBe("machine");
+    expect(planInstrumentStatusChange("vigente", "aditivo", { requiresLegalOpinion: false }).mode).toBe("machine");
+  });
+
+  it("minuta → aditado/apostilado NÃO está na máquina e não há exceção (rev. 2)", () => {
+    expect(canContractTransition("minuta", "aditado")).toBe(false);
+    expect(canContractTransition("minuta", "apostilado")).toBe(false);
+    expect(() => planInstrumentStatusChange("minuta", "aditivo")).toThrow("Transição de contrato inválida: minuta → aditado");
+    expect(() => planInstrumentStatusChange("minuta", "apostilamento")).toThrow("Transição de contrato inválida: minuta → apostilado");
   });
 
   it("`machine` ⇔ a transição existe em STATUS_TRANSITIONS (nenhuma regra nova inventada)", () => {
@@ -229,8 +263,8 @@ describe("SEM-025 — planInstrumentStatusChange só admite o que a máquina def
   });
 });
 
-describe("SEM-025 — createAddendum/createApostille recusam estado encerrado SEM nenhum efeito", () => {
-  it.each(CLOSED)("contrato %s: aditivo e apostilamento recusados antes de contar/gravar/gerar/registrar", async (status) => {
+describe("SEM-025 — createAddendum/createApostille recusam minuta e estados encerrados SEM nenhum efeito", () => {
+  it.each(REFUSING)("contrato %s: aditivo e apostilamento recusados antes de contar/gravar/gerar/registrar", async (status) => {
     cw.status = status;
     await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusTransitionError);
@@ -256,6 +290,23 @@ describe("SEM-025 — createAddendum/createApostille recusam estado encerrado SE
     expect(cw.insertContractApostille).not.toHaveBeenCalled();
     expect(cw.orchestrateMultiCopilot).not.toHaveBeenCalled();
   });
+
+  it("router: contrato em minuta ⇒ BAD_REQUEST CONTRACT_STATUS_TRANSITION_INVALID; sem linha, IA, minuta, CAS ou timeline", async () => {
+    role.value = "owner"; cw.status = "minuta";
+    const a = await err(cwr().createAddendum({ contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses" }));
+    expect(a?.code).toBe("BAD_REQUEST");
+    expect(a?.message).toContain("Transição de contrato inválida: minuta → aditado");
+    expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
+    const p = await err(cwr().createApostille({ contractId: "c1", kind: "gestor", newManager: "Maria" }));
+    expect(p?.code).toBe("BAD_REQUEST");
+    expect(p?.message).toContain("minuta → apostilado");
+    expect(p?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
+    for (const fn of [cw.countContractAddenda, cw.countContractApostilles, cw.insertContractAddendum, cw.insertContractApostille,
+      cw.compareAndSetContractWorkspaceStatus, cw.transaction, cw.orchestrateMultiCopilot, cw.generateOfficialDocument,
+      cw.insertContractWsDocument, item.recordProcessEvent]) {
+      expect(fn).not.toHaveBeenCalled();
+    }
+  });
 });
 
 describe("SEM-025 — transições válidas: instrumento + status + evento na MESMA transação, CAS a partir do status avaliado", () => {
@@ -263,17 +314,43 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
     cw.status = "vigente";
     const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses", correlationId: "c" });
     expect(res.addendum?.status).toBe("finalizado");
-    expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "finalizado" }), { __tx: true });
+    expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "finalizado" }), { __tx: true }, { failOnDuplicate: true });
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado", orgId: 1 }), { __tx: true });
     expect(item.recordProcessEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "change" }), { __tx: true });
     expect(cw.orchestrateMultiCopilot).toHaveBeenCalledTimes(1);
     expect(cw.insertContractAddendum.mock.invocationCallOrder[0]).toBeLessThan(cw.orchestrateMultiCopilot.mock.invocationCallOrder[0]);
   });
 
-  it("aditivo de valor ⇒ aguardando_parecer (comportamento preservado)", async () => {
-    const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "valor", justification: "Acréscimo", newValue: 10, correlationId: "c" });
-    expect(res.requiresLegalOpinion).toBe(true);
-    expect(res.addendum?.status).toBe("aguardando_parecer");
+  it("aditivo que o fluxo marca como exigindo parecer ⇒ aguardando_parecer e status do contrato NÃO efetivado (CAS vigente→vigente)", async () => {
+    for (const addendumType of ["valor", "quantitativo"] as const) {
+      vi.clearAllMocks();
+      const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType, justification: "Acréscimo", newValue: 10, correlationId: "c" });
+      expect(res.requiresLegalOpinion).toBe(true);
+      expect(res.addendum?.status).toBe("aguardando_parecer");
+      expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "aguardando_parecer" }), { __tx: true }, { failOnDuplicate: true });
+      expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "vigente" }), { __tx: true });
+      expect(item.recordProcessEvent).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.stringContaining("status do contrato mantido (vigente)") }), { __tx: true });
+    }
+  });
+
+  it("aditivo que NÃO exige parecer (prazo/qualitativo) segue efetivando pela máquina", async () => {
+    for (const addendumType of ["prazo", "qualitativo"] as const) {
+      vi.clearAllMocks();
+      const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType, justification: "j", correlationId: "c" });
+      expect(res.requiresLegalOpinion).toBe(false);
+      expect(res.addendum?.status).toBe("finalizado");
+      expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado" }), { __tx: true });
+    }
+  });
+
+  it("parecer exigido em contrato recusante ⇒ recusa continua (a flag nunca abre estado não admissível)", async () => {
+    for (const status of REFUSING) {
+      cw.status = status;
+      await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "valor", justification: "j", newValue: 1, correlationId: "c" }))
+        .rejects.toBeInstanceOf(ContractStatusTransitionError);
+    }
+    expect(cw.insertContractAddendum).not.toHaveBeenCalled();
+    expect(cw.transaction).not.toHaveBeenCalled();
   });
 
   it("aditado + 2º aditivo ⇒ status inalterado (CAS aditado→aditado); apostilado → aditado pela máquina", async () => {
@@ -285,10 +362,28 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "apostilado", toStatus: "aditado" }), { __tx: true });
   });
 
-  it("minuta: comportamento de hoje MANTIDO (minuta → aditado/apostilado) até decisão humana", async () => {
-    cw.status = "minuta";
-    await createApostille({ organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Maria", correlationId: "c" });
-    expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "minuta", toStatus: "apostilado" }), { __tx: true });
+  it("cadeia de instrumentos sucessivos: vigente → aditivo → aditivo → apostilamento → aditivo → apostilamento", async () => {
+    // O mock de CAS aplica o status (como o banco): cada passo parte do status resultante do anterior.
+    cw.compareAndSetContractWorkspaceStatus.mockImplementation(async (p: { fromStatus: string; toStatus: string }) => {
+      if (p.fromStatus !== cw.status) return false;
+      cw.status = p.toStatus; return true;
+    });
+    cw.status = "vigente";
+    const steps: Array<[string, () => Promise<unknown>]> = [
+      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "1", correlationId: "c" })],
+      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "qualitativo", justification: "2", correlationId: "c" })],
+      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "reajuste", newValue: 5, correlationId: "c" })],
+      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "3", correlationId: "c" })],
+      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "fiscal", newInspector: "João", correlationId: "c" })],
+      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Ana", correlationId: "c" })],
+      ["apostilado", () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "valor", justification: "4", newValue: 9, correlationId: "c" })], // parecer ⇒ inalterado
+    ];
+    for (const [expected, run] of steps) {
+      await run();
+      expect(cw.status).toBe(expected);
+    }
+    expect(cw.insertContractAddendum).toHaveBeenCalledTimes(4);
+    expect(cw.insertContractApostille).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -300,6 +395,21 @@ describe("SEM-025 — corrida: contrato muda de status durante a operação", ()
     expect(item.recordProcessEvent).not.toHaveBeenCalled(); // evento só após CAS vencedor
     expect(cw.orchestrateMultiCopilot).not.toHaveBeenCalled(); // nenhuma minuta de instrumento não persistido
     expect(cw.generateOfficialDocument).not.toHaveBeenCalled();
+  });
+
+  it("instrumento concorrente com a MESMA sequência ⇒ ER_DUP_ENTRY no INSERT puro ⇒ rollback + CONFLICT (sem linha híbrida)", async () => {
+    cw.status = "aditado";
+    const dup = Object.assign(new Error("Failed query"), { cause: Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY", errno: 1062 }) });
+    cw.insertContractAddendum.mockRejectedValueOnce(dup);
+    const e = await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }).then(() => null, (x: unknown) => x);
+    expect(e).toBeInstanceOf(ContractStatusConflictError);
+    expect((e as ContractStatusConflictError).reason).toBe("sequence");
+    expect(cw.compareAndSetContractWorkspaceStatus).not.toHaveBeenCalled();
+    expect(item.recordProcessEvent).not.toHaveBeenCalled();
+    expect(cw.orchestrateMultiCopilot).not.toHaveBeenCalled();
+    role.value = "owner";
+    cw.insertContractApostille.mockRejectedValueOnce(dup);
+    expect((await err(cwr().createApostille({ contractId: "c1", kind: "gestor", newManager: "Maria" })))?.code).toBe("CONFLICT");
   });
 
   it("mudou para status que ainda admitiria ⇒ ContractStatusConflictError (router: CONFLICT)", async () => {
