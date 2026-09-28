@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import type { OrgRole } from "../../drizzle/schema";
 import { resolveTenantForUser } from "../services/tenantService";
+import { structuredLog } from "../services/observabilityService";
 import * as db from "../db";
 
 const t = initTRPC.context<TrpcContext>().create({
@@ -170,20 +171,50 @@ const ORG_ROLE_RANK: Record<OrgRole, number> = {
   owner:    5,
 };
 
+/** `role` ocupa pelo menos o degrau `minRole` na hierarquia organizacional (viewer < operator < manager < admin < owner). */
+export function hasOrgRoleAtLeast(role: OrgRole, minRole: OrgRole): boolean {
+  return ORG_ROLE_RANK[role] >= ORG_ROLE_RANK[minRole];
+}
+
+type OrgRoleCheckContext = {
+  user?: { id: number } | null;
+  organizationId?: number | null;
+  orgMembership?: { role: OrgRole } | null;
+  correlationId?: string;
+};
+
+/**
+ * NEW-006 — verificação de papel mínimo reutilizável (middleware `orgRoleProcedure` e checagens
+ * condicionais dentro de handlers, ex.: mudança de status num endpoint de edição). FAIL-CLOSED: sem
+ * membership resolvida ⇒ FORBIDDEN (antes: `orgMembership!` ⇒ TypeError). Toda recusa gera UM log
+ * estruturado `rbac/org_role_denied` com operação, papel exigido/atual, usuário, organização e
+ * correlationId (rastreabilidade — antes a recusa não era registrada em lugar nenhum).
+ */
+export function assertOrgRoleAtLeast(ctx: OrgRoleCheckContext, minRole: OrgRole, operation: string): void {
+  const userRole = ctx.orgMembership?.role;
+  if (userRole && hasOrgRoleAtLeast(userRole, minRole)) return;
+  structuredLog({
+    level: "warn", service: "rbac", operation: "org_role_denied",
+    procedure: operation, requiredRole: minRole, userRole: userRole ?? null,
+    userId: ctx.user?.id, organizationId: ctx.organizationId ?? undefined, correlationId: ctx.correlationId,
+  });
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
+  });
+}
+
 export function orgRoleProcedure(minRole: OrgRole) {
   return tenantProcedure.use(
     t.middleware(async opts => {
-      const { ctx, next } = opts;
+      const { ctx, next, path } = opts;
 
-      const userRole = ctx.orgMembership!.role;
-      if (ORG_ROLE_RANK[userRole] < ORG_ROLE_RANK[minRole]) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
-        });
-      }
+      assertOrgRoleAtLeast(ctx, minRole, path);
 
-      return next({ ctx });
+      // `next()` sem sobrescrever ctx: preserva o contexto já estreitado pelo tenantProcedure
+      // (user não-nulo). `next({ ctx })` a partir de um `t.middleware` avulso re-alargava o tipo
+      // para o TrpcContext base (user: User | null) — só tipagem, mesmo objeto em runtime.
+      return next();
     }),
   );
 }
