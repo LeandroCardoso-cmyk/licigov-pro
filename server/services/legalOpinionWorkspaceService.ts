@@ -25,22 +25,34 @@ import {
   getRequest, listRequestTimeline, listDocumentReferences,
 } from "../db/institutionalRequests";
 import {
-  createLegalOpinionWorkspace, transitionLegalStage, assignLawyer,
+  createLegalOpinionWorkspace, transitionLegalStage, assignLawyer, canLegalTransition,
   type LegalOpinionWorkspace, type LegalOpinionPriority,
 } from "../domain/legalOpinionWorkspace";
 import {
   createLegalOpinionDraft, updateLegalOpinionDraft, signLegalOpinionDraft, draftContentHash,
+  decideLegalOpinionDraftCreate, legalOpinionStageInvalidMessage,
+  LEGAL_OPINION_ALREADY_EXISTS, LEGAL_OPINION_ALREADY_EXISTS_MESSAGE, LEGAL_OPINION_ALREADY_SIGNED_MESSAGE,
+  LEGAL_OPINION_STAGE_INVALID,
   type LegalOpinionDraft, type LegalOpinionType, type LegalOpinionConclusion, type SignatureMethod,
 } from "../domain/legalOpinionDraft";
 import { createLawyerAssignment } from "../domain/lawyerAssignment";
 import {
   insertLegalOpinionWorkspace, getLegalOpinionWorkspace, getLegalOpinionWorkspaceByRequest,
-  updateLegalOpinionWorkspaceStage, insertLegalOpinionDraft, getLegalOpinionDraftByWorkspace,
+  updateLegalOpinionWorkspaceStage, getLegalOpinionDraftByWorkspace,
   insertLegalOpinionVersion, countLegalOpinionHistory, insertLegalOpinionHistory,
   listLegalOpinionHistory, listLegalOpinionVersions, insertLawyerAssignment,
+  claimNewLegalOpinionDraft, updateUnsignedLegalOpinionDraft, listLegalOpinionDraftsByWorkspace,
 } from "../db/legalOpinionWorkspace";
+import { serviceLogger } from "./observabilityService";
 
 const DOMAIN = "parecer_juridico" as const;
+const log = serviceLogger("legalOpinionWorkspaceService");
+
+/** CONFLICT governado do padrão R3 (mensagem pt-BR estável com token) — registrado sem PII/conteúdo do parecer. */
+function opinionConflict(message: string, reason: string, ws: LegalOpinionWorkspace, actor: number, correlationId: string): TRPCError {
+  log.warn("create_opinion_draft_conflict", { organizationId: ws.organizationId, workspaceId: ws.id, actorUserId: actor, correlationId, reason });
+  return new TRPCError({ code: "CONFLICT", message });
+}
 
 /** Registra um evento na história do parecer, calculando a ordem. */
 async function recordHistory(ws: LegalOpinionWorkspace, eventType: string, actor: string, summary: string, refId?: string): Promise<void> {
@@ -203,7 +215,19 @@ export async function loadWorkspaceReasoning(params: {
   };
 }
 
-/** Cria o rascunho do parecer e move o workspace para DRAFT. */
+/**
+ * Cria o rascunho do parecer e move o workspace para DRAFT.
+ *
+ * R3 / PR-06 (SEM-006) — CREATE ≠ RESET. Antes, o rascunho era gravado por upsert (id = hash(org, workspace, tipo))
+ * ANTES de validar a etapa: uma nova "criação" sobre parecer ASSINADO o regravava como rascunho v1 não assinado, com
+ * texto novo, e só depois `transitionLegalStage` lançava SIGNED→DRAFT. Agora:
+ *  1. workspace com parecer assinado ⇒ CONFLICT `LEGAL_OPINION_ALREADY_SIGNED`; com parecer não assinado ⇒ CONFLICT
+ *     `LEGAL_OPINION_ALREADY_EXISTS`, salvo retry idempotente da MESMA criação (mesmo ator + mesmo tipo + mesmo
+ *     payload normalizado, parecer ainda rascunho v1), que CONVERGE devolvendo o existente SEM escrita alguma;
+ *  2. a etapa é validada ANTES de qualquer escrita (`LEGAL_OPINION_STAGE_INVALID`);
+ *  3. a criação é INSERT-only sob lock do workspace (`claimNewLegalOpinionDraft`) — nunca upsert;
+ *  4. só o vencedor do INSERT gera documento oficial, move a etapa e registra histórico.
+ */
 export async function createOpinionDraft(params: {
   workspaceId: string;
   organizationId: number;
@@ -221,20 +245,48 @@ export async function createOpinionDraft(params: {
   const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
   if (!ws) throw new Error("Workspace de parecer não encontrado.");
 
-  const draft = createLegalOpinionDraft({
+  const candidate = createLegalOpinionDraft({
     organizationId: params.organizationId, workspaceId: ws.id, requestId: ws.requestId,
     opinionType: params.opinionType, author: params.author, report: params.report, foundation: params.foundation,
     conclusion: params.conclusion, conclusionType: params.conclusionType, recommendations: params.recommendations,
     reservations: params.reservations, attachments: params.attachments, correlationId: params.correlationId,
   });
-  await insertLegalOpinionDraft(draft);
-  await insertLegalOpinionVersion({
-    organizationId: params.organizationId, draftId: draft.id, workspaceId: ws.id, version: draft.version,
-    contentHash: draftContentHash(draft), snapshot: JSON.stringify({ report: draft.report, conclusion: draft.conclusion }),
+
+  /** Converge (retry exato) ou recusa — NUNCA escreve. */
+  const resolveExisting = (existing: LegalOpinionDraft[]): { workspace: LegalOpinionWorkspace; draft: LegalOpinionDraft } => {
+    const decision = decideLegalOpinionDraftCreate(existing, candidate);
+    if (decision.kind === "converge") {
+      log.info("create_opinion_draft_replayed", { organizationId: ws.organizationId, workspaceId: ws.id, draftId: decision.draft.id, actorUserId: params.author, correlationId: params.correlationId });
+      return { workspace: ws, draft: decision.draft };
+    }
+    if (decision.kind === "conflict") {
+      const message = decision.reason === LEGAL_OPINION_ALREADY_EXISTS ? LEGAL_OPINION_ALREADY_EXISTS_MESSAGE : LEGAL_OPINION_ALREADY_SIGNED_MESSAGE;
+      throw opinionConflict(message, decision.reason, ws, params.author, params.correlationId);
+    }
+    throw new Error("Estado inesperado na criação do parecer."); // "create" nunca chega aqui (há existentes)
+  };
+
+  // 1) Parecer já existente (leitura) — converge/recusa sem tocar em nada.
+  const existingBefore = await listLegalOpinionDraftsByWorkspace(ws.id, params.organizationId);
+  if (existingBefore.length > 0) return resolveExisting(existingBefore);
+
+  // 2) Etapa validada ANTES de qualquer escrita.
+  if (ws.currentStage !== "DRAFT" && !canLegalTransition(ws.currentStage, "DRAFT")) {
+    throw opinionConflict(legalOpinionStageInvalidMessage(ws.currentStage), LEGAL_OPINION_STAGE_INVALID, ws, params.author, params.correlationId);
+  }
+  const moved = ws.currentStage === "DRAFT" ? ws : transitionLegalStage(ws, "DRAFT");
+
+  // 3) Criação INSERT-only sob lock do workspace (rascunho + versão v1 na mesma transação).
+  const claim = await claimNewLegalOpinionDraft(candidate, {
+    contentHash: draftContentHash(candidate),
+    snapshot: JSON.stringify({ report: candidate.report, conclusion: candidate.conclusion }),
     author: params.author, correlationId: params.correlationId,
   });
+  if (claim?.status === "workspace_missing") throw new Error("Workspace de parecer não encontrado.");
+  if (claim?.status === "exists") return resolveExisting(claim.drafts); // perdeu a corrida: converge ou CONFLICT
+  const draft = candidate;
 
-  // RC-3 — parecer oficial pelo pipeline ÚNICO (Document Engine).
+  // RC-3 — parecer oficial pelo pipeline ÚNICO (Document Engine). Só o vencedor da criação chega aqui.
   await generateOfficialDocument({
     organizationId: params.organizationId, businessDomain: "parecer_juridico",
     documentType: params.opinionType === "LEGAL_OPINION_FINAL" ? "parecer_final" : "parecer_inicial",
@@ -244,7 +296,6 @@ export async function createOpinionDraft(params: {
     metadata: { opinionType: params.opinionType, conclusionType: draft.conclusionType },
   });
 
-  const moved = ws.currentStage === "DRAFT" ? ws : transitionLegalStage(ws, "DRAFT");
   await updateLegalOpinionWorkspaceStage(moved.id, moved.organizationId, moved.currentStage, moved.status, moved.assignedLawyer, moved.updatedAt);
   await recordHistory(moved, "draft_created", String(params.author), `Parecer (${params.opinionType}) em elaboração.`, draft.id);
   return { workspace: moved, draft };
@@ -263,8 +314,15 @@ export async function updateOpinionDraft(params: {
   const current = await getLegalOpinionDraftByWorkspace(params.workspaceId, params.organizationId);
   if (!current) throw new Error("Parecer ainda não iniciado.");
 
+  if (current.signed) {
+    throw new TRPCError({ code: "CONFLICT", message: LEGAL_OPINION_ALREADY_SIGNED_MESSAGE });
+  }
   const updated = updateLegalOpinionDraft(current, params.patch);
-  await insertLegalOpinionDraft(updated);
+  // Persistência: UPDATE só de parecer NÃO assinado, com CAS na versão lida (nunca upsert).
+  const saved = await updateUnsignedLegalOpinionDraft(updated, current.version);
+  if (saved === false) {
+    throw new TRPCError({ code: "CONFLICT", message: "O parecer foi alterado ou assinado por outra operação; recarregue antes de salvar." });
+  }
   await insertLegalOpinionVersion({
     organizationId: params.organizationId, draftId: updated.id, workspaceId: ws.id, version: updated.version,
     contentHash: draftContentHash(updated), snapshot: JSON.stringify({ report: updated.report, conclusion: updated.conclusion }),
@@ -379,7 +437,11 @@ async function signOpinionConverge(
   }
   // Caminho NORMAL: primeira assinatura.
   const signed = signLegalOpinionDraft(draft, method, signedBy);
-  await insertLegalOpinionDraft(signed);
+  // Persistência: só assina o que ainda não está assinado, na versão lida (CAS) — nunca regrava um assinado.
+  const saved = await updateUnsignedLegalOpinionDraft(signed, draft.version);
+  if (saved === false) {
+    throw new TRPCError({ code: "CONFLICT", message: "O parecer foi alterado ou assinado por outra operação; recarregue antes de assinar." });
+  }
   await materializeSignedParecer(ws, signed, signedBy, correlationId); // única materialização emitido
   const moved = await moveWorkspaceToSigned(ws);
   await recordHistory(moved, "signed", String(signedBy), `Parecer assinado (${signed.signatureMethod}).`, signed.id);

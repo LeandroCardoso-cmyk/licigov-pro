@@ -64,6 +64,34 @@ export async function insertContractWorkspace(ws: ContractWorkspace): Promise<Co
   return ws;
 }
 
+/**
+ * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre chave existente (PRIMARY KEY =
+ * hash(org, origem, número)) devolve "duplicate" sem escrever nada — o serviço decide convergir ou CONFLICT.
+ * (`insertContractWorkspace`, o upsert, segue restrito à edição `updateContract` — escopo da PR-12.) Sem DB ⇒ null.
+ */
+export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise<"inserted" | "duplicate" | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    await db.insert(contractWorkspacesTable).values({
+      id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
+      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
+      correlationId: ws.correlationId, createdBy: ws.createdBy,
+      createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
+    });
+    return "inserted";
+  } catch (err) {
+    let x: unknown = err;
+    for (let i = 0; i < 4 && x && typeof x === "object"; i++) {
+      const e = x as { code?: string; errno?: number; cause?: unknown };
+      if (e.code === "ER_DUP_ENTRY" || e.errno === 1062) return "duplicate";
+      x = e.cause;
+    }
+    throw err;
+  }
+}
+
 export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
   const db = await getDb();
   if (!db) return null;

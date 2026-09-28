@@ -42,7 +42,7 @@ export const contractWorkspaceRouter = router({
     .input(z.object({ processId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createFromProcurement({ organizationId: orgId, processId: input.processId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, correlationId: ctx.correlationId });
+      const workspace = await createFromProcurement({ organizationId: orgId, processId: input.processId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return { workspace };
     }),
 
@@ -50,7 +50,7 @@ export const contractWorkspaceRouter = router({
     .input(z.object({ directWorkspaceId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, correlationId: ctx.correlationId });
+      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return { workspace };
     }),
 
@@ -103,7 +103,7 @@ export const contractWorkspaceRouter = router({
     .input(z.object({ source: z.enum(["pdf", "docx"]), rawText: z.string().min(1), contractNumber: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const result = await importExternalContract({ organizationId: orgId, source: input.source, rawText: input.rawText, contractNumber: input.contractNumber, correlationId: ctx.correlationId });
+      const result = await importExternalContract({ organizationId: orgId, source: input.source, rawText: input.rawText, contractNumber: input.contractNumber, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return result;
     }),
 
@@ -149,7 +149,7 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireContract(input.contractId, orgId);
-      const { contractId, status, ...fields } = input;
+      const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
       let updated = updateContractFields(ws, patch);
       if (status && status !== ws.status) {

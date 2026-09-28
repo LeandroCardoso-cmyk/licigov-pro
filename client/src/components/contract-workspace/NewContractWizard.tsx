@@ -25,7 +25,7 @@ const ORIGINS: ReadonlyArray<readonly [Origin, string]> = [
   ["externo", "Externo (reconstrução)"],
 ];
 
-/** Extrai "(id: ...)" da mensagem de conflito — ver contractWorkspaceRouter.createManual. */
+/** Extrai "(id: ...)" da mensagem de conflito — ver contractWorkspaceRouter.createManual e domain/contractCreation. */
 function parseConflictExistingId(message: string): string | null {
   const m = message.match(/\(id: ([a-f0-9]+)\)/);
   return m ? m[1] : null;
@@ -74,7 +74,8 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
     }
   }, [rawErr]);
   const err = friendlyContractError(rawErr);
-  const conflictExistingId = createManual.error?.data?.code === "CONFLICT" ? parseConflictExistingId(createManual.error.message) : null;
+  // R3 / PR-06 — CONFLICT (CONTRACT_ALREADY_EXISTS) em QUALQUER origem: a criação nunca altera o contrato existente.
+  const conflictExistingId = rawErr?.data?.code === "CONFLICT" ? parseConflictExistingId(rawErr.message) : null;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,7 +177,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       )}
       {conflictExistingId && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          <span>Já existe um contrato avulso com este número.</span>
+          <span>Já existe um contrato com este número para esta origem. Nada foi alterado no contrato existente.</span>
           <button type="button" onClick={() => onCreated?.(conflictExistingId)} className="shrink-0 rounded-md border border-amber-300 px-2 py-1 font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900">
             Abrir contrato existente
           </button>
