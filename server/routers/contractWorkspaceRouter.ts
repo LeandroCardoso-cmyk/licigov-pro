@@ -18,11 +18,16 @@ import {
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../services/contractService";
 import {
-  getContractWorkspace, insertContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
+  getContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
+// SEM-023 (PR-12) — edição governada do contrato (imports separados para não sobrepor PR-08 nas linhas acima).
+import {
+  ContractEconomicFieldsRequireInstrumentError, ContractRevisionConflictError, type ContractWorkspace,
+} from "../domain/contractWorkspace";
+import { assertExpectedContractRevision, saveGovernedContractEdit } from "../services/contractEditService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
@@ -30,6 +35,18 @@ const ADDENDUM_ORIGINS = ["contract_workspace", "institutional_request", "docume
 const APOSTILLE_KINDS = ["reajuste", "gestor", "fiscal", "legal"] as const;
 const OPINION_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"] as const;
 const CONTRACT_STATUSES = ["minuta", "vigente", "aditado", "apostilado", "encerrado", "rescindido", "arquivado"] as const;
+
+/**
+ * SEM-023 — recusas GOVERNADAS da edição direta do contrato, com token estável na mensagem (o projeto não
+ * tem errorFormatter customizado): revisão divergente ⇒ CONFLICT `CONTRACT_REVISION_CONFLICT`; campo
+ * econômico/de identidade fora da minuta ⇒ BAD_REQUEST `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`
+ * (caminho: Termo Aditivo / Apostilamento). Nada é gravado em ambos.
+ */
+function mapContractEditError(e: unknown): never {
+  if (e instanceof ContractRevisionConflictError) throw new TRPCError({ code: "CONFLICT", message: e.message, cause: e });
+  if (e instanceof ContractEconomicFieldsRequireInstrumentError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
+  throw e;
+}
 
 async function requireContract(id: string, orgId: number) {
   const ws = await getContractWorkspace(id, orgId);
@@ -145,19 +162,30 @@ export const contractWorkspaceRouter = router({
       contractor: z.string().optional(), object: z.string().optional(), value: z.number().optional(),
       term: z.string().optional(), manager: z.string().optional(), inspector: z.string().optional(),
       contractNumber: z.string().optional(), status: z.enum(CONTRACT_STATUSES).optional(),
+      // SEM-023 — CAS: a revisão (`workspace.updatedAt` de loadContract) que o cliente carregou. OBRIGATÓRIA:
+      // sem ela não há como provar que o save não sobrescreve uma edição concorrente.
+      expectedUpdatedAt: z.string().datetime(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireContract(input.contractId, orgId);
-      const { contractId, status, ...fields } = input;
+      const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
-      let updated = updateContractFields(ws, patch);
+
+      // SEM-023 — recusas ANTES de qualquer escrita: revisão divergente; campo econômico fora da minuta.
+      let updated: ContractWorkspace;
+      try {
+        assertExpectedContractRevision(ws, input.expectedUpdatedAt);
+        updated = updateContractFields(ws, patch);
+      } catch (e) { mapContractEditError(e); }
       if (status && status !== ws.status) {
         try { updated = transitionContractStatus(updated, status as ContractStatus); }
         catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida." }); }
       }
-      await insertContractWorkspace(updated);
-      return { workspace: updated };
+      const workspace = await saveGovernedContractEdit({
+        before: ws, after: updated, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+      }).catch(mapContractEditError);
+      return { workspace };
     }),
 
   generateDocuments: tenantProcedure

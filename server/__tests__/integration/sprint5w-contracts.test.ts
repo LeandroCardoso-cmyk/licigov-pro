@@ -75,10 +75,18 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(() => transitionContractStatus(mk(), "encerrado")).toThrow();
     });
 
-    it("updateContractFields edita campos supervisionados", () => {
+    // PR-12 (SEM-023): a edição direta de campos econômicos vale só para a MINUTA; fora dela, só por instrumento.
+    it("updateContractFields edita campos supervisionados (minuta: inclusive valor)", () => {
+      expect(mk().status).toBe("minuta");
       const ws = updateContractFields(mk(), { manager: "João", inspector: "Maria", value: 200000 });
       expect(ws.manager).toBe("João");
       expect(ws.value).toBe(200000);
+    });
+
+    it("updateContractFields fora da minuta: gestor/fiscal sim, valor só por aditivo/apostilamento (SEM-023)", () => {
+      const vigente = transitionContractStatus(mk(), "vigente");
+      expect(updateContractFields(vigente, { manager: "João", inspector: "Maria" }).manager).toBe("João");
+      expect(() => updateContractFields(vigente, { value: 200000 })).toThrow(/CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT/);
     });
 
     it("arquivado é terminal", () => {

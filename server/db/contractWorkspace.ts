@@ -81,6 +81,34 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
 }
 
 /**
+ * SEM-023 — gravação da edição do contrato por COMPARE-AND-SET da revisão (`updated_at`, DATETIME(3)).
+ * Numa ÚNICA sentença SQL:
+ *   UPDATE contract_workspaces SET contract_number=?, contractor=?, object=?, value=?, term=?, status=?,
+ *          manager=?, inspector=?, updated_at=? WHERE id=? AND organization_id=? AND updated_at=?
+ * Grava somente se a revisão persistida ainda for `expectedUpdatedAt`; `ws.updatedAt` precisa ser
+ * estritamente posterior (ver `nextContractRevision`), então de dois salvamentos concorrentes com a
+ * mesma revisão exatamente um casa. Nunca insere (não é upsert) e nunca toca id/origem/tenant/createdBy.
+ * Retorna `false` quando 0 linhas casam (revisão mudou em paralelo, ou contrato inexistente no tenant):
+ * nesse caso NADA foi gravado. Degrada sem DB (`false`).
+ */
+export async function compareAndSetContractWorkspace(ws: ContractWorkspace, expectedUpdatedAt: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.update(contractWorkspacesTable)
+    .set({
+      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector, updatedAt: toDbDatetime(ws.updatedAt),
+    })
+    .where(and(
+      eq(contractWorkspacesTable.id, ws.id),
+      eq(contractWorkspacesTable.organizationId, ws.organizationId),
+      eq(contractWorkspacesTable.updatedAt, toDbDatetime(expectedUpdatedAt)),
+    ));
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  return (header?.affectedRows ?? 0) > 0;
+}
+
+/**
  * Busca um contrato AVULSO existente pelo número, na mesma organização — usada para
  * detectar colisão ANTES de criar (unicidade institucional do contrato avulso; ver
  * revisão arquitetural). Não cobre os outros 3 fluxos (processo/direta/externo),
