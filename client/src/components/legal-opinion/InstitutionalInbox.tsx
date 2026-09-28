@@ -34,6 +34,9 @@ export default function InstitutionalInbox({ onOpenWorkspace }: InstitutionalInb
         <p className="text-xs text-muted-foreground">Solicitações encaminhadas pelo Institutional Request Engine. Documentos referenciados, nunca copiados.</p>
       </header>
 
+      {/* NEW-007 — recusa do servidor (sem papel/atribuição, já recebida por outro procurador) é exibida, nunca silenciosa. */}
+      {receive.isError && <p className="mb-3 rounded-md border border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950 px-3 py-2 text-xs text-red-600 dark:text-red-400">{receive.error.message}</p>}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Pendências (a receber) */}
         <div className="rounded-lg bg-card/60 p-3">
