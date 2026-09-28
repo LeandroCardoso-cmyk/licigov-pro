@@ -104,14 +104,67 @@ export function createContractWorkspace(params: {
 }
 
 export function canContractTransition(from: ContractStatus, to: ContractStatus): boolean {
-  return STATUS_TRANSITIONS[from].includes(to);
+  // Fail-closed: status desconhecido (linha legada/corrompida) não tem transição alguma.
+  return STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/** Token estável da recusa de transição de status do contrato (não traduzir; usado por testes/cliente). */
+export const CONTRACT_STATUS_TRANSITION_INVALID = "CONTRACT_STATUS_TRANSITION_INVALID";
+
+/**
+ * Transição de status recusada pela máquina de estados do contrato. A mensagem é a MESMA que a máquina
+ * sempre emitiu ("Transição de contrato inválida: de → para"), então callers que já tratavam `Error`
+ * (ex.: `contractWorkspace.updateContract` → BAD_REQUEST) mantêm o comportamento.
+ */
+export class ContractStatusTransitionError extends Error {
+  readonly code = CONTRACT_STATUS_TRANSITION_INVALID;
+  constructor(public readonly from: ContractStatus, public readonly to: ContractStatus) {
+    super(`Transição de contrato inválida: ${from} → ${to}`);
+    this.name = "ContractStatusTransitionError";
+  }
 }
 
 export function transitionContractStatus(ws: ContractWorkspace, to: ContractStatus, at?: string): ContractWorkspace {
   if (!canContractTransition(ws.status, to)) {
-    throw new Error(`Transição de contrato inválida: ${ws.status} → ${to}`);
+    throw new ContractStatusTransitionError(ws.status, to);
   }
   return { ...ws, status: to, updatedAt: at ?? new Date().toISOString() };
+}
+
+// ─── SEM-025 — status do contrato imprimido por instrumento (aditivo/apostilamento) ──────────────
+
+/** Instrumentos que imprimem status no contrato e o status que cada um imprime (comportamento existente). */
+export const INSTRUMENT_CONTRACT_STATUS = { aditivo: "aditado", apostilamento: "apostilado" } as const satisfies Record<string, ContractStatus>;
+export type ContractInstrumentKind = keyof typeof INSTRUMENT_CONTRACT_STATUS;
+
+/**
+ * Como o status do contrato muda ao registrar um instrumento:
+ *  - `machine`   — transição DEFINIDA em `STATUS_TRANSITIONS` (ex.: vigente → aditado);
+ *  - `unchanged` — o contrato já está no status do instrumento (ex.: 2º aditivo em contrato `aditado`).
+ *                  Não é transição: mesma convenção de `contractWorkspace.updateContract` (status igual ⇒
+ *                  a máquina não é consultada);
+ *  - `minuta_pending_human_decision` — contrato em `minuta`. A máquina NÃO lista minuta → aditado/apostilado,
+ *                  mas o produto não oferece hoje nenhum caminho de UI para levar o contrato a `vigente`
+ *                  (todos os fluxos nascem `minuta`); recusar aqui tornaria Aditivos/Apostilamentos
+ *                  inutilizáveis. O comportamento de hoje é MANTIDO, de forma explícita e auditável, até
+ *                  decisão humana (PR-08, questão aberta) — nunca reabre estado encerrado.
+ * Qualquer outro caso (encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina)
+ * é RECUSADO com `ContractStatusTransitionError`, antes de qualquer efeito.
+ */
+export type InstrumentStatusChangeMode = "machine" | "unchanged" | "minuta_pending_human_decision";
+
+export interface InstrumentStatusChangePlan {
+  readonly from: ContractStatus;
+  readonly to: ContractStatus;
+  readonly mode: InstrumentStatusChangeMode;
+}
+
+export function planInstrumentStatusChange(from: ContractStatus, instrument: ContractInstrumentKind): InstrumentStatusChangePlan {
+  const to: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
+  if (from === to) return { from, to, mode: "unchanged" };
+  if (canContractTransition(from, to)) return { from, to, mode: "machine" };
+  if (from === "minuta") return { from, to, mode: "minuta_pending_human_decision" };
+  throw new ContractStatusTransitionError(from, to);
 }
 
 /** Atualiza campos editáveis do contrato (sempre supervisionado). */

@@ -10,10 +10,10 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure } from "../_core/trpc";
-import { updateContractFields, transitionContractStatus, type ContractStatus } from "../domain/contractWorkspace";
+import { updateContractFields, transitionContractStatus, ContractStatusTransitionError, type ContractStatus } from "../domain/contractWorkspace";
 import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
-  createManualContract, ManualContractConflictError,
+  createManualContract, ManualContractConflictError, ContractStatusConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../services/contractService";
@@ -35,6 +35,24 @@ async function requireContract(id: string, orgId: number) {
   const ws = await getContractWorkspace(id, orgId);
   if (!ws) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado nesta organização." });
   return ws;
+}
+
+/**
+ * SEM-025 — recusa GOVERNADA da máquina de estados do contrato ao registrar aditivo/apostilamento.
+ * Mesma convenção de `updateContract` (transição inválida ⇒ BAD_REQUEST com a mensagem da máquina), acrescida
+ * do token estável `CONTRACT_STATUS_TRANSITION_INVALID`; corrida perdida ⇒ CONFLICT. Nada é gravado em ambos.
+ */
+function mapInstrumentStatusError(e: unknown): never {
+  if (e instanceof ContractStatusTransitionError) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `${e.message} — o contrato neste status não admite o instrumento (${e.code}).`,
+    });
+  }
+  if (e instanceof ContractStatusConflictError) {
+    throw new TRPCError({ code: "CONFLICT", message: e.message });
+  }
+  throw e;
 }
 
 export const contractWorkspaceRouter = router({
@@ -149,7 +167,7 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireContract(input.contractId, orgId);
-      const { contractId, status, ...fields } = input;
+      const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
       let updated = updateContractFields(ws, patch);
       if (status && status !== ws.status) {
@@ -173,7 +191,8 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, correlationId: ctx.correlationId });
+      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, correlationId: ctx.correlationId })
+        .catch(mapInstrumentStatusError);
     }),
 
   createApostille: tenantProcedure
@@ -181,7 +200,8 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, correlationId: ctx.correlationId });
+      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, correlationId: ctx.correlationId })
+        .catch(mapInstrumentStatusError);
       return { apostille };
     }),
 

@@ -20,6 +20,11 @@ import type {
 } from "../domain/contractInstruments";
 import type { ImportedContract, ImportedContractSource, ReconstructedContractFields } from "../domain/contractReconstruction";
 
+// Executor: a conexão (db) ou uma transação (tx) — permite compor instrumento + status + timeline
+// atomicamente (SEM-025). Ausente ⇒ getDb(), assinatura compatível com os callers existentes.
+type ContractWsDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type ContractWsExecutor = ContractWsDb | Parameters<Parameters<ContractWsDb["transaction"]>[0]>[0];
+
 function parseArr(raw: string | null): string[] {
   if (!raw) return [];
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p as string[] : []; } catch { return []; }
@@ -115,12 +120,31 @@ export async function listImportedContractWorkspaces(orgId: number, limit = 50):
   return rows.map(r => ({ id: r.id, contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), status: r.status, updatedAt: r.updatedAt }));
 }
 
-export async function updateContractWorkspaceStatus(id: string, orgId: number, status: string, updatedAt: string): Promise<boolean> {
-  const db = await getDb();
+/**
+ * SEM-025 — mudança de status do contrato por COMPARE-AND-SET (substitui o antigo
+ * `updateContractWorkspaceStatus`, que gravava qualquer status sem conferir o atual e permitia a um
+ * aditivo/apostilamento "ressuscitar" contrato rescindido). Grava `toStatus` somente se o status
+ * persistido ainda for `fromStatus` — na MESMA sentença SQL:
+ *   UPDATE contract_workspaces SET status = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status = ?
+ * A decisão de SE a transição é permitida é da máquina de estados (`planInstrumentStatusChange` /
+ * `canContractTransition`); aqui só se garante que ela vale para o estado REAL no instante da escrita.
+ * Retorna `false` quando 0 linhas casam (status mudou em paralelo ou contrato inexistente no tenant).
+ * O driver reporta linhas CASADAS (CLIENT_FOUND_ROWS), então `fromStatus === toStatus` também confirma.
+ */
+export async function compareAndSetContractWorkspaceStatus(params: {
+  id: string; orgId: number; fromStatus: ContractStatus; toStatus: ContractStatus; updatedAt: string;
+}, executor?: ContractWsExecutor): Promise<boolean> {
+  const db = executor ?? await getDb();
   if (!db) return false;
-  await db.update(contractWorkspacesTable).set({ status, updatedAt: toDbDatetime(updatedAt) })
-    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId)));
-  return true;
+  const result = await db.update(contractWorkspacesTable)
+    .set({ status: params.toStatus, updatedAt: toDbDatetime(params.updatedAt) })
+    .where(and(
+      eq(contractWorkspacesTable.id, params.id),
+      eq(contractWorkspacesTable.organizationId, params.orgId),
+      eq(contractWorkspacesTable.status, params.fromStatus),
+    ));
+  const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
+  return affected > 0;
 }
 
 // ─── Generated documents (minutas) ────────────────────────────────────────────
@@ -172,8 +196,8 @@ export async function countContractAddendaByOrg(orgId: number): Promise<number> 
   return rows.length;
 }
 
-export async function insertContractAddendum(a: ContractAddendum): Promise<ContractAddendum | null> {
-  const db = await getDb();
+export async function insertContractAddendum(a: ContractAddendum, executor?: ContractWsExecutor): Promise<ContractAddendum | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(contractAddendaTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, addendumType: a.addendumType, sequence: a.sequence,
@@ -203,8 +227,8 @@ export async function countContractApostilles(contractId: string, orgId: number)
   return rows.length;
 }
 
-export async function insertContractApostille(a: ContractApostille): Promise<ContractApostille | null> {
-  const db = await getDb();
+export async function insertContractApostille(a: ContractApostille, executor?: ContractWsExecutor): Promise<ContractApostille | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(contractWsApostillesTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, kind: a.kind, sequence: a.sequence,

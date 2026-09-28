@@ -61,6 +61,8 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
           {create.isPending ? "Gerando…" : "Criar aditivo + minuta"}
         </button>
         {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine).</p>}
+        {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
+        {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
       </form>
 
       {addenda.length > 0 && (

@@ -45,6 +45,8 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
         <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Registrar apostilamento + minuta"}
         </button>
+        {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
+        {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
       </form>
 
       {apostilles.length > 0 && (
