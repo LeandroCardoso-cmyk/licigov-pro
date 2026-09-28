@@ -7,13 +7,12 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
   createProcurementWorkspace,
-  advanceStage,
   setStage,
   type StartOption,
-  type ProcessStage,
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
@@ -150,17 +149,11 @@ export const procurementProcessRouter = router({
 
   updateStage: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), stage: z.enum(STAGES).optional() }))
-    .mutation(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      const process = await requireProcess(input.processId, orgId);
-      const updated = input.stage ? setStage(process, input.stage as ProcessStage) : advanceStage(process);
-      await updateProcessStage(process.id, orgId, updated.currentStage, updated.status, updated.updatedAt);
-      await recordProcessEvent({
-        organizationId: orgId, processId: process.id, eventType: "change",
-        actor: String(ctx.user!.id), summary: `Etapa: ${updated.currentStage}.`, refId: process.id,
-        correlationId: ctx.correlationId,
-      });
-      return { process: updated };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-010 (SEM-015) — desligamento governado: o salto genérico de etapa alcançava
+      // ISSUED/"emitido" sem Edital oficial, contornando issueProcess. Recusa ANTES de qualquer efeito
+      // (o RBAC do orgRoleProcedure continua aplicado antes do handler).
+      throwLegacyEndpointDisabled("procurementProcess.updateStage", "LEG-010", ctx, "procurementProcess.issueProcess");
     }),
 
   importDFD: orgRoleProcedure("operator")

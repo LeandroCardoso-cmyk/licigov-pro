@@ -8,11 +8,12 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure } from "../_core/trpc";
 import {
-  createDirectProcurementWorkspace, advanceDirectStage, setDirectStage,
+  createDirectProcurementWorkspace, setDirectStage,
   setProcedureType, setLegalBasis, configureFlags,
-  type DirectStartOption, type DirectProcurementStage, type DirectProcurementType,
+  type DirectStartOption, type DirectProcurementType,
 } from "../domain/directProcurementWorkspace";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
@@ -96,13 +97,10 @@ export const directProcurementRouter = router({
 
   updateStage: tenantProcedure
     .input(z.object({ workspaceId: z.string().min(1), stage: z.enum(STAGES).optional() }))
-    .mutation(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      const ws = await requireWs(input.workspaceId, orgId);
-      const updated = input.stage ? setDirectStage(ws, input.stage as DirectProcurementStage) : advanceDirectStage(ws);
-      await updateDirectProcurementStage(ws.id, orgId, updated.currentStage, updated.status, updated.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: ws.id, eventType: "change", actor: String(ctx.user.id), summary: `Etapa: ${updated.currentStage}.`, refId: ws.id, correlationId: ctx.correlationId });
-      return { workspace: updated };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-011 (FCC-02) — desligamento governado: salto genérico de etapa com tenantProcedure
+      // simples, fora das transições canônicas. Recusa ANTES de qualquer efeito.
+      throwLegacyEndpointDisabled("directProcurement.updateStage", "LEG-011", ctx, "as transições canônicas (ratify/publish)");
     }),
 
   importDFD: tenantProcedure
@@ -278,7 +276,7 @@ export const directProcurementRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireWs(input.workspaceId, orgId);
-      const { workspaceId, ...flags } = input;
+      const { workspaceId: _workspaceId, ...flags } = input;
       const updated = configureFlags(ws, flags);
       await insertDirectProcurementWorkspace(updated);
       return { workspace: updated };

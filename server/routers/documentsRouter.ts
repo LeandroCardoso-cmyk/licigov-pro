@@ -17,6 +17,7 @@
  */
 import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { z } from "zod";
 import * as db from "../db";
 import { generateETP, generateTR, generateDFD, generateEdital, generateContrato, generateAta, generateParecer } from "../services/gemini";
@@ -719,52 +720,25 @@ export const documentsRouter = router({
 
   submitForReview: tenantProcedure
     .input(z.object({ documentId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "in_review");
-      await db.createActivityLog({
-        processId: document.processId,
-        userId: ctx.user.id,
-        action: `enviou ${document.type.toUpperCase()} para revisão`,
-        details: JSON.stringify({ documentId: input.documentId, version: document.version }),
-      });
-      return { success: true };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-008 (SEM-018) — desligamento governado: gravava `documents.documentStatus` fora do
+      // documentReviewService (sem SoD, sem RBAC canônico, sem ledger). Recusa ANTES de qualquer efeito.
+      throwLegacyEndpointDisabled("documents.submitForReview", "LEG-008", ctx, "documentReview.*");
     }),
 
   approveDocument: tenantProcedure
     .input(z.object({ documentId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "approved");
-      await db.createActivityLog({
-        processId: document.processId,
-        userId: ctx.user.id,
-        action: `aprovou o ${document.type.toUpperCase()} (v${document.version})`,
-        details: JSON.stringify({ documentId: input.documentId, version: document.version }),
-      });
-      return { success: true };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-008 (SEM-018) — desligamento governado: gravava `documents.documentStatus` fora do
+      // documentReviewService (sem SoD, sem RBAC canônico, sem ledger). Recusa ANTES de qualquer efeito.
+      throwLegacyEndpointDisabled("documents.approveDocument", "LEG-008", ctx, "documentReview.*");
     }),
 
   rejectDocument: tenantProcedure
     .input(z.object({ documentId: z.number(), reason: z.string().optional() }))
-    .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process || process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.updateDocumentStatusForOrganization(input.documentId, ctx.organizationId, "rejected");
-      await db.createActivityLog({
-        processId: document.processId,
-        userId: ctx.user.id,
-        action: `rejeitou o ${document.type.toUpperCase()} (v${document.version})`,
-        details: JSON.stringify({ documentId: input.documentId, version: document.version, reason: input.reason }),
-      });
-      return { success: true };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-008 (SEM-018) — desligamento governado: gravava `documents.documentStatus` fora do
+      // documentReviewService (sem SoD, sem RBAC canônico, sem ledger). Recusa ANTES de qualquer efeito.
+      throwLegacyEndpointDisabled("documents.rejectDocument", "LEG-008", ctx, "documentReview.*");
     }),
 });
