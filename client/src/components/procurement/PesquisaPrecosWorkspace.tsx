@@ -12,7 +12,9 @@ import { Spinner } from "@/components/ui/spinner";
  * ambas pela fundação canônica (fila, staging, revisão; nada grava direto no domínio): "Enviar arquivo"
  * (padrão; formatos reais do parserRegistry, PDF digitalizado via OCR governado) e "Colar texto".
  * U2B-MIN: o painel legado (gravação direta em Itens Inteligentes) NÃO é oferecido com a flag ligada.
- * Com a flag DESLIGADA (ou falha ao consultar a capacidade), o comportamento legado permanece idêntico.
+ * Com a flag DESLIGADA, o comportamento legado permanece idêntico.
+ * PR-04 (preparação, FCC-03): falha ao consultar a capacidade NÃO cai mais no painel legado — mostra erro com
+ * "Tentar novamente" (o servidor recusa a colagem legada para tenants com a flag ligada).
  */
 
 type ResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
@@ -120,7 +122,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
 }
 
 export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems }: PesquisaPrecosWorkspaceProps) {
-  const { enabled, isLoading, error } = useIngestionCapabilities();
+  const { enabled, isLoading, isFetching, error, refetch } = useIngestionCapabilities();
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-6">
@@ -137,14 +139,23 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           <Spinner className="size-4" /> Carregando…
         </div>
       ) : error ? (
-        // Falha ao consultar capabilities: a ingestão canônica por arquivo permanece FAIL-CLOSED (launcher
-        // não é exposto, nada é habilitado implicitamente), mas o caminho legado por texto continua disponível.
-        <div className="space-y-3">
-          <p role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
-            Não foi possível consultar as opções de importação por arquivo, que permanece indisponível no momento.
-            A entrada por texto continua disponível abaixo.
+        // PR-04 (preparação, FCC-03): falha ao consultar capabilities ⇒ NENHUMA entrada é oferecida. O launcher
+        // canônico continua FAIL-CLOSED e o painel legado também NÃO é exibido: para um tenant com a ingestão
+        // canônica ligada o servidor recusa a colagem legada (LEGACY_ENDPOINT_DISABLED), e sem a consulta não há
+        // como saber qual caminho vale para esta organização. Só um estado de erro com nova tentativa.
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-card p-4 text-sm text-destructive">
+          <p>
+            Não foi possível consultar as opções de importação da pesquisa de preços desta organização.
+            Nenhuma importação foi feita. Tente novamente em instantes.
           </p>
-          <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="mt-3 underline disabled:no-underline disabled:opacity-60"
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : enabled ? (
         <DocumentIngestionLauncher

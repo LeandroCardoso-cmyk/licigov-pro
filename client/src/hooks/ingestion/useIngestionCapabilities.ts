@@ -18,6 +18,9 @@ export function useIngestionCapabilities() {
     capabilities,
     enabled: capabilities?.enabled ?? false,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: query.error ?? null,
+    /** Nova consulta explícita (estado de erro com "Tentar novamente"). */
+    refetch: query.refetch,
   };
 }
