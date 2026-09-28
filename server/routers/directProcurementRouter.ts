@@ -8,7 +8,8 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { serviceLogger } from "../services/observabilityService";
 import {
   createDirectProcurementWorkspace, advanceDirectStage, setDirectStage,
   setProcedureType, setLegalBasis, configureFlags,
@@ -42,6 +43,8 @@ const RECEIPT_METHODS = ["email", "protocolo", "entrega_presencial", "outro"] as
 const PRICE_SOURCES = ["pdf", "docx", "xlsx", "csv", "colar", "manual"] as const;
 const DOC_STATUSES = ["pendente", "anexado", "validado"] as const;
 const PROPOSAL_DOC_KINDS = ["proposta_pdf", "email", "protocolo", "outro"] as const;
+
+const log = serviceLogger("DirectProcurementRouter");
 
 async function requireWs(id: string, orgId: number) {
   const ws = await getDirectProcurementWorkspace(id, orgId);
@@ -136,13 +139,37 @@ export const directProcurementRouter = router({
       return { need };
     }),
 
-  importPriceResearch: tenantProcedure
-    .input(z.object({ workspaceId: z.string().min(1), source: z.enum(PRICE_SOURCES), text: z.string().min(1) }))
+  // R2 / PR-04A — LEG-014 / FCC-01: importação GOVERNADA (identidade explícita por importação, idempotência,
+  // contentHash + dedup, transação local, linhagem, evento persistido). Escrita ⇒ operator+ (viewer NÃO
+  // escreve — mesmo RBAC de procurementProcess.importPriceResearch). Workspace por (id, org do contexto):
+  // outro órgão ⇒ NOT_FOUND neutro, sem escrita.
+  importPriceResearch: orgRoleProcedure("operator")
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      source: z.enum(PRICE_SOURCES),
+      text: z.string().min(1),
+      idempotencyKey: z.string().trim().min(8).max(128),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      const result = await importDirectPriceResearch({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text, correlationId: ctx.correlationId });
-      return result;
+      try {
+        return await importDirectPriceResearch({
+          workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text,
+          idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        if (err instanceof TRPCError) throw err; // NOT_FOUND / CONFLICT / BAD_REQUEST do contrato
+        log.error("direct_price_import_persist_failed", {
+          organizationId: orgId, userId: ctx.user!.id, workspaceId: input.workspaceId,
+          source: input.source, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
     }),
 
   configureProcedure: tenantProcedure
@@ -278,7 +305,7 @@ export const directProcurementRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireWs(input.workspaceId, orgId);
-      const { workspaceId, ...flags } = input;
+      const { workspaceId: _workspaceId, ...flags } = input;
       const updated = configureFlags(ws, flags);
       await insertDirectProcurementWorkspace(updated);
       return { workspace: updated };

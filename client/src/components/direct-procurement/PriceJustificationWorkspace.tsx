@@ -19,8 +19,16 @@ export default function PriceJustificationWorkspace({ workspaceId }: PriceJustif
   const [researchText, setResearchText] = React.useState("");
   const [researchId, setResearchId] = React.useState("");
 
+  // R2 / PR-04A — idempotencyKey por TENTATIVA LÓGICA de importação: gerada uma vez por submit e
+  // preservada em erro (o retry do MESMO conteúdo reusa a key → o servidor converge, sem duplicar);
+  // rotacionada no sucesso ou quando o conteúdo colado muda (nova importação ≠ mesma chave).
+  const importKeyRef = React.useRef<string>("");
+  const ensureImportKey = () => {
+    if (!importKeyRef.current) importKeyRef.current = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
+    return importKeyRef.current;
+  };
   const importResearch = trpc.directProcurement.importPriceResearch.useMutation({
-    onSuccess: (res) => setResearchId(res.researchId),
+    onSuccess: (res) => { importKeyRef.current = ""; setResearchId(res.researchId); },
   });
   const save = trpc.directProcurement.generatePriceJustification.useMutation();
 
@@ -37,13 +45,16 @@ export default function PriceJustificationWorkspace({ workspaceId }: PriceJustif
       {source === "pesquisa" && (
         <div className="space-y-2 rounded-md border border-cyan-100 dark:border-cyan-900 bg-cyan-50/40 dark:bg-cyan-950/40 p-3">
           <p className="text-xs text-cyan-800 dark:text-cyan-200">Reutiliza o Price Research Workspace. Cole os itens (descrição;qtd;un;valor).</p>
-          <textarea value={researchText} onChange={(e) => setResearchText(e.target.value)} rows={3} placeholder="Caneta;100;un;1,50"
+          <textarea value={researchText} onChange={(e) => { importKeyRef.current = ""; setResearchText(e.target.value); }} rows={3} placeholder="Caneta;100;un;1,50"
             className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-          <button type="button" onClick={() => importResearch.mutate({ workspaceId, source: "colar", text: researchText })} disabled={importResearch.isPending || !researchText.trim()}
+          <button type="button" onClick={() => importResearch.mutate({ workspaceId, source: "colar", text: researchText, idempotencyKey: ensureImportKey() })} disabled={importResearch.isPending || !researchText.trim()}
             className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
             {importResearch.isPending ? "Importando…" : "Importar pesquisa"}
           </button>
-          {importResearch.data && <p className="text-xs text-green-700 dark:text-green-300">{importResearch.data.itemCount} item(ns) importado(s).</p>}
+          {importResearch.isError && <p className="text-xs text-red-600 dark:text-red-400">{importResearch.error.message}</p>}
+          {importResearch.data && <p className="text-xs text-green-700 dark:text-green-300">{importResearch.data.deduplicated
+            ? `Conteúdo já importado anteriormente (${importResearch.data.itemCount} item(ns)) — nada foi duplicado.`
+            : `${importResearch.data.itemCount} item(ns) importado(s).`}</p>}
         </div>
       )}
 
