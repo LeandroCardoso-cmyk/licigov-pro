@@ -36,6 +36,9 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
   let orgTables: Array<{ table: string; column: string }> = [];
   let CT_OP = ""; // contrato vigente da org A usado nas recusas e nas ações de operator
   let CT_MGR = ""; // contrato vigente da org A usado nas ações de manager
+  let CT_DRAFT = ""; // contrato em MINUTA da org A usado na edição de campos por operator
+  /** Revisão qualquer (datetime válido) para chamadas que param antes do CAS (RBAC / NOT_FOUND). */
+  const ANY_REV = "2026-01-01T00:00:00.000Z";
 
   async function purgeOrgRows() {
     for (const { table, column } of orgTables) {
@@ -79,10 +82,14 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     await member(ORG_B, users.operatorB, "operator");
     await member(ORG_B, users.managerB, "manager");
 
-    for (const [n, set] of [["CT-NEW006-OP", (id: string) => { CT_OP = id; }], ["CT-NEW006-MGR", (id: string) => { CT_MGR = id; }]] as const) {
+    for (const [n, status, set] of [
+      ["CT-NEW006-OP", "vigente", (id: string) => { CT_OP = id; }],
+      ["CT-NEW006-MGR", "vigente", (id: string) => { CT_MGR = id; }],
+      ["CT-NEW006-DRAFT", "minuta", (id: string) => { CT_DRAFT = id; }],
+    ] as const) {
       const ws = createContractWorkspace({
         organizationId: ORG_A, originType: "avulso", contractNumber: n, contractor: "Fornecedor Original", object: "Objeto original",
-        value: 1000, term: "12 meses", status: "vigente", correlationId: "seed-new006", createdBy: users.managerA,
+        value: 1000, term: "12 meses", status, correlationId: "seed-new006", createdBy: users.managerA,
       });
       await insertContractWorkspace(ws);
       set(ws.id);
@@ -144,7 +151,8 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     loadContract: { contractId },
     listContracts: undefined,
     listImported: undefined,
-    updateContract: { contractId, contractor: "Fornecedor Alterado" },
+    // `expectedUpdatedAt`: inócuo em main (zod descarta), obrigatório no CAS da PR-12 — já incluído.
+    updateContract: { contractId, contractor: "Fornecedor Alterado", expectedUpdatedAt: ANY_REV },
     generateDocuments: { contractId, kind: "contrato" },
     createAddendum: { contractId, addendumType: "prazo", justification: "prorrogação" },
     createApostille: { contractId, kind: "reajuste", description: "reajuste anual" },
@@ -152,6 +160,12 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     requestLegalOpinion: { contractId },
     getLegalOpinion: { requestId: "req-inexistente" },
   });
+
+  /** Revisão ATUAL do contrato (a que o cliente carregaria de loadContract) — exigida pelo CAS da PR-12. */
+  async function rev(contractId: string): Promise<string> {
+    const r = await call("managerA", "loadContract", { contractId }) as { workspace: { updatedAt: string } };
+    return r.workspace.updatedAt;
+  }
 
   const MUTATIONS = (Object.keys(CONTRACT_WORKSPACE_RBAC_MATRIX) as ContractWorkspaceProcedureName[])
     .filter(n => CONTRACT_WORKSPACE_RBAC_MATRIX[n].minRole !== null);
@@ -195,9 +209,9 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     }
   }, 30_000);
 
-  it("operator: updateContract mudando status (vigente → rescindido/encerrado/arquivado) ⇒ FORBIDDEN, nem os campos são gravados", async () => {
+  it("operator: updateContract mudando status (vigente → rescindido/encerrado/arquivado) ⇒ FORBIDDEN, nada gravado", async () => {
     for (const to of ["rescindido", "encerrado", "arquivado"]) {
-      await expectDeniedWithoutEffects("operatorA", "updateContract", { contractId: CT_OP, contractor: "Não gravar", status: to },
+      await expectDeniedWithoutEffects("operatorA", "updateContract", { contractId: CT_OP, status: to, expectedUpdatedAt: await rev(CT_OP) },
         "contractWorkspace.updateContract#status", "manager");
       warn.mockClear();
     }
@@ -206,8 +220,8 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
   it("operator: permitido nas ações de rascunho/edição/minuta/ocorrência/solicitação (efeitos reais gravados)", async () => {
     const count = async (sql: string, p: unknown[]) => Number(((await conn.query<mysql.RowDataPacket[]>(sql, p))[0][0] as { n: number }).n);
 
-    const upd = await call("operatorA", "updateContract", { contractId: CT_OP, contractor: "Fornecedor Editado", status: "vigente" }) as { workspace: { contractor: string; status: string } };
-    expect(upd.workspace).toMatchObject({ contractor: "Fornecedor Editado", status: "vigente" }); // mesmo status ⇒ não é mudança
+    const upd = await call("operatorA", "updateContract", { contractId: CT_DRAFT, contractor: "Fornecedor Editado", status: "minuta", expectedUpdatedAt: await rev(CT_DRAFT) }) as { workspace: { contractor: string; status: string } };
+    expect(upd.workspace).toMatchObject({ contractor: "Fornecedor Editado", status: "minuta" }); // mesmo status ⇒ não é mudança
 
     const docsBefore = await count(`SELECT COUNT(*) n FROM contract_ws_documents WHERE organization_id = ? AND contract_id = ?`, [ORG_A, CT_OP]);
     await call("operatorA", "generateDocuments", { contractId: CT_OP, kind: "contrato" });
@@ -249,7 +263,7 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     expect(ap.apostille.contractId).toBe(CT_MGR);
     const [[ct]] = await conn.query<mysql.RowDataPacket[]>(`SELECT status FROM contract_workspaces WHERE id = ? AND organization_id = ?`, [CT_MGR, ORG_A]);
     expect(ct.status).toBe("apostilado");
-    const upd = await call("managerA", "updateContract", { contractId: CT_MGR, status: "encerrado" }) as { workspace: { status: string } };
+    const upd = await call("managerA", "updateContract", { contractId: CT_MGR, status: "encerrado", expectedUpdatedAt: await rev(CT_MGR) }) as { workspace: { status: string } };
     expect(upd.workspace.status).toBe("encerrado");
     expect(denialLogs()).toHaveLength(0);
   }, 60_000);
@@ -263,7 +277,7 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     ] as const) {
       await expect(call(tag, name, i[name]), `${tag} → ${name}`).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
-    await expect(call("managerB", "updateContract", { contractId: CT_OP, status: "rescindido" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call("managerB", "updateContract", { contractId: CT_OP, status: "rescindido", expectedUpdatedAt: ANY_REV })).rejects.toMatchObject({ code: "NOT_FOUND" });
     const r = await call("operatorB", "loadContract", { contractId: CT_OP }) as { workspace: unknown };
     expect(r.workspace).toBeNull();
     expect(await snapshot()).toBe(before);

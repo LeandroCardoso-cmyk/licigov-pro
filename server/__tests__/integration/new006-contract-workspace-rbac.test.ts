@@ -17,6 +17,7 @@ import { TRPCError } from "@trpc/server";
 
 const h = vi.hoisted(() => ({
   ORG: 70601,
+  draftId: "ctw-new006-minuta",
   roleByUser: new Map<number, string>(),
   contract: {
     id: "ctw-new006", organizationId: 70601, originType: "avulso", originProcess: "", contractNumber: "CT-NEW006",
@@ -54,7 +55,12 @@ vi.mock("../../services/contractService", () => {
 });
 
 vi.mock("../../db/contractWorkspace", () => ({
-  getContractWorkspace: vi.fn(async (id: string, orgId: number) => (id === h.contract.id && orgId === h.ORG ? { ...h.contract } : null)),
+  getContractWorkspace: vi.fn(async (id: string, orgId: number) => {
+    if (orgId !== h.ORG) return null;
+    if (id === h.contract.id) return { ...h.contract };
+    if (id === h.draftId) return { ...h.contract, id: h.draftId, status: "minuta" };
+    return null;
+  }),
   insertContractWorkspace: vi.fn(async (ws: unknown) => ws),
   listContractWorkspaces: vi.fn(async () => []),
   listImportedContractWorkspaces: vi.fn(async () => []),
@@ -84,7 +90,11 @@ const RANK: Record<Role, number> = { viewer: 1, operator: 2, manager: 3, admin: 
 const USER_BY_ROLE: Record<Role, number> = { viewer: 11, operator: 12, manager: 13, admin: 14, owner: 15 };
 for (const r of ROLES) h.roleByUser.set(USER_BY_ROLE[r], r);
 
-const CID = h.contract.id;
+const CID = h.contract.id; // vigente
+const DRAFT = h.draftId; // minuta
+// Revisão carregada pelo cliente. Inócua em main (zod descarta a chave); obrigatória no CAS da PR-12 —
+// incluída desde já para a matriz valer sem reescrita na integração.
+const REV = h.contract.updatedAt;
 /** Entrada VÁLIDA (zod) de cada procedure — a recusa tem de vir do RBAC, nunca da validação. */
 const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   createFromProcurement: { processId: "p-1", contractNumber: "CT-1" },
@@ -94,7 +104,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   loadContract: { contractId: CID },
   listContracts: undefined,
   listImported: undefined,
-  updateContract: { contractId: CID, contractor: "Novo Fornecedor" },
+  updateContract: { contractId: DRAFT, contractor: "Novo Fornecedor", expectedUpdatedAt: REV },
   generateDocuments: { contractId: CID, kind: "contrato" },
   createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação" },
   createApostille: { contractId: CID, kind: "reajuste" },
@@ -235,18 +245,18 @@ describe("NEW-006 — comportamento por papel (router real, serviços mockados)"
 
 describe("NEW-006 — updateContract: campos = operator; mudança de status = manager", () => {
   it("operator edita campos (sem status) e grava", async () => {
-    await expect(call("operator", "updateContract", { contractId: CID, contractor: "X" })).resolves.toMatchObject({ workspace: { contractor: "X" } });
+    await expect(call("operator", "updateContract", { contractId: DRAFT, contractor: "X", expectedUpdatedAt: REV })).resolves.toMatchObject({ workspace: { contractor: "X" } });
     expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
   });
 
-  it("operator enviando o MESMO status atual não é mudança de status ⇒ permitido", async () => {
-    await expect(call("operator", "updateContract", { contractId: CID, contractor: "Y", status: "vigente" })).resolves.toBeDefined();
+  it("operator enviando o MESMO status atual (minuta) não é mudança de status ⇒ permitido", async () => {
+    await expect(call("operator", "updateContract", { contractId: DRAFT, contractor: "Y", status: "minuta", expectedUpdatedAt: REV })).resolves.toBeDefined();
     expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
   });
 
   for (const to of ["encerrado", "rescindido", "arquivado", "aditado"] as const) {
-    it(`operator mudando status vigente → ${to} ⇒ FORBIDDEN, nada gravado (nem os campos), log de recusa`, async () => {
-      await expect(call("operator", "updateContract", { contractId: CID, contractor: "Z", status: to }, "corr-op-status"))
+    it(`operator mudando status vigente → ${to} ⇒ FORBIDDEN, nada gravado, log de recusa`, async () => {
+      await expect(call("operator", "updateContract", { contractId: CID, status: to, expectedUpdatedAt: REV }, "corr-op-status"))
         .rejects.toMatchObject({ code: "FORBIDDEN" });
       expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
       const logs = denialLogs();
@@ -256,17 +266,17 @@ describe("NEW-006 — updateContract: campos = operator; mudança de status = ma
   }
 
   it("manager muda status vigente → encerrado (transição válida) e grava", async () => {
-    await expect(call("manager", "updateContract", { contractId: CID, status: "encerrado" })).resolves.toMatchObject({ workspace: { status: "encerrado" } });
+    await expect(call("manager", "updateContract", { contractId: CID, status: "encerrado", expectedUpdatedAt: REV })).resolves.toMatchObject({ workspace: { status: "encerrado" } });
     expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
   });
 
   it("manager com transição INVÁLIDA continua BAD_REQUEST da máquina de estados (RBAC não mascara a regra)", async () => {
-    await expect(call("manager", "updateContract", { contractId: CID, status: "minuta" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(call("manager", "updateContract", { contractId: CID, status: "minuta", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
   });
 
   it("contrato de outra organização ⇒ NOT_FOUND (inalterado), mesmo para operator pedindo mudança de status", async () => {
-    await expect(call("operator", "updateContract", { contractId: "ctw-outra-org", status: "rescindido" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call("operator", "updateContract", { contractId: "ctw-outra-org", status: "rescindido", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
     expect(vi.mocked(contractService.createAddendum)).not.toHaveBeenCalled();
