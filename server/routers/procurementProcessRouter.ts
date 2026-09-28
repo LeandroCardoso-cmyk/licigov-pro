@@ -14,6 +14,7 @@ import {
   setStage,
   type StartOption,
   type ProcessStage,
+  type ProcurementWorkspace,
 } from "../domain/procurementProcess";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
@@ -28,6 +29,10 @@ import {
 } from "../services/itemMaterializationService";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
+import {
+  PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
+} from "../domain/processCreateContract";
+import { listContextFacts } from "../db/procurementContext";
 import { getOrganizationById } from "../db/organizations";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import {
@@ -53,6 +58,42 @@ async function requireProcess(id: string, orgId: number) {
   const p = await getProcess(id, orgId);
   if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
   return p;
+}
+
+/**
+ * R3 / PR-05 (SEM-002) — a criação colidiu com a chave natural (org + número). NADA foi escrito. Relê o
+ * existente NO ÓRGÃO do contexto e decide SEM ESCREVER (contrato: server/domain/processCreateContract.ts):
+ * retry idempotente da MESMA criação (mesmo ator + payload normalizado idêntico) ⇒ devolve o registro
+ * PERSISTIDO com `created: false`; qualquer outro caso ⇒ CONFLICT `PROCESS_ALREADY_EXISTS`.
+ */
+async function resolveExistingProcurementCreate(p: {
+  organizationId: number; processId: string; actorUserId: number; correlationId: string;
+  request: { object: string; startOption: string; modality?: string; requestingUnit: string | null };
+}): Promise<{ process: ProcurementWorkspace; created: false }> {
+  const existing = await getProcess(p.processId, p.organizationId);
+  let mismatches = ["missing"];
+  if (existing) {
+    const facts = await listContextFacts(p.organizationId, existing.id);
+    const createRequestingUnits = facts
+      .filter((f) => f.path === "demand.requestingUnit" && f.sourceType === "process" && f.sourceVersion === "create")
+      .map((f) => (typeof f.value === "string" ? f.value : JSON.stringify(f.value)));
+    mismatches = procurementCreateMismatches({
+      responsibleUser: existing.responsibleUser, object: existing.object, startOption: existing.startOption,
+      modality: existing.modality, createRequestingUnits,
+    }, { actorUserId: p.actorUserId, ...p.request });
+  }
+  if (existing && mismatches.length === 0) {
+    log.info("create_process_replayed", {
+      organizationId: p.organizationId, processId: existing.id, actorUserId: p.actorUserId, correlationId: p.correlationId,
+    });
+    return { process: existing, created: false };
+  }
+  // Só NOMES de campo divergentes (sem valores/PII); o registro existente não é tocado.
+  log.warn("create_process_conflict", {
+    organizationId: p.organizationId, processId: p.processId, actorUserId: p.actorUserId, correlationId: p.correlationId,
+    reason: PROCESS_ALREADY_EXISTS, mismatches,
+  });
+  throw new TRPCError({ code: "CONFLICT", message: PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE });
 }
 
 // Acabamento institucional das exportações (PR #188).
@@ -88,10 +129,9 @@ export const procurementProcessRouter = router({
         responsibleUser: ctx.user!.id, correlationId: ctx.correlationId,
       });
       try {
-        // Idempotente: id determinístico (org + número) + onDuplicateKeyUpdate →
-        // clique repetido/retry NÃO cria processo duplicado.
-        // DATA-039: processo + evento inicial persistem ATOMICAMENTE (tudo-ou-nada) —
-        // nunca deixa processo sem evento de criação nem evento órfão em caso de falha parcial.
+        // R3 / PR-05 (SEM-002) — Create ≠ Reset: id determinístico (org + número) + INSERT PURO. Número já
+        // existente no órgão ⇒ ProcessAlreadyExistsError, sem escrita (tratado abaixo: converge ou CONFLICT).
+        // DATA-039: processo + evento inicial (+ fato informado) persistem ATOMICAMENTE (tudo-ou-nada).
         await createProcessWithInitialEvent(process, {
           eventType: "workspace_created",
           actor: String(ctx.user!.id), summary: `Processo ${process.processNumber} criado (início: ${input.startOption}).`,
@@ -111,6 +151,12 @@ export const procurementProcessRouter = router({
           actorUserId: ctx.user!.id, informedFields: requestingUnit ? 1 : 0,
         });
       } catch (err) {
+        if (err instanceof ProcessAlreadyExistsError) {
+          return resolveExistingProcurementCreate({
+            organizationId: orgId, processId: err.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+            request: { object: input.object, startOption: input.startOption, modality: input.modality, requestingUnit },
+          });
+        }
         // Não mascarar: persistir o erro técnico com correlationId para diagnóstico;
         // ao usuário, mensagem amigável e estável em pt-BR.
         log.error("create_process_failed", {
@@ -123,7 +169,7 @@ export const procurementProcessRouter = router({
           message: "Não foi possível criar o processo. Tente novamente; se persistir, contate o suporte.",
         });
       }
-      return { process };
+      return { process, created: true };
     }),
 
   loadProcess: tenantProcedure

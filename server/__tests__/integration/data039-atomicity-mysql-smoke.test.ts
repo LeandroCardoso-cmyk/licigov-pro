@@ -1,8 +1,8 @@
 /**
  * DATA-039 (Bloco D) — smoke MySQL REAL da ATOMICIDADE de operações compostas do fluxo canônico.
  * Só roda com DATABASE_URL (CI). Prova, contra MySQL real:
- *   - createProcessWithInitialEvent: processo + evento inicial commitam JUNTOS (tudo-ou-nada) e o
- *     retry (id determinístico) não duplica;
+ *   - createProcessWithInitialEvent: processo + evento inicial commitam JUNTOS (tudo-ou-nada) e a
+ *     2ª criação com o mesmo número (id determinístico) é recusada sem duplicar (R3 / PR-05);
  *   - insertResearchWithItems: cabeçalho da pesquisa + todos os itens brutos commitam JUNTOS;
  *   - ROLLBACK real: uma transação que grava e depois lança NÃO deixa estado parcial persistido
  *     (as funções executor-aware participam do rollback — base das duas garantias acima).
@@ -16,6 +16,7 @@ import {
   getProcess, listProcesses, listProcessTimeline,
 } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
+import { ProcessAlreadyExistsError } from "../../domain/processCreateContract";
 import { createPriceResearchWorkspace, extractItemsFromText } from "../../domain/priceResearch";
 
 const DB = process.env.DATABASE_URL;
@@ -81,7 +82,10 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
   afterAll(cleanup);
   beforeEach(cleanup); // cada teste parte de um estado limpo → independente de ordem e de resíduos
 
-  it("createProcessWithInitialEvent: processo + evento inicial commitam JUNTOS; retry não duplica", async () => {
+  // R3 / PR-05 (SEM-002): antes, a 2ª chamada "convergia" via upsert (`onDuplicateKeyUpdate`) — que também
+  // resetava etapa/status/modalidade do existente. Agora a criação é INSERT PURO: a 2ª chamada é recusada
+  // (ProcessAlreadyExistsError) com rollback total — segue valendo "exatamente 1 processo e 1 evento inicial".
+  it("createProcessWithInitialEvent: processo + evento inicial commitam JUNTOS; 2ª criação recusada sem duplicar", async () => {
     const mk = () => createProcurementWorkspace({
       organizationId: ORG, processNumber: "D039-100/2026", object: "Objeto DATA-039",
       startOption: "criar_dfd", responsibleUser: 1, correlationId: "d039-create",
@@ -97,18 +101,22 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     expect(tl.length).toBe(1);
     expect(tl[0].eventType).toBe("workspace_created");
 
-    // Retry (mesmo número → mesmo id determinístico) não duplica processo nem evento.
-    await createProcessWithInitialEvent(mk(), {
+    // 2ª criação (mesmo número → mesmo id determinístico) recusada: não duplica processo nem evento, e o
+    // efeito `withinTx` da tentativa recusada NÃO roda (rollback antes dele).
+    let sideEffect = false;
+    await expect(createProcessWithInitialEvent(mk(), {
       eventType: "workspace_created", actor: "1",
       summary: "Processo D039-100/2026 criado.", refId: p.id, correlationId: "d039-create",
-    });
+    }, async () => { sideEffect = true; })).rejects.toBeInstanceOf(ProcessAlreadyExistsError);
+    expect(sideEffect).toBe(false);
     expect((await listProcesses(ORG, 200)).filter(x => x.processNumber === "D039-100/2026").length).toBe(1);
     expect((await listProcessTimeline(p.id, ORG)).length).toBe(1);
   });
 
-  it("retry CONCORRENTE (mesmo processo, N simultâneos): exatamente 1 processo e 1 evento inicial", async () => {
-    // Prova a garantia ESTRUTURAL (id determinístico + PK + onDuplicateKeyUpdate) sob concorrência real:
-    // sem check-then-insert, nenhuma janela TOCTOU. N transações concorrentes convergem para 1+1.
+  it("criação CONCORRENTE (mesmo processo, N simultâneos): exatamente 1 processo e 1 evento inicial", async () => {
+    // Prova a garantia ESTRUTURAL (id determinístico + PK + INSERT puro) sob concorrência real: sem
+    // check-then-insert, nenhuma janela TOCTOU. Exatamente 1 transação vence; as demais recebem
+    // ProcessAlreadyExistsError e não deixam resíduo (1 processo + 1 evento).
     const mk = () => createProcurementWorkspace({
       organizationId: ORG, processNumber: "D039-CONC/2026", object: "Objeto concorrente",
       startOption: "criar_dfd", responsibleUser: 1, correlationId: "d039-conc",
@@ -117,7 +125,11 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
       eventType: "workspace_created", actor: "1",
       summary: "Processo D039-CONC/2026 criado.", refId: mk().id, correlationId: "d039-conc",
     }));
-    await Promise.all(runs); // disparados juntos → exercita a corrida
+    const results = await Promise.allSettled(runs); // disparados juntos → exercita a corrida
+    expect(results.filter(r => r.status === "fulfilled").length).toBe(1);
+    for (const r of results.filter(r => r.status === "rejected")) {
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(ProcessAlreadyExistsError);
+    }
     const pid = mk().id;
     expect((await listProcesses(ORG, 200)).filter(x => x.processNumber === "D039-CONC/2026").length).toBe(1);
     expect((await listProcessTimeline(pid, ORG)).length).toBe(1);
