@@ -15,7 +15,9 @@
 import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure, assertOrgRoleAtLeast } from "../_core/trpc";
+// NEW-006 — pisos de papel (import separado: não sobrepõe as linhas de import editadas por PR-08/PR-12).
+import { orgRoleProcedure, assertOrgRoleAtLeast } from "../_core/trpc";
+import { router, tenantProcedure } from "../_core/trpc";
 import { updateContractFields, transitionContractStatus, type ContractStatus } from "../domain/contractWorkspace";
 import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
