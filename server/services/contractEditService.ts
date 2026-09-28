@@ -6,7 +6,7 @@
  *     `ContractRevisionConflictError` (CONFLICT, `CONTRACT_REVISION_CONFLICT`) sem nenhuma escrita; a escrita
  *     em si é um UPDATE condicional (`compareAndSetContractWorkspace`), então dois salvamentos concorrentes
  *     com a mesma revisão ⇒ exatamente um vence.
- *  2. Campos econômicos/de identidade só mudam na minuta — a guarda vive no domínio
+ *  2. Campos econômicos/de identidade E gestor/fiscal só mudam na minuta — a guarda vive no domínio
  *     (`updateContractFields` → `assertContractFieldsEditable`), antes de qualquer efeito.
  *  3. Rastreabilidade — cada gravação aceita registra um evento `change` no timeline do contrato com
  *     antes → depois dos campos alterados e o ator real.

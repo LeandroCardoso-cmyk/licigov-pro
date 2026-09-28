@@ -83,9 +83,11 @@ describe("FASE 5 — Business Domain: Contratos", () => {
       expect(ws.value).toBe(200000);
     });
 
-    it("updateContractFields fora da minuta: gestor/fiscal sim, valor só por aditivo/apostilamento (SEM-023)", () => {
+    // PR-12 rev. 2: gestor/fiscal também deixam de ser editáveis fora da minuta (ação própria futura).
+    it("updateContractFields fora da minuta: valor só por aditivo/apostilamento; gestor/fiscal só por ação governada (SEM-023)", () => {
       const vigente = transitionContractStatus(mk(), "vigente");
-      expect(updateContractFields(vigente, { manager: "João", inspector: "Maria" }).manager).toBe("João");
+      expect(() => updateContractFields(vigente, { manager: "João", inspector: "Maria" })).toThrow(/CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION/);
+      expect(updateContractFields(vigente, { manager: vigente.manager, inspector: vigente.inspector }).manager).toBe(vigente.manager);
       expect(() => updateContractFields(vigente, { value: 200000 })).toThrow(/CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT/);
     });
 

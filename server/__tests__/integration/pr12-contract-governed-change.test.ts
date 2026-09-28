@@ -5,8 +5,11 @@
  *   - CAS de revisão: `expectedUpdatedAt` OBRIGATÓRIO; divergente ⇒ CONFLICT `CONTRACT_REVISION_CONFLICT`,
  *     zero escritas; CAS perdido na escrita (0 linhas) ⇒ CONFLICT;
  *   - fora de `minuta`, contractNumber/contractor/object/value/term ⇒ BAD_REQUEST
- *     `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`, zero escritas; manager/inspector seguem editáveis;
- *   - reenvio do MESMO valor (formulário inteiro) não conta como alteração;
+ *     `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`, zero escritas;
+ *   - fora de `minuta`, manager/inspector (gestor/fiscal) ⇒ BAD_REQUEST
+ *     `CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION`, zero escritas (rev. 2 — decisão do responsável:
+ *     troca pós-formalização exige ação própria, futura); na minuta seguem editáveis;
+ *   - reenvio do MESMO valor (formulário inteiro, inclusive gestor/fiscal) não conta como alteração;
  *   - máquina de estados inalterada; cross-tenant NOT_FOUND inalterado.
  * Persistência mockada; o smoke `pr12-contract-governed-change-mysql-smoke` cobre o MySQL real.
  */
@@ -40,14 +43,17 @@ import * as procurement from "../../db/procurement";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import {
   createContractWorkspace, updateContractFields, governedFieldChanges, assertContractFieldsEditable,
-  pickEditableContractFields, nextContractRevision, isSameContractRevision,
-  ContractEconomicFieldsRequireInstrumentError, CONTRACT_INSTRUMENT_GOVERNED_FIELDS, CONTRACT_FREELY_EDITABLE_FIELDS,
-  CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT, CONTRACT_REVISION_CONFLICT, CONTRACT_DRAFT_STATUS,
+  pickEditableContractFields, nextContractRevision, isSameContractRevision, assignmentFieldChanges,
+  ContractEconomicFieldsRequireInstrumentError, ContractAssignmentRequiresGovernedActionError,
+  CONTRACT_INSTRUMENT_GOVERNED_FIELDS, CONTRACT_ASSIGNMENT_FIELDS, CONTRACT_EDITABLE_FIELDS,
+  CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT, CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION, CONTRACT_REVISION_CONFLICT,
+  CONTRACT_DRAFT_STATUS,
   type ContractStatus, type ContractWorkspace,
 } from "../../domain/contractWorkspace";
 
 const REV = "2026-09-01T10:00:00.123Z";
 const ALL_STATUSES: ContractStatus[] = ["minuta", "vigente", "aditado", "apostilado", "encerrado", "rescindido", "arquivado"];
+const POST_DRAFT_STATUSES = ALL_STATUSES.filter(s => s !== "minuta");
 
 function contract(status: ContractStatus, over: Partial<ContractWorkspace> = {}): ContractWorkspace {
   return {
@@ -81,9 +87,11 @@ beforeEach(() => {
 // ─── Domínio ──────────────────────────────────────────────────────────────────
 
 describe("PR-12 · domínio — campos governados por instrumento", () => {
-  it("lista explícita: econômicos/identidade × livres (decisão auditada SEM-023)", () => {
+  it("lista explícita: econômicos/identidade × designações (gestor/fiscal) — nenhum campo livre fora da minuta", () => {
     expect([...CONTRACT_INSTRUMENT_GOVERNED_FIELDS]).toEqual(["contractNumber", "contractor", "object", "value", "term"]);
-    expect([...CONTRACT_FREELY_EDITABLE_FIELDS]).toEqual(["manager", "inspector"]);
+    expect([...CONTRACT_ASSIGNMENT_FIELDS]).toEqual(["manager", "inspector"]);
+    // tudo o que a edição genérica aceita está numa das duas listas travadas ⇒ nada editável pós-minuta
+    expect([...CONTRACT_EDITABLE_FIELDS].sort()).toEqual([...CONTRACT_INSTRUMENT_GOVERNED_FIELDS, ...CONTRACT_ASSIGNMENT_FIELDS].sort());
     expect(CONTRACT_DRAFT_STATUS).toBe("minuta");
   });
 
@@ -98,10 +106,38 @@ describe("PR-12 · domínio — campos governados por instrumento", () => {
     }
   });
 
-  it.each(ALL_STATUSES)("status %s: gestor/fiscal continuam editáveis", (status) => {
-    const out = updateContractFields(contract(status), { manager: "Carla", inspector: "Davi" });
-    expect(out.manager).toBe("Carla");
-    expect(out.inspector).toBe("Davi");
+  // REESCRITO (PR-12 rev. 2): antes "gestor/fiscal continuam editáveis" em TODO status; agora só na minuta.
+  it.each(POST_DRAFT_STATUSES)("status %s: trocar gestor/fiscal ⇒ recusa CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION", (status) => {
+    const ws = contract(status);
+    for (const [patch, fields] of [
+      [{ manager: "Carla" }, ["manager"]], [{ inspector: "Davi" }, ["inspector"]], [{ manager: "Carla", inspector: "Davi" }, ["manager", "inspector"]],
+      [{ manager: "" }, ["manager"]], // remover a designação também é troca
+    ] as const) {
+      let err: unknown;
+      try { updateContractFields(ws, patch); } catch (e) { err = e; }
+      expect(err).toBeInstanceOf(ContractAssignmentRequiresGovernedActionError);
+      expect((err as Error).message).toContain(CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION);
+      expect((err as ContractAssignmentRequiresGovernedActionError).fields).toEqual(fields);
+      expect((err as ContractAssignmentRequiresGovernedActionError).status).toBe(status);
+    }
+  });
+
+  it.each(POST_DRAFT_STATUSES)("status %s: reenvio do gestor/fiscal persistidos (formulário inteiro) não é troca", (status) => {
+    const ws = contract(status);
+    const out = updateContractFields(ws, {
+      manager: "Ana", inspector: "Bruno", contractor: "ACME LTDA", object: "Serviços de limpeza", term: "12 meses", value: 100000, contractNumber: "CT-PR12/001",
+    });
+    expect(out).toMatchObject({ manager: "Ana", inspector: "Bruno", value: 100000, status });
+    expect(assignmentFieldChanges(ws, { manager: "Ana", inspector: "Bruno" })).toEqual([]);
+  });
+
+  it("minuta: gestor/fiscal editáveis (rascunho)", () => {
+    const out = updateContractFields(contract("minuta"), { manager: "Carla", inspector: "Davi" });
+    expect(out).toMatchObject({ manager: "Carla", inspector: "Davi" });
+  });
+
+  it("fora da minuta, patch que mexe nos dois grupos ⇒ a recusa de instrumento tem precedência (determinística)", () => {
+    expect(() => updateContractFields(contract("vigente"), { value: 1, manager: "Carla" })).toThrow(ContractEconomicFieldsRequireInstrumentError);
   });
 
   it("minuta: campos econômicos editáveis (rascunho)", () => {
@@ -112,8 +148,9 @@ describe("PR-12 · domínio — campos governados por instrumento", () => {
   it("reenvio do valor persistido (formulário inteiro) não é alteração — inclusive valor em centavos equivalente", () => {
     const ws = contract("vigente", { value: 1234.5 });
     expect(governedFieldChanges(ws, { value: 1234.50, contractor: "ACME LTDA", object: "Serviços de limpeza", term: "12 meses", manager: "Nova" })).toEqual([]);
-    expect(() => assertContractFieldsEditable(ws, { value: 1234.5, manager: "Nova" })).not.toThrow();
+    expect(() => assertContractFieldsEditable(ws, { value: 1234.5, manager: "Ana", inspector: "Bruno" })).not.toThrow();
     expect(governedFieldChanges(ws, { value: 1234.51 })).toEqual(["value"]);
+    expect(assignmentFieldChanges(ws, { manager: "Nova" })).toEqual(["manager"]);
   });
 
   it("whitelist: patch não injeta status/id/organizationId/updatedAt", () => {
@@ -192,20 +229,64 @@ describe("PR-12 · contractWorkspace.updateContract — CAS + campos econômicos
     expect(ev.summary).toContain('contractor: "ACME LTDA" → "Outra SA"');
   });
 
-  it("contrato vigente: alteração NÃO econômica (gestor/fiscal) é permitida, com CAS, reenviando o formulário inteiro", async () => {
+  // REESCRITO (PR-12 rev. 2): antes "gestor/fiscal permitido em contrato vigente"; agora recusado fail-closed.
+  it.each(POST_DRAFT_STATUSES)(
+    "contrato %s: trocar gestor/fiscal (formulário inteiro reenviado) ⇒ BAD_REQUEST CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION, zero escritas", async (status) => {
+      getWs().mockResolvedValue(contract(status));
+      const p = caller().updateContract({
+        contractId: "c", expectedUpdatedAt: REV, manager: "Carla", inspector: "Davi",
+        contractor: "ACME LTDA", object: "Serviços de limpeza", term: "12 meses", value: 100000,
+      });
+      await expect(p).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(p).rejects.toThrow(CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION);
+      await expect(p).rejects.not.toThrow(CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT);
+      expectNoWrites();
+    });
+
+  it("contrato vigente: só o fiscal trocado ⇒ recusa, zero escritas", async () => {
+    getWs().mockResolvedValue(contract("vigente"));
+    await expect(caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, manager: "Ana", inspector: "Outro Fiscal" }))
+      .rejects.toThrow(CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION);
+    expectNoWrites();
+  });
+
+  it("contrato vigente com revisão divergente + troca de gestor ⇒ CONFLICT primeiro (recarregar), zero escritas", async () => {
+    getWs().mockResolvedValue(contract("vigente", { updatedAt: "2026-09-01T10:00:05.000Z" }));
+    await expect(caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, manager: "Carla" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expectNoWrites();
+  });
+
+  it("contrato vigente: reenvio IDÊNTICO do formulário inteiro (inclusive gestor/fiscal) segue permitido, com CAS", async () => {
     getWs().mockResolvedValue(contract("vigente"));
     const { workspace } = await caller().updateContract({
-      contractId: "c", expectedUpdatedAt: REV, manager: "Carla", inspector: "Davi",
+      contractId: "c", expectedUpdatedAt: REV, manager: "Ana", inspector: "Bruno",
       contractor: "ACME LTDA", object: "Serviços de limpeza", term: "12 meses", value: 100000,
     });
-    expect(workspace).toMatchObject({ manager: "Carla", inspector: "Davi", value: 100000, status: "vigente" });
+    expect(workspace).toMatchObject({ manager: "Ana", inspector: "Bruno", value: 100000, status: "vigente" });
+    expect(cas()).toHaveBeenCalledTimes(1);
+    expect(cas().mock.calls[0][1]).toBe(REV);
+    expect(event().mock.calls[0][0].summary).toContain("salvo sem alteração de campos");
+  });
+
+  it("minuta: troca de gestor/fiscal é permitida — CAS + evento antes/depois", async () => {
+    getWs().mockResolvedValue(contract("minuta"));
+    const { workspace } = await caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, manager: "Carla", inspector: "Davi" });
+    expect(workspace).toMatchObject({ manager: "Carla", inspector: "Davi", status: "minuta" });
     expect(cas()).toHaveBeenCalledTimes(1);
     expect(cas().mock.calls[0][1]).toBe(REV);
     expect(event().mock.calls[0][0].summary).toContain('manager: "Ana" → "Carla"');
+    expect(event().mock.calls[0][0].summary).toContain('inspector: "Bruno" → "Davi"');
+  });
+
+  it("transição de status não é atalho: vigente → encerrado com gestor trocado ⇒ recusa, zero escritas", async () => {
+    getWs().mockResolvedValue(contract("vigente"));
+    await expect(caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, status: "encerrado", manager: "Carla" }))
+      .rejects.toThrow(CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION);
+    expectNoWrites();
   });
 
   it("CAS perdido na escrita (0 linhas casam — outro save venceu) ⇒ CONFLICT, sem evento", async () => {
-    getWs().mockResolvedValue(contract("vigente"));
+    getWs().mockResolvedValue(contract("minuta"));
     cas().mockResolvedValue(false);
     const p = caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, manager: "Carla" });
     await expect(p).rejects.toMatchObject({ code: "CONFLICT" });
@@ -214,7 +295,7 @@ describe("PR-12 · contractWorkspace.updateContract — CAS + campos econômicos
   });
 
   it("falha do timeline APÓS o CAS vencer não vira erro (a edição já foi gravada)", async () => {
-    getWs().mockResolvedValue(contract("vigente"));
+    getWs().mockResolvedValue(contract("minuta"));
     event().mockRejectedValue(new Error("timeline down"));
     const { workspace } = await caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, manager: "Carla" });
     expect(workspace.manager).toBe("Carla");

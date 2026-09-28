@@ -25,7 +25,8 @@ import { listProcessTimeline } from "../db/procurement";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 // SEM-023 (PR-12) — edição governada do contrato (imports separados para não sobrepor PR-08 nas linhas acima).
 import {
-  ContractEconomicFieldsRequireInstrumentError, ContractRevisionConflictError, type ContractWorkspace,
+  ContractEconomicFieldsRequireInstrumentError, ContractAssignmentRequiresGovernedActionError, ContractRevisionConflictError,
+  type ContractWorkspace,
 } from "../domain/contractWorkspace";
 import { assertExpectedContractRevision, saveGovernedContractEdit } from "../services/contractEditService";
 
@@ -40,11 +41,14 @@ const CONTRACT_STATUSES = ["minuta", "vigente", "aditado", "apostilado", "encerr
  * SEM-023 — recusas GOVERNADAS da edição direta do contrato, com token estável na mensagem (o projeto não
  * tem errorFormatter customizado): revisão divergente ⇒ CONFLICT `CONTRACT_REVISION_CONFLICT`; campo
  * econômico/de identidade fora da minuta ⇒ BAD_REQUEST `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`
- * (caminho: Termo Aditivo / Apostilamento). Nada é gravado em ambos.
+ * (caminho: Termo Aditivo / Apostilamento); gestor/fiscal fora da minuta ⇒ BAD_REQUEST
+ * `CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION` (exige ação própria de designação — capacidade futura).
+ * Nada é gravado em todos os casos.
  */
 function mapContractEditError(e: unknown): never {
   if (e instanceof ContractRevisionConflictError) throw new TRPCError({ code: "CONFLICT", message: e.message, cause: e });
   if (e instanceof ContractEconomicFieldsRequireInstrumentError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
+  if (e instanceof ContractAssignmentRequiresGovernedActionError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
   throw e;
 }
 
@@ -172,7 +176,8 @@ export const contractWorkspaceRouter = router({
       const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 
-      // SEM-023 — recusas ANTES de qualquer escrita: revisão divergente; campo econômico fora da minuta.
+      // SEM-023 — recusas ANTES de qualquer escrita: revisão divergente; campo econômico ou gestor/fiscal
+      // alterado fora da minuta (a troca pós-formalização de gestor/fiscal exige ação própria — dívida registrada).
       let updated: ContractWorkspace;
       try {
         assertExpectedContractRevision(ws, input.expectedUpdatedAt);

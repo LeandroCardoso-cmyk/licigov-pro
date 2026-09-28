@@ -4,10 +4,12 @@
  *
  *   - revisão divergente ⇒ CONFLICT `CONTRACT_REVISION_CONFLICT`, linha intacta;
  *   - dois saves concorrentes com a MESMA revisão ⇒ exatamente um vence (o outro CONFLICT), um evento;
- *   - contrato vigente: alterar valor/contratado/objeto ⇒ BAD_REQUEST
+ *   - contrato vigente: alterar valor/contratado/objeto/vigência ⇒ BAD_REQUEST
  *     `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`, linha intacta (FALHA em main — ver relatório R3.1);
  *   - minuta: a mesma alteração é permitida e persistida;
- *   - vigente: gestor/fiscal editáveis com CAS; revisão avança e a antiga passa a ser recusada;
+ *   - vigente: trocar gestor/fiscal ⇒ BAD_REQUEST `CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION`, linha
+ *     intacta, sem evento (rev. 2); reenvio idêntico do formulário segue aceito com CAS (revisão avança e
+ *     a antiga passa a ser recusada); na minuta a troca de gestor/fiscal é permitida;
  *   - cross-tenant ⇒ NOT_FOUND inalterado, linha intacta.
  * Só roda com DATABASE_URL.
  */
@@ -22,6 +24,7 @@ const ORG_B = 991702;
 const CORR = "corr-pr12-smoke";
 const TOKEN_CONFLICT = "CONTRACT_REVISION_CONFLICT";
 const TOKEN_INSTRUMENT = "CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT";
+const TOKEN_ASSIGNMENT = "CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION";
 
 let conn: mysql.Connection;
 let userA = 0;
@@ -101,17 +104,17 @@ describe.skipIf(!DB)("PR-12 · contrato vigente só muda por instrumento (MySQL 
     await conn.end();
   });
 
-  it("1) contrato VIGENTE: alterar valor / contratado / objeto ⇒ BAD_REQUEST com token; linha intacta, sem evento", async () => {
+  it("1) contrato VIGENTE: alterar valor / contratado / objeto / vigência ⇒ BAD_REQUEST com token; linha intacta, sem evento", async () => {
     const ws = await seedContract("CT-PR12-VIG-ECON", "vigente");
     const before = await row(ws.id);
     const events = await changeEvents(ws.id);
-    for (const patch of [{ value: 999999 }, { contractor: "Outra SA" }, { object: "Objeto trocado sem aditivo" }]) {
+    for (const patch of [{ value: 999999 }, { contractor: "Outra SA" }, { object: "Objeto trocado sem aditivo" }, { term: "36 meses" }]) {
       const p = caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: ws.updatedAt, ...patch });
       await expect(p).rejects.toMatchObject({ code: "BAD_REQUEST" });
       await expect(p).rejects.toThrow(TOKEN_INSTRUMENT);
     }
     expect(await row(ws.id)).toEqual(before);
-    expect(before).toMatchObject({ value: "100000.00", contractor: "ACME LTDA", object: "Serviços de limpeza", status: "vigente" });
+    expect(before).toMatchObject({ value: "100000.00", contractor: "ACME LTDA", object: "Serviços de limpeza", term: "12 meses", status: "vigente" });
     expect(await changeEvents(ws.id)).toBe(events);
   }, 60_000);
 
@@ -136,22 +139,54 @@ describe.skipIf(!DB)("PR-12 · contrato vigente só muda por instrumento (MySQL 
     expect(String(ev[0].summary)).toContain('value: "100000" → "150000"');
   }, 60_000);
 
-  it("4) VIGENTE: alteração não econômica (gestor/fiscal, formulário inteiro reenviado) é permitida com CAS; a revisão antiga passa a ser recusada", async () => {
+  // REESCRITO (PR-12 rev. 2): antes "gestor/fiscal editáveis em contrato vigente"; agora recusado fail-closed.
+  it("4) VIGENTE: trocar gestor/fiscal (formulário inteiro reenviado) ⇒ BAD_REQUEST com token; linha intacta, sem evento", async () => {
     const ws = await seedContract("CT-PR12-VIG-MGR", "vigente");
-    const { workspace } = await caller(userA).updateContract({
-      contractId: ws.id, expectedUpdatedAt: ws.updatedAt, manager: "Carla", inspector: "Davi",
-      contractor: ws.contractor, object: ws.object, term: ws.term, value: ws.value,
-    });
-    expect(await row(ws.id)).toMatchObject({ manager: "Carla", inspector: "Davi", value: "100000.00", status: "vigente" });
+    const before = await row(ws.id);
+    const events = await changeEvents(ws.id);
+    for (const patch of [{ manager: "Carla", inspector: "Davi" }, { manager: "Carla" }, { inspector: "Davi" }, { manager: "" }]) {
+      const p = caller(userA).updateContract({
+        contractId: ws.id, expectedUpdatedAt: ws.updatedAt,
+        contractor: ws.contractor, object: ws.object, term: ws.term, value: ws.value, manager: ws.manager, inspector: ws.inspector, ...patch,
+      });
+      await expect(p).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(p).rejects.toThrow(TOKEN_ASSIGNMENT);
+    }
+    expect(await row(ws.id)).toEqual(before);
+    expect(before).toMatchObject({ manager: "Ana", inspector: "Bruno", status: "vigente" });
+    expect(await changeEvents(ws.id)).toBe(events);
+  }, 60_000);
+
+  it("4b) VIGENTE: reenvio IDÊNTICO do formulário (gestor/fiscal inalterados) é aceito com CAS; a revisão antiga passa a ser recusada", async () => {
+    const ws = await seedContract("CT-PR12-VIG-SAME", "vigente");
+    const form = { contractor: ws.contractor, object: ws.object, term: ws.term, value: ws.value, manager: ws.manager, inspector: ws.inspector };
+    const { workspace } = await caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: ws.updatedAt, ...form });
+    expect(Date.parse(workspace.updatedAt)).toBeGreaterThan(Date.parse(ws.updatedAt));
     const after = await row(ws.id);
+    expect(after).toMatchObject({ manager: "Ana", inspector: "Bruno", value: "100000.00", status: "vigente" });
     // mesma revisão antiga de novo ⇒ CONFLICT, nada muda
-    const stale = caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: ws.updatedAt, manager: "Eva" });
+    const stale = caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: ws.updatedAt, ...form });
     await expect(stale).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(stale).rejects.toThrow(TOKEN_CONFLICT);
     expect(await row(ws.id)).toEqual(after);
-    // com a revisão nova ⇒ ok
-    await caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: workspace.updatedAt, manager: "Eva" });
-    expect((await row(ws.id))!.manager).toBe("Eva");
+    // com a revisão nova ⇒ ok (e ainda sem troca de gestor/fiscal)
+    await caller(userA).updateContract({ contractId: ws.id, expectedUpdatedAt: workspace.updatedAt, ...form });
+    expect((await row(ws.id))!.manager).toBe("Ana");
+  }, 60_000);
+
+  it("4c) MINUTA: a mesma troca de gestor/fiscal é permitida e persistida; evento com antes/depois", async () => {
+    const ws = await seedContract("CT-PR12-MIN-MGR");
+    const events = await changeEvents(ws.id);
+    await caller(userA).updateContract({
+      contractId: ws.id, expectedUpdatedAt: ws.updatedAt,
+      contractor: ws.contractor, object: ws.object, term: ws.term, value: ws.value, manager: "Carla", inspector: "Davi",
+    });
+    expect(await row(ws.id)).toMatchObject({ manager: "Carla", inspector: "Davi", status: "minuta" });
+    expect(await changeEvents(ws.id)).toBe(events + 1);
+    const [ev] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT summary FROM process_timeline WHERE process_id = ? AND organization_id = ? AND event_type = 'change' ORDER BY event_order DESC LIMIT 1", [ws.id, ORG_A],
+    );
+    expect(String(ev[0].summary)).toContain('manager: "Ana" → "Carla"');
   }, 60_000);
 
   it("5) revisão divergente (arbitrária) ⇒ CONFLICT com token; linha intacta", async () => {
