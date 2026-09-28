@@ -15,6 +15,12 @@
 | Consome | PR-03 (LEG-012, SEM-016/017), PR-14 (LEG-015, SEM-012), CUTOVER de LEG-015/016, LEG-027 |
 | Mutações em produção | **Zero** (nenhum SQL executado) |
 
+> **Atualização 2026-09-28 (pós-turno, após a revisão humana):** R2.3 continua **BLOCKED_FOR_HUMAN_REVIEW / ENVIRONMENT**.
+> - Nova verificação única às 17:53Z: a conexão TCP ao banco de produção continua sem completar. O bloqueio fica registrado uma vez; não serão feitas novas tentativas repetidas.
+> - Nenhuma inferência feita a partir de logs substitui as contagens agregadas reais de `legal_opinions`, `direct_contracts`, `contracts` e `processes`.
+> - A PR-03 **não foi iniciada**.
+> - Nenhuma classificação foi atribuída sem evidência.
+
 ## 1. Por que R2.3 não é PASS
 
 | Critério | Situação |

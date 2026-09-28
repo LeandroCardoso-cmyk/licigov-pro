@@ -1,8 +1,15 @@
 # R2.2 — Decisão por tenant sobre `FF_CANONICAL_INGESTION` (SEM-005)
 
-> **Status do checkpoint R2.2: IN_PROGRESS — HUMAN_DECISION_REQUIRED.**
-> Este documento **não registra decisão humana** (nenhuma existe de forma inequívoca) e **não altera flag**.
-> Prepara o pacote de decisão (§7) e a verificação read-only que falta (§6).
+> **Status do checkpoint R2.2 (atualizado 2026-09-28, pós-turno): PASS_CANDIDATE — DECISION_RECORDED —
+> RUNTIME_STATE_READONLY_PENDING.**
+> **HUMAN DECISION RECORDED — OPTION B** (§10). A decisão foi tomada pelo owner após revisar o NIGHT SHIFT REPORT.
+> A flag **não foi ativada**: a ativação é uma ação futura, feita por humano pelo mecanismo governado.
+> O estado de runtime ainda **não foi confirmado no banco** (§6).
+> No ledger oficial, R2.2 **não** conta como PASS até a revisão e o merge desta documentação e o cumprimento dos
+> gates formais.
+>
+> *Texto original do turno noturno (mantido como histórico):* "IN_PROGRESS — HUMAN_DECISION_REQUIRED. Este documento
+> não registra decisão humana e não altera flag. Prepara o pacote de decisão (§7) e a verificação read-only que falta (§6)."
 > Baseline de achados inalterado (92/26/54/12). Documento base congelado:
 > `SEMANTIC_AUTHORITY_CROSS_MODULE_AUDIT.md` (sha256 `08edc734…0810b3`), não editado.
 
@@ -23,7 +30,7 @@ PASS exige, ao mesmo tempo:
 
 | Critério | Situação | Evidência |
 |---|---|---|
-| Decisão humana registrada | ❌ Não existe | Só há registros de **não-ativação** e de que "ativação é decisão do owner" (§3). A pergunta de §13 do inventário R2.1 segue sem resposta. |
+| Decisão humana registrada | ✅ **Registrada em 2026-09-28: Opção B** (§10) | Na noite anterior só havia registros de **não-ativação** e de que "ativação é decisão do owner" (§3). A pergunta de §13 do inventário R2.1 está respondida em §10. |
 | Estado confirmado read-only | ⚠️ Parcial | Logs sem evento de ativação e sem tráfego de ingestão (§4). As tabelas `feature_flags` e `tenant_feature_flags` não foram lidas (§6). |
 
 ## 2. Como a flag é resolvida (código em `main`)
@@ -144,6 +151,13 @@ Qualquer outro resultado é um achado e deve ser registrado.
 
 A PR-04 (R2.6) só fica pronta para PR depois de R2.2 = PASS.
 
+**Situação em 2026-09-28:**
+- critério 1: ✅ (§10);
+- critério 2: ⏳ pendente (leitura read-only do banco);
+- critério 3: ⏳ ação futura, que depende de staging validado e da PR-04.
+
+R2.2 = **PASS_CANDIDATE**.
+
 ## 9. O que este documento NÃO fez
 
 - Nenhuma flag alterada.
@@ -153,3 +167,57 @@ A PR-04 (R2.6) só fica pronta para PR depois de R2.2 = PASS.
 - Nenhum túnel ou TCP proxy criado.
 - Nenhuma mutação tRPC em produção.
 - Nenhuma decisão humana inventada.
+- A decisão de §10 foi tomada pelo owner; este documento apenas a registra.
+
+## 10. Decisão humana registrada — 2026-09-28 (HUMAN DECISION RECORDED — OPTION B)
+
+Registro literal da autorização do owner:
+> "Aprovo o pacote de decisões proposto para R2.2, PR-06, PR-08, PR-09 e PR-12, e autorizo priorizar a triagem/correção
+> de NEW-005, NEW-006 e NEW-007 antes da abertura das PRs relacionadas."
+
+### 10.1 Estratégia
+
+**Opção B:** rollout governado por tenant. O tenant institucional piloto terá `FF_CANONICAL_INGESTION` ativada de forma governada, **em execução futura**. Nada é ativado agora.
+
+### 10.2 Parâmetros aprovados para a ativação futura
+
+| Parâmetro | Valor | Motivo |
+|---|---|---|
+| `organizationId` | tenant institucional piloto (único tenant institucional de produção) | Decisão por tenant. Um tenant futuro nasce OFF e precisa de decisão própria. |
+| `percentage` | **100**, nunca menor que 100 | O código resolve percentual parcial com `Math.random` por resolução e por instância (§2), o que viola o determinismo institucional (ver NEW-015) |
+| `expiresAt` | **NULL** (sem expiração automática) | Uma expiração silenciosa devolveria o tenant ao valor global, isto é, OFF, e reabriria o fluxo legado |
+| Executor | owner ou admin autorizado | — |
+| Mecanismo | **exclusivamente** `featureFlagAdmin.setTenantFlag` | Nunca SQL manual, variável Railway ou edição direta de banco |
+| Registro obrigatório | `reason`, ator, tenant, timestamp, evento de auditoria/correlação (`feature_flag_set`) | Trilha da PR #249 |
+
+### 10.3 Sequência institucional aprovada
+
+1. Confirmar o estado atual da flag, somente leitura (§6).
+2. Validar a ingestão canônica em staging: fluxo upload/colagem → sessão → revisão → aprovação → promoção, com S3 e OCR operacionais.
+3. PR-04 com o guard server-side preparado. Branch `cutover/r2-pr04-canonical-price-ingestion`: flag ON ⇒ legado bloqueado; erro de avaliação ⇒ fail-closed; falha de capabilities ⇒ sem fallback silencioso ao legado.
+4. Ativação governada do tenant a 100%.
+5. Observação.
+6. Fechamento definitivo do legado quando for seguro (PR de acompanhamento: fechamento incondicional e remoção do painel legado).
+
+### 10.4 Rollback futuro (decisão operacional supervisionada)
+
+- Enquanto o cutover for reversível, o rollback é `featureFlagAdmin.setTenantFlag { enabled: false }`, pelo mesmo mecanismo governado. **Não executado agora.**
+- Gatilhos candidatos:
+  - falha de capabilities;
+  - erro sistêmico de upload;
+  - falha na criação de sessão;
+  - OCR ou storage indisponível;
+  - promoção incapaz de concluir;
+  - regressão de isolamento de tenant;
+  - aumento anômalo de 5xx;
+  - impossibilidade de completar o fluxo real upload → revisão → aprovação → promoção.
+- Erro isolado de um usuário **não** dispara rollback automático. O rollback é sempre decisão humana supervisionada.
+
+### 10.5 Status resultante
+
+| Item | Estado |
+|---|---|
+| R2.2 | **PASS_CANDIDATE · DECISION_RECORDED · RUNTIME_STATE_READONLY_PENDING** (não é PASS oficial) |
+| Flag em produção | **inalterada**. Estado provável OFF; não confirmado no banco. |
+| PR-04 | **DECISION_RECORDED / IMPLEMENTATION_PREPARED**. Não está pronta para PR enquanto o estado da flag não for confirmado read-only e o staging não for validado. |
+| Ledger oficial | sem novo checkpoint até a revisão e o merge documental |
