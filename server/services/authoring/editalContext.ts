@@ -305,7 +305,8 @@ function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>)
  * Resolve as fontes do Edital de forma TENANT-SCOPED e monta o contexto. Toda leitura é escopada por
  * `organizationId` (documento de outro tenant retorna null → tratado como ausente/[REVISAR], nunca vaza).
  * Os parâmetros modalidade/forma/plataforma vêm do próprio passo do Edital (não há reentrada de dados de
- * etapas anteriores); critério/regime ficam como [REVISAR] quando não disponíveis no espaço canônico.
+ * etapas anteriores). PR-09 / R5 (0308): critério de julgamento / regime de execução são os PERSISTIDOS no
+ * rascunho canônico do Edital (passados pelo chamador); NULL ⇒ ficam como [REVISAR] (nunca inferidos).
  */
 export async function resolveEditalSources(params: {
   organizationId: number;

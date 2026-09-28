@@ -11,6 +11,13 @@
  *   5. Edital: parâmetros persistidos → recarga (reviewableDraft pelo ROUTER) hidrata → "Gerar edital" sem
  *      proposta usa os PERSISTIDOS; proposta divergente sem troca explícita ⇒ CONFLICT; staleness contra os
  *      persistidos; sem parâmetros ⇒ PRECONDITION_FAILED (sem padrão silencioso).
+ *   6. R5.B — documento com versão OFICIAL emitida: regenerar (router real, mesmo com confirmReplace) ⇒
+ *      PRECONDITION_FAILED OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE, zero IA e zero writes; a UI recebe
+ *      `regenerationBlock`; versão oficial e rascunho intactos;
+ *   7. R5.C — critério de julgamento / regime de execução persistidos (0308): 1ª decisão grava as colunas,
+ *      recarga hidrata, regeneração SEM proposta usa os persistidos no prompt (sem [REVISAR]); linha antiga
+ *      (colunas NULL) segue NULL e o prompt mantém [REVISAR];
+ *   8. R5 — migração 0308: colunas nullable sem default; reaplicar os statements = no-op; ledger único.
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -32,6 +39,9 @@ import { buildMockProviderAuthoring } from "../../services/authoring/structuredA
 import { getGeneratedDocumentByKind, getLatestDraftEdit, insertProcess } from "../../db/procurement";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
+import { promoteOfficialDocument } from "../../services/documentPromotionService";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -44,7 +54,9 @@ let conn: mysql.Connection;
 let seq = 0;
 let routerUserId = 0;
 let invokeCalls = 0;
-const invokeFor = (kind: "etp" | "tr" | "edital") => async () => { invokeCalls++; return buildMockProviderAuthoring(kind); };
+let lastPrompt = "";
+const invokeFor = (kind: "etp" | "tr" | "edital") => async (prompt?: string) => { invokeCalls++; lastPrompt = prompt ?? ""; return buildMockProviderAuthoring(kind); };
+const EMITTER = 77; // terceiro revisor/emissor (≠ originador A, ≠ editor B) — SoD
 
 async function newProcess(org: number, object: string): Promise<string> {
   const p = createProcurementWorkspace({ organizationId: org, processNumber: `PR09-${Date.now()}-${++seq}`, object, startOption: "iniciar_tr", responsibleUser: A, correlationId: "pr09" });
@@ -221,13 +233,15 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
 
     // "Recarga": a leitura reload-safe devolve os parâmetros persistidos (hidratação do formulário).
     const read = await api.procurementProcess.reviewableDraft({ processId: pid, kind: "edital" });
-    expect(read.draft!.parameters).toEqual({ modality: "concorrencia", form: "presencial", platform: null });
+    // R5 (0308) — contrato aditivo: critério/regime presentes (null = requer revisão; nunca inventados).
+    expect(read.draft!.parameters).toEqual({ modality: "concorrencia", form: "presencial", platform: null, judgmentCriterion: null, executionRegime: null });
+    expect(read.draft!.regenerationBlock).toBeNull();
     expect(read.draft!.humanEdit).toBeNull();
 
     // Staleness calculada contra os PERSISTIDOS: a proposta (antigo padrão da UI) não acende o alerta.
     const st = await getEditalSourceState({ organizationId: ORG, processId: pid, object: "Obra de reforma", modality: "pregao", form: "eletronico", platform: "compras_gov" });
     expect(st.state).toBe("current");
-    expect(st.parameters).toEqual({ persisted: { modality: "concorrencia", form: "presencial", platform: null }, proposedDiffers: true });
+    expect(st.parameters).toEqual({ persisted: { modality: "concorrencia", form: "presencial", platform: null, judgmentCriterion: null, executionRegime: null }, proposedDiffers: true });
 
     // O antigo padrão pregão/eletrônico sem troca explícita ⇒ CONFLICT, zero efeitos.
     const before = await effects(ORG, pid);
@@ -261,8 +275,168 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
     // Edição humana do Edital preserva os parâmetros (content-only) e protege contra regeneração silenciosa.
     await humanEdit(ORG, pid, "edital", "# Edital revisado pela comissão", `ed-edit-${pid}`);
     const edited = await api.procurementProcess.reviewableDraft({ processId: pid, kind: "edital" });
-    expect(edited.draft!.parameters).toEqual({ modality: "pregao", form: "eletronico", platform: "bll" });
+    expect(edited.draft!.parameters).toEqual({ modality: "pregao", form: "eletronico", platform: "bll", judgmentCriterion: null, executionRegime: null });
     await expect(api.procurementProcess.generateNotice({ processId: pid, object: "Obra de reforma do prédio sede", idempotencyKey: `ed5-${pid}` }))
       .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^HUMAN_EDIT_WOULD_BE_OVERWRITTEN:/) });
+  }, 180_000);
+
+  // ─── R5 ─────────────────────────────────────────────────────────────────────────────────────
+
+  it("R5.B — versão OFICIAL emitida: regenerar (router real) ⇒ OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE, zero IA/writes", async () => {
+    const pid = await newProcess(ORG, "Serviço de vigilância");
+    await genTR(ORG, pid, `seed-${pid}`, A);
+    const tr = (await getGeneratedDocumentByKind(pid, ORG, "tr"))!;
+    const emission = await promoteOfficialDocument({
+      organizationId: ORG, processId: pid, kind: "tr", actorUserId: EMITTER, actorRole: "manager",
+      idempotencyKey: `emit-${pid}`, correlationId: "pr09-emit", expectedContentHash: draftContentHash(tr.content),
+    });
+    const v = emission.officialDocument.version; // versão na linhagem oficial (snapshots `gerado` também numeram)
+    const [off] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT id, CAST(content AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND origin = ? AND status = 'emitido'", [ORG, pid]);
+    expect(off).toHaveLength(1);
+
+    const snapshot = await effects(ORG, pid);
+    aiEngineCalls = 0; invokeCalls = 0;
+    const api = await caller();
+    for (const extra of [{}, { confirmReplace: true, expectedContentHash: draftContentHash(tr.content) }]) {
+      await expect(api.procurementProcess.generateTR({ processId: pid, object: "Serviço de vigilância armada", idempotencyKey: `regen-${pid}`, ...extra }))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining(`OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE: o TR já possui versão OFICIAL emitida (v${v})`) });
+    }
+    // Serviço direto (mesmo caminho do Edital/ETP) também recusa, antes de qualquer cognição.
+    await expect(genTR(ORG, pid, `regen-svc-${pid}`, A, { confirmReplace: true })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(aiEngineCalls).toBe(0);
+    expect(invokeCalls).toBe(0);
+    expect(await effects(ORG, pid)).toEqual(snapshot); // rascunho, ledger, idempotência, timeline e oficial intactos
+    const [off2] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT id, CAST(content AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND origin = ? AND status = 'emitido'", [ORG, pid]);
+    expect(off2).toEqual(off);
+
+    // A UI recebe o bloqueio (e explica o novo ciclo); outro tenant com o MESMO processId não é afetado.
+    const read = await api.procurementProcess.reviewableDraft({ processId: pid, kind: "tr" });
+    expect(read.draft!.regenerationBlock).toMatchObject({ reason: "official_emitted", officialVersion: v });
+    await genTR(ORG2, pid, `seed-b-${pid}`, A);
+    await expect(generateDocument({ organizationId: ORG2, processId: pid, kind: "tr", object: "Outro objeto B", correlationId: "pr09", idempotencyKey: `regen-b-${pid}`, actorUserId: A, invoke: invokeFor("tr") })).resolves.toBeTruthy();
+  }, 180_000);
+
+  it("R5.B — Edital oficial: nem troca de parâmetros confirmada nem confirmReplace regeneram (router real)", async () => {
+    const pid = await newProcess(ORG, "Aquisição de merenda");
+    await generateNotice({
+      organizationId: ORG, processId: pid, object: "Aquisição de merenda", modality: "pregao", form: "eletronico", platform: "bll",
+      correlationId: "pr09-ed", idempotencyKey: `ed1-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
+    });
+    const ed = (await getGeneratedDocumentByKind(pid, ORG, "edital"))!;
+    await promoteOfficialDocument({
+      organizationId: ORG, processId: pid, kind: "edital", actorUserId: EMITTER, actorRole: "manager",
+      idempotencyKey: `emit-ed-${pid}`, correlationId: "pr09-emit", expectedContentHash: draftContentHash(ed.content),
+    });
+    const snapshot = await effects(ORG, pid);
+    aiEngineCalls = 0;
+    const api = await caller();
+    await expect(api.procurementProcess.generateNotice({
+      processId: pid, object: "Aquisição de merenda", modality: "concorrencia", form: "presencial", confirmParameterChange: true,
+      judgmentCriterion: "Menor preço", confirmReplace: true, idempotencyKey: `ed2-${pid}`,
+    })).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE: o Edital/) });
+    expect(aiEngineCalls).toBe(0);
+    expect(await effects(ORG, pid)).toEqual(snapshot);
+    const row = (await getGeneratedDocumentByKind(pid, ORG, "edital"))!;
+    expect({ m: row.modality, f: row.form, jc: row.judgmentCriterion }).toEqual({ m: "pregao", f: "eletronico", jc: null });
+  }, 180_000);
+
+  it("R5.C — critério/regime: 1ª decisão persiste → recarga hidrata → regenerar SEM proposta usa os persistidos no prompt", async () => {
+    const pid = await newProcess(ORG, "Reforma da escola");
+    const api = await caller();
+    // Entrada do router: texto bounded (100) — acima disso é rejeitado pelo contrato (antes de qualquer efeito).
+    await expect(api.procurementProcess.generateNotice({
+      processId: pid, object: "Reforma da escola", modality: "concorrencia", form: "presencial",
+      judgmentCriterion: "x".repeat(101), idempotencyKey: `edx-${pid}`,
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    await generateNotice({
+      organizationId: ORG, processId: pid, object: "Reforma da escola", modality: "concorrencia", form: "presencial",
+      judgmentCriterion: "  Menor preço  ", executionRegime: "Empreitada por preço global",
+      correlationId: "pr09-ed", idempotencyKey: `ed1-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
+    });
+    const [cols] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT judgment_criterion AS jc, execution_regime AS er FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [ORG, pid]);
+    expect(cols[0]).toMatchObject({ jc: "Menor preço", er: "Empreitada por preço global" });
+    expect(lastPrompt).toContain("Critério de julgamento: Menor preço");
+
+    // Recarga (router) hidrata os fatos institucionais.
+    const read = await api.procurementProcess.reviewableDraft({ processId: pid, kind: "edital" });
+    expect(read.draft!.parameters).toEqual({
+      modality: "concorrencia", form: "presencial", platform: null, judgmentCriterion: "Menor preço", executionRegime: "Empreitada por preço global",
+    });
+    const st = await api.procurementProcess.editalSourceState({ processId: pid, object: "Reforma da escola" });
+    expect(st.state).toBe("current");
+    expect(st.missing).not.toContain("criterio_julgamento");
+
+    // Regenerar SEM proposta (objeto novo) ⇒ servidor lê os PERSISTIDOS: prompt sem [REVISAR] de critério/regime.
+    lastPrompt = "";
+    await generateNotice({
+      organizationId: ORG, processId: pid, object: "Reforma da escola municipal",
+      correlationId: "pr09-ed", idempotencyKey: `ed2-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
+    });
+    expect(lastPrompt).toContain("Critério de julgamento: Menor preço");
+    expect(lastPrompt).toContain("Regime de contratação/execução: Empreitada por preço global");
+    expect(lastPrompt).not.toContain("[REVISAR: definir critério de julgamento");
+    expect(lastPrompt).not.toContain("[REVISAR: definir regime de execução");
+    const [off] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT metadata FROM official_documents WHERE tenant_id = ? AND origin = ? ORDER BY created_at DESC LIMIT 1", [ORG, pid]);
+    const meta = typeof (off[0] as any).metadata === "string" ? JSON.parse((off[0] as any).metadata) : (off[0] as any).metadata;
+    expect(meta).toMatchObject({ judgmentCriterion: "Menor preço", executionRegime: "Empreitada por preço global", parametersSource: "persisted" });
+
+    // Sobrescrever o critério decidido sem troca explícita ⇒ CONFLICT (zero efeitos); edição humana preserva.
+    const before = await effects(ORG, pid);
+    await expect(generateNotice({
+      organizationId: ORG, processId: pid, object: "Reforma da escola municipal", judgmentCriterion: "Técnica e preço",
+      correlationId: "pr09-ed", idempotencyKey: `ed3-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
+    })).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^EDITAL_PARAMETERS_CHANGED:/) });
+    expect(await effects(ORG, pid)).toEqual(before);
+    await humanEdit(ORG, pid, "edital", "# Edital revisado — critério mantido", `ed-edit-${pid}`);
+    const edited = (await getGeneratedDocumentByKind(pid, ORG, "edital"))!;
+    expect({ jc: edited.judgmentCriterion, er: edited.executionRegime }).toEqual({ jc: "Menor preço", er: "Empreitada por preço global" });
+  }, 180_000);
+
+  it("R5.C — linha ANTIGA (colunas NULL): segue NULL (sem valor inventado) e o prompt mantém [REVISAR]", async () => {
+    const pid = await newProcess(ORG, "Compra de uniformes");
+    // Simula um Edital gravado antes da 0308 (INSERT sem as colunas novas).
+    await conn.execute(
+      "INSERT INTO generated_documents (id, organization_id, process_id, kind, title, content, status, sources, modality, form, platform, legal_justification, author_user_id, correlation_id) VALUES (?, ?, ?, 'edital', 'Edital — antigo', '', 'rascunho', '[]', 'pregao', 'eletronico', 'compras_gov', '', ?, 'legacy')",
+      [`old${pid}`.slice(0, 20), ORG, pid, A]);
+    const [cols] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT judgment_criterion AS jc, execution_regime AS er FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [ORG, pid]);
+    expect(cols[0]).toMatchObject({ jc: null, er: null });
+    lastPrompt = "";
+    await generateNotice({
+      organizationId: ORG, processId: pid, object: "Compra de uniformes",
+      correlationId: "pr09-ed", idempotencyKey: `ed1-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
+    });
+    expect(lastPrompt).toContain("[REVISAR: definir critério de julgamento");
+    expect(lastPrompt).toContain("[REVISAR: definir regime de execução");
+    const row = (await getGeneratedDocumentByKind(pid, ORG, "edital"))!;
+    expect({ m: row.modality, jc: row.judgmentCriterion, er: row.executionRegime }).toEqual({ m: "pregao", jc: null, er: null });
+  }, 180_000);
+
+  it("R5 — migração 0308: colunas nullable sem default; reaplicar os statements = no-op; registrada uma vez", async () => {
+    const [c] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT COLUMN_NAME AS n, IS_NULLABLE AS nul, COLUMN_DEFAULT AS d, CHARACTER_MAXIMUM_LENGTH AS len FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'generated_documents' AND COLUMN_NAME IN ('judgment_criterion','execution_regime') ORDER BY COLUMN_NAME", []);
+    expect((c as any[]).map((r) => ({ n: r.n, nul: r.nul, len: Number(r.len), d: r.d === "NULL" ? null : r.d }))).toEqual([
+      { n: "execution_regime", nul: "YES", len: 100, d: null },
+      { n: "judgment_criterion", nul: "YES", len: 100, d: null },
+    ]);
+    const sql = readFileSync(path.join(process.cwd(), "drizzle/0308_edital_institutional_parameters.sql"), "utf8");
+    const statements = sql.split("--> statement-breakpoint").map((x) => x.trim()).filter((x) => x && !/^(--[^\n]*\n?)+$/.test(x));
+    for (let i = 0; i < 2; i++) for (const st of statements) await conn.query(st); // replay manual (sem ledger) ⇒ no-op
+    const [c2] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'generated_documents' AND COLUMN_NAME IN ('judgment_criterion','execution_regime')", []);
+    expect(Number((c2[0] as any).n)).toBe(2);
+    const [procs] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) n FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME LIKE 'licigov_0308%'", []);
+    expect(Number((procs[0] as any).n)).toBe(0); // procedure auxiliar removida
+    await runMigrations(conn); // 2ª migração pelo ledger ⇒ no-op
+    const [led] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM __drizzle_migrations", []);
+    const journal = JSON.parse(readFileSync(path.join(process.cwd(), "drizzle/meta/_journal.json"), "utf8"));
+    expect(Number((led[0] as any).n)).toBe(journal.entries.length);
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 308, tag: "0308_edital_institutional_parameters" });
   }, 180_000);
 });

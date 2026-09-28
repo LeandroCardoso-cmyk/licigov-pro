@@ -2068,6 +2068,13 @@
       "when": 1790466007593,
       "tag": "0307_notifications_stage_assigned",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "5",
+      "when": 1790637161152,
+      "tag": "0308_edital_institutional_parameters",
+      "breakpoints": true
     }
   ]
 }

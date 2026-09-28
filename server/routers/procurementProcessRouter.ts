@@ -36,7 +36,9 @@ import {
   recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
   getGeneratedDocumentByKind, getLatestDraftEdit,
 } from "../db/procurement";
-import { classifyDraftHumanState, persistedEditalParameters } from "../domain/draftRegeneration";
+import {
+  classifyDraftHumanState, persistedEditalParameters, officialRegenerationBlock, EDITAL_TEXT_PARAMETER_MAX,
+} from "../domain/draftRegeneration";
 
 const log = serviceLogger("procurementProcessRouter");
 
@@ -56,6 +58,12 @@ const PLATFORMS = ["compras_gov", "bll", "licitanet", "portal_proprio", "outra"]
  *     HUMAN_EDIT_WOULD_BE_OVERWRITTEN antes de qualquer IA/write);
  *   - expectedContentHash: hash do rascunho que o humano viu (divergente ⇒ CONFLICT).
  */
+/**
+ * PR-09 / R5 (0308) — critério de julgamento / regime de execução: PROPOSTA textual opcional (bounded). O
+ * repositório não define lista fechada para eles; vazio ⇒ ausência (mantém o persistido / NULL = [REVISAR]).
+ */
+const EDITAL_TEXT_PARAMETER = z.string().trim().max(EDITAL_TEXT_PARAMETER_MAX).optional();
+
 const REGENERATION_GUARD_FIELDS = {
   confirmReplace: z.boolean().optional(),
   expectedContentHash: z.string().trim().min(1).optional(),
@@ -503,6 +511,7 @@ export const procurementProcessRouter = router({
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
       modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      judgmentCriterion: EDITAL_TEXT_PARAMETER, executionRegime: EDITAL_TEXT_PARAMETER,
       confirmParameterChange: z.boolean().optional(),
       idempotencyKey: z.string().trim().min(1),
       ...REGENERATION_GUARD_FIELDS,
@@ -513,6 +522,7 @@ export const procurementProcessRouter = router({
       const result = await generateNotice({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform,
+        judgmentCriterion: input.judgmentCriterion, executionRegime: input.executionRegime,
         confirmParameterChange: input.confirmParameterChange, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
         confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
@@ -532,6 +542,7 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1), object: z.string().min(1),
       // PR-09 — proposta opcional; havendo parâmetros persistidos, a staleness é calculada contra eles.
       modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      judgmentCriterion: EDITAL_TEXT_PARAMETER, executionRegime: EDITAL_TEXT_PARAMETER,
     }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -539,6 +550,7 @@ export const procurementProcessRouter = router({
       return getEditalSourceState({
         organizationId: orgId, processId: input.processId, object: input.object,
         modality: input.modality, form: input.form, platform: input.platform,
+        judgmentCriterion: input.judgmentCriterion, executionRegime: input.executionRegime,
       });
     }),
 
@@ -583,6 +595,9 @@ export const procurementProcessRouter = router({
       const humanEdit = humanState.human
         ? { reason: humanState.reason, operation: humanState.operation, actorUserId: humanState.actorUserId, at: humanState.at }
         : null;
+      // R5 — documento APROVADO / com versão OFICIAL emitida: a UI desabilita "Gerar novamente" e explica que
+      // é preciso um novo ciclo de versão governado (o servidor recusa de todo modo). Read-only, tenant-scoped.
+      const regenerationBlock = officialRegenerationBlock(doc, await getLatestOfficialPromotion(orgId, input.processId, input.kind));
       return {
         draft: {
           id: doc.id, kind: doc.kind, title: doc.title, content: doc.content,
@@ -594,6 +609,8 @@ export const procurementProcessRouter = router({
           // PR-09 — aditivo: proveniência humana do conteúdo vigente + parâmetros persistidos do Edital.
           humanEdit,
           parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
+          // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
+          regenerationBlock,
         },
       };
     }),

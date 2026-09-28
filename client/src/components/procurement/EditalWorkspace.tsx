@@ -6,9 +6,11 @@ import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
+import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
 import {
   editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
-  needsReplaceConfirmation, resolveEditalFormValues,
+  needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
+  resolveEditalTextValues, editalTextProposal, editalTextOverwrites, editalTextPendingReview, type EditalTextParams,
 } from "./regenerationGuard";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -33,6 +35,10 @@ const labelSource = (k: string) => SOURCE_LABELS[k] ?? k;
  * vazios até a escolha explícita). "Gerar edital" usa os parâmetros persistidos (o servidor os lê); trocar
  * um parâmetro é ação explícita confirmada (atual × proposto). PR-09 (SEM-014) — regenerar sobre conteúdo
  * humano exige confirmação explícita (diálogo), e a versão atual fica preservada no histórico.
+ *
+ * R5 (0308) — critério de julgamento e regime de execução são FATOS institucionais persistidos no rascunho
+ * canônico (como modalidade/forma/plataforma): hidratados do persistido, nunca pré-preenchidos com padrão;
+ * não definidos ⇒ "requer revisão" ([REVISAR] na minuta). Edital aprovado/oficial ⇒ sem regeneração direta.
  */
 
 type Modality =
@@ -87,6 +93,8 @@ export default function EditalWorkspace({
   const [proposed, setProposed] = useState<{ modality: Modality | null; form: Form | null; platform: Platform | null }>({
     modality: null, form: null, platform: null,
   });
+  // R5 (0308) — critério/regime digitados (null = não tocou ⇒ exibe o persistido). Sem padrão.
+  const [proposedText, setProposedText] = useState<EditalTextParams>({ judgmentCriterion: null, executionRegime: null });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const utils = trpc.useUtils();
   // Objeto pré-preenchido com o do processo (mesmo padrão do ETP/TR; sem reentrada de dado existente).
@@ -103,11 +111,26 @@ export default function EditalWorkspace({
   const persisted = draft?.parameters ?? null;
   const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted);
   const { modality, form, platform } = effective;
-  const paramsChanged = editalParamsDiffer(effective, persisted);
+  const textValues = resolveEditalTextValues(proposedText, persisted);
+  const textProposal = editalTextProposal(proposedText, persisted);
+  const textPending = editalTextPendingReview(persisted);
+  // Troca = sobrescrever fato decidido (núcleo diferente OU critério/regime definido trocado). Definir pela 1ª
+  // vez um critério/regime ainda não definido NÃO é troca (sem confirmação de parâmetros).
+  const paramsChanged = editalParamsDiffer(effective, persisted) || editalTextOverwrites(proposedText, persisted);
   const paramsComplete = editalParamsComplete(effective);
-  const describeParams = (v: { modality: Modality | null; form: Form | null; platform: Platform | null }) =>
+  const regenerationBlock = draft?.regenerationBlock ?? null;
+  const describeParams = (
+    v: { modality: Modality | null; form: Form | null; platform: Platform | null },
+    t?: { judgmentCriterion?: string | null; executionRegime?: string | null } | null,
+  ) =>
     [v.modality ? MODALITY_LABELS[v.modality] : "—", v.form ? FORM_LABELS[v.form] : "—",
-      v.form === "eletronico" && v.platform ? PLATFORM_LABELS[v.platform] : null].filter(Boolean).join(" / ");
+      v.form === "eletronico" && v.platform ? PLATFORM_LABELS[v.platform] : null,
+      t?.judgmentCriterion ? `critério: ${t.judgmentCriterion}` : null,
+      t?.executionRegime ? `regime: ${t.executionRegime}` : null].filter(Boolean).join(" / ");
+  const effectiveText = {
+    judgmentCriterion: textProposal.judgmentCriterion ?? persisted?.judgmentCriterion ?? null,
+    executionRegime: textProposal.executionRegime ?? persisted?.executionRegime ?? null,
+  };
 
   // P0 — estado de desatualização das fontes (SOURCE_CHANGED): read-only. Com parâmetros persistidos o
   // servidor calcula a staleness contra ELES (a proposta da UI não acende/apaga o alerta).
@@ -127,6 +150,7 @@ export default function EditalWorkspace({
     onSuccess: () => {
       setConfirmOpen(false);
       setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
+      setProposedText({ judgmentCriterion: null, executionRegime: null });
       rotateEditalKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
@@ -137,7 +161,12 @@ export default function EditalWorkspace({
 
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
-    if (!confirmed && (needsReplaceConfirmation(draft) || paramsChanged)) { setConfirmOpen(true); return; }
+    // Decisão PURA antes de qualquer chamada (bloqueado ⇒ nada; confirmação ⇒ diálogo; cancelar = zero efeito).
+    const plan = planRegeneration({
+      confirmed, needsReplace: needsReplaceConfirmation(draft), parameterChange: paramsChanged, block: regenerationBlock,
+    });
+    if (plan === "blocked") return;
+    if (plan === "confirm") { setConfirmOpen(true); return; }
     generateNotice.mutate({
       processId,
       object: object.trim(),
@@ -147,6 +176,8 @@ export default function EditalWorkspace({
         form: form ?? undefined,
         platform: form === "eletronico" ? platform ?? undefined : undefined,
       }),
+      // R5 — critério/regime: só os digitados e diferentes do persistido (vazio nunca apaga o definido).
+      ...textProposal,
       confirmParameterChange: paramsChanged && confirmed ? true : undefined,
       confirmReplace: confirmed && needsReplaceConfirmation(draft) ? true : undefined,
       expectedContentHash: draft?.contentHash,
@@ -231,17 +262,60 @@ export default function EditalWorkspace({
           </label>
         ) : null}
 
+        {/* R5 (0308) — critério de julgamento / regime de execução: fatos institucionais persistidos (sem padrão). */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium text-foreground">Critério de julgamento</span>
+            <input
+              type="text"
+              maxLength={100}
+              value={textValues.judgmentCriterion}
+              onChange={(e) => setProposedText((t) => ({ ...t, judgmentCriterion: e.target.value }))}
+              placeholder="Definido pela Administração (art. 33)"
+              className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
+            />
+            {!textValues.judgmentCriterion.trim() && (
+              <span className="mt-1 text-xs text-amber-600 dark:text-amber-400">Não definido — requer revisão ([REVISAR] na minuta).</span>
+            )}
+          </label>
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium text-foreground">Regime de execução</span>
+            <input
+              type="text"
+              maxLength={100}
+              value={textValues.executionRegime}
+              onChange={(e) => setProposedText((t) => ({ ...t, executionRegime: e.target.value }))}
+              placeholder="Definido pela Administração, quando aplicável"
+              className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
+            />
+            {!textValues.executionRegime.trim() && (
+              <span className="mt-1 text-xs text-amber-600 dark:text-amber-400">Não definido — requer revisão ([REVISAR] na minuta).</span>
+            )}
+          </label>
+        </div>
+        {(["judgmentCriterion", "executionRegime"] as const).some((k) => proposedText[k]?.trim() === "" && !!persisted?.[k]) && (
+          <p className="text-xs text-muted-foreground">
+            Um parâmetro já definido não é apagado ao deixar o campo vazio — o valor definido é mantido.
+          </p>
+        )}
+
         {/* PR-09 (SEM-009) — origem dos parâmetros: persistidos × proposta (troca = ação explícita). */}
         {persisted && !paramsChanged && (
           <p className="text-xs text-muted-foreground">
-            Parâmetros definidos para este Edital: {describeParams(persisted)}.
+            Parâmetros definidos para este Edital: {describeParams(persisted, persisted)}.
+            {textPending.length > 0 && (
+              <> Requer revisão (não definido): {textPending.map((k) => (k === "judgmentCriterion" ? "critério de julgamento" : "regime de execução")).join(", ")}.</>
+            )}
           </p>
         )}
         {persisted && paramsChanged && (
           <div className="rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-800 dark:text-orange-300" role="status">
-            <strong>Troca de parâmetros.</strong> Atual: {describeParams(persisted)} → proposto: {describeParams(effective)}.
+            <strong>Troca de parâmetros.</strong> Atual: {describeParams(persisted, persisted)} → proposto: {describeParams(effective, effectiveText)}.
             A troca só é aplicada ao gerar, com confirmação.{" "}
-            <button type="button" className="underline" onClick={() => setProposed({ modality: null, form: null, platform: null })}>
+            <button
+              type="button" className="underline"
+              onClick={() => { setProposed({ modality: null, form: null, platform: null }); setProposedText({ judgmentCriterion: null, executionRegime: null }); }}
+            >
               Manter os parâmetros atuais
             </button>
           </div>
@@ -255,7 +329,7 @@ export default function EditalWorkspace({
         <button
           type="button"
           onClick={() => handleGenerate()}
-          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending}
+          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !!regenerationBlock}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {generateNotice.isPending ? "Gerando..." : "Gerar edital"}
@@ -265,6 +339,7 @@ export default function EditalWorkspace({
             Selecione um processo para gerar o edital.
           </p>
         )}
+        <RegenerationBlockedNotice documentLabel="Edital" block={regenerationBlock} />
         {generateNotice.isError && !isHumanEditRefusal(generateNotice.error.message) && !isEditalParametersChangedRefusal(generateNotice.error.message) && (
           <p className="text-sm text-destructive">
             {domainErrorMessage(generateNotice.error.message, "Falha ao gerar o edital.")}
@@ -316,7 +391,7 @@ export default function EditalWorkspace({
       <RegenerationConfirmDialog
         open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="Edital"
         humanEdit={draft?.humanEdit ?? null} currentLength={draft?.content.length}
-        parameterChange={persisted && paramsChanged ? { current: describeParams(persisted), proposed: describeParams(effective) } : null}
+        parameterChange={persisted && paramsChanged ? { current: describeParams(persisted, persisted), proposed: describeParams(effective, effectiveText) } : null}
         pending={generateNotice.isPending} onConfirm={() => handleGenerate(true)}
       />
 

@@ -9,7 +9,8 @@
  *
  * Matriz:
  *  T1  migration em banco LIMPO (cadeia completa pelo runner de release) → ENUM físico com `stage_assigned`;
- *  T2  UPGRADE a partir do estado imediatamente anterior à 0307 → só a 0307 é aplicada;
+ *  T2  UPGRADE a partir do estado imediatamente anterior à 0307 → a 0307 (e só as migrations POSTERIORES a ela,
+ *      p.ex. 0308 do PR-09) é aplicada; nenhuma anterior é reaplicada;
  *  T3  rerun do runner → no-op (ledger não cresce, tipo inalterado);
  *  T4  dados preexistentes preservados (todos os valores antigos, NOT NULL, default, PK);
  *  T5/T6/T13  sucesso completo e atômico: 1 atribuição + 1 notificação `stage_assigned` + 1 activity log;
@@ -69,14 +70,18 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     admin = await mysql.createConnection(DB!);
     await admin.query(`CREATE DATABASE \`${cleanDb}\``);
     await admin.query(`CREATE DATABASE \`${upgradeDb}\``);
-    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0307 (mesmos arquivos; journal sem a entry 0307).
+    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0307: journal SÓ com as entries anteriores à 0307
+    // (e só os arquivos delas). PR-09 (R5): com migrations POSTERIORES (0308+), excluir apenas a 0307 aplicaria a
+    // 0308 no "pré-0307" e o migrator (por timestamp) pularia a 0307 — o estado pré-0307 é o prefixo do journal.
     tmpFolder = mkdtempSync(path.join(os.tmpdir(), "pr01a-pre0307-"));
     mkdirSync(path.join(tmpFolder, "meta"));
-    for (const f of readdirSync(DRZ).filter((x) => /^\d{4}_.+\.sql$/.test(x) && !x.startsWith(TAG_0307))) {
+    const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
+    const idx0307 = journal.entries.findIndex((e: { tag: string }) => e.tag === TAG_0307);
+    journal.entries = journal.entries.slice(0, idx0307);
+    const preTags = new Set(journal.entries.map((e: { tag: string }) => `${e.tag}.sql`));
+    for (const f of readdirSync(DRZ).filter((x) => preTags.has(x))) {
       cpSync(path.join(DRZ, f), path.join(tmpFolder, f));
     }
-    const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
-    journal.entries = journal.entries.filter((e: { tag: string }) => e.tag !== TAG_0307);
     writeFileSync(path.join(tmpFolder, "meta", "_journal.json"), JSON.stringify(journal));
   }, 60000);
 
@@ -89,11 +94,14 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     if (tmpFolder) rmSync(tmpFolder, { recursive: true, force: true });
   });
 
-  it("a 0307 está registrada no journal (o runner de release a executa) e é a última migration", () => {
+  // PR-09 (R5) — reescrito: a 0307 deixou de ser a ÚLTIMA (a 0308 do PR-09 vem depois). O contrato que importa
+  // continua provado: a 0307 está no journal (o runner a executa) e sua ordem por timestamp é consistente.
+  it("a 0307 está registrada no journal (o runner de release a executa) e está ordenada por timestamp", () => {
     const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
-    const last = journal.entries[journal.entries.length - 1];
-    expect(last.tag).toBe(TAG_0307);
-    expect(last.when).toBeGreaterThan(journal.entries[journal.entries.length - 2].when);
+    const i = journal.entries.findIndex((e: { tag: string }) => e.tag === TAG_0307);
+    expect(i).toBeGreaterThan(0);
+    expect(journal.entries[i].when).toBeGreaterThan(journal.entries[i - 1].when);
+    for (const later of journal.entries.slice(i + 1)) expect(later.when).toBeGreaterThan(journal.entries[i].when);
   });
 
   it("T1 — banco LIMPO: cadeia completa pelo runner de release ⇒ ENUM físico com stage_assigned e schema válido", async () => {
@@ -107,7 +115,7 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     }
   }, 240000);
 
-  it("T2/T3/T4 — UPGRADE do estado pré-0307 com dados ⇒ só a 0307 aplica, dados preservados; rerun = no-op", async () => {
+  it("T2/T3/T4 — UPGRADE do estado pré-0307 com dados ⇒ a 0307 (e as posteriores) aplica, dados preservados; rerun = no-op", async () => {
     const conn = await mysql.createConnection(urlFor(upgradeDb));
     try {
       await migrate(drizzle(conn), { migrationsFolder: tmpFolder });
@@ -123,9 +131,11 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
       await conn.query(`INSERT INTO notifications (userId, title, message) VALUES (42, 'pre-default', 'm')`);
       const [pre] = await conn.query<mysql.RowDataPacket[]>(`SELECT id, title, type, isRead FROM notifications ORDER BY id`);
 
-      // T2 — runner real: aplica SOMENTE a 0307
+      // T2 — runner real: aplica a 0307 e SOMENTE as migrations posteriores a ela (nenhuma anterior reaplicada)
       await migrateWithAdvisoryLock(conn);
-      expect(await ledgerCount(conn)).toBe(before + 1);
+      const fullJournal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
+      const fromIdx = fullJournal.entries.findIndex((e: { tag: string }) => e.tag === TAG_0307);
+      expect(await ledgerCount(conn)).toBe(before + (fullJournal.entries.length - fromIdx));
       expect(await columnInfo(conn)).toEqual({ type: FINAL_TYPE, nullable: "NO", def: "general" });
       const [post] = await conn.query<mysql.RowDataPacket[]>(`SELECT id, title, type, isRead FROM notifications ORDER BY id`);
       expect(post).toEqual(pre);                                                  // T4 — mesmas linhas, mesmos valores

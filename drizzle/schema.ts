@@ -5446,6 +5446,12 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   form:              varchar("form", { length: 20 }),
   platform:          varchar("platform", { length: 40 }),
   legalJustification: text("legal_justification"),
+  // PR-09 / R5 (0308) — parâmetros INSTITUCIONAIS complementares do Edital (critério de julgamento e regime
+  // de execução), persistidos junto de modality/form/platform no rascunho canônico (tenant-scoped pela linha).
+  // Texto livre bounded (o repositório não define lista fechada; espelha o legado edital_parameters
+  // varchar(100)). Nullable SEM default: NULL = "requer revisão" (nunca um valor inferido/backfill).
+  judgmentCriterion: varchar("judgment_criterion", { length: 100 }),
+  executionRegime:   varchar("execution_regime", { length: 100 }),
   // C.4B.1 — autor do rascunho (quem gerou/originou o conteúdo). Aditivo/nullable: rascunhos
   // anteriores à migração ficam sem autor conhecido. Base para a segregação de deveres na
   // promoção (revisor/emissor ≠ autor) e para a auditoria da emissão oficial.

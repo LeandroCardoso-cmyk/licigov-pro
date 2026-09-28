@@ -15,6 +15,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const fakeTx = { __tx: true };
 vi.mock("../../db/procurement");
+// R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
+vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));
@@ -41,6 +43,8 @@ vi.mock("../../services/authoring/editalContext", async (orig) => ({
 }));
 
 import * as procDb from "../../db/procurement";
+import * as promotions from "../../db/officialDocumentPromotions";
+import * as docEngine from "../../services/documentEngineService";
 import * as idem from "../../services/idempotencyService";
 import * as authoring from "../../services/authoring/authoringContext";
 import * as structured from "../../services/authoring/structuredAuthoringService";
@@ -180,5 +184,120 @@ describe("SEM-014 + SEM-009 — Edital", () => {
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null);
     await expect(genEdital()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^EDITAL_PARAMETERS_REQUIRED:/) });
     expectZeroEffects();
+  });
+});
+
+// ─── R5 (decisões do owner) ──────────────────────────────────────────────────────────────────────
+
+describe("R5.B — documento APROVADO/OFICIAL não é regenerado diretamente", () => {
+  const emitted = { officialDocumentId: "off-9", lineageId: "lin-9", version: 2, contentHash: "h", actorUserId: 3, createdAt: "2026-09-10T00:00:00.000Z" };
+  const edRow = (extra: Record<string, unknown> = {}) => draftRow("# Edital IA", { kind: "edital", modality: "pregao", form: "eletronico", platform: "bll", ...extra });
+
+  it.each(["etp", "tr"] as const)("%s com versão oficial emitida ⇒ PRECONDITION_FAILED OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE mesmo com confirmReplace (zero efeitos)", async (kind) => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow(HUMAN, { kind }));
+    vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue(ledger("human_edit", HUMAN));
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(emitted);
+    for (const extra of [{}, { confirmReplace: true, expectedContentHash: draftContentHash(HUMAN) }]) {
+      await expect(generateDocument({ organizationId: 7, processId: "p1", kind, object: "X", correlationId: "c", idempotencyKey: "k", actorUserId: 11, invoke: async () => "{}", ...extra } as any))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE: o (ETP|TR) já possui versão OFICIAL emitida \(v2\)/) });
+    }
+    expectZeroEffects();
+    // Recusa ANTES de montar contexto/classificar (nenhuma leitura de ledger de edição, nenhum contexto).
+    expect(authoring.resolveDocumentAuthoringContext).not.toHaveBeenCalled();
+    expect(procDb.getLatestDraftEdit).not.toHaveBeenCalled();
+    expect(vi.mocked(promotions.getLatestOfficialPromotion).mock.calls[0]).toEqual([7, "p1", kind, undefined]); // tenant-scoped
+  });
+
+  it("Edital oficial ⇒ recusa ANTES da resolução de parâmetros (nem troca confirmada, nem confirmReplace)", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(edRow());
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(emitted);
+    await expect(generateNotice({
+      organizationId: 7, processId: "p1", object: "Obra", modality: "concorrencia", form: "presencial", confirmParameterChange: true,
+      confirmReplace: true, judgmentCriterion: "Menor preço", correlationId: "c", idempotencyKey: "ke", actorUserId: 11, invoke: async () => "{}",
+    } as any)).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE: o Edital/) });
+    expectZeroEffects();
+    expect(edital.resolveEditalSources).not.toHaveBeenCalled();
+  });
+
+  it("status aprovado (sem emissão) também bloqueia", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow("# TR IA", { status: "aprovado" }));
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(null);
+    await expect(genTR({ confirmReplace: true })).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("está APROVADO") });
+    expectZeroEffects();
+  });
+
+  it("emissão concluída DURANTE a cognição ⇒ revalidação na transação recusa; nada persistido, chave marcada failed", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow("# TR IA"));
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValueOnce(null).mockResolvedValueOnce(emitted);
+    await expect(genTR()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE:/) });
+    expect(vi.mocked(promotions.getLatestOfficialPromotion).mock.calls[1][3]).toBe(fakeTx); // revalidado na MESMA transação
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+    expect(procDb.recordProcessEvent).not.toHaveBeenCalled();
+    expect(idem.saveIdempotencyResult).not.toHaveBeenCalled();
+    expect(idem.failIdempotencyKey).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("R5.A — regenerar rascunho: confirmação explícita basta (sem justificativa textual)", () => {
+  it("confirmReplace: true SEM qualquer justificativa ⇒ regenera; o conteúdo humano segue para o ledger (previous_content)", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow(HUMAN));
+    vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue(ledger("human_edit", HUMAN));
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(null);
+    await expect(genTR({ confirmReplace: true })).resolves.toBeTruthy();
+    const call = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1];
+    expect(call.operation).toBe("ai_regenerate"); // applyDraftContentMutationTx grava previous_content = conteúdo vigente
+    expect(call.expectedState).toEqual({ type: "present", contentHash: draftContentHash(HUMAN) });
+  });
+
+  it("recusa NÃO reserva idempotência: a MESMA chave segue utilizável após confirmar", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow(HUMAN));
+    vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue(ledger("human_edit", HUMAN));
+    vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(null);
+    await expect(genTR({ idempotencyKey: "same" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(idem.checkIdempotency).not.toHaveBeenCalled();
+    await genTR({ idempotencyKey: "same", confirmReplace: true });
+    expect(idem.checkIdempotency).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(idem.checkIdempotency).mock.calls[0][0]).toBe("same");
+  });
+});
+
+describe("R5.C — Edital lê critério de julgamento / regime de execução PERSISTIDOS", () => {
+  const row = (extra: Record<string, unknown>) => draftRow("# Edital IA", { kind: "edital", modality: "pregao", form: "eletronico", platform: "bll", ...extra });
+  const genEdital = (over: Record<string, unknown> = {}) => generateNotice({
+    organizationId: 7, processId: "p1", object: "Obra", correlationId: "c", idempotencyKey: "ke", actorUserId: 11,
+    invoke: async () => "{}", ...over,
+  } as any);
+  beforeEach(() => { vi.mocked(promotions.getLatestOfficialPromotion).mockResolvedValue(null); });
+
+  it("persistidos ⇒ contexto recebe critério/regime (sem [REVISAR]) e o rascunho os mantém; metadata carrega o lineage", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row({ judgmentCriterion: "Menor preço", executionRegime: "Empreitada por preço global" }));
+    await genEdital();
+    expect(vi.mocked(edital.resolveEditalSources).mock.calls[0][0]).toMatchObject({ criterioJulgamento: "Menor preço", regimeContratacao: "Empreitada por preço global" });
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc).toMatchObject({ judgmentCriterion: "Menor preço", executionRegime: "Empreitada por preço global" });
+    expect((vi.mocked(docEngine.generateOfficialDocument).mock.calls[0][0] as any).metadata)
+      .toMatchObject({ judgmentCriterion: "Menor preço", executionRegime: "Empreitada por preço global", parametersSource: "persisted" });
+  });
+
+  it("NULL (linha antiga) ⇒ contexto recebe null (vira [REVISAR]); nenhum valor inventado é gravado", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row({ judgmentCriterion: null, executionRegime: null }));
+    await genEdital();
+    expect(vi.mocked(edital.resolveEditalSources).mock.calls[0][0]).toMatchObject({ criterioJulgamento: null, regimeContratacao: null });
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc).toMatchObject({ judgmentCriterion: null, executionRegime: null });
+  });
+
+  it("1ª definição de critério ainda NULL ⇒ sem confirmação; timeline registra o complemento", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row({}));
+    await genEdital({ judgmentCriterion: "Maior desconto" });
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc).toMatchObject({ modality: "pregao", judgmentCriterion: "Maior desconto", executionRegime: null });
+    expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][0].summary).toContain("Parâmetros complementados: pregao/eletronico/bll → pregao/eletronico/bll · critério de julgamento: Maior desconto");
+  });
+
+  it("sobrescrever critério decidido sem confirmParameterChange ⇒ CONFLICT (zero efeitos); com confirmação ⇒ aplicado", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row({ judgmentCriterion: "Menor preço" }));
+    await expect(genEdital({ judgmentCriterion: "Técnica e preço" })).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^EDITAL_PARAMETERS_CHANGED:/) });
+    expectZeroEffects();
+    await genEdital({ judgmentCriterion: "Técnica e preço", confirmParameterChange: true });
+    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls[0][1].doc).toMatchObject({ judgmentCriterion: "Técnica e preço" });
+    expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][0].summary).toContain("Parâmetros trocados explicitamente");
   });
 });

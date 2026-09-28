@@ -37,8 +37,12 @@ import {
 // PR-09 (SEM-014/SEM-009) — preservação do estado humano na regeneração + parâmetros do Edital persistidos.
 import {
   classifyDraftHumanState, humanEditRefusalMessage, persistedEditalParameters, resolveEditalParameters,
-  describeEditalParameters, sameEditalParameters, type DraftHumanState, type EditalParameters,
+  describeEditalParameters, sameEditalParameters, overlayEditalProposal, normalizeEditalText,
+  officialRegenerationBlock, officialRegenerationRefusalMessage,
+  type DraftHumanState, type EditalParameters,
 } from "../domain/draftRegeneration";
+// R5 (decisão do owner) — autoridade oficial EXISTENTE (ledger imutável da emissão governada C.4B.1).
+import { getLatestOfficialPromotion, type PromotionExecutor } from "../db/officialDocumentPromotions";
 // V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
 import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
 // Contexto Canônico da Contratação — DFD como 1º consumidor (prefill, estado por campo, reconciliação, IA).
@@ -744,6 +748,27 @@ export async function saveReviewableDraft(params: {
  */
 type CanonicalDraftRow = Awaited<ReturnType<typeof getGeneratedDocumentByKind>>;
 
+/**
+ * R5 (decisão do owner) — documento APROVADO (status do rascunho) ou com versão OFICIAL emitida (ledger
+ * `official_document_promotions`) NÃO é regenerado diretamente, nem com `confirmReplace`: recusa governada
+ * PRECONDITION_FAILED `OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE`. Chamado ANTES de qualquer reserva de
+ * idempotência, cognição ou write (recusa ⇒ zero efeitos) e revalidado DENTRO da transação de persistência
+ * (fecha a janela em que uma emissão concorrente conclua durante a cognição — rollback total).
+ */
+async function assertRegenerationNotOfficial(p: {
+  organizationId: number; processId: string; kind: "etp" | "tr" | "edital"; correlationId: string; actorUserId: number;
+  draft: { status?: string | null } | null; executor?: PromotionExecutor;
+}): Promise<void> {
+  const latest = await getLatestOfficialPromotion(p.organizationId, p.processId, p.kind, p.executor);
+  const block = officialRegenerationBlock(p.draft, latest);
+  if (!block) return;
+  log.warn("draft_regeneration_refused_official", {
+    organizationId: p.organizationId, processId: p.processId, correlationId: p.correlationId,
+    actorUserId: p.actorUserId, documentKind: p.kind, reason: block.reason, officialVersion: block.officialVersion,
+  });
+  throw new TRPCError({ code: "PRECONDITION_FAILED", message: officialRegenerationRefusalMessage(p.kind, block) });
+}
+
 async function resolveRegenerationBaseline(p: {
   organizationId: number; processId: string; kind: "etp" | "tr" | "edital"; correlationId: string;
   actorUserId: number; confirmReplace?: boolean; expectedContentHash?: string;
@@ -803,6 +828,14 @@ export async function generateDocument(params: {
   assertKernelAccess(DOMAIN, "institutional_rag");
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
 
+  // R5 — documento APROVADO/OFICIAL não é regenerado diretamente (nem com confirmReplace): 1ª verificação,
+  // antes de montar contexto, reservar idempotência ou chamar a IA.
+  const beforeDraft = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
+  await assertRegenerationNotOfficial({
+    organizationId: params.organizationId, processId: params.processId, kind: params.kind,
+    correlationId: params.correlationId, actorUserId: params.actorUserId, draft: beforeDraft,
+  });
+
   const items = await listIntelligentItems(params.processId, params.organizationId);
   const approved = items.filter(i => i.status === "aprovado");
 
@@ -835,6 +868,7 @@ export async function generateDocument(params: {
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     correlationId: params.correlationId, actorUserId: params.actorUserId,
     confirmReplace: params.confirmReplace, expectedContentHash: params.expectedContentHash,
+    preloaded: { before: beforeDraft },
   });
 
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
@@ -877,6 +911,11 @@ export async function generateDocument(params: {
       return {
         response: doc,
         persist: async (tx) => {
+          // R5 — revalidação na MESMA transação: emissão oficial concluída durante a cognição ⇒ rollback total.
+          await assertRegenerationNotOfficial({
+            organizationId: params.organizationId, processId: params.processId, kind: params.kind,
+            correlationId: params.correlationId, actorUserId: params.actorUserId, draft: beforeDraft, executor: tx,
+          });
           // C.4B.3A — mutação governada: cria (author = originador) ou regenera (preserva originador,
           // último ator substantivo = solicitante, ledger ai_regenerate) com revalidação sob lock.
           const { document } = await applyDraftContentMutationTx(tx, {
@@ -992,6 +1031,12 @@ export async function generateNotice(params: {
   modality?: EditalModality;
   form?: EditalForm;
   platform?: EditalPlatform;
+  /**
+   * PR-09 / R5 (0308) — PROPOSTA de critério de julgamento / regime de execução (texto; opcional). Persistidos
+   * no rascunho canônico como os demais parâmetros; ausentes ⇒ mantêm o persistido (ou NULL = [REVISAR]).
+   */
+  judgmentCriterion?: string;
+  executionRegime?: string;
   confirmParameterChange?: boolean;
   /** PR-09 (SEM-014) — confirmação explícita para substituir conteúdo humano do Edital. */
   confirmReplace?: boolean;
@@ -1011,9 +1056,18 @@ export async function generateNotice(params: {
   // PR-09 (SEM-009) — parâmetros EFETIVOS lidos no SERVIDOR a partir do rascunho canônico persistido
   // (decisão humana por processo). Nunca um padrão da UI: ausência ⇒ recusa; divergência ⇒ troca explícita.
   const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  // R5 — Edital APROVADO/OFICIAL não é regenerado diretamente (nem com confirmReplace/troca de parâmetros):
+  // 1ª verificação, antes de resolver parâmetros, reservar idempotência ou chamar a IA.
+  await assertRegenerationNotOfficial({
+    organizationId: params.organizationId, processId: params.processId, kind: "edital",
+    correlationId: params.correlationId, actorUserId: params.actorUserId, draft: beforeEdital,
+  });
   const resolution = resolveEditalParameters({
     persisted: persistedEditalParameters(beforeEdital),
-    proposed: { modality: params.modality, form: params.form, platform: params.platform },
+    proposed: {
+      modality: params.modality, form: params.form, platform: params.platform,
+      judgmentCriterion: params.judgmentCriterion, executionRegime: params.executionRegime,
+    },
     confirmParameterChange: params.confirmParameterChange,
   });
   if (!resolution.ok) {
@@ -1025,7 +1079,7 @@ export async function generateNotice(params: {
     });
     throw new TRPCError({ code: resolution.code, message: resolution.message });
   }
-  const { modality, form, platform } = resolution.params;
+  const { modality, form, platform, judgmentCriterion, executionRegime } = resolution.params;
   const legalJustification = form === "presencial" ? defaultPresencialJustification(modality) : "";
 
   // Validação de parâmetros (modalidade/forma/plataforma/justificativa) ANTES de qualquer efeito/cognição.
@@ -1051,9 +1105,10 @@ export async function generateNotice(params: {
   });
 
   // Reaproveitamento canônico do contexto (TENANT-SCOPED): DFD/ETP/TR/itens/parâmetros do processo.
+  // PR-09 / R5 — critério de julgamento / regime de execução PERSISTIDOS entram no contexto (NULL ⇒ [REVISAR]).
   const sourceContext = await resolveEditalSources({
     organizationId: params.organizationId, processId: params.processId, object: params.object,
-    modality, form, platform,
+    modality, form, platform, criterioJulgamento: judgmentCriterion, regimeContratacao: executionRegime,
   });
   // Modo canônico (Itens da contratação): Edital nunca sai com quantidade da Pesquisa por fallback.
   assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params);
@@ -1089,7 +1144,7 @@ export async function generateNotice(params: {
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
         ],
-        modality, form, platform, legalJustification,
+        modality, form, platform, legalJustification, judgmentCriterion, executionRegime,
         authorUserId: params.actorUserId, lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
@@ -1097,6 +1152,11 @@ export async function generateNotice(params: {
       return {
         response: { document: doc, validation },
         persist: async (tx) => {
+          // R5 — revalidação na MESMA transação: emissão oficial concluída durante a cognição ⇒ rollback total.
+          await assertRegenerationNotOfficial({
+            organizationId: params.organizationId, processId: params.processId, kind: "edital",
+            correlationId: params.correlationId, actorUserId: params.actorUserId, draft: beforeEdital, executor: tx,
+          });
           const { document } = await applyDraftContentMutationTx(tx, {
             organizationId: params.organizationId, processId: params.processId, kind: "edital",
             actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
@@ -1110,7 +1170,7 @@ export async function generateNotice(params: {
             origin: params.processId, title: doc.title, content: doc.content, author: "structured_authoring",
             correlationId: params.correlationId,
             metadata: {
-              modality, form, platform, parametersSource: resolution.source,
+              modality, form, platform, judgmentCriterion, executionRegime, parametersSource: resolution.source,
               groundingState: authoring.groundingState,
               evidenceCount: authoring.evidences.length,
               evidenceComplete: authoring.evidenceComplete,
@@ -1142,7 +1202,9 @@ export async function generateNotice(params: {
             summary: `Edital gerado (rascunho) — ${modality}/${form} — fundamentação: ${authoring.groundingState}.`
               + (resolution.source === "explicit_change" && resolution.previous
                 ? ` Parâmetros trocados explicitamente: ${describeEditalParameters(resolution.previous)} → ${describeEditalParameters(resolution.params)}.`
-                : "")
+                : resolution.source === "first_decision" && resolution.previous
+                  ? ` Parâmetros complementados: ${describeEditalParameters(resolution.previous)} → ${describeEditalParameters(resolution.params)}.`
+                  : "")
               + (humanState.human ? " Substituiu conteúdo humano por confirmação explícita (anterior preservado no histórico)." : ""),
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
@@ -1163,6 +1225,8 @@ export async function getEditalSourceState(params: {
   organizationId: number; processId: string; object: string;
   /** Proposta da UI (opcional). Havendo parâmetros PERSISTIDOS, a staleness é calculada contra ELES. */
   modality?: EditalModality; form?: EditalForm; platform?: EditalPlatform;
+  /** PR-09 / R5 — proposta de critério de julgamento / regime de execução (texto; opcional). */
+  judgmentCriterion?: string; executionRegime?: string;
 }): Promise<{
   state: "never_generated" | "current" | "source_changed";
   storedDigest: string | null; currentDigest: string;
@@ -1172,14 +1236,25 @@ export async function getEditalSourceState(params: {
 }> {
   const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
   const persisted = persistedEditalParameters(existing);
+  const proposal = {
+    modality: params.modality, form: params.form, platform: params.platform,
+    judgmentCriterion: params.judgmentCriterion, executionRegime: params.executionRegime,
+  };
   const proposed: EditalParameters | null = params.modality && params.form
-    ? { modality: params.modality, form: params.form, platform: params.form === "eletronico" ? (params.platform ?? null) : null }
+    ? {
+        modality: params.modality, form: params.form, platform: params.form === "eletronico" ? (params.platform ?? null) : null,
+        judgmentCriterion: normalizeEditalText(params.judgmentCriterion), executionRegime: normalizeEditalText(params.executionRegime),
+      }
     : null;
   const effective = persisted ?? proposed;
-  const parameters = { persisted, proposedDiffers: !!(persisted && proposed) && !sameEditalParameters(persisted, proposed) };
+  // A proposta sobreposta aos persistidos difere deles? (informativo; NÃO altera a staleness).
+  const overlaid = persisted ? overlayEditalProposal(persisted, proposal) : null;
+  const parameters = { persisted, proposedDiffers: !!(persisted && overlaid) && !sameEditalParameters(persisted!, overlaid!) };
+  // Staleness contra os PERSISTIDOS (critério/regime incluídos: são parte do digest do contexto).
   const current = await resolveEditalSources({
     organizationId: params.organizationId, processId: params.processId, object: params.object,
     modality: effective?.modality ?? "", form: effective?.form ?? "", platform: effective?.platform ?? null,
+    criterioJulgamento: effective?.judgmentCriterion ?? null, regimeContratacao: effective?.executionRegime ?? null,
   });
   if (!existing || !existing.content.trim()) {
     return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters };

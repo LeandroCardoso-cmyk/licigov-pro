@@ -440,7 +440,10 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
   await db.insert(generatedDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,
     content: d.content, status: d.status, sources: JSON.stringify(d.sources), modality: d.modality,
-    form: d.form, platform: d.platform, legalJustification: d.legalJustification, authorUserId: d.authorUserId,
+    form: d.form, platform: d.platform, legalJustification: d.legalJustification,
+    // PR-09 / R5 (0308) — critério de julgamento / regime de execução do Edital (null = requer revisão).
+    judgmentCriterion: d.judgmentCriterion ?? null, executionRegime: d.executionRegime ?? null,
+    authorUserId: d.authorUserId,
     lastSubstantiveActorUserId: d.lastSubstantiveActorUserId, lastSubstantiveAt: d.lastSubstantiveAt ? toDb(d.lastSubstantiveAt) : null,
     correlationId: d.correlationId, createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
   }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: toDb(d.updatedAt) } });
@@ -504,7 +507,9 @@ function rowToGeneratedDocument(r: GeneratedDocRow): GeneratedDocument {
     title: r.title, content: r.content ?? "", status: r.status as GeneratedDocument["status"],
     sources: parseArr<string>(r.sources), modality: r.modality as GeneratedDocument["modality"],
     form: r.form as GeneratedDocument["form"], platform: r.platform as GeneratedDocument["platform"],
-    legalJustification: r.legalJustification ?? "", authorUserId: r.authorUserId ?? null,
+    legalJustification: r.legalJustification ?? "",
+    judgmentCriterion: r.judgmentCriterion ?? null, executionRegime: r.executionRegime ?? null,
+    authorUserId: r.authorUserId ?? null,
     lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
     lastSubstantiveAt: r.lastSubstantiveAt ? fromDb(r.lastSubstantiveAt) : null,
     correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
@@ -581,12 +586,15 @@ export async function applyDraftContentMutationTx(
   // anterior (reconstroem o doc). Em ambos o originador é preservado.
   const contentOnly = input.operation === "human_edit";
 
-  // PR-09 (SEM-009) — parâmetros do Edital (modalidade/forma/plataforma/justificativa) são estado SUBSTANTIVO:
-  // uma troca explícita com conteúdo idêntico NÃO pode ser descartada como no-op.
+  // PR-09 (SEM-009) — parâmetros do Edital (modalidade/forma/plataforma/justificativa + critério de julgamento
+  // e regime de execução, 0308) são estado SUBSTANTIVO: uma troca explícita com conteúdo idêntico NÃO pode ser
+  // descartada como no-op.
   const parametersChanged = !contentOnly && (
     (existing.modality ?? null) !== (doc.modality ?? null) || (existing.form ?? null) !== (doc.form ?? null)
     || (existing.platform ?? null) !== (doc.platform ?? null)
     || (existing.legalJustification ?? "") !== (doc.legalJustification ?? "")
+    || (existing.judgmentCriterion ?? null) !== (doc.judgmentCriterion ?? null)
+    || (existing.executionRegime ?? null) !== (doc.executionRegime ?? null)
   );
 
   // No-op determinístico: mesmo conteúdo em bytes (e mesmos parâmetros) → não muda último ator nem cria
@@ -600,6 +608,7 @@ export async function applyDraftContentMutationTx(
       : {
           title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
           modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
+          judgmentCriterion: doc.judgmentCriterion ?? null, executionRegime: doc.executionRegime ?? null,
           lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now),
         },
   ).where(and(
@@ -644,6 +653,8 @@ export async function getGeneratedDocumentByKind(
   authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string;
   /** PR-09 (SEM-009) — parâmetros persistidos do Edital (null nos demais kinds / antes da decisão). */
   modality: string | null; form: string | null; platform: string | null;
+  /** PR-09 / R5 (0308) — critério de julgamento / regime de execução persistidos (null = requer revisão). */
+  judgmentCriterion: string | null; executionRegime: string | null;
 } | null> {
   const db = await getDb();
   if (!db) return null;
@@ -662,6 +673,7 @@ export async function getGeneratedDocumentByKind(
     authorUserId: r.authorUserId ?? null, lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
     updatedAt: fromDb(r.updatedAt),
     modality: r.modality ?? null, form: r.form ?? null, platform: r.platform ?? null,
+    judgmentCriterion: r.judgmentCriterion ?? null, executionRegime: r.executionRegime ?? null,
   };
 }
 

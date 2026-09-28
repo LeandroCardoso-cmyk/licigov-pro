@@ -62,7 +62,8 @@ describe("resolveEditalParameters (SEM-009)", () => {
   const persisted = persistedEditalParameters({ modality: "concorrencia", form: "presencial", platform: "bll" })!;
 
   it("persistidos normalizam plataforma (presencial ⇒ null) e exigem modalidade + forma", () => {
-    expect(persisted).toEqual({ modality: "concorrencia", form: "presencial", platform: null });
+    // R5 (0308) — contrato ADITIVO: critério/regime sempre presentes (null = requer revisão).
+    expect(persisted).toEqual({ modality: "concorrencia", form: "presencial", platform: null, judgmentCriterion: null, executionRegime: null });
     expect(persistedEditalParameters({ modality: null, form: "eletronico", platform: null })).toBeNull();
     expect(persistedEditalParameters(null)).toBeNull();
   });
@@ -89,7 +90,7 @@ describe("resolveEditalParameters (SEM-009)", () => {
 
   it("troca explícita (confirmParameterChange) ⇒ proposta, com anterior registrado", () => {
     const r = resolveEditalParameters({ persisted, proposed: { modality: "pregao", form: "eletronico", platform: "bll" }, confirmParameterChange: true });
-    expect(r).toEqual({ ok: true, params: { modality: "pregao", form: "eletronico", platform: "bll" }, source: "explicit_change", previous: persisted });
+    expect(r).toEqual({ ok: true, params: { modality: "pregao", form: "eletronico", platform: "bll", judgmentCriterion: null, executionRegime: null }, source: "explicit_change", previous: persisted });
   });
 
   it("proposta incompleta ⇒ PRECONDITION_FAILED (com ou sem persistidos)", () => {
@@ -106,6 +107,6 @@ describe("resolveEditalParameters (SEM-009)", () => {
 
   it("sem persistidos + proposta completa ⇒ 1ª decisão humana", () => {
     expect(resolveEditalParameters({ persisted: null, proposed: { modality: "pregao", form: "presencial", platform: "bll" } }))
-      .toEqual({ ok: true, params: { modality: "pregao", form: "presencial", platform: null }, source: "first_decision", previous: null });
+      .toEqual({ ok: true, params: { modality: "pregao", form: "presencial", platform: null, judgmentCriterion: null, executionRegime: null }, source: "first_decision", previous: null });
   });
 });
