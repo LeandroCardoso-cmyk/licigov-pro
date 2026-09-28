@@ -16,6 +16,11 @@ import fs from "fs";
 import { TRPCError } from "@trpc/server";
 
 const h = vi.hoisted(() => ({
+  // Caminho de gravação da edição governada da PR-12 (compare-and-set + evento). Chaves extras no mock
+  // são inócuas em main (onde a gravação é o upsert `insertContractWorkspace`); com elas a matriz vale
+  // igual na árvore integrada sem reescrita.
+  cas: vi.fn(async () => true),
+  recordProcessEvent: vi.fn(async () => null),
   ORG: 70601,
   draftId: "ctw-new006-minuta",
   roleByUser: new Map<number, string>(),
@@ -62,6 +67,7 @@ vi.mock("../../db/contractWorkspace", () => ({
     return null;
   }),
   insertContractWorkspace: vi.fn(async (ws: unknown) => ws),
+  compareAndSetContractWorkspace: h.cas,
   listContractWorkspaces: vi.fn(async () => []),
   listImportedContractWorkspaces: vi.fn(async () => []),
   listContractWsDocuments: vi.fn(async () => []),
@@ -70,7 +76,7 @@ vi.mock("../../db/contractWorkspace", () => ({
   listContractOccurrences: vi.fn(async () => []),
 }));
 
-vi.mock("../../db/procurement", () => ({ listProcessTimeline: vi.fn(async () => []) }));
+vi.mock("../../db/procurement", () => ({ listProcessTimeline: vi.fn(async () => []), recordProcessEvent: h.recordProcessEvent }));
 
 vi.mock("../../services/idempotencyService", () => ({
   checkIdempotency: vi.fn(async () => ({ status: "new" })),
@@ -119,7 +125,11 @@ const EFFECT_MOCKS = () => [
   contractService.createManualContract, contractService.generateContractDocument, contractService.createAddendum,
   contractService.createApostille, contractService.registerOccurrence, contractService.requestContractLegalOpinion,
   contractDb.insertContractWorkspace, idem.checkIdempotency, idem.saveIdempotencyResult, idem.failIdempotencyKey,
+  h.cas, h.recordProcessEvent,
 ].map(f => vi.mocked(f));
+
+/** Gravações do contrato pela edição: upsert (main) + compare-and-set (PR-12). */
+const contractWrites = () => vi.mocked(contractDb.insertContractWorkspace).mock.calls.length + h.cas.mock.calls.length;
 
 function caller(role: Role, correlationId = `corr-new006-${role}`) {
   const userId = USER_BY_ROLE[role];
@@ -246,19 +256,19 @@ describe("NEW-006 — comportamento por papel (router real, serviços mockados)"
 describe("NEW-006 — updateContract: campos = operator; mudança de status = manager", () => {
   it("operator edita campos (sem status) e grava", async () => {
     await expect(call("operator", "updateContract", { contractId: DRAFT, contractor: "X", expectedUpdatedAt: REV })).resolves.toMatchObject({ workspace: { contractor: "X" } });
-    expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
+    expect(contractWrites()).toBe(1);
   });
 
   it("operator enviando o MESMO status atual (minuta) não é mudança de status ⇒ permitido", async () => {
     await expect(call("operator", "updateContract", { contractId: DRAFT, contractor: "Y", status: "minuta", expectedUpdatedAt: REV })).resolves.toBeDefined();
-    expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
+    expect(contractWrites()).toBe(1);
   });
 
   for (const to of ["encerrado", "rescindido", "arquivado", "aditado"] as const) {
     it(`operator mudando status vigente → ${to} ⇒ FORBIDDEN, nada gravado, log de recusa`, async () => {
       await expect(call("operator", "updateContract", { contractId: CID, status: to, expectedUpdatedAt: REV }, "corr-op-status"))
         .rejects.toMatchObject({ code: "FORBIDDEN" });
-      expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
+      expect(contractWrites()).toBe(0);
       const logs = denialLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({ procedure: "contractWorkspace.updateContract#status", requiredRole: "manager", userRole: "operator", correlationId: "corr-op-status" });
@@ -267,18 +277,18 @@ describe("NEW-006 — updateContract: campos = operator; mudança de status = ma
 
   it("manager muda status vigente → encerrado (transição válida) e grava", async () => {
     await expect(call("manager", "updateContract", { contractId: CID, status: "encerrado", expectedUpdatedAt: REV })).resolves.toMatchObject({ workspace: { status: "encerrado" } });
-    expect(vi.mocked(contractDb.insertContractWorkspace)).toHaveBeenCalledTimes(1);
+    expect(contractWrites()).toBe(1);
   });
 
   it("manager com transição INVÁLIDA continua BAD_REQUEST da máquina de estados (RBAC não mascara a regra)", async () => {
     await expect(call("manager", "updateContract", { contractId: CID, status: "minuta", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
+    expect(contractWrites()).toBe(0);
   });
 
   it("contrato de outra organização ⇒ NOT_FOUND (inalterado), mesmo para operator pedindo mudança de status", async () => {
     await expect(call("operator", "updateContract", { contractId: "ctw-outra-org", status: "rescindido", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(vi.mocked(contractDb.insertContractWorkspace)).not.toHaveBeenCalled();
+    expect(contractWrites()).toBe(0);
     expect(vi.mocked(contractService.createAddendum)).not.toHaveBeenCalled();
   });
 });
