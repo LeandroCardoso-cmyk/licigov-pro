@@ -31,8 +31,14 @@ import { computeLineageId } from "../domain/officialDocument";
 import { getDb } from "../db/connection";
 import {
   recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
-  getGeneratedDocumentByKind, type ProcurementExecutor, type DraftEditOperation,
+  getGeneratedDocumentByKind, getLatestDraftEdit, type ProcurementExecutor, type DraftEditOperation,
+  type DraftExpectedState,
 } from "../db/procurement";
+// PR-09 (SEM-014/SEM-009) — preservação do estado humano na regeneração + parâmetros do Edital persistidos.
+import {
+  classifyDraftHumanState, humanEditRefusalMessage, persistedEditalParameters, resolveEditalParameters,
+  describeEditalParameters, sameEditalParameters, type DraftHumanState, type EditalParameters,
+} from "../domain/draftRegeneration";
 // V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
 import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
 // Contexto Canônico da Contratação — DFD como 1º consumidor (prefill, estado por campo, reconciliação, IA).
@@ -728,6 +734,52 @@ export async function saveReviewableDraft(params: {
 }
 
 /**
+ * PR-09 (SEM-014) — Estado de PARTIDA da regeneração de ETP/TR/Edital, resolvido ANTES de qualquer reserva de
+ * idempotência ou cognição (recusa ⇒ zero chamadas de IA, zero writes):
+ *   - `expectedContentHash` (opcional) = o hash que o humano VIU; divergente do vigente ⇒ CONFLICT (a
+ *     confirmação vale só para o conteúdo exibido); também vira o estado esperado revalidado SOB LOCK;
+ *   - conteúdo vigente com trabalho HUMANO (ledger/sources) sem `confirmReplace: true` ⇒ CONFLICT
+ *     `HUMAN_EDIT_WOULD_BE_OVERWRITTEN`. Com confirmação, a regeneração segue e o conteúdo humano anterior
+ *     fica recuperável no ledger (`generated_document_edits.previous_content`, operação ai_regenerate).
+ */
+type CanonicalDraftRow = Awaited<ReturnType<typeof getGeneratedDocumentByKind>>;
+
+async function resolveRegenerationBaseline(p: {
+  organizationId: number; processId: string; kind: "etp" | "tr" | "edital"; correlationId: string;
+  actorUserId: number; confirmReplace?: boolean; expectedContentHash?: string;
+  /** Rascunho já lido pelo chamador (evita segunda leitura); ausente ⇒ lido aqui. */
+  preloaded?: { before: CanonicalDraftRow };
+}): Promise<{ expectedState: DraftExpectedState; humanState: DraftHumanState }> {
+  const before = p.preloaded ? p.preloaded.before : await getGeneratedDocumentByKind(p.processId, p.organizationId, p.kind);
+  const currentHash = before ? draftContentHash(before.content) : null;
+  if (p.expectedContentHash !== undefined && p.expectedContentHash !== currentHash) {
+    throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de regenerar." });
+  }
+  let humanState: DraftHumanState = { human: false };
+  if (before && before.content.trim()) {
+    humanState = classifyDraftHumanState(before, await getLatestDraftEdit(p.processId, p.organizationId, p.kind));
+    const refusal = humanEditRefusalMessage(p.kind, humanState, p.confirmReplace);
+    if (refusal) {
+      log.warn("draft_regeneration_refused_human_content", {
+        organizationId: p.organizationId, processId: p.processId, correlationId: p.correlationId,
+        actorUserId: p.actorUserId, documentKind: p.kind,
+        reason: humanState.human ? humanState.reason : null, operation: humanState.human ? humanState.operation : null,
+      });
+      throw new TRPCError({ code: "CONFLICT", message: refusal });
+    }
+  }
+  const expectedState: DraftExpectedState = before
+    ? { type: "present", contentHash: p.expectedContentHash ?? currentHash! }
+    : { type: "absent" };
+  return { expectedState, humanState };
+}
+
+/** Motivo gravado no ledger quando a regeneração substitui conteúdo humano por confirmação explícita. */
+function replaceReason(state: DraftHumanState): string | null {
+  return state.human ? `confirm_replace:${state.reason}${state.operation ? `:${state.operation}` : ""}` : null;
+}
+
+/**
  * A2 — Gera um documento (ETP/TR) a partir do fluxo, via AUTORIA ESTRUTURADA com GROUNDING REAL:
  * recupera evidência do corpus institucional (fontes vigentes), fundamenta as seções nas exigências
  * legais reais da Lei 14.133/2021, alimenta a proveniência A1 com `EvidenceRef[]` reais e consolida um
@@ -741,6 +793,10 @@ export async function generateDocument(params: {
   correlationId: string;
   idempotencyKey: string;
   actorUserId: number;
+  /** PR-09 — confirmação EXPLÍCITA para substituir conteúdo humano (edição/importação). Opcional. */
+  confirmReplace?: boolean;
+  /** PR-09 — hash do rascunho que o humano viu (opcional; divergente ⇒ CONFLICT). */
+  expectedContentHash?: string;
   invoke?: (prompt: string) => Promise<string>;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
@@ -772,15 +828,19 @@ export async function generateDocument(params: {
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
   });
 
+  // C.4B.3A + PR-09 — estado de PARTIDA capturado ANTES da idempotência e da cognição (sentinel de ausência
+  // explícito). Conteúdo humano sem `confirmReplace` ⇒ recusa aqui (zero IA, zero writes). Se o rascunho
+  // mudar enquanto a IA executa, a revalidação sob lock recusa (CONFLICT) e NÃO sobrescreve.
+  const { expectedState, humanState } = await resolveRegenerationBaseline({
+    organizationId: params.organizationId, processId: params.processId, kind: params.kind,
+    correlationId: params.correlationId, actorUserId: params.actorUserId,
+    confirmReplace: params.confirmReplace, expectedContentHash: params.expectedContentHash,
+  });
+
   const { result, replayed } = await runReplaySafeGeneration<GeneratedDocument>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
     reviveIdempotent,
     async () => {
-      // C.4B.3A — captura o estado de PARTIDA ANTES da cognição (sentinel de ausência explícito). Se o
-      // rascunho mudar enquanto a IA executa, a revalidação sob lock na persistência recusa (CONFLICT)
-      // e NÃO sobrescreve a alteração concorrente. 1ª geração: ausência esperada.
-      const before = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
-      const expectedState = before ? { type: "present" as const, contentHash: draftContentHash(before.content) } : { type: "absent" as const };
 
       // A2 — AUTORIA ESTRUTURADA com GROUNDING REAL. Cognição SEMPRE fora da transação (rede/modelo).
       // Recupera evidência REAL do corpus institucional, alimenta a proveniência A1 com EvidenceRef[]
@@ -823,6 +883,7 @@ export async function generateDocument(params: {
             organizationId: params.organizationId, processId: params.processId, kind: params.kind,
             actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
             expectedState, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+            reason: replaceReason(humanState),
           });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação.
           const official = await generateOfficialDocument({
@@ -865,7 +926,7 @@ export async function generateDocument(params: {
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
             actor: "multi_copilot",
-            summary: `${params.kind.toUpperCase()} gerado (rascunho) com base no processo — fontes: ${sourceContext.usedSources.join(", ") || "objeto"}${sourceContext.missing.length ? ` · pendências: ${sourceContext.missing.join(", ")}` : ""}.`,
+            summary: `${params.kind.toUpperCase()} gerado (rascunho) com base no processo — fontes: ${sourceContext.usedSources.join(", ") || "objeto"}${sourceContext.missing.length ? ` · pendências: ${sourceContext.missing.join(", ")}` : ""}.${humanState.human ? " Substituiu conteúdo humano por confirmação explícita (anterior preservado no histórico)." : ""}`,
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
           return document; // snapshot canônico (originador preservado em regeneração)
@@ -923,9 +984,19 @@ export async function generateNotice(params: {
   organizationId: number;
   processId: string;
   object: string;
-  modality: EditalModality;
-  form: EditalForm;
+  /**
+   * PR-09 (SEM-009) — PROPOSTA de parâmetros (opcional). Os parâmetros EFETIVOS são os PERSISTIDOS no
+   * rascunho canônico do Edital (leitura no servidor); proposta divergente exige `confirmParameterChange`;
+   * sem persistidos, a proposta completa é a 1ª decisão humana; ausência ⇒ EDITAL_PARAMETERS_REQUIRED.
+   */
+  modality?: EditalModality;
+  form?: EditalForm;
   platform?: EditalPlatform;
+  confirmParameterChange?: boolean;
+  /** PR-09 (SEM-014) — confirmação explícita para substituir conteúdo humano do Edital. */
+  confirmReplace?: boolean;
+  /** PR-09 — hash do rascunho que o humano viu (opcional; divergente ⇒ CONFLICT). */
+  expectedContentHash?: string;
   correlationId: string;
   idempotencyKey: string;
   actorUserId: number;
@@ -937,17 +1008,32 @@ export async function generateNotice(params: {
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
   assertKernelAccess(DOMAIN, "document_engine");
 
-  const legalJustification = params.form === "presencial"
-    ? defaultPresencialJustification(params.modality)
-    : "";
-  const platform = params.form === "eletronico" ? (params.platform ?? null) : null;
+  // PR-09 (SEM-009) — parâmetros EFETIVOS lidos no SERVIDOR a partir do rascunho canônico persistido
+  // (decisão humana por processo). Nunca um padrão da UI: ausência ⇒ recusa; divergência ⇒ troca explícita.
+  const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  const resolution = resolveEditalParameters({
+    persisted: persistedEditalParameters(beforeEdital),
+    proposed: { modality: params.modality, form: params.form, platform: params.platform },
+    confirmParameterChange: params.confirmParameterChange,
+  });
+  if (!resolution.ok) {
+    log.warn("edital_generation_refused_parameters", {
+      organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+      actorUserId: params.actorUserId, code: resolution.code,
+      persisted: resolution.persisted ? describeEditalParameters(resolution.persisted) : null,
+      proposed: resolution.proposed ? describeEditalParameters(resolution.proposed) : null,
+    });
+    throw new TRPCError({ code: resolution.code, message: resolution.message });
+  }
+  const { modality, form, platform } = resolution.params;
+  const legalJustification = form === "presencial" ? defaultPresencialJustification(modality) : "";
 
   // Validação de parâmetros (modalidade/forma/plataforma/justificativa) ANTES de qualquer efeito/cognição.
   // Edital inválido: nenhum efeito, nenhuma reserva de idempotência, nenhuma chamada ao provider.
   const prelim = createGeneratedDocument({
     organizationId: params.organizationId, processId: params.processId, kind: "edital",
     title: `Edital — ${params.object}`, content: "",
-    modality: params.modality, form: params.form, platform, legalJustification,
+    modality, form, platform, legalJustification,
     correlationId: params.correlationId,
   });
   const validation = validateEdital(prelim);
@@ -955,25 +1041,28 @@ export async function generateNotice(params: {
     return { document: prelim, validation, replayed: false };
   }
 
+  // C.4B.3A + PR-09 (SEM-014) — estado de partida (revalidado sob lock) + recusa de sobrescrita de conteúdo
+  // humano sem `confirmReplace`, ANTES de qualquer reserva de idempotência ou cognição.
+  const { expectedState: expectedStateEdital, humanState } = await resolveRegenerationBaseline({
+    organizationId: params.organizationId, processId: params.processId, kind: "edital",
+    correlationId: params.correlationId, actorUserId: params.actorUserId,
+    confirmReplace: params.confirmReplace, expectedContentHash: params.expectedContentHash,
+    preloaded: { before: beforeEdital },
+  });
+
   // Reaproveitamento canônico do contexto (TENANT-SCOPED): DFD/ETP/TR/itens/parâmetros do processo.
   const sourceContext = await resolveEditalSources({
     organizationId: params.organizationId, processId: params.processId, object: params.object,
-    modality: params.modality, form: params.form, platform,
+    modality, form, platform,
   });
   // Modo canônico (Itens da contratação): Edital nunca sai com quantidade da Pesquisa por fallback.
   assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params);
-
-  // C.4B.3A — estado de partida para revalidação sob lock (regeneração não sobrescreve edição concorrente).
-  const beforeEdital = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
-  const expectedStateEdital = beforeEdital
-    ? { type: "present" as const, contentHash: draftContentHash(beforeEdital.content) }
-    : { type: "absent" as const };
 
   // Replay-safe: o digest das FONTES entra no payload → retry técnico com as MESMAS fontes replaya; fonte
   // alterada sob a MESMA chave → CONFLICT (não cria duas versões independentes).
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: "edital",
-    object: params.object, modality: params.modality, form: params.form, platform,
+    object: params.object, modality, form, platform,
     sourcesDigest: sourceContext.sourcesDigest,
   });
 
@@ -985,7 +1074,7 @@ export async function generateNotice(params: {
       // de contexto + grounding por evidência (RAG governado). Fail-closed em structured output inválido.
       const authoring = await generateEditalAuthoring({
         organizationId: params.organizationId, object: params.object,
-        modality: params.modality, form: params.form, platform,
+        modality, form, platform,
         sourceContext, correlationId: params.correlationId, actorUserId: params.actorUserId,
         invoke: params.invoke,
       });
@@ -1000,7 +1089,7 @@ export async function generateNotice(params: {
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
         ],
-        modality: params.modality, form: params.form, platform, legalJustification,
+        modality, form, platform, legalJustification,
         authorUserId: params.actorUserId, lastSubstantiveActorUserId: params.actorUserId,
         correlationId: params.correlationId,
       });
@@ -1012,7 +1101,7 @@ export async function generateNotice(params: {
             organizationId: params.organizationId, processId: params.processId, kind: "edital",
             actorUserId: params.actorUserId, doc, operation: "ai_regenerate",
             expectedState: expectedStateEdital, idempotencyKey: params.idempotencyKey,
-            correlationId: params.correlationId,
+            correlationId: params.correlationId, reason: replaceReason(humanState),
           });
           // RC-3 — documento oficial pelo pipeline ÚNICO (Document Engine), na MESMA transação. Metadata
           // carrega o LINEAGE completo (parâmetros + fundamentação + versões das fontes) para explainability/replay.
@@ -1021,7 +1110,7 @@ export async function generateNotice(params: {
             origin: params.processId, title: doc.title, content: doc.content, author: "structured_authoring",
             correlationId: params.correlationId,
             metadata: {
-              modality: params.modality, form: params.form, platform,
+              modality, form, platform, parametersSource: resolution.source,
               groundingState: authoring.groundingState,
               evidenceCount: authoring.evidences.length,
               evidenceComplete: authoring.evidenceComplete,
@@ -1050,7 +1139,11 @@ export async function generateNotice(params: {
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "decision",
             actor: "multi_copilot",
-            summary: `Edital gerado (rascunho) — ${params.modality}/${params.form} — fundamentação: ${authoring.groundingState}.`,
+            summary: `Edital gerado (rascunho) — ${modality}/${form} — fundamentação: ${authoring.groundingState}.`
+              + (resolution.source === "explicit_change" && resolution.previous
+                ? ` Parâmetros trocados explicitamente: ${describeEditalParameters(resolution.previous)} → ${describeEditalParameters(resolution.params)}.`
+                : "")
+              + (humanState.human ? " Substituiu conteúdo humano por confirmação explícita (anterior preservado no histórico)." : ""),
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
           return { document, validation }; // snapshot canônico + validação
@@ -1068,26 +1161,34 @@ export async function generateNotice(params: {
  */
 export async function getEditalSourceState(params: {
   organizationId: number; processId: string; object: string;
-  modality: EditalModality; form: EditalForm; platform?: EditalPlatform;
+  /** Proposta da UI (opcional). Havendo parâmetros PERSISTIDOS, a staleness é calculada contra ELES. */
+  modality?: EditalModality; form?: EditalForm; platform?: EditalPlatform;
 }): Promise<{
   state: "never_generated" | "current" | "source_changed";
   storedDigest: string | null; currentDigest: string;
   usedSources: string[]; missing: string[];
+  /** PR-09 (SEM-009) — parâmetros persistidos × proposta (a proposta NÃO altera o estado de staleness). */
+  parameters: { persisted: EditalParameters | null; proposedDiffers: boolean };
 }> {
-  const platform = params.form === "eletronico" ? (params.platform ?? null) : null;
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  const persisted = persistedEditalParameters(existing);
+  const proposed: EditalParameters | null = params.modality && params.form
+    ? { modality: params.modality, form: params.form, platform: params.form === "eletronico" ? (params.platform ?? null) : null }
+    : null;
+  const effective = persisted ?? proposed;
+  const parameters = { persisted, proposedDiffers: !!(persisted && proposed) && !sameEditalParameters(persisted, proposed) };
   const current = await resolveEditalSources({
     organizationId: params.organizationId, processId: params.processId, object: params.object,
-    modality: params.modality, form: params.form, platform,
+    modality: effective?.modality ?? "", form: effective?.form ?? "", platform: effective?.platform ?? null,
   });
-  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
   if (!existing || !existing.content.trim()) {
-    return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing };
+    return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters };
   }
   const stored = (existing.sources ?? []).find((s) => s.startsWith("srcdigest:"))?.slice("srcdigest:".length) ?? null;
   // O marcador guarda o prefixo (16 chars) do digest — compara com o mesmo prefixo do digest atual.
   const currentShort = current.sourcesDigest.slice(0, 16);
   const state = stored === null ? "source_changed" : stored === currentShort ? "current" : "source_changed";
-  return { state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing };
+  return { state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters };
 }
 
 /**

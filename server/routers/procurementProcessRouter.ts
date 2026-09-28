@@ -34,8 +34,9 @@ import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
   listIntelligentItems,
   recordProcessEvent, listProcessTimeline, listGeneratedDocuments,
-  getGeneratedDocumentByKind,
+  getGeneratedDocumentByKind, getLatestDraftEdit,
 } from "../db/procurement";
+import { classifyDraftHumanState, persistedEditalParameters } from "../domain/draftRegeneration";
 
 const log = serviceLogger("procurementProcessRouter");
 
@@ -48,6 +49,17 @@ const STAGES = ["NEW_PROCESS", "DFD", "ETP", "PRICE_RESEARCH", "ITEM_WORKSPACE",
 const MODALITIES = ["pregao", "concorrencia", "leilao", "concurso", "chamada_publica", "credenciamento", "registro_de_precos"] as const;
 const FORMS = ["eletronico", "presencial"] as const;
 const PLATFORMS = ["compras_gov", "bll", "licitanet", "portal_proprio", "outra"] as const;
+
+/**
+ * PR-09 (SEM-014) — campos OPCIONAIS (retrocompatíveis) da regeneração de ETP/TR/Edital:
+ *   - confirmReplace: confirmação EXPLÍCITA para substituir conteúdo humano (sem ela ⇒ CONFLICT
+ *     HUMAN_EDIT_WOULD_BE_OVERWRITTEN antes de qualquer IA/write);
+ *   - expectedContentHash: hash do rascunho que o humano viu (divergente ⇒ CONFLICT).
+ */
+const REGENERATION_GUARD_FIELDS = {
+  confirmReplace: z.boolean().optional(),
+  expectedContentHash: z.string().trim().min(1).optional(),
+};
 
 async function requireProcess(id: string, orgId: number) {
   const p = await getProcess(id, orgId);
@@ -348,13 +360,14 @@ export const procurementProcessRouter = router({
     }),
 
   generateETP: orgRoleProcedure("operator")
-    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
+    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1), ...REGENERATION_GUARD_FIELDS }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "etp", object: input.object,
         correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
+        confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
       });
       return { document };
     }),
@@ -469,27 +482,40 @@ export const procurementProcessRouter = router({
     }),
 
   generateTR: orgRoleProcedure("operator")
-    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1) }))
+    .input(z.object({ processId: z.string().min(1), object: z.string().min(1), idempotencyKey: z.string().trim().min(1), ...REGENERATION_GUARD_FIELDS }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      const { document } = await generateDocument({ organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id });
+      const { document } = await generateDocument({
+        organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId,
+        idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
+        confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
+      });
       return { document };
     }),
 
+  /**
+   * PR-09 (SEM-009) — modalidade/forma/plataforma passam a ser PROPOSTA opcional: o servidor usa os parâmetros
+   * PERSISTIDOS do Edital; proposta divergente só com `confirmParameterChange`; sem parâmetros definidos ⇒
+   * PRECONDITION_FAILED EDITAL_PARAMETERS_REQUIRED (nenhum padrão silencioso).
+   */
   generateNotice: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
-      modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
+      modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      confirmParameterChange: z.boolean().optional(),
       idempotencyKey: z.string().trim().min(1),
+      ...REGENERATION_GUARD_FIELDS,
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       const result = await generateNotice({
         organizationId: orgId, processId: input.processId, object: input.object,
-        modality: input.modality, form: input.form, platform: input.platform, correlationId: ctx.correlationId,
+        modality: input.modality, form: input.form, platform: input.platform,
+        confirmParameterChange: input.confirmParameterChange, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
+        confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
       });
       if (!result.validation.valid) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Edital inválido: ${result.validation.violations.join(" ")}` });
@@ -504,7 +530,8 @@ export const procurementProcessRouter = router({
   editalSourceState: tenantProcedure
     .input(z.object({
       processId: z.string().min(1), object: z.string().min(1),
-      modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).optional(),
+      // PR-09 — proposta opcional; havendo parâmetros persistidos, a staleness é calculada contra eles.
+      modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
     }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -550,6 +577,12 @@ export const procurementProcessRouter = router({
       const grounding = groundingSource
         ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0 }
         : null;
+      // PR-09 (SEM-014) — o conteúdo vigente carrega trabalho HUMANO? (ledger + sources; read-only). A UI
+      // pede confirmação explícita antes de regenerar; o servidor recusa sem `confirmReplace` de todo modo.
+      const humanState = classifyDraftHumanState(doc, await getLatestDraftEdit(input.processId, orgId, input.kind));
+      const humanEdit = humanState.human
+        ? { reason: humanState.reason, operation: humanState.operation, actorUserId: humanState.actorUserId, at: humanState.at }
+        : null;
       return {
         draft: {
           id: doc.id, kind: doc.kind, title: doc.title, content: doc.content,
@@ -558,6 +591,9 @@ export const procurementProcessRouter = router({
           authorUserId: doc.authorUserId, lastSubstantiveActorUserId: doc.lastSubstantiveActorUserId,
           // A2 — estado de fundamentação (grounded/partially_grounded/ungrounded) + contagem de evidências.
           grounding,
+          // PR-09 — aditivo: proveniência humana do conteúdo vigente + parâmetros persistidos do Edital.
+          humanEdit,
+          parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
         },
       };
     }),

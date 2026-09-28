@@ -6,6 +6,8 @@ import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
+import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
+import { isHumanEditRefusal, needsReplaceConfirmation } from "./regenerationGuard";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -38,8 +40,13 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
     { processId, kind: "etp" }, { enabled: !!processId },
   );
+  // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const generateETP = trpc.procurementProcess.generateETP.useMutation({
+    // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
+    onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
     onSuccess: () => {
+      setConfirmOpen(false);
       rotateEtpKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "etp" });
@@ -49,9 +56,14 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   });
   const draft = reviewable.data?.draft ?? null;
 
-  const handleGenerate = () => {
+  const handleGenerate = (confirmReplace = false) => {
     if (!processId || !object.trim()) return;
-    generateETP.mutate({ processId, object: object.trim(), idempotencyKey: etpKey });
+    if (!confirmReplace && needsReplaceConfirmation(draft)) { setConfirmOpen(true); return; }
+    generateETP.mutate({
+      processId, object: object.trim(), idempotencyKey: etpKey,
+      // Hash do rascunho que o humano VIU: a confirmação vale só para este conteúdo (divergente ⇒ CONFLICT).
+      expectedContentHash: draft?.contentHash, confirmReplace: confirmReplace || undefined,
+    });
   };
 
   return (
@@ -80,7 +92,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
         </label>
         <button
           type="button"
-          onClick={handleGenerate}
+          onClick={() => handleGenerate()}
           disabled={!processId || !object.trim() || generateETP.isPending}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
@@ -91,7 +103,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
             Selecione um processo para gerar o ETP.
           </p>
         )}
-        {generateETP.isError && (
+        {generateETP.isError && !isHumanEditRefusal(generateETP.error?.message) && (
           <p className="mt-2 text-sm text-destructive">{generateETP.error?.message || "Falha ao gerar o ETP."}</p>
         )}
       </div>
@@ -121,6 +133,12 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
           </div>
         </div>
       )}
+
+      <RegenerationConfirmDialog
+        open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="ETP"
+        humanEdit={draft?.humanEdit ?? null} currentLength={draft?.content.length}
+        pending={generateETP.isPending} onConfirm={() => handleGenerate(true)}
+      />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="etp" reviewSnapshot={reviewable.data?.draft ?? null} />

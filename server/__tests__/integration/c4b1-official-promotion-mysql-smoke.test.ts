@@ -109,6 +109,9 @@ async function emitidoContent(org: number, processId: string): Promise<string | 
 
 async function cleanup() {
   for (const org of [ORG, ORG2]) {
+    // PR-09 — o ledger de edições do rascunho de TESTE também é limpo: sem isso, uma reexecução recria o
+    // rascunho com ledger órfão da execução anterior (hash divergente ⇒ conteúdo tratado como não-IA).
+    await conn.execute("DELETE FROM generated_document_edits WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_promotions WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_documents WHERE tenant_id = ?", [org]).catch(() => {});
