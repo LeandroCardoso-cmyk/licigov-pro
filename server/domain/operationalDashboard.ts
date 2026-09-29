@@ -27,7 +27,10 @@ export interface ConsolidatedInput {
   readonly addendaCount: number;
   readonly contractsExpiringSoon: number;
   readonly pendingTasks: number;
+  /** Registros operacionais ATIVOS (concluídos no ciclo de vida ficam fora das superfícies ativas). */
   readonly operationalRecords?: ReadonlyArray<{ currentStage: string }>;
+  /** Registros concluídos no ciclo de vida operacional (histórico; métrica separada). */
+  readonly completedOperationalRecords?: number;
 }
 
 export interface OperationalIndicators {
@@ -42,6 +45,7 @@ export interface OperationalIndicators {
   /** Registros legados/manuais, separados das métricas canônicas para não contar duas vezes. */
   readonly trackedRecords: number;
   readonly finalizedRecords: number;
+  readonly completedRecords: number;
 }
 
 import { isFinalizedOperationRecord } from "./operationRecordSchedule";
@@ -66,6 +70,7 @@ export function computeIndicators(input: ConsolidatedInput): OperationalIndicato
     pendingRequests: input.institutionalRequestsPending,
     trackedRecords: input.operationalRecords?.length ?? 0,
     finalizedRecords: input.operationalRecords?.filter(r => isFinalizedOperationRecord(r.currentStage)).length ?? 0,
+    completedRecords: input.completedOperationalRecords ?? 0,
   };
 }
 

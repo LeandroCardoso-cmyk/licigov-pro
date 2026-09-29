@@ -18,7 +18,7 @@ import { listDirectProcurementWorkspaces } from "../db/directProcurement";
 import { listContractWorkspaces, countContractAddendaByOrg } from "../db/contractWorkspace";
 import { listLegalOpinionWorkspaces } from "../db/legalOpinionWorkspace";
 import { listPendingForDomain } from "../db/institutionalRequests";
-import { listOperationalEvents, listOperationalTimeline, listOperationRecords, listScheduledOperationRecords, type OperationRecordListRow } from "../db/departmentOperation";
+import { countCompletedOperationRecords, listOperationalEvents, listOperationalTimeline, listOperationRecords, listScheduledOperationRecords, type OperationRecordListRow } from "../db/departmentOperation";
 import { isFinalizedOperationRecord } from "../domain/operationRecordSchedule";
 
 const DOMAIN = "gestao_departamento" as const;
@@ -26,16 +26,18 @@ const LEGAL_DOMAIN = "parecer_juridico" as const;
 
 /** Reúne o estado consolidado do departamento (sem duplicar dados dos domínios). */
 async function collect(orgId: number) {
-  const [processes, directs, contracts, legalPending, requestsPending, addendaCount, records] = await Promise.all([
+  const [processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords] = await Promise.all([
     listProcesses(orgId, 200),
     listDirectProcurementWorkspaces(orgId, 200),
     listContractWorkspaces(orgId, 200),
     listLegalOpinionWorkspaces(orgId, { activeOnly: true, limit: 200 }),
     listPendingForDomain(orgId, LEGAL_DOMAIN, 200),
     countContractAddendaByOrg(orgId),
-    listOperationRecords(orgId, 5000),
+    // Superfícies operacionais ATIVAS: registros concluídos ficam fora (histórico preservado no banco/timeline).
+    listOperationRecords(orgId, 5000, "active"),
+    countCompletedOperationRecords(orgId),
   ]);
-  return { processes, directs, contracts, legalPending, requestsPending, addendaCount, records };
+  return { processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords };
 }
 
 function recordCalendarEvent(record: OperationRecordListRow) {
@@ -64,7 +66,7 @@ export interface DepartmentSnapshot {
 /** ÁREA 1 — Centro de Operações: indicadores + eventos de hoje e futuros. */
 export async function getDashboard(params: { organizationId: number; today: string }): Promise<DepartmentSnapshot> {
   assertKernelAccess(DOMAIN, "observability");
-  const { processes, directs, contracts, legalPending, requestsPending, addendaCount, records } = await collect(params.organizationId);
+  const { processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords } = await collect(params.organizationId);
   const events = await listOperationalEvents(params.organizationId, { from: params.today, limit: 500 });
   const scheduled = records.filter(r => r.eventDate).map(recordCalendarEvent);
   const allEvents = [...events.map(e => ({ ...e, eventEndDate: "" })), ...scheduled]
@@ -76,7 +78,7 @@ export async function getDashboard(params: { organizationId: number; today: stri
   const indicators = computeIndicators({
     processes, directProcurements: directs, contracts,
     legalOpinionsPending: legalPending.length, institutionalRequestsPending: requestsPending.length,
-    addendaCount, contractsExpiringSoon, pendingTasks: 0, operationalRecords: records,
+    addendaCount, contractsExpiringSoon, pendingTasks: 0, operationalRecords: records, completedOperationalRecords: completedRecords,
   });
 
   const todayEvents = allEvents.filter(e => e.eventDate <= params.today && lastEventDate(e) >= params.today);
@@ -133,7 +135,7 @@ export async function getInbox(params: { organizationId: number; userId: number 
   const [legalOpinions, institutionalRequests, records] = await Promise.all([
     listLegalOpinionWorkspaces(params.organizationId, { activeOnly: true, limit: 100 }),
     listPendingForDomain(params.organizationId, LEGAL_DOMAIN, 100),
-    listOperationRecords(params.organizationId, 100),
+    listOperationRecords(params.organizationId, 100, "active"),
   ]);
   const mine = legalOpinions.filter(o => o.assignedLawyer === params.userId || o.assignedLawyer === null);
   const myRecords = records.filter(r => r.responsible === params.userId || r.recordType === "tarefa");

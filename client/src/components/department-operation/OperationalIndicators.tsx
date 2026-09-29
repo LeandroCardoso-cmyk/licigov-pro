@@ -15,6 +15,7 @@ export interface OperationalIndicatorsProps { compact?: boolean }
 const CARDS: Array<{ key: string; label: string; alert?: boolean }> = [
   { key: "trackedRecords", label: "Registros acompanhados" },
   { key: "finalizedRecords", label: "Registros finalizados" },
+  { key: "completedRecords", label: "Registros concluídos" },
   { key: "activeProcesses", label: "Processos ativos" },
   { key: "concludedProcesses", label: "Concluídos" },
   { key: "legalOpinionsAwaiting", label: "Pareceres aguardando" },
