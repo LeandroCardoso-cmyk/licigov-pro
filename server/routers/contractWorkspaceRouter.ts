@@ -23,6 +23,7 @@ import {
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
+import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
@@ -148,8 +149,9 @@ export const contractWorkspaceRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      await assertNoGenericContractActivation(input, orgId, ctx); // NEW-022 — minuta → vigente só por ação governada (antes de qualquer escrita)
       const ws = await requireContract(input.contractId, orgId);
-      const { contractId, status, ...fields } = input;
+      const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
       let updated = updateContractFields(ws, patch);
       if (status && status !== ws.status) {
