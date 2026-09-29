@@ -1,0 +1,53 @@
+From 347c628746246570c219d312ee04f4f71f7baa8e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 01:52:14 +0000
+Subject: [PATCH] integ(w4): PR-12 state-machine test follows NEW-022
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+pr12-contract-governed-change.test.ts afirmava "máquina de estados
+inalterada: minuta → vigente permitido (via CAS)". Com a NEW-022 a
+ativação NÃO passa pelo editor genérico: o caso passa a exigir FORBIDDEN
+CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION com zero escrita (nem o
+`value` enviado junto) e a cobertura "transição válida grava via CAS" é
+preservada com vigente → encerrado (CAS chamado com o novo status,
+updatedAt avançado). minuta → encerrado continua BAD_REQUEST sem escrita.
+Aplicar depois da PR-12 (e de 0005). Só teste.
+---
+ .../pr12-contract-governed-change.test.ts       | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/server/__tests__/integration/pr12-contract-governed-change.test.ts b/server/__tests__/integration/pr12-contract-governed-change.test.ts
+index b7ac82f..834b296 100644
+--- a/server/__tests__/integration/pr12-contract-governed-change.test.ts
++++ b/server/__tests__/integration/pr12-contract-governed-change.test.ts
+@@ -307,12 +307,21 @@ describe("PR-12 · contractWorkspace.updateContract — CAS + campos econômicos
+     expectNoWrites();
+   });
+ 
+-  it("máquina de estados inalterada: minuta → vigente permitido (via CAS); minuta → encerrado recusado sem escrita", async () => {
++  it("máquina de estados: transição válida grava via CAS; minuta → vigente pelo editor genérico recusado (NEW-022); minuta → encerrado recusado sem escrita", async () => {
++    // Integração NEW-022: a ativação (minuta → vigente) NÃO passa pelo editor genérico — nem com a revisão
++    // correta — e nada é gravado (nem o `value` enviado junto). A transição válida continua pelo CAS.
+     getWs().mockResolvedValue(contract("minuta"));
+-    const { workspace } = await caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, status: "vigente", value: 120000 });
+-    expect(workspace).toMatchObject({ status: "vigente", value: 120000 });
++    await expect(caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, status: "vigente", value: 120000 }))
++      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION") });
++    expectNoWrites();
++
++    vi.clearAllMocks();
++    cas().mockResolvedValue(true);
++    getWs().mockResolvedValue(contract("vigente"));
++    const { workspace } = await caller().updateContract({ contractId: "c", expectedUpdatedAt: REV, status: "encerrado" });
++    expect(workspace).toMatchObject({ status: "encerrado" });
+     expect(Date.parse(workspace.updatedAt)).toBeGreaterThan(Date.parse(REV));
+-    expect(cas().mock.calls[0][0]).toMatchObject({ status: "vigente" });
++    expect(cas().mock.calls[0][0]).toMatchObject({ status: "encerrado" });
+ 
+     vi.clearAllMocks();
+     getWs().mockResolvedValue(contract("minuta"));
+-- 
+2.43.0
+

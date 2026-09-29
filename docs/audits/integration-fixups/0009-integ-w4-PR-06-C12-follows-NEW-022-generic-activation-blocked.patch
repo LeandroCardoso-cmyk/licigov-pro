@@ -1,0 +1,56 @@
+From 6b69b09eee9107f0a070ef8469d94a6efbf53892 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 01:52:14 +0000
+Subject: [PATCH] integ(w4): PR-06 C12 follows NEW-022 (generic activation
+ blocked)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+O smoke create-not-reset-legal-contract C12 punha o contrato em `vigente`
+"pelo fluxo real" via contractWorkspace.updateContract({ status:
+"vigente" }) — exatamente o caminho genérico que a NEW-022 fecha (minuta →
+vigente exige ação governada ainda inexistente). O objeto do C12 é o retry
+DEPOIS que o contrato saiu de minuta; por isso:
+- prova que o editor genérico recusa a ativação mesmo para manager (piso
+  NEW-006) com a revisão correta (CAS PR-12): FORBIDDEN
+  CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION, contrato segue `minuta`;
+- põe o contrato em `vigente` por FIXTURE direta no banco e mantém todas
+  as asserções originais (retry ⇒ CONFLICT CONTRACT_ALREADY_EXISTS,
+  snapshot inalterado, status vigente).
+Aplicar depois de 0004 e 0005 (mesmo teste). Só teste.
+---
+ ...ate-not-reset-legal-contract-mysql-smoke.test.ts | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+index 8320d1f..c7e79a2 100644
+--- a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
++++ b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+@@ -628,14 +628,19 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+     }
+   }, 60_000);
+ 
+-  it("C12 — retry EXATO depois que o contrato saiu de minuta (vigente pelo fluxo real) ⇒ CONFLICT; idempotência não mascara a evolução", async () => {
++  it("C12 — retry EXATO depois que o contrato saiu de minuta (vigente por fixture) ⇒ CONFLICT; idempotência não mascara a evolução", async () => {
+     const c = await caller(lawyerA, ORG_A);
+     const p = { processId: `proc-${RUN}-12`, contractNumber: `CT-${RUN}-C12`, contractor: "Lambda", value: 42, term: "12 meses" };
+     const { workspace } = await c.contractWorkspace.createFromProcurement(p);
+     expect((await c.contractWorkspace.createFromProcurement(p)).workspace.id).toBe(workspace.id); // ainda minuta: converge
+-    // Integração NEW-006: mudança de status exige piso "manager" (operator ⇒ FORBIDDEN).
+-    // Integração PR-12: o save exige a revisão carregada (CAS `expectedUpdatedAt`).
+-    await (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente", expectedUpdatedAt: workspace.updatedAt });
++    // Integração NEW-022: o editor genérico NÃO ativa contrato (minuta → vigente exige ação governada ainda
++    // inexistente) — nem para manager (piso NEW-006) com a revisão correta (CAS PR-12). O objeto do C12 é o
++    // retry DEPOIS que o contrato saiu de minuta; o estado `vigente` é, portanto, fixture direta no banco.
++    const act = await errOf(async () => (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente", expectedUpdatedAt: workspace.updatedAt }));
++    expect(act.code).toBe("FORBIDDEN");
++    expect(act.message).toContain("CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION");
++    expect((await contractRow(ORG_A, workspace.id)).status).toBe("minuta");
++    await conn.execute("UPDATE contract_workspaces SET status = 'vigente' WHERE id = ? AND organization_id = ?", [workspace.id, ORG_A]);
+     const before = await orgContractsSnapshot(ORG_A);
+     const e = await errOf(() => c.contractWorkspace.createFromProcurement(p));
+     expect(e.code).toBe("CONFLICT");
+-- 
+2.43.0
+

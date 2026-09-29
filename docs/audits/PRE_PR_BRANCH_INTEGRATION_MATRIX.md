@@ -245,3 +245,86 @@ Patches prontos em `integration-fixups/000N-*.patch` (aplicáveis com `git am` n
 - `invitations-mysql-smoke` falha no main (`ctx.res.cookie is not a function`, 2 testes) — pré-existente, fora do `test:smoke:security`.
 - `pnpm lint` repo-wide não está verde nem no main (763 problemas) — pré-existente.
 - Graphify: regenerar o grafo uma única vez após a integração (exceção registrada nos commits das branches).
+
+## 9. Rodada final de hardening pré-PR (2026-09-29) — W0 + reintegração completa
+
+> Nova simulação DESCARTÁVEL, 100% local, num ambiente novo (nada herdado da execução anterior): worktree destacado sobre
+> `origin/main = 5924b4a`, merges `--no-ff` locais na ordem abaixo, banco próprio (MariaDB 10.11). Nenhum merge foi enviado.
+> Resoluções de merge: as dos `remerge-<sha>.diff` versionados, **reaplicadas mecanicamente** (marcadores normalizados +
+> `git apply` com contexto exato — qualquer divergência abortaria); `package.json` por união; PR-09 pela M8
+> (`m8-pr09-renumber-0309.py`, novo, executável e determinístico). HEAD final local: 20 merges + 10 fix-ups sobre 5924b4a.
+
+### 9.1 Ordem executada e resultado de cada merge
+
+| Pos. | Branch | Head | Merge |
+|---|---|---|---|
+| W0.1 | fix/new-016-official-document-immutability | `674662f` | limpo |
+| W0.2 | fix/new-003-disable-lgpd-export | `f99fcf8` | T package.json |
+| W0.3 | fix/new-022-block-generic-contract-activation | `9905413` | T package.json |
+| W1.1–W1.6 | PR-02 · LEG-005 · LEG-009 · LEG-028 · LEG-032 · NEW-002 | inalterados | idem §1 (remerge 445012f/4e9a75c/7792959 reaplicados) |
+| — | fix-ups 0001 · 0002 · 0007 · **0008** | | aplicados (`git am`) |
+| W2.1–W2.3 | NEW-005 · NEW-006 · NEW-007 | inalterados | idem §1 (remerge 867a80e/ca50b1b/e914837) |
+| W3.1–W3.3 | PR-04A · PR-05 · PR-06 | inalterados | idem §1 (remerge 76ee900/2026165/4ceff41); fix-ups 0003 · 0004 |
+| W4.1–W4.2 | PR-08 · PR-12 | inalterados | idem §1 (remerge 644b689/451062c); fix-ups 0005 · **0009** · **0010** |
+| W4.3 | PR-09 | `ddb148c` | T package.json, journal, 0308_snapshot (add/add), smoke colaboração ⇒ M8 (0308→0309) + M9; fix-up 0006 |
+| W5.1 | cutover PR-04 | `1568c40` | idem §1 (remerge 1617065) |
+| W5.2 | audit/r2-2-r2-3-prep | `7cf887e` | limpo |
+
+**W0 não conflita semanticamente com W1–W5 no código de produto**; os ajustes foram todos em testes (0008–0010) e um
+achado de typecheck corrigido na própria NEW-016 (INTEG-016-05, §9.3).
+
+### 9.2 Revalidação dos fix-ups existentes (0001–0007)
+
+Heads idênticos aos da execução anterior ⇒ os 7 patches aplicaram com `git am` **sem ajuste**, nos mesmos pontos, e cada
+um continua necessário (o teste correspondente falha sem ele — provado na execução anterior e reconfirmado pelos gates
+abaixo com o tree completo). O patch 0005 é **correção de produto** (PR-06 × PR-12), os demais são de teste/lint.
+
+### 9.3 Fix-ups novos e ajustes em branch
+
+| Id | Onde | Motivo | Tipo |
+|---|---|---|---|
+| **0008** | `new-002-account-hard-delete-mysql-smoke.test.ts` | NEW-003 desativa `exportMyData`; o smoke da NEW-002 afirmava que "continua funcionando" | teste (após NEW-002) |
+| **0009** | `create-not-reset-legal-contract-mysql-smoke.test.ts` C12 | NEW-022 fecha `minuta → vigente` pelo editor genérico; C12 usava esse caminho para chegar a `vigente` | teste (após 0004 e 0005) |
+| **0010** | `pr12-contract-governed-change.test.ts` | "minuta → vigente permitido via CAS" contradiz NEW-022; cobertura do CAS preservada com vigente → encerrado | teste (após PR-12/0005) |
+| INTEG-016-05 | branch NEW-016 (`674662f`) | `isDuplicateKeyError` exportado por `db/procurement.ts` (PR-05) e `db/officialDocuments.ts` ⇒ TS2308 via `db/index.ts` | produto, corrigido na branch |
+| NEW-016 `cde5db5` | smoke NEW-016 T8 | PR-09 recusa regenerar documento já emitido (PRECONDITION_FAILED) | teste, na branch |
+| NEW-022 `961c711` | import do guard | colidia com o import inserido pela PR-12 na mesma linha | produto (só posição), na branch |
+| NEW-022 `802dc88` / `9905413` | smoke NEW-022 | NEW-006 recusa viewer antes do handler; PR-12 exige `expectedUpdatedAt` e trava `object` pós-minuta | teste, na branch |
+
+### 9.4 Migration numbering (decisão)
+
+- PR-06 mantém **0308**; PR-09 vira **0309** somente no merge de integração (M8). **Não** renumerada agora na própria
+  branch: sobre a main atual (sem a PR-06) a PR-09 precisa da 0308 para ser validável isoladamente, e renumerar criaria um
+  buraco no journal (idx 308 ausente) que o validator de boot trataria como inconsistência.
+- A mudança exata para depois que a PR-06 estiver na main é o script `m8-pr09-renumber-0309.py` (rebase/merge da PR-09
+  sobre a nova main ⇒ SQL `0309_…`, journal idx 309 com o `when` da PR-09, `0309_snapshot.json` = snapshot 0308 da PR-06 +
+  `generated_documents` da PR-09, `id d38bd35e…`, `prevId b455cc58…`, e as referências "0308" da própria PR-09). Resultado
+  verificado: `pnpm db:generate` ⇒ "No schema changes".
+
+### 9.5 Gates no tree totalmente integrado (W0–W5)
+
+| Gate | Resultado |
+|---|---|
+| `pnpm -s check` | ✔ 0 erros |
+| `pnpm db:generate` (drift schema × snapshot) | ✔ "No schema changes, nothing to migrate" |
+| `db:migrate:release` em DB limpo | ✔ 310 linhas no ledger = 310 entries do journal (…0308_contract_number_unique_per_org, 0309_edital_institutional_parameters); `normalized_number` + `uq_ctw_org_normalized_number` + `judgment_criterion`/`execution_regime` presentes; rerun = no-op (310) |
+| `DATABASE_URL=… pnpm -s test:smoke:security` (DB novo migrado) | ✔ **26 arquivos / 300 testes** (antes 23 / 262; +NEW-016 14, +NEW-003 12, +NEW-022 12) |
+| `env -u DATABASE_URL pnpm -s test` | ✔ **301 passed \| 74 skipped arquivos; 6446 passed \| 647 skipped testes** (antes 298 \| 71; 6416 \| 609) |
+| smokes MySQL extras das áreas do W0 (c4a, c4b1, v1-functional-closure, contrato-avulso, create-not-reset-processes, document-generation) | ✔ 6 / 62 |
+| eslint `--max-warnings 0` nos 137 `.ts/.tsx` alterados vs main | ✔ 0 problemas |
+| `pnpm -s lint` (repo inteiro) | ✘ pré-existente: 698 (289 err / 409 warn) — **idêntico** ao tree anterior; W0 não introduz nenhum; main = 763 |
+| `pnpm -s build` | ✔ |
+| `git diff --check origin/main HEAD` | ✔ limpo |
+
+**Pares descartáveis exigidos (cada um sobre main + as duas branches, com os testes das duas frentes):**
+
+| Par | Textual | Semântico | Resultado |
+|---|---|---|---|
+| NEW-016 × PR-09 | package.json | T8 da NEW-016 × regra "emitido não regenera" da PR-09 ⇒ ajustado na NEW-016 (`cde5db5`) | ✔ smokes NEW-016 14 + PR-09 10 + C.4B.1 12 + C.4A 7; unit/integração 100/100; check 0 |
+| NEW-016 × cutover PR-04 / PR-04A | package.json | nenhum (PR-04 não toca Document Engine) | ✔ (merge-tree) — coberto pelo tree completo |
+| NEW-016 × PR-05 | limpo | TS2308 `isDuplicateKeyError` ⇒ corrigido na NEW-016 (`674662f`) | ✔ check 0 |
+| NEW-003 × NEW-002 (2 ordens) | package.json | smoke NEW-002 "exportMyData funciona" ⇒ **0008** | ✔ 19/19 smokes + 27/27 unit; check 0; eslint 0 |
+| NEW-022 × NEW-006 | package.json | viewer recusado pelo RBAC antes do handler ⇒ smoke NEW-022 ajustado (`802dc88`) | ✔ NEW-022 12/12; NEW-006 smoke + unit 121/121 |
+| NEW-022 × PR-06 | package.json | C12 ativava pelo editor genérico ⇒ **0009** | ✔ (C12 verde no tree completo) |
+| NEW-022 × PR-08 | package.json | nenhum | ✔ 41/41 smokes + 65/65 unit |
+| NEW-022 × PR-12 | package.json (após `961c711`) | CAS obrigatório (smoke NEW-022 ajustado, `9905413`) + teste PR-12 "minuta → vigente via CAS" ⇒ **0010** | ✔ NEW-022 12/12; PR-12 51/51 com 0010 |

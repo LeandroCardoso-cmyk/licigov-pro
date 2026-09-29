@@ -1,0 +1,72 @@
+From a2ed16114c9e4dec023350cdb88595f73b52f286 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 01:36:50 +0000
+Subject: [PATCH] integ(w0/w1): NEW-002 smoke follows NEW-003 (exportMyData
+ disabled)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+O smoke new-002-account-hard-delete-mysql-smoke afirmava que
+lgpd.exportMyData "continua funcionando" (devolvia user/processos/
+documentos). Com a NEW-003 (P1 SECURITY) a exportação por autoatendimento
+é DESATIVADA: o teste passa a exigir FORBIDDEN LGPD_EXPORT_DISABLED
+(mensagem estável) e mantém a prova de que nenhuma linha é alterada.
+Só teste; nenhuma cobertura de "zero cascata" removida.
+---
+ ...02-account-hard-delete-mysql-smoke.test.ts | 24 +++++++++----------
+ 1 file changed, 11 insertions(+), 13 deletions(-)
+
+diff --git a/server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts b/server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts
+index 3a35800..cc043a5 100644
+--- a/server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts
++++ b/server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts
+@@ -11,12 +11,13 @@
+  *    órgão) recebe FORBIDDEN com ACCOUNT_HARD_DELETE_DISABLED — mensagem idêntica;
+  *  - ZERO delete / ZERO cascata: contagens EXATAS de todas as tabelas acima permanecem iguais, para o
+  *    titular e para o usuário de outro órgão; as linhas de `users` continuam existindo;
+- *  - `lgpd.exportMyData` (somente leitura) continua funcionando e não altera nenhuma linha;
++ *  - `lgpd.exportMyData` (desativado pela NEW-003) recusa com LGPD_EXPORT_DISABLED e não altera nenhuma linha;
+  *  - evento `account_hard_delete_refused` com actorUserId/correlationId e sem e-mail/nome.
+  */
+ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+ import mysql from "mysql2/promise";
+ import { ACCOUNT_HARD_DELETE_DISABLED, ACCOUNT_HARD_DELETE_DISABLED_MESSAGE } from "../../services/accountRemovalGuard";
++import { LGPD_EXPORT_DISABLED, LGPD_EXPORT_DISABLED_MESSAGE } from "../../services/lgpdExportGuard";
+ 
+ const DB = process.env.DATABASE_URL;
+ const ORG_A = 960201;
+@@ -202,21 +203,18 @@ describe.skipIf(!DB)("NEW-002 — lgpd.deleteMyAccount sem exclusão física (My
+     expect(await snapshot()).toEqual(before);
+   }, 30000);
+ 
+-  it("exportMyData (somente leitura) continua funcionando e não altera nenhuma linha", async () => {
++  it("exportMyData (desativado pela NEW-003) recusa com LGPD_EXPORT_DISABLED e não altera nenhuma linha", async () => {
++    // Integração NEW-002 × NEW-003: a exportação por autoatendimento deixou de existir (P1 SECURITY — vazava
++    // passwordHash/signaturePassword/tokenVersion/openId e documentos de órgão de servidor desligado).
+     const before = await snapshot();
+     const c = await caller(holder, "user", ORG_A, "n002-export");
+-    const data = await c.lgpd.exportMyData();
+-    expect(data.user?.id).toBe(holder);
+-    expect(data.processes.map((p) => p.id)).toEqual([pHolder]);
+-    expect(data.documents.map((d) => d.id)).toEqual([dHolder]);
+-    expect(data.comments).toHaveLength(1);
+-    expect(data.notifications).toHaveLength(1);
+-    expect(data.consents).toHaveLength(2);
+-    expect(data.activities).toHaveLength(2);
+-    // não mistura dados de outro usuário/órgão
+-    expect(data.processes.map((p) => p.id)).not.toContain(pOther);
+-    expect(data.documents.map((d) => d.id)).not.toContain(dOther);
++    const err = await errOf(() => c.lgpd.exportMyData());
++    expect(err).toEqual({ code: "FORBIDDEN", message: LGPD_EXPORT_DISABLED_MESSAGE });
++    expect(err.message).toContain(LGPD_EXPORT_DISABLED);
+     expect(await snapshot()).toEqual(before);
++    // e o titular de outro órgão também não é afetado
++    expect(pOther).toBeGreaterThan(0);
++    expect(dOther).toBeGreaterThan(0);
+   }, 30000);
+ 
+   it("evento account_hard_delete_refused com actorUserId/correlationId, sem e-mail nem nome", async () => {
+-- 
+2.43.0
+
