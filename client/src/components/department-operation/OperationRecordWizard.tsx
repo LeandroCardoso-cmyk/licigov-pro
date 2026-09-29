@@ -69,10 +69,10 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
           <input type="date" value={eventDate} onChange={(e) => { setEventDate(e.target.value); if (!e.target.value) { setEventEndDate(""); setEventTime(""); } }} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" />
         </label>
         <label className="block text-xs font-medium text-foreground">Data final (opcional)
-          <input type="date" value={eventEndDate} min={eventDate || undefined} disabled={!eventDate} onChange={(e) => setEventEndDate(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:opacity-50" />
+          <input type="date" value={eventEndDate} min={eventDate || undefined} disabled={!eventDate} onChange={(e) => setEventEndDate(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:bg-muted disabled:text-muted-foreground" />
         </label>
         <label className="block text-xs font-medium text-foreground">Horário (opcional)
-          <input type="time" value={eventTime} disabled={!eventDate} onChange={(e) => setEventTime(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:opacity-50" />
+          <input type="time" value={eventTime} disabled={!eventDate} onChange={(e) => setEventTime(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:bg-muted disabled:text-muted-foreground" />
         </label>
       </div>
       <p className="text-xs text-muted-foreground">Sem horário, o evento aparece como dia inteiro no calendário.</p>
