@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 import { createContractWorkspace, type ContractStatus } from "../../domain/contractWorkspace";
-import { insertContractWorkspace } from "../../db/contractWorkspace";
+import { insertContractWorkspace, getContractWorkspace } from "../../db/contractWorkspace";
 import {
   CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION,
   CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION_MESSAGE,
@@ -97,6 +97,11 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
       `SELECT status, contractor, object, value, term, manager, inspector, contract_number, updated_at FROM contract_workspaces WHERE id = ?`, [id]);
     return JSON.stringify(r[0] ?? null);
   }
+  /** Revisão atual (`updatedAt`) — enviada como `expectedUpdatedAt` (CAS obrigatório com a PR-12; sem a PR-12 o
+   *  Zod não-estrito descarta a chave). Assim o smoke vale antes e depois da PR-12. */
+  async function rev(id: string, org = ORG_A) {
+    return (await getContractWorkspace(id, org))?.updatedAt ?? new Date().toISOString();
+  }
   async function timelineCount(id: string) {
     const [r] = await conn.execute<mysql.RowDataPacket[]>(`SELECT COUNT(*) n FROM process_timeline WHERE process_id = ?`, [id]);
     return Number((r[0] as { n: number }).n);
@@ -117,7 +122,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
       const before = await row(id);
       const tl = await timelineCount(id);
       const c = await caller(tag, ORG_A);
-      const err = await errOf(() => c.contractWorkspace.updateContract({ contractId: id, status: "vigente" }));
+      const err = await errOf(async () => c.contractWorkspace.updateContract({ contractId: id, status: "vigente", expectedUpdatedAt: await rev(id) }));
       if (tag === "viewer") {
         // Composição com a NEW-006: o piso RBAC operator+ da procedure recusa o viewer ANTES do handler
         // (FORBIDDEN do RBAC); sem a NEW-006, é o guard da NEW-022. Nos dois casos: recusa e zero escrita.
@@ -135,9 +140,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     const id = contracts.minuta;
     const before = await row(id);
     const c = await caller("owner", ORG_A);
-    const err = await errOf(() => c.contractWorkspace.updateContract({
-      contractId: id, status: "vigente", contractor: "OUTRA LTDA", value: 1, manager: "Novo Gestor",
-    }));
+    const err = await errOf(async () => c.contractWorkspace.updateContract({ contractId: id, status: "vigente", contractor: "OUTRA LTDA", value: 1, manager: "Novo Gestor", expectedUpdatedAt: await rev(id) }));
     expect(err.code).toBe("FORBIDDEN");
     expect(err.message).toContain(CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION);
     expect(await row(id)).toBe(before);
@@ -146,7 +149,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
   it("outras edições da minuta continuam funcionando (sem status)", async () => {
     const id = contracts["minuta-edit"];
     const c = await caller("owner", ORG_A);
-    const res = await c.contractWorkspace.updateContract({ contractId: id, contractor: "NOVA RAZÃO LTDA" });
+    const res = await c.contractWorkspace.updateContract({ contractId: id, contractor: "NOVA RAZÃO LTDA", expectedUpdatedAt: await rev(id) });
     expect(res.workspace.status).toBe("minuta");
     expect(JSON.parse(await row(id))).toMatchObject({ status: "minuta", contractor: "NOVA RAZÃO LTDA" });
   }, 30_000);
@@ -154,7 +157,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
   it("transições que NÃO são ativação seguem a máquina: vigente → encerrado grava", async () => {
     const id = contracts.vigente;
     const c = await caller("owner", ORG_A);
-    const res = await c.contractWorkspace.updateContract({ contractId: id, status: "encerrado" });
+    const res = await c.contractWorkspace.updateContract({ contractId: id, status: "encerrado", expectedUpdatedAt: await rev(id) });
     expect(res.workspace.status).toBe("encerrado");
     expect(JSON.parse(await row(id)).status).toBe("encerrado");
   }, 30_000);
@@ -163,7 +166,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     const id = contracts.arquivado;
     const before = await row(id);
     const c = await caller("owner", ORG_A);
-    const err = await errOf(() => c.contractWorkspace.updateContract({ contractId: id, status: "vigente" }));
+    const err = await errOf(async () => c.contractWorkspace.updateContract({ contractId: id, status: "vigente", expectedUpdatedAt: await rev(id) }));
     expect(err.code).toBe("BAD_REQUEST");
     expect(err.message).not.toContain(CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION);
     expect(await row(id)).toBe(before);
@@ -173,8 +176,8 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     const id = contracts.minuta;
     const before = await row(id);
     const c = await caller("other-b", ORG_B);
-    const cross = await errOf(() => c.contractWorkspace.updateContract({ contractId: id, status: "vigente" }));
-    const missing = await errOf(() => c.contractWorkspace.updateContract({ contractId: "nao-existe-n022", status: "vigente" }));
+    const cross = await errOf(async () => c.contractWorkspace.updateContract({ contractId: id, status: "vigente", expectedUpdatedAt: await rev(id) }));
+    const missing = await errOf(async () => c.contractWorkspace.updateContract({ contractId: "nao-existe-n022", status: "vigente", expectedUpdatedAt: new Date().toISOString() }));
     expect(cross.code).toBe("NOT_FOUND");
     expect(cross).toEqual(missing);
     expect(await row(id)).toBe(before);
@@ -187,7 +190,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     const cap = captureWarn();
     const errs = [];
     try {
-      for (let i = 0; i < 5; i++) errs.push(await errOf(() => c.contractWorkspace.updateContract({ contractId: id, status: "vigente" })));
+      for (let i = 0; i < 5; i++) errs.push(await errOf(async () => c.contractWorkspace.updateContract({ contractId: id, status: "vigente", expectedUpdatedAt: await rev(id) })));
     } finally { cap.restore(); }
     expect(new Set(errs.map((e) => JSON.stringify(e))).size).toBe(1);
     expect(await row(id)).toBe(before);
@@ -202,7 +205,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     const ws = createContractWorkspace({ organizationId: ORG_A, originType: "avulso", contractNumber: `N022-noop-${stamp}`, status: "vigente", correlationId: "n022-seed" });
     await insertContractWorkspace(ws);
     const c = await caller("owner", ORG_A);
-    const res = await c.contractWorkspace.updateContract({ contractId: ws.id, status: "vigente", object: "Objeto ajustado" });
+    const res = await c.contractWorkspace.updateContract({ contractId: ws.id, status: "vigente", expectedUpdatedAt: await rev(ws.id) });
     expect(res.workspace.status).toBe("vigente");
   }, 30_000);
 });
