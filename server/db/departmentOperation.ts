@@ -7,14 +7,16 @@
  * degrada sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lte, max, or } from "drizzle-orm";
 import { getDb } from "./connection";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 import {
   operationRecordsTable, operationalEventsTable, operationalMilestonesTable,
-  operationalTimelineTable, publicationRecordsTable, operationalSettingsTable,
+  operationalTimelineTable, publicationRecordsTable, operationalSettingsTable, organizations,
 } from "../../drizzle/schema";
 import type { OperationRecord } from "../domain/operationRecord";
+import { createOperationalTimelineEntry } from "../domain/operationalTimeline";
+import type { OperationRecordSchedule } from "../domain/operationRecordSchedule";
 import type { OperationalEvent } from "../domain/operationalEvent";
 import type { OperationalMilestone } from "../domain/operationalMilestone";
 import type { OperationalTimelineEntry } from "../domain/operationalTimeline";
@@ -32,17 +34,89 @@ export async function insertOperationRecord(r: OperationRecord): Promise<Operati
     id: r.id, organizationId: r.organizationId, recordType: r.recordType, origin: r.origin, number: r.number,
     object: r.object, modality: r.modality, currentStage: r.currentStage, responsible: r.responsible,
     referenceType: r.referenceType, referenceId: r.referenceId, documentReferences: JSON.stringify(r.documentReferences),
-    notes: r.notes, correlationId: r.correlationId, createdAt: toDb(r.createdAt), updatedAt: toDb(r.updatedAt),
+    notes: r.notes, eventDate: r.eventDate, eventEndDate: r.eventEndDate, eventTime: r.eventTime,
+    correlationId: r.correlationId, createdAt: toDb(r.createdAt), updatedAt: toDb(r.updatedAt),
   }).onDuplicateKeyUpdate({ set: { currentStage: r.currentStage, object: r.object, notes: r.notes, updatedAt: toDb(r.updatedAt) } });
   return r;
 }
 
-export async function listOperationRecords(orgId: number, limit = 100): Promise<Array<{ id: string; recordType: string; origin: string; number: string; object: string; modality: string; currentStage: string; responsible: number | null; createdAt: string }>> {
+export interface OperationRecordListRow {
+  id: string; recordType: string; origin: string; number: string; object: string;
+  modality: string; currentStage: string; responsible: number | null;
+  eventDate: string; eventEndDate: string; eventTime: string; createdAt: string;
+}
+
+function mapOperationRecordRow(r: typeof operationRecordsTable.$inferSelect): OperationRecordListRow {
+  return {
+    id: r.id, recordType: r.recordType, origin: r.origin, number: r.number,
+    object: r.object ?? "", modality: r.modality, currentStage: r.currentStage,
+    responsible: r.responsible ?? null, eventDate: r.eventDate,
+    eventEndDate: r.eventEndDate, eventTime: r.eventTime, createdAt: fromDb(r.createdAt),
+  };
+}
+
+export async function listOperationRecords(orgId: number, limit = 100): Promise<OperationRecordListRow[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(operationRecordsTable)
     .where(eq(operationRecordsTable.organizationId, orgId)).orderBy(desc(operationRecordsTable.updatedAt)).limit(limit);
-  return rows.map(r => ({ id: r.id, recordType: r.recordType, origin: r.origin, number: r.number, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, responsible: r.responsible ?? null, createdAt: fromDb(r.createdAt) }));
+  return rows.map(mapOperationRecordRow);
+}
+
+/** Somente registros cuja agenda intercepta a janela, sempre isolados por tenant. */
+export async function listScheduledOperationRecords(orgId: number, from: string, to: string, limit = 2000): Promise<OperationRecordListRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(operationRecordsTable).where(and(
+    eq(operationRecordsTable.organizationId, orgId),
+    gt(operationRecordsTable.eventDate, ""),
+    lte(operationRecordsTable.eventDate, to),
+    or(and(eq(operationRecordsTable.eventEndDate, ""), gte(operationRecordsTable.eventDate, from)),
+      gte(operationRecordsTable.eventEndDate, from)),
+  )).orderBy(asc(operationRecordsTable.eventDate)).limit(limit);
+  return rows.map(mapOperationRecordRow);
+}
+
+/** Atualização idempotente e auditada da agenda de um registro existente. */
+export async function setOperationRecordSchedule(params: {
+  organizationId: number; recordId: string; schedule: OperationRecordSchedule;
+  actor: string; correlationId: string;
+}): Promise<{ record: OperationRecordListRow; changed: boolean } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  return db.transaction(async (tx) => {
+    const [organization] = await tx.select({ id: organizations.id }).from(organizations)
+      .where(eq(organizations.id, params.organizationId)).for("update").limit(1);
+    if (!organization) return null;
+    const rows = await tx.select().from(operationRecordsTable).where(and(
+      eq(operationRecordsTable.organizationId, params.organizationId), eq(operationRecordsTable.id, params.recordId),
+    )).for("update").limit(1);
+    const before = rows[0];
+    if (!before) return null;
+    const { eventDate, eventEndDate, eventTime } = params.schedule;
+    if (before.eventDate === eventDate && before.eventEndDate === eventEndDate && before.eventTime === eventTime) {
+      return { record: mapOperationRecordRow(before), changed: false };
+    }
+    const updatedAt = toDb(new Date().toISOString());
+    await tx.update(operationRecordsTable).set({ eventDate, eventEndDate, eventTime, updatedAt })
+      .where(and(eq(operationRecordsTable.organizationId, params.organizationId), eq(operationRecordsTable.id, params.recordId)));
+    const [orderRow] = await tx.select({ value: max(operationalTimelineTable.eventOrder) })
+      .from(operationalTimelineTable).where(eq(operationalTimelineTable.organizationId, params.organizationId));
+    const entry = createOperationalTimelineEntry({
+      organizationId: params.organizationId, order: Number(orderRow?.value ?? -1) + 1,
+      actor: params.actor, action: "agenda_registro_atualizada", referenceType: "operation_record",
+      referenceId: params.recordId, summary: eventDate
+        ? `Agenda do registro definida para ${eventDate}${eventEndDate ? ` a ${eventEndDate}` : ""}${eventTime ? ` às ${eventTime}` : " (dia inteiro)"}.`
+        : "Agenda do registro removida.", correlationId: params.correlationId,
+    });
+    await tx.insert(operationalTimelineTable).values({
+      id: entry.id, organizationId: entry.organizationId, eventOrder: entry.order,
+      actor: entry.actor, action: entry.action, referenceType: entry.referenceType,
+      referenceId: entry.referenceId, summary: entry.summary, correlationId: entry.correlationId,
+      createdAt: toDb(entry.createdAt),
+    });
+    return { record: mapOperationRecordRow({ ...before, eventDate, eventEndDate, eventTime, updatedAt }), changed: true };
+  });
 }
 
 // ─── Events ────────────────────────────────────────────────────────────────────
@@ -58,15 +132,69 @@ export async function insertOperationalEvent(e: OperationalEvent): Promise<Opera
   return e;
 }
 
+/** Evento manual + timeline em um commit; repetir a mesma solicitação não duplica auditoria. */
+export async function insertManualOperationalEvent(e: OperationalEvent, actor: string): Promise<boolean | null> {
+  const db = await getDb();
+  if (!db) return null;
+  return db.transaction(async (tx) => {
+    const [organization] = await tx.select({ id: organizations.id }).from(organizations)
+      .where(eq(organizations.id, e.organizationId)).for("update").limit(1);
+    if (!organization) throw new Error("Organização não encontrada.");
+    if (e.referenceType === "operation_record") {
+      const [record] = await tx.select({ id: operationRecordsTable.id }).from(operationRecordsTable)
+        .where(and(eq(operationRecordsTable.organizationId, e.organizationId), eq(operationRecordsTable.id, e.referenceId))).limit(1);
+      if (!record) throw new Error("Registro de referência não encontrado nesta organização.");
+    }
+    const [existing] = await tx.select().from(operationalEventsTable)
+      .where(eq(operationalEventsTable.id, e.id)).for("update").limit(1);
+    if (existing) {
+      if (existing.organizationId !== e.organizationId || existing.eventType !== e.eventType ||
+          existing.title !== e.title || existing.eventDate !== e.eventDate || existing.eventTime !== e.eventTime ||
+          existing.referenceType !== e.referenceType || existing.referenceId !== e.referenceId || existing.autoGenerated !== 0) {
+        throw new Error("Já existe um evento diferente para este registro, tipo e data.");
+      }
+      return false;
+    }
+    const peers = await tx.select({ id: operationalEventsTable.id }).from(operationalEventsTable).where(and(
+      eq(operationalEventsTable.organizationId, e.organizationId),
+      eq(operationalEventsTable.eventType, e.eventType),
+      eq(operationalEventsTable.eventDate, e.eventDate),
+      eq(operationalEventsTable.referenceType, e.referenceType),
+      eq(operationalEventsTable.referenceId, e.referenceId),
+    )).for("update");
+    if (peers.length > 0) throw new Error("Já existe um evento para este registro, tipo e data.");
+    await tx.insert(operationalEventsTable).values({
+      id: e.id, organizationId: e.organizationId, eventType: e.eventType, title: e.title,
+      eventDate: e.eventDate, eventTime: e.eventTime, referenceType: e.referenceType,
+      referenceId: e.referenceId, autoGenerated: 0, alertOffsetDays: 0,
+      correlationId: e.correlationId, createdAt: toDb(e.createdAt),
+    });
+    const [orderRow] = await tx.select({ value: max(operationalTimelineTable.eventOrder) })
+      .from(operationalTimelineTable).where(eq(operationalTimelineTable.organizationId, e.organizationId));
+    const entry = createOperationalTimelineEntry({
+      organizationId: e.organizationId, order: Number(orderRow?.value ?? -1) + 1,
+      actor, action: "evento_criado", referenceType: "operational_event", referenceId: e.id,
+      summary: `Evento "${e.title}" cadastrado no calendário.`, correlationId: e.correlationId,
+    });
+    await tx.insert(operationalTimelineTable).values({
+      id: entry.id, organizationId: entry.organizationId, eventOrder: entry.order,
+      actor: entry.actor, action: entry.action, referenceType: entry.referenceType,
+      referenceId: entry.referenceId, summary: entry.summary, correlationId: entry.correlationId,
+      createdAt: toDb(entry.createdAt),
+    });
+    return true;
+  });
+}
+
 export async function listOperationalEvents(orgId: number, opts: { from?: string; to?: string; limit?: number } = {}): Promise<Array<{ id: string; eventType: string; title: string; eventDate: string; eventTime: string; referenceType: string; referenceId: string; autoGenerated: boolean; alertOffsetDays: number }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(operationalEventsTable)
-    .where(eq(operationalEventsTable.organizationId, orgId)).orderBy(asc(operationalEventsTable.eventDate)).limit(opts.limit ?? 200);
-  let mapped = rows.map(r => ({ id: r.id, eventType: r.eventType, title: r.title, eventDate: r.eventDate, eventTime: r.eventTime, referenceType: r.referenceType, referenceId: r.referenceId, autoGenerated: r.autoGenerated === 1, alertOffsetDays: r.alertOffsetDays }));
-  if (opts.from) mapped = mapped.filter(e => e.eventDate >= opts.from!);
-  if (opts.to) mapped = mapped.filter(e => e.eventDate <= opts.to!);
-  return mapped;
+    .where(and(eq(operationalEventsTable.organizationId, orgId),
+      opts.from ? gte(operationalEventsTable.eventDate, opts.from) : undefined,
+      opts.to ? lte(operationalEventsTable.eventDate, opts.to) : undefined,
+    )).orderBy(asc(operationalEventsTable.eventDate)).limit(opts.limit ?? 200);
+  return rows.map(r => ({ id: r.id, eventType: r.eventType, title: r.title, eventDate: r.eventDate, eventTime: r.eventTime, referenceType: r.referenceType, referenceId: r.referenceId, autoGenerated: r.autoGenerated === 1, alertOffsetDays: r.alertOffsetDays }));
 }
 
 // ─── Milestones ──────────────────────────────────────────────────────────────
