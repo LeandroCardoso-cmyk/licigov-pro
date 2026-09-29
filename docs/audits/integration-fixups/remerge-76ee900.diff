@@ -1,0 +1,58 @@
+=== 76ee900 Merge remote-tracking branch 'origin/fix/r2-pr04a-direct-price-import' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index 4554e3a..4dbd92a 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< e914837 (Merge remote-tracking branch 'origin/fix/new-007-legal-opinion-rbac' into HEAD)
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts",
+->>>>>>> 6a8e8a9 (fix(direct-procurement): governed price-research import with explicit identity (PR-04A, LEG-014/FCC-01))
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",
+diff --git a/server/routers/directProcurementRouter.ts b/server/routers/directProcurementRouter.ts
+remerge CONFLICT (content): Merge conflict in server/routers/directProcurementRouter.ts
+index 9a24dcc..016e578 100644
+--- a/server/routers/directProcurementRouter.ts
++++ b/server/routers/directProcurementRouter.ts
+@@ -21,13 +21,9 @@
+  */
+ import { z } from "zod";
+ import { TRPCError } from "@trpc/server";
+-<<<<<<< e914837 (Merge remote-tracking branch 'origin/fix/new-007-legal-opinion-rbac' into HEAD)
+ import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
+ import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+-=======
+-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+ import { serviceLogger } from "../services/observabilityService";
+->>>>>>> 6a8e8a9 (fix(direct-procurement): governed price-research import with explicit identity (PR-04A, LEG-014/FCC-01))
+ import {
+   createDirectProcurementWorkspace, setDirectStage,
+   setProcedureType, setLegalBasis, configureFlags,
+@@ -154,10 +150,6 @@ export const directProcurementRouter = router({
+       return { need };
+     }),
+ 
+-<<<<<<< e914837 (Merge remote-tracking branch 'origin/fix/new-007-legal-opinion-rbac' into HEAD)
+-  importPriceResearch: orgRoleProcedure("operator")
+-    .input(z.object({ workspaceId: z.string().min(1), source: z.enum(PRICE_SOURCES), text: z.string().min(1) }))
+-=======
+   // R2 / PR-04A — LEG-014 / FCC-01: importação GOVERNADA (identidade explícita por importação, idempotência,
+   // contentHash + dedup, transação local, linhagem, evento persistido). Escrita ⇒ operator+ (viewer NÃO
+   // escreve — mesmo RBAC de procurementProcess.importPriceResearch). Workspace por (id, org do contexto):
+@@ -169,7 +161,6 @@ export const directProcurementRouter = router({
+       text: z.string().min(1),
+       idempotencyKey: z.string().trim().min(8).max(128),
+     }))
+->>>>>>> 6a8e8a9 (fix(direct-procurement): governed price-research import with explicit identity (PR-04A, LEG-014/FCC-01))
+     .mutation(async ({ input, ctx }) => {
+       const orgId = ctx.organizationId!;
+       await requireWs(input.workspaceId, orgId);

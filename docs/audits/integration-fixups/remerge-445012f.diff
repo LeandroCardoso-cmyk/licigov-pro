@@ -1,0 +1,20 @@
+=== 445012f Merge remote-tracking branch 'origin/fix/r2-leg005-disable-legacy-items-catmat' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index 17b6f4f..73999dd 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< e9f388d (Merge remote-tracking branch 'origin/fix/r2-pr02-disable-legacy-endpoints' into HEAD)
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts",
+->>>>>>> 00209a9 (fix(r2): LEG-005 governed disable of legacy TR items / CATMAT procedures)
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",

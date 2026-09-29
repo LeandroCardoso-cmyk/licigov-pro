@@ -1,0 +1,87 @@
+From 5f9ed882bd92c23e1b440224ab95487a4891bfbc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 28 Sep 2026 23:54:29 +0000
+Subject: [PATCH] integ(w3): PR-06 smoke follows NEW-007 assignment authority
+ (e4/eActor) and NEW-006 manager floor on status change (C12)
+
+---
+ ...t-reset-legal-contract-mysql-smoke.test.ts | 23 ++++++++++++-------
+ 1 file changed, 15 insertions(+), 8 deletions(-)
+
+diff --git a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+index e1042b0..dfd9d3d 100644
+--- a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
++++ b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+@@ -37,7 +37,7 @@ const RUN = Date.now().toString(36);
+ 
+ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL real, router real)", () => {
+   let conn: mysql.Connection;
+-  let lawyerA: number, lawyerA2: number, requesterA: number, lawyerB: number, outsider: number;
++  let lawyerA: number, lawyerA2: number, requesterA: number, lawyerB: number, outsider: number, managerA: number;
+   let seq = 0;
+ 
+   const q = async (sql: string, p: unknown[] = []) => {
+@@ -80,7 +80,10 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+       conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, 1)`, [org, userId, role]);
+     lawyerA = await user("lawyer-a"); lawyerA2 = await user("lawyer-a2"); requesterA = await user("req-a");
+     lawyerB = await user("lawyer-b"); outsider = await user("outsider");
++    // Integração NEW-006: mudança de status em contractWorkspace.updateContract exige piso "manager".
++    managerA = await user("manager-a");
+     await member(ORG_A, lawyerA); await member(ORG_A, lawyerA2); await member(ORG_A, requesterA);
++    await member(ORG_A, managerA, "manager");
+     await member(ORG_B, lawyerB);
+     // outsider: propositalmente SEM membership em ORG_A (só em ORG_B).
+     await member(ORG_B, outsider);
+@@ -101,7 +104,7 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+       await del(`DELETE FROM idempotency_keys WHERE organizationId = ?`, [org]);
+       await del(`DELETE FROM organization_members WHERE organizationId = ?`, [org]);
+     }
+-    const users = [lawyerA, lawyerA2, requesterA, lawyerB, outsider].filter(Boolean);
++    const users = [lawyerA, lawyerA2, requesterA, lawyerB, outsider, managerA].filter(Boolean);
+     if (users.length) await del(`DELETE FROM users WHERE id IN (${users.map(() => "?").join(",")})`, users);
+     await del(`DELETE FROM organizations WHERE id IN (?, ?)`, [ORG_A, ORG_B]);
+     await conn.end();
+@@ -182,10 +185,12 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+     expect(e3.code).toBe("CONFLICT");
+     expect(e3.message).toContain("LEGAL_OPINION_ALREADY_SIGNED");
+ 
+-    // Outro procurador do mesmo órgão — idem.
++    // Outro procurador do mesmo órgão — recusado, sem escrita. Integração NEW-007: quem não é o procurador
++    // designado é barrado ANTES pela autoridade de atribuição (FORBIDDEN LEGAL_OPINION_ASSIGNMENT_REQUIRED).
+     const c2 = await caller(lawyerA2, ORG_A);
+     const e4 = await errOf(() => c2.legalOpinionWorkspace.createDraft({ workspaceId: wsId, ...DRAFT_PAYLOAD, report: "outro" }));
+-    expect(e4.code).toBe("CONFLICT");
++    expect(e4.code).toBe("FORBIDDEN");
++    expect(e4.message).toContain("LEGAL_OPINION_ASSIGNMENT_REQUIRED");
+ 
+     // Edição direta também continua bloqueada (domínio) — e nada muda.
+     await errOf(() => c.legalOpinionWorkspace.updateOpinion({ workspaceId: wsId, report: "edição pós-assinatura" }));
+@@ -231,11 +236,12 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+       expect(e.message).toContain("LEGAL_OPINION_ALREADY_EXISTS");
+       expect(e.message).toMatch(/Já existe um parecer/);
+     }
+-    // Mesmo payload, OUTRO ator ⇒ não é retry da mesma criação.
++    // Mesmo payload, OUTRO ator ⇒ não é retry da mesma criação. Integração NEW-007: o outro ator não é o
++    // procurador designado ⇒ FORBIDDEN LEGAL_OPINION_ASSIGNMENT_REQUIRED antes do Create ≠ Reset (zero mutação).
+     const c2 = await caller(lawyerA2, ORG_A);
+     const eActor = await errOf(() => c2.legalOpinionWorkspace.createDraft({ workspaceId: wsId, ...DRAFT_PAYLOAD }));
+-    expect(eActor.code).toBe("CONFLICT");
+-    expect(eActor.message).toContain("LEGAL_OPINION_ALREADY_EXISTS");
++    expect(eActor.code).toBe("FORBIDDEN");
++    expect(eActor.message).toContain("LEGAL_OPINION_ASSIGNMENT_REQUIRED");
+     expect(await opinionSnapshot(ORG_A, wsId)).toBe(before);
+ 
+     // Após edição humana (v2), o payload ORIGINAL da criação já não converge — e não reseta a v2.
+@@ -627,7 +633,8 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+     const p = { processId: `proc-${RUN}-12`, contractNumber: `CT-${RUN}-C12`, contractor: "Lambda", value: 42, term: "12 meses" };
+     const { workspace } = await c.contractWorkspace.createFromProcurement(p);
+     expect((await c.contractWorkspace.createFromProcurement(p)).workspace.id).toBe(workspace.id); // ainda minuta: converge
+-    await c.contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente" });
++    // Integração NEW-006: mudança de status exige piso "manager" (operator ⇒ FORBIDDEN).
++    await (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente" });
+     const before = await orgContractsSnapshot(ORG_A);
+     const e = await errOf(() => c.contractWorkspace.createFromProcurement(p));
+     expect(e.code).toBe("CONFLICT");
+-- 
+2.43.0
+

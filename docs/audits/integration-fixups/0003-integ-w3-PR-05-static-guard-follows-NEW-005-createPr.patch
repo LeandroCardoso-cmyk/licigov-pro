@@ -1,0 +1,26 @@
+From e603f84fbfdd9e627cc3cad4343f82230b8fa05f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 28 Sep 2026 23:50:47 +0000
+Subject: [PATCH] integ(w3): PR-05 static guard follows NEW-005 createProcess:
+ orgRoleProcedure("operator")
+
+---
+ server/__tests__/unit/process-create-contract.test.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/server/__tests__/unit/process-create-contract.test.ts b/server/__tests__/unit/process-create-contract.test.ts
+index f863f89..b025660 100644
+--- a/server/__tests__/unit/process-create-contract.test.ts
++++ b/server/__tests__/unit/process-create-contract.test.ts
+@@ -139,7 +139,7 @@ describe("R3 / PR-05 — guarda estática: criação nunca é upsert", () => {
+     const pp = src("server/routers/procurementProcessRouter.ts");
+     const dp = src("server/routers/directProcurementRouter.ts");
+     const ppCreate = pp.slice(pp.indexOf("createProcess: orgRoleProcedure(\"operator\")"), pp.indexOf("loadProcess:"));
+-    const dpCreate = dp.slice(dp.indexOf("createProcess: tenantProcedure"), dp.indexOf("loadProcess:"));
++    const dpCreate = dp.slice(dp.indexOf("createProcess: orgRoleProcedure(\"operator\")"), dp.indexOf("loadProcess:"));
+     expect(ppCreate).toMatch(/createProcessWithInitialEvent\(/);
+     expect(ppCreate).toMatch(/err instanceof ProcessAlreadyExistsError/);
+     expect(dpCreate).toMatch(/createDirectProcurementWorkspaceWithInitialEvent\(/);
+-- 
+2.43.0
+

@@ -1,0 +1,31 @@
+From c02a8eb4e58c33042336315d54882e4dca1d9bc3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 00:22:00 +0000
+Subject: [PATCH] integ(w1): rc-sec-pr-a tenant freeze asserts documentsRouter
+ has no runtime DB access after PR-02 LEG-008 + LEG-009
+
+---
+ .../integration/rc-sec-pr-a-tenant-freeze.test.ts          | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts b/server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts
+index 720f070..4005acd 100644
+--- a/server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts
++++ b/server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts
+@@ -84,7 +84,12 @@ describe("RC-SEC-PR-A — Congelamento de isolamento e autorização (Bloco A)",
+     const src = read("server/routers/documentsRouter.ts");
+     expect(src).not.toMatch(/db\.getDocumentById\(/);
+     expect(src).not.toMatch(/db\.getProcessById\(/);
+-    expect(src).toContain("getDocumentByIdForOrganization");
++    // Integração PR-02 (LEG-008: submitForReview/approveDocument/rejectDocument) + LEG-009 (as 13 demais): TODAS as
++    // procedures do router legado estão desligadas de forma governada — não resta NENHUM acesso a banco em runtime
++    // (nem global nem *ForOrganization; `db` só aparece em tipos). Contrato mais forte que o anterior
++    // (`toContain("getDocumentByIdForOrganization")`, que dependia de procedures vivas).
++    expect(src).not.toMatch(/\bdb\.\w+\(/);
++    expect((src.match(/throwLegacyEndpointDisabled\("documents\.\w+", "LEG-00[89]"/g) ?? []).length).toBe(16);
+   });
+ 
+   it("aiAssistantRouter não carrega processo global (usa *ForOrganization)", () => {
+-- 
+2.43.0
+

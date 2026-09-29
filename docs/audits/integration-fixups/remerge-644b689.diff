@@ -1,0 +1,68 @@
+=== 644b689 Merge remote-tracking branch 'origin/fix/r4-pr08-rbac-state-machine' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index da4f9cc..37f6311 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< 5f9ed88 (integ(w3): PR-06 smoke follows NEW-007 assignment authority (e4/eActor) and NEW-006 manager floor on status change (C12))
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/pr08-rbac-state-machine-mysql-smoke.test.ts",
+->>>>>>> dd03480 (fix(r4): enforce contract lifecycle decisions)
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts server/__tests__/integration/pr08-rbac-state-machine-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",
+diff --git a/server/services/contractService.ts b/server/services/contractService.ts
+remerge CONFLICT (content): Merge conflict in server/services/contractService.ts
+index c161e99..d551314 100644
+--- a/server/services/contractService.ts
++++ b/server/services/contractService.ts
+@@ -21,13 +21,8 @@ import { recordProcessEvent } from "../db/procurement";
+ import { getProcess } from "../db/procurement";
+ import { getDirectProcurementWorkspace } from "../db/directProcurement";
+ import {
+-<<<<<<< 5f9ed88 (integ(w3): PR-06 smoke follows NEW-007 assignment authority (e4/eActor) and NEW-006 manager floor on status change (C12))
+-  createContractWorkspace, CONTRACT_DOMAIN_COPILOTS,
+-  type ContractWorkspace, type ContractOriginType,
+-=======
+   createContractWorkspace, CONTRACT_DOMAIN_COPILOTS, planInstrumentStatusChange,
+-  type ContractWorkspace, type ContractInstrumentKind, type InstrumentStatusChangePlan,
+->>>>>>> dd03480 (fix(r4): enforce contract lifecycle decisions)
++  type ContractWorkspace, type ContractOriginType, type ContractInstrumentKind, type InstrumentStatusChangePlan,
+ } from "../domain/contractWorkspace";
+ import {
+   createContractAddendum, advanceAddendum, createContractApostille, createContractOccurrence,
+@@ -37,11 +32,7 @@ import {
+ import { createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER, type ImportedContractSource } from "../domain/contractReconstruction";
+ import { getDb } from "../db/connection";
+ import {
+-<<<<<<< 5f9ed88 (integ(w3): PR-06 smoke follows NEW-007 assignment authority (e4/eActor) and NEW-006 manager floor on status change (C12))
+-  getContractWorkspace, updateContractWorkspaceStatus,
+-=======
+-  insertContractWorkspace, getContractWorkspace, compareAndSetContractWorkspaceStatus, type ContractWsExecutor,
+->>>>>>> dd03480 (fix(r4): enforce contract lifecycle decisions)
++  getContractWorkspace, compareAndSetContractWorkspaceStatus, type ContractWsExecutor,
+   insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda,
+   insertContractApostille, countContractApostilles, insertContractOccurrence, insertImportedContract,
+   findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
+@@ -50,14 +41,9 @@ import {
+   CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED_MESSAGE,
+   contractAlreadyExistsMessage, contractNumberTakenText, decideContractCreateOnExisting, normalizeContractNumber,
+ } from "../domain/contractCreation";
+-import { serviceLogger } from "./observabilityService";
+ 
+ const DOMAIN = "contratos" as const;
+-<<<<<<< 5f9ed88 (integ(w3): PR-06 smoke follows NEW-007 assignment authority (e4/eActor) and NEW-006 manager floor on status change (C12))
+ const log = serviceLogger("contractService");
+-=======
+-const log = serviceLogger("ContractService");
+->>>>>>> dd03480 (fix(r4): enforce contract lifecycle decisions)
+ 
+ /**
+  * Colisão de número na criação do contrato AVULSO — nunca sobrescreve silenciosamente. O número é único na organização

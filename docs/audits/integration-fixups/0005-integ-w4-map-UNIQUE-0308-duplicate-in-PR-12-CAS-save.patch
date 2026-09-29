@@ -1,0 +1,82 @@
+From 3d9c5b25d311171f2949594350710521cba251ff Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 00:05:32 +0000
+Subject: [PATCH] integ(w4): map UNIQUE 0308 duplicate in PR-12 CAS save to
+ CONFLICT CONTRACT_ALREADY_EXISTS; PR-06 C12/C13 send expectedUpdatedAt
+
+---
+ ...t-reset-legal-contract-mysql-smoke.test.ts |  7 ++--
+ server/db/contractWorkspace.ts                | 32 +++++++++++++------
+ 2 files changed, 27 insertions(+), 12 deletions(-)
+
+diff --git a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+index dfd9d3d..8320d1f 100644
+--- a/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
++++ b/server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts
+@@ -634,7 +634,8 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+     const { workspace } = await c.contractWorkspace.createFromProcurement(p);
+     expect((await c.contractWorkspace.createFromProcurement(p)).workspace.id).toBe(workspace.id); // ainda minuta: converge
+     // Integração NEW-006: mudança de status exige piso "manager" (operator ⇒ FORBIDDEN).
+-    await (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente" });
++    // Integração PR-12: o save exige a revisão carregada (CAS `expectedUpdatedAt`).
++    await (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente", expectedUpdatedAt: workspace.updatedAt });
+     const before = await orgContractsSnapshot(ORG_A);
+     const e = await errOf(() => c.contractWorkspace.createFromProcurement(p));
+     expect(e.code).toBe("CONFLICT");
+@@ -648,7 +649,9 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
+     const a = await c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-13`, contractNumber: `CT-${RUN}-C13A`, contractor: "Mi" });
+     const b = await c.contractWorkspace.createManual({ idempotencyKey: `k-c13-${RUN}`, contractNumber: `CT-${RUN}-C13B`, contractor: "Ni" });
+     const before = await orgContractsSnapshot(ORG_A);
+-    const e = await errOf(() => c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado" }));
++    // Integração PR-12: o save exige a revisão carregada (CAS `expectedUpdatedAt`); a gravação é o UPDATE condicional
++    // (compareAndSetContractWorkspace), que mapeia a violação do UNIQUE 0308 para CONFLICT CONTRACT_ALREADY_EXISTS.
++    const e = await errOf(() => c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado", expectedUpdatedAt: a.workspace.updatedAt }));
+     expect(e.code).toBe("CONFLICT");
+     expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
+     expect(await orgContractsSnapshot(ORG_A)).toBe(before);
+diff --git a/server/db/contractWorkspace.ts b/server/db/contractWorkspace.ts
+index 62688b3..f1abfad 100644
+--- a/server/db/contractWorkspace.ts
++++ b/server/db/contractWorkspace.ts
+@@ -166,16 +166,28 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
+ export async function compareAndSetContractWorkspace(ws: ContractWorkspace, expectedUpdatedAt: string): Promise<boolean> {
+   const db = await getDb();
+   if (!db) return false;
+-  const result = await db.update(contractWorkspacesTable)
+-    .set({
+-      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+-      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector, updatedAt: toDbDatetime(ws.updatedAt),
+-    })
+-    .where(and(
+-      eq(contractWorkspacesTable.id, ws.id),
+-      eq(contractWorkspacesTable.organizationId, ws.organizationId),
+-      eq(contractWorkspacesTable.updatedAt, toDbDatetime(expectedUpdatedAt)),
+-    ));
++  let result: unknown;
++  try {
++    result = await db.update(contractWorkspacesTable)
++      .set({
++        contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
++        term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector, updatedAt: toDbDatetime(ws.updatedAt),
++      })
++      .where(and(
++        eq(contractWorkspacesTable.id, ws.id),
++        eq(contractWorkspacesTable.organizationId, ws.organizationId),
++        eq(contractWorkspacesTable.updatedAt, toDbDatetime(expectedUpdatedAt)),
++      ));
++  } catch (err) {
++    // Integração PR-06 × PR-12: renomear para um número já usado por outro contrato da organização viola
++    // UNIQUE(organization_id, normalized_number) (0308). O UPDATE falha INTEIRO (nada gravado) ⇒ CONFLICT
++    // governado `CONTRACT_ALREADY_EXISTS` (mesma recusa que o upsert legado emitia), nunca 500.
++    if (!isDuplicateKeyError(err)) throw err;
++    throw new TRPCError({
++      code: "CONFLICT",
++      message: `Já existe outro contrato com o número "${ws.contractNumber}" nesta organização. O número do contrato é único na organização, qualquer que seja a origem; nada foi alterado (${CONTRACT_ALREADY_EXISTS}).`,
++    });
++  }
+   const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+   return (header?.affectedRows ?? 0) > 0;
+ }
+-- 
+2.43.0
+

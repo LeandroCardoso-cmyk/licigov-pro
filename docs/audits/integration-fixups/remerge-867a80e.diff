@@ -1,0 +1,38 @@
+=== 867a80e Merge remote-tracking branch 'origin/fix/new-005-direct-procurement-rbac' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index 052fe64..9c89a3c 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< e46b7c0 (integ(w1): LEG-005 out-of-scope test follows PR-02 LEG-006 disable of processes.updateStatus)
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts",
+->>>>>>> fbe9328 (fix(security): enforce direct procurement institutional RBAC)
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",
+diff --git a/server/routers/directProcurementRouter.ts b/server/routers/directProcurementRouter.ts
+remerge CONFLICT (content): Merge conflict in server/routers/directProcurementRouter.ts
+index 1727a5b..e7fa719 100644
+--- a/server/routers/directProcurementRouter.ts
++++ b/server/routers/directProcurementRouter.ts
+@@ -21,12 +21,8 @@
+  */
+ import { z } from "zod";
+ import { TRPCError } from "@trpc/server";
+-<<<<<<< e46b7c0 (integ(w1): LEG-005 out-of-scope test follows PR-02 LEG-006 disable of processes.updateStatus)
+ import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
+-import { router, tenantProcedure } from "../_core/trpc";
+-=======
+ import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+->>>>>>> fbe9328 (fix(security): enforce direct procurement institutional RBAC)
+ import {
+   createDirectProcurementWorkspace, setDirectStage,
+   setProcedureType, setLegalBasis, configureFlags,

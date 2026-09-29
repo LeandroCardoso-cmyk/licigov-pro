@@ -1,0 +1,2 @@
+# Patches/diffs gerados pelo git: espaços finais e a linha "-- " fazem parte do formato e não podem ser removidos.
+* -whitespace

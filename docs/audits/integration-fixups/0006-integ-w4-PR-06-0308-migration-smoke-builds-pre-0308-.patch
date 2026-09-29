@@ -1,0 +1,84 @@
+From aaafb6b35a2f274a228de6a6147cfc75a75309ff Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 29 Sep 2026 00:12:57 +0000
+Subject: [PATCH] integ(w4): PR-06 0308 migration smoke builds pre-0308 as
+ journal prefix (0309 from PR-09 follows); validator names latest tag
+
+---
+ ...act-number-unique-0308-mysql-smoke.test.ts | 26 ++++++++++++-------
+ 1 file changed, 17 insertions(+), 9 deletions(-)
+
+diff --git a/server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts b/server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts
+index f01925c..8388d33 100644
+--- a/server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts
++++ b/server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts
+@@ -82,18 +82,24 @@ describe.skipIf(!DB)("R3 / PR-06 — migration 0308: número do contrato único
+   const upgradeDb = `pr06_0308_upgrade_${stamp}`;
+   let admin: mysql.Connection;
+   let pre0308 = "";
++  let fromTag0308Count = 0; // entries do journal a partir da 0308 (inclusive) — integração PR-09 (0309)
+ 
+   beforeAll(async () => {
+     admin = await mysql.createConnection(DB!);
+     for (const d of [cleanDb, dirtyDb, upgradeDb]) await admin.query(`CREATE DATABASE \`${d}\``);
+-    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0308 (= main): mesmos arquivos, journal sem a 0308.
++    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0308 (= main): journal SÓ com as entries anteriores à
++    // 0308 (e só os arquivos delas). Integração PR-09 (0309): excluir apenas a 0308 aplicaria a 0309 no "pré-0308" e
++    // o migrator (por timestamp) pularia a 0308 — o estado pré-0308 é o PREFIXO do journal (mesmo padrão da 0307).
+     pre0308 = mkdtempSync(path.join(os.tmpdir(), "pr06-pre0308-"));
+     mkdirSync(path.join(pre0308, "meta"));
+-    for (const f of readdirSync(DRZ).filter((x) => /^\d{4}_.+\.sql$/.test(x) && !x.startsWith(TAG_0308))) {
++    const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
++    const idx0308 = journal.entries.findIndex((e: { tag: string }) => e.tag === TAG_0308);
++    fromTag0308Count = journal.entries.length - idx0308;
++    journal.entries = journal.entries.slice(0, idx0308);
++    const preTags = new Set(journal.entries.map((e: { tag: string }) => `${e.tag}.sql`));
++    for (const f of readdirSync(DRZ).filter((x) => preTags.has(x))) {
+       cpSync(path.join(DRZ, f), path.join(pre0308, f));
+     }
+-    const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
+-    journal.entries = journal.entries.filter((e: { tag: string }) => e.tag !== TAG_0308);
+     writeFileSync(path.join(pre0308, "meta", "_journal.json"), JSON.stringify(journal));
+   }, 60_000);
+ 
+@@ -179,14 +185,16 @@ describe.skipIf(!DB)("R3 / PR-06 — migration 0308: número do contrato único
+       expect(await uniqueIndex(conn)).toEqual([]);
+       expect(await ledgerCount(conn)).toBe(ledgerBefore);            // 0308 NÃO registrada
+       expect(await rowsSnapshot(conn)).toBe(before);                 // nenhum dado tocado (sem dedupe)
+-      // o boot validator continua acusando o schema atrás (fail-closed em staging/produção)
+-      expect((await collectSchemaProblems(conn)).join("\n")).toContain(TAG_0308);
++      // o boot validator continua acusando o schema atrás (fail-closed em staging/produção). Integração PR-09: o
++      // validator nomeia a migration MAIS RECENTE do journal não aplicada (0309), não necessariamente a 0308.
++      const latestTag = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8")).entries.at(-1).tag as string;
++      expect((await collectSchemaProblems(conn)).join("\n")).toContain(latestTag);
+     } finally {
+       await conn.end();
+     }
+   }, 240_000);
+ 
+-  it("M3 — UPGRADE limpo: só a 0308 aplica, backfill = TRIM pelo banco (vazio ⇒ NULL), dados intactos; rerun no-op; UNIQUE ativo", async () => {
++  it("M3 — UPGRADE limpo: a 0308 (e as posteriores) aplica, backfill = TRIM pelo banco (vazio ⇒ NULL), dados intactos; rerun no-op; UNIQUE ativo", async () => {
+     const conn = await mysql.createConnection(urlFor(upgradeDb));
+     try {
+       await migrate(drizzle(conn), { migrationsFolder: pre0308 });
+@@ -206,7 +214,7 @@ describe.skipIf(!DB)("R3 / PR-06 — migration 0308: número do contrato único
+       expect((await runPreflight(conn)).get("GUARD (bloqueia): grupos duplicados")).toBe(0);
+ 
+       await migrateWithAdvisoryLock(conn);
+-      expect(await ledgerCount(conn)).toBe(ledgerBefore + 1);       // só a 0308
++      expect(await ledgerCount(conn)).toBe(ledgerBefore + fromTag0308Count); // a 0308 + as posteriores do journal (integração: 0309)
+       expect(await rowsSnapshot(conn)).toBe(before);                // nenhuma coluna existente alterada
+       const [norm] = await conn.query<mysql.RowDataPacket[]>(`SELECT id, normalized_number AS n FROM contract_workspaces ORDER BY id`);
+       expect(Object.fromEntries(norm.map((r) => [r.id, r.n]))).toEqual({
+@@ -218,7 +226,7 @@ describe.skipIf(!DB)("R3 / PR-06 — migration 0308: número do contrato único
+       const schemaOf = async () => JSON.stringify([await columnInfo(conn), await uniqueIndex(conn)]);
+       const schemaBefore = await schemaOf();
+       await migrateWithAdvisoryLock(conn);
+-      expect(await ledgerCount(conn)).toBe(ledgerBefore + 1);
++      expect(await ledgerCount(conn)).toBe(ledgerBefore + fromTag0308Count); // rerun: não cresce
+       const stmts = readFileSync(path.join(DRZ, `${TAG_0308}.sql`), "utf8").split("--> statement-breakpoint")
+         .map((s) => s.replace(/^\s*--.*$/gm, "").trim()).filter(Boolean);
+       for (const s of stmts) await conn.query(s);
+-- 
+2.43.0
+

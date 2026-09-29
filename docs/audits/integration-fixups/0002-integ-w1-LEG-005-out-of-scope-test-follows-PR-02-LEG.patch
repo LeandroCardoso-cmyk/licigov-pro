@@ -1,0 +1,39 @@
+From e46b7c0fe8731913a467978b3a4bcd66a860d686 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 28 Sep 2026 23:45:26 +0000
+Subject: [PATCH] integ(w1): LEG-005 out-of-scope test follows PR-02 LEG-006
+ disable of processes.updateStatus
+
+---
+ .../r2-leg005-legacy-items-catmat-disabled.test.ts         | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/server/__tests__/integration/r2-leg005-legacy-items-catmat-disabled.test.ts b/server/__tests__/integration/r2-leg005-legacy-items-catmat-disabled.test.ts
+index cc1a2f5..54a6959 100644
+--- a/server/__tests__/integration/r2-leg005-legacy-items-catmat-disabled.test.ts
++++ b/server/__tests__/integration/r2-leg005-legacy-items-catmat-disabled.test.ts
+@@ -252,7 +252,7 @@ describe("R2 / LEG-005 — itens do TR / CATMAT legados desativados (governado)"
+     expect(calledFns(db as any)).toEqual([]);
+   });
+ 
+-  it("procedures fora do escopo LEG-005 NÃO foram desativadas (list/search/getById/updateStatus seguem vivas)", async () => {
++  it("procedures fora do escopo LEG-005 NÃO foram desativadas por LEG-005 (list/search/getById seguem vivas; updateStatus é LEG-006/PR-02)", async () => {
+     vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
+     vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
+     const caller = processesRouter.createCaller(ctxFor()) as any;
+@@ -260,8 +260,11 @@ describe("R2 / LEG-005 — itens do TR / CATMAT legados desativados (governado)"
+     await expect(caller.search({ query: "x" })).resolves.toEqual([]);
+     vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(undefined as any);
+     await expect(caller.getById({ id: 1 })).rejects.toThrow(/não encontrado/i);
+-    await expect(caller.updateStatus({ id: 1, status: "em_etp" })).rejects.toThrow(/não encontrado/i);
+     expect(disabledEvents()).toHaveLength(0);
++    // Integração PR-02 (LEG-006): processes.updateStatus foi desligada de forma governada por OUTRA
++    // superfície. Não é escopo de LEG-005 — o evento, se houver, é LEG-006 (nunca LEG-005).
++    await expect(caller.updateStatus({ id: 1, status: "em_etp" })).rejects.toThrow(/LEGACY_ENDPOINT_DISABLED/);
++    expect(disabledEvents().map((e: any) => e.surfaceId)).toEqual(["LEG-006"]);
+   });
+ });
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,67 @@
+=== ca50b1b Merge remote-tracking branch 'origin/fix/new-006-contract-workspace-rbac' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index d0e606b..91ef272 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< 867a80e (Merge remote-tracking branch 'origin/fix/new-005-direct-procurement-rbac' into HEAD)
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts",
+->>>>>>> db7fefc (test(security): cover PR-12 save path in contract workspace RBAC mocks)
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",
+diff --git a/server/_core/trpc.ts b/server/_core/trpc.ts
+remerge CONFLICT (content): Merge conflict in server/_core/trpc.ts
+index 35e2152..706ab95 100644
+--- a/server/_core/trpc.ts
++++ b/server/_core/trpc.ts
+@@ -205,35 +205,15 @@ export function assertOrgRoleAtLeast(ctx: OrgRoleCheckContext, minRole: OrgRole,
+ }
+ 
+ export function orgRoleProcedure(minRole: OrgRole) {
+-<<<<<<< 867a80e (Merge remote-tracking branch 'origin/fix/new-005-direct-procurement-rbac' into HEAD)
+-  // NEW-005 — middleware inline sobre `tenantProcedure` (antes: `t.middleware` genérico + `next({ ctx })`),
+-  // SÓ para preservar a tipagem estreitada do tenantProcedure (`ctx.user` não-nulo) nos handlers. Mesma
+-  // semântica em runtime: mesmo ranking, mesma recusa, mesmo ctx repassado.
++  // NEW-005 + NEW-006 (integração) — middleware inline sobre `tenantProcedure` (preserva a tipagem
++  // estreitada: `ctx.user` não-nulo nos handlers) delegando a recusa a `assertOrgRoleAtLeast`
++  // (fail-closed sem membership + log estruturado `rbac/org_role_denied`). `next()` sem sobrescrever
++  // ctx — mesmo objeto em runtime, mesmo ranking, mesma mensagem de recusa.
+   return tenantProcedure.use(async opts => {
+-    const { ctx, next } = opts;
++    const { ctx, next, path } = opts;
+ 
+-    const userRole = ctx.orgMembership.role;
+-    if (ORG_ROLE_RANK[userRole] < ORG_ROLE_RANK[minRole]) {
+-      throw new TRPCError({
+-        code: "FORBIDDEN",
+-        message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
+-      });
+-    }
++    assertOrgRoleAtLeast(ctx, minRole, path);
+ 
+     return next();
+   });
+-=======
+-  return tenantProcedure.use(
+-    t.middleware(async opts => {
+-      const { ctx, next, path } = opts;
+-
+-      assertOrgRoleAtLeast(ctx, minRole, path);
+-
+-      // `next()` sem sobrescrever ctx: preserva o contexto já estreitado pelo tenantProcedure
+-      // (user não-nulo). `next({ ctx })` a partir de um `t.middleware` avulso re-alargava o tipo
+-      // para o TrpcContext base (user: User | null) — só tipagem, mesmo objeto em runtime.
+-      return next();
+-    }),
+-  );
+->>>>>>> db7fefc (test(security): cover PR-12 save path in contract workspace RBAC mocks)
+ }

@@ -114,6 +114,58 @@ Os resultados estão em §11.
   - commits só de docs usam o hook normal (que não faz nada, porque não tocam `server/` nem `client/`).
 - **Tratamento proposto:** uma única regeneração do grafo, numa PR própria, depois da integração das branches.
 
-## 11. Achados novos (fora do baseline), com triagem
+## 11. Resultado da execução (2026-09-28/29)
 
-*(Preenchido ao final da execução; ver §11 abaixo.)*
+- **Main:** `5cd9d50` no início; `5924b4a` ao final (MAIN_MOVED_AFTER_NIGHT_SHIFT).
+- **O que entrou na main:** um commit do owner, "fix(operations): persist records and show existing registrations", que toca 3 arquivos de Operações e nenhuma migration.
+- **Impacto nas branches:** nenhuma sobreposição de arquivos com qualquer branch. Não houve rebase.
+- **PRs abertas:** zero no início e zero no fim.
+
+| Frente | Branch | Head anterior → novo | Migration | Status |
+|---|---|---|---|---|
+| PR-06 | `fix/r3-pr06-create-not-reset-legal-contract` | `5e68dc6` → `b655087` | **0308** (`normalized_number` gerado + UNIQUE(org, número), com preflight fail-closed) | READY_FOR_HUMAN_REVIEW |
+| PR-08 | `fix/r4-pr08-rbac-state-machine` | `95b455d` → `dd03480` | não | READY_FOR_HUMAN_REVIEW (ativação sem evidência canônica: proposta em `docs/design/CONTRACT_ACTIVATION_TRANSITION.md`) |
+| PR-09 | `fix/r5-pr09-regeneration-human-state` | `c5b116f` → `ddb148c` | **0308** local, renumerar para **0309** na integração | READY_FOR_HUMAN_REVIEW |
+| PR-12 | `fix/r5-pr12-contract-governed-change` | `2ef5a4c` → `6fab8c7` | não | READY_FOR_HUMAN_REVIEW |
+| NEW-005 | `fix/new-005-direct-procurement-rbac` (nova) | — → `fbe9328` | não | READY_FOR_HUMAN_REVIEW |
+| NEW-006 | `fix/new-006-contract-workspace-rbac` (nova) | — → `db7fefc` | não | READY_FOR_HUMAN_REVIEW |
+| NEW-007 | `fix/new-007-legal-opinion-rbac` (nova) | — → `ed8ac75` | não | READY_FOR_HUMAN_REVIEW |
+
+A integração simulada das 17 branches passou em todos os gates; ver [`PRE_PR_BRANCH_INTEGRATION_MATRIX.md`](PRE_PR_BRANCH_INTEGRATION_MATRIX.md).
+
+## 12. Ledger de achados fora do baseline (NEW-00x): severidade candidata e tratamento
+
+| ID | Severidade candidata | Superfície | Situação |
+|---|---|---|---|
+| NEW-001 | P0 (histórico) | `assignStage` | DEPLOYED_AWAITING_FINAL_VALIDATION (PR #261) |
+| NEW-002 | P0 operacional / governança | `lgpd.deleteMyAccount` | branch pronta (`81622d8`) |
+| NEW-003 | **P1 SECURITY**: segredo exposto ao titular, mais quebra de fronteira de tenant para servidor desligado (legado) | `lgpd.exportMyData` | confirmado e reproduzido. Não corrigido. Tratamento: DISABLE (LEG-033) + allowlist estrita. [Triagem](POST_NS_TRIAGE_NEW_003_004_015.md) |
+| NEW-004 | **P1** integridade de auditoria | ids e ordem de evento por contagem + upsert (9 pontos) | confirmado e reproduzido. Não corrigido. Aditivo e apostilamento agora falham fechado na PR-08 (CONFLICT, nada gravado) |
+| NEW-005A/B | **P0 AUTHORITY** | `directProcurement.ratify` / `publish` | corrigido em branch (piso manager) |
+| NEW-005C | P1 RBAC | demais mutações da Contratação Direta | corrigido em branch |
+| NEW-006 | P1; **P0** nos subcasos `updateContract` com `status`, `createAddendum` e `createApostille` | `contractWorkspace.*` | corrigido em branch |
+| NEW-007 | **P0 AUTHORITY** (`signOpinion`); P1 nos demais | `legalOpinionWorkspace.*` | corrigido em branch (operator+ **e** atribuição) |
+| NEW-008 | P2 | numeração de aditivo e apostilamento | parcial: PR-08 falha fechado; numeração atômica pendente (DATA-039 follow-up) |
+| NEW-009 | P2 | ativação e write-back de instrumentos | decisão do owner registrada (§5); proposta de ativação na PR-08 |
+| NEW-010 | P2 | número de processo sem normalização | aberto (a PR-06 cobre só contratos) |
+| NEW-011 | P3 | `server/routers.ts.backup` | aberto |
+| NEW-012 | P3 | `productionReadiness.getSystemHealth` / `webhookRouter` | mitigado pela LEG-028 (gated) |
+| NEW-013 | P3 | tamanho dos campos de cotação / deduplicação parcial | aberto |
+| NEW-014 | P3 | limpeza de smokes (rerun) | aberto |
+| NEW-015 | P2 latente | flag percentual aleatória | mitigado pela decisão R2.2 (100%, sem expiração). Regra: sem rollout percentual institucional até existir bucket determinístico |
+| NEW-016 | **P1, candidato a P0** | `officialDocumentLifecycleService.createDocument`: GET_LOCK liberado antes do commit externo | reproduzido (versão **emitida** sobrescrita). Aberto |
+| NEW-017 | P2 | kill-switches de Ops sem consumidor e com semântica invertida | aberto |
+| NEW-018 | P2 | recusas de RBAC não eram logadas | **tratado** na branch NEW-006 (log `rbac/org_role_denied`) |
+| NEW-019 | P2 | `legalOpinionWorkspace.loadReasoning` dispara IA a pedido de qualquer membro | aberto |
+| NEW-020 | P3 | `receiveRequest`: crash entre o claim e o recebimento deixa o workspace atribuído em INBOX | aberto |
+| NEW-021 | P2 | `insertContractOccurrence` grava datetime ISO (falha no MariaDB; não verificado no MySQL 8) | aberto |
+| NEW-022 | P1 candidato | `updateContract` ainda permite `minuta → vigente` sem evidência nem evento dedicado (manager+ após NEW-006) | aberto; depende da transição de ativação (§5) |
+| NEW-023 | P2 | `createAddendum` marca aditivos prazo/qualitativo como `finalizado` sem decisão humana (possível sobreposição com SEM-025/084) | aberto |
+| NEW-024 | P2 | aditivo `aguardando_parecer` sem comando de finalização; `legalOpinionRequestId` nunca é gravado | aberto |
+| NEW-025 | P2 | apostilamento gestor/fiscal não aplica a troca | aberto; depende da ação governada de designação (§7) |
+| NEW-026 | P2 | "substituir" via importação de documento ignora a emissão oficial (mesma lacuna que a PR-09 B fechou para regeneração) | aberto |
+| NEW-027 | P3 | contrato renomeado bloqueia o número original para sua origem; regras de comparação (case) divergentes | aberto; decisão sobre case-folding |
+
+**Registrados como pertencentes ao baseline, não como novos:**
+- `ratify` com default "ratificado" e re-ratificação sobrescrevendo: SEM-004 / PR-07.
+- Reset de contrato por operador antes da PR-06: SEM-006/007.

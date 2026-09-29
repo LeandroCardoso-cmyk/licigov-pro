@@ -1,0 +1,54 @@
+=== 4ceff41 Merge remote-tracking branch 'origin/fix/r3-pr06-create-not-reset-legal-contract' into HEAD
+
+diff --git a/package.json b/package.json
+remerge CONFLICT (content): Merge conflict in package.json
+index 1e0dca7..55fda56 100644
+--- a/package.json
++++ b/package.json
+@@ -18,11 +18,7 @@
+     "lint": "eslint . --max-warnings 0",
+     "format": "prettier --write .",
+     "test": "vitest run",
+-<<<<<<< e603f84 (integ(w3): PR-05 static guard follows NEW-005 createProcess: orgRoleProcedure("operator"))
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts",
+-=======
+-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts",
+->>>>>>> b655087 (fix(r3): apply human decisions to PR-06)
++    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts server/__tests__/integration/contract-number-unique-0308-mysql-smoke.test.ts",
+     "db:push": "tsx scripts/db-push-guard.ts",
+     "db:generate": "drizzle-kit generate",
+     "db:migrate": "drizzle-kit migrate",
+diff --git a/server/services/legalOpinionWorkspaceService.ts b/server/services/legalOpinionWorkspaceService.ts
+remerge CONFLICT (content): Merge conflict in server/services/legalOpinionWorkspaceService.ts
+index 984354f..8487363 100644
+--- a/server/services/legalOpinionWorkspaceService.ts
++++ b/server/services/legalOpinionWorkspaceService.ts
+@@ -37,26 +37,18 @@ import {
+ } from "../domain/legalOpinionDraft";
+ import { createLawyerAssignment } from "../domain/lawyerAssignment";
+ import {
+-<<<<<<< e603f84 (integ(w3): PR-05 static guard follows NEW-005 createProcess: orgRoleProcedure("operator"))
+   getLegalOpinionWorkspace, getLegalOpinionWorkspaceByRequest,
+-  updateLegalOpinionWorkspaceStage, insertLegalOpinionDraft, getLegalOpinionDraftByWorkspace,
++  updateLegalOpinionWorkspaceStage, getLegalOpinionDraftByWorkspace,
+   insertLegalOpinionVersion, countLegalOpinionHistory, insertLegalOpinionHistory,
+   listLegalOpinionHistory, listLegalOpinionVersions,
++  claimNewLegalOpinionDraft, updateUnsignedLegalOpinionDraft, listLegalOpinionDraftsByWorkspace,
+ } from "../db/legalOpinionWorkspace";
+ import { canTransition as canRequestTransition } from "../domain/institutionalRequest";
+ import { claimLegalOpinionWorkspaceForLawyer } from "../db/legalOpinionAssignment";
+ import {
+   LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE, legalOpinionRequestNotReceivableMessage, logLegalOpinionAssignment,
+ } from "./legalOpinionAuthorityService";
+-=======
+-  insertLegalOpinionWorkspace, getLegalOpinionWorkspace, getLegalOpinionWorkspaceByRequest,
+-  updateLegalOpinionWorkspaceStage, getLegalOpinionDraftByWorkspace,
+-  insertLegalOpinionVersion, countLegalOpinionHistory, insertLegalOpinionHistory,
+-  listLegalOpinionHistory, listLegalOpinionVersions, insertLawyerAssignment,
+-  claimNewLegalOpinionDraft, updateUnsignedLegalOpinionDraft, listLegalOpinionDraftsByWorkspace,
+-} from "../db/legalOpinionWorkspace";
+ import { serviceLogger } from "./observabilityService";
+->>>>>>> b655087 (fix(r3): apply human decisions to PR-06)
+ 
+ const DOMAIN = "parecer_juridico" as const;
+ const log = serviceLogger("legalOpinionWorkspaceService");

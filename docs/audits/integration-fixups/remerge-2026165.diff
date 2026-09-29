@@ -1,0 +1,63 @@
+=== 2026165 Merge remote-tracking branch 'origin/fix/r3-pr05-create-not-reset-processes' into HEAD
+
+diff --git a/server/routers/directProcurementRouter.ts b/server/routers/directProcurementRouter.ts
+remerge CONFLICT (content): Merge conflict in server/routers/directProcurementRouter.ts
+index 20aa44f..ca3663d 100644
+--- a/server/routers/directProcurementRouter.ts
++++ b/server/routers/directProcurementRouter.ts
+@@ -27,11 +27,7 @@ import { serviceLogger } from "../services/observabilityService";
+ import {
+   createDirectProcurementWorkspace, setDirectStage,
+   setProcedureType, setLegalBasis, configureFlags,
+-<<<<<<< 76ee900 (Merge remote-tracking branch 'origin/fix/r2-pr04a-direct-price-import' into HEAD)
+-  type DirectStartOption, type DirectProcurementType,
+-=======
+-  type DirectStartOption, type DirectProcurementStage, type DirectProcurementType, type DirectProcurementWorkspace,
+->>>>>>> fcdb3b1 (fix(r3): create != reset nos criadores canônicos de processo (SEM-002, SEM-003))
++  type DirectStartOption, type DirectProcurementType, type DirectProcurementWorkspace,
+ } from "../domain/directProcurementWorkspace";
+ import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
+ import {
+@@ -43,7 +39,6 @@ import { createRatification } from "../domain/directProcurementJustifications";
+ import {
+   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, DIRECT_PROCUREMENT_ALREADY_EXISTS_MESSAGE, directProcurementCreateMismatches,
+ } from "../domain/processCreateContract";
+-import { serviceLogger } from "../services/observabilityService";
+ import {
+   createDirectProcurementWorkspaceWithInitialEvent,
+   insertDirectProcurementWorkspace, getDirectProcurementWorkspace, listDirectProcurementWorkspaces,
+@@ -67,7 +62,7 @@ const PRICE_SOURCES = ["pdf", "docx", "xlsx", "csv", "colar", "manual"] as const
+ const DOC_STATUSES = ["pendente", "anexado", "validado"] as const;
+ const PROPOSAL_DOC_KINDS = ["proposta_pdf", "email", "protocolo", "outro"] as const;
+ 
+-const log = serviceLogger("DirectProcurementRouter");
++const log = serviceLogger("directProcurementRouter");
+ 
+ async function requireWs(id: string, orgId: number) {
+   const ws = await getDirectProcurementWorkspace(id, orgId);
+@@ -75,8 +70,6 @@ async function requireWs(id: string, orgId: number) {
+   return ws;
+ }
+ 
+-const log = serviceLogger("directProcurementRouter");
+-
+ /**
+  * R3 / PR-05 (SEM-003) — a criação colidiu com a chave natural (org + número). NADA foi escrito. Relê o
+  * existente NO ÓRGÃO do contexto e decide SEM ESCREVER (contrato: server/domain/processCreateContract.ts):
+diff --git a/server/routers/procurementProcessRouter.ts b/server/routers/procurementProcessRouter.ts
+remerge CONFLICT (content): Merge conflict in server/routers/procurementProcessRouter.ts
+index 0f722a0..41c0d49 100644
+--- a/server/routers/procurementProcessRouter.ts
++++ b/server/routers/procurementProcessRouter.ts
+@@ -13,11 +13,7 @@ import {
+   createProcurementWorkspace,
+   setStage,
+   type StartOption,
+-<<<<<<< 76ee900 (Merge remote-tracking branch 'origin/fix/r2-pr04a-direct-price-import' into HEAD)
+-=======
+-  type ProcessStage,
+   type ProcurementWorkspace,
+->>>>>>> fcdb3b1 (fix(r3): create != reset nos criadores canônicos de processo (SEM-002, SEM-003))
+ } from "../domain/procurementProcess";
+ import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
+ import {

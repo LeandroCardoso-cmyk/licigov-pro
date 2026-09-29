@@ -1,0 +1,25 @@
+From 6eda0da01a3bd47760e3c62bc27c48c673ba8c73 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 28 Sep 2026 23:43:39 +0000
+Subject: [PATCH] integ(w1): drop unused TRPCError import in documentsRouter
+ after PR-02 + LEG-009
+
+---
+ server/routers/documentsRouter.ts | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/server/routers/documentsRouter.ts b/server/routers/documentsRouter.ts
+index 101daf0..edf12ec 100644
+--- a/server/routers/documentsRouter.ts
++++ b/server/routers/documentsRouter.ts
+@@ -16,7 +16,6 @@
+  * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
+  */
+ import { tenantProcedure, router } from "../_core/trpc";
+-import { TRPCError } from "@trpc/server";
+ import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
+ import { z } from "zod";
+ import * as db from "../db";
+-- 
+2.43.0
+
