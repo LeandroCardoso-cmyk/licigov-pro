@@ -56,8 +56,9 @@ export class OfficialDocumentVersionConflictError extends TRPCError {
   }
 }
 
-/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle. */
-export function isDuplicateKeyError(err: unknown): boolean {
+/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle. Privado do módulo: o
+ *  `db/index.ts` re-exporta `*` deste arquivo e outro repositório pode ter um helper homônimo (TS2308). */
+function isDuplicateKeyError(err: unknown): boolean {
   let e: unknown = err;
   for (let i = 0; i < 4 && e; i++) {
     const x = e as { code?: string; errno?: number; cause?: unknown };

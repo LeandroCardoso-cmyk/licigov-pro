@@ -10,7 +10,8 @@ import { describe, it, expect, vi } from "vitest";
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { createDocument, OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE } from "../../services/officialDocumentLifecycleService";
-import { isDuplicateKeyError, OfficialDocumentVersionConflictError, OFFICIAL_DOCUMENT_VERSION_CONFLICT } from "../../db/officialDocuments";
+import { insertOfficialDocument, OfficialDocumentVersionConflictError, OFFICIAL_DOCUMENT_VERSION_CONFLICT } from "../../db/officialDocuments";
+import { createOfficialDocument } from "../../domain/officialDocument";
 
 vi.mock("../../db/connection", () => ({ getDb: vi.fn(async () => null) }));
 
@@ -53,12 +54,20 @@ describe("NEW-016 — erro institucional de colisão", () => {
     expect(e.code).toBe("CONFLICT");
     expect(e.message.startsWith(`${OFFICIAL_DOCUMENT_VERSION_CONFLICT}:`)).toBe(true);
   });
-  it("isDuplicateKeyError reconhece ER_DUP_ENTRY direto e encapsulado (drizzle `cause`)", () => {
-    expect(isDuplicateKeyError({ code: "ER_DUP_ENTRY" })).toBe(true);
-    expect(isDuplicateKeyError({ errno: 1062 })).toBe(true);
-    expect(isDuplicateKeyError({ message: "Failed query", cause: { code: "ER_DUP_ENTRY" } })).toBe(true);
-    expect(isDuplicateKeyError({ code: "ER_LOCK_DEADLOCK" })).toBe(false);
-    expect(isDuplicateKeyError(null)).toBe(false);
+  const DOC = createOfficialDocument({
+    tenantId: 1, businessDomain: "processo_licitatorio", documentType: "etp", origin: "p1", title: "ETP",
+    content: "X", version: 1, author: "u", status: "emitido", correlationId: "c",
+  });
+  const insertThatFailsWith = (err: unknown) => ({ insert: () => ({ values: async () => { throw err; } }) });
+
+  it("insertOfficialDocument: ER_DUP_ENTRY direto ou encapsulado (drizzle `cause`) ⇒ CONFLICT estável, sem upsert", async () => {
+    for (const err of [{ code: "ER_DUP_ENTRY" }, { errno: 1062 }, { message: "Failed query", cause: { code: "ER_DUP_ENTRY" } }]) {
+      await expect(insertOfficialDocument(DOC, insertThatFailsWith(err) as never)).rejects.toBeInstanceOf(OfficialDocumentVersionConflictError);
+    }
+  });
+  it("insertOfficialDocument: outros erros de banco são propagados como estão (sem mascarar)", async () => {
+    const deadlock = { code: "ER_LOCK_DEADLOCK", message: "deadlock" };
+    await expect(insertOfficialDocument(DOC, insertThatFailsWith(deadlock) as never)).rejects.toBe(deadlock);
   });
 });
 
