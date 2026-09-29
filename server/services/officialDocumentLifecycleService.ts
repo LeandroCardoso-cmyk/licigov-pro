@@ -15,13 +15,14 @@
 
 import { createHash } from "crypto";
 import { sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import {
   createOfficialDocument, computeLineageId, officialFilename, OFFICIAL_MIME_TYPES,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
 } from "../domain/officialDocument";
 import {
-  insertOfficialDocument, getLatestByLineage, countVersions,
+  insertOfficialDocument, getLatestByLineage, countVersions, lockLatestVersionForUpdate,
   countDocumentTimeline, insertDocumentTimelineEntry, updateOfficialDocumentStorageRefs,
   type OfficialDocsExecutor,
 } from "../db/officialDocuments";
@@ -30,12 +31,31 @@ import { isStorageConfigured, storageFallbackAllowed, assertStorageUsable, stora
 
 // ─── Timeline (append-only) — responsabilidade do Lifecycle ───────────────────
 
-async function recordDocEvent(doc: OfficialDocument, eventType: string, summary: string, executor?: OfficialDocsExecutor): Promise<void> {
-  const order = await countDocumentTimeline(doc.lineageId, doc.tenantId, executor);
+async function recordDocEvent(
+  doc: OfficialDocument, eventType: string, summary: string, executor?: OfficialDocsExecutor,
+  opts: { locked?: boolean } = {},
+): Promise<void> {
+  // `locked` (NEW-016): dentro da transação da versão — ordem por leitura corrente com lock e INSERT
+  // puro (colisão ⇒ CONFLICT; nunca reescreve um evento já registrado).
+  const order = await countDocumentTimeline(doc.lineageId, doc.tenantId, executor, { forUpdate: opts.locked });
   await insertDocumentTimelineEntry({
     tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
     eventType, actor: doc.author, summary, correlationId: doc.correlationId,
-  }, executor);
+  }, executor, { insertOnly: opts.locked });
+}
+
+/**
+ * NEW-016 — token estável quando o lock nomeado da linhagem não pôde ser obtido (timeout, erro ou
+ * NULL). A criação da versão FALHA FECHADA: nada é lido/escrito sem o lock.
+ */
+export const OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE = "OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE";
+const LINEAGE_LOCK_TIMEOUT_SECONDS = 10;
+
+/** Resultado de `SELECT GET_LOCK(...) AS ok` via drizzle/mysql2 (`[rows, fields]` ou `rows`). */
+function readLockResult(res: unknown): number | null {
+  const rows = (Array.isArray(res) && Array.isArray(res[0]) ? res[0] : res) as Array<{ ok?: unknown }> | undefined;
+  const v = Array.isArray(rows) ? rows[0]?.ok : undefined;
+  return v === null || v === undefined ? null : Number(v);
 }
 
 // ─── Criação/versionamento + persistência de metadados ────────────────────────
@@ -88,18 +108,33 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
   // timeline. A numeração é serializada por linhagem com um lock nomeado (GET_LOCK) — evita colisão de
   // versão e perda silenciosa de evento por corrida, INCLUSIVE na 1ª versão. O lock é liberado sempre
   // (finally), pois locks nomeados não são desfeitos por rollback.
+  //
+  // NEW-016 — o GET_LOCK é liberado ANTES do commit da transação (externa ou própria); sozinho ele NÃO
+  // serializa até o commit. Por isso, dentro do lock:
+  //   1. o retorno do GET_LOCK é verificado (≠ 1 ⇒ FALHA FECHADA, sem ler/escrever);
+  //   2. a maior versão é lida com `FOR UPDATE` (leitura corrente): um escritor concorrente cuja
+  //      versão ainda não commitou BLOQUEIA esta leitura até o commit — a serialização passa a valer
+  //      até o COMMIT, também com transação externa e snapshot REPEATABLE READ antigo;
+  //   3. a nova versão e o evento de timeline são INSERT PURO — qualquer colisão residual vira
+  //      CONFLICT (`OFFICIAL_DOCUMENT_VERSION_CONFLICT`), nunca sobrescrita. Uma versão oficial
+  //      criada (em especial `emitido`) é IMUTÁVEL: erro é preferível a corrupção.
   const lockKey = `odoc:${params.organizationId}:${lineageId}`.slice(0, 60);
   // C.4A — o corpo roda sobre o executor recebido (transação EXTERNA compartilhada com a persistência
   // do generated_document + idempotency) ou, quando ausente, numa transação PRÓPRIA. GET_LOCK exige a
   // MESMA conexão do início ao fim: por isso o caso sem executor abre a própria tx (nunca a pool crua).
   const persist = async (tx: OfficialDocsExecutor): Promise<OfficialDocument> => {
-    await tx.execute(sql`SELECT GET_LOCK(${lockKey}, 10)`);
+    const acquired = readLockResult(await tx.execute(sql`SELECT GET_LOCK(${lockKey}, ${LINEAGE_LOCK_TIMEOUT_SECONDS}) AS ok`));
+    if (acquired !== 1) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: `${OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE}: a linhagem documental está ocupada por outra operação — nenhuma versão foi criada. Tente novamente.`,
+      });
+    }
     try {
-      const previous = await getLatestByLineage(lineageId, params.organizationId, tx);
-      const version = ((await countVersions(lineageId, params.organizationId, tx)) || (previous ? previous.version : 0)) + 1;
+      const version = (await lockLatestVersionForUpdate(lineageId, params.organizationId, tx)) + 1;
       const doc = makeDoc(version);
       await insertOfficialDocument(doc, tx);
-      await recordDocEvent(doc, eventTypeFor(doc, version), summaryFor(doc, version), tx);
+      await recordDocEvent(doc, eventTypeFor(doc, version), summaryFor(doc, version), tx, { locked: true });
       return doc;
     } finally {
       await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);

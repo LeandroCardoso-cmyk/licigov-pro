@@ -1,3 +1,4 @@
+import { throwLgpdExportDisabled } from "../services/lgpdExportGuard";
 import { protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
@@ -32,9 +33,11 @@ export const lgpdRouter = router({
       return { hasAccepted };
     }),
 
+  // NEW-003 — exportação LGPD por autoatendimento DESATIVADA (ver services/lgpdExportGuard.ts): recusa
+  // antes de qualquer leitura; `db.exportUserData` não é mais alcançável por nenhuma rota.
   exportMyData: protectedProcedure
     .mutation(async ({ ctx }) => {
-      return await db.exportUserData(ctx.user.id);
+      throwLgpdExportDisabled(ctx);
     }),
 
   deleteMyAccount: protectedProcedure
