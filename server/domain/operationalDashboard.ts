@@ -27,6 +27,7 @@ export interface ConsolidatedInput {
   readonly addendaCount: number;
   readonly contractsExpiringSoon: number;
   readonly pendingTasks: number;
+  readonly operationalRecords?: ReadonlyArray<{ currentStage: string }>;
 }
 
 export interface OperationalIndicators {
@@ -38,7 +39,12 @@ export interface OperationalIndicators {
   readonly addenda: number;
   readonly pendingTasks: number;
   readonly pendingRequests: number;
+  /** Registros legados/manuais, separados das métricas canônicas para não contar duas vezes. */
+  readonly trackedRecords: number;
+  readonly finalizedRecords: number;
 }
+
+import { isFinalizedOperationRecord } from "./operationRecordSchedule";
 
 const CONCLUDED_PROCESS = new Set(["emitido", "arquivado", "concluido", "publicado"]);
 const CONCLUDED_CONTRACT = new Set(["encerrado", "arquivado", "rescindido"]);
@@ -58,6 +64,8 @@ export function computeIndicators(input: ConsolidatedInput): OperationalIndicato
     addenda: input.addendaCount,
     pendingTasks: input.pendingTasks,
     pendingRequests: input.institutionalRequestsPending,
+    trackedRecords: input.operationalRecords?.length ?? 0,
+    finalizedRecords: input.operationalRecords?.filter(r => isFinalizedOperationRecord(r.currentStage)).length ?? 0,
   };
 }
 
@@ -93,4 +101,7 @@ export interface MonitoringRow {
   readonly currentStage: string;
   readonly origin: string;
   readonly situation: SituationColor;
+  readonly eventDate?: string;
+  readonly eventEndDate?: string;
+  readonly eventTime?: string;
 }

@@ -12,30 +12,56 @@ import { EVENT_TYPE_LABELS, EVENT_TYPE_CLASSES, formatDate, todayIso, addDaysIso
 export interface OperationalCalendarProps { onOpenReference?: (type: string, id: string) => void }
 
 type ViewMode = "diaria" | "semanal" | "mensal";
-const SPAN: Record<ViewMode, number> = { diaria: 0, semanal: 6, mensal: 29 };
+
+function monthEnd(start: string): string {
+  const [year, month] = start.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
+function shiftDate(date: string, view: ViewMode, direction: -1 | 1): string {
+  if (view === "diaria") return addDaysIso(date, direction);
+  if (view === "semanal") return addDaysIso(date, direction * 7);
+  const [year, month] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1 + direction, 1)).toISOString().slice(0, 10);
+}
 
 export default function OperationalCalendar({ onOpenReference }: OperationalCalendarProps) {
   const [view, setView] = React.useState<ViewMode>("semanal");
-  const from = todayIso();
-  const to = addDaysIso(from, SPAN[view]);
+  const [anchorDate, setAnchorDate] = React.useState(todayIso);
+  const from = view === "mensal" ? `${anchorDate.slice(0, 7)}-01` : anchorDate;
+  const to = view === "mensal" ? monthEnd(from) : addDaysIso(from, view === "diaria" ? 0 : 6);
   const { data, isLoading } = trpc.departmentOperation.calendar.useQuery({ from, to });
   const events = data?.events ?? [];
 
   const byDate = React.useMemo(() => {
     const map: Record<string, typeof events> = {};
-    for (const e of events) (map[e.eventDate] ??= []).push(e);
+    for (const e of events) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(e.eventDate)) continue;
+      const first = e.eventDate < from ? from : e.eventDate;
+      const ending = e.eventEndDate || e.eventDate;
+      const last = ending > to ? to : ending;
+      for (let day = first, shown = 0; day <= last && shown < 31; day = addDaysIso(day, 1), shown++) (map[day] ??= []).push(e);
+    }
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-  }, [events]);
+  }, [events, from, to]);
 
   return (
     <section className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Calendário Operacional</h3>
         <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
           {(["diaria", "semanal", "mensal"] as const).map((v) => (
             <button key={v} type="button" onClick={() => setView(v)} className={`rounded-md px-3 py-1 capitalize transition ${view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>{v}</button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <button type="button" onClick={() => setAnchorDate(shiftDate(anchorDate, view, -1))} className="rounded border border-border px-2 py-1 text-foreground">Anterior</button>
+        <button type="button" onClick={() => setAnchorDate(todayIso())} className="rounded border border-border px-2 py-1 text-foreground">Hoje</button>
+        <button type="button" onClick={() => setAnchorDate(shiftDate(anchorDate, view, 1))} className="rounded border border-border px-2 py-1 text-foreground">Próximo</button>
+        <label className="flex items-center gap-2">Ir para <input aria-label="Ir para data" type="date" value={anchorDate} onChange={(e) => e.target.value && setAnchorDate(e.target.value)} className="rounded border border-input bg-background px-2 py-1 text-foreground" /></label>
+        <span>{formatDate(from)}{from !== to ? ` a ${formatDate(to)}` : ""}</span>
       </div>
 
       {isLoading ? (
@@ -51,7 +77,7 @@ export default function OperationalCalendar({ onOpenReference }: OperationalCale
                 {evs.map((e) => (
                   <li key={e.id}>
                     <button type="button" onClick={() => e.referenceId && onOpenReference?.(e.referenceType, e.referenceId)} className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left hover:border-indigo-200 dark:hover:border-indigo-800">
-                      <span className="line-clamp-1 text-sm text-foreground">{e.title}{e.eventTime ? ` · ${e.eventTime}` : ""}</span>
+                      <span className="line-clamp-1 text-sm text-foreground">{e.title} · {e.eventTime ? (date === e.eventDate ? e.eventTime : "Em andamento") : "Dia inteiro"}</span>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${EVENT_TYPE_CLASSES[e.eventType] ?? "bg-muted text-foreground"}`}>{EVENT_TYPE_LABELS[e.eventType] ?? e.eventType}</span>
                     </button>
                   </li>

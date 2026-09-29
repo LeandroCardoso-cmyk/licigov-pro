@@ -1,0 +1,9 @@
+# Agenda dos registros operacionais
+
+O Cadastro Rápido permanece um registro operacional, sem criar ou substituir um processo do ERP. A Visão Geral apresenta indicadores separados para registros acompanhados e finalizados, preservando a contagem dos processos canônicos. A Visão Geral e o Painel de Acompanhamento exibem as linhas operacionais do tenant.
+
+`operation_records.event_date` é a data local de início (`YYYY-MM-DD`). `event_end_date` é opcional e inclusiva; `event_time` (`HH:mm`) também é opcional. Sem horário, o calendário apresenta **Dia inteiro**. Sem data inicial, não há evento de calendário. A data final não pode anteceder a inicial. Os registros antigos recebem as colunas vazias na migração 0308 e podem ter a agenda preenchida em **Registros → Definir data**. Essa alteração valida `organization_id`, atualiza o registro e acrescenta uma entrada na timeline em uma única transação; repetir o mesmo valor não acrescenta outra entrada.
+
+O calendário deriva os eventos de `operation_records` por referência, sem copiá-los para `operational_events`. Ele inclui intervalos que interceptam a janela consultada e exibe cada dia de um período. Datas com horário preservam a hora de início; nos dias seguintes aparecem como **Em andamento**. A navegação diária, semanal e mensal permite consultar datas históricas. Eventos adicionais, como certames, usam o fluxo existente de `operational_events` e referenciam o registro. A criação é transacional e idempotente por tenant, tipo, referência e data, com timeline append-only.
+
+Para o cronograma de 2026, a `Data Inicial` confirmada pelo responsável é a data de dia inteiro do registro. Um certame com data própria deve ser lançado como evento adicional vinculado ao registro, com o horário confirmado. Não inferir término do processo a partir da última data preenchida na planilha e não marcar um processo como finalizado apenas porque há um aditivo relacionado.
