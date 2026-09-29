@@ -1,6 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
-import { SITUATION_CLASSES, SITUATION_LABELS, RECORD_TYPE_LABELS } from "./labels";
+import { SITUATION_CLASSES, SITUATION_LABELS, RECORD_TYPE_LABELS, formatDate } from "./labels";
 
 /**
  * OperationalMonitoringPanel — REAL (tRPC).
@@ -10,7 +10,7 @@ import { SITUATION_CLASSES, SITUATION_LABELS, RECORD_TYPE_LABELS } from "./label
  * Situação Geral por cores (verde/amarelo/azul/vermelho/cinza).
  */
 
-export interface OperationalMonitoringPanelProps { onOpen?: (id: string) => void }
+export interface OperationalMonitoringPanelProps { onOpen?: (id: string, origin: string) => void }
 
 const ORIGIN_LABELS: Record<string, string> = {
   processo_licitatorio: "Processo Licitatório", contratacao_direta: "Contratação Direta",
@@ -25,7 +25,7 @@ export default function OperationalMonitoringPanel({ onOpen }: OperationalMonito
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold text-foreground">Painel de Acompanhamento</h3>
-          <p className="text-xs text-muted-foreground">Substitui a planilha — consolidado automaticamente dos domínios.</p>
+          <p className="text-xs text-muted-foreground">Processos do LiciGov e registros operacionais da organização.</p>
         </div>
         <div className="hidden gap-2 sm:flex">
           {Object.entries(SITUATION_LABELS).map(([k, label]) => (
@@ -47,16 +47,18 @@ export default function OperationalMonitoringPanel({ onOpen }: OperationalMonito
                 <th className="px-4 py-2 font-medium">Objeto</th>
                 <th className="px-4 py-2 font-medium">Origem</th>
                 <th className="px-4 py-2 font-medium">Etapa Atual</th>
+                <th className="px-4 py-2 font-medium">Agenda</th>
                 <th className="px-4 py-2 font-medium">Situação Geral</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.processId} onClick={() => onOpen?.(r.processId)} className={onOpen ? "cursor-pointer border-b border-border hover:bg-muted last:border-0" : "border-b border-border last:border-0"}>
+                <tr key={r.processId} onClick={() => { if (r.origin !== "processo_licitatorio" && r.origin !== "contratacao_direta") onOpen?.(r.processId, r.origin); }} className={onOpen && r.origin !== "processo_licitatorio" && r.origin !== "contratacao_direta" ? "cursor-pointer border-b border-border hover:bg-muted last:border-0" : "border-b border-border last:border-0"}>
                   <td className="px-4 py-3 font-medium text-foreground">{r.processNumber}</td>
                   <td className="px-4 py-3"><p className="line-clamp-1 text-xs text-muted-foreground">{r.object}</p></td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{ORIGIN_LABELS[r.origin] ?? RECORD_TYPE_LABELS[r.origin] ?? r.origin}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{r.currentStage}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{r.eventDate ? `${formatDate(r.eventDate)}${r.eventEndDate ? ` a ${formatDate(r.eventEndDate)}` : ""} · ${r.eventTime || "Dia inteiro"}` : "—"}</td>
                   <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${SITUATION_CLASSES[r.situation] ?? SITUATION_CLASSES.cinza}`}>{SITUATION_LABELS[r.situation] ?? r.situation}</span></td>
                 </tr>
               ))}

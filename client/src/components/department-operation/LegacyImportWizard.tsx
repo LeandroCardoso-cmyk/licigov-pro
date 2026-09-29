@@ -23,6 +23,9 @@ export default function LegacyImportWizard({ onImported }: LegacyImportWizardPro
     onSuccess: (res) => {
       void utils.operationRecord.listRecords.invalidate();
       void utils.departmentOperation.timeline.invalidate();
+      void utils.departmentOperation.dashboard.invalidate();
+      void utils.departmentOperation.indicators.invalidate();
+      void utils.departmentOperation.monitoringPanel.invalidate();
       onImported?.(res.record.id);
     },
   });

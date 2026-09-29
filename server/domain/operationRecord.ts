@@ -46,6 +46,10 @@ export interface OperationRecord {
   readonly referenceId: string;
   readonly documentReferences: readonly string[];
   readonly notes: string;
+  /** Agenda local: sem horário = dia inteiro; fim vazio = apenas a data inicial. */
+  readonly eventDate: string;
+  readonly eventEndDate: string;
+  readonly eventTime: string;
   readonly correlationId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -64,6 +68,9 @@ export function createOperationRecord(params: {
   referenceId?: string;
   documentReferences?: string[];
   notes?: string;
+  eventDate?: string;
+  eventEndDate?: string;
+  eventTime?: string;
   correlationId: string;
   createdAt?: string;
 }): OperationRecord {
@@ -85,6 +92,9 @@ export function createOperationRecord(params: {
     referenceId: params.referenceId ?? "",
     documentReferences: params.documentReferences ?? [],
     notes: params.notes ?? "",
+    eventDate: params.eventDate ?? "",
+    eventEndDate: params.eventEndDate ?? "",
+    eventTime: params.eventTime ?? "",
     correlationId: params.correlationId,
     createdAt: ts,
     updatedAt: ts,

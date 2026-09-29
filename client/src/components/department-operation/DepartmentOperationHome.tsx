@@ -9,7 +9,7 @@ import OperationalInbox from "./OperationalInbox";
 import OperationalRecommendations from "./OperationalRecommendations";
 import OperationRecordWizard from "./OperationRecordWizard";
 import LegacyImportWizard from "./LegacyImportWizard";
-import { RECORD_TYPE_LABELS } from "./labels";
+import OperationalRecordList from "./OperationalRecordList";
 
 /**
  * DepartmentOperationHome — REAL (tRPC via filhos).
@@ -41,38 +41,11 @@ interface DepartmentOperationHomeProps {
   showPageHeader?: boolean;
 }
 
-function OperationalRecordList() {
-  const { data, isLoading, isError } = trpc.operationRecord.listRecords.useQuery({ limit: 200 });
-  const records = data?.records ?? [];
-
-  return (
-    <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-      <h2 className="text-base font-semibold text-foreground">Registros cadastrados</h2>
-      {isLoading ? <p className="mt-3 text-sm text-muted-foreground">Carregando registros…</p>
-        : isError ? <p className="mt-3 text-sm text-destructive">Não foi possível carregar os registros.</p>
-          : records.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhum registro cadastrado.</p>
-            : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead><tr className="border-b border-border text-muted-foreground">
-                    <th className="px-2 py-2">Número</th><th className="px-2 py-2">Objeto</th>
-                    <th className="px-2 py-2">Tipo</th><th className="px-2 py-2">Etapa atual</th>
-                  </tr></thead>
-                  <tbody>{records.map((record) => <tr key={record.id} className="border-b border-border/60">
-                    <td className="px-2 py-2">{record.number || "—"}</td>
-                    <td className="px-2 py-2">{record.object || "—"}</td>
-                    <td className="px-2 py-2">{RECORD_TYPE_LABELS[record.recordType] ?? record.recordType}</td>
-                    <td className="px-2 py-2">{record.currentStage || "—"}</td>
-                  </tr>)}</tbody>
-                </table>
-              </div>
-            )}
-    </section>
-  );
-}
-
 export default function DepartmentOperationHome({ showPageHeader = true }: DepartmentOperationHomeProps) {
   const [tab, setTab] = React.useState<Tab>("centro");
+  const [focusRecordId, setFocusRecordId] = React.useState<string | null>(null);
+  const openRecord = (id: string) => { setFocusRecordId(id); setTab("registros"); };
+  const openReference = (type: string, id: string) => { if (type === "operation_record") openRecord(id); };
   // PR B (Escopo 4) — o botão agora ENTREGA o relatório: antes a mutation era
   // disparada e o resultado descartado (botão sem comportamento visível). O
   // Document Engine ainda produz o relatório em MARKDOWN; para não prometer o que
@@ -128,20 +101,23 @@ export default function DepartmentOperationHome({ showPageHeader = true }: Depar
       </div>
 
       {tab === "centro" && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2"><OperationalDashboard /></div>
-          <div><OperationalRecommendations /></div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2"><OperationalDashboard onOpenReference={openReference} /></div>
+            <div><OperationalRecommendations /></div>
+          </div>
+          <OperationalMonitoringPanel onOpen={(id, origin) => { if (origin !== "processo_licitatorio" && origin !== "contratacao_direta") openRecord(id); }} />
         </div>
       )}
-      {tab === "painel" && <OperationalMonitoringPanel />}
-      {tab === "calendario" && <OperationalCalendar />}
+      {tab === "painel" && <OperationalMonitoringPanel onOpen={(id, origin) => { if (origin !== "processo_licitatorio" && origin !== "contratacao_direta") openRecord(id); }} />}
+      {tab === "calendario" && <OperationalCalendar onOpenReference={openReference} />}
       {tab === "caixa" && <OperationalInbox />}
       {tab === "timeline" && <OperationalTimeline />}
       {tab === "registros" && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <OperationRecordWizard />
           <LegacyImportWizard />
-          <OperationalRecordList />
+          <OperationalRecordList focusRecordId={focusRecordId} />
         </div>
       )}
     </div>
