@@ -261,7 +261,11 @@ describe.skipIf(!DB)("NEW-016 — imutabilidade da versão oficial (MySQL estrit
     const pid = "n016-t8";
     await seedDraft(ORG, pid, "Material T8", `gen-${pid}-0`);
     const r = await emit(ORG, pid, `emit-${pid}`);
-    await seedDraft(ORG, pid, "Material T8 revisto", `gen-${pid}-1`); // regeneração posterior
+    // Regeneração posterior: na main é aceita (nova versão `gerado`); com a PR-09 um documento já EMITIDO
+    // não é regenerado diretamente (PRECONDITION_FAILED). Nos dois casos a versão emitida fica intacta.
+    await seedDraft(ORG, pid, "Material T8 revisto", `gen-${pid}-1`).catch((e: { code?: string }) => {
+      if (e?.code !== "PRECONDITION_FAILED") throw e;
+    });
     const [rows] = await conn.execute<mysql.RowDataPacket[]>(
       "SELECT status, CAST(content AS CHAR) AS content, metadata FROM official_documents WHERE id = ? AND tenant_id = ?", [r.officialDocument.id, ORG]);
     const row = rows[0] as any;
