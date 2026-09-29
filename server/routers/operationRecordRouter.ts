@@ -7,11 +7,12 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
   createRecord, importLegacyRecord, registerExpiration, createManualEvent,
-  registerMilestone, setPublicationStatus, updateRecordSchedule,
+  registerMilestone, setPublicationStatus, updateRecordSchedule, changeRecordLifecycle,
 } from "../services/operationRecordService";
+import { COMPLETION_REASON_MAX } from "../domain/operationRecordLifecycle";
 import { validLocalDate, validLocalTime } from "../domain/operationRecordSchedule";
 import { listOperationRecords, listOperationalMilestones, listPublicationRecords, getOperationalSettings, upsertOperationalSettings } from "../db/departmentOperation";
 
@@ -78,12 +79,44 @@ export const operationRecordRouter = router({
       return importLegacyRecord({ organizationId: orgId, recordType: input.recordType, rawText: input.rawText, actor: String(ctx.user.id), correlationId: ctx.correlationId });
     }),
 
+  /** Registros do tenant. Padrão: somente ATIVOS (concluídos ficam no histórico: `completed` / `all`). */
   listRecords: tenantProcedure
-    .input(z.object({ limit: z.number().min(1).max(200).optional() }).optional())
+    .input(z.object({
+      limit: z.number().min(1).max(200).optional(),
+      lifecycle: z.enum(["active", "completed", "all"]).optional(),
+    }).optional())
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const records = await listOperationRecords(orgId, input?.limit ?? 100);
+      const records = await listOperationRecords(orgId, input?.limit ?? 100, input?.lifecycle ?? "active");
       return { records, total: records.length };
+    }),
+
+  /**
+   * Conclui um registro operacional (transição auditada — nunca exclusão). Agenda, eventos vinculados e
+   * histórico permanecem; a agenda base sai das superfícies operacionais ativas. operator+; tenant do
+   * contexto autenticado; repetir é idempotente.
+   */
+  complete: orgRoleProcedure("operator")
+    .input(z.object({ recordId: z.string().length(20), reason: z.string().trim().max(COMPLETION_REASON_MAX).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await changeRecordLifecycle({
+        organizationId: ctx.organizationId!, recordId: input.recordId, action: "complete",
+        actorUserId: ctx.user!.id, reason: input.reason, correlationId: ctx.correlationId,
+      });
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Registro não encontrado nesta organização." });
+      return result;
+    }),
+
+  /** Reabre um registro concluído por engano (volta a ACTIVE; nada é recriado). operator+; idempotente. */
+  reopen: orgRoleProcedure("operator")
+    .input(z.object({ recordId: z.string().length(20) }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await changeRecordLifecycle({
+        organizationId: ctx.organizationId!, recordId: input.recordId, action: "reopen",
+        actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+      });
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Registro não encontrado nesta organização." });
+      return result;
     }),
 
   /** Gera automaticamente o evento de vencimento + alertas (90/60/30/15/7 dias). */

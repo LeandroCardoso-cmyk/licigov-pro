@@ -7,6 +7,9 @@ dist/
 build/
 *.dist
 
+# Dados operacionais PRIVADOS (datasets de backfill, planilhas institucionais) — nunca versionar.
+ops-private/
+
 # Environment variables
 .env
 .env.local

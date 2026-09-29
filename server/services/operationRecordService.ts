@@ -19,8 +19,12 @@ import { assertOperationRecordSchedule, validLocalDate, validLocalTime, type Ope
 import {
   insertOperationRecord, insertOperationalEvent, insertOperationalMilestone,
   countOperationalTimeline, insertOperationalTimelineEntry, upsertPublicationRecord,
-  setOperationRecordSchedule, insertManualOperationalEvent,
+  setOperationRecordSchedule, insertManualOperationalEvent, transitionOperationRecordLifecycle,
 } from "../db/departmentOperation";
+import { COMPLETION_REASON_MAX, type LifecycleAction } from "../domain/operationRecordLifecycle";
+import { serviceLogger } from "./observabilityService";
+
+const log = serviceLogger("OperationRecordService");
 
 /** Registra um evento na timeline operacional (append-only), calculando a ordem. */
 async function recordTimeline(params: { organizationId: number; actor: string; action: string; referenceType?: string; referenceId?: string; summary: string; correlationId: string }): Promise<void> {
@@ -68,6 +72,25 @@ export async function updateRecordSchedule(params: {
 }) {
   assertOperationRecordSchedule(params.schedule);
   return setOperationRecordSchedule(params);
+}
+
+/**
+ * Concluir / reabrir um registro operacional (transição auditada, nunca exclusão). Idempotente: repetir a
+ * mesma ação devolve o estado atual sem nova escrita nem nova entrada de timeline.
+ */
+export async function changeRecordLifecycle(params: {
+  organizationId: number; recordId: string; action: LifecycleAction;
+  actorUserId: number; reason?: string; correlationId: string;
+}) {
+  const reason = (params.reason ?? "").replace(/\s+/g, " ").trim().slice(0, COMPLETION_REASON_MAX);
+  const result = await transitionOperationRecordLifecycle({ ...params, reason });
+  if (result) {
+    log.info(params.action === "complete" ? "operation_record_completed" : "operation_record_reopened", {
+      organizationId: params.organizationId, recordId: params.recordId, from: result.from, to: result.to,
+      changed: result.changed, actorUserId: params.actorUserId, correlationId: params.correlationId,
+    });
+  }
+  return result;
 }
 
 /** Importação Assistida de processo/contrato legado (PDF/DOCX → texto → confirmação). */

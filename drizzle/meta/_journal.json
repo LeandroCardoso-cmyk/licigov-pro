@@ -2075,6 +2075,13 @@
       "when": 1790673600000,
       "tag": "0308_operation_record_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "5",
+      "when": 1790760000000,
+      "tag": "0309_operation_record_lifecycle",
+      "breakpoints": true
     }
   ]
 }
