@@ -6,7 +6,7 @@
  * sem evidência de formalização, comando/evento dedicado, idempotência específica ou autoridade contextual.
  *
  * Contrato verificado (tenant resolvido pelo banco — memberships reais):
- *  - viewer / operator / manager / owner / admin de plataforma: `minuta → vigente` ⇒ FORBIDDEN com
+ *  - viewer / operator / manager / admin / owner (do órgão) e admin de plataforma: `minuta → vigente` ⇒ FORBIDDEN com
  *    CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION, mensagem idêntica;
  *  - ZERO escrita: a linha do contrato (status, campos, updated_at) e a timeline ficam idênticas;
  *  - tentativa de transição + edição de campo no MESMO pedido é atômica (nada dos campos é gravado);
@@ -43,9 +43,9 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
         `INSERT INTO users (openId, name, email, role) VALUES (?, ?, ?, ?)`, [`n022-${tag}-${stamp}`, `N022 ${tag}`, `n022-${tag}-${stamp}@teste.local`, role]);
       ids[tag] = r.insertId;
     }
-    for (const tag of ["viewer", "operator", "manager", "owner", "other-b"]) await user(tag);
+    for (const tag of ["viewer", "operator", "manager", "org-admin", "owner", "other-b"]) await user(tag);
     await user("platform-admin", "admin");
-    for (const [tag, role] of [["viewer", "viewer"], ["operator", "operator"], ["manager", "manager"], ["owner", "owner"]] as const) {
+    for (const [tag, role] of [["viewer", "viewer"], ["operator", "operator"], ["manager", "manager"], ["org-admin", "admin"], ["owner", "owner"]] as const) {
       await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, 1)`, [ORG_A, ids[tag], role]);
     }
     await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'owner', 1)`, [ORG_B, ids["other-b"]]);
@@ -116,7 +116,7 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
     return { lines, restore: () => spy.mockRestore() };
   }
 
-  for (const tag of ["viewer", "operator", "manager", "owner", "platform-admin"]) {
+  for (const tag of ["viewer", "operator", "manager", "org-admin", "owner", "platform-admin"]) {
     it(`${tag}: minuta → vigente pelo editor genérico ⇒ FORBIDDEN ${CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION}, zero escrita`, async () => {
       const id = contracts.minuta;
       const before = await row(id);
