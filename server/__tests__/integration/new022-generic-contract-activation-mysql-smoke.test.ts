@@ -118,7 +118,13 @@ describe.skipIf(!DB)("NEW-022 — ativação genérica de contrato bloqueada (My
       const tl = await timelineCount(id);
       const c = await caller(tag, ORG_A);
       const err = await errOf(() => c.contractWorkspace.updateContract({ contractId: id, status: "vigente" }));
-      expect(err).toEqual({ code: "FORBIDDEN", message: CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION_MESSAGE });
+      if (tag === "viewer") {
+        // Composição com a NEW-006: o piso RBAC operator+ da procedure recusa o viewer ANTES do handler
+        // (FORBIDDEN do RBAC); sem a NEW-006, é o guard da NEW-022. Nos dois casos: recusa e zero escrita.
+        expect(err.code).toBe("FORBIDDEN");
+      } else {
+        expect(err).toEqual({ code: "FORBIDDEN", message: CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION_MESSAGE });
+      }
       expect(await row(id)).toBe(before);
       expect(JSON.parse(await row(id)).status).toBe("minuta");
       expect(await timelineCount(id)).toBe(tl);
