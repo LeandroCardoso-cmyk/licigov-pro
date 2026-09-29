@@ -22,8 +22,9 @@ import {
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
-import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
+// NEW-022 — bloqueio da ativação genérica (import isolado: não sobrepõe as linhas de import editadas por NEW-006/PR-08/PR-12).
 import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
