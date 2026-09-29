@@ -275,13 +275,25 @@ describe.skipIf(!DB)("NEW-016 — imutabilidade da versão oficial (MySQL estrit
   }, 60_000);
 
   it("T9) official_document_promotions: cada linha aponta para versão `emitido` com mesma versão e hash", async () => {
+    // Sem JOIN entre as tabelas: no MySQL 8 `official_documents.id` (utf8mb4_unicode_ci, explícita na 0280) e
+    // `official_document_promotions.official_document_id` (default do servidor, utf8mb4_0900_ai_ci — a 0295 não
+    // fixa collation) não são comparáveis (ER_CANT_AGGREGATE_2COLLATIONS). Divergência preexistente de schema,
+    // fora do escopo da NEW-016. Cada promoção é conferida contra a versão oficial por consulta própria.
     const [ledger] = await conn.execute<mysql.RowDataPacket[]>(
-      "SELECT p.version AS lv, p.content_hash AS lh, d.version AS dv, d.status AS ds, CAST(d.content AS CHAR) AS dc FROM official_document_promotions p JOIN official_documents d ON d.id = p.official_document_id AND d.tenant_id = p.organization_id WHERE p.organization_id = ?", [ORG]);
+      "SELECT organization_id, official_document_id, lineage_id, version, content_hash FROM official_document_promotions WHERE organization_id = ?", [ORG]);
     expect(ledger.length).toBeGreaterThan(0);
-    for (const l of ledger as any[]) {
-      expect(l.ds).toBe("emitido");
-      expect(Number(l.dv)).toBe(Number(l.lv));
-      expect(draftContentHash(l.dc)).toBe(l.lh);
+    for (const p of ledger as any[]) {
+      const [docs] = await conn.execute<mysql.RowDataPacket[]>(
+        "SELECT id, tenant_id, lineage_id, version, status, CAST(content AS CHAR) AS content FROM official_documents WHERE tenant_id = ? AND id = ?",
+        [p.organization_id, p.official_document_id]);
+      expect(docs.length, `versão oficial da promoção ${p.official_document_id}`).toBe(1); // nenhuma promoção órfã
+      const d = docs[0] as any;
+      expect(Number(d.tenant_id)).toBe(Number(p.organization_id));
+      expect(d.id).toBe(p.official_document_id);
+      expect(d.lineage_id).toBe(p.lineage_id);
+      expect(d.status).toBe("emitido");
+      expect(Number(d.version)).toBe(Number(p.version));
+      expect(draftContentHash(d.content)).toBe(p.content_hash);
     }
   }, 30_000);
 
