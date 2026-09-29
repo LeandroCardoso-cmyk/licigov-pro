@@ -17,3 +17,44 @@ Registros concluídos saem das superfícies operacionais ativas — Visão Geral
 ## Preenchimento em lote da agenda (backfill one-off)
 
 `pnpm ops:schedule-backfill --org <id> --expect-slug <slug> --file <dataset.json | -> [--apply]` aplica agendas de **dia inteiro** a registros **já existentes**. O dataset real **nunca é versionado**: fica fora do repositório (ou em `ops-private/`, ignorada pelo Git); o executor recusa arquivos versionáveis dentro do repositório. Cada entrada é resolvida por token exato da referência gravada na etapa (`<prefixo> item N` / `<prefixo> itens N/M`), nunca por posição ou objeto sozinho, e classificada como MATCH, ALREADY_CORRECT, CONFLICT, NOT_FOUND ou AMBIGUOUS. Sem `--apply` é **dry-run**. Com `--apply`, só grava se CONFLICT = NOT_FOUND = AMBIGUOUS = 0 e MATCH + ALREADY_CORRECT = esperado: uma transação reconfere que cada agenda continua vazia, atualiza e registra a timeline com o correlationId da execução. Eventos vinculados (ex.: certame com horário) só são criados quando não há evento equivalente (mesmo registro, tipo, data, horário e número). Uma segunda execução resulta em ALREADY_CORRECT, sem escrita. Nunca cria, duplica ou exclui registros e nunca sobrescreve agenda existente.
+
+## Calendário Operacional Visual v1 (grade mensal)
+
+**Objetivo.** Dar à aba *Calendário* do Centro de Operações uma grade mensal real (7 colunas, semanas
+completas) acima da lista operacional, sem nova fonte de dados, importação ou tabela.
+
+**Fonte de dados reaproveitada.** A grade e a lista usam a MESMA consulta `departmentOperation.calendar`
+(`getCalendar`): eventos operacionais + agenda base dos registros **ativos** da organização do contexto
+autenticado. Na visão mensal a janela consultada é a das semanas visíveis (domingo da 1ª semana → sábado
+da última, 28–42 dias). Sem migration, sem endpoint novo, sem mudança no router ou no serviço — tenant,
+registros concluídos fora das superfícies ativas e eventos vinculados continuam decididos no backend.
+
+**Camadas.**
+- Domínio puro: `shared/operationalCalendar.ts` — `monthGridRange`, `buildMonthGrid`, `classifyCalendarItem`,
+  `groupItemsByDay`, `listForMonthSelection`, `timeLabelFor` e o redutor `monthNavigationReducer`.
+  Determinístico, sem React, datas `AAAA-MM-DD` com aritmética em UTC (independe do fuso do navegador).
+- UI: `OperationalMonthGrid.tsx` (apresentação) + `OperationalCalendar.tsx` (estado e consulta).
+
+**Comportamento da grade.**
+- Cabeçalho com mês/ano; navegação *Anterior*, *Hoje* (vai ao mês atual e seleciona o dia), *Próximo* e *Ir para*.
+- Dias fora do mês atenuados; dia atual com o número destacado; dia selecionado com contorno.
+- Itens por dia, em ordem estável (dia inteiro primeiro, depois por horário):
+  - **Dia inteiro** (agenda de registro sem horário) — só o título;
+  - **Com horário** — horário + título (em períodos, "Em andamento" após o 1º dia);
+  - **Certame / sessão pública** — estilo próprio, com o horário quando houver.
+- Mais itens que o limite da célula (3 linhas): os primeiros + indicador **"+N"**.
+- Em telas pequenas, a célula mostra só a contagem de eventos; os detalhes ficam na lista.
+
+**Integração com a lista inferior.** Sem dia selecionado, a lista mostra o mês inteiro (dias de meses
+vizinhos visíveis na grade não entram). Clicar num dia filtra a lista para ele; clicar de novo, ou em
+*Ver mês inteiro*, volta ao mês. Clicar num dia de mês vizinho navega até esse mês. Abrir o processo de
+referência continua sendo feito pela lista. As visões *diária* e *semanal* continuam em lista, como antes;
+a *mensal* passou a ser a visão inicial da aba.
+
+**Limitações da v1.** Sem arrastar e soltar, edição na grade, recorrência, integração com agendas externas
+ou notificações novas. Itens com período longo são repetidos em cada dia (sem barra contínua entre dias).
+A consulta de eventos operacionais mantém o teto atual de 500 itens por janela.
+
+**Evoluções possíveis (v2).** Barras contínuas para períodos; abrir o processo direto do item na grade;
+filtros por tipo de evento; destaque de prazos vencidos; semana começando na segunda-feira como preferência;
+impressão/exportação do mês.

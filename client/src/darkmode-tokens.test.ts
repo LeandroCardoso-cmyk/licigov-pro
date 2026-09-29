@@ -26,6 +26,7 @@ const MIGRATED_FILES = [
   "client/src/components/department-operation/OperationalInbox.tsx",
   "client/src/components/department-operation/OperationalMonitoringPanel.tsx",
   "client/src/components/department-operation/OperationalCalendar.tsx",
+  "client/src/components/department-operation/OperationalMonthGrid.tsx",
   "client/src/components/department-operation/LegacyImportWizard.tsx",
   "client/src/components/department-operation/OperationRecordWizard.tsx",
   "client/src/components/department-operation/labels.ts",
