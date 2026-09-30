@@ -23,6 +23,8 @@ const ORG_B = 997052;
 const TOKEN = "LEGACY_ENDPOINT_DISABLED";
 
 type Ids = { process: number; item: number; suggestion: number };
+/** Ids que não existem em nenhum tenant — a recusa precisa ser a mesma (não revela existência). */
+const MISSING_IDS: Ids = { process: 999_999_991, item: 999_999_992, suggestion: 999_999_993 };
 
 const PROCEDURES: readonly { name: string; input: (i: Ids) => unknown }[] = [
   { name: "addItemsToTR", input: (i) => ({ processId: i.process, items: [{ itemType: "material", description: "Item novo que não pode ser gravado", unit: "UN", quantity: 5 }] }) },
@@ -158,6 +160,8 @@ describe.skipIf(!DB)("R2 / LEG-005 — itens do TR / CATMAT legados desativados 
       { user: users.ownerA, ids: idsB }, // A mirando recursos de B
       { user: users.ownerB, ids: idsA }, // B mirando recursos de A
       { user: users.ownerB, ids: idsB },
+      { user: users.ownerA, ids: MISSING_IDS }, // ids inexistentes
+      { user: users.viewerA, ids: MISSING_IDS },
     ];
     for (const { user, ids } of scenarios) {
       const caller = (await makeCaller(user)) as unknown as { processes: Record<string, (i: unknown) => Promise<unknown>> };
