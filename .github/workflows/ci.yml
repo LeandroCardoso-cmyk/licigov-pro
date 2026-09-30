@@ -206,6 +206,12 @@ jobs:
       - name: Smoke — revisão por item lógico (Pesquisa de Preços)
         run: pnpm exec vitest run server/__tests__/integration/price-research-review-mysql-smoke.test.ts
 
+      # Centro de Operações — ciclo de vida do registro (Concluir/Reabrir: RBAC, tenant A×B, idempotência,
+      # timeline, agenda/eventos preservados, superfícies ativas) e backfill genérico de agenda (dry-run,
+      # gate, transação, replay, conflito sem sobrescrita, NOT_FOUND sem inserção). Dados sintéticos.
+      - name: Smoke — ciclo de vida e backfill de agenda (Centro de Operações)
+        run: pnpm exec vitest run server/__tests__/integration/operation-record-lifecycle-mysql-smoke.test.ts
+
       # PR C — idempotência canônica concorrência-safe (replay/conflito/em-andamento/falha/concorrência).
       - name: Smoke — idempotência canônica (PR C)
         run: pnpm exec vitest run server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts

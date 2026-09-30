@@ -22,18 +22,26 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
   const [object, setObject] = React.useState("");
   const [modality, setModality] = React.useState("");
   const [currentStage, setCurrentStage] = React.useState("");
+  const [eventDate, setEventDate] = React.useState("");
+  const [eventEndDate, setEventEndDate] = React.useState("");
+  const [eventTime, setEventTime] = React.useState("");
 
   const create = trpc.operationRecord.createRecord.useMutation({
     onSuccess: (res) => {
       void utils.operationRecord.listRecords.invalidate();
       void utils.departmentOperation.timeline.invalidate();
+      void utils.departmentOperation.dashboard.invalidate();
+      void utils.departmentOperation.indicators.invalidate();
+      void utils.departmentOperation.monitoringPanel.invalidate();
+      void utils.departmentOperation.calendar.invalidate();
       onCreated?.(res.record.id);
       setNumber(""); setObject(""); setModality(""); setCurrentStage("");
+      setEventDate(""); setEventEndDate(""); setEventTime("");
     },
   });
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); create.mutate({ recordType, origin, number: number || undefined, object: object || undefined, modality: modality || undefined, currentStage: currentStage || undefined }); }}
+    <form onSubmit={(e) => { e.preventDefault(); create.mutate({ recordType, origin, number: number || undefined, object: object || undefined, modality: modality || undefined, currentStage: currentStage || undefined, eventDate: eventDate || undefined, eventEndDate: eventEndDate || undefined, eventTime: eventTime || undefined }); }}
       className="space-y-3 rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Cadastro Rápido</h2>
       <p className="text-xs text-muted-foreground">Registre um item legado/externo — processo completo ou apenas uma parte.</p>
@@ -56,7 +64,21 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
       <input value={object} onChange={(e) => setObject(e.target.value)} placeholder="Objeto" className="w-full rounded-md border border-input px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
       <input value={currentStage} onChange={(e) => setCurrentStage(e.target.value)} placeholder="Etapa atual (opcional)" className="w-full rounded-md border border-input px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="block text-xs font-medium text-foreground">Data do evento (opcional)
+          <input type="date" value={eventDate} onChange={(e) => { setEventDate(e.target.value); if (!e.target.value) { setEventEndDate(""); setEventTime(""); } }} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" />
+        </label>
+        <label className="block text-xs font-medium text-foreground">Data final (opcional)
+          <input type="date" value={eventEndDate} min={eventDate || undefined} disabled={!eventDate} onChange={(e) => setEventEndDate(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:bg-muted disabled:text-muted-foreground" />
+        </label>
+        <label className="block text-xs font-medium text-foreground">Horário (opcional)
+          <input type="time" value={eventTime} disabled={!eventDate} onChange={(e) => setEventTime(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm disabled:bg-muted disabled:text-muted-foreground" />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">Sem horário, o evento aparece como dia inteiro no calendário.</p>
+
       {create.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Registro criado.</p>}
+      {create.isError && <p role="alert" className="text-xs text-destructive">Não foi possível criar o registro: {create.error.message}</p>}
       <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {create.isPending ? "Salvando…" : "Criar registro"}
       </button>

@@ -252,7 +252,7 @@ describe("R2 / LEG-005 — itens do TR / CATMAT legados desativados (governado)"
     expect(calledFns(db as any)).toEqual([]);
   });
 
-  it("procedures fora do escopo LEG-005 NÃO foram desativadas (list/search/getById/updateStatus seguem vivas)", async () => {
+  it("procedures fora do escopo LEG-005 mantêm o comportamento da main (list/search/getById vivas; updateStatus segue LEG-006)", async () => {
     vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
     const caller = processesRouter.createCaller(ctxFor()) as any;
@@ -260,8 +260,14 @@ describe("R2 / LEG-005 — itens do TR / CATMAT legados desativados (governado)"
     await expect(caller.search({ query: "x" })).resolves.toEqual([]);
     vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(undefined as any);
     await expect(caller.getById({ id: 1 })).rejects.toThrow(/não encontrado/i);
-    await expect(caller.updateStatus({ id: 1, status: "em_etp" })).rejects.toThrow(/não encontrado/i);
     expect(disabledEvents()).toHaveLength(0);
+
+    // R2 / PR-02: processes.updateStatus já está desativada pela LEG-006 — o LEG-005 não a revive.
+    const err = await captureError(() => caller.updateStatus({ id: 1, status: "em_etp" }));
+    expect(err.code).toBe("FORBIDDEN");
+    expect(err.message).toContain(LEGACY_ENDPOINT_DISABLED);
+    expect(disabledEvents().map((e) => [e.procedure, e.surfaceId])).toEqual([["processes.updateStatus", "LEG-006"]]);
+    expect(db.updateProcessStatusForOrganization).not.toHaveBeenCalled();
   });
 });
 

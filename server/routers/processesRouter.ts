@@ -236,35 +236,11 @@ export const processesRouter = router({
       id: z.number(),
       status: z.enum(["em_dfd", "em_etp", "em_tr", "em_edital", "concluido"]),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessByIdForOrganization(input.id, ctx.organizationId);
-      if (!process) {
-        denyNotFound("updateStatus", ctx, input.id, "process_cross_tenant_or_missing", "Processo não encontrado");
-      }
-      const oldStatus = process.status;
-
-      await db.updateProcessStatusForOrganization(input.id, ctx.organizationId, input.status);
-
-      await db.createActivityLog({
-        processId: input.id,
-        userId: ctx.user.id,
-        action: `alterou o status para ${input.status}`,
-      });
-
-      if (oldStatus && oldStatus !== input.status && ctx.user.email && process) {
-        const { sendStatusChangeEmail } = await import("../services/emailService");
-        sendStatusChangeEmail({
-          recipientEmail: ctx.user.email,
-          recipientName: ctx.user.name || "Usuário",
-          processName: process.name,
-          oldStatus,
-          newStatus: input.status,
-          processId: input.id,
-        }).catch((error) => {
-          console.error("[Email] Erro ao enviar notificação:", error);
-        });
-      }
-
-      return { success: true };
+    .mutation(async ({ ctx }) => {
+      // R2 / LEG-006 — desligamento governado: esta procedure gravava `processes.status` legado,
+      // `activity_logs` sem organizationId e disparava e-mail real (sendStatusChangeEmail) fora do
+      // fluxo canônico. Recusa determinística ANTES de qualquer leitura/escrita/e-mail. Procedure e
+      // schema de input mantidos (contrato da API não some silenciosamente).
+      throwLegacyEndpointDisabled("processes.updateStatus", "LEG-006", ctx, "o fluxo canônico do Processo Licitatório");
     }),
 });

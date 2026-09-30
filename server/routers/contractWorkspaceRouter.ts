@@ -22,6 +22,8 @@ import {
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
+// NEW-022 — bloqueio da ativação genérica (import isolado: não sobrepõe as linhas de import editadas por NEW-006/PR-08/PR-12).
+import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
@@ -148,8 +150,9 @@ export const contractWorkspaceRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      await assertNoGenericContractActivation(input, orgId, ctx); // NEW-022 — minuta → vigente só por ação governada (antes de qualquer escrita)
       const ws = await requireContract(input.contractId, orgId);
-      const { contractId, status, ...fields } = input;
+      const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
       let updated = updateContractFields(ws, patch);
       if (status && status !== ws.status) {
