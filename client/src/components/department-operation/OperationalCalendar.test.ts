@@ -21,8 +21,8 @@ vi.mock("../../lib/trpc", () => ({
   },
 }));
 
-import OperationalCalendar from "./OperationalCalendar";
-import OperationalMonthGrid from "./OperationalMonthGrid";
+import OperationalCalendar, { capitalizeFirst } from "./OperationalCalendar";
+import OperationalMonthGrid, { ITEM_KIND_CLASSES, ITEM_KIND_HOVER_CLASSES } from "./OperationalMonthGrid";
 
 const ev = (over: Record<string, unknown>) => ({
   id: "x", eventType: "manual", title: "Registro fictício", eventDate: "2026-10-05", eventEndDate: "", eventTime: "",
@@ -60,8 +60,8 @@ describe("Calendário — grade mensal acima da lista", () => {
     expect(html).toContain('data-kind="timed"');
     expect(html).toContain('data-kind="certame"');
     expect(html).toContain(">Mudas de plantas<");
-    expect(html).toContain(">14:00 Reunião técnica<");
-    expect(html).toContain(">10:15 Certame 7/2026<");
+    expect(html).toMatch(/data-kind="timed"[^>]*>(?:<!-- -->)?<span class="[^"]*font-semibold[^"]*">14:00<\/span>Reunião técnica</);
+    expect(html).toMatch(/data-kind="certame"[^>]*>(?:<!-- -->)?<span class="[^"]*font-semibold[^"]*">10:15<\/span>Certame 7\/2026</);
     expect(html).toContain("Mudas de plantas · Dia inteiro");
     expect(html).toContain("Certame 7/2026 · 10:15");
     expect(html).toContain(">Certame<");
@@ -100,5 +100,56 @@ describe("Grade mensal — seleção de dia", () => {
     expect(monthNavigationReducer(s1, { type: "next" })).toEqual({ month: "2026-11", selectedDate: null });
     expect(monthNavigationReducer(s1, { type: "previous" })).toEqual({ month: "2026-09", selectedDate: null });
     expect(monthNavigationReducer(s1, { type: "today", today: "2026-10-01" })).toEqual({ month: "2026-10", selectedDate: "2026-10-01" });
+  });
+});
+
+describe("Polimento visual v1.1", () => {
+  it("título do mês com a 1ª letra maiúscula e o 'de' minúsculo (sem capitalize de CSS)", () => {
+    reset();
+    const html = render();
+    expect(html).toContain(">Outubro de 2026<");
+    expect(html).not.toContain("Outubro De 2026");
+    expect(html).not.toMatch(/capitalize[^"]*text-foreground">Outubro/);
+    expect(capitalizeFirst("setembro de 2026")).toBe("Setembro de 2026");
+    expect(capitalizeFirst("")).toBe("");
+  });
+
+  it("tooltip nativo traz o título completo de itens truncados", () => {
+    reset();
+    const longo = "ADITIVO INGÁ INFORMÁTICA — PRORROGAÇÃO DO CONTRATO DE LOCAÇÃO DE EQUIPAMENTOS";
+    state.events = [
+      ev({ id: "record:longo", title: longo }),
+      ev({ id: "cert", eventType: "certame", title: "Certame 31/2026 — Aquisição de mudas de plantas", eventDate: "2026-10-13", eventTime: "09:30" }),
+    ];
+    const html = render();
+    expect(html).toContain(`title="${longo} — Dia inteiro"`);
+    expect(html).toContain('title="Certame 31/2026 — Aquisição de mudas de plantas — 09:30 · Certame"');
+    expect(html).toMatch(/data-kind="allDay"[^>]*class="[^"]*truncate/);
+  });
+
+  it("cada tipo tem fundo, borda e texto próprios em light E dark, com hover discreto", () => {
+    for (const kind of ["allDay", "timed", "certame"] as const) {
+      const cls = ITEM_KIND_CLASSES[kind];
+      expect(cls).toMatch(/\bborder\b/);
+      for (const part of ["bg-", "border-", "text-"]) {
+        expect(cls).toMatch(new RegExp(`(^| )${part}`));
+        expect(cls).toMatch(new RegExp(`dark:${part}`));
+      }
+      expect(ITEM_KIND_HOVER_CLASSES[kind]).toMatch(/hover:bg-/);
+      expect(ITEM_KIND_HOVER_CLASSES[kind]).toMatch(/dark:hover:bg-/);
+      // Cor semântica: nada de verde/amarelo/vermelho (sucesso/alerta/erro).
+      expect(`${cls} ${ITEM_KIND_HOVER_CLASSES[kind]}`).not.toMatch(/\b(?:\w+:)*(?:bg|text|border)-(?:red|green|yellow|amber|emerald|lime|rose)-/);
+    }
+    expect(ITEM_KIND_CLASSES.allDay).toContain("slate");
+    expect(ITEM_KIND_CLASSES.timed).toContain("blue");
+    expect(ITEM_KIND_CLASSES.certame).toContain("violet");
+    expect(ITEM_KIND_CLASSES.certame).toContain("font-semibold");
+  });
+
+  it("legenda usa os mesmos estilos dos itens e texto com mais contraste", () => {
+    const grid = buildMonthGrid({ month: "2026-10", items: [], today: "2026-10-01" });
+    const html = renderToStaticMarkup(createElement(OperationalMonthGrid, { grid, onSelectDate: () => {} }));
+    expect(html).toMatch(/aria-label="Legenda do calendário" class="[^"]*text-foreground\/80/);
+    for (const kind of ["allDay", "timed", "certame"] as const) expect(html).toContain(`data-legend="${kind}"`);
   });
 });
