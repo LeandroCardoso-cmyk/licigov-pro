@@ -55,6 +55,11 @@ function EventList({ groups, onOpenReference }: { groups: Array<[string, Calenda
   );
 }
 
+/** "outubro de 2026" → "Outubro de 2026" (só a 1ª letra; o "de" continua minúsculo). */
+export function capitalizeFirst(text: string): string {
+  return text ? text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1) : text;
+}
+
 const NAV_BUTTON = "rounded border border-border px-2 py-1 text-foreground hover:bg-muted";
 
 export default function OperationalCalendar({ onOpenReference, today: todayProp }: OperationalCalendarProps) {
@@ -104,7 +109,7 @@ export default function OperationalCalendar({ onOpenReference, today: todayProp 
         <button type="button" onClick={() => (isMonth ? dispatch({ type: "today", today }) : setAnchorDate(today))} className={NAV_BUTTON}>Hoje</button>
         <button type="button" onClick={() => (isMonth ? dispatch({ type: "next" }) : setAnchorDate(shiftDate(anchorDate, view, 1)))} className={NAV_BUTTON}>Próximo</button>
         <label className="flex items-center gap-2">Ir para <input aria-label="Ir para data" type="date" value={isMonth ? monthState.selectedDate ?? "" : anchorDate} onChange={(e) => goTo(e.target.value)} className="rounded border border-input bg-background px-2 py-1 text-foreground" /></label>
-        {isMonth && <span className="text-sm font-semibold capitalize text-foreground">{monthGrid?.label}</span>}
+        {isMonth && monthGrid && <span className="text-sm font-semibold text-foreground">{capitalizeFirst(monthGrid.label)}</span>}
       </div>
 
       {isError ? (

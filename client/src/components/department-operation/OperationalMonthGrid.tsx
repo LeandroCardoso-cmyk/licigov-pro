@@ -15,18 +15,36 @@ export interface OperationalMonthGridProps<T extends OperationalCalendarItem> {
   onSelectDate: (date: string) => void;
 }
 
+/**
+ * Cor com significado (v1.1): neutro azul-acinzentado = agenda de dia inteiro; azul = compromisso
+ * com horário; violeta = certame/sessão (destaque superior, com filete à esquerda). Sem verde,
+ * amarelo ou vermelho — reservados a sucesso/alerta/erro no restante do sistema.
+ */
 export const ITEM_KIND_CLASSES: Record<CalendarItemKind, string> = {
-  certame: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 font-semibold",
-  timed: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  allDay: "border border-border bg-muted text-foreground",
+  allDay: "border border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
+  timed: "border border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100",
+  certame: "border border-l-[3px] border-violet-400 bg-violet-100 font-semibold text-violet-950 dark:border-violet-500 dark:bg-violet-900 dark:text-violet-50",
 };
+
+/** Hover discreto no item: só realça fundo/borda (o clique continua selecionando o dia). */
+export const ITEM_KIND_HOVER_CLASSES: Record<CalendarItemKind, string> = {
+  allDay: "hover:border-slate-400 hover:bg-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-700",
+  timed: "hover:border-blue-400 hover:bg-blue-200 dark:hover:border-blue-600 dark:hover:bg-blue-900",
+  certame: "hover:border-violet-500 hover:bg-violet-200 dark:hover:border-violet-400 dark:hover:bg-violet-800",
+};
+
+/** Texto do tooltip nativo: título completo primeiro (é o que a célula trunca), depois o horário. */
+export function itemTooltip(item: OperationalCalendarItem, kind: CalendarItemKind, timeLabel: string): string {
+  const type = kind === "certame" ? ` · ${EVENT_TYPE_LABELS[item.eventType] ?? item.eventType}` : "";
+  return `${item.title} — ${timeLabel}${type}`;
+}
 
 export const ITEM_KIND_LABELS: Record<CalendarItemKind, string> = {
   allDay: "Dia inteiro", timed: "Com horário", certame: "Certame / sessão",
 };
 
 function cellClasses(cell: { inMonth: boolean; isSelected: boolean }): string {
-  const base = "flex min-h-[3.25rem] min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-border p-1 text-left align-top transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:min-h-[6.5rem]";
+  const base = "flex min-h-[3.25rem] min-w-0 cursor-pointer flex-col gap-0.5 overflow-hidden border-b border-r border-border p-1 text-left align-top transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:min-h-[6.5rem]";
   const tone = cell.isSelected ? "bg-indigo-50 dark:bg-indigo-950 ring-2 ring-inset ring-indigo-500" : cell.inMonth ? "bg-card hover:bg-muted" : "bg-muted/40 text-muted-foreground hover:bg-muted";
   return `${base} ${tone}`;
 }
@@ -66,10 +84,11 @@ export default function OperationalMonthGrid<T extends OperationalCalendarItem>(
                       <span
                         key={item.id}
                         data-kind={kind}
-                        title={`${timeLabel} · ${item.title}${kind === "certame" ? ` (${EVENT_TYPE_LABELS[item.eventType] ?? item.eventType})` : ""}`}
-                        className={`block truncate rounded px-1 py-0.5 text-[11px] leading-tight ${ITEM_KIND_CLASSES[kind]}`}
+                        title={itemTooltip(item, kind, timeLabel)}
+                        className={`block truncate rounded px-1 py-0.5 text-[11px] leading-tight transition-colors ${ITEM_KIND_CLASSES[kind]} ${ITEM_KIND_HOVER_CLASSES[kind]}`}
                       >
-                        {kind === "allDay" ? item.title : `${timeLabel} ${item.title}`}
+                        {kind !== "allDay" && <span className="mr-1 font-semibold tabular-nums">{timeLabel}</span>}
+                        {item.title}
                       </span>
                     ))}
                     {cell.overflow > 0 && <span className="px-1 text-[11px] font-medium text-muted-foreground">+{cell.overflow}</span>}
@@ -80,9 +99,9 @@ export default function OperationalMonthGrid<T extends OperationalCalendarItem>(
           </div>
         ))}
       </div>
-      <ul aria-label="Legenda do calendário" className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+      <ul aria-label="Legenda do calendário" className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-medium text-foreground/80">
         {(["allDay", "timed", "certame"] as const).map((kind) => (
-          <li key={kind} className="flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded ${ITEM_KIND_CLASSES[kind]}`} />{ITEM_KIND_LABELS[kind]}</li>
+          <li key={kind} className="flex items-center gap-1.5"><span aria-hidden="true" data-legend={kind} className={`inline-block h-3 w-4 rounded-sm ${ITEM_KIND_CLASSES[kind]}`} />{ITEM_KIND_LABELS[kind]}</li>
         ))}
       </ul>
     </div>
