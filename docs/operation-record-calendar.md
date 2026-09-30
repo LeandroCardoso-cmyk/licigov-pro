@@ -1,0 +1,60 @@
+# Agenda dos registros operacionais
+
+O Cadastro Rápido permanece um registro operacional, sem criar ou substituir um processo do ERP. A Visão Geral apresenta indicadores separados para registros acompanhados e finalizados, preservando a contagem dos processos canônicos. A Visão Geral e o Painel de Acompanhamento exibem as linhas operacionais do tenant.
+
+`operation_records.event_date` é a data local de início (`YYYY-MM-DD`). `event_end_date` é opcional e inclusiva; `event_time` (`HH:mm`) também é opcional. Sem horário, o calendário apresenta **Dia inteiro**. Sem data inicial, não há evento de calendário. A data final não pode anteceder a inicial. Os registros antigos recebem as colunas vazias na migração 0308 e podem ter a agenda preenchida em **Registros → Definir data**. Essa alteração valida `organization_id`, atualiza o registro e acrescenta uma entrada na timeline em uma única transação; repetir o mesmo valor não acrescenta outra entrada.
+
+O calendário deriva os eventos de `operation_records` por referência, sem copiá-los para `operational_events`. Ele inclui intervalos que interceptam a janela consultada e exibe cada dia de um período. Datas com horário preservam a hora de início; nos dias seguintes aparecem como **Em andamento**. A navegação diária, semanal e mensal permite consultar datas históricas. Eventos adicionais, como certames, usam o fluxo existente de `operational_events` e referenciam o registro. A criação é transacional e idempotente por tenant, tipo, referência e data, com timeline append-only.
+
+Para o cronograma de 2026, a `Data Inicial` confirmada pelo responsável é a data de dia inteiro do registro. Um certame com data própria deve ser lançado como evento adicional vinculado ao registro, com o horário confirmado. Não inferir término do processo a partir da última data preenchida na planilha e não marcar um processo como finalizado apenas porque há um aditivo relacionado.
+
+## Ciclo de vida do registro (Concluir / Reabrir)
+
+`operation_records.lifecycle_status` (migração 0309) vale `active` (padrão de todos os registros existentes) ou `completed`. **Concluir** é uma transição auditada, nunca exclusão: a transação bloqueia organização e registro, grava `completed_at`, `completed_by` e `completion_reason` (opcional) e acrescenta `registro_concluido` à timeline com estado anterior → posterior, ator e correlationId. **Reabrir** (`registro_reaberto`) volta a `active` sem recriar nada. Repetir a mesma ação não escreve nem duplica a timeline. Ambas exigem papel `operator` ou superior e são sempre escopadas pela organização do contexto autenticado.
+
+Registros concluídos saem das superfícies operacionais ativas — Visão Geral (“Registros acompanhados” conta apenas ativos; “Registros concluídos” é métrica separada), Painel, Calendário, eventos de hoje e próximos — mas permanecem no banco e na timeline e ficam acessíveis em **Registros → Concluídos / Todos**. A agenda do registro é preservada. **Eventos vinculados** (certame, aditivo, homologação, prorrogação…) têm ciclo próprio e **não** são apagados nem ocultados ao concluir o registro. A etapa textual (ex.: “Finalizado”, vinda do cronograma) é independente do ciclo de vida e continua alimentando “Registros finalizados”. Processos canônicos não são afetados.
+
+## Preenchimento em lote da agenda (backfill one-off)
+
+`pnpm ops:schedule-backfill --org <id> --expect-slug <slug> --file <dataset.json | -> [--apply]` aplica agendas de **dia inteiro** a registros **já existentes**. O dataset real **nunca é versionado**: fica fora do repositório (ou em `ops-private/`, ignorada pelo Git); o executor recusa arquivos versionáveis dentro do repositório. Cada entrada é resolvida por token exato da referência gravada na etapa (`<prefixo> item N` / `<prefixo> itens N/M`), nunca por posição ou objeto sozinho, e classificada como MATCH, ALREADY_CORRECT, CONFLICT, NOT_FOUND ou AMBIGUOUS. Sem `--apply` é **dry-run**. Com `--apply`, só grava se CONFLICT = NOT_FOUND = AMBIGUOUS = 0 e MATCH + ALREADY_CORRECT = esperado: uma transação reconfere que cada agenda continua vazia, atualiza e registra a timeline com o correlationId da execução. Eventos vinculados (ex.: certame com horário) só são criados quando não há evento equivalente (mesmo registro, tipo, data, horário e número). Uma segunda execução resulta em ALREADY_CORRECT, sem escrita. Nunca cria, duplica ou exclui registros e nunca sobrescreve agenda existente.
+
+## Calendário Operacional Visual v1 (grade mensal)
+
+**Objetivo.** Dar à aba *Calendário* do Centro de Operações uma grade mensal real (7 colunas, semanas
+completas) acima da lista operacional, sem nova fonte de dados, importação ou tabela.
+
+**Fonte de dados reaproveitada.** A grade e a lista usam a MESMA consulta `departmentOperation.calendar`
+(`getCalendar`): eventos operacionais + agenda base dos registros **ativos** da organização do contexto
+autenticado. Na visão mensal a janela consultada é a das semanas visíveis (domingo da 1ª semana → sábado
+da última, 28–42 dias). Sem migration, sem endpoint novo, sem mudança no router ou no serviço — tenant,
+registros concluídos fora das superfícies ativas e eventos vinculados continuam decididos no backend.
+
+**Camadas.**
+- Domínio puro: `shared/operationalCalendar.ts` — `monthGridRange`, `buildMonthGrid`, `classifyCalendarItem`,
+  `groupItemsByDay`, `listForMonthSelection`, `timeLabelFor` e o redutor `monthNavigationReducer`.
+  Determinístico, sem React, datas `AAAA-MM-DD` com aritmética em UTC (independe do fuso do navegador).
+- UI: `OperationalMonthGrid.tsx` (apresentação) + `OperationalCalendar.tsx` (estado e consulta).
+
+**Comportamento da grade.**
+- Cabeçalho com mês/ano; navegação *Anterior*, *Hoje* (vai ao mês atual e seleciona o dia), *Próximo* e *Ir para*.
+- Dias fora do mês atenuados; dia atual com o número destacado; dia selecionado com contorno.
+- Itens por dia, em ordem estável (dia inteiro primeiro, depois por horário):
+  - **Dia inteiro** (agenda de registro sem horário) — só o título;
+  - **Com horário** — horário + título (em períodos, "Em andamento" após o 1º dia);
+  - **Certame / sessão pública** — estilo próprio, com o horário quando houver.
+- Mais itens que o limite da célula (3 linhas): os primeiros + indicador **"+N"**.
+- Em telas pequenas, a célula mostra só a contagem de eventos; os detalhes ficam na lista.
+
+**Integração com a lista inferior.** Sem dia selecionado, a lista mostra o mês inteiro (dias de meses
+vizinhos visíveis na grade não entram). Clicar num dia filtra a lista para ele; clicar de novo, ou em
+*Ver mês inteiro*, volta ao mês. Clicar num dia de mês vizinho navega até esse mês. Abrir o processo de
+referência continua sendo feito pela lista. As visões *diária* e *semanal* continuam em lista, como antes;
+a *mensal* passou a ser a visão inicial da aba.
+
+**Limitações da v1.** Sem arrastar e soltar, edição na grade, recorrência, integração com agendas externas
+ou notificações novas. Itens com período longo são repetidos em cada dia (sem barra contínua entre dias).
+A consulta de eventos operacionais mantém o teto atual de 500 itens por janela.
+
+**Evoluções possíveis (v2).** Barras contínuas para períodos; abrir o processo direto do item na grade;
+filtros por tipo de evento; destaque de prazos vencidos; semana começando na segunda-feira como preferência;
+impressão/exportação do mês.

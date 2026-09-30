@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { router, tenantProcedure } from "../_core/trpc";
+import { validLocalDate } from "../domain/operationRecordSchedule";
 import {
   getDashboard, getMonitoringPanel, getCalendar, getTimeline, getInbox,
   getRecommendations, generateOperationalReport,
@@ -15,7 +16,9 @@ import {
 
 /** Data de referência (hoje) para filtros de calendário/indicadores. */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = (type: string) => parts.find(part => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 const REPORT_KINDS = ["operacional", "pendencias", "produtividade"] as const;
@@ -49,7 +52,7 @@ export const departmentOperationRouter = router({
 
   /** ÁREA 3 — Calendário Operacional (janela de datas). */
   calendar: tenantProcedure
-    .input(z.object({ from: z.string(), to: z.string() }))
+    .input(z.object({ from: z.string().refine(validLocalDate), to: z.string().refine(validLocalDate) }).refine(v => v.to >= v.from, { message: "Período do calendário inválido." }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const events = await getCalendar({ organizationId: orgId, from: input.from, to: input.to });
