@@ -31,8 +31,6 @@ const CERTAME_TYPES = new Set(["certame", "sessao_publica"]);
 
 export const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const;
 export const DEFAULT_MAX_VISIBLE_PER_DAY = 3;
-/** Teto defensivo de dias percorridos por item (mesmo limite da lista anterior). */
-const MAX_SPAN_DAYS = 31;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_MONTH = /^\d{4}-\d{2}$/;
@@ -94,6 +92,21 @@ export function itemLastDate(item: Pick<OperationalCalendarItem, "eventDate" | "
   return item.eventEndDate && item.eventEndDate > item.eventDate ? item.eventEndDate : item.eventDate;
 }
 
+/**
+ * Interseção do período do item com a janela `[from, to]` (datas `AAAA-MM-DD`), ou `null` quando
+ * não há dia em comum. A projeção percorre só essa interseção: o custo fica limitado à janela
+ * recebida (a grade mensal tem no máximo 42 dias), qualquer que seja a duração do item.
+ */
+export function visibleSpan(
+  item: Pick<OperationalCalendarItem, "eventDate" | "eventEndDate">, from: string, to: string,
+): { first: string; last: string } | null {
+  if (!isIsoDate(item.eventDate)) return null;
+  const lastOfItem = itemLastDate(item);
+  const first = item.eventDate < from ? from : item.eventDate;
+  const last = lastOfItem > to ? to : lastOfItem;
+  return first <= last ? { first, last } : null;
+}
+
 export function occursOn(item: Pick<OperationalCalendarItem, "eventDate" | "eventEndDate">, day: string): boolean {
   return isIsoDate(item.eventDate) && item.eventDate <= day && itemLastDate(item) >= day;
 }
@@ -121,15 +134,16 @@ function uniqueById<T extends OperationalCalendarItem>(items: readonly T[]): T[]
   return items.filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
 }
 
-/** Agrupa os itens por dia dentro de [from, to] (itens com período aparecem em cada dia). */
+/**
+ * Agrupa os itens por dia dentro de [from, to] (itens com período aparecem em cada dia visível).
+ * Cada item percorre apenas `visibleSpan` — nunca além da janela recebida.
+ */
 export function groupItemsByDay<T extends OperationalCalendarItem>(items: readonly T[], from: string, to: string): Array<[string, T[]]> {
   const map = new Map<string, T[]>();
   for (const item of uniqueById(items)) {
-    if (!isIsoDate(item.eventDate)) continue;
-    const first = item.eventDate < from ? from : item.eventDate;
-    const lastOfItem = itemLastDate(item);
-    const last = lastOfItem > to ? to : lastOfItem;
-    for (let day = first, shown = 0; day <= last && shown < MAX_SPAN_DAYS; day = addDays(day, 1), shown++) {
+    const span = visibleSpan(item, from, to);
+    if (!span) continue;
+    for (let day = span.first; day <= span.last; day = addDays(day, 1)) {
       const bucket = map.get(day);
       if (bucket) bucket.push(item); else map.set(day, [item]);
     }

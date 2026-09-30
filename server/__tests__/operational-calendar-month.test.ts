@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMonthGrid, classifyCalendarItem, groupItemsByDay, listForMonthSelection, monthGridRange, monthLabel,
-  monthNavigationReducer, shiftMonth, timeLabelFor, type OperationalCalendarItem,
+  monthNavigationReducer, shiftMonth, timeLabelFor, visibleSpan, type OperationalCalendarItem,
 } from "@shared/operationalCalendar";
 
 const item = (over: Partial<OperationalCalendarItem> & Pick<OperationalCalendarItem, "id" | "eventDate">): OperationalCalendarItem => ({
@@ -128,5 +128,62 @@ describe("lista inferior e navegação", () => {
     expect(monthNavigationReducer(start, { type: "goTo", date: "2027-02-10" })).toEqual({ month: "2027-02", selectedDate: "2027-02-10" });
     expect(monthNavigationReducer(start, { type: "select", date: "2026-02-30" })).toBe(start);
     expect(monthNavigationReducer(start, { type: "goTo", date: "" })).toBe(start);
+  });
+});
+
+describe("grade mensal — períodos longos cobrem toda a janela visível", () => {
+  // Agosto/2026: grade de 6 semanas (42 dias), de 26/07 a 05/09.
+  const cellsWith = (grid: ReturnType<typeof buildMonthGrid>, id: string) =>
+    grid.weeks.flat().filter((c) => c.items.some((i) => i.item.id === id)).map((c) => c.date);
+  const allCells = (month: string) => buildMonthGrid({ month, items: [], today: "2026-08-01" }).weeks.flat().map((c) => c.date);
+
+  it("período com mais de 31 dias visíveis aparece em TODOS os dias da grade, uma única vez (regressão)", () => {
+    const longo = item({ id: "longo", eventDate: "2026-07-01", eventEndDate: "2026-12-31" });
+    const grid = buildMonthGrid({ month: "2026-08", items: [longo], today: "2026-08-01" });
+    expect(cellsWith(grid, "longo")).toEqual(allCells("2026-08"));
+    for (const d of ["2026-08-26", "2026-08-30", "2026-08-31", "2026-09-01", "2026-09-05"]) {
+      const cell = grid.weeks.flat().find((c) => c.date === d)!;
+      expect(cell.items.filter((i) => i.item.id === "longo")).toHaveLength(1);
+    }
+  });
+
+  it("grade e lista concordam em cada dia do mês (ex.: 30/08)", () => {
+    const longo = item({ id: "longo", eventDate: "2026-07-26", eventEndDate: "2026-09-05" });
+    const grid = buildMonthGrid({ month: "2026-08", items: [longo], today: "2026-08-01" });
+    const byDate = new Map(grid.weeks.flat().map((c) => [c.date, c.items.map((i) => i.item.id)]));
+    expect(listForMonthSelection([longo], "2026-08", "2026-08-30")).toEqual([["2026-08-30", [longo]]]);
+    for (const [day, dayItems] of listForMonthSelection([longo], "2026-08", null)) {
+      expect(byDate.get(day)).toEqual(dayItems.map((i) => i.id));
+    }
+    expect(byDate.get("2026-08-30")).toEqual(["longo"]);
+  });
+
+  it("período de anos só é projetado nos dias visíveis; fim no meio da grade é respeitado", () => {
+    const anos = item({ id: "anos", eventDate: "1900-01-01", eventEndDate: "2100-12-31" });
+    const termina = item({ id: "termina", eventDate: "2020-01-01", eventEndDate: "2026-08-15" });
+    const comeca = item({ id: "comeca", eventDate: "2026-08-20", eventEndDate: "2030-12-31" });
+    const grid = buildMonthGrid({ month: "2026-08", items: [anos, termina, comeca], today: "2026-08-01" });
+    const cells = allCells("2026-08");
+    expect(cellsWith(grid, "anos")).toEqual(cells);
+    expect(cellsWith(grid, "termina")).toEqual(cells.filter((d) => d <= "2026-08-15"));
+    expect(cellsWith(grid, "comeca")).toEqual(cells.filter((d) => d >= "2026-08-20"));
+    expect(grid.weeks.flat().every((c) => new Set(c.items.map((i) => i.item.id)).size === c.items.length)).toBe(true);
+    const again = buildMonthGrid({ month: "2026-08", items: [comeca, anos, termina], today: "2026-08-01" });
+    expect(JSON.stringify(again)).toBe(JSON.stringify(grid));
+  });
+
+  it("a projeção percorre só a interseção com a janela visível (custo limitado à grade)", () => {
+    const { from, to } = monthGridRange("2026-08");
+    expect(visibleSpan(item({ id: "anos", eventDate: "1900-01-01", eventEndDate: "2100-12-31" }), from, to)).toEqual({ first: from, last: to });
+    expect(visibleSpan(item({ id: "meio", eventDate: "2026-08-10", eventEndDate: "2026-08-12" }), from, to)).toEqual({ first: "2026-08-10", last: "2026-08-12" });
+    expect(visibleSpan(item({ id: "um-dia", eventDate: "2026-08-10" }), from, to)).toEqual({ first: "2026-08-10", last: "2026-08-10" });
+    expect(visibleSpan(item({ id: "antes", eventDate: "2026-01-01", eventEndDate: "2026-07-25" }), from, to)).toBeNull();
+    expect(visibleSpan(item({ id: "depois", eventDate: "2026-09-06", eventEndDate: "2027-01-01" }), from, to)).toBeNull();
+    expect(visibleSpan(item({ id: "invalida", eventDate: "" }), from, to)).toBeNull();
+    // Mesmo com um período de séculos, só os dias da janela recebem o item.
+    const dias = groupItemsByDay([item({ id: "anos", eventDate: "0001-01-01", eventEndDate: "9999-12-31" })], from, to);
+    expect(dias).toHaveLength(42);
+    expect(dias[0][0]).toBe(from);
+    expect(dias[41][0]).toBe(to);
   });
 });
