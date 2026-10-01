@@ -34,11 +34,16 @@ import {
 } from "../domain/legalOpinionDraft";
 import { createLawyerAssignment } from "../domain/lawyerAssignment";
 import {
-  insertLegalOpinionWorkspace, getLegalOpinionWorkspace, getLegalOpinionWorkspaceByRequest,
+  getLegalOpinionWorkspace, getLegalOpinionWorkspaceByRequest,
   updateLegalOpinionWorkspaceStage, insertLegalOpinionDraft, getLegalOpinionDraftByWorkspace,
   insertLegalOpinionVersion, countLegalOpinionHistory, insertLegalOpinionHistory,
-  listLegalOpinionHistory, listLegalOpinionVersions, insertLawyerAssignment,
+  listLegalOpinionHistory, listLegalOpinionVersions,
 } from "../db/legalOpinionWorkspace";
+import { canTransition as canRequestTransition } from "../domain/institutionalRequest";
+import { claimLegalOpinionWorkspaceForLawyer } from "../db/legalOpinionAssignment";
+import {
+  LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE, legalOpinionRequestNotReceivableMessage, logLegalOpinionAssignment,
+} from "./legalOpinionAuthorityService";
 
 const DOMAIN = "parecer_juridico" as const;
 
@@ -55,6 +60,16 @@ async function recordHistory(ws: LegalOpinionWorkspace, eventType: string, actor
  * Abre (ou recupera) o Workspace do Procurador a partir de uma solicitação
  * institucional pendente. Reutiliza o Institutional Request Engine para marcar a
  * solicitação como recebida/em andamento e espelha o estado no workspace.
+ *
+ * NEW-007 — receber = ser DESIGNADO procurador do workspace (atribuição exclusiva, auditável):
+ *  - solicitação de outro tenant/inexistente ⇒ NOT_FOUND (mesma resposta; sem enumeração);
+ *  - workspace já atribuído a ESTE ator ⇒ retry: devolve o existente SEM escrita alguma;
+ *  - workspace já atribuído a OUTRO ator ⇒ CONFLICT `LEGAL_OPINION_ALREADY_ASSIGNED`, SEM escrita (nunca
+ *    sobrescreve — antes, o upsert trocava o procurador silenciosamente); o modelo não tem reatribuição;
+ *  - solicitação fora de estado recebível ⇒ CONFLICT `LEGAL_OPINION_REQUEST_NOT_RECEIVABLE` ANTES de escrever;
+ *  - a atribuição é um CLAIM atômico (`claimLegalOpinionWorkspaceForLawyer`: INSERT-only + FOR UPDATE +
+ *    UPDATE condicional) — em corrida, só o vencedor recebe a solicitação no Engine e grava histórico.
+ * A autorização de QUEM pode receber (membership real operator+) é aplicada no router antes desta chamada.
  */
 export async function openWorkspaceFromRequest(params: {
   requestId: string;
@@ -64,31 +79,58 @@ export async function openWorkspaceFromRequest(params: {
   correlationId: string;
 }): Promise<LegalOpinionWorkspace> {
   const request = await getRequest(params.requestId, params.organizationId);
-  if (!request) throw new Error("Solicitação não encontrada.");
+  if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitação não encontrada." });
   if (request.destinationDomain !== DOMAIN) {
-    throw new Error("Esta solicitação não pertence ao domínio Parecer Jurídico.");
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Esta solicitação não pertence ao domínio Parecer Jurídico." });
+  }
+  const trail = { organizationId: params.organizationId, requestId: params.requestId, actorUserId: params.lawyerId, correlationId: params.correlationId };
+  const conflict = (workspaceId: string): TRPCError => {
+    logLegalOpinionAssignment("legal_opinion_receive_conflict", { ...trail, workspaceId });
+    return new TRPCError({ code: "CONFLICT", message: LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE });
+  };
+
+  // 1) Leitura prévia (sem escrita): retry do mesmo procurador converge; outro ator ⇒ CONFLICT.
+  const existing = await getLegalOpinionWorkspaceByRequest(params.requestId, params.organizationId);
+  if (existing && existing.assignedLawyer !== null) {
+    if (existing.assignedLawyer !== params.lawyerId) throw conflict(existing.id);
+    logLegalOpinionAssignment("legal_opinion_receive_replayed", { ...trail, workspaceId: existing.id });
+    return existing;
   }
 
-  // Reutiliza o Engine: recebe e passa a trabalhar (RECEIVED → IN_PROGRESS).
-  await receiveInstitutionalRequest(params.requestId, params.organizationId, params.lawyerId);
+  // 2) Nova atribuição: a solicitação precisa admitir o recebimento ANTES de qualquer escrita.
+  if (!canRequestTransition(request.status, "RECEIVED")) {
+    throw new TRPCError({ code: "CONFLICT", message: legalOpinionRequestNotReceivableMessage(request.status) });
+  }
 
-  // Espelha o trabalho no workspace do domínio (idempotente por requestId).
-  const existing = await getLegalOpinionWorkspaceByRequest(params.requestId, params.organizationId);
-  let ws = existing ?? createLegalOpinionWorkspace({
+  // 3) CLAIM atômico do workspace (+ registro auditável em lawyer_assignments).
+  const candidate = createLegalOpinionWorkspace({
     organizationId: params.organizationId, requestId: params.requestId, sourceDomain: request.sourceDomain,
     referenceProcessId: request.referenceProcessId, requestType: request.requestType,
     assignedLawyer: params.lawyerId, responsibleSector: params.sector, priority: request.priority as LegalOpinionPriority,
     correlationId: params.correlationId,
   });
-  if (!existing) {
-    await insertLegalOpinionWorkspace(ws);
+  const assignment = createLawyerAssignment({
+    organizationId: params.organizationId, workspaceId: candidate.id, requestId: params.requestId,
+    lawyerId: params.lawyerId, sector: params.sector, priority: candidate.priority, correlationId: params.correlationId,
+  });
+  const claim = await claimLegalOpinionWorkspaceForLawyer(candidate, params.lawyerId, assignment);
+  if (!claim) throw new Error("Persistência indisponível para receber a solicitação.");
+  if (claim.status === "assigned_to_other") throw conflict(candidate.id);
+  const claimed = await getLegalOpinionWorkspace(candidate.id, params.organizationId);
+  if (!claimed) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitação não encontrada." });
+  if (claim.status === "already_assigned_to_actor") {
+    // Corrida do MESMO ator: o vencedor conduz o recebimento; este retry não escreve nada.
+    logLegalOpinionAssignment("legal_opinion_receive_replayed", { ...trail, workspaceId: claimed.id });
+    return claimed;
+  }
+
+  // 4) Só o vencedor do claim: reutiliza o Engine (RECEIVED → IN_PROGRESS) e espelha o estado no workspace.
+  await receiveInstitutionalRequest(params.requestId, params.organizationId, params.lawyerId);
+  let ws = claimed;
+  if (claim.created) {
     await recordHistory(ws, "workspace_created", String(params.lawyerId), `Trabalho aberto a partir da solicitação ${params.requestId}.`, params.requestId);
-    // Distribuição interna ao procurador.
-    const assignment = createLawyerAssignment({
-      organizationId: params.organizationId, workspaceId: ws.id, requestId: params.requestId,
-      lawyerId: params.lawyerId, sector: params.sector, priority: ws.priority, correlationId: params.correlationId,
-    });
-    await insertLawyerAssignment(assignment);
+  }
+  if (ws.currentStage === "INBOX") {
     // INBOX → RECEIVED → UNDER_ANALYSIS
     ws = assignLawyer(transitionLegalStage(ws, "RECEIVED"), params.lawyerId);
     await updateLegalOpinionWorkspaceStage(ws.id, ws.organizationId, ws.currentStage, ws.status, ws.assignedLawyer, ws.updatedAt);
@@ -96,7 +138,10 @@ export async function openWorkspaceFromRequest(params: {
     ws = transitionLegalStage(ws, "UNDER_ANALYSIS");
     await updateLegalOpinionWorkspaceStage(ws.id, ws.organizationId, ws.currentStage, ws.status, ws.assignedLawyer, ws.updatedAt);
     await recordHistory(ws, "under_analysis", String(params.lawyerId), "Análise do processo iniciada.");
+  } else {
+    await recordHistory(ws, "received", String(params.lawyerId), "Solicitação recebida pelo Procurador.");
   }
+  logLegalOpinionAssignment("legal_opinion_workspace_assigned", { ...trail, workspaceId: ws.id, created: claim.created });
   return ws;
 }
 

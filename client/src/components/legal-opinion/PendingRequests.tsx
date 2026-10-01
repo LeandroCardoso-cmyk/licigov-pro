@@ -38,6 +38,9 @@ export default function PendingRequests({ limit = 50, onReceive }: PendingReques
         </span>
       </header>
 
+      {/* NEW-007 — recusa do servidor (sem papel/atribuição, já recebida por outro procurador) é exibida, nunca silenciosa. */}
+      {receive.isError && <p className="mb-3 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{receive.error.message}</p>}
+
       {isError ? (
         <p className="rounded-md border border-red-100 bg-red-50 p-4 text-center text-xs text-red-600">Não foi possível carregar as pendências.</p>
       ) : isLoading ? (

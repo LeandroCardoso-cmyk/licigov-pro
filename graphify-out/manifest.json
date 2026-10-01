@@ -1525,8 +1525,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/InstitutionalInbox.tsx": {
-    "mtime": 1790643728.9280136,
-    "ast_hash": "805fd97b2b869823eb532d46957cb098",
+    "mtime": 1790890630.7107432,
+    "ast_hash": "d8e0943be5477f66f3a6f698937a8677",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LawyerDashboard.tsx": {
@@ -1555,8 +1555,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/PendingRequests.tsx": {
-    "mtime": 1790643728.9282136,
-    "ast_hash": "fae17d1cc9a0177290bc2866941356c1",
+    "mtime": 1790890630.7107432,
+    "ast_hash": "fb7bd625f9f89c3875d7b620c1451c6e",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/RequestContextPanel.tsx": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790890488.5542052,
-    "ast_hash": "9a779d2689b41043b060e6c5c33b6ce5",
+    "mtime": 1790890630.7392607,
+    "ast_hash": "18dda608e14f7f4fa7623b427b6c57bf",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -8860,8 +8860,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionWorkspaceRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "a31220071ec54cbf70af25e0e2078ee0",
+    "mtime": 1790890630.7107432,
+    "ast_hash": "61ddcbbb5e409b1001e06ea9058c4130",
     "semantic_hash": ""
   },
   "server/routers/legalOpinionsRouter.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1790643729.3969874,
-    "ast_hash": "31785e032973d8703e8a50aaf4bc6162",
+    "mtime": 1790890630.7107432,
+    "ast_hash": "4fc7b284b5134d3923f68666c83234f2",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -12682,6 +12682,31 @@
   "server/routers/contractWorkspaceRbac.ts": {
     "mtime": 1790890488.390735,
     "ast_hash": "d729a421d52d69ca289d6322068e7b05",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-assignment-authority.test.ts": {
+    "mtime": 1790890630.7107432,
+    "ast_hash": "99e0bdaee92497b0ce36b6fd2552e7c0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts": {
+    "mtime": 1790890630.7107432,
+    "ast_hash": "8ea6f1045bccc35c8d26e998b0f706eb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-receive-claim.test.ts": {
+    "mtime": 1790890630.7107432,
+    "ast_hash": "96e8b47850965b3a82b5e854fd25b84c",
+    "semantic_hash": ""
+  },
+  "server/db/legalOpinionAssignment.ts": {
+    "mtime": 1790890630.7107432,
+    "ast_hash": "3464989dbafad41b661770142a171931",
+    "semantic_hash": ""
+  },
+  "server/services/legalOpinionAuthorityService.ts": {
+    "mtime": 1790890630.7107432,
+    "ast_hash": "84c079b676a0f4200c9a9d9926eb938e",
     "semantic_hash": ""
   }
 }
