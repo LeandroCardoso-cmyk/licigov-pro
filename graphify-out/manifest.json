@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790889748.0435648,
-    "ast_hash": "9b5e48e1e5facdd0e6a8fb1c7b2d69a0",
+    "mtime": 1790890225.525955,
+    "ast_hash": "ad967c9c173605530b993e9e1f5b172f",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -7020,8 +7020,8 @@
     "semantic_hash": ""
   },
   "server/db/lgpd.ts": {
-    "mtime": 1790643729.3348873,
-    "ast_hash": "9c47245008ec2c77642751a17f4955ec",
+    "mtime": 1790890218.1227188,
+    "ast_hash": "a8625c08eea90d646f45d444fe79819b",
     "semantic_hash": ""
   },
   "server/db/officialDocumentPromotions.ts": {
@@ -8875,8 +8875,8 @@
     "semantic_hash": ""
   },
   "server/routers/lgpdRouter.ts": {
-    "mtime": 1790881530.0448847,
-    "ast_hash": "1e2dcf2645fc608fd80fbd0f5a7f6bef",
+    "mtime": 1790890218.1227188,
+    "ast_hash": "8047ce21fc8e129d5986d0c7c5b328c7",
     "semantic_hash": ""
   },
   "server/routers/moduleLicensingRouter.ts": {
@@ -12637,6 +12637,21 @@
   "server/__tests__/integration/r2-leg032-contact-disabled.test.ts": {
     "mtime": 1790890151.3947148,
     "ast_hash": "4dd25b890f5cc3421be3cb0871905b91",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new-002-account-hard-delete-disabled.test.ts": {
+    "mtime": 1790890218.1227188,
+    "ast_hash": "1674a14d72e1fadb0e570f34f8ca1c2c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts": {
+    "mtime": 1790890252.2982614,
+    "ast_hash": "26924e3ca31f8c458e872f226d1854b2",
+    "semantic_hash": ""
+  },
+  "server/services/accountRemovalGuard.ts": {
+    "mtime": 1790890218.1267188,
+    "ast_hash": "722ed73e090b024c189e2e5fb71e03e5",
     "semantic_hash": ""
   }
 }
