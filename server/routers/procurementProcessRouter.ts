@@ -27,6 +27,8 @@ import {
   importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
 import { serviceLogger } from "../services/observabilityService";
+import { isFeatureEnabled } from "../services/featureFlagService";
+import { CANONICAL_INGESTION_FLAG } from "../services/ingestionUploadService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
@@ -94,6 +96,42 @@ async function resolveExistingProcurementCreate(p: {
     outcome: "CONFLICT", reason: PROCESS_ALREADY_EXISTS, mismatches, durationMs: Date.now() - p.startedAt,
   });
   throw new TRPCError({ code: "CONFLICT", message: PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE });
+}
+
+/**
+ * PR-04 (preparação) — FCC-03 / LEG-013 (SEM-005): guard SERVER-SIDE da colagem legada da Pesquisa de Preços.
+ *
+ * Acoplado à MESMA flag tenant-aware da ingestão canônica (`FF_CANONICAL_INGESTION`), avaliada pelo MESMO
+ * avaliador (`isFeatureEnabled`, usado por `ingestion.getCapabilities` e `assertCanonicalIngestionEnabled`):
+ *  - flag LIGADA para o tenant do contexto ⇒ recusa governada `LEGACY_ENDPOINT_DISABLED` (a UI desse tenant só
+ *    oferece a ingestão supervisionada; o endpoint legado não pode continuar API-reachable);
+ *  - flag DESLIGADA (inclusive ausência de flag / sem DB — o default fail-closed do avaliador) ⇒ comportamento
+ *    legado INALTERADO (estado de produção documentado; a decisão por tenant é a R2.2, humana);
+ *  - ERRO ao avaliar a flag ⇒ recusa (INTERNAL_SERVER_ERROR) SEM gravar nada: o avaliador existente propaga o erro
+ *    (não o converte em "desligada"), e o caminho canônico, no mesmo cenário, também recusaria. Um erro de
+ *    avaliação nunca pode liberar uma escrita que o caminho canônico teria recusado.
+ * Roda ANTES de qualquer leitura de processo, escrita, IA ou log de atividade (só lê a flag).
+ */
+async function assertLegacyPriceResearchPasteAllowed(ctx: {
+  organizationId?: number | null; user?: { id: number } | null; correlationId?: string | null;
+}): Promise<void> {
+  const orgId = ctx.organizationId!;
+  let canonicalIngestionOn: boolean;
+  try {
+    canonicalIngestionOn = await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId);
+  } catch (err) {
+    log.error("legacy_price_research_flag_evaluation_failed", {
+      organizationId: orgId, userId: ctx.user?.id ?? null, correlationId: ctx.correlationId ?? null,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Não foi possível verificar a configuração de importação desta organização. Nada foi gravado; tente novamente.",
+    });
+  }
+  if (canonicalIngestionOn) {
+    throwLegacyEndpointDisabled("procurementProcess.importPriceResearch", "LEG-013", ctx, "a ingestão supervisionada de pesquisa de preços");
+  }
 }
 
 // Acabamento institucional das exportações (PR #188).
@@ -411,6 +449,8 @@ export const procurementProcessRouter = router({
       text: z.string().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
+      // FCC-03 / LEG-013: flag canônica ligada para o tenant ⇒ recusa governada ANTES de qualquer efeito.
+      await assertLegacyPriceResearchPasteAllowed(ctx);
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       // DATA-039 + hardening P0: pesquisa + cotações + BASE dos Itens Inteligentes numa ÚNICA transação

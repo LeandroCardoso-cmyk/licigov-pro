@@ -24,9 +24,13 @@ vi.mock("../../storage", () => ({
   storageGetBytes: async (key: string) => { const b = mem.get(key); if (!b) throw new Error(`storage vazio: ${key}`); return b; },
   storagePut: async (key: string, data: string | Buffer) => { mem.set(key, Buffer.from(data)); return { key, url: "" }; },
 }));
+// PR-04 prep (FCC-03): com FF_CANONICAL_INGESTION ligada o servidor RECUSA a colagem legada
+// (`procurementProcess.importPriceResearch` ⇒ LEGACY_ENDPOINT_DISABLED). O item "legado" deste cenário é o dado
+// histórico gravado enquanto a flag do tenant estava DESLIGADA; a flag é desligada só durante essa gravação.
+const flagState = vi.hoisted(() => ({ canonicalIngestion: true }));
 vi.mock("../../services/featureFlagService", async (orig) => {
   const actual = await orig<typeof import("../../services/featureFlagService")>();
-  return { ...actual, isFeatureEnabled: vi.fn(async () => true) };
+  return { ...actual, isFeatureEnabled: vi.fn(async () => flagState.canonicalIngestion) };
 });
 
 import { runMigrations } from "../../bootstrap";
@@ -111,6 +115,15 @@ async function cleanup() {
   await conn.query("DELETE FROM users WHERE openId LIKE 'elg-%'").catch(() => {});
 }
 
+/** Importação legada gravada com a flag canônica DESLIGADA para o tenant (histórico pré-cutover). */
+async function legacyImportWhileFlagOff(userId: number, input: { processId: string; source: "pdf" | "colar"; text: string }) {
+  const op = await asUser(userId);
+  // Com a flag LIGADA o endpoint legado é recusado no servidor (novo contrato; nada gravado).
+  await expect(op.procurementProcess.importPriceResearch(input)).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("LEGACY_ENDPOINT_DISABLED") });
+  flagState.canonicalIngestion = false;
+  try { return await op.procurementProcess.importPriceResearch(input); } finally { flagState.canonicalIngestion = true; }
+}
+
 const candidatesOf = async (pid: string, u = users.operator) => (await asUser(u)).procurementItems.candidates({ processId: pid, source: "price_research" });
 
 describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado (MySQL real)", { timeout: 180_000 }, () => {
@@ -135,7 +148,7 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
     pid = await newProcess(ORG);
     // Caminho LEGADO real (importação de texto): uma linha vira Item Inteligente sem revisão prévia.
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" });
+    await legacyImportWhileFlagOff(users.operator, { processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" });
     const before = await listIntelligentItems(pid, ORG);
     expect(before).toHaveLength(1);
     legacyId = before[0].id;
@@ -191,7 +204,7 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
   it("5) importação manual APROVADA por humano (decisão do Item Inteligente) ⇒ elegível; não aprovada ⇒ não", async () => {
     const p3 = await newProcess(ORG);
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
+    await legacyImportWhileFlagOff(users.operator, { processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
     expect((await candidatesOf(p3)).candidates).toHaveLength(0);
     const [it] = await listIntelligentItems(p3, ORG);
     await op.procurementProcess.approveItem({ itemId: it.id });

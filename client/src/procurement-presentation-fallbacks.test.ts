@@ -15,7 +15,7 @@ type QueryState = { data: unknown; isLoading: boolean; isFetching: boolean; isEr
 const state = vi.hoisted(() => ({
   processes: undefined as unknown as QueryState,
   items: undefined as unknown as QueryState,
-  capabilities: { enabled: false, isLoading: false, error: null as unknown, capabilities: undefined },
+  capabilities: { enabled: false, isLoading: false, isFetching: false, error: null as unknown, capabilities: undefined, refetch: () => Promise.resolve() },
 }));
 
 const mutation = vi.hoisted(() => () => ({ mutate: () => {}, isPending: false, isError: false, isSuccess: false, error: null, data: undefined }));
@@ -70,7 +70,7 @@ const LEGACY_MARKER = "Importar e gerar Itens Inteligentes";
 const STALE_WARNING = "Não foi possível atualizar os dados agora. As informações abaixo são da última consulta bem-sucedida.";
 
 describe("PesquisaPrecosWorkspace — capabilities governam SÓ a ingestão canônica por arquivo", () => {
-  beforeEach(() => { state.capabilities = { enabled: false, isLoading: false, error: null, capabilities: undefined }; });
+  beforeEach(() => { state.capabilities = { enabled: false, isLoading: false, isFetching: false, error: null, capabilities: undefined, refetch: () => Promise.resolve() }; });
 
   it("success + enabled → launcher canônico (U2B-MIN: arquivo + colar texto; sem painel legado)", () => {
     state.capabilities = { ...state.capabilities, enabled: true };
@@ -86,23 +86,36 @@ describe("PesquisaPrecosWorkspace — capabilities governam SÓ a ingestão can�
     expect(html).toContain(LEGACY_MARKER);
   });
 
-  it("error → FAIL-CLOSED para arquivo (sem launcher), aviso claro e painel legado por texto PRESERVADO", () => {
+  // PR-04 (preparação, FCC-03): o servidor recusa a colagem legada para tenants com FF_CANONICAL_INGESTION ligada.
+  // Sem a consulta de capabilities não há como saber qual caminho vale ⇒ nenhuma entrada; erro + nova tentativa.
+  // (Antes desta PR o erro caía no painel legado — contrato intencionalmente substituído.)
+  it("error → sem launcher E sem painel legado; erro claro em pt-BR com 'Tentar novamente'", () => {
     state.capabilities = { ...state.capabilities, enabled: false, error: new Error("getCapabilities falhou") };
     const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
     expect(html).not.toContain("CANONICAL_LAUNCHER");
-    expect(html).toMatch(/role="alert"[^>]*>Não foi possível consultar as opções de importação por arquivo/);
-    expect(html).toContain("A entrada por texto continua disponível abaixo.");
-    expect(html).toContain(LEGACY_MARKER);
-    expect(html).toContain("Conteúdo da pesquisa");
+    expect(html).not.toContain(LEGACY_MARKER);
+    expect(html).not.toContain("Conteúdo da pesquisa");
+    expect(html).toMatch(/role="alert"[^>]*><p>Não foi possível consultar as opções de importação da pesquisa de preços desta organização\./);
+    expect(html).toContain("Nenhuma importação foi feita.");
+    expect(html).toMatch(/<button type="button"[^>]*>Tentar novamente<\/button>/);
     // Nada é apresentado como habilitado implicitamente.
     expect(html).not.toContain("ingestão supervisionada");
+    expect(html).not.toContain("A entrada por texto");
   });
 
-  it("error mesmo com capabilities anteriores 'enabled' em cache → launcher continua oculto (fail-closed)", () => {
+  it("error mesmo com capabilities anteriores 'enabled' em cache → nem launcher nem painel legado (fail-closed)", () => {
     state.capabilities = { ...state.capabilities, enabled: true, error: new Error("refetch falhou") };
     const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
     expect(html).not.toContain("CANONICAL_LAUNCHER");
-    expect(html).toContain(LEGACY_MARKER);
+    expect(html).not.toContain(LEGACY_MARKER);
+    expect(html).toContain("Tentar novamente");
+  });
+
+  it("error com nova consulta em andamento → botão 'Tentar novamente' desabilitado", () => {
+    state.capabilities = { ...state.capabilities, error: new Error("falhou"), isFetching: true };
+    const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
+    expect(html).toMatch(/<button type="button" disabled=""[^>]*>Tentar novamente<\/button>/);
+    expect(html).not.toContain(LEGACY_MARKER);
   });
 });
 
