@@ -41,4 +41,11 @@ fi
 # reproduzível entre execuções e máquinas.
 export PYTHONHASHSEED=0
 
+# `run.sh --python <script> [args]` executa um script com o Python do venv fixado (usado pelo hook
+# para classificar arquivos com o próprio `graphify.detect`, sem lista paralela de extensões).
+if [ "${1:-}" = "--python" ]; then
+  shift
+  exec "$VENV/bin/python" "$@"
+fi
+
 exec "$VENV/bin/graphify" "$@"
