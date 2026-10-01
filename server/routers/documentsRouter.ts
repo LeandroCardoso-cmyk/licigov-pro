@@ -16,71 +16,44 @@
  * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
  */
 import { tenantProcedure, router } from "../_core/trpc";
-import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { z } from "zod";
 import * as db from "../db";
-import { generateETP, generateTR, generateDFD, generateEdital, generateContrato, generateAta, generateParecer } from "../services/gemini";
-import { convertToPDF, convertToDOCX } from "../services/documentConverter";
-import { storagePut, storageGet } from "../storage";
-import { serviceLogger } from "../services/observabilityService";
-import {
-  resolveInstitutionalIdentity,
-  institutionalIdentityFingerprint,
-  institutionalIdentityFromMetadataOrLive,
-  type InstitutionalIdentity,
-} from "../services/institutionalIdentityService";
-
-const log = serviceLogger("documentsRouter");
 
 /**
- * Cabeçalho institucional (organização/endereço/cnpj/contato) para os generators/exportadores,
- * derivado da FONTE CANÔNICA composta (`organizations` + extensão `documentSettings`). Único ponto
- * de mapeamento identidade → params, para não reintroduzir leitura direta de tabela.
+ * R2 / LEG-009 (inventário R2.1 `docs/audits/R2_LEGACY_REACHABILITY_INVENTORY.md`, decisão humana de
+ * 27/09/2026 = DISABLE) — desligamento GOVERNADO das 13 procedures de leitura/gravação/geração/upload/
+ * download/versionamento deste router (listByProcess, list, save, getByType, generateNext, updateDocument,
+ * generateDocument, uploadDocument, getDownloadUrl, getVersionHistory, restoreVersion, downloadDocx,
+ * downloadPdf). Os únicos chamadores de cliente estão na subárvore NÃO roteada de `pages/ProcessDetails.tsx`
+ * (a rota `/processo/:id` redireciona para `/processos`).
+ *
+ * Cada procedure continua REGISTRADA e com o MESMO schema de input (contrato de API e congelamento
+ * RC-C0.1A), mas recusa TODA chamada (FORBIDDEN + `LEGACY_ENDPOINT_DISABLED`) como PRIMEIRA instrução —
+ * antes de qualquer leitura/gravação em banco, IA (gemini), S3, conversão DOCX/PDF ou activity log. Nenhum
+ * dado histórico (linhas `documents`, objetos S3) é apagado ou alterado. Caminho canônico: Processo
+ * Licitatório (`procurementProcess.*`) + Document Engine (`documentEngine.*`); revisão/aprovação oficial em
+ * `documentReview.*` — nenhum deles é alterado por este corte.
  */
-function orgHeaderParams(identity: InstitutionalIdentity) {
-  return {
-    organizationName: identity.organizationName || undefined,
-    address: identity.address || undefined,
-    cnpj: identity.cnpj || undefined,
-    phone: identity.phone || undefined,
-    email: identity.email || undefined,
-    website: identity.website || undefined,
-  };
-}
+
+/** R2 / LEG-009 — caminho canônico sugerido na recusa governada. */
+const LEG009_ALTERNATIVE =
+  "o Processo Licitatório canônico (procurementProcess.*) e o Document Engine (documentEngine.*)";
 
 /**
- * Metadados de SNAPSHOT da identidade (congela a identidade vigente no momento da geração + um
- * fingerprint determinístico) para gravar em `documents.metadata`. A exportação prefere este snapshot
- * ao vivo (replay-safe): reexportar reproduz o cabeçalho da época, ainda que a identidade mude depois.
+ * Tipos de SAÍDA do contrato legado, preservados só no nível de tipo: a procedure nunca mais os devolve (recusa
+ * governada), mas o contrato da API não "some" silenciosamente e os chamadores legados (não roteados) seguem
+ * compilando sem alteração.
  */
-function identitySnapshotMetadata(identity: InstitutionalIdentity) {
-  return {
-    institutionalIdentitySnapshot: identity,
-    institutionalIdentityFingerprint: institutionalIdentityFingerprint(identity),
-  };
-}
-
-/**
- * RC-SEC-PR-A — Negação de autorização multi-tenant. Cross-tenant e inexistente
- * produzem o MESMO erro NOT_FOUND. Log estruturado leve, sem conteúdo sensível.
- */
-function denyNotFound(
-  procedure: string,
-  ctx: { organizationId: number; user: { id: number } },
-  resourceId: number,
-  reason: string,
-  message = "Recurso não encontrado",
-): never {
-  log.warn("tenant_authorization_denied", {
-    procedure,
-    organizationId: ctx.organizationId,
-    userId: ctx.user.id,
-    resourceId,
-    reason,
-  });
-  throw new TRPCError({ code: "NOT_FOUND", message });
-}
+type LegacyDocType = "dfd" | "etp" | "tr" | "edital" | "contrato" | "ata" | "parecer";
+type LegacyDocumentList = Awaited<ReturnType<typeof db.getDocumentsByProcessForOrganization>>;
+type LegacyDocumentByType = Awaited<ReturnType<typeof db.getDocumentByProcessAndTypeForOrganization>>;
+type LegacyDocumentVersions = Awaited<ReturnType<typeof db.getDocumentVersionsForOrganization>>;
+type LegacySaveResult = { success: boolean; version: number };
+type LegacyGenerateNextResult = { success: boolean; documentType: LegacyDocType | null; status: string };
+type LegacyGenerateResult = { success: boolean; docType: LegacyDocType; version: number };
+type LegacyDownloadUrlResult = { url: string; expiresIn: number };
+type LegacyFileResult = { success: boolean; filename: string; data: string };
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -89,39 +62,19 @@ const ALLOWED_MIME_TYPES = [
   "text/plain",
 ] as const;
 
-/**
- * Verifica se o processo pertence à organização (1ª camada, isolamento tenant),
- * e então se o usuário é dono do processo ou membro com acesso (2ª camada intra-org).
- * Cross-tenant e inexistente retornam o MESMO NOT_FOUND.
- */
-async function assertProcessAccess(processId: number, organizationId: number, userId: number): Promise<void> {
-  const process = await db.getProcessByIdForOrganization(processId, organizationId);
-  if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-  if (process.ownerId === userId) return;
-  const member = await db.getProcessMember(processId, userId);
-  if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
-}
-
-/** Verifica organização (1ª camada) e propriedade do processo (2ª camada, operações destrutivas). */
-async function assertProcessOwner(processId: number, organizationId: number, userId: number): Promise<void> {
-  const process = await db.getProcessByIdForOrganization(processId, organizationId);
-  if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-  if (process.ownerId !== userId) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o responsável pode executar esta ação" });
-}
-
 export const documentsRouter = router({
+  // R2 / LEG-009 — as 13 procedures abaixo (até downloadPdf) estão DESLIGADAS de forma governada: schema de
+  // input preservado (contrato de API e congelamento RC-C0.1A), recusa antes de qualquer efeito colateral.
   listByProcess: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
-      return await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyDocumentList> => {
+      throwLegacyEndpointDisabled("documents.listByProcess", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   list: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
-      return await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyDocumentList> => {
+      throwLegacyEndpointDisabled("documents.list", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   save: tenantProcedure
@@ -130,28 +83,8 @@ export const documentsRouter = router({
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
       content: z.string().max(500_000),
     }))
-    .mutation(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
-      const existing = await db.getDocumentByProcessAndTypeForOrganization(input.processId, input.type, ctx.organizationId);
-      const version = existing ? existing.version + 1 : 1;
-
-      await db.createDocument({
-        processId: input.processId,
-        type: input.type,
-        content: input.content,
-        version,
-        createdBy: ctx.user.id,
-        organizationId: ctx.organizationId,
-      });
-
-      await db.createActivityLog({
-        processId: input.processId,
-        userId: ctx.user.id,
-        action: `${existing ? 'atualizou' : 'criou'} o documento ${input.type.toUpperCase()}`,
-        details: JSON.stringify({ version }),
-      });
-
-      return { success: true, version };
+    .mutation(async ({ ctx }): Promise<LegacySaveResult> => {
+      throwLegacyEndpointDisabled("documents.save", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   getByType: tenantProcedure
@@ -159,203 +92,22 @@ export const documentsRouter = router({
       processId: z.number(),
       type: z.enum(["etp", "tr", "dfd", "edital", "contrato", "ata", "parecer"]),
     }))
-    .query(async ({ ctx, input }) => {
-      await assertProcessAccess(input.processId, ctx.organizationId, ctx.user.id);
-      return await db.getDocumentByProcessAndTypeForOrganization(input.processId, input.type, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyDocumentByType> => {
+      throwLegacyEndpointDisabled("documents.getByType", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   generateNext: tenantProcedure
     .input(z.object({
       processId: z.number(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
-      if (!process) {
-        denyNotFound("generateNext", ctx, input.processId, "process_cross_tenant_or_missing", "Processo não encontrado");
-      }
-      if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
-
-      const identity = await resolveInstitutionalIdentity(ctx.organizationId);
-      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
-      const dfdDoc = docs.find(d => d.type === "dfd");
-      const etpDoc = docs.find(d => d.type === "etp");
-      const trDoc = docs.find(d => d.type === "tr");
-
-      let nextDocType: "dfd" | "etp" | "tr" | "edital" | "contrato" | "ata" | "parecer";
-      let nextStatus: "em_dfd" | "em_etp" | "em_tr" | "em_edital" | "em_contrato" | "em_ata" | "em_parecer" | "concluido";
-      let generatedContent: string;
-
-      const editalDoc = docs.find(d => d.type === "edital");
-      const contratoDoc = docs.find(d => d.type === "contrato");
-      const ataDoc = docs.find(d => d.type === "ata");
-
-      const commonOrgParams = orgHeaderParams(identity);
-
-      if (process.status === "em_dfd" && dfdDoc) {
-        nextDocType = "etp";
-        nextStatus = "em_etp";
-        generatedContent = await generateETP({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          dfdContent: dfdDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_etp" && etpDoc && dfdDoc) {
-        nextDocType = "tr";
-        nextStatus = "em_tr";
-        const processItems = await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
-        const catmatItems = processItems.map(item => ({
-          itemType: item.itemType,
-          catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
-          catserCode: item.catserCode ? String(item.catserCode) : undefined,
-          description: item.description,
-          unit: item.unit,
-          groupCode: item.groupCode ? String(item.groupCode) : undefined,
-          classCode: item.classCode ? String(item.classCode) : undefined,
-        }));
-        generatedContent = await generateTR({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          etpContent: etpDoc.content || "",
-          catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_tr" && trDoc && etpDoc && dfdDoc) {
-        nextDocType = "edital";
-        nextStatus = "em_edital";
-        generatedContent = await generateEdital({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          dfdContent: dfdDoc.content || "",
-          etpContent: etpDoc.content || "",
-          trContent: trDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_edital" && editalDoc && trDoc) {
-        nextDocType = "contrato";
-        nextStatus = "em_contrato";
-        generatedContent = await generateContrato({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          editalContent: editalDoc.content || "",
-          trContent: trDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_contrato" && contratoDoc && editalDoc) {
-        nextDocType = "ata";
-        nextStatus = "em_ata";
-        generatedContent = await generateAta({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          editalContent: editalDoc.content || "",
-          contratoContent: contratoDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_ata" && ataDoc && editalDoc && trDoc && etpDoc && dfdDoc) {
-        nextDocType = "parecer";
-        nextStatus = "em_parecer";
-        generatedContent = await generateParecer({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          dfdContent: dfdDoc.content || "",
-          etpContent: etpDoc.content || "",
-          trContent: trDoc.content || "",
-          editalContent: editalDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (process.status === "em_parecer") {
-        await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, "concluido");
-        await db.createActivityLog({
-          processId: input.processId,
-          userId: ctx.user.id,
-          action: "concluiu o processo",
-          details: JSON.stringify({ status: "concluido" }),
-        });
-        return { success: true, documentType: null, status: "concluido" };
-      } else {
-        throw new Error("Não é possível gerar o próximo documento. Verifique o status do processo.");
-      }
-
-      const existingDoc = docs.find(d => d.type === nextDocType);
-      const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
-
-      await db.createDocument({
-        processId: input.processId,
-        type: nextDocType,
-        content: generatedContent,
-        version: nextVersion,
-        createdBy: ctx.user.id,
-        organizationId: ctx.organizationId,
-        // REPLAY-SAFE: congela a identidade institucional vigente na geração (cabeçalho reprodutível).
-        metadata: identitySnapshotMetadata(identity),
-      });
-
-      await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, nextStatus);
-
-      await db.createActivityLog({
-        processId: input.processId,
-        userId: ctx.user.id,
-        action: `gerou o ${nextDocType.toUpperCase()} automaticamente`,
-        details: JSON.stringify({ generatedBy: "AI", status: nextStatus }),
-      });
-
-      return { success: true, documentType: nextDocType, status: nextStatus };
+    .mutation(async ({ ctx }): Promise<LegacyGenerateNextResult> => {
+      throwLegacyEndpointDisabled("documents.generateNext", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   updateDocument: tenantProcedure
     .input(z.object({ documentId: z.number(), content: z.string() }))
-    .mutation(async ({ input, ctx }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) {
-        denyNotFound("updateDocument", ctx, input.documentId, "document_cross_tenant_or_missing", "Documento não encontrado");
-      }
-
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process) {
-        denyNotFound("updateDocument", ctx, document.processId, "process_cross_tenant_or_missing", "Documento não encontrado");
-      }
-      if (process.ownerId !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para editar este documento' });
-      }
-
-      const newVersion = document.version + 1;
-      await db.createDocument({
-        processId: document.processId,
-        type: document.type,
-        content: input.content,
-        version: newVersion,
-        createdBy: ctx.user.id,
-        organizationId: ctx.organizationId,
-      });
-
-      await db.createActivityLog({
-        processId: document.processId,
-        userId: ctx.user.id,
-        action: `Editou ${document.type.toUpperCase()} (versão ${newVersion})`,
-      });
-
-      return { success: true, version: newVersion };
+    .mutation(async ({ ctx }): Promise<LegacySaveResult> => {
+      throwLegacyEndpointDisabled("documents.updateDocument", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   generateDocument: tenantProcedure
@@ -363,160 +115,8 @@ export const documentsRouter = router({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const process = await db.getProcessByIdForOrganization(input.processId, ctx.organizationId);
-      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-      if (process.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para este processo" });
-
-      const identity = await resolveInstitutionalIdentity(ctx.organizationId);
-      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
-      const dfdDoc = docs.find(d => d.type === "dfd");
-      const etpDoc = docs.find(d => d.type === "etp");
-      const trDoc = docs.find(d => d.type === "tr");
-      const editalDoc = docs.find(d => d.type === "edital");
-      const contratoDoc = docs.find(d => d.type === "contrato");
-
-      const commonOrgParams = orgHeaderParams(identity);
-
-      let generatedContent: string;
-
-      if (input.docType === "dfd") {
-        generatedContent = await generateDFD({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          ...commonOrgParams,
-        });
-      } else if (input.docType === "etp") {
-        generatedContent = await generateETP({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          dfdContent: dfdDoc?.content || undefined,
-          ...commonOrgParams,
-        });
-      } else if (input.docType === "tr") {
-        if (!etpDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP é necessário para gerar o TR" });
-        const processItems = await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
-        const catmatItems = processItems.map(item => ({
-          itemType: item.itemType,
-          catmatCode: item.catmatCode ? String(item.catmatCode) : undefined,
-          catserCode: item.catserCode ? String(item.catserCode) : undefined,
-          description: item.description,
-          unit: item.unit,
-          groupCode: item.groupCode ? String(item.groupCode) : undefined,
-          classCode: item.classCode ? String(item.classCode) : undefined,
-        }));
-        generatedContent = await generateTR({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          etpContent: etpDoc.content || "",
-          catmatItems: catmatItems.length > 0 ? catmatItems : undefined,
-          ...commonOrgParams,
-        });
-      } else if (input.docType === "edital") {
-        if (!etpDoc || !trDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "ETP e TR são necessários para gerar o Edital" });
-        generatedContent = await generateEdital({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          dfdContent: dfdDoc?.content || "",
-          etpContent: etpDoc.content || "",
-          trContent: trDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (input.docType === "contrato") {
-        if (!editalDoc || !trDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "Edital e TR são necessários para gerar a Minuta de Contrato" });
-        generatedContent = await generateContrato({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          platformId: process.platformId,
-          editalContent: editalDoc.content || "",
-          trContent: trDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else if (input.docType === "ata") {
-        if (!editalDoc || !contratoDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "Edital e Minuta de Contrato são necessários para gerar a Ata" });
-        generatedContent = await generateAta({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          editalContent: editalDoc.content || "",
-          contratoContent: contratoDoc.content || "",
-          ...commonOrgParams,
-        });
-      } else {
-        // parecer
-        if (!dfdDoc || !etpDoc || !trDoc || !editalDoc) throw new TRPCError({ code: "BAD_REQUEST", message: "DFD, ETP, TR e Edital são necessários para gerar o Parecer" });
-        generatedContent = await generateParecer({
-          processName: process.name,
-          object: process.object || "",
-          estimatedValue: process.estimatedValue || 0,
-          modality: process.modality || "",
-          category: process.category || "",
-          dfdContent: dfdDoc.content || "",
-          etpContent: etpDoc.content || "",
-          trContent: trDoc.content || "",
-          editalContent: editalDoc.content || "",
-          ...commonOrgParams,
-        });
-      }
-
-      const existingDoc = docs.find(d => d.type === input.docType);
-      const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
-
-      await db.createDocument({
-        processId: input.processId,
-        type: input.docType,
-        content: generatedContent,
-        version: nextVersion,
-        createdBy: ctx.user.id,
-        // REPLAY-SAFE: congela a identidade institucional vigente na geração (cabeçalho reprodutível).
-        metadata: identitySnapshotMetadata(identity),
-      });
-
-      const statusMap: Record<string, string> = {
-        dfd: "em_dfd",
-        etp: "em_etp",
-        tr: "em_tr",
-        edital: "em_edital",
-        contrato: "em_contrato",
-        ata: "em_ata",
-        parecer: "em_parecer",
-      };
-      const statusOrder = ["em_dfd", "em_etp", "em_tr", "em_edital", "em_contrato", "em_ata", "em_parecer", "concluido"];
-      const currentIdx = statusOrder.indexOf(process.status);
-      const targetIdx = statusOrder.indexOf(statusMap[input.docType]);
-      if (targetIdx > currentIdx) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast de enum pré-existente (fora do escopo deste fix)
-        await db.updateProcessStatusForOrganization(input.processId, ctx.organizationId, statusMap[input.docType] as any);
-      }
-
-      await db.createActivityLog({
-        processId: input.processId,
-        userId: ctx.user.id,
-        action: `gerou o ${input.docType.toUpperCase()} por IA`,
-        details: JSON.stringify({ generatedBy: "AI", docType: input.docType }),
-      });
-
-      return { success: true, docType: input.docType, version: nextVersion };
+    .mutation(async ({ ctx }): Promise<LegacyGenerateResult> => {
+      throwLegacyEndpointDisabled("documents.generateDocument", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   uploadDocument: tenantProcedure
@@ -527,65 +127,20 @@ export const documentsRouter = router({
       fileBase64: z.string().max(15_000_000), // ~10 MB em base64
       mimeType: z.enum(ALLOWED_MIME_TYPES),
     }))
-    .mutation(async ({ ctx, input }) => {
-      await assertProcessOwner(input.processId, ctx.organizationId, ctx.user.id);
-
-      const buffer = Buffer.from(input.fileBase64, "base64");
-      const safeFileName = input.fileName.replace(/[^a-zA-Z0-9_\-. ]/g, "_");
-      const s3Key = `processes/${input.processId}/${input.docType}/${Date.now()}_${safeFileName}`;
-      const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
-
-      const docs = await db.getDocumentsByProcessForOrganization(input.processId, ctx.organizationId);
-      const existingDoc = docs.find(d => d.type === input.docType);
-      const nextVersion = existingDoc ? existingDoc.version + 1 : 1;
-
-      await db.createDocument({
-        processId: input.processId,
-        type: input.docType,
-        content: null,
-        sourceType: "upload",
-        s3Key: key,
-        fileUrl: url,
-        version: nextVersion,
-        createdBy: ctx.user.id,
-      });
-
-      await db.createActivityLog({
-        processId: input.processId,
-        userId: ctx.user.id,
-        action: `fez upload do ${input.docType.toUpperCase()}`,
-        details: JSON.stringify({ fileName: input.fileName, s3Key: key }),
-      });
-
-      return { success: true, docType: input.docType, version: nextVersion };
+    .mutation(async ({ ctx }): Promise<LegacyGenerateResult> => {
+      throwLegacyEndpointDisabled("documents.uploadDocument", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   getDownloadUrl: tenantProcedure
     .input(z.object({ documentId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      if (!document.s3Key) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este documento não possui arquivo S3 associado" });
-      }
-
-      const { url } = await storageGet(document.s3Key, 3600);
-      return { url, expiresIn: 3600 };
+    .query(async ({ ctx }): Promise<LegacyDownloadUrlResult> => {
+      throwLegacyEndpointDisabled("documents.getDownloadUrl", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   getVersionHistory: tenantProcedure
     .input(z.object({ documentId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
-      return await db.getDocumentVersionsForOrganization(document.processId, document.type, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyDocumentVersions> => {
+      throwLegacyEndpointDisabled("documents.getVersionHistory", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   restoreVersion: tenantProcedure
@@ -593,129 +148,24 @@ export const documentsRouter = router({
       documentId: z.number(),
       versionId: z.number(),
     }))
-    .mutation(async ({ input, ctx }) => {
-      const currentDocument = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!currentDocument) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-
-      const versionToRestore = await db.getDocumentByIdForOrganization(input.versionId, ctx.organizationId);
-      if (!versionToRestore) throw new TRPCError({ code: "NOT_FOUND", message: "Versão não encontrada" });
-
-      await assertProcessOwner(currentDocument.processId, ctx.organizationId, ctx.user.id);
-
-      const newVersion = currentDocument.version + 1;
-      await db.createDocument({
-        processId: currentDocument.processId,
-        type: currentDocument.type,
-        content: versionToRestore.content,
-        version: newVersion,
-        createdBy: ctx.user.id,
-      });
-
-      await db.createActivityLog({
-        processId: currentDocument.processId,
-        userId: ctx.user.id,
-        action: `restaurou ${currentDocument.type.toUpperCase()} para versão ${versionToRestore.version}`,
-        details: JSON.stringify({
-          restoredFrom: versionToRestore.version,
-          newVersion,
-        }),
-      });
-
-      return { success: true, version: newVersion };
+    .mutation(async ({ ctx }): Promise<LegacySaveResult> => {
+      throwLegacyEndpointDisabled("documents.restoreVersion", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   downloadDocx: tenantProcedure
     .input(z.object({
       documentId: z.number(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
-
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-
-      const documentLabels: Record<string, string> = {
-        dfd: "Documento Formalizador de Demanda (DFD)",
-        etp: "Estudo Técnico Preliminar (ETP)",
-        tr: "Termo de Referência (TR)",
-        edital: "Edital de Licitação",
-        contrato: "Minuta de Contrato",
-        ata: "Ata de Resultado de Julgamento",
-        parecer: "Parecer Jurídico",
-      };
-
-      // REPLAY-SAFE: prefere o snapshot de identidade congelado na geração; cai para o vigente só em
-      // documentos legados (sem snapshot). Reexportar reproduz o cabeçalho da época.
-      const identity = await institutionalIdentityFromMetadataOrLive(
-        document.metadata as Record<string, unknown> | null | undefined,
-        ctx.organizationId,
-      );
-
-      const buffer = await convertToDOCX(
-        document.content || "",
-        `${documentLabels[document.type]} - ${process.name}`,
-        identity.organizationName || undefined,
-        identity.address || undefined,
-        identity.cnpj || undefined,
-        identity.phone || undefined,
-        identity.email || undefined,
-        identity.website || undefined
-      );
-
-      return {
-        success: true,
-        filename: `${document.type}_${process.name.replace(/\s+/g, "_")}.docx`,
-        data: buffer.toString("base64"),
-      };
+    .mutation(async ({ ctx }): Promise<LegacyFileResult> => {
+      throwLegacyEndpointDisabled("documents.downloadDocx", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   downloadPdf: tenantProcedure
     .input(z.object({
       documentId: z.number(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const document = await db.getDocumentByIdForOrganization(input.documentId, ctx.organizationId);
-      if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado" });
-      await assertProcessAccess(document.processId, ctx.organizationId, ctx.user.id);
-
-      const process = await db.getProcessByIdForOrganization(document.processId, ctx.organizationId);
-      if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-
-      const documentLabels: Record<string, string> = {
-        dfd: "Documento Formalizador de Demanda (DFD)",
-        etp: "Estudo Técnico Preliminar (ETP)",
-        tr: "Termo de Referência (TR)",
-        edital: "Edital de Licitação",
-        contrato: "Minuta de Contrato",
-        ata: "Ata de Resultado de Julgamento",
-        parecer: "Parecer Jurídico",
-      };
-
-      // REPLAY-SAFE: prefere o snapshot de identidade congelado na geração; cai para o vigente só em
-      // documentos legados (sem snapshot). Reexportar reproduz o cabeçalho da época.
-      const identity = await institutionalIdentityFromMetadataOrLive(
-        document.metadata as Record<string, unknown> | null | undefined,
-        ctx.organizationId,
-      );
-
-      const buffer = await convertToPDF(
-        document.content || "",
-        `${documentLabels[document.type]} - ${process.name}`,
-        identity.organizationName || undefined,
-        identity.address || undefined,
-        identity.cnpj || undefined,
-        identity.phone || undefined,
-        identity.email || undefined,
-        identity.website || undefined
-      );
-
-      return {
-        success: true,
-        filename: `${document.type}_${process.name.replace(/\s+/g, "_")}.pdf`,
-        data: buffer.toString("base64"),
-      };
+    .mutation(async ({ ctx }): Promise<LegacyFileResult> => {
+      throwLegacyEndpointDisabled("documents.downloadPdf", "LEG-009", ctx, LEG009_ALTERNATIVE);
     }),
 
   submitForReview: tenantProcedure

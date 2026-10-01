@@ -192,24 +192,38 @@ describe("Segurança — Integração", () => {
   });
 
   // ── Controle de acesso por ownership de processo ──────────────────────────
-  describe("assertProcessAccess — isolamento de dados por usuário", () => {
-    it("usuário não-dono sem membro → FORBIDDEN em listByProcess", async () => {
+  // R2 / LEG-009 — `documents.listByProcess|save|uploadDocument` foram DESLIGADOS de forma governada: recusam
+  // TODA chamada com FORBIDDEN + LEGACY_ENDPOINT_DISABLED antes de qualquer leitura (assertProcessAccess/Owner
+  // deixaram de existir no router). A intenção de isolamento é preservada e endurecida: o não-dono continua
+  // barrado, nada é lido/gravado, e o processo inexistente recebe o MESMO erro do não-dono (antes era NOT_FOUND
+  // vs FORBIDDEN — agora não há sequer diferença observável entre existir ou não).
+  describe("isolamento de dados por usuário (LEG-009: recusa governada, sem leitura)", () => {
+    const GOVERNED = { code: "FORBIDDEN", message: expect.stringContaining("LEGACY_ENDPOINT_DISABLED") };
+    const expectNoDbCalls = () => {
+      for (const [name, fn] of Object.entries(db)) {
+        if (vi.isMockFunction(fn)) expect(fn, `db.${name} não deveria ser chamado`).not.toHaveBeenCalled();
+      }
+    };
+
+    it("usuário não-dono sem membro → FORBIDDEN governado em listByProcess, sem leitura", async () => {
       vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(GOVERNED);
+      expectNoDbCalls();
     });
 
-    it("usuário não-dono → FORBIDDEN em save", async () => {
+    it("usuário não-dono → FORBIDDEN governado em save, sem gravação", async () => {
       vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "x" }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(GOVERNED);
+      expectNoDbCalls();
     });
 
-    it("assertProcessOwner — usuário não-dono → FORBIDDEN em uploadDocument", async () => {
+    it("usuário não-dono → FORBIDDEN governado em uploadDocument, sem gravação", async () => {
       vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
 
       await expect(
@@ -217,15 +231,24 @@ describe("Segurança — Integração", () => {
           processId: 10, docType: "tr", fileName: "f.pdf",
           fileBase64: "abc", mimeType: "application/pdf",
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(GOVERNED);
+      expectNoDbCalls();
     });
 
-    it("processo inexistente → NOT_FOUND (não FORBIDDEN)", async () => {
+    it("processo inexistente → MESMO erro governado do não-dono (não revela existência)", async () => {
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
+      const errOf = async (p: Promise<unknown>) => {
+        try { await p; } catch (e: any) { return { code: e.code, message: e.message }; }
+        return { code: "RESOLVED", message: "" };
+      };
+      const foreign = await errOf(documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }));
       vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
+      const missing = await errOf(documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }));
 
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(missing.code).toBe("FORBIDDEN");
+      expect(missing.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+      expect(missing).toEqual(foreign);
+      expectNoDbCalls();
     });
   });
 

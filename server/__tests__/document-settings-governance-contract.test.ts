@@ -24,8 +24,9 @@ const DOCS_ROUTER = read("server/routers/documentsRouter.ts");
 const ENGINE = read("server/services/documentEngineService.ts");
 const EXPORT_ADAPTER = read("server/services/officialDocumentExportAdapter.ts");
 
+// R2 / LEG-009 — `documentsRouter.ts` saiu da lista: suas procedures de geração/exportação foram desligadas de
+// forma governada e o router não resolve mais identidade institucional alguma (ver bloco H3 abaixo).
 const CONSUMERS = [
-  "server/routers/documentsRouter.ts",
   "server/routers/legalOpinionsRouter.ts",
   "server/services/directContractDocuments.ts",
   "server/routers/platformsRouter.ts",
@@ -128,10 +129,17 @@ describe("documentSettings · governança institucional endurecida (contrato)", 
   });
 
   it("H3 replay-safe: snapshot de identidade congelado na geração/emissão e preferido na exportação", () => {
-    // Legacy documents: grava snapshot no metadata na geração e prefere-o na exportação.
-    expect(DOCS_ROUTER).toContain("institutionalIdentitySnapshot");
-    expect(DOCS_ROUTER).toContain("institutionalIdentityFromMetadataOrLive");
-    expect(DOCS_ROUTER).toContain("metadata: identitySnapshotMetadata(identity)");
+    // Legacy documents (R2 / LEG-009): geração (generateNext/generateDocument) e exportação (downloadDocx/
+    // downloadPdf) foram DESLIGADAS de forma governada — não há mais caminho legado que emita/exporte cabeçalho
+    // institucional (com ou sem snapshot). O invariante replay-safe passa a ser garantido por AUSÊNCIA: o router
+    // não importa gemini/documentConverter nem lê identidade/documentSettings, e recusa com LEG-009.
+    expect(DOCS_ROUTER).not.toMatch(/from ["'][^"']*services\/gemini["']/);
+    expect(DOCS_ROUTER).not.toMatch(/from ["'][^"']*services\/documentConverter["']/);
+    expect(DOCS_ROUTER).not.toMatch(/resolveInstitutionalIdentity|institutionalIdentityFromMetadataOrLive/);
+    expect(DOCS_ROUTER).not.toContain("getDocumentSettingsByUser");
+    for (const proc of ["generateNext", "generateDocument", "downloadDocx", "downloadPdf"]) {
+      expect(DOCS_ROUTER).toContain(`throwLegacyEndpointDisabled("documents.${proc}", "LEG-009"`);
+    }
     // Document Engine oficial: injeta o snapshot no metadata de toda versão emitida.
     expect(ENGINE).toContain("snapshotInstitutionalIdentity");
     expect(ENGINE).toContain("institutionalIdentitySnapshot");
