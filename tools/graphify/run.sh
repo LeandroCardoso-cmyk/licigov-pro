@@ -35,4 +35,17 @@ if [ "$need_install" -eq 1 ]; then
   "$VENV/bin/python" -m pip install --quiet -r "$REQ"
 fi
 
+# Determinismo: o clustering de comunidades itera conjuntos/dicts do Python, cuja ordem depende da
+# aleatorização de hash por processo. Sem semente fixa, duas execuções sobre o MESMO código geram
+# partições de comunidade diferentes (nós e arestas idênticos). Fixar a semente torna o grafo
+# reproduzível entre execuções e máquinas.
+export PYTHONHASHSEED=0
+
+# `run.sh --python <script> [args]` executa um script com o Python do venv fixado (usado pelo hook
+# para classificar arquivos com o próprio `graphify.detect`, sem lista paralela de extensões).
+if [ "${1:-}" = "--python" ]; then
+  shift
+  exec "$VENV/bin/python" "$@"
+fi
+
 exec "$VENV/bin/graphify" "$@"
