@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1790643728.9214704,
-    "ast_hash": "b330571dbb707f2d4c5abf150658fd77",
+    "mtime": 1790891509.3107955,
+    "ast_hash": "2b838a48303887f014157da5d6060ec8",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -1535,8 +1535,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionEditor.tsx": {
-    "mtime": 1790643728.9282136,
-    "ast_hash": "92579763ceac3ea1f0e88df9684a67d9",
+    "mtime": 1790891497.3827949,
+    "ast_hash": "745c8eebc9ad089a92c65d200c40912e",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionHome.tsx": {
@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1790881529.9568846,
-    "ast_hash": "90ab9a54b1aa6d0c278a0c304b1b7784",
+    "mtime": 1790892143.2028332,
+    "ast_hash": "1e4b182cfe9375b7465956279397233d",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1790881529.9608846,
-    "ast_hash": "ff897089f022c926c89ec68a47d07cf5",
+    "mtime": 1790891538.3601117,
+    "ast_hash": "dc492cd3fe0ea9a585b2a2bc7ad7d9e2",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790890903.513281,
-    "ast_hash": "8811257482aad84418812af4ba257733",
+    "mtime": 1790892118.5678964,
+    "ast_hash": "c37543f077fcbacd29cae83922b3e141",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5465,7 +5465,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts": {
-    "mtime": 1790881530.0368845,
+    "mtime": 1790891518.8387961,
     "ast_hash": "7817501158e9dee3b14fb427088c81a8",
     "semantic_hash": ""
   },
@@ -5500,8 +5500,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "dceac990b7e022e2624789790116a16d",
+    "mtime": 1790891509.3147955,
+    "ast_hash": "231fb46cf4aec822c1792a8842072d7b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/csp-headers.test.ts": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1790643729.3348873,
-    "ast_hash": "5de2bcd38e6dd25519c5eaef7b4a4d94",
+    "mtime": 1790891538.3733706,
+    "ast_hash": "5ee3b7989080af7598491816af904c22",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -7005,8 +7005,8 @@
     "semantic_hash": ""
   },
   "server/db/legalOpinionWorkspace.ts": {
-    "mtime": 1790643729.3348873,
-    "ast_hash": "1b34102dbf24a2692195fe0cb4723dee",
+    "mtime": 1790891497.3827949,
+    "ast_hash": "6dbf0b4f4cf0cfd1c4b7024577b2a47a",
     "semantic_hash": ""
   },
   "server/db/legalOpinions.ts": {
@@ -8140,8 +8140,8 @@
     "semantic_hash": ""
   },
   "server/domain/legalOpinionDraft.ts": {
-    "mtime": 1790643729.344868,
-    "ast_hash": "44b23992d9faa28ef7cd4307298e154d",
+    "mtime": 1790891509.3147955,
+    "ast_hash": "8978c9bd44d70353ac6f3ee11bdbd804",
     "semantic_hash": ""
   },
   "server/domain/legalOpinionWorkspace.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1790890496.6565366,
-    "ast_hash": "efc21cb20dd9f93ad3d49b2a30f3172d",
+    "mtime": 1790891497.3867948,
+    "ast_hash": "7a8613e5da793f8e0fd7ba80e876ecb6",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "f08d8e17bfdb8affdc2168182073a7a8",
+    "mtime": 1790891538.3777397,
+    "ast_hash": "cac13719c7a580161dcd3be9fa622265",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1790890630.7107432,
-    "ast_hash": "4fc7b284b5134d3923f68666c83234f2",
+    "mtime": 1790891509.2751503,
+    "ast_hash": "6c827541937f21794c136eedd788644d",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -12737,6 +12737,41 @@
   "server/__tests__/integration/pr04-legacy-price-research-guard.test.ts": {
     "mtime": 1790890903.4787595,
     "ast_hash": "3a243780ec00e39b437ecb6141888fb9",
+    "semantic_hash": ""
+  },
+  "drizzle/0310_contract_number_unique_per_org.sql": {
+    "mtime": 1790891572.8622067,
+    "ast_hash": "39f8935e37c4c1e04805c3528b569415",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0310_snapshot.json": {
+    "mtime": 1790891574.5147994,
+    "ast_hash": "6a646d2eaa37330caa5ea7da41b7a2f5",
+    "semantic_hash": ""
+  },
+  "scripts/preflight-0310-contract-number.sql": {
+    "mtime": 1790891538.366819,
+    "ast_hash": "da79530fa090004542ca400b5509f9d0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contract-number-unique-0310-mysql-smoke.test.ts": {
+    "mtime": 1790891694.9247818,
+    "ast_hash": "dfbd40192bbd316f947dd8473b9419f1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts": {
+    "mtime": 1790891755.7999299,
+    "ast_hash": "c0daeb327c5f1f950b36bfcb205cffd9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/create-not-reset-legal-contract.test.ts": {
+    "mtime": 1790891509.3147955,
+    "ast_hash": "a1c5711dac79320bf4e02486b8eb9fc6",
+    "semantic_hash": ""
+  },
+  "server/domain/contractCreation.ts": {
+    "mtime": 1790891538.3756354,
+    "ast_hash": "6f4746c7c43a2a08a249f22d320a2a4e",
     "semantic_hash": ""
   }
 }
