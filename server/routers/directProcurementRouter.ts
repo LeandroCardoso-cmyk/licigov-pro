@@ -13,7 +13,7 @@ import { router, tenantProcedure } from "../_core/trpc";
 import {
   createDirectProcurementWorkspace, setDirectStage,
   setProcedureType, setLegalBasis, configureFlags,
-  type DirectStartOption, type DirectProcurementType,
+  type DirectStartOption, type DirectProcurementType, type DirectProcurementWorkspace,
 } from "../domain/directProcurementWorkspace";
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
@@ -23,6 +23,11 @@ import {
 } from "../domain/directProcurementProcedure";
 import { createRatification } from "../domain/directProcurementJustifications";
 import {
+  PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, DIRECT_PROCUREMENT_ALREADY_EXISTS_MESSAGE, directProcurementCreateMismatches,
+} from "../domain/processCreateContract";
+import { serviceLogger } from "../services/observabilityService";
+import {
+  createDirectProcurementWorkspaceWithInitialEvent,
   insertDirectProcurementWorkspace, getDirectProcurementWorkspace, listDirectProcurementWorkspaces,
   updateDirectProcurementStage, insertDirectProcedure, getDirectProcedure,
   insertProposalCollection, listProposalCollections, insertProposalDocument,
@@ -50,6 +55,37 @@ async function requireWs(id: string, orgId: number) {
   return ws;
 }
 
+const log = serviceLogger("directProcurementRouter");
+
+/**
+ * R3 / PR-05 (SEM-003) — a criação colidiu com a chave natural (org + número). NADA foi escrito. Relê o
+ * existente NO ÓRGÃO do contexto e decide SEM ESCREVER (contrato: server/domain/processCreateContract.ts):
+ * retry idempotente da MESMA criação (mesmo ator + payload normalizado idêntico) ⇒ devolve o workspace
+ * PERSISTIDO com `created: false`; qualquer outro caso ⇒ CONFLICT `PROCESS_ALREADY_EXISTS`.
+ */
+async function resolveExistingDirectCreate(p: {
+  organizationId: number; workspaceId: string; actorUserId: number; correlationId: string; startedAt: number;
+  request: { object: string; procurementType: string; startOption: string; legalBasis?: string };
+}): Promise<{ workspace: DirectProcurementWorkspace; created: false }> {
+  const existing = await getDirectProcurementWorkspace(p.workspaceId, p.organizationId);
+  const mismatches = existing
+    ? directProcurementCreateMismatches(existing, { actorUserId: p.actorUserId, ...p.request })
+    : ["missing"];
+  if (existing && mismatches.length === 0) {
+    log.info("create_process_replayed", {
+      organizationId: p.organizationId, workspaceId: existing.id, actorUserId: p.actorUserId, correlationId: p.correlationId,
+      outcome: "IDEMPOTENT_CONVERGENCE", durationMs: Date.now() - p.startedAt,
+    });
+    return { workspace: existing, created: false };
+  }
+  // Só NOMES de campo divergentes (sem valores/PII); o workspace existente não é tocado.
+  log.warn("create_process_conflict", {
+    organizationId: p.organizationId, workspaceId: p.workspaceId, actorUserId: p.actorUserId, correlationId: p.correlationId,
+    outcome: "CONFLICT", reason: PROCESS_ALREADY_EXISTS, mismatches, durationMs: Date.now() - p.startedAt,
+  });
+  throw new TRPCError({ code: "CONFLICT", message: DIRECT_PROCUREMENT_ALREADY_EXISTS_MESSAGE });
+}
+
 export const directProcurementRouter = router({
   createProcess: tenantProcedure
     .input(z.object({
@@ -60,15 +96,33 @@ export const directProcurementRouter = router({
       legalBasis: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const startedAt = Date.now();
       const orgId = ctx.organizationId!;
       const ws = createDirectProcurementWorkspace({
         organizationId: orgId, processNumber: input.processNumber, object: input.object,
         procurementType: input.procurementType as DirectProcurementType, startOption: input.startOption as DirectStartOption,
         legalBasis: input.legalBasis, responsibleUser: ctx.user.id, correlationId: ctx.correlationId,
       });
-      await insertDirectProcurementWorkspace(ws);
-      await recordProcessEvent({ organizationId: orgId, processId: ws.id, eventType: "workspace_created", actor: String(ctx.user.id), summary: `Contratação direta ${ws.processNumber} (${ws.procurementType}) criada.`, refId: ws.id, correlationId: ctx.correlationId });
-      return { workspace: ws };
+      // R3 / PR-05 (SEM-003) — Create ≠ Reset: INSERT PURO + evento inicial na MESMA transação. Número já
+      // existente no órgão ⇒ nada é escrito; converge (retry idempotente da mesma criação) ou CONFLICT.
+      try {
+        await createDirectProcurementWorkspaceWithInitialEvent(ws, {
+          actor: String(ctx.user.id), summary: `Contratação direta ${ws.processNumber} (${ws.procurementType}) criada.`, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        if (err instanceof ProcessAlreadyExistsError) {
+          return resolveExistingDirectCreate({
+            organizationId: orgId, workspaceId: err.processId, actorUserId: ctx.user.id, correlationId: ctx.correlationId, startedAt,
+            request: { object: input.object, procurementType: input.procurementType, startOption: input.startOption, legalBasis: input.legalBasis },
+          });
+        }
+        throw err;
+      }
+      log.info("create_process_created", {
+        organizationId: orgId, workspaceId: ws.id, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+        outcome: "CREATED", durationMs: Date.now() - startedAt,
+      });
+      return { workspace: ws, created: true };
     }),
 
   loadProcess: tenantProcedure

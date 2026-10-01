@@ -359,6 +359,12 @@ jobs:
       - name: Smoke — atomicidade de operações compostas (DATA-039)
         run: pnpm exec vitest run server/__tests__/integration/data039-atomicity-mysql-smoke.test.ts
 
+      # R3 / PR-05 — Create ≠ Reset dos criadores canônicos de processo (SEM-002, SEM-003) pelo router real:
+      # número existente ⇒ CONFLICT PROCESS_ALREADY_EXISTS sem mutação; retry idempotente converge sem escrita;
+      # criação concorrente ⇒ exatamente 1 registro; mesmo número em órgãos distintos segue isolado.
+      - name: Smoke — Create ≠ Reset de processos (R3 / PR-05)
+        run: pnpm exec vitest run server/__tests__/integration/create-not-reset-processes-mysql-smoke.test.ts
+
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
     name: Build de Produção (gate)

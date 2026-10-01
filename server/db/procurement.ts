@@ -25,6 +25,7 @@ import {
   generatedDocumentEditsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
+import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
 import type { PriceResearchWorkspace, PriceResearchItem } from "../domain/priceResearch";
@@ -61,16 +62,41 @@ const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Process ─────────────────────────────────────────────────────────────────
 
+/**
+ * ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle (`cause`).
+ * R3 / PR-05 — usado pelos criadores canônicos para traduzir colisão de chave natural em CONFLICT.
+ */
+export function isDuplicateKeyError(err: unknown): boolean {
+  let e: unknown = err;
+  for (let i = 0; i < 4 && e; i++) {
+    const x = e as { code?: string; errno?: number; cause?: unknown };
+    if (x.code === "ER_DUP_ENTRY" || x.errno === 1062) return true;
+    e = x.cause;
+  }
+  return false;
+}
+
+/**
+ * R3 / PR-05 (SEM-002) — CRIA o processo com INSERT PURO. Nunca é upsert: antes, `onDuplicateKeyUpdate`
+ * devolvia um processo existente (mesmo emitido) à etapa inicial/"rascunho" e trocava a modalidade.
+ * Colisão da PK determinística (`plp:org:número` = chave natural) ⇒ `ProcessAlreadyExistsError`, sem escrita.
+ * Contrato completo em `server/domain/processCreateContract.ts`.
+ */
 export async function insertProcess(p: ProcurementWorkspace, executor?: ProcurementExecutor): Promise<ProcurementWorkspace | null> {
   const db = executor ?? await getDb();
   if (!db) return null;
-  await db.insert(procurementProcessesTable).values({
-    id: p.id, organizationId: p.organizationId, processNumber: p.processNumber, object: p.object,
-    modality: p.modality, currentStage: p.currentStage, status: p.status, startOption: p.startOption,
-    responsibleUser: p.responsibleUser, participants: JSON.stringify(p.participants),
-    activeCopilots: JSON.stringify(p.activeCopilots), correlationId: p.correlationId,
-    createdAt: toDb(p.createdAt), updatedAt: toDb(p.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { currentStage: p.currentStage, status: p.status, modality: p.modality, updatedAt: toDb(p.updatedAt) } });
+  try {
+    await db.insert(procurementProcessesTable).values({
+      id: p.id, organizationId: p.organizationId, processNumber: p.processNumber, object: p.object,
+      modality: p.modality, currentStage: p.currentStage, status: p.status, startOption: p.startOption,
+      responsibleUser: p.responsibleUser, participants: JSON.stringify(p.participants),
+      activeCopilots: JSON.stringify(p.activeCopilots), correlationId: p.correlationId,
+      createdAt: toDb(p.createdAt), updatedAt: toDb(p.updatedAt),
+    });
+  } catch (err) {
+    if (isDuplicateKeyError(err)) throw new ProcessAlreadyExistsError(p.id);
+    throw err;
+  }
   return p;
 }
 
@@ -79,12 +105,12 @@ export async function insertProcess(p: ProcurementWorkspace, executor?: Procurem
  * Evita estado parcial (processo sem evento de criação, ou evento sem processo) em caso de falha
  * entre os dois writes.
  *
- * Replay-safety ESTRUTURAL (sem check-then-insert / sem janela TOCTOU): ambos os writes usam id
- * DETERMINÍSTICO e INDEPENDENTE de ordem — o processo por `plp:org:número`; o evento de criação por
- * uma `idempotencyKey` estável. Retries sequenciais OU concorrentes colidem no MESMO id, e a
- * PRIMARY KEY + onDuplicateKeyUpdate garante EXATAMENTE UM processo e EXATAMENTE UM evento inicial —
- * a garantia é do banco, não da aplicação. Multi-tenant: o id inclui `organizationId`, então tenants
- * distintos com o mesmo número de processo nunca colidem.
+ * R3 / PR-05 — a unicidade é ESTRUTURAL (sem check-then-insert / sem janela TOCTOU): o processo tem id
+ * DETERMINÍSTICO `plp:org:número` (PRIMARY KEY) e é criado por INSERT PURO. Uma segunda criação — sequencial
+ * ou CONCORRENTE — colide na PK; a transação inteira é revertida e a função lança `ProcessAlreadyExistsError`
+ * sem escrever nada (processo, evento ou efeitos de `withinTx`). Decidir entre convergência (retry idempotente
+ * da mesma criação) e CONFLICT é responsabilidade do router, que relê o existente (ver processCreateContract).
+ * Multi-tenant: o id inclui `organizationId`, então tenants distintos com o mesmo número nunca colidem.
  *
  * FAIL-CLOSED: operação AUTORITATIVA de criação — se o banco estiver indisponível, LANÇA (não finge
  * sucesso). Um "sucesso fantasma" quebraria auditabilidade/determinismo/rastreabilidade. O erro é
@@ -100,12 +126,12 @@ export async function createProcessWithInitialEvent(
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — criação de processo não persistida (fail-closed).");
   await db.transaction(async (tx) => {
-    await insertProcess(p, tx);
+    await insertProcess(p, tx); // INSERT puro: colisão ⇒ ProcessAlreadyExistsError ⇒ rollback de tudo
     await recordProcessEvent({
       organizationId: p.organizationId, processId: p.id,
       eventType: event.eventType, actor: event.actor, summary: event.summary,
       refId: event.refId, correlationId: event.correlationId,
-      idempotencyKey: "initial", // evento SINGLETON de criação — id estável, retry (mesmo concorrente) não duplica
+      idempotencyKey: "initial", // evento SINGLETON de criação — id estável
     }, tx);
     if (withinTx) await withinTx(tx);
   });

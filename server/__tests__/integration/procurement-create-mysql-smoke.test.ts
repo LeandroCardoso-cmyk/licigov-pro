@@ -8,7 +8,7 @@
  *
  * Garante: o processo é gravado e recuperado no MySQL sem erro de DATETIME,
  * as datas voltam como ISO válido (round-trip), o isolamento por tenant é real,
- * e o retry (mesmo número) NÃO cria duplicata (idempotência).
+ * e a 2ª criação com o mesmo número é recusada sem duplicata nem reset (R3 / PR-05).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
@@ -19,6 +19,7 @@ import {
 } from "../../db/procurement";
 import { generateDFDDraft, saveDFDDraft } from "../../services/procurementProcessService";
 import { draftContentHash } from "../../domain/generatedDocument";
+import { ProcessAlreadyExistsError } from "../../domain/processCreateContract";
 
 const DB = process.env.DATABASE_URL;
 
@@ -121,18 +122,24 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     expect(await getProcess(process.id, ORG_B)).toBeNull(); // cross-tenant → null
   });
 
-  it("retry com o mesmo número NÃO cria duplicata (id determinístico + onDuplicateKeyUpdate)", async () => {
-    const mk = () => createProcurementWorkspace({
+  // R3 / PR-05 (SEM-002): antes este caso provava o upsert (`onDuplicateKeyUpdate`), que RESETAVA etapa/status/
+  // modalidade do processo existente. O contrato agora é Create ≠ Reset: a 2ª criação com o mesmo número é
+  // RECUSADA pelo banco (PK determinística) com ProcessAlreadyExistsError, sem duplicar e sem tocar o existente.
+  // A convergência do retry idempotente é do router (create-not-reset-processes-mysql-smoke).
+  it("mesmo número ⇒ 2ª criação recusada (ProcessAlreadyExistsError): sem duplicata e sem reset do existente", async () => {
+    const mk = (over: Partial<Parameters<typeof createProcurementWorkspace>[0]> = {}) => createProcurementWorkspace({
       organizationId: ORG_A, processNumber: "300/2026", object: "Objeto retry",
-      startOption: "criar_dfd", responsibleUser: 1, correlationId: "smoke-retry",
+      startOption: "criar_dfd", responsibleUser: 1, correlationId: "smoke-retry", ...over,
     });
-    await insertProcess(mk());
-    await insertProcess(mk()); // segundo clique/retry
+    const first = mk({ modality: "pregao" });
+    await insertProcess(first);
+    await expect(insertProcess(mk({ modality: "concorrencia", startOption: "iniciar_etp" }))).rejects.toBeInstanceOf(ProcessAlreadyExistsError);
 
     const rows = (await listProcesses(ORG_A, 200)).filter(p => p.processNumber === "300/2026");
     expect(rows.length).toBe(1);
-    // A modalidade real é projetada (Escopo 3 — Central).
-    expect(rows[0].modality).toBeDefined();
+    // O existente permanece como foi criado (modalidade/etapa não trocadas pela 2ª tentativa).
+    expect(rows[0].modality).toBe("pregao");
+    expect(rows[0].currentStage).toBe(first.currentStage);
     expect(rows[0].updatedAt).toMatch(ISO);
   });
 

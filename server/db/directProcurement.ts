@@ -24,6 +24,8 @@ import type { DirectProcurementProcedure, ProposalCollection, ProposalDocument }
 import type { ContractJustification, PriceJustification, RequiredDocument, Ratification, GeneratedPublication } from "../domain/directProcurementJustifications";
 import type { CopilotType } from "../domain/institutionalCopilot";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
+import { recordProcessEvent, isDuplicateKeyError } from "./procurement";
+import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 
 function parseArr<T>(raw: string | null): T[] {
   if (!raw) return [];
@@ -39,16 +41,54 @@ const fromDb = (v: string): string => fromDbDatetime(v) ?? v;
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
+const workspaceRow = (ws: DirectProcurementWorkspace) => ({
+  id: ws.id, organizationId: ws.organizationId, processNumber: ws.processNumber, object: ws.object,
+  procurementType: ws.procurementType, procedureType: ws.procedureType, legalBasis: ws.legalBasis,
+  startOption: ws.startOption, currentStage: ws.currentStage, status: ws.status, responsibleUser: ws.responsibleUser,
+  participants: JSON.stringify(ws.participants), activeCopilots: JSON.stringify(ws.activeCopilots),
+  flags: JSON.stringify(ws.flags), correlationId: ws.correlationId, createdAt: toDb(ws.createdAt), updatedAt: toDb(ws.updatedAt),
+});
+
+/**
+ * R3 / PR-05 (SEM-003) — CRIA o workspace e o SEU evento inicial de timeline ATOMICAMENTE, com INSERT PURO.
+ * Antes, `createProcess` usava o upsert abaixo e, com um número já existente, resetava tipo
+ * (dispensa↔inexigibilidade), fundamento legal, procedimento, etapa, status e flags — e anexava outro
+ * `workspace_created` à timeline. Agora a PK determinística `dpw:org:número` (= chave natural) recusa a segunda
+ * criação (sequencial ou CONCORRENTE): a transação é revertida e lança `ProcessAlreadyExistsError`, sem escrita.
+ * Convergência × CONFLICT é decidida pelo router (contrato em `server/domain/processCreateContract.ts`).
+ * FAIL-CLOSED: sem banco, LANÇA (criação autoritativa nunca finge sucesso).
+ */
+export async function createDirectProcurementWorkspaceWithInitialEvent(
+  ws: DirectProcurementWorkspace,
+  event: { actor: string; summary: string; correlationId: string },
+): Promise<DirectProcurementWorkspace> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados indisponível — criação de contratação direta não persistida (fail-closed).");
+  await db.transaction(async (tx) => {
+    try {
+      await tx.insert(directProcurementWorkspacesTable).values(workspaceRow(ws));
+    } catch (err) {
+      if (isDuplicateKeyError(err)) throw new ProcessAlreadyExistsError(ws.id);
+      throw err;
+    }
+    await recordProcessEvent({
+      organizationId: ws.organizationId, processId: ws.id, eventType: "workspace_created",
+      actor: event.actor, summary: event.summary, refId: ws.id, correlationId: event.correlationId,
+      idempotencyKey: "initial", // evento SINGLETON de criação — id estável
+    }, tx);
+  });
+  return ws;
+}
+
+/**
+ * SALVA (upsert) um workspace JÁ EXISTENTE, carregado por `getDirectProcurementWorkspace` — usado pelas
+ * mutações de etapa posterior (fundamento legal, procedimento, flags). NÃO é caminho de criação: criar é
+ * `createDirectProcurementWorkspaceWithInitialEvent` (R3 / PR-05).
+ */
 export async function insertDirectProcurementWorkspace(ws: DirectProcurementWorkspace): Promise<DirectProcurementWorkspace | null> {
   const db = await getDb();
   if (!db) return null;
-  await db.insert(directProcurementWorkspacesTable).values({
-    id: ws.id, organizationId: ws.organizationId, processNumber: ws.processNumber, object: ws.object,
-    procurementType: ws.procurementType, procedureType: ws.procedureType, legalBasis: ws.legalBasis,
-    startOption: ws.startOption, currentStage: ws.currentStage, status: ws.status, responsibleUser: ws.responsibleUser,
-    participants: JSON.stringify(ws.participants), activeCopilots: JSON.stringify(ws.activeCopilots),
-    flags: JSON.stringify(ws.flags), correlationId: ws.correlationId, createdAt: toDb(ws.createdAt), updatedAt: toDb(ws.updatedAt),
-  }).onDuplicateKeyUpdate({ set: {
+  await db.insert(directProcurementWorkspacesTable).values(workspaceRow(ws)).onDuplicateKeyUpdate({ set: {
     procurementType: ws.procurementType, procedureType: ws.procedureType, legalBasis: ws.legalBasis,
     currentStage: ws.currentStage, status: ws.status, flags: JSON.stringify(ws.flags), updatedAt: toDb(ws.updatedAt),
   } });
