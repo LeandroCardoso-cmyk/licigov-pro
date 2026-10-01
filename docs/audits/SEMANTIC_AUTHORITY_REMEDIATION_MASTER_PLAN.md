@@ -335,6 +335,84 @@ Nenhuma operação remota entra na transação. Os gates da #260 (processo no te
 
 ---
 
+### 6.2 PR-05 — Create ≠ Reset dos processos (SEM-002, SEM-003) — resultado (2026-10-01)
+
+Contrato R3.2 aplicado a `procurementProcess.createProcess` e `directProcurement.createProcess`. A fonte normativa
+é o cabeçalho de `server/domain/processCreateContract.ts`; esta seção registra a matriz e a evidência.
+
+**Chave natural (confirmada no código, sem migration):** `(organizationId do contexto, número exatamente como enviado)`,
+materializada na PK determinística `sha256("plp:org:número")[0:20]` (Processo Licitatório,
+`server/domain/procurementProcess.ts`) e `sha256("dpw:org:número")[0:20]` (Contratação Direta,
+`server/domain/directProcurementWorkspace.ts`). `process_number` não tem UNIQUE própria; a unicidade vem da PK.
+Nenhuma normalização nova: `2026/253`, `2026/0253`, `253/2026` etc. continuam sendo chaves distintas.
+
+**Payload semântico de criação** (campos que representam a intenção de criar; timestamps, ids derivados, etapa,
+status, flags derivadas, procedimento e participantes ficam de fora):
+
+| Domínio | Campos comparados | Equivalência permitida |
+|---|---|---|
+| Processo Licitatório | ator (`responsible_user` = usuário autenticado), `object`, `start_option`, `modality`, `requestingUnit` (fato `demand.requestingUnit` gravado na criação: `sourceType = process`, `sourceVersion = create`) | `modality` ausente ≡ `""` (regra de gravação existente); `requestingUnit` já normalizada pela fronteira (zod `.trim()` + `\|\| null`) |
+| Contratação Direta | ator (`responsible_user`), `object`, `procurement_type`, `start_option`, `legal_basis` | `legal_basis` ausente ≡ `""` (regra de gravação existente) |
+
+Comparação exata contra o estado persistido atual; espaço ou caixa diferentes não convergem.
+
+**Matriz de comportamento:**
+
+| Caso | Resultado | Escrita |
+|---|---|---|
+| chave inexistente no órgão | cria (INSERT puro + evento `workspace_created` + fato informado, numa transação) → `created: true` | 1 linha, 1 evento, 0–1 fato |
+| chave existente + mesmo ator + payload idêntico | converge: devolve o registro **persistido** → `created: false` | zero (nem `updated_at`) |
+| chave existente + qualquer diferença (campo, ator, ou registro alterado depois em campo do payload) | `CONFLICT` com mensagem pt-BR estável e token `PROCESS_ALREADY_EXISTS` | zero no registro e nos filhos |
+| mesma chave em outro órgão | registro independente (o id inclui o organizationId) | — |
+
+**Concorrência:** INSERT primeiro; a PK serializa as criações no InnoDB. A perdedora recebe `ER_DUP_ENTRY` (1062),
+a transação inteira é revertida (`ProcessAlreadyExistsError`) e a decisão converge/CONFLICT é tomada **fora** da
+transação, só com leituras tenant-scoped. Não há check-then-insert, lock novo ou chamada remota na transação.
+
+**Anti-enumeração e RBAC:** a releitura usa `(id, organizationId do contexto)`; o id derivado já inclui o órgão, então
+outro tenant nunca colide nem é lido. RBAC inalterado (`procurementProcess.createProcess` = operator;
+`directProcurement.createProcess` = tenant).
+
+**Observabilidade (sem payload, sem valores):** `create_process_created` (`outcome: CREATED`),
+`create_process_replayed` (`IDEMPOTENT_CONVERGENCE`) e `create_process_conflict` (`CONFLICT`, com os **nomes** dos
+campos divergentes), todos com organizationId, id, ator, correlationId e `durationMs`.
+
+**Persistência:** `insertProcess` e `createDirectProcurementWorkspaceWithInitialEvent` deixaram de ser upsert. O upsert
+`insertDirectProcurementWorkspace` permanece só como "salvar" de workspace já carregado (fundamento legal,
+procedimento, flags), não como criação. Criação de contratação direta sem banco passou a ser fail-closed.
+
+**Fora do escopo (inalterado):** geração/id interno estável, `supersedes`, ledger de lifecycle, correção de número,
+descarte, cancelamento, reset governado (Pilot Reset B2/B3). O piloto real confirmou que recriar o mesmo número herdaria
+estado de rascunhos, pesquisa, importação, itens, CATMAT, contexto e timeline; por isso o create agora recusa em vez de
+"reiniciar". Nenhum dado de produção foi lido ou alterado por esta PR.
+
+**R3.1 — reprodução em MySQL real (main `570a962`, antes da correção):**
+- **SEM-002:** processo avançado para `ISSUED/emitido`, modalidade `pregao`; novo create com o mesmo número e payload
+  diferente respondeu **sucesso** e deixou a linha em `ETP/rascunho`, modalidade `concorrencia` (objeto antigo mantido) e
+  **2** fatos `demand.requestingUnit`; a resposta devolveu ao cliente o objeto novo, que não estava gravado.
+- **SEM-003:** workspace `dispensa`/`Art. 75, II`/`eletronico`/`RATIFICATION`/`ratificado`; novo create virou
+  `inexigibilidade`/`Art. 74, I`/`indefinido`/`LEGAL_BASIS`/`rascunho`, flags redefinidas e **2** eventos
+  `workspace_created`.
+- Smoke `create-not-reset-processes-mysql-smoke` (P1–P8, D1–D6): **11/14 falham** na main; os 3 guardas de regressão
+  (P6/D6 cross-tenant, P7 viewer) passam. Na PR: **14/14**.
+- **SEM-006 (discovery, sem correção — PR-06):** reproduzido na main `570a962`. `createOpinionDraft` sobre parecer
+  `assinado`/`signed = 1` reescreveu o mesmo id (`lod:org:workspace:tipo`) para `rascunho`/`signed = 0`/`signed_by = NULL`
+  com o relatório novo.
+- **SEM-007 (discovery, sem correção — PR-06):** reproduzido na main `570a962`. `createFromProcurement` com o mesmo
+  número sobre contrato `vigente` reescreveu o mesmo id (`ctw:org:originType:número`) para `minuta`, com contratado e
+  valor do segundo pedido. A chave real é `(órgão, tipo de origem, número)`, não `(origem, número)`.
+
+**Testes da PR:** `create-not-reset-processes-mysql-smoke` (MySQL real, router real, step próprio no job MySQL do CI),
+`unit/process-create-contract` (regra pura, mensagens congeladas, comparação exata, guarda estática contra upsert na
+criação), `integration/create-not-reset-router` (decisão pós-colisão só com leituras no órgão). Reescritos, sem perder
+cobertura, os testes que codificavam o upsert: `data039-atomicity-mysql-smoke` e `procurement-create-mysql-smoke`.
+
+**Risco residual registrado:** registros criados antes desta PR podem ter resíduo do upsert antigo (por exemplo, mais
+de um fato de criação `demand.requestingUnit` com valores diferentes). O retry desses casos recebe `CONFLICT`
+(fail-closed, sem escrita). Nenhum dado é corrigido aqui.
+
+---
+
 ## 7. Invariantes mestres
 
 | ID | Invariante | Base na auditoria |
@@ -458,7 +536,10 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R1.10 | IN_PROGRESS | deploy automático Railway `b85dd763` SUCCESS do commit `141bcad`: predeploy com migrations em 110 ms (0307), "Schema validado" no boot (o validador, fail-closed, exige a migration mais recente do build no ledger), bootstrap concluído, sem crash/erros. **Falta** a verificação comportamental read-only do caso (§8). A produção tem hoje **um único tenant** conhecido; o smoke cross-tenant é impraticável sem criar dado artificial, o que não será feito | — | — |
 | R2.1 | PASS | inventário congelado em [`R2_LEGACY_REACHABILITY_INVENTORY.md`](R2_LEGACY_REACHABILITY_INVENTORY.md): 33 superfícies (LEG-001…LEG-033); rota, menu, caller (grafo de imports) e API verificados; 0 UNKNOWN; nenhuma produção consultada. **Decisões humanas congeladas em 2026-09-27** para 33/33 superfícies (FIX 4, CUTOVER 10, DISABLE 18, COMPATIBILITY_LAYER 1); FCC-01…05 aceitas; NEW-002 registrado (§9.2). Os 12 critérios de R2.1 estão atendidos | PR #262 (docs) | 2026-09-28 |
 | R2.2 – R2.7 | TODO | — | — | — |
-| R3.1 – R3.6 | TODO | — | — | — |
+| R3.1 | IN_PROGRESS | reprodução em MySQL real na main `570a962` (§6.2): SEM-002 e SEM-003 resetam estado (11/14 casos do smoke falham antes; 14/14 depois); SEM-006 e SEM-007 também reproduzidos (discovery, correção na PR-06). Aguarda merge e reconciliação humana | PR-05 | — |
+| R3.2 | IN_PROGRESS | contrato "CONFLICT em chave natural existente; convergência só com mesmo payload" documentado em `server/domain/processCreateContract.ts` e §6.2. Aguarda merge | PR-05 | — |
+| R3.3 | IN_PROGRESS | PR-05 aberta; aguarda CI do head e autorização humana de merge | PR-05 | — |
+| R3.4 – R3.6 | TODO | — | — | — |
 | R4.1 – R4.7 | TODO | — | — | — |
 | R5.1 – R5.7 | TODO | — | — | — |
 | R6.1 – R6.6 | TODO | — | — | — |
