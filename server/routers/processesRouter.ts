@@ -1,12 +1,21 @@
 /**
  * @deprecated LEGACY_ACTIVE_MAINTENANCE_ONLY (RC-C0.1A) — CRUD de processo licitatório
- * legado, ATIVO em produção hoje (alimenta o fluxo real de `/processos` no menu). Não
- * adicione novos tipos documentais, novos consumidores ou novas rotas aqui. Hotfix
- * crítico e correção de segurança são permitidos. Destino canônico:
- * `procurementProcessRouter` (ainda órfão do frontend — ver
- * `server/kernel/architecture/legacyBoundaries.ts` → `CANONICAL_NOT_YET_WIRED`).
- * Referência: `docs/architecture/LEGACY_INVENTORY.md`, seção "Licitação / Processo
- * Licitatório / Geração Documental". Migração prevista para sprint dedicada futura (C1+).
+ * legado. A navegação oficial NÃO passa mais por aqui: `/processos` monta o fluxo canônico
+ * (ProcessoLicitatorio → `procurementProcess.*`), e `create` está em corte controlado (PR B).
+ * Não adicione novos tipos documentais, novos consumidores ou novas rotas aqui. Hotfix
+ * crítico e correção de segurança são permitidos.
+ *
+ * R2 / LEG-005 (decisão humana 27/09/2026 = DISABLE): as procedures legadas de ITENS do TR /
+ * CATMAT (addItemsToTR, getProcessItems, parseItemsFile, generateCatmatSuggestions,
+ * getCatmatSuggestions, approveCatmatSuggestion, rejectCatmatSuggestion, updateProcessItem,
+ * deleteProcessItem) estão DESATIVADAS de forma governada (`throwLegacyEndpointDisabled`,
+ * FORBIDDEN + LEGACY_ENDPOINT_DISABLED, antes de qualquer leitura/escrita, IA ou log de
+ * atividade). Seus únicos callers (TRItemsModal/ImportItemsModal/CatmatSuggestionsModal/
+ * EditItemDialog) só são alcançáveis pela página NÃO roteada `pages/ProcessDetails.tsx`.
+ * Destino canônico: Itens da Contratação / Itens Inteligentes (`itemIntelligence`) no
+ * Processo Licitatório canônico. Dados históricos (process_items / catmat_suggestions) são
+ * preservados — nada é apagado. Referência: `docs/architecture/LEGACY_INVENTORY.md` e
+ * `server/kernel/architecture/legacyBoundaries.ts`.
  */
 import { tenantProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -15,8 +24,33 @@ import { z } from "zod";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
 import { throwLegacyProcessPipelineDisabled } from "../domain/legacyPipeline";
+import type { CatmatMatch } from "../services/catmatMatcher";
 
 const log = serviceLogger("processesRouter");
+
+/** R2 / LEG-005 — superfície legada de itens do TR / CATMAT desativada (DISABLE governado). */
+const LEG005 = "LEG-005";
+const LEG005_ALTERNATIVE =
+  "Itens da Contratação / Itens Inteligentes (itemIntelligence) no Processo Licitatório canônico";
+
+// Tipos de saída PRESERVADOS (somente tipo, sem efeito em runtime): o contrato tipado da API
+// continua o mesmo para os consumidores legados congelados, embora toda chamada seja recusada.
+type LegacySuccess = { success: boolean };
+type LegacyProcessItems = Awaited<ReturnType<typeof db.getProcessItemsForOrganization>>;
+type LegacyCatmatSuggestions = Awaited<ReturnType<typeof db.getCatmatSuggestionsByItemForOrganization>>;
+type LegacyParsedItem = { description: string; quantity: number; unit: string; unitPrice: number; totalPrice: number };
+type LegacyParseItemsFileResult = {
+  success: boolean;
+  preview?: (string | number | boolean | null)[][];
+  items: LegacyParsedItem[];
+  count: number;
+};
+type LegacyGenerateCatmatSuggestionsResult = {
+  success: boolean;
+  suggestions: CatmatMatch[];
+  requiresHumanValidation: true;
+  notice: string;
+};
 
 /**
  * RC-SEC-PR-A — Negação de autorização multi-tenant. Cross-tenant e inexistente
@@ -110,25 +144,16 @@ export const processesRouter = router({
         estimatedPrice: z.number().optional(),
       })),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const saved = await db.saveProcessItemsForOrganization(input.processId, ctx.organizationId, input.items);
-      if (!saved) {
-        denyNotFound("addItemsToTR", ctx, input.processId, "process_cross_tenant_or_missing", "Processo não encontrado");
-      }
-
-      await db.createActivityLog({
-        processId: input.processId,
-        userId: ctx.user.id,
-        action: `adicionou ${input.items.length} item(ns) ao TR`,
-      });
-
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<LegacySuccess> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.addItemsToTR", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   getProcessItems: tenantProcedure
     .input(z.object({ processId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      return await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyProcessItems> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.getProcessItems", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   parseItemsFile: tenantProcedure
@@ -144,64 +169,9 @@ export const processesRouter = router({
       }),
       previewOnly: z.boolean().optional(),
     }))
-    .mutation(async ({ input }) => {
-      const XLSX = await import('xlsx');
-
-      const buffer = Buffer.from(input.fileContent, 'base64');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
-
-      if (data.length === 0) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo vazio' });
-      }
-
-      if (input.previewOnly) {
-        return {
-          success: true,
-          preview: data.slice(0, 6),
-          items: [],
-          count: 0,
-        };
-      }
-
-      if (data.length > 500) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Máximo 500 itens por importação' });
-      }
-
-      const items = data.slice(1).map((row, index) => {
-        const description = row[input.columnMapping.description]?.toString().trim();
-
-        if (!description || description.length < 10) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Linha ${index + 2}: Descrição inválida (mínimo 10 caracteres)`,
-          });
-        }
-
-        return {
-          description,
-          quantity: input.columnMapping.quantity !== undefined
-            ? parseFloat(String(row[input.columnMapping.quantity])) || 1
-            : 1,
-          unit: input.columnMapping.unit !== undefined
-            ? row[input.columnMapping.unit]?.toString().trim() || 'UN'
-            : 'UN',
-          unitPrice: input.columnMapping.unitPrice !== undefined
-            ? parseFloat(String(row[input.columnMapping.unitPrice])) || 0
-            : 0,
-          totalPrice: input.columnMapping.totalPrice !== undefined
-            ? parseFloat(String(row[input.columnMapping.totalPrice])) || 0
-            : 0,
-        };
-      }).filter(item => item.description);
-
-      return {
-        success: true,
-        items,
-        count: items.length,
-      };
+    .mutation(async ({ ctx }): Promise<LegacyParseItemsFileResult> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.parseItemsFile", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   generateCatmatSuggestions: tenantProcedure
@@ -210,54 +180,16 @@ export const processesRouter = router({
       description: z.string(),
       itemType: z.enum(["material", "service"]).default("material"),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const { findCatmatMatches } = await import("../services/catmatMatcher");
-      const { trackCATMATMatching } = await import("../services/aiUsageTracker");
-
-      // A3 — via Cognitive Kernel (tenant + correlation obrigatórios; provider/replay governados).
-      // Assistivo: os retornos são CANDIDATOS gerados por IA (não-grounded), não consultas
-      // ao catálogo oficial; ficam pendentes de validação humana (approve/reject) antes de uso.
-      const matches = await findCatmatMatches({
-        itemDescription: input.description,
-        itemType: input.itemType,
-        organizationId: ctx.organizationId,
-        correlationId: ctx.correlationId,
-        userId: ctx.user.id,
-      });
-
-      await trackCATMATMatching({
-        userId: ctx.user.id,
-        itemDescription: input.description,
-        suggestionsCount: matches.length,
-      });
-
-      for (const match of matches) {
-        const created = await db.createCatmatSuggestionForOrganization({
-          processItemId: input.processItemId,
-          catmatCode: match.code,
-          description: match.description,
-          confidenceScore: match.confidence,
-          reasoning: match.reasoning,
-        }, ctx.organizationId);
-        if (created === null) {
-          denyNotFound("generateCatmatSuggestions", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
-        }
-      }
-
-      return {
-        success: true,
-        suggestions: matches,
-        // Contrato explícito para a UI: candidatos assistivos, não códigos verificados.
-        requiresHumanValidation: true as const,
-        notice:
-          "Sugestões geradas por IA — candidatos a validar no catálogo oficial CATMAT/CATSER antes de usar.",
-      };
+    .mutation(async ({ ctx }): Promise<LegacyGenerateCatmatSuggestionsResult> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.generateCatmatSuggestions", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   getCatmatSuggestions: tenantProcedure
     .input(z.object({ processItemId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      return await db.getCatmatSuggestionsByItemForOrganization(input.processItemId, ctx.organizationId);
+    .query(async ({ ctx }): Promise<LegacyCatmatSuggestions> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.getCatmatSuggestions", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   approveCatmatSuggestion: tenantProcedure
@@ -265,45 +197,16 @@ export const processesRouter = router({
       suggestionId: z.number(),
       processItemId: z.number(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const suggestion = await db.getCatmatSuggestionByIdForOrganization(input.suggestionId, ctx.organizationId);
-      if (!suggestion) {
-        denyNotFound("approveCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
-      }
-
-      const itemType = suggestion.catmatCode.startsWith('CAT') ? 'material' : 'service';
-      const parsedCode = parseInt(suggestion.catmatCode.replace(/\D/g, '')) || null;
-      const updatedItem = await db.updateProcessItemForOrganization(input.processItemId, ctx.organizationId, {
-        itemType,
-        catmatCode: itemType === 'material' ? parsedCode : undefined,
-        catserCode: itemType === 'service' ? parsedCode : undefined,
-        description: suggestion.description,
-      });
-      if (!updatedItem) {
-        denyNotFound("approveCatmatSuggestion", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
-      }
-
-      const updatedSuggestion = await db.updateCatmatSuggestionForOrganization(input.suggestionId, ctx.organizationId, { status: 'approved' });
-      if (!updatedSuggestion) {
-        denyNotFound("approveCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
-      }
-
-      const rejected = await db.rejectOtherSuggestionsForOrganization(input.processItemId, input.suggestionId, ctx.organizationId);
-      if (!rejected) {
-        denyNotFound("approveCatmatSuggestion", ctx, input.processItemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
-      }
-
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<LegacySuccess> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.approveCatmatSuggestion", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   rejectCatmatSuggestion: tenantProcedure
     .input(z.object({ suggestionId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const rejected = await db.updateCatmatSuggestionForOrganization(input.suggestionId, ctx.organizationId, { status: 'rejected' });
-      if (!rejected) {
-        denyNotFound("rejectCatmatSuggestion", ctx, input.suggestionId, "suggestion_cross_tenant_or_missing", "Sugestão não encontrada");
-      }
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<LegacySuccess> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.rejectCatmatSuggestion", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   updateProcessItem: tenantProcedure
@@ -316,27 +219,16 @@ export const processesRouter = router({
       catmatCode: z.string().optional(),
       catserCode: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      const { itemId, catmatCode, catserCode, ...rest } = input;
-      const updated = await db.updateProcessItemForOrganization(itemId, ctx.organizationId, {
-        ...rest,
-        catmatCode: catmatCode ? parseInt(catmatCode) : undefined,
-        catserCode: catserCode ? parseInt(catserCode) : undefined,
-      });
-      if (!updated) {
-        denyNotFound("updateProcessItem", ctx, itemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
-      }
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<LegacySuccess> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.updateProcessItem", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   deleteProcessItem: tenantProcedure
     .input(z.object({ itemId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      const deleted = await db.deleteProcessItemForOrganization(input.itemId, ctx.organizationId);
-      if (!deleted) {
-        denyNotFound("deleteProcessItem", ctx, input.itemId, "process_item_cross_tenant_or_missing", "Item não encontrado");
-      }
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<LegacySuccess> => {
+      // R2 / LEG-005 — DISABLE governado: recusa antes de qualquer leitura/escrita, IA ou log.
+      throwLegacyEndpointDisabled("processes.deleteProcessItem", LEG005, ctx, LEG005_ALTERNATIVE);
     }),
 
   updateStatus: tenantProcedure

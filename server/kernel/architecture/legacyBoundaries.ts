@@ -123,8 +123,9 @@ export const DOCUMENT_RENDERERS: readonly string[] = [
 // Edital via Document Engine). A geração COGNITIVA legada (documentsRouter.generate* →
 // gemini.ts) NÃO tem entrada pela navegação oficial. MAINTENANCE_ONLY é mantido para as
 // responsabilidades legadas NÃO-cognitivas ainda consumidas (version history/approval em
-// documentsRouter; CRUD de itens em processesRouter) e para as páginas fora de rota
-// (Dashboard/ProcessDetails/NewProcess), até retirada GOVERNADA procedure-by-procedure.
+// documentsRouter) e para as páginas fora de rota (Dashboard/ProcessDetails/NewProcess),
+// até retirada GOVERNADA procedure-by-procedure. (R2 / LEG-005: o CRUD legado de itens do
+// TR / CATMAT em processesRouter foi DESATIVADO — alcançável só pela ProcessDetails não roteada.)
 // Sem migração de tráfego, sem shadow, sem remoção nesta PR.
 export const LEGACY_ACTIVE_MAINTENANCE_ONLY: readonly string[] = [
   "server/routers/documentsRouter.ts",
@@ -206,7 +207,7 @@ export const BOUNDARY_CLASSIFICATIONS: readonly BoundaryClassificationEntry[] = 
   // procurementProcess.*). MAINTENANCE_ONLY permanece para as responsabilidades legadas
   // NÃO-cognitivas ainda vivas e para as páginas fora de rota — retirada GOVERNADA futura.
   { path: "server/routers/documentsRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "NÃO é mais o caminho de geração de DFD/ETP/TR/Edital (isso é procurementProcess.* / Kernel). A geração cognitiva (generateDocument/generateNext → gemini) está órfã (sem caller na navegação oficial). Mantém procedures NÃO-cognitivas VIVAS (version history/approval/upload/download — ver DOCUMENTS_CONSUMERS_BASELINE). Retirada procedure-by-procedure, caller-aware." },
-  { path: "server/routers/processesRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "A criação/geração legada de processo saiu da navegação (Dashboard/NewProcess fora de rota). Mantém CRUD de ITENS VIVO no fluxo canônico (CatmatSuggestions/TRItems/ImportItems/EditItem → trpc.processes.*). NÃO declarar órfão por atacado." },
+  { path: "server/routers/processesRouter.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "A criação/geração legada de processo saiu da navegação (Dashboard/NewProcess fora de rota). R2 / LEG-005 (DISABLE, 27/09/2026): as procedures legadas de ITENS do TR / CATMAT (addItemsToTR/getProcessItems/parseItemsFile/generateCatmatSuggestions/getCatmatSuggestions/approveCatmatSuggestion/rejectCatmatSuggestion/updateProcessItem/deleteProcessItem) estão DESATIVADAS (FORBIDDEN + LEGACY_ENDPOINT_DISABLED) — seus callers (CatmatSuggestions/TRItems/ImportItems/EditItem) só são alcançáveis pela ProcessDetails NÃO roteada; canônico = itemIntelligence. As demais procedures seguem retirada governada procedure-by-procedure." },
   { path: "server/services/gemini.ts", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "Geração cognitiva legacy-compat (AI SDK), alcançada só por documentsRouter.generate* — SEM caller na navegação oficial. NÃO é alvo de shadow/cutover (não há tráfego institucional a migrar)." },
   { path: "client/src/pages/Dashboard.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "FORA do roteamento oficial: /processos monta ProcessoLicitatorio, não Dashboard. Legado sem rota ativa — preservado por compatibilidade, retirada governada." },
   { path: "client/src/pages/ProcessDetails.tsx", allowlist: "LEGACY_ACTIVE_MAINTENANCE_ONLY", disposition: "manutencao_apenas", note: "FORA do roteamento oficial (/processo/:id redireciona a /processos). Único caller de useProcessDocuments (documents.generateDocument) — geração cognitiva sem entrada oficial." },
