@@ -4,30 +4,27 @@ import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
-import { useState } from "react";
-import { SetSignaturePasswordDialog } from "@/components/SetSignaturePasswordDialog";
 import { SignatureHistory } from "@/components/SignatureHistory";
 import { LegalOpinionHeader } from "@/components/legal-opinion-details/LegalOpinionHeader";
 import { LegalOpinionContent } from "@/components/legal-opinion-details/LegalOpinionContent";
 import { LegalOpinionSidebar } from "@/components/legal-opinion-details/LegalOpinionSidebar";
-import { SignOpinionDialog } from "@/components/legal-opinion-details/SignOpinionDialog";
 
+/**
+ * R2 / PR-03 (LEG-012; SEM-016/017) — detalhe do parecer LEGADO como LEITURA HISTÓRICA.
+ * Gerar com IA, aprovar, salvar como template, configurar senha e assinar foram desligados no servidor
+ * (LEGACY_ENDPOINT_DISABLED); esta tela não oferece mais essas ações. Leitura, verificação de assinatura e
+ * exportação do conteúdo histórico continuam disponíveis. Novos pareceres: workspace canônico (/parecer).
+ */
 export default function LegalOpinionDetails() {
-  const { user, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const params = useParams();
   const opinionId = params?.id ? parseInt(params.id) : null;
 
-  const [showSignDialog, setShowSignDialog] = useState(false);
-  const [showSetPasswordDialog, setShowSetPasswordDialog] = useState(false);
-
-  const { data: opinion, isLoading, refetch } = trpc.legalOpinions.getById.useQuery(
+  const { data: opinion, isLoading } = trpc.legalOpinions.getById.useQuery(
     { id: opinionId! },
     { enabled: !!opinionId }
   );
-  const { data: hasPassword } = trpc.legalOpinions.hasSignaturePassword.useQuery(undefined, {
-    enabled: !!user,
-  });
   const { data: signatureHistoryData } = trpc.legalOpinions.getSignatureHistory.useQuery(
     { id: opinionId! },
     { enabled: !!opinionId }
@@ -36,16 +33,6 @@ export default function LegalOpinionDetails() {
     { id: opinionId! },
     { enabled: !!opinionId && !!(opinion as { signatureId?: unknown } | undefined)?.signatureId }
   );
-
-  const generateMutation = trpc.legalOpinions.generateOpinion.useMutation({
-    onSuccess: () => { toast.success("Parecer gerado com sucesso!"); refetch(); },
-    onError: (e) => toast.error(e.message || "Erro ao gerar parecer"),
-  });
-
-  const updateMutation = trpc.legalOpinions.update.useMutation({
-    onSuccess: () => { toast.success("Status atualizado!"); refetch(); },
-    onError: (e) => toast.error(e.message || "Erro ao atualizar"),
-  });
 
   const exportPDFMutation = trpc.legalOpinions.exportPDF.useMutation({
     onSuccess: (data) => {
@@ -85,15 +72,6 @@ export default function LegalOpinionDetails() {
     onError: (e) => toast.error(e.message || "Erro ao imprimir"),
   });
 
-  const signMutation = trpc.legalOpinions.sign.useMutation({
-    onSuccess: (data) => {
-      toast.success(`✅ Parecer assinado digitalmente! (${data.signaturesCount}/${data.requiredSignatures})`);
-      setShowSignDialog(false);
-      refetch();
-    },
-    onError: (e) => toast.error(e.message || "Erro ao assinar parecer"),
-  });
-
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -111,38 +89,22 @@ export default function LegalOpinionDetails() {
     );
   }
 
-  const handleSignClick = () => {
-    if (!hasPassword) { setShowSetPasswordDialog(true); return; }
-    setShowSignDialog(true);
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <LegalOpinionHeader
         opinion={opinion}
         signatureHistoryData={signatureHistoryData}
-        isGenerating={generateMutation.isPending}
         exportPDFPending={exportPDFMutation.isPending}
         exportDOCXPending={exportDOCXMutation.isPending}
-        updatePending={updateMutation.isPending}
-        signPending={signMutation.isPending}
-        onGenerate={() => opinionId && generateMutation.mutateAsync({ id: opinionId })}
-        onApprove={() => opinionId && updateMutation.mutateAsync({ id: opinionId, status: "approved", reviewedBy: user?.id })}
-        onSignClick={handleSignClick}
         onExportPDF={() => exportPDFMutation.mutate({ id: opinion.id })}
         onExportDOCX={() => exportDOCXMutation.mutate({ id: opinion.id })}
         onPrint={() => printPDFMutation.mutate({ id: opinion.id })}
         printPending={printPDFMutation.isPending}
-        onSaveAsTemplate={() => updateMutation.mutate({ id: opinion.id, isTemplate: true } as unknown as Parameters<typeof updateMutation.mutate>[0])}
       />
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <LegalOpinionContent
-            opinion={opinion}
-            isGenerating={generateMutation.isPending}
-            onGenerate={() => opinionId && generateMutation.mutateAsync({ id: opinionId })}
-          />
+          <LegalOpinionContent opinion={opinion} />
           <LegalOpinionSidebar opinion={opinion} />
 
           {signatureHistoryData && signatureHistoryData.length > 0 && (
@@ -154,19 +116,6 @@ export default function LegalOpinionDetails() {
         </div>
       </div>
 
-      <SignOpinionDialog
-        open={showSignDialog}
-        onOpenChange={setShowSignDialog}
-        opinionId={opinion.id}
-        isPending={signMutation.isPending}
-        onSign={(args) => signMutation.mutate(args)}
-      />
-
-      <SetSignaturePasswordDialog
-        open={showSetPasswordDialog}
-        onOpenChange={setShowSetPasswordDialog}
-        onSuccess={() => { setShowSetPasswordDialog(false); setShowSignDialog(true); }}
-      />
     </div>
   );
 }

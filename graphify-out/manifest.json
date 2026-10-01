@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1790881396.1448767,
-    "ast_hash": "b9601268590ea24fd83902e8cc62390c",
+    "mtime": 1790891193.358647,
+    "ast_hash": "0edde7c447e2de5c3f7e23e85858470a",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -1500,13 +1500,13 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion-details/LegalOpinionContent.tsx": {
-    "mtime": 1790643728.9274313,
-    "ast_hash": "9550035596a65f53dc010f566f0307d9",
+    "mtime": 1790891228.0827787,
+    "ast_hash": "f8ac3101f01d496b96b3fcd30fcb333b",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion-details/LegalOpinionHeader.tsx": {
-    "mtime": 1790643728.9280136,
-    "ast_hash": "bfb8d572bdaa415fd8d81c26e56bf143",
+    "mtime": 1790891209.6572635,
+    "ast_hash": "506dd8b07ad957c177a388e0b827d141",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion-details/LegalOpinionSidebar.tsx": {
@@ -3130,8 +3130,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
-    "mtime": 1790881396.1608768,
-    "ast_hash": "c0b863a346039b8a4b2db151d33569be",
+    "mtime": 1790891241.4304967,
+    "ast_hash": "5d0f61b0db597c33f1596bab80ca341c",
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinions.tsx": {
@@ -5815,8 +5815,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "358b7d361c7499108f544e59aa5caa74",
+    "mtime": 1790891346.9087422,
+    "ast_hash": "d607f98fdb045306847827e3242c6738",
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-reference-governance-mysql-smoke.test.ts": {
@@ -6130,8 +6130,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "ebc5e34a77765e7bcd3ea388fcf2890c",
+    "mtime": 1790891284.7116637,
+    "ast_hash": "16930ac5ee913fe07547a9a88763de7f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts": {
@@ -8865,8 +8865,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionsRouter.ts": {
-    "mtime": 1790881396.3168766,
-    "ast_hash": "d2a81ef20bd10d4e2d40b65c1f643fca",
+    "mtime": 1790891154.0460129,
+    "ast_hash": "14eda923503c2fae919467a4d03a6293",
     "semantic_hash": ""
   },
   "server/routers/legalReasoningRouter.ts": {

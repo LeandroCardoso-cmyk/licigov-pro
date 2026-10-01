@@ -2,10 +2,14 @@
  * RC-LEGAL-SEC-001 — Isolamento multi-tenant completo do `legalOpinionsRouter`
  * legado — smoke contra MySQL REAL. Só roda quando DATABASE_URL está definido.
  *
- * Cobre as 15 procedures do router. A geração de parecer (A3 — Cognitive Kernel)
- * roteia por `executeCognitiveTask`, que é mockado aqui (evita rede/modelo) —
- * a PERSISTÊNCIA e o ISOLAMENTO TENANT são exercitados contra MySQL real, não
- * contra `db` mockado.
+ * Cobre as 15 procedures do router.
+ *
+ * R2 / PR-03 (LEG-012; SEM-016/017): as 6 mutações (create, update, delete, generateOpinion, sign,
+ * setSignaturePassword) foram desligadas de forma governada (LEGACY_ENDPOINT_DISABLED). Os testes que
+ * exercitavam a escrita legítima/cross-tenant dessas mutações foram SUBSTITUÍDOS pelo contrato mais forte:
+ * recusa idêntica para o próprio órgão, outro órgão e id inexistente, com ZERO alteração em `legal_opinions`,
+ * `signature_history` e `users.signaturePassword` e ZERO chamada ao Cognitive Kernel. As leituras (HISTORICAL_READ)
+ * continuam cobertas com o isolamento multi-tenant original.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -18,6 +22,7 @@ const ORG_B = 900302;
 // A3 — generateLegalOpinion agora solicita a Cognitive Task LEGAL_ANALYSIS ao Kernel.
 // Mockamos executeCognitiveTask para devolver um parecer estruturado válido (structured
 // output no `response.content`), sem depender de provider/rede.
+const kernelCalls = { count: 0 };
 vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/aiExecutionEngine")>();
   const content = JSON.stringify({
@@ -28,9 +33,10 @@ vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
   });
   return {
     ...actual,
-    executeCognitiveTask: (async () => ({
-      response: { content },
-    })) as unknown as typeof actual.executeCognitiveTask,
+    executeCognitiveTask: (async () => {
+      kernelCalls.count++;
+      return { response: { content } };
+    }) as unknown as typeof actual.executeCognitiveTask,
   };
 });
 
@@ -194,57 +200,6 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     await expect(callerB.legalOpinions.getById({ id: opinionA })).rejects.toThrow(/não encontrado/i);
   }, 30_000);
 
-  // ── 6-7. create não aceita contrato de outra organização ────────────────────
-  it("6-7. create: parecer da ORG_A não aceita contrato da ORG_B e vice-versa", async () => {
-    const callerA = await makeCaller(userA);
-    const callerB = await makeCaller(userB);
-    await expect(callerA.legalOpinions.create({
-      title: "Tentativa cross-tenant", sourceType: "contract", sourceId: contractB,
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    })).rejects.toThrow(/não encontrado/i);
-    await expect(callerB.legalOpinions.create({
-      title: "Tentativa cross-tenant", sourceType: "contract", sourceId: contractA,
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    })).rejects.toThrow(/não encontrado/i);
-
-    // Caminho legítimo: cria normalmente dentro do próprio tenant.
-    const created = await callerA.legalOpinions.create({
-      title: "Parecer legítimo", sourceType: "contract", sourceId: contractA,
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    });
-    expect(created.id).toBeGreaterThan(0);
-  }, 30_000);
-
-  // ── 8. update cross-tenant bloqueada ────────────────────────────────────────
-  it("8. update cross-tenant é bloqueada (NOT_FOUND)", async () => {
-    const callerA = await makeCaller(userA);
-    await expect(callerA.legalOpinions.update({ id: opinionB, title: "Alteração maliciosa" }))
-      .rejects.toThrow(/não encontrado/i);
-  }, 30_000);
-
-  // ── 9. delete cross-tenant bloqueada ────────────────────────────────────────
-  it("9. delete cross-tenant é bloqueada (NOT_FOUND); dentro do tenant funciona", async () => {
-    const callerA = await makeCaller(userA);
-    const callerB = await makeCaller(userB);
-    await expect(callerA.legalOpinions.delete({ id: opinionB })).rejects.toThrow(/não encontrado/i);
-
-    // Cria um parecer descartável em B e confirma que B consegue deletar o próprio.
-    const disposable = await callerB.legalOpinions.create({
-      title: "Descartável", sourceType: "other", legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    });
-    const result = await callerB.legalOpinions.delete({ id: disposable.id });
-    expect(result.success).toBe(true);
-  }, 30_000);
-
-  // ── 10. geração documental cross-tenant bloqueada ───────────────────────────
-  it("10. generateOpinion cross-tenant é bloqueada; dentro do tenant funciona (invokeLLM mockado)", async () => {
-    const callerA = await makeCaller(userA);
-    await expect(callerA.legalOpinions.generateOpinion({ id: opinionB })).rejects.toThrow(/não encontrado/i);
-
-    const result = await callerA.legalOpinions.generateOpinion({ id: opinionA });
-    expect(result.conclusion).toBe("favorable");
-  }, 30_000);
-
   // ── 11. export cross-tenant bloqueado ───────────────────────────────────────
   it("11. exportPDF/exportDOCX cross-tenant são bloqueados (NOT_FOUND)", async () => {
     const callerA = await makeCaller(userA);
@@ -304,19 +259,6 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
     expect(opened).toHaveProperty("sourceType");
   }, 30_000);
 
-  // ── 18. auditoria (assinatura) só ocorre após validação tenant ──────────────
-  it("18. sign cross-tenant é bloqueado antes de qualquer persistência de assinatura", async () => {
-    const callerA = await makeCaller(userA);
-    await expect(callerA.legalOpinions.sign({
-      id: opinionB, signerRole: "revisor", signaturePassword: "qualquer",
-    })).rejects.toThrow(/não encontrado/i);
-
-    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM signature_history WHERE opinionId = ?`, [opinionB]
-    );
-    expect(Number((rows[0] as { cnt: number }).cnt)).toBe(0);
-  }, 30_000);
-
   // ── repository: getBySource também isolado ──────────────────────────────────
   it("getBySource: A vê só pareceres do contrato A dentro da própria organização", async () => {
     const { getLegalOpinionsBySourceForOrganization } = await import("../../db/legalOpinions");
@@ -327,117 +269,81 @@ describe.skipIf(!DB)("legalOpinionsRouter legado — isolamento multi-tenant com
   });
 
   // ============================================================================
-  // Complementação — fonte "process" (itens 1-5 da complementação LEGAL-SEC-001)
+  // R2 / PR-03 — MUTATION_DISABLED (LEG-012): recusa governada, idêntica e sem efeito
   // ============================================================================
 
-  it("1. generateOpinion com fonte processo: A gera parecer usando processo A", async () => {
-    const callerA = await makeCaller(userA);
-    const result = await callerA.legalOpinions.generateOpinion({ id: opinionProcessA });
-    expect(result.conclusion).toBe("favorable");
-  }, 30_000);
+  async function snapshot() {
+    const [ops] = await conn.execute<mysql.RowDataPacket[]>(
+      `SELECT id, organizationId, title, status, opinion, conclusion, sourceType, sourceId, updatedAt
+         FROM legal_opinions WHERE organizationId IN (?, ?) ORDER BY id`, [ORG_A, ORG_B]);
+    const [sigs] = await conn.execute<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM signature_history WHERE opinionId IN (SELECT id FROM legal_opinions WHERE organizationId IN (?, ?))`,
+      [ORG_A, ORG_B]);
+    const [pw] = await conn.execute<mysql.RowDataPacket[]>(
+      `SELECT id, signaturePassword FROM users WHERE id IN (?, ?) ORDER BY id`, [userA, userB]);
+    return JSON.stringify({ ops, sigs, pw });
+  }
 
-  it("2-3. generateOpinion bloqueia parecer cross-tenant com fonte processo (nível-parecer, A não acessa B e vice-versa)", async () => {
+  const QUESTION = "Questão jurídica de teste com mais de dez caracteres";
+  type Caller = Awaited<ReturnType<typeof makeCaller>>;
+  const MUTATIONS: ReadonlyArray<[string, (c: Caller, id: number) => Promise<unknown>]> = [
+    ["create (contrato)", (c) => c.legalOpinions.create({ title: "Novo", sourceType: "contract", sourceId: contractA, legalQuestion: QUESTION })],
+    ["create (processo de outro órgão)", (c) => c.legalOpinions.create({ title: "Novo", sourceType: "process", sourceId: processB, legalQuestion: QUESTION })],
+    ["update (aprovar)", (c, id) => c.legalOpinions.update({ id, status: "approved", reviewedBy: userA })],
+    ["update (conteúdo/conclusão)", (c, id) => c.legalOpinions.update({ id, opinion: "sobrescrita", conclusion: "unfavorable" })],
+    ["delete", (c, id) => c.legalOpinions.delete({ id })],
+    ["generateOpinion", (c, id) => c.legalOpinions.generateOpinion({ id })],
+    ["sign", (c, id) => c.legalOpinions.sign({ id, signerRole: "revisor", signaturePassword: "qualquer" })],
+    ["setSignaturePassword", (c) => c.legalOpinions.setSignaturePassword({ password: "nova-senha-123" })],
+  ];
+
+  // Inclui os pareceres da ORG_A que referenciam FONTE da ORG_B (registro legado inconsistente): antes, só a
+  // revalidação de fonte em generateOpinion os barrava; agora nenhuma mutação chega a resolver a fonte.
+  it("PR-03: as 6 mutações legadas recusam com LEGACY_ENDPOINT_DISABLED — próprio órgão, outro órgão e inexistente", async () => {
     const callerA = await makeCaller(userA);
     const callerB = await makeCaller(userB);
-    await expect(callerA.legalOpinions.generateOpinion({ id: opinionProcessB })).rejects.toThrow(/não encontrado/i);
-    await expect(callerB.legalOpinions.generateOpinion({ id: opinionProcessA })).rejects.toThrow(/não encontrado/i);
-  }, 30_000);
+    const before = await snapshot();
+    const kernelBefore = kernelCalls.count;
+    const messages = new Set<string>();
+    for (const [label, call] of MUTATIONS) {
+      for (const [caller, id] of [[callerA, opinionA], [callerA, opinionB], [callerB, opinionA], [callerA, opinionACrossProcess], [callerA, opinionACrossDirect], [callerA, 999999999]] as const) {
+        let err: unknown = null;
+        try { await call(caller, id); } catch (e) { err = e; }
+        expect(err, `${label} (id ${id}) deveria recusar`).toBeInstanceOf(Error);
+        expect((err as { code?: string }).code, label).toBe("FORBIDDEN");
+        expect((err as Error).message, label).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+        expect((err as Error).message, label).toMatch(/\/parecer/);
+        messages.add(`${label.split(" ")[0]}:${(err as Error).message}`);
+      }
+    }
+    // mesma mensagem por procedure, qualquer que seja o órgão/id (anti-enumeração)
+    expect(messages.size).toBe(6);
+    expect(await snapshot()).toBe(before);
+    expect(kernelCalls.count).toBe(kernelBefore);
+  }, 60_000);
 
-  it("2b. generateOpinion revalida a FONTE em profundidade: parecer da própria ORG_A referenciando processo da ORG_B é bloqueado (não confia apenas na validação de create)", async () => {
+  it("PR-03: parecer assinado/aprovado não é editado, excluído, re-gerado nem re-assinado pela API legada", async () => {
+    await conn.execute(`UPDATE legal_opinions SET status = 'approved', opinion = 'Conteúdo aprovado', conclusion = 'favorable' WHERE id = ?`, [opinionProcessA]);
     const callerA = await makeCaller(userA);
-    // opinionACrossProcess pertence à ORG_A (passa em requireOpinionForOrg), mas
-    // referencia processB (ORG_B) — só é bloqueado pela revalidação de fonte.
-    await expect(callerA.legalOpinions.generateOpinion({ id: opinionACrossProcess })).rejects.toThrow(/processo não encontrado/i);
+    const before = await snapshot();
+    await expect(callerA.legalOpinions.update({ id: opinionProcessA, opinion: "IA sobrescreve", conclusion: "unfavorable" })).rejects.toThrow(/LEGACY_ENDPOINT_DISABLED/);
+    await expect(callerA.legalOpinions.generateOpinion({ id: opinionProcessA })).rejects.toThrow(/LEGACY_ENDPOINT_DISABLED/);
+    await expect(callerA.legalOpinions.delete({ id: opinionProcessA })).rejects.toThrow(/LEGACY_ENDPOINT_DISABLED/);
+    await expect(callerA.legalOpinions.sign({ id: opinionProcessA, signerRole: "gestor", signaturePassword: "x" })).rejects.toThrow(/LEGACY_ENDPOINT_DISABLED/);
+    expect(await snapshot()).toBe(before);
+    // HISTORICAL_READ: o conteúdo aprovado continua legível no próprio órgão
+    const opened = await callerA.legalOpinions.getById({ id: opinionProcessA });
+    expect(opened.opinion).toBe("Conteúdo aprovado");
+    expect(opened.status).toBe("approved");
   }, 30_000);
 
-  it("4. resposta cross-tenant (processo, nível-fonte) não revela existência — mesma mensagem de inexistente", async () => {
+  it("PR-03: leituras históricas seguem tenant-scoped (getSignatureHistory/verifySignature/hasSignaturePassword)", async () => {
     const callerA = await makeCaller(userA);
-    let msgCrossTenant = "";
-    let msgInexistente = "";
-    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossProcess }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
-    // Compara com uma tentativa de gerar parecer de processo com sourceId inexistente, dentro do próprio tenant.
-    const disposable = await callerA.legalOpinions.create({
-      title: "Descartável (processo inexistente)", sourceType: "other",
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    });
-    // Força sourceType=process/sourceId inexistente via SQL direto (sem passar por create, que já bloquearia).
-    await conn.execute(`UPDATE legal_opinions SET sourceType = 'process', sourceId = 999999999 WHERE id = ?`, [disposable.id]);
-    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
-    expect(msgCrossTenant).not.toBe("");
-    expect(msgCrossTenant).toBe(msgInexistente);
+    expect(await callerA.legalOpinions.getSignatureHistory({ id: opinionA })).toEqual([]);
+    expect(await callerA.legalOpinions.getSignatureHistory({ id: opinionB })).toEqual([]);
+    expect(await callerA.legalOpinions.verifySignature({ id: opinionB })).toEqual({ signed: false, valid: false });
+    expect(typeof (await callerA.legalOpinions.hasSignaturePassword())).toBe("boolean");
   }, 30_000);
-
-  it("5. create com sourceType='process' cross-tenant é rejeitado; nenhuma linha de parecer é criada", async () => {
-    const callerA = await makeCaller(userA);
-    const [before] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM legal_opinions WHERE organizationId = ?`, [ORG_A]
-    );
-    await expect(callerA.legalOpinions.create({
-      title: "Tentativa cross-tenant (processo)", sourceType: "process", sourceId: processB,
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    })).rejects.toThrow(/processo não encontrado/i);
-    const [after] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM legal_opinions WHERE organizationId = ?`, [ORG_A]
-    );
-    expect(Number((after[0] as { cnt: number }).cnt)).toBe(Number((before[0] as { cnt: number }).cnt));
-  }, 30_000);
-
-  // ============================================================================
-  // Complementação — fonte "direct_contract" (itens 6-10)
-  // ============================================================================
-
-  it("6. generateOpinion com fonte contratação direta: A gera parecer usando contratação direta A", async () => {
-    const callerA = await makeCaller(userA);
-    const result = await callerA.legalOpinions.generateOpinion({ id: opinionDirectA });
-    expect(result.conclusion).toBe("favorable");
-  }, 30_000);
-
-  it("7-8. generateOpinion bloqueia parecer cross-tenant com fonte contratação direta (nível-parecer, A não acessa B e vice-versa)", async () => {
-    const callerA = await makeCaller(userA);
-    const callerB = await makeCaller(userB);
-    await expect(callerA.legalOpinions.generateOpinion({ id: opinionDirectB })).rejects.toThrow(/não encontrado/i);
-    await expect(callerB.legalOpinions.generateOpinion({ id: opinionDirectA })).rejects.toThrow(/não encontrado/i);
-  }, 30_000);
-
-  it("7b. generateOpinion revalida a FONTE em profundidade: parecer da própria ORG_A referenciando contratação direta da ORG_B é bloqueado", async () => {
-    const callerA = await makeCaller(userA);
-    await expect(callerA.legalOpinions.generateOpinion({ id: opinionACrossDirect })).rejects.toThrow(/contratação direta não encontrada/i);
-  }, 30_000);
-
-  it("9. resposta cross-tenant (contratação direta, nível-fonte) não revela existência — mesma mensagem de inexistente", async () => {
-    const callerA = await makeCaller(userA);
-    let msgCrossTenant = "";
-    let msgInexistente = "";
-    try { await callerA.legalOpinions.generateOpinion({ id: opinionACrossDirect }); } catch (e) { msgCrossTenant = e instanceof Error ? e.message : String(e); }
-    const disposable = await callerA.legalOpinions.create({
-      title: "Descartável (direta inexistente)", sourceType: "other",
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    });
-    await conn.execute(`UPDATE legal_opinions SET sourceType = 'direct_contract', sourceId = 999999999 WHERE id = ?`, [disposable.id]);
-    try { await callerA.legalOpinions.generateOpinion({ id: disposable.id }); } catch (e) { msgInexistente = e instanceof Error ? e.message : String(e); }
-    expect(msgCrossTenant).not.toBe("");
-    expect(msgCrossTenant).toBe(msgInexistente);
-  }, 30_000);
-
-  it("10. create com sourceType='direct_contract' cross-tenant é rejeitado; nenhuma linha/documento é criado", async () => {
-    const callerA = await makeCaller(userA);
-    const [before] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM legal_opinions WHERE organizationId = ?`, [ORG_A]
-    );
-    await expect(callerA.legalOpinions.create({
-      title: "Tentativa cross-tenant (direta)", sourceType: "direct_contract", sourceId: directContractB,
-      legalQuestion: "Questão jurídica de teste com mais de dez caracteres",
-    })).rejects.toThrow(/contratação direta não encontrada/i);
-    const [after] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM legal_opinions WHERE organizationId = ?`, [ORG_A]
-    );
-    expect(Number((after[0] as { cnt: number }).cnt)).toBe(Number((before[0] as { cnt: number }).cnt));
-  }, 30_000);
-
-  // Itens 11-13 (admin de plataforma escopado / usuário sem organização / header
-  // malicioso) já são cobertos genericamente pelos testes 12-14 acima — o
-  // mecanismo de guarda (tenantProcedure + ctx.organizationId) é o mesmo para
-  // todas as origens institucionais, não há benefício em repetir por sourceType.
 
   // ── repository: novas funções org-scoped de processo/contratação direta ─────
   it("getProcessByIdForOrganization / getDirectContractByIdForOrganization: isolamento direto no repository", async () => {

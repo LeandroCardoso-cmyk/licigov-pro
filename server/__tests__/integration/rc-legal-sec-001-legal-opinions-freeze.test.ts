@@ -111,9 +111,14 @@ describe("RC-LEGAL-SEC-001 — Congelamento do legalOpinionsRouter legado (pós-
     const src = read("server/routers/legalOpinionsRouter.ts");
     expect(src).not.toMatch(/\bgetProcessById\(/);
     expect(src).not.toMatch(/\bgetDirectContractById\(/);
-    expect(src).toContain("getProcessByIdForOrganization");
-    expect(src).toContain("getDirectContractByIdForOrganization");
-    expect(src).toContain("getContractByIdForOrganization");
+    // R2 / PR-03 (LEG-012): create/generateOpinion — os únicos que resolviam a FONTE (processo, contratação
+    // direta, contrato) — foram desligados de forma governada. Contrato mais forte que o anterior (que exigia as
+    // variantes *ForOrganization): o router não resolve mais fonte NENHUMA e as 6 mutações recusam como
+    // primeira instrução, sem nenhuma escrita/IA/assinatura alcançável.
+    expect(src).not.toMatch(/\b(getProcessByIdForOrganization|getDirectContractByIdForOrganization|getContractByIdForOrganization)\b/);
+    expect(src).not.toMatch(/\b(createLegalOpinion|updateLegalOpinionForOrganization|deleteLegalOpinionForOrganization|generateLegalOpinion|addSignatureToHistoryForOrganization|setSignaturePassword\()/);
+    const guards = src.match(/throwLegacyEndpointDisabled\("legalOpinions\.(create|update|delete|generateOpinion|sign|setSignaturePassword)", LEG012_SURFACE_ID/g) ?? [];
+    expect(guards.length).toBe(6);
   });
 
   // ── 4c. todas as origens do enum sourceType têm tratamento tenant-safe ──────

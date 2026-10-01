@@ -10,22 +10,44 @@
  * servidor (nunca aceito do cliente) e aplicado antes de qualquer leitura/escrita.
  * `signature_history` (sem coluna `organizationId` própria) é protegida validando
  * o parecer-pai dentro da organização primeiro (na camada de repositório).
- * `setSignaturePassword`/`hasSignaturePassword` operam sobre `ctx.user.id` — sem
- * dado organizacional envolvido, sem vazamento cross-tenant possível — mantidas
- * em `protectedProcedure` deliberadamente (ver LEGACY_INVENTORY.md).
+ * `hasSignaturePassword` opera sobre `ctx.user.id` — sem dado organizacional.
+ *
+ * R2 / PR-03 — CUTOVER do parecer legado (LEG-012; SEM-016, SEM-017; decisão humana R2.1 congelada).
+ *  - MUTATION_DISABLED: `create`, `update`, `delete`, `generateOpinion`, `sign` e `setSignaturePassword`
+ *    continuam REGISTRADAS e com o MESMO schema de input, mas a PRIMEIRA instrução de cada handler é
+ *    `throwLegacyEndpointDisabled(..., "LEG-012", ...)` (FORBIDDEN + `LEGACY_ENDPOINT_DISABLED`, evento
+ *    estruturado sem input) — antes de qualquer leitura/escrita em banco, IA (Cognitive Kernel), assinatura,
+ *    notificação ou senha. Fecha: aprovador escolhido pelo cliente, autor aprovando o próprio parecer, edição
+ *    de aprovado/assinado, exclusão de assinado e IA sobrescrevendo conteúdo/conclusão (SEM-016/017).
+ *  - HISTORICAL_READ: `list`, `getById`, `getBySource`, `exportPDF`, `exportDOCX`, `verifySignature`,
+ *    `getAnalytics`, `hasSignaturePassword` e `getSignatureHistory` seguem tenant-scoped e sem escrita — o
+ *    histórico continua legível (nenhuma linha de `legal_opinions`/`signature_history` é apagada ou
+ *    alterada). O volume real desse histórico é a verificação read-only R2.3 (pendente).
+ *  - Novo parecer: workspace canônico (`legalOpinionWorkspace.*`, rota `/parecer`).
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { exportLegalOpinionToPDF, exportLegalOpinionToDOCX } from "../services/legalOpinionExportService";
-import { getContractByIdForOrganization } from "../db";
 import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
+
+/** R2 / PR-03 — superfície do inventário R2.1 desligada para mutação. */
+export const LEG012_SURFACE_ID = "LEG-012";
+
+/** Formato de saída histórico de `generateOpinion` (mantido só no nível de tipo para os chamadores legados). */
+type LegacyGeneratedOpinion = {
+  opinion: string;
+  conclusion: "favorable" | "unfavorable" | "with_reservations";
+  citedArticles: string[];
+  jurisprudence: unknown[];
+};
 
 /**
  * Mapeia a identidade institucional COMPOSTA (fonte canônica única) para o formato de settings do
  * exportador de parecer. Elimina a leitura direta de `documentSettings` (que não guarda mais
- * nome/cnpj). Exportação de rascunho de parecer é LIVE (preview); o parecer OFICIAL (emitido) sai
+ * nome/cnpj). Exportação de parecer legado é LIVE (preview); o parecer OFICIAL (emitido) sai
  * pelo pipeline `official_documents`, que congela o snapshot de identidade.
  */
 async function opinionExportSettings(organizationId: number) {
@@ -41,16 +63,10 @@ async function opinionExportSettings(organizationId: number) {
   };
 }
 import {
-  createLegalOpinion,
   getLegalOpinionsByOrganization,
   getLegalOpinionByIdForOrganization,
-  updateLegalOpinionForOrganization,
-  deleteLegalOpinionForOrganization,
   getLegalOpinionsBySourceForOrganization,
-  getProcessByIdForOrganization,
-  getDirectContractByIdForOrganization,
 } from "../db";
-import { generateLegalOpinion } from "../services/legalOpinionService";
 
 async function requireOpinionForOrg(id: number, organizationId: number) {
   const opinion = await getLegalOpinionByIdForOrganization(id, organizationId);
@@ -113,30 +129,8 @@ export const legalOpinionsRouter = router({
         requiredSignatures: z.number().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      // RC-LEGAL-SEC-001: a fonte institucional precisa pertencer à organização —
-      // nunca vincular parecer a processo/contratação direta/contrato de outro tenant.
-      if (input.sourceId) {
-        if (input.sourceType === "contract") {
-          const contract = await getContractByIdForOrganization(input.sourceId, ctx.organizationId);
-          if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        } else if (input.sourceType === "process") {
-          const process = await getProcessByIdForOrganization(input.sourceId, ctx.organizationId);
-          if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-        } else if (input.sourceType === "direct_contract") {
-          const directContract = await getDirectContractByIdForOrganization(input.sourceId, ctx.organizationId);
-          if (!directContract) throw new TRPCError({ code: "NOT_FOUND", message: "Contratação direta não encontrada" });
-        }
-      }
-
-      const opinionId = await createLegalOpinion({
-        ...input,
-        organizationId: ctx.organizationId,
-        requestedBy: ctx.user.id,
-        status: "draft",
-      });
-
-      return { id: opinionId };
+    .mutation(async ({ ctx }): Promise<{ id: number }> => {
+      throwLegacyEndpointDisabled("legalOpinions.create", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
 
   /**
@@ -158,32 +152,8 @@ export const legalOpinionsRouter = router({
         reviewedBy: z.number().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      const { id, ...data } = input;
-
-      // AUDITORIA TÉCNICA - Item 1.2: Bloquear edição após assinatura
-      const { getSignatureCountForOrganization } = await import("../db");
-      const { canEditDocument } = await import("../services/signatureValidation");
-
-      await requireOpinionForOrg(id, ctx.organizationId);
-      const signatureCount = await getSignatureCountForOrganization(id, ctx.organizationId);
-      const editCheck = canEditDocument(signatureCount);
-
-      if (!editCheck.canEdit) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: editCheck.reason || "Documento não pode ser editado"
-        });
-      }
-
-      // Se está sendo aprovado, adicionar reviewedBy e reviewedAt
-      const updated = data.status === "approved"
-        ? await updateLegalOpinionForOrganization(id, ctx.organizationId, { ...data, reviewedAt: new Date() })
-        : await updateLegalOpinionForOrganization(id, ctx.organizationId, data);
-
-      if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Parecer jurídico não encontrado" });
-
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<{ success: boolean }> => {
+      throwLegacyEndpointDisabled("legalOpinions.update", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
 
   /**
@@ -191,10 +161,8 @@ export const legalOpinionsRouter = router({
    */
   delete: tenantProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input, ctx }) => {
-      const deleted = await deleteLegalOpinionForOrganization(input.id, ctx.organizationId);
-      if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Parecer jurídico não encontrado" });
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<{ success: boolean }> => {
+      throwLegacyEndpointDisabled("legalOpinions.delete", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
 
   /**
@@ -269,48 +237,8 @@ export const legalOpinionsRouter = router({
         id: z.number(), // ID do parecer já criado
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
-
-      // Buscar dados da fonte (processo, contratação direta, contrato) — RC-LEGAL-SEC-001:
-      // as três origens são resolvidas dentro da organização (defesa em profundidade —
-      // o vínculo já é validado em `create`, mas revalidado aqui para nunca gerar
-      // conteúdo a partir de fonte cross-tenant, mesmo que o dado já existisse antes
-      // desta correção).
-      let sourceData = null;
-      if (opinion.sourceId) {
-        if (opinion.sourceType === "process") {
-          sourceData = await getProcessByIdForOrganization(opinion.sourceId, ctx.organizationId);
-          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-        } else if (opinion.sourceType === "direct_contract") {
-          sourceData = await getDirectContractByIdForOrganization(opinion.sourceId, ctx.organizationId);
-          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Contratação direta não encontrada" });
-        } else if (opinion.sourceType === "contract") {
-          sourceData = await getContractByIdForOrganization(opinion.sourceId, ctx.organizationId);
-          if (!sourceData) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
-        }
-      }
-
-      // Gerar parecer com IA
-      const result = await generateLegalOpinion({
-        title: opinion.title,
-        legalQuestion: opinion.legalQuestion,
-        context: opinion.context || undefined,
-        sourceType: opinion.sourceType,
-        sourceData,
-        // A3 — boundary institucional (tenant + correlation + ator) para o Cognitive Kernel.
-        meta: { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id },
-      });
-
-      // Atualizar parecer com o resultado
-      await updateLegalOpinionForOrganization(input.id, ctx.organizationId, {
-        opinion: result.opinion,
-        conclusion: result.conclusion,
-        citedArticles: result.citedArticles,
-        jurisprudence: result.jurisprudence,
-      });
-
-      return result;
+    .mutation(async ({ ctx }): Promise<LegacyGeneratedOpinion> => {
+      throwLegacyEndpointDisabled("legalOpinions.generateOpinion", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
   /**
    * Assinar digitalmente um parecer jurídico (ATUALIZADO: com role e senha)
@@ -324,97 +252,8 @@ export const legalOpinionsRouter = router({
         signaturePassword: z.string(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const { generateContentHash, generateSignature, generateCertificateInfo } = await import("../services/digitalSignatureService");
-      const {
-        validateSignaturePassword,
-        hasUserSignedOpinionForOrganization,
-        addSignatureToHistoryForOrganization,
-        getSignatureCountForOrganization,
-        getSignatureHistoryForOrganization,
-      } = await import("../db");
-      const { validateBeforeSign, canEditDocument } = await import("../services/signatureValidation");
-
-      // Buscar parecer dentro da organização (NOT_FOUND se cross-tenant)
-      const opinion = await requireOpinionForOrg(input.id, ctx.organizationId);
-
-      // Validar senha de assinatura
-      const isPasswordValid = await validateSignaturePassword(ctx.user.id, input.signaturePassword);
-      if (!isPasswordValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha de assinatura inválida" });
-      }
-
-      // Verificar se usuário já assinou
-      const alreadySigned = await hasUserSignedOpinionForOrganization(input.id, ctx.user.id, ctx.organizationId);
-      if (alreadySigned) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Você já assinou este parecer" });
-      }
-
-      // Verificar se já atingiu o número de assinaturas necessárias
-      const currentSignatures = await getSignatureCountForOrganization(input.id, ctx.organizationId);
-      if (currentSignatures >= opinion.requiredSignatures) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Este parecer já possui todas as assinaturas necessárias" });
-      }
-
-      // AUDITORIA TÉCNICA - Item 1.2: Verificar se documento pode ser editado
-      const editCheck = canEditDocument(currentSignatures);
-      if (!editCheck.canEdit) {
-        // Documento já assinado, validar integridade antes de adicionar nova assinatura
-        const signatures = await getSignatureHistoryForOrganization(input.id, ctx.organizationId);
-        if (signatures.length > 0) {
-          const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
-          const validation = validateBeforeSign({
-            documentContent: content,
-            currentSignatureCount: currentSignatures,
-            expectedSignatureCount: currentSignatures,
-            originalHash: signatures[0].documentHash,
-          });
-
-          if (!validation.isValid) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `Validação de assinatura falhou: ${validation.errors.join(", ")}`
-            });
-          }
-        }
-      }
-
-      // Gerar hash do conteúdo
-      const content = `${opinion.title}\n${opinion.legalQuestion}\n${opinion.opinion || ""}`;
-      const documentHash = generateContentHash(content);
-
-      // Gerar assinatura criptográfica
-      const signature = generateSignature(documentHash, ctx.user.id);
-
-      // Gerar informações do certificado
-      const certificateInfo = generateCertificateInfo(ctx.user.name || "Usuário", ctx.user.email);
-
-      // Adicionar assinatura ao histórico (revalida o parecer-pai internamente)
-      const signatureId = await addSignatureToHistoryForOrganization({
-        opinionId: input.id,
-        userId: ctx.user.id,
-        userName: ctx.user.name || "Usuário",
-        userEmail: ctx.user.email || null,
-        signerRole: input.signerRole,
-        documentHash,
-        signature,
-        certificateInfo,
-      }, ctx.organizationId);
-      if (signatureId === null) throw new TRPCError({ code: "NOT_FOUND", message: "Parecer jurídico não encontrado" });
-
-      // Enviar notificação automática
-      const { notifyOwner } = await import("../_core/notification");
-      const roleNames = {
-        revisor: "Advogado Revisor",
-        responsavel: "Advogado Responsável",
-        gestor: "Gestor Jurídico",
-      };
-      await notifyOwner({
-        title: `🔒 Parecer Jurídico Assinado`,
-        content: `O parecer "${opinion.title}" foi assinado digitalmente por ${ctx.user.name || ctx.user.email} como ${roleNames[input.signerRole]}.\n\nAssinado em: ${new Date().toLocaleString("pt-BR")}\nAssinaturas: ${currentSignatures + 1}/${opinion.requiredSignatures}\nHash SHA-256: ${documentHash.substring(0, 16)}...`,
-      });
-
-      return { success: true, signatureId, signaturesCount: currentSignatures + 1, requiredSignatures: opinion.requiredSignatures };
+    .mutation(async ({ ctx }): Promise<{ success: boolean; signatureId: number; signaturesCount: number; requiredSignatures: number }> => {
+      throwLegacyEndpointDisabled("legalOpinions.sign", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
 
   /**
@@ -506,10 +345,8 @@ export const legalOpinionsRouter = router({
         password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const { setSignaturePassword } = await import("../db");
-      await setSignaturePassword(ctx.user.id, input.password);
-      return { success: true };
+    .mutation(async ({ ctx }): Promise<{ success: boolean }> => {
+      throwLegacyEndpointDisabled("legalOpinions.setSignaturePassword", LEG012_SURFACE_ID, ctx, "o workspace canônico do Parecer Jurídico (/parecer → legalOpinionWorkspace.*)");
     }),
 
   /**
