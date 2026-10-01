@@ -51,7 +51,30 @@ o hook **falha** com mensagem acionável em vez de deixar o grafo desatualizado.
 - Extrai a AST de `server/`, `client/`, `shared/`, `docs/` etc. e reescreve
   `graphify-out/{graph.json,GRAPH_REPORT.md,manifest.json,.graphify_labels.json}`.
 - A nomeação de comunidades por LLM (`graphify label`) é **opcional** e **não** é usada no fluxo
-  determinístico: sem chave de API, o `update` nomeia comunidades pelo hub (determinístico).
+  determinístico: sem chave de API, o `update` nomeia comunidades pelo hub.
+
+## Freshness, determinismo e tamanho do diff (rebaseline de 2026-10-01)
+
+Comportamentos verificados com experimentos em worktrees descartáveis:
+
+- **`built_at_commit` registra o commit PAI.** O hook roda *antes* de o commit existir, então o grafo
+  incluído no commit `X` reflete o código de `X` (staged), mas grava `built_at_commit = X^`. Por isso
+  "`built_at_commit` ≠ `HEAD`" **não** significa grafo desatualizado. Critério correto de freshness:
+  nenhum arquivo de código mudou depois do último commit que tocou `graphify-out/graph.json`
+  (`git log -1 --format=%H -- graphify-out/graph.json` e então `git diff --name-only <esse>..HEAD`).
+- **Determinismo.** O wrapper fixa `PYTHONHASHSEED=0`. Sem isso, a extração (nós/arestas) já era
+  determinística, mas o agrupamento em comunidades variava entre execuções sobre o mesmo código.
+  Com a semente fixa, duas gerações do zero em diretórios independentes produzem `graph.json`,
+  `GRAPH_REPORT.md` e `.graphify_labels.json` idênticos byte a byte. Um `update` sem mudança de
+  topologia não reescreve nada.
+- **O que ainda varia por máquina/checkout:**
+  - `manifest.json` guarda o `mtime` de cada arquivo. Num checkout novo, todas as entradas mudam na
+    próxima regeneração; num checkout já usado, só as dos arquivos alterados.
+  - O título do `GRAPH_REPORT.md` usa o **nome da pasta** do repositório. Gere o grafo num diretório
+    chamado `licigov-pro`.
+- **Tamanho do diff.** Toda mudança de topologia (mesmo +1 nó) reexecuta o clustering global e
+  reatribui milhares de nós a comunidades. O diff de `graph.json` costuma ficar na casa de dezenas de
+  milhares de linhas mesmo para mudanças pequenas. Não é sinal de drift; é o comportamento da ferramenta.
 
 ## Notas de compatibilidade (validação 0.9.32 × grafo canônico)
 
@@ -72,7 +95,8 @@ sobrescrito), comparando a build 0.9.32 no HEAD contra o grafo canônico:
 | Arestas | 29 040 | 29 347 (**+307**) | ✅ explicado³ |
 
 ¹ Na cópia de validação (sem `.git`) o campo `built_at_commit` fica ausente; no repositório real
-  (com `.git`) o `graphify update .` o preenche com o commit corrente. Diferença de setup, não de versão.
+  (com `.git`) o `graphify update .` o preenche com o `HEAD` no momento da execução — no pre-commit,
+  é o commit pai (ver "Freshness, determinismo e tamanho do diff").
 
 ² `tree_sitter_sql` **não** é instalado (nem era no canônico): os 288 arquivos `.sql` de
   `drizzle/` nunca contribuíram nós. **Não** adicionar o extra `graphifyy[sql]` — introduziria
