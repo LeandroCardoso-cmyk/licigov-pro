@@ -204,13 +204,37 @@ export const directProcurementRouter = router({
       return { need };
     }),
 
+  // R2 / PR-04A — LEG-014 / FCC-01: importação GOVERNADA (identidade explícita por importação, idempotência,
+  // contentHash + dedup, transação local, linhagem, evento persistido). Escrita ⇒ operator+ (viewer NÃO
+  // escreve — mesmo RBAC de procurementProcess.importPriceResearch). Workspace por (id, org do contexto):
+  // outro órgão ⇒ NOT_FOUND neutro, sem escrita.
   importPriceResearch: orgRoleProcedure("operator")
-    .input(z.object({ workspaceId: z.string().min(1), source: z.enum(PRICE_SOURCES), text: z.string().min(1) }))
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      source: z.enum(PRICE_SOURCES),
+      text: z.string().min(1),
+      idempotencyKey: z.string().trim().min(8).max(128),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      const result = await importDirectPriceResearch({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text, correlationId: ctx.correlationId });
-      return result;
+      try {
+        return await importDirectPriceResearch({
+          workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text,
+          idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        if (err instanceof TRPCError) throw err; // NOT_FOUND / CONFLICT / BAD_REQUEST do contrato
+        log.error("direct_price_import_persist_failed", {
+          organizationId: orgId, userId: ctx.user!.id, workspaceId: input.workspaceId,
+          source: input.source, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
     }),
 
   configureProcedure: orgRoleProcedure("operator")
