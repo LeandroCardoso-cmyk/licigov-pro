@@ -4,7 +4,9 @@
  * tRPC procedures for DOCX/PDF export generation.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   generateDocx,
@@ -20,7 +22,7 @@ import { createSection, createClause } from "../domain/trComposition";
 const exportHistory: ExportAuditEntry[] = [];
 
 export const exportRouter = router({
-  generate: protectedProcedure
+  generate: experimentalProtectedProcedure
     .input(z.object({
       processId:      z.number(),
       organizationId: z.number(),
@@ -78,7 +80,7 @@ export const exportRouter = router({
       };
     }),
 
-  getHistory: protectedProcedure
+  getHistory: experimentalProtectedProcedure
     .input(z.object({
       organizationId: z.number(),
       processId:      z.number().optional(),
@@ -97,7 +99,7 @@ export const exportRouter = router({
       return filtered;
     }),
 
-  getPreview: protectedProcedure
+  getPreview: experimentalProtectedProcedure
     .input(z.object({
       processId:      z.number(),
       organizationId: z.number(),
