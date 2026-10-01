@@ -10,6 +10,7 @@
  * Foco exclusivo em documentação — nunca ERP/financeiro. Degrada sem DB. Determinístico.
  */
 
+import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
@@ -20,7 +21,7 @@ import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
 import {
   createContractWorkspace, CONTRACT_DOMAIN_COPILOTS,
-  type ContractWorkspace,
+  type ContractWorkspace, type ContractOriginType,
 } from "../domain/contractWorkspace";
 import {
   createContractAddendum, advanceAddendum, createContractApostille, createContractOccurrence,
@@ -29,20 +30,91 @@ import {
 } from "../domain/contractInstruments";
 import { createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER, type ImportedContractSource } from "../domain/contractReconstruction";
 import {
-  insertContractWorkspace, getContractWorkspace, updateContractWorkspaceStatus,
+  getContractWorkspace, updateContractWorkspaceStatus,
   insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda,
   insertContractApostille, countContractApostilles, insertContractOccurrence, insertImportedContract,
-  findManualContractByNumber,
+  findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
 } from "../db/contractWorkspace";
+import {
+  CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED_MESSAGE,
+  contractAlreadyExistsMessage, contractNumberTakenText, decideContractCreateOnExisting, normalizeContractNumber,
+} from "../domain/contractCreation";
+import { serviceLogger } from "./observabilityService";
 
 const DOMAIN = "contratos" as const;
+const log = serviceLogger("contractService");
 
-/** Colisão de número de contrato AVULSO na mesma organização — nunca sobrescreve silenciosamente. */
+/**
+ * Colisão de número na criação do contrato AVULSO — nunca sobrescreve silenciosamente. O número é único na organização
+ * qualquer que seja a origem (R3/PR-06): `existingOrigin` diz de onde veio o contrato que já tem o número (default
+ * "avulso", o caso pré-existente). O router anexa "(id: …)" (convenção pré-existente).
+ */
 export class ManualContractConflictError extends Error {
-  constructor(public readonly existingId: string, contractNumber: string) {
-    super(`Já existe um contrato avulso com o número "${contractNumber}" nesta organização.`);
+  constructor(public readonly existingId: string, contractNumber: string, existingOrigin: ContractOriginType = "avulso") {
+    super(contractNumberTakenText({ originType: existingOrigin, contractNumber }));
     this.name = "ManualContractConflictError";
   }
+}
+
+/**
+ * R3 / PR-06 (SEM-007) — CONFLICT governado da criação sobre número de contrato já existente NA ORGANIZAÇÃO (qualquer
+ * origem), para os fluxos Processo, Contratação Direta e Externo. É um TRPCError (code CONFLICT) para chegar ao cliente com a mensagem estável
+ * (token `CONTRACT_ALREADY_EXISTS` + "(id: …)") sem exigir mapeamento no router.
+ */
+export class ContractAlreadyExistsError extends TRPCError {
+  readonly existingId: string;
+  constructor(existing: ContractWorkspace) {
+    super({ code: "CONFLICT", message: contractAlreadyExistsMessage(existing) });
+    this.existingId = existing.id;
+    this.name = "ContractAlreadyExistsError";
+  }
+}
+
+/**
+ * Número oficial normalizado (`normalizeContractNumber`: só trim das pontas). Vazio ⇒ BAD_REQUEST antes de qualquer
+ * escrita (um contrato não nasce sem número; o import tem o fallback "IMPORTADO" antes desta checagem).
+ */
+function requireContractNumber(raw: string | null | undefined): string {
+  const n = normalizeContractNumber(raw);
+  if (!n) throw new TRPCError({ code: "BAD_REQUEST", message: CONTRACT_NUMBER_REQUIRED_MESSAGE });
+  return n;
+}
+
+/**
+ * Persiste a CRIAÇÃO de um contrato — INSERT-only, nunca upsert (padrão R3). A chave institucional é (organização,
+ * número normalizado), QUALQUER QUE SEJA A ORIGEM (decisão do responsável). Número já existente na organização ⇒ retry
+ * idempotente da MESMA criação converge (devolve o existente, `created: false`, sem escrita); qualquer outra coisa —
+ * inclusive o mesmo número vindo de outra origem, ou o contrato já fora de "minuta" — ⇒ `onConflict`.
+ *  1. checagem no servidor (leitura) do número na organização — recusa/converge sem escrever nada;
+ *  2. INSERT puro; a garantia no BANCO é UNIQUE(organization_id, normalized_number) (0310) + a PRIMARY KEY: em corrida
+ *     (inclusive entre origens diferentes) exatamente um INSERT vence; o perdedor relê e passa pela mesma decisão.
+ * Não há transação a estender: a criação é um único INSERT atômico; os eventos só são gravados pelo vencedor.
+ * Sem DB ⇒ degrada (`created: true`, como antes).
+ */
+async function persistNewContract(
+  ws: ContractWorkspace, onConflict: (existing: ContractWorkspace) => Error, correlationId: string,
+): Promise<{ workspace: ContractWorkspace; created: boolean }> {
+  const decide = (existing: ContractWorkspace): { workspace: ContractWorkspace; created: boolean } => {
+    const meta = { organizationId: ws.organizationId, contractId: existing.id, originType: ws.originType, existingOriginType: existing.originType, actorUserId: ws.createdBy, correlationId };
+    if (decideContractCreateOnExisting(existing, ws).kind === "converge") {
+      log.info("create_contract_replayed", meta);
+      return { workspace: existing, created: false };
+    }
+    log.warn("create_contract_conflict", { ...meta, reason: CONTRACT_ALREADY_EXISTS });
+    throw onConflict(existing);
+  };
+
+  const before = await findContractByNormalizedNumber(ws.organizationId, ws.contractNumber);
+  if (before) return decide(before);
+
+  const inserted = await insertNewContractWorkspace(ws);
+  if (inserted !== "duplicate") return { workspace: ws, created: true };
+  // Perdeu a corrida (UNIQUE do número na organização ou PRIMARY KEY): relê pelo número; se a colisão foi só de PK
+  // (linha cujo número foi editado depois da criação), relê pelo id.
+  const existing = (await findContractByNormalizedNumber(ws.organizationId, ws.contractNumber))
+    ?? (await getContractWorkspace(ws.id, ws.organizationId));
+  if (!existing) throw new TRPCError({ code: "CONFLICT", message: `Criação concorrente do contrato; tente novamente (${CONTRACT_ALREADY_EXISTS}).` });
+  return decide(existing);
 }
 
 export interface Recommendation {
@@ -64,14 +136,17 @@ async function requireContract(id: string, orgId: number): Promise<ContractWorks
 /** FLUXO 1 — a partir do Processo Licitatório (homologado/adjudicado). */
 export async function createFromProcurement(params: {
   organizationId: number; processId: string; contractNumber: string; contractor?: string; value?: number; term?: string; correlationId: string;
+  /** Ator autenticado (R3/PR-06: retry idempotente só converge para o MESMO ator). */
+  createdBy?: number | null;
 }): Promise<ContractWorkspace> {
   const process = await getProcess(params.processId, params.organizationId);
-  const ws = createContractWorkspace({
+  const candidate = createContractWorkspace({
     organizationId: params.organizationId, originType: "processo_licitatorio", originProcess: params.processId,
-    contractNumber: params.contractNumber, contractor: params.contractor, object: process?.object ?? "",
-    value: params.value, term: params.term, correlationId: params.correlationId,
+    contractNumber: requireContractNumber(params.contractNumber), contractor: params.contractor, object: process?.object ?? "",
+    value: params.value, term: params.term, correlationId: params.correlationId, createdBy: params.createdBy,
   });
-  await insertContractWorkspace(ws);
+  const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
+  if (!created) return ws;
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato ${ws.contractNumber} gerado a partir do Processo Licitatório ${params.processId}.`, refId: ws.id, correlationId: params.correlationId });
   return ws;
 }
@@ -79,14 +154,17 @@ export async function createFromProcurement(params: {
 /** FLUXO 2 — a partir da Contratação Direta (ratificada). */
 export async function createFromDirectProcurement(params: {
   organizationId: number; directWorkspaceId: string; contractNumber: string; contractor?: string; value?: number; term?: string; correlationId: string;
+  /** Ator autenticado (R3/PR-06: retry idempotente só converge para o MESMO ator). */
+  createdBy?: number | null;
 }): Promise<ContractWorkspace> {
   const src = await getDirectProcurementWorkspace(params.directWorkspaceId, params.organizationId);
-  const ws = createContractWorkspace({
+  const candidate = createContractWorkspace({
     organizationId: params.organizationId, originType: "contratacao_direta", originProcess: params.directWorkspaceId,
-    contractNumber: params.contractNumber, contractor: params.contractor, object: src?.object ?? "",
-    value: params.value, term: params.term, correlationId: params.correlationId,
+    contractNumber: requireContractNumber(params.contractNumber), contractor: params.contractor, object: src?.object ?? "",
+    value: params.value, term: params.term, correlationId: params.correlationId, createdBy: params.createdBy,
   });
-  await insertContractWorkspace(ws);
+  const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
+  if (!created) return ws;
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato ${ws.contractNumber} gerado a partir da Contratação Direta ${params.directWorkspaceId}.`, refId: ws.id, correlationId: params.correlationId });
   return ws;
 }
@@ -105,16 +183,22 @@ export async function createManualContract(params: {
 }): Promise<ContractWorkspace> {
   // Unicidade institucional do avulso: nunca sobrescreve silenciosamente (ver revisão
   // arquitetural — a idempotência do COMANDO é tratada à parte, no router, via idempotencyKey).
-  const existing = await findManualContractByNumber(params.organizationId, params.contractNumber);
-  if (existing) throw new ManualContractConflictError(existing.id, params.contractNumber);
-
-  const ws = createContractWorkspace({
+  // R3 / PR-06: INSERT-only; retry idempotente da MESMA criação (mesmo ator + payload, ainda minuta) converge. O número
+  // é único na organização qualquer que seja a origem (persistNewContract); a checagem avulso↔avulso pré-existente
+  // (findManualContractByNumber, na colação da coluna) é mantida — nunca afrouxada.
+  const contractNumber = requireContractNumber(params.contractNumber);
+  const candidate = createContractWorkspace({
     organizationId: params.organizationId, originType: "avulso", originProcess: "",
-    contractNumber: params.contractNumber, contractor: params.contractor, object: params.object,
+    contractNumber, contractor: params.contractor, object: params.object,
     value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
     status: "minuta", correlationId: params.correlationId, createdBy: params.createdBy,
   });
-  await insertContractWorkspace(ws);
+  const byNumber = await findManualContractByNumber(params.organizationId, contractNumber);
+  if (byNumber && byNumber.id !== candidate.id) throw new ManualContractConflictError(byNumber.id, contractNumber);
+  const { workspace: ws, created } = await persistNewContract(
+    candidate, (e) => new ManualContractConflictError(e.id, e.contractNumber, e.originType), params.correlationId,
+  );
+  if (!created) return ws;
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`, summary: `Contrato avulso ${ws.contractNumber} criado do zero (sem processo de origem).`, refId: ws.id, correlationId: params.correlationId });
   return ws;
 }
@@ -127,15 +211,24 @@ export async function createManualContract(params: {
  */
 export async function importExternalContract(params: {
   organizationId: number; source: ImportedContractSource; rawText: string; contractNumber?: string; correlationId: string;
+  /** Ator autenticado (R3/PR-06: retry idempotente só converge para o MESMO ator). */
+  createdBy?: number | null;
 }): Promise<{ workspace: ContractWorkspace; confidence: number; reconstructed: ReturnType<typeof createAssistedReconstruction>["reconstructed"]; assisted: true; disclaimer: string }> {
   const reconstruction = createAssistedReconstruction({ organizationId: params.organizationId, source: params.source, rawText: params.rawText, correlationId: params.correlationId });
-  const ws = createContractWorkspace({
+  const candidate = createContractWorkspace({
     organizationId: params.organizationId, originType: "externo", originProcess: "",
-    contractNumber: params.contractNumber || reconstruction.reconstructed.contractNumber || "IMPORTADO",
+    contractNumber: requireContractNumber(
+      normalizeContractNumber(params.contractNumber) || normalizeContractNumber(reconstruction.reconstructed.contractNumber) || "IMPORTADO",
+    ),
     contractor: reconstruction.reconstructed.contractor, object: reconstruction.reconstructed.object, value: reconstruction.reconstructed.value,
-    term: reconstruction.reconstructed.term, status: "minuta", correlationId: params.correlationId,
+    term: reconstruction.reconstructed.term, status: "minuta", correlationId: params.correlationId, createdBy: params.createdBy,
   });
-  await insertContractWorkspace(ws);
+  // R3 / PR-06: um import sobre número já existente na organização (de qualquer origem, inclusive o fallback
+  // "IMPORTADO") nunca sobrescreve o existente.
+  const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
+  if (!created) {
+    return { workspace: ws, confidence: reconstruction.confidence, reconstructed: reconstruction.reconstructed, assisted: true, disclaimer: RECONSTRUCTION_DISCLAIMER };
+  }
   await insertImportedContract(reconstruction, ws.id);
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: "sistema", summary: `Reconstrução assistida de contrato externo (${params.source}), confiança ${Math.round(reconstruction.confidence * 100)}% — pendente de revisão do servidor.`, refId: reconstruction.id, correlationId: params.correlationId });
   return { workspace: ws, confidence: reconstruction.confidence, reconstructed: reconstruction.reconstructed, assisted: true, disclaimer: RECONSTRUCTION_DISCLAIMER };

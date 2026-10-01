@@ -37,7 +37,12 @@ export default function LegalOpinionEditor({ workspaceId = "", hasDraft = false,
     void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId });
     onSaved?.(workspaceId);
   };
-  const createDraft = trpc.legalOpinionWorkspace.createDraft.useMutation({ onSuccess: onDone });
+  // R3 / PR-06 — CONFLICT (parecer já existe/assinado): a mensagem do servidor é exibida e o contexto é recarregado,
+  // para a tela refletir o parecer existente em vez de oferecer uma nova "criação".
+  const createDraft = trpc.legalOpinionWorkspace.createDraft.useMutation({
+    onSuccess: onDone,
+    onError: (e) => { if (e.data?.code === "CONFLICT") void utils.legalOpinionWorkspace.loadContext.invalidate({ workspaceId }); },
+  });
   const updateOpinion = trpc.legalOpinionWorkspace.updateOpinion.useMutation({ onSuccess: onDone });
 
   if (!enabled) {
