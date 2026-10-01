@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790890348.3077545,
-    "ast_hash": "36f948c8884c575f989c83f89f9a84b1",
+    "mtime": 1790890488.5542052,
+    "ast_hash": "9a779d2689b41043b060e6c5c33b6ce5",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6810,8 +6810,8 @@
     "semantic_hash": ""
   },
   "server/_core/trpc.ts": {
-    "mtime": 1790890348.2707264,
-    "ast_hash": "c19f6a1bb1b3cd73a3033c204c9618a5",
+    "mtime": 1790890496.6355522,
+    "ast_hash": "b6b270655267b0376c8fe0b194092f54",
     "semantic_hash": ""
   },
   "server/_core/types/cookie.d.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1790881530.0408845,
-    "ast_hash": "a8db8ad5ec108f2f7e2c2ee4ad31d27b",
+    "mtime": 1790890496.6565366,
+    "ast_hash": "efc21cb20dd9f93ad3d49b2a30f3172d",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -12667,6 +12667,21 @@
   "server/routers/directProcurementRbacMatrix.ts": {
     "mtime": 1790890348.2707264,
     "ast_hash": "4cebe6f2630ea2b0ada4bc1fc63d7c4f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
+    "mtime": 1790890496.6667352,
+    "ast_hash": "746b8123ed28c725707ed18d61b90dad",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new006-contract-workspace-rbac.test.ts": {
+    "mtime": 1790890496.6787353,
+    "ast_hash": "168ec2c7c14fbac6df89140525790da3",
+    "semantic_hash": ""
+  },
+  "server/routers/contractWorkspaceRbac.ts": {
+    "mtime": 1790890488.390735,
+    "ast_hash": "d729a421d52d69ca289d6322068e7b05",
     "semantic_hash": ""
   }
 }
