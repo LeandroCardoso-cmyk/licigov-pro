@@ -1,8 +1,17 @@
 /**
- * Testes de Integração — Documentos
+ * Testes de Integração — Documentos (router legado `documents.*`)
  *
- * Cobre: versionamento, controle de acesso, upload S3, download com URL
- * presignada, assertProcessAccess/Owner, persistência no banco.
+ * R2 / LEG-009 (decisão humana de 27/09/2026 = DISABLE): as procedures de leitura/gravação/geração/upload/
+ * download/versionamento do router legado foram DESLIGADAS de forma governada. Este arquivo cobria o
+ * comportamento antigo (versionamento, upload S3, URL presignada, assertProcessAccess/Owner) e foi REESCRITO
+ * para o contrato governado, preservando a intenção de cada bloco:
+ *  - autenticação continua exigida (UNAUTHORIZED antes do handler);
+ *  - o schema de input continua validando (BAD_REQUEST, sem efeito colateral);
+ *  - dono, membro, sem vínculo, processo/documento inexistente ⇒ MESMO FORBIDDEN + LEGACY_ENDPOINT_DISABLED
+ *    (a recusa não depende do recurso — nenhuma enumeração de existência);
+ *  - ZERO chamadas a banco (db.*), S3 (storagePut/storageGet), IA (gemini) e conversão (DOCX/PDF).
+ * A cobertura exaustiva das 13 procedures está em `r2-leg009-legacy-documents-disabled.test.ts` (mockado) e
+ * `r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts` (MySQL real).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -34,6 +43,7 @@ vi.mock("../../services/rateLimiter", async () => {
     resetRateLimit: vi.fn(),
     cleanupExpiredEntries: vi.fn(),
     getRateLimitStats: vi.fn().mockReturnValue(null),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock herdado do rate limiter (tipagem interna do tRPC)
     rateLimitMiddleware: (_type: string) => trpc.middleware(({ next }: any) => next()),
   };
 });
@@ -73,154 +83,130 @@ vi.mock("../../_core/sdk", () => ({
 import { documentsRouter } from "../../routers/documentsRouter";
 import * as db from "../../db";
 import * as storageModule from "../../storage";
+import * as gemini from "../../services/gemini";
+import * as converter from "../../services/documentConverter";
 import { makeContext, mockUser, mockOtherUser, mockProcess, mockDocument, mockUploadedDocument } from "../helpers/fixtures";
+
+/** Contrato governado LEG-009: FORBIDDEN + token estável (mensagem idêntica para qualquer chamador/recurso). */
+const GOVERNED = { code: "FORBIDDEN", message: expect.stringContaining("LEGACY_ENDPOINT_DISABLED") };
+
+/** Nenhuma função de banco, S3, IA ou conversão foi chamada. */
+function expectNoSideEffects() {
+  for (const [name, fn] of Object.entries(db)) {
+    if (vi.isMockFunction(fn)) expect(fn, `db.${name} não deveria ser chamado`).not.toHaveBeenCalled();
+  }
+  expect(storageModule.storagePut).not.toHaveBeenCalled();
+  expect(storageModule.storageGet).not.toHaveBeenCalled();
+  for (const fn of Object.values(gemini)) expect(fn).not.toHaveBeenCalled();
+  expect(converter.convertToPDF).not.toHaveBeenCalled();
+  expect(converter.convertToDOCX).not.toHaveBeenCalled();
+}
+
+async function errorOf(p: Promise<unknown>): Promise<{ code?: string; message?: string }> {
+  try {
+    await p;
+  } catch (e) {
+    const x = e as { code?: string; message?: string };
+    return { code: x.code, message: x.message };
+  }
+  return { code: "RESOLVED" };
+}
 
 // ─── Testes ───────────────────────────────────────────────────────────────────
 
-describe("Documents Router — Integração", () => {
+describe("Documents Router — Integração (R2 / LEG-009: desligamento governado)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
-    vi.mocked(db.getProcessMember).mockResolvedValue(null as any);
-    vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
-    vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
-    vi.mocked(db.createDocument).mockResolvedValue(undefined as any);
-    vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
-    vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
-    vi.mocked(db.getDocumentVersionsForOrganization).mockResolvedValue([] as any);
+    // Cenário "feliz" do legado (processo do próprio usuário, documentos existentes): mesmo assim nada executa.
+    vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as never);
+    vi.mocked(db.getProcessMember).mockResolvedValue(null as never);
+    vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as never);
+    vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(mockDocument as never);
+    vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as never);
+    vi.mocked(db.getDocumentVersionsForOrganization).mockResolvedValue([mockDocument] as never);
   });
 
   // ── documents.listByProcess ──────────────────────────────────────────────
   describe("listByProcess", () => {
-    it("retorna documentos para o dono do processo", async () => {
-      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
+    it("dono do processo recebe a recusa governada (não lista documentos) e nada é lido", async () => {
       const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.listByProcess({ processId: 10 });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].type).toBe("dfd");
+      await expect(caller.listByProcess({ processId: 10 })).rejects.toMatchObject(GOVERNED);
+      expectNoSideEffects();
     });
 
-    it("permite acesso a membro autorizado do processo", async () => {
-      const memberUser = { ...mockOtherUser };
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
-      vi.mocked(db.getProcessMember).mockResolvedValue({ id: 1, processId: 10, userId: memberUser.id } as any);
+    it("membro, usuário sem vínculo e processo inexistente recebem o MESMO erro do dono (sem enumeração)", async () => {
+      const own = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }));
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as never);
+      vi.mocked(db.getProcessMember).mockResolvedValue({ id: 1, processId: 10, userId: mockOtherUser.id } as never);
+      const member = await errorOf(documentsRouter.createCaller(makeContext(mockOtherUser)).listByProcess({ processId: 10 }));
+      vi.mocked(db.getProcessMember).mockResolvedValue(null as never);
+      const stranger = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }));
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as never);
+      const missing = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }));
 
-      const result = await documentsRouter.createCaller(makeContext(memberUser)).listByProcess({ processId: 10 });
-
-      expect(result).toBeDefined();
-    });
-
-    it("bloqueia usuário sem vínculo com o processo com FORBIDDEN", async () => {
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
-      vi.mocked(db.getProcessMember).mockResolvedValue(null as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 10 }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("permissão") });
-    });
-
-    it("retorna NOT_FOUND para processo inexistente", async () => {
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(null as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).listByProcess({ processId: 9999 }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(own.code).toBe("FORBIDDEN");
+      expect(own.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+      expect(member).toEqual(own);
+      expect(stranger).toEqual(own);
+      expect(missing).toEqual(own);
+      expectNoSideEffects();
     });
 
     it("rejeita acesso sem autenticação", async () => {
       await expect(
         documentsRouter.createCaller(makeContext(null)).listByProcess({ processId: 10 }),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expectNoSideEffects();
     });
   });
 
   // ── documents.save ───────────────────────────────────────────────────────
   describe("save (criar/atualizar documento)", () => {
-    it("cria documento com versão 1 quando não existe versão anterior", async () => {
-      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.save({ processId: 10, type: "etp", content: "# ETP" });
-
-      expect(result.success).toBe(true);
-      expect(result.version).toBe(1);
-      expect(db.createDocument).toHaveBeenCalledWith(
-        expect.objectContaining({ version: 1, type: "etp", createdBy: mockUser.id }),
-      );
+    it("não cria versão nem activity log (recusa governada)", async () => {
+      await expect(
+        documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "etp", content: "# ETP" }),
+      ).rejects.toMatchObject(GOVERNED);
+      expect(db.createDocument).not.toHaveBeenCalled();
+      expect(db.createActivityLog).not.toHaveBeenCalled();
+      expectNoSideEffects();
     });
 
-    it("incrementa versão quando já existe documento do mesmo tipo", async () => {
-      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue({ ...mockDocument, version: 2 } as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.save({ processId: 10, type: "dfd", content: "# DFD v3" });
-
-      expect(result.version).toBe(3);
-      expect(db.createDocument).toHaveBeenCalledWith(
-        expect.objectContaining({ version: 3 }),
-      );
-    });
-
-    it("persiste o userId como createdBy", async () => {
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-      await caller.save({ processId: 10, type: "tr", content: "# TR" });
-
-      expect(db.createDocument).toHaveBeenCalledWith(
-        expect.objectContaining({ createdBy: mockUser.id }),
-      );
-    });
-
-    it("registra log de atividade ao salvar", async () => {
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-      await caller.save({ processId: 10, type: "etp", content: "# ETP" });
-
-      expect(db.createActivityLog).toHaveBeenCalledWith(
-        expect.objectContaining({ processId: 10, userId: mockUser.id }),
-      );
-    });
-
-    it("rejeita conteúdo acima de 500.000 chars com BAD_REQUEST", async () => {
+    it("rejeita conteúdo acima de 500.000 chars com BAD_REQUEST (schema preservado)", async () => {
       const hugContent = "x".repeat(500001);
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "etp", content: hugContent }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expectNoSideEffects();
     });
 
-    it("rejeita tipo de documento inválido com BAD_REQUEST", async () => {
+    it("rejeita tipo de documento inválido com BAD_REQUEST (schema preservado)", async () => {
       await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "invalido" as any, content: "x" }),
+        documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "invalido" as never, content: "x" }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expectNoSideEffects();
     });
 
-    it("bloqueia usuário sem permissão no processo", async () => {
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "# TR" }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    it("usuário sem permissão no processo recebe o mesmo erro governado do dono", async () => {
+      const own = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "# TR" }));
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as never);
+      const stranger = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).save({ processId: 10, type: "tr", content: "# TR" }));
+      expect(own.code).toBe("FORBIDDEN");
+      expect(stranger).toEqual(own);
+      expectNoSideEffects();
     });
   });
 
   // ── documents.getByType ──────────────────────────────────────────────────
   describe("getByType", () => {
-    it("retorna documento pelo tipo", async () => {
-      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(mockDocument as any);
+    it("não devolve documento (recusa governada) para tipo existente nem inexistente", async () => {
       const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.getByType({ processId: 10, type: "dfd" });
-
-      expect(result).toMatchObject({ type: "dfd", processId: 10 });
-    });
-
-    it("retorna null para tipo inexistente", async () => {
-      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.getByType({ processId: 10, type: "ata" });
-
-      expect(result).toBeNull();
+      const existing = await errorOf(caller.getByType({ processId: 10, type: "dfd" }));
+      vi.mocked(db.getDocumentByProcessAndTypeForOrganization).mockResolvedValue(null as never);
+      const absent = await errorOf(caller.getByType({ processId: 10, type: "ata" }));
+      expect(existing.code).toBe("FORBIDDEN");
+      expect(existing.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+      expect(absent).toEqual(existing);
+      expectNoSideEffects();
     });
   });
 
@@ -234,128 +220,85 @@ describe("Documents Router — Integração", () => {
       mimeType: "application/pdf" as const,
     };
 
-    it("faz upload para S3 e persiste metadados no banco", async () => {
-      vi.mocked(storageModule.storagePut).mockResolvedValue({
-        key: "processes/10/tr/1234_termo.pdf",
-        url: "https://s3.example.com/processes/10/tr/1234_termo.pdf",
-      } as any);
-      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.uploadDocument(validUpload);
-
-      expect(result.success).toBe(true);
-      expect(storageModule.storagePut).toHaveBeenCalled();
-      expect(db.createDocument).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sourceType: "upload",
-          s3Key: expect.stringContaining("tr"),
-        }),
-      );
+    it("NÃO faz upload para S3 nem persiste metadados (recusa governada)", async () => {
+      await expect(
+        documentsRouter.createCaller(makeContext(mockUser)).uploadDocument(validUpload),
+      ).rejects.toMatchObject(GOVERNED);
+      expect(storageModule.storagePut).not.toHaveBeenCalled();
+      expect(db.createDocument).not.toHaveBeenCalled();
+      expectNoSideEffects();
     });
 
-    it("define versão 1 para primeiro upload do tipo", async () => {
-      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([] as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.uploadDocument(validUpload);
-
-      expect(result.version).toBe(1);
-    });
-
-    it("incrementa versão em uploads subsequentes do mesmo tipo", async () => {
-      vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([{ ...mockUploadedDocument, type: "tr", version: 2 }] as any);
-      const caller = documentsRouter.createCaller(makeContext(mockUser));
-
-      const result = await caller.uploadDocument(validUpload);
-
-      expect(result.version).toBe(3);
-    });
-
-    it("rejeita MIME type não permitido com BAD_REQUEST", async () => {
+    it("rejeita MIME type não permitido com BAD_REQUEST (schema preservado)", async () => {
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).uploadDocument({
           ...validUpload,
-          mimeType: "image/png" as any,
+          mimeType: "image/png" as never,
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expectNoSideEffects();
     });
 
-    it("rejeita nome de arquivo com caracteres inválidos com BAD_REQUEST", async () => {
+    it("rejeita nome de arquivo com caracteres inválidos com BAD_REQUEST (schema preservado)", async () => {
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).uploadDocument({
           ...validUpload,
           fileName: "../../etc/passwd",
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expectNoSideEffects();
     });
 
-    it("exige que o usuário seja dono do processo (assertProcessOwner)", async () => {
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).uploadDocument(validUpload),
-      ).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("responsável") });
+    it("não-dono do processo recebe o mesmo erro governado do dono", async () => {
+      const own = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).uploadDocument(validUpload));
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as never);
+      const stranger = await errorOf(documentsRouter.createCaller(makeContext(mockUser)).uploadDocument(validUpload));
+      expect(own.code).toBe("FORBIDDEN");
+      expect(stranger).toEqual(own);
+      expectNoSideEffects();
     });
   });
 
   // ── documents.getDownloadUrl ─────────────────────────────────────────────
   describe("getDownloadUrl (presigned URL)", () => {
-    it("retorna URL presignada para documento S3 válido", async () => {
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as any);
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
-      vi.mocked(storageModule.storageGet).mockResolvedValue({ url: "https://s3.example.com/presigned" } as any);
-
-      const result = await documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 101 });
-
-      expect(result.url).toContain("presigned");
-      expect(result.expiresIn).toBe(3600);
-    });
-
-    it("retorna NOT_FOUND para documento inexistente", async () => {
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 9999 }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    });
-
-    it("retorna FORBIDDEN para usuário que não é dono do processo", async () => {
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as any);
-      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as any);
-
+    it("NÃO emite URL presignada (recusa governada) nem consulta o S3", async () => {
       await expect(
         documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 101 }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(GOVERNED);
+      expect(storageModule.storageGet).not.toHaveBeenCalled();
+      expectNoSideEffects();
     });
 
-    it("retorna BAD_REQUEST para documento sem s3Key (documento textual)", async () => {
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue({ ...mockDocument, s3Key: null } as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).getDownloadUrl({ documentId: 100 }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("S3") });
+    it("documento inexistente, de outro dono ou sem s3Key recebem o MESMO erro (sem enumeração)", async () => {
+      const caller = documentsRouter.createCaller(makeContext(mockUser));
+      const own = await errorOf(caller.getDownloadUrl({ documentId: 101 }));
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as never);
+      const missing = await errorOf(caller.getDownloadUrl({ documentId: 9999 }));
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockUploadedDocument as never);
+      vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue({ ...mockProcess, ownerId: 999 } as never);
+      const foreign = await errorOf(caller.getDownloadUrl({ documentId: 101 }));
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue({ ...mockDocument, s3Key: null } as never);
+      const textual = await errorOf(caller.getDownloadUrl({ documentId: 100 }));
+      expect(own.code).toBe("FORBIDDEN");
+      expect(own.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+      expect(missing).toEqual(own);
+      expect(foreign).toEqual(own);
+      expect(textual).toEqual(own);
+      expectNoSideEffects();
     });
   });
 
   // ── documents.getVersionHistory ──────────────────────────────────────────
   describe("getVersionHistory", () => {
-    it("retorna histórico de versões do documento", async () => {
-      const versions = [{ ...mockDocument, version: 1 }, { ...mockDocument, version: 2, id: 200 }];
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(mockDocument as any);
-      vi.mocked(db.getDocumentVersionsForOrganization).mockResolvedValue(versions as any);
-
-      const result = await documentsRouter.createCaller(makeContext(mockUser)).getVersionHistory({ documentId: 100 });
-
-      expect(result).toHaveLength(2);
-    });
-
-    it("retorna NOT_FOUND para documento inexistente", async () => {
-      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as any);
-
-      await expect(
-        documentsRouter.createCaller(makeContext(mockUser)).getVersionHistory({ documentId: 9999 }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    it("NÃO devolve histórico (recusa governada); documento inexistente recebe o mesmo erro", async () => {
+      const caller = documentsRouter.createCaller(makeContext(mockUser));
+      const existing = await errorOf(caller.getVersionHistory({ documentId: 100 }));
+      vi.mocked(db.getDocumentByIdForOrganization).mockResolvedValue(null as never);
+      const missing = await errorOf(caller.getVersionHistory({ documentId: 9999 }));
+      expect(existing.code).toBe("FORBIDDEN");
+      expect(existing.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+      expect(missing).toEqual(existing);
+      expectNoSideEffects();
     });
   });
 });

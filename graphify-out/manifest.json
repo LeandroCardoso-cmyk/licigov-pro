@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790881530.0328846,
-    "ast_hash": "6b12bc58096239f14f97406f481276ed",
+    "mtime": 1790889748.0435648,
+    "ast_hash": "9b5e48e1e5facdd0e6a8fb1c7b2d69a0",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5270,8 +5270,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/document-settings-governance-contract.test.ts": {
-    "mtime": 1790881396.2768767,
-    "ast_hash": "c5ba10bd80bc4615e87c73ab8ed93584",
+    "mtime": 1790889739.8786902,
+    "ast_hash": "ad9c0ade1f39d9d1d34420e1b9c44413",
     "semantic_hash": ""
   },
   "server/__tests__/feature-flag-admin.test.ts": {
@@ -5565,8 +5565,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-generation-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "f5c3492bcb6a5685bf7857b220c6981b",
+    "mtime": 1790889739.8786902,
+    "ast_hash": "b215fe0c6aebf69881b67e64b03972e1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-institutional-render.test.ts": {
@@ -5605,8 +5605,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/documents.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "308db26cf43316aedc40b1749da5e1a1",
+    "mtime": 1790889739.8786902,
+    "ast_hash": "42b7931151a8c6e114b9e02c4ffa286b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/domain-auth-errors.test.ts": {
@@ -6135,8 +6135,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "73b45055caeb904e3f18e8cc4c126f48",
+    "mtime": 1790889739.8826902,
+    "ast_hash": "c7758a338eda498fdf8061892951bb54",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts": {
@@ -6145,8 +6145,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-sec-pr-a-tenant-freeze.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "a27f3684e3c6d84b57b41543a37e05df",
+    "mtime": 1790889762.6864355,
+    "ast_hash": "86bb375efc4786a330300e7b86c4c3e8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc1-frontend-navigation.test.ts": {
@@ -6330,8 +6330,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/security.test.ts": {
-    "mtime": 1790881396.2888765,
-    "ast_hash": "1b5647cd1bb4b78ce717227a806af209",
+    "mtime": 1790889739.8826902,
+    "ast_hash": "eb3423d3afbc288931f8dc1676c53ab5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/session-revocation.test.ts": {
@@ -8500,8 +8500,8 @@
     "semantic_hash": ""
   },
   "server/kernel/architecture/legacyBoundaries.ts": {
-    "mtime": 1790881530.0408845,
-    "ast_hash": "c8e0850ce148a7cc30affb748d881858",
+    "mtime": 1790889748.0432386,
+    "ast_hash": "b8dbaf24283314d8b77759bc21e99bef",
     "semantic_hash": ""
   },
   "server/middleware/correlationMiddleware.ts": {
@@ -8785,8 +8785,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentsRouter.ts": {
-    "mtime": 1790881530.0448847,
-    "ast_hash": "f2509a136f24ef8c918384b28147da67",
+    "mtime": 1790889762.6857986,
+    "ast_hash": "282ab06d519854140223d4063e5c0160",
     "semantic_hash": ""
   },
   "server/routers/downloadRouter.ts": {
@@ -12607,6 +12607,16 @@
   "docs/audits/R2_LEGACY_DATA_USAGE_READONLY.md": {
     "mtime": 1790889631.5106838,
     "ast_hash": "6f203d60a7ec5ee74bd7d6b819bccb4b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts": {
+    "mtime": 1790889739.8786902,
+    "ast_hash": "920e5e8f2e1fb9688bafc8ca61882c2a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r2-leg009-legacy-documents-disabled.test.ts": {
+    "mtime": 1790889739.8786902,
+    "ast_hash": "dc7e250d62fb86d58574ed5057f17d8b",
     "semantic_hash": ""
   }
 }
