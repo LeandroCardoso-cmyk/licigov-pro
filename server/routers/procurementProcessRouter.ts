@@ -66,7 +66,7 @@ async function requireProcess(id: string, orgId: number) {
  * PERSISTIDO com `created: false`; qualquer outro caso ⇒ CONFLICT `PROCESS_ALREADY_EXISTS`.
  */
 async function resolveExistingProcurementCreate(p: {
-  organizationId: number; processId: string; actorUserId: number; correlationId: string;
+  organizationId: number; processId: string; actorUserId: number; correlationId: string; startedAt: number;
   request: { object: string; startOption: string; modality?: string; requestingUnit: string | null };
 }): Promise<{ process: ProcurementWorkspace; created: false }> {
   const existing = await getProcess(p.processId, p.organizationId);
@@ -84,13 +84,14 @@ async function resolveExistingProcurementCreate(p: {
   if (existing && mismatches.length === 0) {
     log.info("create_process_replayed", {
       organizationId: p.organizationId, processId: existing.id, actorUserId: p.actorUserId, correlationId: p.correlationId,
+      outcome: "IDEMPOTENT_CONVERGENCE", durationMs: Date.now() - p.startedAt,
     });
     return { process: existing, created: false };
   }
   // Só NOMES de campo divergentes (sem valores/PII); o registro existente não é tocado.
   log.warn("create_process_conflict", {
     organizationId: p.organizationId, processId: p.processId, actorUserId: p.actorUserId, correlationId: p.correlationId,
-    reason: PROCESS_ALREADY_EXISTS, mismatches,
+    outcome: "CONFLICT", reason: PROCESS_ALREADY_EXISTS, mismatches, durationMs: Date.now() - p.startedAt,
   });
   throw new TRPCError({ code: "CONFLICT", message: PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE });
 }
@@ -120,6 +121,7 @@ export const procurementProcessRouter = router({
       requestingUnit: z.string().trim().max(200).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const startedAt = Date.now();
       const orgId = ctx.organizationId!;
       const requestingUnit = input.requestingUnit?.trim() || null;
       const process = createProcurementWorkspace({
@@ -149,10 +151,14 @@ export const procurementProcessRouter = router({
           organizationId: orgId, processId: process.id, correlationId: ctx.correlationId,
           actorUserId: ctx.user!.id, informedFields: requestingUnit ? 1 : 0,
         });
+        log.info("create_process_created", {
+          organizationId: orgId, processId: process.id, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+          outcome: "CREATED", durationMs: Date.now() - startedAt,
+        });
       } catch (err) {
         if (err instanceof ProcessAlreadyExistsError) {
           return resolveExistingProcurementCreate({
-            organizationId: orgId, processId: err.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+            organizationId: orgId, processId: err.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId, startedAt,
             request: { object: input.object, startOption: input.startOption, modality: input.modality, requestingUnit },
           });
         }

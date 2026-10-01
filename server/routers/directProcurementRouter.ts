@@ -64,7 +64,7 @@ const log = serviceLogger("directProcurementRouter");
  * PERSISTIDO com `created: false`; qualquer outro caso ⇒ CONFLICT `PROCESS_ALREADY_EXISTS`.
  */
 async function resolveExistingDirectCreate(p: {
-  organizationId: number; workspaceId: string; actorUserId: number; correlationId: string;
+  organizationId: number; workspaceId: string; actorUserId: number; correlationId: string; startedAt: number;
   request: { object: string; procurementType: string; startOption: string; legalBasis?: string };
 }): Promise<{ workspace: DirectProcurementWorkspace; created: false }> {
   const existing = await getDirectProcurementWorkspace(p.workspaceId, p.organizationId);
@@ -74,13 +74,14 @@ async function resolveExistingDirectCreate(p: {
   if (existing && mismatches.length === 0) {
     log.info("create_process_replayed", {
       organizationId: p.organizationId, workspaceId: existing.id, actorUserId: p.actorUserId, correlationId: p.correlationId,
+      outcome: "IDEMPOTENT_CONVERGENCE", durationMs: Date.now() - p.startedAt,
     });
     return { workspace: existing, created: false };
   }
   // Só NOMES de campo divergentes (sem valores/PII); o workspace existente não é tocado.
   log.warn("create_process_conflict", {
     organizationId: p.organizationId, workspaceId: p.workspaceId, actorUserId: p.actorUserId, correlationId: p.correlationId,
-    reason: PROCESS_ALREADY_EXISTS, mismatches,
+    outcome: "CONFLICT", reason: PROCESS_ALREADY_EXISTS, mismatches, durationMs: Date.now() - p.startedAt,
   });
   throw new TRPCError({ code: "CONFLICT", message: DIRECT_PROCUREMENT_ALREADY_EXISTS_MESSAGE });
 }
@@ -95,6 +96,7 @@ export const directProcurementRouter = router({
       legalBasis: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const startedAt = Date.now();
       const orgId = ctx.organizationId!;
       const ws = createDirectProcurementWorkspace({
         organizationId: orgId, processNumber: input.processNumber, object: input.object,
@@ -110,12 +112,16 @@ export const directProcurementRouter = router({
       } catch (err) {
         if (err instanceof ProcessAlreadyExistsError) {
           return resolveExistingDirectCreate({
-            organizationId: orgId, workspaceId: err.processId, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+            organizationId: orgId, workspaceId: err.processId, actorUserId: ctx.user.id, correlationId: ctx.correlationId, startedAt,
             request: { object: input.object, procurementType: input.procurementType, startOption: input.startOption, legalBasis: input.legalBasis },
           });
         }
         throw err;
       }
+      log.info("create_process_created", {
+        organizationId: orgId, workspaceId: ws.id, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+        outcome: "CREATED", durationMs: Date.now() - startedAt,
+      });
       return { workspace: ws, created: true };
     }),
 

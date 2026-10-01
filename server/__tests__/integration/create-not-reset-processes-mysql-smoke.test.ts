@@ -19,7 +19,7 @@
  *  - órgãos diferentes com o mesmo número continuam independentes;
  *  - RBAC inalterado (procurementProcess exige operator; viewer continua recusado).
  *
- * Matriz: P1–P7 (Processo Licitatório) e D1–D6 (Contratação Direta).
+ * Matriz: P1–P8 (Processo Licitatório) e D1–D6 (Contratação Direta).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
@@ -54,7 +54,8 @@ describe.skipIf(!DB)("R3 / PR-05 — Create ≠ Reset: processos (MySQL real, ro
   afterAll(async () => {
     if (!conn) return;
     const del = async (sql: string, p: unknown[]) => { await conn.execute(sql, p).catch(() => {}); };
-    for (const t of ["procurement_context_facts", "process_timeline", "procurement_processes", "direct_procurement_workspaces"]) {
+    for (const t of ["procurement_items", "intelligent_items", "price_research", "generated_documents",
+      "procurement_context_facts", "process_timeline", "procurement_processes", "direct_procurement_workspaces"]) {
       await del(`DELETE FROM ${t} WHERE organization_id IN (?, ?)`, [ORG_A, ORG_B]);
     }
     await del(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
@@ -166,6 +167,7 @@ describe.skipIf(!DB)("R3 / PR-05 — Create ≠ Reset: processos (MySQL real, ro
       { modality: "pregao" },
       { requestingUnit: "Secretaria de Obras" },
       { requestingUnit: undefined },
+      { object: "Aquisição de notebooks (R3) " }, // espaço final: NENHUMA normalização nova (comparação exata)
     ]) {
       const err = await errOf(() => c.procurementProcess.createProcess(ppInput(n, over)));
       expect(err.code, JSON.stringify(over)).toBe("CONFLICT");
@@ -210,6 +212,41 @@ describe.skipIf(!DB)("R3 / PR-05 — Create ≠ Reset: processos (MySQL real, ro
     expect(snap2.rows).toHaveLength(1);
     expect(snap2.rows[0].object).toBe(winner);
     expect(snap2.timeline).toHaveLength(1);
+  }, 30000);
+
+  it("P8 — filhos existentes (rascunho, pesquisa, item inteligente, item da contratação) ficam intactos no CONFLICT e em N retries idênticos", async () => {
+    const n = num("pp8");
+    const c = await caller(opA, ORG_A);
+    const created = await c.procurementProcess.createProcess(ppInput(n));
+    const pid = created.process.id;
+    const tag = String(stamp).slice(-8);
+    await conn.execute(`INSERT INTO generated_documents (id, organization_id, process_id, kind, title, content, status) VALUES (?, ?, ?, 'dfd', 'DFD R3', 'conteúdo humano', 'em_revisao')`, [`gd8${tag}`, ORG_A, pid]);
+    await conn.execute(`INSERT INTO price_research (id, organization_id, process_id, source, item_count) VALUES (?, ?, ?, 'manual', 2)`, [`pr8${tag}`, ORG_A, pid]);
+    await conn.execute(`INSERT INTO intelligent_items (id, organization_id, process_id, description, status, approved_by) VALUES (?, ?, ?, 'Notebook i5', 'aprovado', ?)`, [`ii8${tag}`, ORG_A, pid, opA]);
+    await conn.execute(`INSERT INTO procurement_items (id, organization_id, process_id, description, unit, ordinal, fingerprint, origin, provenance_json, created_by, updated_by)
+      VALUES (?, ?, ?, 'Notebook i5', 'un', 1, 'fp8', 'manual', '{}', ?, ?)`, [`pi8${tag}`, ORG_A, pid, opA, opA]);
+    // o processo anda (etapa/status), sem tocar em campos do payload de criação
+    await conn.execute(`UPDATE procurement_processes SET current_stage = 'ISSUED', status = 'emitido', updated_at = '2026-01-02 03:04:05.678'
+      WHERE organization_id = ? AND id = ?`, [ORG_A, pid]);
+    const children = async () => ({
+      ...(await ppSnapshot(ORG_A, n)),
+      docs: await rows(`SELECT * FROM generated_documents WHERE organization_id = ? AND process_id = ?`, [ORG_A, pid]),
+      research: await rows(`SELECT * FROM price_research WHERE organization_id = ? AND process_id = ?`, [ORG_A, pid]),
+      iitems: await rows(`SELECT * FROM intelligent_items WHERE organization_id = ? AND process_id = ?`, [ORG_A, pid]),
+      pitems: await rows(`SELECT * FROM procurement_items WHERE organization_id = ? AND process_id = ?`, [ORG_A, pid]),
+    });
+    const before = await children();
+    expect([before.docs.length, before.research.length, before.iitems.length, before.pitems.length]).toEqual([1, 1, 1, 1]);
+
+    const err = await errOf(() => c.procurementProcess.createProcess(ppInput(n, { object: "Objeto diferente", modality: "concorrencia" })));
+    expect(err.code).toBe("CONFLICT");
+    expect(await children()).toEqual(before);
+
+    for (let i = 0; i < 3; i++) {
+      const r = await c.procurementProcess.createProcess(ppInput(n));
+      expect(r).toMatchObject({ created: false, process: { id: pid, currentStage: "ISSUED", status: "emitido" } });
+    }
+    expect(await children()).toEqual(before); // linha, timeline, fatos e filhos: zero escrita em 3 replays
   }, 30000);
 
   // P6/D6/P7 são guardas de REGRESSÃO: já valiam na main e devem continuar valendo.

@@ -13,14 +13,16 @@
  *    - CONVERGÊNCIA (retry idempotente da MESMA criação) ⇒ sucesso com `created: false`, devolvendo o registro
  *      PERSISTIDO (nunca o objeto montado a partir do pedido). "Mesma criação" significa, cumulativamente:
  *        a) o MESMO ator: `responsibleUser` do registro === usuário autenticado; e
- *        b) payload NORMALIZADO idêntico ao registro persistido — textos comparados após `trim()`, opcionais
- *           ausentes equivalem a vazio/nulo:
+ *        b) payload idêntico ao registro persistido, comparado EXATAMENTE como gravado (sem trim, caixa ou
+ *           qualquer normalização nova). A única equivalência é a que os criadores já aplicam ao gravar: opcional
+ *           ausente ≡ "" (`modality ?? ""`, `legalBasis ?? ""`). A unidade demandante chega já normalizada pela
+ *           fronteira de entrada existente (zod `.trim()` + `|| null` no router), igual ao valor gravado no fato:
  *           - Processo Licitatório: `object`, `startOption`, `modality` (ausente ≡ "") e `requestingUnit`
  *             (ausente/vazio ≡ nenhum fato de criação; presente ≡ exatamente um valor no(s) fato(s)
  *             `demand.requestingUnit` gravado(s) NA CRIAÇÃO, `sourceType = "process"`, `sourceVersion = "create"`).
  *           - Contratação Direta: `object`, `procurementType`, `startOption`, `legalBasis` (ausente ≡ "").
  *      Os endpoints não recebem chave de idempotência do cliente; por isso a identidade da operação é
- *      (tenant, número, ator, payload normalizado). A comparação é feita contra o estado ATUAL do registro: se ele
+ *      (tenant, número, ator, payload exato). A comparação é feita contra o estado ATUAL do registro: se ele
  *      foi alterado depois da criação (ex.: fundamento legal escolhido), um retry tardio deixa de ser "o mesmo" e
  *      recebe CONFLICT — fail-closed, ainda sem escrita.
  *    - Qualquer outra situação ⇒ `CONFLICT` com mensagem pt-BR ESTÁVEL e o token `PROCESS_ALREADY_EXISTS`.
@@ -54,9 +56,13 @@ export class ProcessAlreadyExistsError extends Error {
   }
 }
 
-const norm = (v: string | null | undefined): string => (v ?? "").trim();
+/** Opcional ausente ≡ "" — a mesma regra que os criadores aplicam ao gravar. NÃO faz trim nem outra normalização. */
+const orEmpty = (v: string | null | undefined): string => v ?? "";
 
-/** Pedido de criação do Processo Licitatório, já com o ator autenticado. */
+/**
+ * Pedido de criação do Processo Licitatório, já com o ator autenticado. `requestingUnit` chega normalizado pela
+ * fronteira de entrada (zod `.trim()` + `|| null`), exatamente como é gravado no fato de criação.
+ */
 export interface ProcurementCreateRequest {
   readonly actorUserId: number;
   readonly object: string;
@@ -86,11 +92,11 @@ export interface ExistingProcurementForCreate {
 export function procurementCreateMismatches(existing: ExistingProcurementForCreate, req: ProcurementCreateRequest): string[] {
   const out: string[] = [];
   if (existing.responsibleUser !== req.actorUserId) out.push("actor");
-  if (norm(existing.object) !== norm(req.object)) out.push("object");
+  if (existing.object !== req.object) out.push("object");
   if (existing.startOption !== req.startOption) out.push("startOption");
-  if (norm(existing.modality) !== norm(req.modality)) out.push("modality");
-  const units = [...new Set(existing.createRequestingUnits.map(norm).filter((u) => u.length > 0))];
-  const requested = norm(req.requestingUnit);
+  if (orEmpty(existing.modality) !== orEmpty(req.modality)) out.push("modality");
+  const units = [...new Set(existing.createRequestingUnits.filter((u) => u.length > 0))];
+  const requested = orEmpty(req.requestingUnit);
   const sameUnit = requested.length === 0 ? units.length === 0 : units.length === 1 && units[0] === requested;
   if (!sameUnit) out.push("requestingUnit");
   return out;
@@ -118,9 +124,9 @@ export interface ExistingDirectProcurementForCreate {
 export function directProcurementCreateMismatches(existing: ExistingDirectProcurementForCreate, req: DirectProcurementCreateRequest): string[] {
   const out: string[] = [];
   if (existing.responsibleUser !== req.actorUserId) out.push("actor");
-  if (norm(existing.object) !== norm(req.object)) out.push("object");
+  if (existing.object !== req.object) out.push("object");
   if (existing.procurementType !== req.procurementType) out.push("procurementType");
   if (existing.startOption !== req.startOption) out.push("startOption");
-  if (norm(existing.legalBasis) !== norm(req.legalBasis)) out.push("legalBasis");
+  if (orEmpty(existing.legalBasis) !== orEmpty(req.legalBasis)) out.push("legalBasis");
   return out;
 }

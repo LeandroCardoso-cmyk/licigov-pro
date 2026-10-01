@@ -61,12 +61,17 @@ describe("R3 / PR-05 — regra pura de 'mesma criação' (Processo Licitatório)
   };
   const req = { actorUserId: 7, object: "Aquisição de notebooks", startOption: "criar_dfd", requestingUnit: "Secretaria de Educação" };
 
-  it("mesmo ator + payload normalizado idêntico ⇒ [] (converge)", () => {
+  it("mesmo ator + payload idêntico ⇒ [] (converge)", () => {
     expect(procurementCreateMismatches(existing, req)).toEqual([]);
-    // normalização: trim; modalidade ausente ≡ ""
-    expect(procurementCreateMismatches(existing, { ...req, object: "  Aquisição de notebooks ", requestingUnit: " Secretaria de Educação ", modality: undefined })).toEqual([]);
+    // única equivalência: opcional ausente ≡ "" (a mesma regra de gravação de createProcurementWorkspace)
+    expect(procurementCreateMismatches(existing, { ...req, modality: undefined })).toEqual([]);
     expect(procurementCreateMismatches({ ...existing, createRequestingUnits: [] }, { ...req, requestingUnit: null })).toEqual([]);
-    expect(procurementCreateMismatches({ ...existing, createRequestingUnits: [] }, { ...req, requestingUnit: "   " })).toEqual([]);
+  });
+
+  it("nenhuma normalização nova: espaço/caixa diferentes NÃO convergem (fail-closed ⇒ CONFLICT)", () => {
+    expect(procurementCreateMismatches(existing, { ...req, object: "Aquisição de notebooks " })).toEqual(["object"]);
+    expect(procurementCreateMismatches(existing, { ...req, object: "aquisição de notebooks" })).toEqual(["object"]);
+    expect(procurementCreateMismatches(existing, { ...req, modality: " " })).toEqual(["modality"]);
   });
 
   it("cada divergência é nomeada (sem valores) ⇒ CONFLICT", () => {
@@ -83,7 +88,7 @@ describe("R3 / PR-05 — regra pura de 'mesma criação' (Processo Licitatório)
     const polluted = { ...existing, createRequestingUnits: ["Secretaria de Educação", "Secretaria de Saúde"] };
     expect(procurementCreateMismatches(polluted, req)).toEqual(["requestingUnit"]);
     // duplicata do MESMO valor não é ambiguidade
-    expect(procurementCreateMismatches({ ...existing, createRequestingUnits: ["Secretaria de Educação", " Secretaria de Educação"] }, req)).toEqual([]);
+    expect(procurementCreateMismatches({ ...existing, createRequestingUnits: ["Secretaria de Educação", "Secretaria de Educação"] }, req)).toEqual([]);
   });
 
   it("etapa/status/modalidade atuais NÃO entram como 'payload' — mas modalidade alterada depois impede convergência", () => {
@@ -95,10 +100,15 @@ describe("R3 / PR-05 — regra pura de 'mesma criação' (Contratação Direta)"
   const existing = { responsibleUser: 7, object: "Manutenção", procurementType: "dispensa", startOption: "criar_dfd", legalBasis: "" };
   const req = { actorUserId: 7, object: "Manutenção", procurementType: "dispensa", startOption: "criar_dfd" };
 
-  it("mesmo ator + payload idêntico ⇒ [] (fundamento ausente ≡ vazio; trim)", () => {
+  it("mesmo ator + payload idêntico ⇒ [] (fundamento ausente ≡ vazio, como createDirectProcurementWorkspace grava)", () => {
     expect(directProcurementCreateMismatches(existing, req)).toEqual([]);
-    expect(directProcurementCreateMismatches(existing, { ...req, object: " Manutenção ", legalBasis: "  " })).toEqual([]);
-    expect(directProcurementCreateMismatches({ ...existing, legalBasis: "Art. 75, II" }, { ...req, legalBasis: "Art. 75, II " })).toEqual([]);
+    expect(directProcurementCreateMismatches(existing, { ...req, legalBasis: undefined })).toEqual([]);
+    expect(directProcurementCreateMismatches({ ...existing, legalBasis: "Art. 75, II" }, { ...req, legalBasis: "Art. 75, II" })).toEqual([]);
+  });
+
+  it("nenhuma normalização nova: espaço diferente NÃO converge (fail-closed ⇒ CONFLICT)", () => {
+    expect(directProcurementCreateMismatches(existing, { ...req, object: " Manutenção" })).toEqual(["object"]);
+    expect(directProcurementCreateMismatches({ ...existing, legalBasis: "Art. 75, II" }, { ...req, legalBasis: "Art. 75, II " })).toEqual(["legalBasis"]);
   });
 
   it("cada divergência é nomeada ⇒ CONFLICT", () => {
