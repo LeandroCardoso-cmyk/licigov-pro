@@ -2,7 +2,7 @@
  * R3 / PR-05 — "Create ≠ Reset" para os DOIS criadores canônicos de processo (SEM-002, SEM-003) — smoke contra
  * MySQL REAL, pelo router tRPC de verdade (`appRouter.createCaller`). Só roda com DATABASE_URL definido.
  *
- * Problema reproduzido na main `5cd9d50` (R3.1):
+ * Problema reproduzido na main `570a962` (R3.1):
  *  - SEM-002: `procurementProcess.createProcess` com um número JÁ existente no órgão respondia SUCESSO e o upsert
  *    (`onDuplicateKeyUpdate`) devolvia o processo à etapa inicial / "rascunho" (mesmo emitido), trocava a modalidade
  *    e anexava um fato `demand.requestingUnit` ao processo existente.
