@@ -102,6 +102,7 @@ export default function DirectProcurementHome() {
                   <button type="button" onClick={() => configureProcedure.mutate({ workspaceId: ws.id, procedureType: "presencial", receiptMethod: "protocolo" })}
                     className="flex-1 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:border-indigo-300">Presencial</button>
                 </div>
+                {configureProcedure.isError && <p className="text-xs text-red-600 dark:text-red-400">{configureProcedure.error.message}</p>}
                 {data?.procedure && (
                   <p className="text-xs text-muted-foreground">
                     Atual: {data.procedure.procedureType}
@@ -124,6 +125,7 @@ export default function DirectProcurementHome() {
                   className="w-full rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
                   {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer jurídico"}
                 </button>
+                {requestOpinion.isError && <p className="text-xs text-red-600 dark:text-red-400">{requestOpinion.error.message}</p>}
                 {requestOpinion.data && <p className="text-xs text-green-700 dark:text-green-300">Solicitação {requestOpinion.data.requestId.slice(0, 8)}… enviada. Aguardando retorno automático.</p>}
               </div>
               <RequiredDocumentsWorkspace workspaceId={ws.id} documents={data?.requiredDocuments ?? []} />

@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementHome.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "6f10e6256065cd8acddd06b34176a132",
+    "mtime": 1790890348.2667265,
+    "ast_hash": "ae857832724e92c1fef6855e476ac778",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementOverview.tsx": {
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NeedCharacterizationWorkspace.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "46f09836a4606bc9b1cb7ad2fb3e726f",
+    "mtime": 1790890348.2667265,
+    "ast_hash": "3c650b963db47db4a300513773079328",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NewDirectProcurementWizard.tsx": {
@@ -1010,8 +1010,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "1a66f319017887a01384241f39bbe5ba",
+    "mtime": 1790890348.2707264,
+    "ast_hash": "59bfd2911f2812ec16af513ccba3631b",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PublicationWorkspace.tsx": {
@@ -1020,13 +1020,13 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RatificationWorkspace.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "5faeb607c88d13ee8ddd24e5ac6d92f6",
+    "mtime": 1790890348.2707264,
+    "ast_hash": "c23eb2b23be63357b84d9aa372b674f4",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "f8a2d76655f7700b17395173ee698ab4",
+    "mtime": 1790890348.2707264,
+    "ast_hash": "a0391666da1fe60d809302c15b3b9195",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/TimelinePanel.tsx": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790890225.525955,
-    "ast_hash": "ad967c9c173605530b993e9e1f5b172f",
+    "mtime": 1790890348.3077545,
+    "ast_hash": "36f948c8884c575f989c83f89f9a84b1",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6810,8 +6810,8 @@
     "semantic_hash": ""
   },
   "server/_core/trpc.ts": {
-    "mtime": 1790643729.3335886,
-    "ast_hash": "5cffc4ad64f521ce4ef0e53c83fb4cc7",
+    "mtime": 1790890348.2707264,
+    "ast_hash": "c19f6a1bb1b3cd73a3033c204c9618a5",
     "semantic_hash": ""
   },
   "server/_core/types/cookie.d.ts": {
@@ -8765,8 +8765,8 @@
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
-    "mtime": 1790882020.9711194,
-    "ast_hash": "85802d3c0211a2c94848f599d616da26",
+    "mtime": 1790890352.6159217,
+    "ast_hash": "c84af19728434bc714a7d0cc158acde7",
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
@@ -12575,8 +12575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/process-create-contract.test.ts": {
-    "mtime": 1790881993.230179,
-    "ast_hash": "b7ea47edc2af89130d7e3ddcbdcc0003",
+    "mtime": 1790890399.9369469,
+    "ast_hash": "e698707ff0d9a55594c9c04a6b2ee9a2",
     "semantic_hash": ""
   },
   "server/domain/processCreateContract.ts": {
@@ -12652,6 +12652,21 @@
   "server/services/accountRemovalGuard.ts": {
     "mtime": 1790890218.1267188,
     "ast_hash": "722ed73e090b024c189e2e5fb71e03e5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-procurement-rbac-contract.test.ts": {
+    "mtime": 1790890348.2707264,
+    "ast_hash": "6f9bb41da77bcf210607df1583c974b2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
+    "mtime": 1790890348.2707264,
+    "ast_hash": "188bcf0c0ad93fa69aaeec73fa951630",
+    "semantic_hash": ""
+  },
+  "server/routers/directProcurementRbacMatrix.ts": {
+    "mtime": 1790890348.2707264,
+    "ast_hash": "4cebe6f2630ea2b0ada4bc1fc63d7c4f",
     "semantic_hash": ""
   }
 }

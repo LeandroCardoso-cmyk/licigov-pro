@@ -35,6 +35,8 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
         )}
       </div>
 
+      {mutate.isError && <p className="text-xs text-red-600 dark:text-red-400">{mutate.error.message}</p>}
+
       {documents.length === 0 ? (
         <p className="text-xs text-muted-foreground">Gere o checklist dinâmico conforme a modalidade.</p>
       ) : (
