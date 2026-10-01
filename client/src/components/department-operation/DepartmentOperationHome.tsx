@@ -9,6 +9,7 @@ import OperationalInbox from "./OperationalInbox";
 import OperationalRecommendations from "./OperationalRecommendations";
 import OperationRecordWizard from "./OperationRecordWizard";
 import LegacyImportWizard from "./LegacyImportWizard";
+import OperationalRecordList from "./OperationalRecordList";
 
 /**
  * DepartmentOperationHome — REAL (tRPC via filhos).
@@ -42,6 +43,9 @@ interface DepartmentOperationHomeProps {
 
 export default function DepartmentOperationHome({ showPageHeader = true }: DepartmentOperationHomeProps) {
   const [tab, setTab] = React.useState<Tab>("centro");
+  const [focusRecordId, setFocusRecordId] = React.useState<string | null>(null);
+  const openRecord = (id: string) => { setFocusRecordId(id); setTab("registros"); };
+  const openReference = (type: string, id: string) => { if (type === "operation_record") openRecord(id); };
   // PR B (Escopo 4) — o botão agora ENTREGA o relatório: antes a mutation era
   // disparada e o resultado descartado (botão sem comportamento visível). O
   // Document Engine ainda produz o relatório em MARKDOWN; para não prometer o que
@@ -97,19 +101,23 @@ export default function DepartmentOperationHome({ showPageHeader = true }: Depar
       </div>
 
       {tab === "centro" && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2"><OperationalDashboard /></div>
-          <div><OperationalRecommendations /></div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2"><OperationalDashboard onOpenReference={openReference} /></div>
+            <div><OperationalRecommendations /></div>
+          </div>
+          <OperationalMonitoringPanel onOpen={(id, origin) => { if (origin !== "processo_licitatorio" && origin !== "contratacao_direta") openRecord(id); }} />
         </div>
       )}
-      {tab === "painel" && <OperationalMonitoringPanel />}
-      {tab === "calendario" && <OperationalCalendar />}
+      {tab === "painel" && <OperationalMonitoringPanel onOpen={(id, origin) => { if (origin !== "processo_licitatorio" && origin !== "contratacao_direta") openRecord(id); }} />}
+      {tab === "calendario" && <OperationalCalendar onOpenReference={openReference} />}
       {tab === "caixa" && <OperationalInbox />}
       {tab === "timeline" && <OperationalTimeline />}
       {tab === "registros" && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <OperationRecordWizard />
           <LegacyImportWizard />
+          <OperationalRecordList focusRecordId={focusRecordId} />
         </div>
       )}
     </div>

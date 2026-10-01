@@ -136,11 +136,23 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
     await expect(callerA.processes.getById({ id: 999999999 })).rejects.toThrow(/não encontrado/i);
   });
 
-  it("processes.updateStatus cross-tenant é bloqueado", async () => {
+  it("processes.updateStatus (LEG-006, desativado): cross-tenant e próprio recebem o MESMO erro governado e nada muda", async () => {
+    // R2 / PR-02 — `processes.updateStatus` foi desligado de forma governada (LEG-006): recusa TODA chamada com
+    // FORBIDDEN + LEGACY_ENDPOINT_DISABLED antes de qualquer leitura. A intenção de isolamento deste caso é
+    // preservada: a tentativa cross-tenant continua bloqueada, não altera o processo de B e — como a recusa não
+    // depende do recurso — o erro é IDÊNTICO ao do próprio processo (não revela existência em outro órgão).
     const callerA = await makeCaller(userA);
-    await expect(callerA.processes.updateStatus({ id: processB, status: "em_etp" })).rejects.toThrow(/não encontrado/i);
-    const [rows] = await conn.execute<mysql.RowDataPacket[]>(`SELECT status FROM processes WHERE id = ?`, [processB]);
-    expect(rows[0].status).toBe("em_dfd"); // inalterado
+    const errOf = async (p: Promise<unknown>) => {
+      try { await p; } catch (e) { const x = e as { code?: string; message?: string }; return { code: x.code, message: x.message }; }
+      return { code: "RESOLVED", message: "" };
+    };
+    const cross = await errOf(callerA.processes.updateStatus({ id: processB, status: "em_etp" }));
+    const own = await errOf(callerA.processes.updateStatus({ id: processA, status: "em_etp" }));
+    expect(cross.code).toBe("FORBIDDEN");
+    expect(cross.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+    expect(own).toEqual(cross);
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>(`SELECT id, status FROM processes WHERE id IN (?, ?)`, [processA, processB]);
+    expect(rows.every((r) => r.status === "em_dfd")).toBe(true); // ambos inalterados
   });
 
   it("processes.create (legado): corte controlado — recusa FORBIDDEN com token estável e NÃO grava (PR B)", async () => {

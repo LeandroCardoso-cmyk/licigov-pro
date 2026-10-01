@@ -18,7 +18,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts",
+    "test:smoke:security": "vitest run --no-file-parallelism server/__tests__/integration/rc-sec-pr-a-core-isolation-mysql-smoke.test.ts server/__tests__/integration/rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-legacy-full-isolation-mysql-smoke.test.ts server/__tests__/integration/contracts-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-tenant-isolation-mysql-smoke.test.ts server/__tests__/integration/collaboration-stage-assignment-atomicity-mysql-smoke.test.ts server/__tests__/integration/new016-official-document-immutability-mysql-smoke.test.ts server/__tests__/integration/new003-lgpd-export-disabled-mysql-smoke.test.ts server/__tests__/integration/new022-generic-contract-activation-mysql-smoke.test.ts server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts",
     "db:push": "tsx scripts/db-push-guard.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -30,7 +30,8 @@
     "db:audit": "tsx scripts/schema-audit.ts",
     "ai:models": "tsx scripts/ai-models.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
-    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "ops:schedule-backfill": "tsx scripts/operation-record-schedule-backfill.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -165,8 +166,8 @@
     "overrides": {
       "tailwindcss>nanoid": "3.3.18",
       "postcss>nanoid": "3.3.18",
-      "brace-expansion@1": "1.1.18",
-      "brace-expansion@2": "2.1.4",
+      "brace-expansion@1": "1.1.21",
+      "brace-expansion@2": "2.1.7",
       "brace-expansion@5": "5.0.9",
       "@xmldom/xmldom@>=0.7.0 <0.8.15": "0.8.15"
     }

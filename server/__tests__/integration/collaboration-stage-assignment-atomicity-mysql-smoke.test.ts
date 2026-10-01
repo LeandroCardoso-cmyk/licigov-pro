@@ -9,7 +9,7 @@
  *
  * Matriz:
  *  T1  migration em banco LIMPO (cadeia completa pelo runner de release) → ENUM físico com `stage_assigned`;
- *  T2  UPGRADE a partir do estado imediatamente anterior à 0307 → só a 0307 é aplicada;
+ *  T2  UPGRADE a partir do estado imediatamente anterior à 0307 → aplica a 0307 e migrations posteriores;
  *  T3  rerun do runner → no-op (ledger não cresce, tipo inalterado);
  *  T4  dados preexistentes preservados (todos os valores antigos, NOT NULL, default, PK);
  *  T5/T6/T13  sucesso completo e atômico: 1 atribuição + 1 notificação `stage_assigned` + 1 activity log;
@@ -69,14 +69,14 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     admin = await mysql.createConnection(DB!);
     await admin.query(`CREATE DATABASE \`${cleanDb}\``);
     await admin.query(`CREATE DATABASE \`${upgradeDb}\``);
-    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0307 (mesmos arquivos; journal sem a entry 0307).
+    // Pasta de migrations no estado IMEDIATAMENTE ANTERIOR à 0307.
     tmpFolder = mkdtempSync(path.join(os.tmpdir(), "pr01a-pre0307-"));
     mkdirSync(path.join(tmpFolder, "meta"));
-    for (const f of readdirSync(DRZ).filter((x) => /^\d{4}_.+\.sql$/.test(x) && !x.startsWith(TAG_0307))) {
+    for (const f of readdirSync(DRZ).filter((x) => /^\d{4}_.+\.sql$/.test(x) && Number(x.slice(0, 4)) < 307)) {
       cpSync(path.join(DRZ, f), path.join(tmpFolder, f));
     }
     const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
-    journal.entries = journal.entries.filter((e: { tag: string }) => e.tag !== TAG_0307);
+    journal.entries = journal.entries.filter((e: { idx: number }) => e.idx < 307);
     writeFileSync(path.join(tmpFolder, "meta", "_journal.json"), JSON.stringify(journal));
   }, 60000);
 
@@ -89,11 +89,11 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     if (tmpFolder) rmSync(tmpFolder, { recursive: true, force: true });
   });
 
-  it("a 0307 está registrada no journal (o runner de release a executa) e é a última migration", () => {
+  it("a 0307 permanece na ordem do journal, antes das migrations posteriores", () => {
     const journal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
-    const last = journal.entries[journal.entries.length - 1];
-    expect(last.tag).toBe(TAG_0307);
-    expect(last.when).toBeGreaterThan(journal.entries[journal.entries.length - 2].when);
+    const entry = journal.entries.find((e: { tag: string }) => e.tag === TAG_0307);
+    expect(entry?.idx).toBe(307);
+    expect(entry?.when).toBeGreaterThan(journal.entries.find((e: { idx: number }) => e.idx === 306)?.when);
   });
 
   it("T1 — banco LIMPO: cadeia completa pelo runner de release ⇒ ENUM físico com stage_assigned e schema válido", async () => {
@@ -107,7 +107,7 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
     }
   }, 240000);
 
-  it("T2/T3/T4 — UPGRADE do estado pré-0307 com dados ⇒ só a 0307 aplica, dados preservados; rerun = no-op", async () => {
+  it("T2/T3/T4 — UPGRADE do estado pré-0307 com dados ⇒ aplica pendentes, preserva dados; rerun = no-op", async () => {
     const conn = await mysql.createConnection(urlFor(upgradeDb));
     try {
       await migrate(drizzle(conn), { migrationsFolder: tmpFolder });
@@ -123,9 +123,10 @@ describe.skipIf(!DB)("PR-01A / NEW-001 — migration 0307 (MySQL real, bancos de
       await conn.query(`INSERT INTO notifications (userId, title, message) VALUES (42, 'pre-default', 'm')`);
       const [pre] = await conn.query<mysql.RowDataPacket[]>(`SELECT id, title, type, isRead FROM notifications ORDER BY id`);
 
-      // T2 — runner real: aplica SOMENTE a 0307
+      // T2 — runner real: aplica a 0307 e as migrations posteriores.
       await migrateWithAdvisoryLock(conn);
-      expect(await ledgerCount(conn)).toBe(before + 1);
+      const fullJournal = JSON.parse(readFileSync(path.join(DRZ, "meta", "_journal.json"), "utf8"));
+      expect(await ledgerCount(conn)).toBe(before + fullJournal.entries.filter((e: { idx: number }) => e.idx >= 307).length);
       expect(await columnInfo(conn)).toEqual({ type: FINAL_TYPE, nullable: "NO", def: "general" });
       const [post] = await conn.query<mysql.RowDataPacket[]>(`SELECT id, title, type, isRead FROM notifications ORDER BY id`);
       expect(post).toEqual(pre);                                                  // T4 — mesmas linhas, mesmos valores
