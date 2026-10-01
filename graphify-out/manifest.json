@@ -1005,8 +1005,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PriceJustificationWorkspace.tsx": {
-    "mtime": 1790643728.9237983,
-    "ast_hash": "9223d833d239c51f5eaae646a263ac73",
+    "mtime": 1790890763.8667512,
+    "ast_hash": "a1c8f2bcee599d6ef868db525e0e1163",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790890630.7392607,
-    "ast_hash": "18dda608e14f7f4fa7623b427b6c57bf",
+    "mtime": 1790890763.8940756,
+    "ast_hash": "b90d2b09f1a95cd167233f9836b5d479",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6510,8 +6510,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5z-direct-procurement.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "475a7d22e5ed7aa5702ed7438f008270",
+    "mtime": 1790890763.8667512,
+    "ast_hash": "79615c4286b60bc32d384499dd2614f6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/task-attachment-policy.test.ts": {
@@ -8765,8 +8765,8 @@
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
-    "mtime": 1790890352.6159217,
-    "ast_hash": "c84af19728434bc714a7d0cc158acde7",
+    "mtime": 1790890806.726121,
+    "ast_hash": "028c351bd866856eb4b4fb2b52e19c69",
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "4250b12dcea4adf1e0297d8fed51f02b",
+    "mtime": 1790890763.8707511,
+    "ast_hash": "ae9cb085daefe73929aa1f6c59bc2500",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -12707,6 +12707,26 @@
   "server/services/legalOpinionAuthorityService.ts": {
     "mtime": 1790890630.7107432,
     "ast_hash": "84c079b676a0f4200c9a9d9926eb938e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/direct-price-import-contract.test.ts": {
+    "mtime": 1790890763.8667512,
+    "ast_hash": "b3597ecb191bdbd4bffd2d8424c3c52f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-price-import-governed-mysql-smoke.test.ts": {
+    "mtime": 1790890763.8667512,
+    "ast_hash": "b717bbb6014d1447733e72cc26af2bdd",
+    "semantic_hash": ""
+  },
+  "server/db/directPriceImport.ts": {
+    "mtime": 1790890763.8667512,
+    "ast_hash": "4f685673dbe4ed1a35ca3df39f6bae01",
+    "semantic_hash": ""
+  },
+  "server/domain/directPriceImport.ts": {
+    "mtime": 1790890763.8667512,
+    "ast_hash": "e5b5af5b517d7998e1d44283c7da8d46",
     "semantic_hash": ""
   }
 }

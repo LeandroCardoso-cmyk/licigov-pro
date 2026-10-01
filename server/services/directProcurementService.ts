@@ -16,8 +16,12 @@ import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
-import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { insertResearch, insertResearchItem, recordProcessEvent } from "../db/procurement";
+import type { PriceResearchSource } from "../domain/priceResearch";
+import { planDirectPriceImport, computeDirectPriceImportPayloadHash } from "../domain/directPriceImport";
+import { recordProcessEvent } from "../db/procurement";
+import { getDb } from "../db/connection";
+import { lockDirectWorkspaceForImport, findDirectPriceImport, insertDirectPriceImportTx } from "../db/directPriceImport";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   DIRECT_DOMAIN_COPILOTS,
   type DirectProcurementWorkspace,
@@ -51,25 +55,138 @@ async function requireWorkspace(id: string, orgId: number): Promise<DirectProcur
 
 // ─── Pesquisa de Preços (REUTILIZA o Price Research Workspace) ─────────────────
 
-/** Importa pesquisa de preços reutilizando integralmente o Price Research Workspace. */
+/** Operação registrada na idempotência (escopo do hash de payload). */
+export const DIRECT_PRICE_IMPORT_OP = "directProcurement.importPriceResearch";
+
+export interface DirectPriceImportResult {
+  /** Mantido por compatibilidade com o cliente (= importId). */
+  readonly researchId: string;
+  readonly importId: string;
+  readonly itemCount: number;
+  readonly contentHash: string;
+  readonly source: string;
+  /** true ⇒ o MESMO conteúdo já havia sido importado neste workspace: convergiu, nada foi escrito. */
+  readonly deduplicated: boolean;
+  /** true ⇒ resposta da idempotência (mesma chave + mesmo payload), sem reexecução. */
+  readonly replayed: boolean;
+}
+
+function isDuplicateEntry(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && typeof e === "object" && i < 4; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: string }).code === "ER_DUP_ENTRY") return true;
+  }
+  return false;
+}
+
+function reviveImport(raw: unknown): Omit<DirectPriceImportResult, "replayed"> {
+  const v = (typeof raw === "string" ? JSON.parse(raw) : raw) as Omit<DirectPriceImportResult, "replayed">;
+  return { researchId: v.researchId, importId: v.importId, itemCount: v.itemCount, contentHash: v.contentHash, source: v.source, deduplicated: v.deduplicated };
+}
+
+/**
+ * R2 / PR-04A — LEG-014 / FCC-01 — Importação GOVERNADA de pesquisa de preços na Contratação Direta.
+ *
+ * Contrato:
+ *   - identidade EXPLÍCITA por importação (importId = f(org, workspace, contentHash)); cotações com ids
+ *     escopados à importação — nunca reaproveita/sobrescreve a pesquisa ou as cotações de outra importação;
+ *   - idempotência (reuso de checkIdempotency/saveIdempotencyResult/failIdempotencyKey): mesma chave +
+ *     mesmo payload ⇒ converge (mesmo resultado persistido, `replayed`); mesma chave + payload diferente ⇒
+ *     CONFLICT; chave em processamento ⇒ CONFLICT;
+ *   - dedup governada: mesmo conteúdo (contentHash) sob NOVA chave ⇒ converge para a importação existente
+ *     (`deduplicated: true`), sem escrita nem evento; conteúdo diferente ⇒ coexiste;
+ *   - transação LOCAL e determinística (lock do workspace + pesquisa + cotações + evento de timeline +
+ *     conclusão da chave). Nada de IA, rede, storage, e-mail ou webhook;
+ *   - linhagem: fonte, importId, contentHash, correlationId e ator (evento `process_timeline` com
+ *     actor = usuário autenticado, refId = importId; chave de idempotência por (org, usuário));
+ *   - tenant fail-closed: workspace revalidado por (id, org) sob lock; ausente ⇒ NOT_FOUND neutro;
+ *   - FAIL-CLOSED sem DB (escrita autoritativa — nunca sucesso simulado).
+ */
 export async function importDirectPriceResearch(params: {
   workspaceId: string;
   organizationId: number;
-  source: "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
+  source: PriceResearchSource;
   text: string;
+  idempotencyKey: string;
+  actorUserId: number;
   correlationId: string;
-}): Promise<{ researchId: string; itemCount: number }> {
-  const research = createPriceResearchWorkspace({
-    processId: params.workspaceId, organizationId: params.organizationId, source: params.source, correlationId: params.correlationId,
+}): Promise<DirectPriceImportResult> {
+  const plan = planDirectPriceImport({
+    workspaceId: params.workspaceId, organizationId: params.organizationId, source: params.source,
+    text: params.text, correlationId: params.correlationId,
   });
-  const items = extractItemsFromText(params.text, { researchId: research.id, processId: params.workspaceId, organizationId: params.organizationId });
-  await insertResearch({ ...research, itemCount: items.length });
-  for (const it of items) await insertResearchItem(it);
-  await recordProcessEvent({
-    organizationId: params.organizationId, processId: params.workspaceId, eventType: "change",
-    actor: "sistema", summary: `Pesquisa de preços importada (${params.source}): ${items.length} item(ns).`, refId: research.id, correlationId: params.correlationId,
+  if (plan.items.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Nenhuma cotação reconhecida no conteúdo informado (use: descrição;qtd;un;valor[;fornecedor])." });
+  }
+  const payloadHash = computeDirectPriceImportPayloadHash({
+    operation: DIRECT_PRICE_IMPORT_OP, organizationId: params.organizationId, workspaceId: params.workspaceId,
+    source: params.source, contentHash: plan.contentHash,
   });
-  return { researchId: research.id, itemCount: items.length };
+
+  const db = await getDb();
+  if (!db) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — importação recusada (nada salvo)." });
+  }
+
+  const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, DIRECT_PRICE_IMPORT_OP, payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key reutilizada com conteúdo diferente — importação recusada." });
+    }
+    return { ...reviveImport(check.response), replayed: true };
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: "Uma importação idêntica já está em processamento para esta chave — aguarde a conclusão." });
+  }
+
+  const key = { key: params.idempotencyKey, user: params.actorUserId, org: params.organizationId };
+  const dedupResult = (existing: { importId: string; itemCount: number; source: string }): Omit<DirectPriceImportResult, "replayed"> => ({
+    researchId: existing.importId, importId: existing.importId, itemCount: existing.itemCount,
+    contentHash: plan.contentHash, source: existing.source, deduplicated: true,
+  });
+
+  const runTx = async (): Promise<Omit<DirectPriceImportResult, "replayed">> => {
+    let result!: Omit<DirectPriceImportResult, "replayed">;
+    await db.transaction(async (tx) => {
+      if (!(await lockDirectWorkspaceForImport(tx, params.workspaceId, params.organizationId))) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Processo de contratação direta não encontrado nesta organização." });
+      }
+      const existing = await findDirectPriceImport(tx, plan.importId, params.organizationId, params.workspaceId);
+      if (existing) {
+        // Dedup governada: mesmo conteúdo já importado — converge, sem escrita/evento (nada mudou).
+        result = dedupResult(existing);
+      } else {
+        await insertDirectPriceImportTx(tx, plan.research, plan.items);
+        await recordProcessEvent({
+          organizationId: params.organizationId, processId: params.workspaceId, eventType: "change",
+          actor: String(params.actorUserId),
+          summary: `Pesquisa de preços importada (${params.source}): ${plan.items.length} cotação(ões). importId=${plan.importId} contentHash=${plan.contentHash}`,
+          refId: plan.importId, correlationId: params.correlationId.slice(0, 64),
+          // evento SINGLETON por importação (id derivado do importId — nunca duplica)
+          idempotencyKey: `direct_price_import:${plan.importId}`,
+        }, tx);
+        result = {
+          researchId: plan.importId, importId: plan.importId, itemCount: plan.items.length,
+          contentHash: plan.contentHash, source: params.source, deduplicated: false,
+        };
+      }
+      await saveIdempotencyResult(key.key, key.user, key.org, result, tx);
+    });
+    return result;
+  };
+
+  try {
+    try {
+      return { ...(await runTx()), replayed: false };
+    } catch (err) {
+      // Corrida estrutural (mesmo conteúdo, outra chave, commit simultâneo): a PK recusou o 2º INSERT e a
+      // transação fez rollback. Reexecuta UMA vez: agora a importação existe ⇒ converge (dedup).
+      if (!isDuplicateEntry(err)) throw err;
+      return { ...(await runTx()), replayed: false };
+    }
+  } catch (err) {
+    await failIdempotencyKey(key.key, key.user, key.org).catch(() => {});
+    throw err;
+  }
 }
 
 // ─── Justificativa da Contratação (copilotos, revisável) ──────────────────────
