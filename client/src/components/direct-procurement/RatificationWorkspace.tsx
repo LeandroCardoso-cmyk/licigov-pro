@@ -36,6 +36,7 @@ export default function RatificationWorkspace({ workspaceId, onRatified }: Ratif
       <textarea value={evidence} onChange={(e) => setEvidence(e.target.value)} rows={2} placeholder="Evidências (uma por linha)…"
         className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
       {ratify.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Ratificação registrada.</p>}
+      {ratify.isError && <p className="text-xs text-red-600 dark:text-red-400">{ratify.error.message}</p>}
       <button type="submit" disabled={ratify.isPending} className="w-full rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
         {ratify.isPending ? "Registrando…" : "Registrar ratificação"}
       </button>

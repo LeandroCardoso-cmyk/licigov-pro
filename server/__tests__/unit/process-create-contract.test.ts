@@ -149,7 +149,7 @@ describe("R3 / PR-05 — guarda estática: criação nunca é upsert", () => {
     const pp = src("server/routers/procurementProcessRouter.ts");
     const dp = src("server/routers/directProcurementRouter.ts");
     const ppCreate = pp.slice(pp.indexOf("createProcess: orgRoleProcedure(\"operator\")"), pp.indexOf("loadProcess:"));
-    const dpCreate = dp.slice(dp.indexOf("createProcess: tenantProcedure"), dp.indexOf("loadProcess:"));
+    const dpCreate = dp.slice(dp.indexOf("createProcess: orgRoleProcedure(\"operator\")"), dp.indexOf("loadProcess:"));
     expect(ppCreate).toMatch(/createProcessWithInitialEvent\(/);
     expect(ppCreate).toMatch(/err instanceof ProcessAlreadyExistsError/);
     expect(dpCreate).toMatch(/createDirectProcurementWorkspaceWithInitialEvent\(/);

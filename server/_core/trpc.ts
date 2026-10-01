@@ -171,19 +171,20 @@ const ORG_ROLE_RANK: Record<OrgRole, number> = {
 };
 
 export function orgRoleProcedure(minRole: OrgRole) {
-  return tenantProcedure.use(
-    t.middleware(async opts => {
-      const { ctx, next } = opts;
+  // NEW-005 — middleware inline sobre `tenantProcedure` (antes: `t.middleware` genérico + `next({ ctx })`),
+  // SÓ para preservar a tipagem estreitada do tenantProcedure (`ctx.user` não-nulo) nos handlers. Mesma
+  // semântica em runtime: mesmo ranking, mesma recusa, mesmo ctx repassado.
+  return tenantProcedure.use(async opts => {
+    const { ctx, next } = opts;
 
-      const userRole = ctx.orgMembership!.role;
-      if (ORG_ROLE_RANK[userRole] < ORG_ROLE_RANK[minRole]) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
-        });
-      }
+    const userRole = ctx.orgMembership.role;
+    if (ORG_ROLE_RANK[userRole] < ORG_ROLE_RANK[minRole]) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
+      });
+    }
 
-      return next({ ctx });
-    }),
-  );
+    return next();
+  });
 }

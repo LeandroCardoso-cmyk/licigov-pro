@@ -3,13 +3,26 @@
  *
  * Conduz o servidor por Dispensa/Inexigibilidade num Workspace próprio. Reutiliza
  * Price Research, Institutional Request Engine (→ Parecer Jurídico), Timeline e
- * Document Engine. tenantProcedure, multi-tenant. Adaptive Process Engine controla
+ * Document Engine. Multi-tenant. Adaptive Process Engine controla
  * as etapas condicionais (DFD, pesquisa, propostas, parecer).
+ *
+ * NEW-005 — RBAC institucional (matriz congelada em ./directProcurementRbacMatrix.ts):
+ *   READ (loadProcess, listProcesses, getLegalOpinion)                      → tenantProcedure
+ *   DRAFT_WRITE / EVIDENCE_WRITE (createProcess, importDFD, selectLegalBasis,
+ *     characterizeNeed, importPriceResearch, configureProcedure, registerProposal,
+ *     generateJustification, generatePriceJustification, validateDocuments,
+ *     requestLegalOpinion)                                                  → orgRoleProcedure("operator")
+ *   WORKFLOW_CONFIGURATION (configureFlags)                                 → orgRoleProcedure("manager")
+ *   INSTITUTIONAL_DECISION (ratify)                                         → orgRoleProcedure("manager")
+ *   PUBLICATION (publish)                                                   → orgRoleProcedure("manager")
+ *   LEGACY_TO_DISABLE (updateStage, LEG-011)                                → desligado por PR-02
+ * `manager` é só o PISO técnico de RBAC — não é a afirmação de autoridade legalmente competente.
+ * Autoridade competente, decidedBy × recordedBy e SoD pertencem ao PR-07.
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
   createDirectProcurementWorkspace, setDirectStage,
   setProcedureType, setLegalBasis, configureFlags,
@@ -87,7 +100,7 @@ async function resolveExistingDirectCreate(p: {
 }
 
 export const directProcurementRouter = router({
-  createProcess: tenantProcedure
+  createProcess: orgRoleProcedure("operator")
     .input(z.object({
       processNumber: z.string().min(1),
       object: z.string().min(1),
@@ -157,7 +170,7 @@ export const directProcurementRouter = router({
       throwLegacyEndpointDisabled("directProcurement.updateStage", "LEG-011", ctx, "as transições canônicas (ratify/publish)");
     }),
 
-  importDFD: tenantProcedure
+  importDFD: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), source: z.enum(["pdf", "docx", "oficio", "memorando"]), fields: z.record(z.string(), z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -167,7 +180,7 @@ export const directProcurementRouter = router({
       return { dfd };
     }),
 
-  selectLegalBasis: tenantProcedure
+  selectLegalBasis: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), legalBasis: z.string().min(1), justification: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -178,7 +191,7 @@ export const directProcurementRouter = router({
       return { workspace: updated, suggestions: suggestLegalBasis(ws.procurementType) };
     }),
 
-  characterizeNeed: tenantProcedure
+  characterizeNeed: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), description: z.string().optional(), justification: z.string().optional(), estimatedValue: z.number().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -188,7 +201,7 @@ export const directProcurementRouter = router({
       return { need };
     }),
 
-  importPriceResearch: tenantProcedure
+  importPriceResearch: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), source: z.enum(PRICE_SOURCES), text: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -197,7 +210,7 @@ export const directProcurementRouter = router({
       return result;
     }),
 
-  configureProcedure: tenantProcedure
+  configureProcedure: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       procedureType: z.enum(PROCEDURE_MODES),
@@ -220,7 +233,7 @@ export const directProcurementRouter = router({
       return { procedure };
     }),
 
-  registerProposal: tenantProcedure
+  registerProposal: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       supplierName: z.string().min(1),
@@ -246,7 +259,7 @@ export const directProcurementRouter = router({
       return { proposal };
     }),
 
-  generateJustification: tenantProcedure
+  generateJustification: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -254,7 +267,7 @@ export const directProcurementRouter = router({
       return generateContractJustification({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId });
     }),
 
-  generatePriceJustification: tenantProcedure
+  generatePriceJustification: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       source: z.enum(["pesquisa", "manual", "documento"]),
@@ -269,7 +282,7 @@ export const directProcurementRouter = router({
       return generatePriceJustification({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, justification: input.justification, referenceValue: input.referenceValue, researchId: input.researchId, documentReferences: input.documentReferences, correlationId: ctx.correlationId });
     }),
 
-  validateDocuments: tenantProcedure
+  validateDocuments: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), documentId: z.string().optional(), status: z.enum(DOC_STATUSES).optional(), documentReference: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -283,7 +296,7 @@ export const directProcurementRouter = router({
       return { documents, pending: documents.filter(d => d.required && d.status === "pendente").length };
     }),
 
-  requestLegalOpinion: tenantProcedure
+  requestLegalOpinion: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), documents: z.array(z.object({ documentId: z.string(), title: z.string().optional(), version: z.number().optional() })).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -301,7 +314,9 @@ export const directProcurementRouter = router({
       return getLegalOpinionResult(input.requestId, orgId);
     }),
 
-  ratify: tenantProcedure
+  // NEW-005 — INSTITUTIONAL_DECISION: piso técnico manager+. NÃO define autoridade competente; quem decide
+  // (decidedBy) × quem registra (recordedBy) e a segregação de funções são do PR-07 (semântica inalterada aqui).
+  ratify: orgRoleProcedure("manager")
     .input(z.object({ workspaceId: z.string().min(1), decision: z.enum(["ratificado", "nao_ratificado"]).optional(), justification: z.string().optional(), evidence: z.array(z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -314,7 +329,8 @@ export const directProcurementRouter = router({
       return { ratification };
     }),
 
-  publish: tenantProcedure
+  // NEW-005 — PUBLICATION: piso técnico manager+ (mesma ressalva do ratify: autoridade competente = PR-07).
+  publish: orgRoleProcedure("manager")
     .input(z.object({ workspaceId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -325,7 +341,8 @@ export const directProcurementRouter = router({
       return { publications };
     }),
 
-  configureFlags: tenantProcedure
+  // NEW-005 — WORKFLOW_CONFIGURATION: muda exigências do fluxo (ex.: requiresLegalOpinion) ⇒ piso manager+.
+  configureFlags: orgRoleProcedure("manager")
     .input(z.object({ workspaceId: z.string().min(1), usesDFD: z.boolean().optional(), requiresPriceResearch: z.boolean().optional(), requiresProposalCollection: z.boolean().optional(), requiresLegalOpinion: z.boolean().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

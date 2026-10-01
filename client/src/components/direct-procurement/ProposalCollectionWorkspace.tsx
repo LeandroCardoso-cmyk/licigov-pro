@@ -45,6 +45,7 @@ export default function ProposalCollectionWorkspace({ workspaceId, proposals = [
           {register.isPending ? "Registrando…" : "Registrar proposta"}
         </button>
       </form>
+      {register.isError && <p className="text-xs text-red-600 dark:text-red-400">{register.error.message}</p>}
 
       {proposals.length > 0 && (
         <ul className="divide-y divide-border">
