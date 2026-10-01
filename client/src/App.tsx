@@ -44,7 +44,6 @@ import DirectContractsAnalytics from "./pages/DirectContractsAnalytics";
 import NewContract from "./pages/NewContract";
 import ContractDetails from "./pages/ContractDetails";
 import ContractAlerts from "./pages/ContractAlerts";
-import NewLegalOpinion from "./pages/NewLegalOpinion";
 import LegalOpinionDetails from "./pages/LegalOpinionDetails";
 import LegalOpinionsAnalytics from "./pages/LegalOpinionsAnalytics";
 // RC-1 — Business Domains conectados à navegação principal
@@ -137,7 +136,6 @@ const PublicationLogsRoute = () => <AuthenticatedRoute component={PublicationLog
 const NewDirectContractRoute = () => <AuthenticatedRoute component={NewDirectContract} />;
 const DirectContractDetailsRoute = () => <AuthenticatedRoute component={DirectContractDetails} />;
 const LegalOpinionsAnalyticsRoute = () => <AuthenticatedRoute component={LegalOpinionsAnalytics} />;
-const NewLegalOpinionRoute = () => <AuthenticatedRoute component={NewLegalOpinion} />;
 const LegalOpinionDetailsRoute = () => <AuthenticatedRoute component={LegalOpinionDetails} />;
 // RC-6 — Rotas críticas de homologação renderizadas DENTRO do shell (DashboardLayout).
 // V1 UI/UX Stabilization: /dashboard e /centro-operacoes deixam de ser alias da MESMA
@@ -210,7 +208,10 @@ function Router() {
       <Route path={'/contratos/novo'} component={() => <AuthenticatedRoute component={NewContract} />} />
       <Route path={'/contratos/alertas'} component={() => <AuthenticatedRoute component={ContractAlerts} />} />
       <Route path={'/contratos/:id'} component={() => <AuthenticatedRoute component={ContractDetails} />} />
-      <Route path={'/parecer/novo'} component={NewLegalOpinionRoute} />
+      {/* R2 / PR-03 (LEG-012, SEM-016/017): a criação de parecer LEGADO foi desligada no servidor; o deep
+              link /parecer/novo (inclusive ?contractId=) leva ao workspace canônico. O detalhe legado
+              /parecer/:id continua como LEITURA HISTÓRICA. */}
+      <Route path={'/parecer/novo'} component={() => <LegacyRedirect to="/parecer" />} />
       <Route path={'/parecer/analytics'} component={LegalOpinionsAnalyticsRoute} />
       <Route path={'/parecer/:id'} component={LegalOpinionDetailsRoute} />
 
@@ -226,7 +227,7 @@ function Router() {
       <Route path={'/contracts/:id'}>{(p) => <LegacyRedirect to={`/contratos/${p.id}`} />}</Route>
       <Route path={'/contracts'} component={() => <LegacyRedirect to="/contratos" />} />
       <Route path={'/parecer-juridico/analytics'} component={() => <LegacyRedirect to="/parecer/analytics" />} />
-      <Route path={'/parecer-juridico/novo'} component={() => <LegacyRedirect to="/parecer/novo" />} />
+      <Route path={'/parecer-juridico/novo'} component={() => <LegacyRedirect to="/parecer" />} />
       <Route path={'/parecer-juridico/:id'}>{(p) => <LegacyRedirect to={`/parecer/${p.id}`} />}</Route>
       <Route path={'/parecer-juridico'} component={() => <LegacyRedirect to="/parecer" />} />
       {/* PR B — Detalhe legado de processo desativado. Documentado expressamente:
