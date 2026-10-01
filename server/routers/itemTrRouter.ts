@@ -5,22 +5,20 @@
  * Contratos de tipo corretos; persistência real virá na Sprint 3.2.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
   createItemTR,
-  computeItemTRId,
   approveItem,
   rejectItem,
   overrideItem,
   selectCandidate as selectCandidateFn,
   type ItemTR,
 } from "../domain/itemTR";
-import {
-  type ItemReviewState,
-} from "../domain/itemReviewWorkflow";
 import {
   computeItemAnalytics,
   type ItemLifecycleData,
@@ -213,7 +211,7 @@ function setItems(organizationId: number, processId: number, items: ItemTR[]): v
   itemStore.set(storeKey(organizationId, processId), items);
 }
 
-function findItem(organizationId: number, processId: number, id: string): ItemTR | undefined {
+function _findItem(organizationId: number, processId: number, id: string): ItemTR | undefined {
   return getItems(organizationId, processId).find(i => i.id === id);
 }
 
@@ -248,7 +246,7 @@ const itemReviewStateSchema = z.enum([
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const itemTrRouter = router({
-  list: protectedProcedure
+  list: experimentalProtectedProcedure
     .input(z.object({
       processId:      z.number(),
       organizationId: z.number(),
@@ -268,7 +266,7 @@ export const itemTrRouter = router({
       return { items, total: filtered.length };
     }),
 
-  getById: protectedProcedure
+  getById: experimentalProtectedProcedure
     .input(z.object({
       id:             z.string(),
       organizationId: z.number(),
@@ -281,7 +279,7 @@ export const itemTrRouter = router({
       return item;
     }),
 
-  approve: protectedProcedure
+  approve: experimentalProtectedProcedure
     .input(z.object({
       id:             z.string(),
       organizationId: z.number(),
@@ -306,7 +304,7 @@ export const itemTrRouter = router({
       }
     }),
 
-  reject: protectedProcedure
+  reject: experimentalProtectedProcedure
     .input(z.object({
       id:             z.string(),
       organizationId: z.number(),
@@ -332,7 +330,7 @@ export const itemTrRouter = router({
       }
     }),
 
-  override: protectedProcedure
+  override: experimentalProtectedProcedure
     .input(z.object({
       id:             z.string(),
       organizationId: z.number(),
@@ -364,7 +362,7 @@ export const itemTrRouter = router({
       }
     }),
 
-  selectCandidate: protectedProcedure
+  selectCandidate: experimentalProtectedProcedure
     .input(z.object({
       id:             z.string(),
       organizationId: z.number(),
@@ -390,7 +388,7 @@ export const itemTrRouter = router({
       }
     }),
 
-  bulkApprove: protectedProcedure
+  bulkApprove: experimentalProtectedProcedure
     .input(z.object({
       ids:            z.array(z.string()),
       organizationId: z.number(),
@@ -425,7 +423,7 @@ export const itemTrRouter = router({
       return { approved, failed };
     }),
 
-  bulkReject: protectedProcedure
+  bulkReject: experimentalProtectedProcedure
     .input(z.object({
       ids:            z.array(z.string()),
       organizationId: z.number(),
@@ -461,7 +459,7 @@ export const itemTrRouter = router({
       return { rejected, failed };
     }),
 
-  getAnalytics: protectedProcedure
+  getAnalytics: experimentalProtectedProcedure
     .input(z.object({
       organizationId: z.number(),
       processId:      z.number().optional(),

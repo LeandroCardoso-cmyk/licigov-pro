@@ -8660,8 +8660,8 @@
     "semantic_hash": ""
   },
   "server/routers/approvalWorkflowRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "d845f604abcd39de2fdcf39bf92c62fd",
+    "mtime": 1790889921.486701,
+    "ast_hash": "0136436e0927c00f5cf4ffdbc1f8fef4",
     "semantic_hash": ""
   },
   "server/routers/authRouter.ts": {
@@ -8685,13 +8685,13 @@
     "semantic_hash": ""
   },
   "server/routers/clauseRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "762565b5c7fbcca7caf83ffabd440d0b",
+    "mtime": 1790889921.486701,
+    "ast_hash": "d00e18c4d21ec931a20166c089beb4c0",
     "semantic_hash": ""
   },
   "server/routers/collaborationCommentsRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "84e3e4119a1be218a3f6ffa474d59315",
+    "mtime": 1790889921.486701,
+    "ast_hash": "433e45483a9450f03298afcc6510d33a",
     "semantic_hash": ""
   },
   "server/routers/collaborationRouter.ts": {
@@ -8805,8 +8805,8 @@
     "semantic_hash": ""
   },
   "server/routers/exportRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "68635061332ea98b793e2fcda178c9d9",
+    "mtime": 1790889921.486701,
+    "ast_hash": "b422bfb544411a81bfb944d9af7acad4",
     "semantic_hash": ""
   },
   "server/routers/featureFlagAdminRouter.ts": {
@@ -8840,8 +8840,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemAnalyticsRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "1984d59d025c70bfc340a5fe8ceca377",
+    "mtime": 1790889921.486701,
+    "ast_hash": "2561573afc38503061fbc37312d3e631",
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
@@ -8850,8 +8850,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "dba085a09a2739065125b3e7de034be2",
+    "mtime": 1790889921.486701,
+    "ast_hash": "60a64f6c90024b947bbc3b846b5fb208",
     "semantic_hash": ""
   },
   "server/routers/knowledgeGraphRouter.ts": {
@@ -8915,8 +8915,8 @@
     "semantic_hash": ""
   },
   "server/routers/pilotReadinessRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "6e846f116244df6e35df2031835c6567",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "5165f57ed3918ade3a041793f3314b5e",
     "semantic_hash": ""
   },
   "server/routers/platformsRouter.ts": {
@@ -8940,8 +8940,8 @@
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "aedc24ebca0510c7c5d58be672f17a9f",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "046a60d6ff0c64f58d70ec6308497e56",
     "semantic_hash": ""
   },
   "server/routers/promptOrchestrationRouter.ts": {
@@ -8965,8 +8965,8 @@
     "semantic_hash": ""
   },
   "server/routers/reviewWorkspaceRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "f1d9fabe3603d50b2bf2e9c677526b24",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "3e4c886f4207e52d90d07cd4355a27f7",
     "semantic_hash": ""
   },
   "server/routers/semanticGovernanceRouter.ts": {
@@ -8985,8 +8985,8 @@
     "semantic_hash": ""
   },
   "server/routers/structuredExportRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "73165be24b81db1b05724621a6487b93",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "f63744882304d93b3d7df5c8383737e3",
     "semantic_hash": ""
   },
   "server/routers/taskRouter.ts": {
@@ -9005,13 +9005,13 @@
     "semantic_hash": ""
   },
   "server/routers/trCompositionRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "7451f938623f4a7262a41065c4f4386d",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "cfe02d50a612cc592e022ce834f8b1b5",
     "semantic_hash": ""
   },
   "server/routers/webhookRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "8d79846cb862bb467e7453c1d1d1d722",
+    "mtime": 1790889921.4907012,
+    "ast_hash": "05ea7e202435305465db40b465c966bf",
     "semantic_hash": ""
   },
   "server/routers/workspaceGovernanceRouter.ts": {
@@ -12617,6 +12617,21 @@
   "server/__tests__/integration/r2-leg009-legacy-documents-disabled.test.ts": {
     "mtime": 1790889739.8786902,
     "ast_hash": "dc7e250d62fb86d58574ed5057f17d8b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r2-leg028-experimental-api-gate.test.ts": {
+    "mtime": 1790889921.486701,
+    "ast_hash": "748bc25015ee5848b1679f5a089e040d",
+    "semantic_hash": ""
+  },
+  "server/config/experimentalApis.ts": {
+    "mtime": 1790889921.486701,
+    "ast_hash": "a99122b7844e069fa0577ee1ebfca572",
+    "semantic_hash": ""
+  },
+  "server/services/experimentalApiGate.ts": {
+    "mtime": 1790889921.4907012,
+    "ast_hash": "17713331b411d96ab4a15186ef422d81",
     "semantic_hash": ""
   }
 }
