@@ -35,6 +35,7 @@ import {
   buildAddendumTermContent, buildApostilleTermContent, INSTRUMENT_NOT_FOUND, INSTRUMENT_REFERENCE_REQUIRED,
   type AddendumData, type ApostilleData,
 } from "../domain/instrumentTerms";
+import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import {
   getContractWorkspace, compareAndSetContractWorkspaceStatus, type ContractWsExecutor,
   insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda, listContractApostilles,
@@ -340,6 +341,8 @@ export async function generateContractDocument(params: {
     metadata: {
       copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, confidence: orchestration.consolidated.confidence,
       ...(instrument ? { instrumentId: instrument.data.id, instrumentKind: instrument.kind, contractNumber: ws.contractNumber } : {}),
+      // R8 / PR-20 scaffolding (SEM-084): o sistema não valida limites legais do aditivo sem parecer registrado.
+      ...(instrument?.kind === "aditivo" ? { addendumLimitPolicy: legalPolicyMarker("SEM-084_CANONICAL_ADDENDUM_LIMITS") } : {}),
     },
   });
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: "multi_copilot", summary: `Minuta de ${params.kind} gerada (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
