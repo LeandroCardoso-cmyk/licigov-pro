@@ -153,6 +153,8 @@ export const legalOpinionWorkspaceRouter = router({
   updateOpinion: legalMutationProcedure
     .input(z.object({
       workspaceId: z.string().min(1),
+      /** R5 / PR-10 — versão que o editor carregou (CAS). Ausente = cliente antigo (o CAS de persistência continua). */
+      expectedVersion: z.number().int().min(1).optional(),
       report: z.string().optional(),
       foundation: z.string().optional(),
       conclusion: z.string().optional(),
@@ -164,12 +166,12 @@ export const legalOpinionWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "update_opinion");
-      const { workspaceId, ...rest } = input;
+      const { workspaceId, expectedVersion, ...rest } = input;
       const patch = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
-      const draft = await updateOpinionDraft({
-        workspaceId, organizationId: orgId, author: ctx.user!.id, patch, correlationId: ctx.correlationId,
+      const result = await updateOpinionDraft({
+        workspaceId, organizationId: orgId, author: ctx.user!.id, patch, correlationId: ctx.correlationId, expectedVersion,
       });
-      return { draft };
+      return { draft: result.draft, changed: result.changed };
     }),
 
   /** Assina o parecer (apenas MANUAL implementado nesta fase). */

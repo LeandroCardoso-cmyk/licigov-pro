@@ -139,7 +139,7 @@ export default function LegalOpinionHome() {
 
               <Section title="Elaboração e assinatura" description="Redija o parecer, revise a versão e assine.">
                 <div className="space-y-5">
-                  <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} />
+                  <LegalOpinionEditor workspaceId={workspaceId} hasDraft={hasDraft} draft={ctx?.draft ?? null} loading={isLoading} />
                   {hasDraft && <LegalOpinionViewer draft={ctx?.draft ?? null} />}
                   <SignaturePanel workspaceId={workspaceId} signed={signed} onReturned={() => setWorkspaceId("")} />
                 </div>

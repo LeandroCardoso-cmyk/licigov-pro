@@ -34,6 +34,7 @@ import {
   LEGAL_OPINION_ALREADY_EXISTS, LEGAL_OPINION_ALREADY_EXISTS_MESSAGE, LEGAL_OPINION_ALREADY_SIGNED_MESSAGE,
   LEGAL_OPINION_STAGE_INVALID,
   type LegalOpinionDraft, type LegalOpinionType, type LegalOpinionConclusion, type SignatureMethod,
+  effectiveOpinionPatch, LEGAL_OPINION_STALE_VERSION,
 } from "../domain/legalOpinionDraft";
 import { createLawyerAssignment } from "../domain/lawyerAssignment";
 import {
@@ -353,7 +354,9 @@ export async function updateOpinionDraft(params: {
   author: number;
   patch: Partial<Pick<LegalOpinionDraft, "report" | "foundation" | "conclusion" | "conclusionType" | "recommendations" | "reservations" | "attachments">>;
   correlationId: string;
-}): Promise<LegalOpinionDraft> {
+  /** R5 / PR-10 — versão vista pelo editor; diferente da atual ⇒ CONFLICT (nada gravado). */
+  expectedVersion?: number;
+}): Promise<{ draft: LegalOpinionDraft; changed: boolean }> {
   const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
   if (!ws) throw new Error("Workspace de parecer não encontrado.");
   const current = await getLegalOpinionDraftByWorkspace(params.workspaceId, params.organizationId);
@@ -362,7 +365,13 @@ export async function updateOpinionDraft(params: {
   if (current.signed) {
     throw new TRPCError({ code: "CONFLICT", message: LEGAL_OPINION_ALREADY_SIGNED_MESSAGE });
   }
-  const updated = updateLegalOpinionDraft(current, params.patch);
+  if (params.expectedVersion !== undefined && params.expectedVersion !== current.version) {
+    throw new TRPCError({ code: "CONFLICT", message: `O parecer foi alterado por outra pessoa (versão atual ${current.version}); recarregue antes de salvar. Nada foi gravado (${LEGAL_OPINION_STALE_VERSION}).` });
+  }
+  // R5 / PR-10 (SEM-019): salvar vazio não apaga — campos em branco e sem mudança são descartados; patch vazio ⇒ no-op.
+  const effective = effectiveOpinionPatch(current, params.patch);
+  if (Object.keys(effective).length === 0) return { draft: current, changed: false };
+  const updated = updateLegalOpinionDraft(current, effective);
   // Persistência: UPDATE só de parecer NÃO assinado, com CAS na versão lida (nunca upsert).
   const saved = await updateUnsignedLegalOpinionDraft(updated, current.version);
   if (saved === false) {
@@ -374,7 +383,7 @@ export async function updateOpinionDraft(params: {
     author: params.author, correlationId: params.correlationId,
   });
   await recordHistory(ws, "draft_updated", String(params.author), `Parecer atualizado (v${updated.version}).`, updated.id);
-  return updated;
+  return { draft: updated, changed: true };
 }
 
 /**
