@@ -20,14 +20,15 @@ const RESEARCH = [
   { id: "ii3", description: "Pano de microfibra", unit: "UN", quantity: 0, status: "aprovado", quoteCount: 6 },
   { id: "ii4", description: "Cera líquida", unit: "Litro", quantity: 35, status: "aprovado", quoteCount: 6 },
   { id: "ii5", description: "Escova de cerdas", unit: "UN", quantity: 1, status: "aprovado", quoteCount: 6 },
-].map((i) => ({ ...i, sourceResearchId: "rs-promoted" }));
+// R9 / SEM-030: candidato de sessão promovida exige o Item Inteligente APROVADO por humano (aprovar a extração ≠ aprovar o item).
+].map((i) => ({ ...i, status: "aprovado", approvedBy: 9, sourceResearchId: "rs-promoted" }));
 /** Lineage governado: a pesquisa veio da PROMOÇÃO de uma sessão aprovada (revisão humana concluída). */
 const RESEARCHES = new Map([["rs-promoted", { researchId: "rs-promoted", provenance: "promoted_session" as const, importSessionId: 1 }]]);
 const lots: ProcurementLot[] = [];
 const sources = () => priceResearchCandidateSources(RESEARCH, RESEARCHES);
 const cands = (items = [] as Parameters<typeof matchCandidates>[1], links = [] as Parameters<typeof matchCandidates>[2], l = lots as Parameters<typeof matchCandidates>[3]) => matchCandidates(sources(), items, links, l);
-const plan = (candidates: ItemCandidate[], decisions: Parameters<typeof planCandidateDecisions>[0]["decisions"], items: Array<{ id: string; status: "active" | "withdrawn" }> = [], l: Array<Pick<ProcurementLot, "id" | "codeKey" | "status">> = []) =>
-  planCandidateDecisions({ organizationId: ORG, processId: PID, candidates, decisions, items, lots: l });
+const plan = (candidates: ItemCandidate[], decisions: Parameters<typeof planCandidateDecisions>[0]["decisions"], items: Array<{ id: string; status: "active" | "withdrawn"; unit?: string }> = [], l: Array<Pick<ProcurementLot, "id" | "codeKey" | "status">> = []) =>
+  planCandidateDecisions({ organizationId: ORG, processId: PID, candidates, decisions, items: items.map((i) => ({ unit: "UN", ...i })), lots: l });
 
 describe("Itens da contratação — identidade, candidatos e quantidades", () => {
   it("3) Pesquisa revisada (5 itens lógicos / 30 cotações) ⇒ 5 candidatos com descrição e unidade herdadas", () => {
@@ -82,10 +83,13 @@ describe("Itens da contratação — identidade, candidatos e quantidades", () =
     const two = cands([{ id: "x1", fingerprint: fp, status: "active", lotId: "L1" }, { id: "x2", fingerprint: fp, status: "active", lotId: "L2" }]);
     expect(two[0].match).toMatchObject({ status: "ambiguous", candidateItemIds: ["x1", "x2"] });
     // Humano decide: criar como novo é permitido (itens iguais em estruturas distintas coexistem)
-    const p = plan(two, [{ candidateKey: two[0].candidateKey, action: "create" }], [{ id: "x1", status: "active" }, { id: "x2", status: "active" }]);
+    const p = plan(two, [{ candidateKey: two[0].candidateKey, action: "create" }], [{ id: "x1", status: "active", unit: "Tambor" }, { id: "x2", status: "active", unit: "Tambor" }]);
     expect(p.creates).toHaveLength(1);
-    const pl = plan(two, [{ candidateKey: two[0].candidateKey, action: "link", canonicalItemId: "x2" }], [{ id: "x1", status: "active" }, { id: "x2", status: "active" }]);
+    const pl = plan(two, [{ candidateKey: two[0].candidateKey, action: "link", canonicalItemId: "x2" }], [{ id: "x1", status: "active", unit: "Tambor" }, { id: "x2", status: "active", unit: "Tambor" }]);
     expect(pl.links[0].itemId).toBe("x2");
+    // R9 / SEM-031: vínculo de PREÇO com unidade diferente (Tambor × UN) é recusado — nenhuma conversão inventada.
+    expect(() => plan(two, [{ candidateKey: two[0].candidateKey, action: "link", canonicalItemId: "x2" }], [{ id: "x2", status: "active", unit: "UN" }]))
+      .toThrow(/UNIT_INCOMPATIBLE/);
   });
 
   it("duplicidade: evidência já vinculada ⇒ 'linked' (reprocessar/clicar duas vezes não cria de novo)", () => {

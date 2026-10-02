@@ -12,7 +12,7 @@
  */
 import { createHash } from "crypto";
 import { canonicalItemKey, normalizeText } from "./canonicalProcurementContext";
-import { intelligentItemLogicalKey } from "./priceQuoteConsolidation";
+import { canonicalUnit, intelligentItemLogicalKey } from "./priceQuoteConsolidation";
 import { numberToDecimalString } from "./money";
 
 export const PROCUREMENT_ITEMS_VERSION = "procurement-items/1";
@@ -173,6 +173,11 @@ export interface ItemCandidate {
   duplicateOfCandidateKey: string | null;
   /** Lote existente correspondente ao código da fonte (quando houver). */
   sourceLotId: string | null;
+  /**
+   * R9 / SEM-030 — estado GOVERNADO do Item Inteligente (só candidatos da Pesquisa de Preços): status da decisão humana,
+   * estado da fonte e preço — exibidos no painel de candidatos (aprovar a extração ≠ aprovar o item).
+   */
+  evidence?: { status: string; sourceState: string; averagePriceCents: number | null; quoteCount: number } | null;
 }
 
 export interface IntelligentItemSource {
@@ -208,7 +213,8 @@ export type CandidateIneligibility =
   | "rejected"                  // Item Inteligente rejeitado
   | "no_lineage"                // sem pesquisa de origem nem cotações com pesquisa (órfão)
   | "unknown_research"          // pesquisa(s) de origem não pertencem ao processo/tenant ou não existem
-  | "manual_import_unreviewed"; // importação manual cujo Item ainda NÃO foi aprovado por um humano
+  | "manual_import_unreviewed" // importação manual cujo Item ainda NÃO foi aprovado por um humano
+  | "item_not_approved";       // R9 / SEM-030: sessão promovida, mas o Item Inteligente não foi aprovado por humano
 
 export type CandidateEligibility =
   | { eligible: true; via: "promoted_session" | "approved_manual_import"; importSessionIds: number[] }
@@ -219,7 +225,8 @@ export type CandidateEligibility =
  * `intelligent_items` NÃO basta: é preciso lineage comprovável até uma origem governada.
  *  1. rejeitado ⇒ inelegível;
  *  2. pesquisas de evidência = origem do item ∪ pesquisas das cotações; nenhuma ⇒ inelegível (órfão);
- *  3. alguma pesquisa de SESSÃO PROMOVIDA (revisão humana aprovada + promoção) ⇒ elegível;
+ *  3. alguma pesquisa de SESSÃO PROMOVIDA (revisão humana aprovada + promoção) ⇒ elegível SÓ com o Item Inteligente
+ *     APROVADO por humano (R9 / SEM-030: aprovar a EXTRAÇÃO não é aprovar o ITEM para a contratação);
  *  4. só importação manual ⇒ elegível apenas com o Item APROVADO por humano (status `aprovado` + `approvedBy`);
  *  5. caso contrário (pesquisas desconhecidas) ⇒ inelegível — FAIL-CLOSED, sem inferência.
  * Nunca usa descrição, quantidade, preço ou nº de cotações como critério; sem IA, sem fuzzy.
@@ -233,6 +240,7 @@ export function priceResearchCandidateEligibility(
   const known = ids.map((id) => researches.get(id)).filter((r): r is PriceResearchRecord => !!r);
   const promoted = known.filter((r) => r.provenance === "promoted_session");
   if (promoted.length > 0) {
+    if (!(item.status === "aprovado" && item.approvedBy != null)) return { eligible: false, reason: "item_not_approved" };
     return { eligible: true, via: "promoted_session", importSessionIds: [...new Set(promoted.map((r) => r.importSessionId).filter((x): x is number => x !== null))].sort((a, b) => a - b) };
   }
   if (known.some((r) => r.provenance === "manual_import")) {
@@ -247,6 +255,8 @@ export interface PriceResearchEligibilitySummary {
   intelligentItemCount: number; eligibleCount: number; ineligibleCount: number;
   rejectedCount: number; legacyOrUnlinkedCount: number; manualUnreviewedCount: number;
   promotedSessionCount: number;
+  /** R9 / SEM-030 — itens de sessão promovida ainda sem aprovação humana do Item Inteligente. */
+  itemNotApprovedCount: number;
 }
 
 export function summarizePriceResearchEligibility(
@@ -260,6 +270,7 @@ export function summarizePriceResearchEligibility(
     intelligentItemCount: items.length, eligibleCount, ineligibleCount: items.length - eligibleCount,
     rejectedCount: why("rejected"), legacyOrUnlinkedCount: why("no_lineage") + why("unknown_research"),
     manualUnreviewedCount: why("manual_import_unreviewed"), promotedSessionCount: sessions.size,
+    itemNotApprovedCount: why("item_not_approved"),
   };
 }
 
@@ -279,7 +290,12 @@ export function priceResearchCandidateSources(
       sourceDigest: digest([i.description, i.unit, q]),
       description: normalizeText(i.description), unit: normalizeText(i.unit ?? "") || "UN",
       sourceQuantity: q, sourceLotCode: null, fingerprint: itemFingerprint(i.description, i.unit),
-      blocked: i.sourceState === "review_required",
+      // R9 / SEM-030: fonte alterada (`source_changed`) também bloqueia — o item precisa ser revisado antes.
+      blocked: (i.sourceState ?? "current") !== "current",
+      evidence: {
+        status: i.status, sourceState: i.sourceState ?? "current",
+        averagePriceCents: i.averagePriceCents && i.averagePriceCents > 0 ? i.averagePriceCents : null, quoteCount: i.quoteCount ?? 0,
+      },
     };
   });
 }
@@ -372,6 +388,17 @@ export class ItemDomainError extends Error {
 }
 
 /**
+ * R9 / SEM-031 — vínculo de PREÇO (Pesquisa de Preços) só entre unidades canônicas iguais: preço por CX não é preço
+ * por UN. Nenhuma conversão é inventada; a pessoa ajusta a unidade do item ou escolhe outro vínculo.
+ */
+function assertPriceUnitCompatible(c: ItemCandidate, itemUnit: string): void {
+  if (c.sourceType !== "price_research") return;
+  if (canonicalUnit(c.unit) !== canonicalUnit(itemUnit)) {
+    throw new ItemDomainError("UNIT_INCOMPATIBLE", `a unidade da cotação ("${c.unit}") é diferente da unidade do item ("${itemUnit}") — nenhuma conversão é feita; ajuste a unidade ou escolha outro item.`);
+  }
+}
+
+/**
  * Valida as decisões contra a projeção RECALCULADA no servidor (o browser não escolhe ids arbitrários):
  * candidato inexistente/desatualizado ⇒ STALE_CANDIDATES; já vinculado ⇒ não cria de novo; possível
  * duplicata/ambiguidade exige ação explícita (create/link); vínculo só a item ativo do processo.
@@ -379,7 +406,7 @@ export class ItemDomainError extends Error {
 export function planCandidateDecisions(p: {
   organizationId: number; processId: string;
   candidates: readonly ItemCandidate[]; decisions: readonly CandidateDecision[];
-  items: readonly Pick<ProcurementItem, "id" | "status">[];
+  items: readonly Pick<ProcurementItem, "id" | "status" | "unit">[];
   lots: readonly Pick<ProcurementLot, "id" | "codeKey" | "status">[];
 }): CandidatePlan {
   const byKey = new Map(p.candidates.map((c) => [c.candidateKey, c]));
@@ -404,6 +431,7 @@ export function planCandidateDecisions(p: {
       if (d.canonicalItemId) {
         const target = p.items.find((i) => i.id === d.canonicalItemId && i.status === "active");
         if (!target) throw new ItemDomainError("ITEM_NOT_FOUND", "item de destino inexistente ou retirado neste processo.");
+        assertPriceUnitCompatible(c, target.unit);
         links.push({ itemId: target.id, candidate: c });
       } else if (d.toCandidateKey) {
         deferred.push({ c, to: d.toCandidateKey });
@@ -442,6 +470,7 @@ export function planCandidateDecisions(p: {
   for (const { c, to } of deferred) {
     const target = creates.find((x) => x.candidate.candidateKey === to);
     if (!target) throw new ItemDomainError("INVALID_DECISION", "o item de destino da associação precisa ser criado nesta mesma confirmação.");
+    assertPriceUnitCompatible(c, target.unit);
     links.push({ itemId: target.itemId, candidate: c });
   }
   return { creates, links, lotsToCreate: [...lotsToCreate.values()], skipped };

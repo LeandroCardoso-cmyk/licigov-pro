@@ -126,6 +126,8 @@ export interface DocumentAuthoringContext {
    * sem Itens da contratação). > 0 ⇒ TR/Edital fail-closed: quantidade cotada nunca vira necessidade.
    */
   readonly legacyQuotedItemCount: number;
+  /** R9 / SEM-029 — objeto digitado que DIVERGE de `process.object` (ignorado; mudar o objeto é ação explícita no processo). */
+  readonly objectProposal: { current: string; proposed: string; source: "client_input" } | null;
 }
 
 function short(hash: string | null): string {
@@ -156,7 +158,12 @@ const sortQuotes = (qs: readonly ContextQuote[]) => [...qs].sort((a, b) => (quot
  * Builder PURO (sem IO, determinístico): snapshot canônico → prompt + quadro + digest.
  */
 export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): DocumentAuthoringContext {
-  const objeto = input.object?.trim() || input.processObject?.trim() || "";
+  // R9 / SEM-029 — o objeto AUTORITATIVO é `process.object`. O objeto digitado no navegador só é usado quando o processo
+  // não tem objeto (legado); se diverge, é uma PROPOSTA ignorada (exposta em `objectProposal`), nunca 2ª autoridade.
+  const objeto = input.processObject?.trim() || input.object?.trim() || "";
+  const proposedObject = input.object?.trim() ?? "";
+  const objectProposal = input.processObject?.trim() && proposedObject && proposedObject !== input.processObject.trim()
+    ? { current: input.processObject.trim(), proposed: proposedObject, source: "client_input" as const } : null;
   const dfd = docSnapshot(input.dfd);
   const etp = input.kind === "tr" ? docSnapshot(input.etp) : { snap: null, excerpt: null };
   const canonical = input.canonical ?? null;
@@ -283,6 +290,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     estimate, pendingItemCount: input.pendingItemCount,
     quantitySource: canonical ? "canonical_planned" : "legacy", canonical,
     legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
+    objectProposal,
   };
 }
 
@@ -324,6 +332,7 @@ export function canonicalDocumentItems(
       id: it.key, description, unit: String(it.unit.value ?? ""),
       quantity: planned !== null && planned > 0 ? planned : 0,
       averagePriceCents: it.priceContext.unitReferencePriceCents ?? 0,
+      priceBlockedReason: it.priceContext.priceBlockedReason,
       quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
       confirmedCatalogCode: catalogs.length === 1 ? catalogs[0] : null,
       suggestedCatalogCode: evid.find((e) => e.suggestedCatalogCode)?.suggestedCatalogCode ?? null,

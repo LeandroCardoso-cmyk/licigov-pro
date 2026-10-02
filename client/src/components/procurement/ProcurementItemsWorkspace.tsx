@@ -3,7 +3,7 @@ import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import {
   groupItems, originLabel, formatQty, plannedQuantityLabel, provenanceLines, sourceQuantityLabel, adoptableQuantities,
-  quantityInputError, brl, CANDIDATE_STATUS_LABELS, type ItemView, type LotView,
+  quantityInputError, brl, priceBlockedText, candidateEvidenceText, CANDIDATE_STATUS_LABELS, type ItemView, type LotView,
 } from "./procurementItemsView";
 import { shouldRotateAssistKeyOnError } from "./dfdFieldSources";
 
@@ -268,6 +268,9 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
         {item.estimatedTotalCents !== null && (
           <span className="text-sm text-muted-foreground">Estimativa: {brl(item.estimatedTotalCents)}</span>
         )}
+        {priceBlockedText(item.priceBlockedReason) && (
+          <span className="text-xs text-amber-700 dark:text-amber-300">{priceBlockedText(item.priceBlockedReason)}</span>
+        )}
         {item.priceAmbiguous && (
           <span className="text-xs text-amber-700 dark:text-amber-300">Preços de referência divergentes entre as pesquisas vinculadas — revise na Pesquisa de Preços.</span>
         )}
@@ -346,7 +349,8 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
   });
   const candidates = useMemo(() => data?.candidates ?? [], [data]);
   const get = (c: (typeof candidates)[number]): Decision => decisions[c.candidateKey] ?? {
-    include: c.match.status === "new" && !c.duplicateOfCandidateKey,
+    // R9 / SEM-055: nada vem pré-marcado — a inclusão de cada item é decisão explícita da pessoa.
+    include: false,
     action: c.match.status === "possible_match" ? "link" : "create",
     linkTo: c.match.candidateItemIds[0] ?? "",
     description: c.description, unit: c.unit, quantity: "", adopt: false,
@@ -408,6 +412,7 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
                     <span className="text-xs text-muted-foreground">{CANDIDATE_STATUS_LABELS[c.match.status]}</span>
                   </div>
                   {c.match.reason && c.match.status === "blocked" && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{c.match.reason}</p>}
+                  {c.evidence && <p className="mt-1 text-xs text-muted-foreground" data-evidence>{candidateEvidenceText(c.evidence)}</p>}
                   {c.duplicateOfCandidateKey && <p className="mt-1 text-xs text-muted-foreground">Mesma descrição e unidade de outra linha desta fonte (ex.: cotada com outra quantidade).</p>}
                   {!frozen && d.include && (
                     <div className="mt-2 space-y-2">
@@ -438,7 +443,7 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
                       )}
                       {d.action === "create" && c.sourceQuantity !== null && (
                         <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          {source === "dfd" ? "Quantidade no DFD" : "Quantidade no documento"}: {formatQty(c.sourceQuantity)}
+                          {source === "dfd" ? "Quantidade no DFD" : "Quantidade cotada (não é a necessidade)"}: {formatQty(c.sourceQuantity)}
                           <label className="flex items-center gap-1 text-foreground">
                             <input type="checkbox" checked={d.adopt} onChange={(e) => set(c.candidateKey, { adopt: e.target.checked, quantity: "" }, c)} />
                             Usar {formatQty(c.sourceQuantity)} como quantidade prevista

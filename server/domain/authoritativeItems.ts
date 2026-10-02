@@ -33,6 +33,8 @@ export interface AuthoritativeItemInput {
   readonly confirmedCatalogCode: string | null;
   /** Sugestão existente (não confirmada) — só sinaliza "a revisar". */
   readonly suggestedCatalogCode: string | null;
+  /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (`SOURCE_NOT_CURRENT` | `UNIT_MISMATCH`); null/ausente = sem bloqueio. */
+  readonly priceBlockedReason?: string | null;
 }
 
 export interface AuthoritativeItemRow extends AuthoritativeItemInput {
@@ -135,7 +137,10 @@ export function renderAuthoritativeItemsBlock(
     const catalog = r.confirmedCatalogCode
       ? cell(r.confirmedCatalogCode)
       : r.suggestedCatalogCode ? "a revisar (sugestão não confirmada)" : "a revisar";
-    const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "") : "[REVISAR: sem preço]";
+    const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "")
+      : r.priceBlockedReason === "SOURCE_NOT_CURRENT" ? "[REVISAR: preço suspenso — fonte da pesquisa alterada]"
+        : r.priceBlockedReason === "UNIT_MISMATCH" ? "[REVISAR: unidade da cotação incompatível com o item]"
+          : "[REVISAR: sem preço]";
     const total = r.averagePriceCents > 0 ? formatBRL(r.estimatedTotalCents).replace(/^R\$ /, "") : "—";
     lines.push(`| ${r.index} | ${cell(r.description) || "[item sem descrição]"} | ${formatQuantity(r.quantity)} | ${cell(r.unit)} | ${avg} | ${total} | ${catalog} | ${r.quoteCount} |`);
   }

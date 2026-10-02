@@ -122,6 +122,8 @@ export interface EditalSourceContext {
   readonly canonical: CanonicalItemsState | null;
   /** R6 / PR-13 (SEM-008) — itens aprovados só com quantidade da COTAÇÃO (sem Itens da contratação). */
   readonly legacyQuotedItemCount: number;
+  /** R9 / SEM-029 — objeto digitado que DIVERGE de `process.object` (ignorado; mudar o objeto é ação explícita no processo). */
+  readonly objectProposal: { current: string; proposed: string; source: "client_input" } | null;
 }
 
 function short(hash: string | null): string {
@@ -147,7 +149,12 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
   const missing: string[] = [];
   const lines: string[] = [];
 
-  const objeto = input.object?.trim() || input.processObject?.trim() || "";
+  // R9 / SEM-029 — o objeto AUTORITATIVO é `process.object`. O objeto digitado no navegador só é usado quando o processo
+  // não tem objeto (legado); se diverge, é uma PROPOSTA ignorada (exposta em `objectProposal`), nunca 2ª autoridade.
+  const objeto = input.processObject?.trim() || input.object?.trim() || "";
+  const proposedObject = input.object?.trim() ?? "";
+  const objectProposal = input.processObject?.trim() && proposedObject && proposedObject !== input.processObject.trim()
+    ? { current: input.processObject.trim(), proposed: proposedObject, source: "client_input" as const } : null;
   lines.push("## Parâmetros do certame (definidos no fluxo do Edital)");
   lines.push(`- Objeto: ${objeto || "[REVISAR: objeto não informado]"}`);
   if (!objeto) missing.push("objeto");
@@ -283,6 +290,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     quantitySource: canonical ? "canonical_planned" : "legacy",
     canonical: canonical?.state ?? null,
     legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
+    objectProposal,
   };
 }
 

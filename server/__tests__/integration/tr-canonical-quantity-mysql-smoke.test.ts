@@ -50,8 +50,9 @@ async function seedItem(processId: string, id: string, description: string, unit
   await conn.execute(
     `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
        suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'tr-qty-smoke')`,
-    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, unit, price.toFixed(2), JSON.stringify(suppliers), status],
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, ?, 'done', 'tr-qty-smoke')`,
+    // R9 / SEM-030: item "aprovado" exige o aprovador humano.
+    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, unit, price.toFixed(2), JSON.stringify(suppliers), status, status === "aprovado" ? owner : null],
   );
 }
 

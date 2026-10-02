@@ -219,6 +219,8 @@ export interface PriceEvidence {
   unitAmountCents: number | null;
   quoteCount: number;
   approved: boolean;
+  /** R9 / SEM-028 — fonte do Item Inteligente vigente (`sourceState === "current"`). */
+  current: boolean;
 }
 
 // ─── Entradas e contexto resolvido ─────────────────────────────────────────────────────
@@ -235,6 +237,8 @@ export interface ContextInputs {
   intelligentItems: ReadonlyArray<{
     id: string; description: string; unit: string; quantity: number; status: string;
     averagePriceCents: number; quoteCount: number;
+    /** R9 / SEM-028 — estado da FONTE do Item Inteligente (`current` | `source_changed` | `review_required` …). */
+    sourceState?: string;
   }>;
   /** Itens Canônicos da Contratação (entidade persistente com id estável). */
   procurementItems?: ReadonlyArray<{
@@ -245,6 +249,13 @@ export interface ContextInputs {
   lots?: ReadonlyArray<{ id: string; code: string; name: string; ordinal: number; status: string }>;
   /** Vínculos Item Canônico → Item Inteligente (evidência de preço), decididos por humano. */
   priceLinks?: ReadonlyArray<{ itemId: string; intelligentItemId: string }>;
+}
+
+export type PriceBlockedReason = "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH";
+
+/** R9 / SEM-031 — unidade da cotação compatível com a do item: mesma unidade CANÔNICA (sem fator de conversão). */
+export function unitsCompatible(evidenceUnit: string, itemUnit: string | null | undefined): boolean {
+  return canonicalUnit(evidenceUnit) === canonicalUnit(itemUnit);
 }
 
 export interface CanonicalItem {
@@ -266,6 +277,12 @@ export interface CanonicalItem {
      */
     unitReferencePriceCents: number | null;
     priceAmbiguous: boolean;
+    /**
+     * R9 / SEM-028, SEM-031 — por que um preço VINCULADO deixou de ser autoritativo (null = nenhum bloqueio):
+     * `SOURCE_NOT_CURRENT` (a fonte do Item Inteligente mudou/exige revisão) · `UNIT_MISMATCH` (unidade da cotação ≠
+     * unidade do item da contratação, sem conversão — nenhuma é inventada).
+     */
+    priceBlockedReason: PriceBlockedReason | null;
     evidenceCount: number;
     /** Quantidades vistas nos documentos da pesquisa (distintas; null = documento sem quantidade). */
     sourceQuantities: Array<number | null>;
@@ -330,6 +347,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       sourceQuantity: Number.isFinite(i.quantity) && i.quantity > 0 ? i.quantity : null,
       unitAmountCents: i.averagePriceCents > 0 ? i.averagePriceCents : null,
       quoteCount: i.quoteCount, approved: i.status === "aprovado",
+      current: (i.sourceState ?? "current") === "current",
     }));
   const evidenceById = new Map(evidence.map((e) => [e.intelligentItemId, e]));
 
@@ -352,9 +370,16 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
   const items: CanonicalItem[] = pItems.map((it) => {
     const ev = (input.priceLinks ?? []).filter((l) => l.itemId === it.id)
       .map((l) => evidenceById.get(l.intelligentItemId)).filter((e): e is PriceEvidence => !!e);
-    const priced = ev.filter((e) => e.approved && e.unitAmountCents !== null && e.quoteCount > 0);
+    const candidates = ev.filter((e) => e.approved && e.unitAmountCents !== null && e.quoteCount > 0);
+    // SEM-028: preço só de fonte VIGENTE; SEM-031: só de cotação na MESMA unidade canônica do item. Nada é convertido.
+    const notCurrent = candidates.filter((e) => !e.current);
+    const unitMismatch = candidates.filter((e) => e.current && !unitsCompatible(e.unit, it.unit));
+    const priced = candidates.filter((e) => e.current && unitsCompatible(e.unit, it.unit));
     const distinct = [...new Set(priced.map((e) => e.unitAmountCents as number))];
-    const unitReferencePriceCents = distinct.length === 1 ? distinct[0] : null;
+    const blocked = notCurrent.length > 0 || unitMismatch.length > 0;
+    // Fail-closed: QUALQUER evidência vinculada bloqueada torna o preço não autoritativo (não se escolhe "a que sobrou").
+    const unitReferencePriceCents = !blocked && distinct.length === 1 ? distinct[0] : null;
+    const priceBlockedReason: PriceBlockedReason | null = notCurrent.length > 0 ? "SOURCE_NOT_CURRENT" : unitMismatch.length > 0 ? "UNIT_MISMATCH" : null;
     const sourceQuantities = [...new Set(ev.map((e) => e.sourceQuantity))].sort((a, b) => (a ?? -1) - (b ?? -1));
     const plannedQuantity = asNumberField(f(itemPath(it.id, "plannedQuantity")));
     const pq = plannedQuantity.value;
@@ -365,7 +390,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       unit: f(itemPath(it.id, "unit")) as CanonicalField<string>,
       plannedQuantity,
       priceContext: {
-        unitReferencePriceCents, priceAmbiguous: distinct.length > 1,
+        unitReferencePriceCents, priceAmbiguous: !blocked && distinct.length > 1, priceBlockedReason,
         evidenceCount: ev.reduce((s, e) => s + e.quoteCount, 0),
         sourceQuantities, intelligentItemIds: ev.map((e) => e.intelligentItemId).sort(),
       },
@@ -454,6 +479,7 @@ function digestSnapshot(
     items: ctx.items.map((i) => ({
       k: i.key, l: i.lotId, d: fieldSnap(i.description), u: fieldSnap(i.unit), q: fieldSnap(i.plannedQuantity),
       ref: i.priceContext.unitReferencePriceCents, amb: i.priceContext.priceAmbiguous,
+      ...(i.priceContext.priceBlockedReason ? { blk: i.priceContext.priceBlockedReason } : {}),
       sq: i.priceContext.sourceQuantities, n: i.priceContext.evidenceCount,
     })),
     total: price.estimatedTotalCents,
