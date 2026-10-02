@@ -8,6 +8,9 @@ import { trpc } from "../../lib/trpc";
  * concluída e DEVOLVIDA AUTOMATICAMENTE ao domínio de origem pelo Request
  * Engine. A assinatura é apenas um placeholder — a assinatura real (manual,
  * ICP-Brasil, gov.br, certificado A1) ainda NÃO está implementada.
+ *
+ * NEW-035 (classe SEM-019) — a CONCLUSÃO começa NEUTRA: nenhuma opção (nem "Favorável") vem pré-selecionada; o
+ * envio só é possível depois que o humano escolhe a conclusão explicitamente.
  */
 
 export interface ResponsePanelProps {
@@ -45,7 +48,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
   const utils = trpc.useUtils();
 
   const [responseType, setResponseType] = React.useState("parecer");
-  const [responseStatus, setResponseStatus] = React.useState("favoravel");
+  const [responseStatus, setResponseStatus] = React.useState("");
   const [comments, setComments] = React.useState("");
   const [sign, setSign] = React.useState("");
 
@@ -56,6 +59,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
       void utils.institutionalRequest.listCompleted.invalidate();
       setComments("");
       setSign("");
+      setResponseStatus("");
       onResponded?.(requestId);
     },
   });
@@ -70,6 +74,7 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!responseStatus) return; // NEW-035: sem conclusão escolhida, nada é enviado
     respond.mutate({
       requestId,
       responseType: responseType as "parecer" | "revisao" | "aprovacao" | "informacao" | "correcao" | "assinatura",
@@ -109,8 +114,13 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
           <select
             value={responseStatus}
             onChange={(e) => setResponseStatus(e.target.value)}
+            required
+            aria-required="true"
             className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-foreground focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
           >
+            <option value="" disabled>
+              Selecione a conclusão…
+            </option>
             {RESPONSE_STATUSES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -159,8 +169,8 @@ export default function ResponsePanel({ requestId = "", onResponded }: ResponseP
 
       <button
         type="submit"
-        disabled={respond.isPending}
-        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+        disabled={respond.isPending || !responseStatus}
+        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
       >
         {respond.isPending ? "Enviando…" : "Emitir resposta e devolver à origem"}
       </button>
