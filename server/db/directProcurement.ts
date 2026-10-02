@@ -274,6 +274,11 @@ export async function updateRequiredDocumentStatus(id: string, orgId: number, st
 
 // ─── Ratification ────────────────────────────────────────────────────────────
 
+/**
+ * @deprecated R4 / PR-07 — upsert LEGADO da ratificação (reescrevia decisão/justificativa e mantinha o 1º responsável,
+ * SEM-004). Não há mais caller de produção: o registro é `institutionalDecisionService` (ledger append-only, 0312).
+ * A tabela `ratifications` segue como HISTÓRICO legível (`getRatification`).
+ */
 export async function insertRatification(r: Ratification): Promise<Ratification | null> {
   const db = await getDb();
   if (!db) return null;

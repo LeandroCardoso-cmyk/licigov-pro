@@ -174,10 +174,17 @@ describe("FASE 5 — Business Domain: Contratação Direta", () => {
       expect(pendRequiredDocument(validateRequiredDocument(d)).status).toBe("pendente");
     });
 
-    it("ratificação registra responsável, decisão e evidências", () => {
-      const r = createRatification({ organizationId: ORG_ID, workspaceId: "ws-1", responsible: 7, justification: "ok", evidence: ["e1"], correlationId: CORR });
-      expect(r.decision).toBe("ratificado");
-      expect(r.evidence).toEqual(["e1"]);
+    // R4.6 / PR-07 — reescrito: este teste PROTEGIA o default "ratificado" (SEM-004). A decisão agora é sempre
+    // explícita (o formato legado só existe para histórico; o registro real é o ledger institutional_decisions).
+    it("ratificação (formato legado) carrega a decisão EXPLÍCITA — sem default de resultado", () => {
+      const yes = createRatification({ organizationId: ORG_ID, workspaceId: "ws-1", responsible: 7, decision: "ratificado", justification: "ok", evidence: ["e1"], correlationId: CORR });
+      const no = createRatification({ organizationId: ORG_ID, workspaceId: "ws-1", responsible: 7, decision: "nao_ratificado", justification: "ok", correlationId: CORR });
+      expect(yes.decision).toBe("ratificado");
+      expect(no.decision).toBe("nao_ratificado");
+      expect(yes.evidence).toEqual(["e1"]);
+      // sem decisão ⇒ nada é inventado (o campo fica indefinido; o tipo também a exige)
+      const missing = createRatification({ organizationId: ORG_ID, workspaceId: "ws-1", responsible: 7, correlationId: CORR } as unknown as Parameters<typeof createRatification>[0]);
+      expect(missing.decision).toBeUndefined();
     });
 
     it("publicação determinística por tipo", () => {

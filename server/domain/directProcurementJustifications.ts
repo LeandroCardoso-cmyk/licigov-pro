@@ -159,11 +159,15 @@ export interface Ratification {
   readonly ratifiedAt: string;
 }
 
+/**
+ * @deprecated R4 / PR-07 — a ratificação passou ao ledger `institutional_decisions` (server/domain/institutionalDecision.ts).
+ * Mantida só para leitura/testes do formato legado. SEM default de decisão (antes: "ratificado" implícito — SEM-004).
+ */
 export function createRatification(params: {
   organizationId: number;
   workspaceId: string;
   responsible: number;
-  decision?: "ratificado" | "nao_ratificado";
+  decision: "ratificado" | "nao_ratificado";
   justification?: string;
   evidence?: string[];
   correlationId: string;
@@ -172,7 +176,7 @@ export function createRatification(params: {
   const id = createHash("sha256").update(`rat:${params.organizationId}:${params.workspaceId}`).digest("hex").slice(0, 20);
   return {
     id, organizationId: params.organizationId, workspaceId: params.workspaceId, responsible: params.responsible,
-    decision: params.decision ?? "ratificado", justification: params.justification ?? "", evidence: params.evidence ?? [],
+    decision: params.decision, justification: params.justification ?? "", evidence: params.evidence ?? [],
     correlationId: params.correlationId, ratifiedAt: params.ratifiedAt ?? new Date().toISOString(),
   };
 }

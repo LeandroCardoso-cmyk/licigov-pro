@@ -128,8 +128,13 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
   },
   ratify: {
     rbacClass: "INSTITUTIONAL_DECISION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
-    rationale: "Registro da ratificação (ato institucional). manager+ é só o PISO técnico; autoridade competente/decidedBy×recordedBy/SoD = PR-07.",
-    sideEffects: "ratifications (upsert) + etapa RATIFICATION + process_timeline(approval). Sem IA/notificação.",
+    rationale: "Registro da ratificação (ato institucional). manager+ é só o PISO técnico de quem REGISTRA; a autoridade que decidiu é declarada (decidedBy ≠ recordedBy) e sua competência não é validada pelo sistema (R4.2 pendente) — PR-07.",
+    sideEffects: "institutional_decisions (INSERT append-only, revisão CAS, idempotência) + etapa RATIFICATION só se 'ratificado' + process_timeline(approval, id estável). Sem IA/notificação.",
+  },
+  getRatificationDecision: {
+    rbacClass: "READ", oldBuilder: "tenantProcedure", minRole: null, newBuilder: "tenantProcedure",
+    rationale: "R4 / PR-07 — leitura da decisão de ratificação corrente, do histórico de revisões e do registro legado, escopada pelo órgão do contexto.",
+    sideEffects: "Nenhum.",
   },
   publish: {
     rbacClass: "PUBLICATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',

@@ -116,7 +116,7 @@ describe.skipIf(!DB)("C.3A-OPS.3 — DATETIME Contratação Direta (MySQL estrit
       procurementType: "dispensa", startOption: "sem_dfd", responsibleUser: ACTOR, correlationId: "corr-dp-dt-3",
     });
     await insertDirectProcurementWorkspace(ws);
-    const rat = createRatification({ organizationId: ORG, workspaceId: ws.id, responsible: ACTOR, correlationId: "corr-dp-dt-3" });
+    const rat = createRatification({ organizationId: ORG, workspaceId: ws.id, responsible: ACTOR, decision: "ratificado", correlationId: "corr-dp-dt-3" });
     const savedRat = await insertRatification(rat);
     expect(savedRat).not.toBeNull();
     const back = await getRatification(ws.id, ORG);

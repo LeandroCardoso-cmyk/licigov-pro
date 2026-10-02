@@ -34,17 +34,18 @@ import {
   createNeedCharacterization, suggestLegalBasis,
   type ProcedureMode, type ElectronicPlatform, type PresentialReceiptMethod, type ProposalDocumentKind,
 } from "../domain/directProcurementProcedure";
-import { createRatification } from "../domain/directProcurementJustifications";
 import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, DIRECT_PROCUREMENT_ALREADY_EXISTS_MESSAGE, directProcurementCreateMismatches,
 } from "../domain/processCreateContract";
 import { serviceLogger } from "../services/observabilityService";
+import { recordDirectProcurementRatification } from "../services/institutionalDecisionService";
+import { listDecisions } from "../db/institutionalDecisions";
 import {
   createDirectProcurementWorkspaceWithInitialEvent,
   insertDirectProcurementWorkspace, getDirectProcurementWorkspace, listDirectProcurementWorkspaces,
   updateDirectProcurementStage, insertDirectProcedure, getDirectProcedure,
   insertProposalCollection, listProposalCollections, insertProposalDocument,
-  insertRatification, listRequiredDocuments, updateRequiredDocumentStatus, listGeneratedPublications,
+  getRatification, listRequiredDocuments, updateRequiredDocumentStatus, listGeneratedPublications,
 } from "../db/directProcurement";
 import { recordProcessEvent, listProcessTimeline } from "../db/procurement";
 import {
@@ -316,17 +317,53 @@ export const directProcurementRouter = router({
 
   // NEW-005 — INSTITUTIONAL_DECISION: piso técnico manager+. NÃO define autoridade competente; quem decide
   // (decidedBy) × quem registra (recordedBy) e a segregação de funções são do PR-07 (semântica inalterada aqui).
+  /**
+   * R4 / PR-07 (SEM-004) — registro GOVERNADO da decisão de ratificação no ledger append-only
+   * (`institutional_decisions`, 0312). Sem resultado padrão; autoridade DECLARADA (nome, cargo, data e referência do
+   * ato) separada de quem registra (usuário autenticado); revisão com CAS (`expectedRevision`); nova decisão supera a
+   * anterior explicitamente (histórico preservado); idempotência por chave (INV-11). manager+ continua sendo só o
+   * PISO TÉCNICO de quem registra (NEW-005) — a competência jurídica da autoridade NÃO é validada pelo sistema
+   * (R4.2 pendente ⇒ `authorityValidation = NOT_VALIDATED_POLICY_PENDING`).
+   */
   ratify: orgRoleProcedure("manager")
-    .input(z.object({ workspaceId: z.string().min(1), decision: z.enum(["ratificado", "nao_ratificado"]).optional(), justification: z.string().optional(), evidence: z.array(z.string()).optional() }))
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      decision: z.enum(["ratificado", "nao_ratificado"]),
+      decidedByName: z.string().max(255),
+      decidedByRole: z.string().max(255),
+      decidedAt: z.string().max(10),
+      basisReference: z.string().max(500),
+      justification: z.string().max(20000),
+      evidence: z.array(z.string().max(2000)).max(50).optional(),
+      expectedRevision: z.number().int().min(0),
+      idempotencyKey: z.string().min(8).max(128),
+    }))
     .mutation(async ({ input, ctx }) => {
+      const result = await recordDirectProcurementRatification({
+        organizationId: ctx.organizationId!, subjectType: "direct_procurement.ratification", subjectId: input.workspaceId,
+        decisionType: "ratification", outcome: input.decision, decidedByName: input.decidedByName,
+        decidedByRole: input.decidedByRole, decidedByUserId: null, decidedAt: input.decidedAt,
+        basisReference: input.basisReference, reason: input.justification, evidence: input.evidence ?? [],
+        recordedByUserId: ctx.user.id, expectedRevision: input.expectedRevision, idempotencyKey: input.idempotencyKey,
+        correlationId: ctx.correlationId,
+      });
+      return { decision: result.decision, replayed: result.replayed };
+    }),
+
+  /** R4 / PR-07 — decisão de ratificação corrente + histórico (revisões superadas) + legado pré-0312 (somente leitura). */
+  getRatificationDecision: tenantProcedure
+    .input(z.object({ workspaceId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const ws = await requireWs(input.workspaceId, orgId);
-      const ratification = createRatification({ organizationId: orgId, workspaceId: ws.id, responsible: ctx.user.id, decision: input.decision, justification: input.justification, evidence: input.evidence, correlationId: ctx.correlationId });
-      await insertRatification(ratification);
-      const moved = setDirectStage(ws, "RATIFICATION");
-      await updateDirectProcurementStage(ws.id, orgId, moved.currentStage, moved.status, moved.updatedAt);
-      await recordProcessEvent({ organizationId: orgId, processId: ws.id, eventType: "approval", actor: String(ctx.user.id), summary: `Ratificação: ${ratification.decision}.`, refId: ratification.id, correlationId: ctx.correlationId });
-      return { ratification };
+      await requireWs(input.workspaceId, orgId);
+      const history = await listDecisions(orgId, "direct_procurement.ratification", input.workspaceId);
+      const legacy = await getRatification(input.workspaceId, orgId);
+      return {
+        current: history.length ? history[history.length - 1] : null,
+        history,
+        legacyRatification: legacy ? { decision: legacy.decision, ratifiedAt: legacy.ratifiedAt, recordedBy: legacy.responsible } : null,
+        currentRevision: history.length ? history[history.length - 1].revision : 0,
+      };
     }),
 
   // NEW-005 — PUBLICATION: piso técnico manager+ (mesma ressalva do ratify: autoridade competente = PR-07).
