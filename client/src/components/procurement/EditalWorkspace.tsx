@@ -373,6 +373,10 @@ export default function EditalWorkspace({
             <div className="mb-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-800 dark:text-orange-300" role="alert">
               <strong>Documentos-base alterados.</strong> Os documentos-base deste Edital (DFD/ETP/TR/itens/parâmetros)
               foram alterados após a geração da minuta. Revise ou regenere antes da aprovação.
+              {/* R9 / SEM-047 — lista O QUE mudou (minutas antigas, sem marcador por fonte, mostram só o aviso). */}
+              {(sourceState.data.changedSources ?? []).length > 0 && (
+                <span className="mt-1 block">Mudou: {sourceState.data.changedSources.map((c) => c.label).join(", ")}.</span>
+              )}
             </div>
           )}
 

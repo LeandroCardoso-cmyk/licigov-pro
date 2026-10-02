@@ -37,6 +37,11 @@ vi.mock("../../services/canonicalContextService", () => ({
 
 // R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
 vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
+// R9 / SEM-039 — as fontes a montante preferem a versão EMITIDA; neste teste não há emissão (vale o rascunho).
+vi.mock("../../db/officialDocuments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
+  getLatestEmittedByOrigin: vi.fn(async () => null),
+}));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));

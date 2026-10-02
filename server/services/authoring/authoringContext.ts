@@ -20,7 +20,7 @@
  * Contexto Canônico: processo com Itens da contratação ⇒ ETP/TR (e o Edital, em `editalContext`) consomem a
  * MESMA projeção (`canonicalDocumentItems`): quantidade = PREVISTA, nunca a da cotação.
  */
-import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
+import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
@@ -31,6 +31,8 @@ import { draftContentHash } from "../../domain/generatedDocument";
 import { canonicalDigest, selectDocumentExcerpt, sha256Hex, type CanonicalValue } from "../../domain/canonicalJson";
 import { listProcurementItems } from "../../db/procurementItems";
 import { resolveProcurementContext } from "../canonicalContextService";
+import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
+import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
 
 export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
@@ -48,6 +50,9 @@ export interface UpstreamDoc {
   readonly content: string;
   /** "import" quando o rascunho veio de um documento importado (informativo; não muda o tratamento). */
   readonly origin: "import" | "generated" | "manual" | null;
+  /** R9 / SEM-039 — autoridade da fonte consumida (emitido > aprovado > rascunho); ausente em chamadores legados. */
+  readonly authority?: UpstreamAuthority;
+  readonly version?: number | null;
 }
 
 /** Cotação consumida pela autoria (apenas campos renderizados). */
@@ -128,6 +133,8 @@ export interface DocumentAuthoringContext {
   readonly legacyQuotedItemCount: number;
   /** R9 / SEM-029 — objeto digitado que DIVERGE de `process.object` (ignorado; mudar o objeto é ação explícita no processo). */
   readonly objectProposal: { current: string; proposed: string; source: "client_input" } | null;
+  /** R9 / SEM-047 — hash POR FONTE (conteúdo integral da fonte autoritativa); gravado como `srcd:` na geração. */
+  readonly sourceDigests: Partial<Record<SourceKey, string>>;
 }
 
 function short(hash: string | null): string {
@@ -215,7 +222,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       const cov = ex.coverage === "full"
         ? "cobertura: integral"
         : `cobertura: PARCIAL — ${ex.usedChars} de ${ex.totalChars} caracteres; todas as ${ex.sections.length} seção(ões) representadas`;
-      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}${doc.origin === "import" ? ", importado e revisado" : ""}; ${cov})`);
+      const state = doc.authority ? authorityLabel(doc) : (doc.status ?? "?");
+      lines.push(`## Base — ${label} (estado: ${state}${doc.origin === "import" ? ", importado e revisado" : ""}; ${cov})`);
       lines.push(ex.text, "");
     } else {
       missing.push(key);
@@ -268,8 +276,20 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     dfd: versionOf(input.dfd, dfd.excerpt?.coverage ?? null),
     etp: versionOf(input.kind === "tr" ? input.etp : null, etp.excerpt?.coverage ?? null),
   };
+  // R9 / SEM-047 — hash POR FONTE: conteúdo INTEGRAL (não o recorte), sem contagem de pendentes nem status/origem.
+  const docHash = (d: UpstreamDoc | null) => (d?.present && d.contentHash ? d.contentHash.slice(0, 12) : "ausente");
+  const itemsSnap = snapshot as { items?: unknown; qs?: unknown; missingPlanned?: unknown; unlinked?: unknown };
+  const sourceDigests: Partial<Record<SourceKey, string>> = {
+    processo: sourceHash({ obj: objeto, pn: input.processNumber ?? null }),
+    dfd: docHash(input.dfd),
+    ...(input.kind === "tr" ? { etp: docHash(input.etp) } : {}),
+    itens: sourceHash({ items: itemsSnap.items ?? [], qs: itemsSnap.qs ?? null, mp: itemsSnap.missingPlanned ?? null, un: itemsSnap.unlinked ?? null }),
+  };
   const lineageMarkers = [
     `srcdigest:${sourcesDigest.slice(0, 16)}`,
+    ...sourceDigestMarkers(sourceDigests),
+    authorityMarker("dfd", input.dfd),
+    ...(input.kind === "tr" ? [authorityMarker("etp", input.etp)] : []),
     `ctx:${AUTHORING_CONTEXT_VERSION}`,
     `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
     ...(sourceVersions.dfd.coverage ? [`coverage:dfd=${sourceVersions.dfd.coverage}`] : []),
@@ -291,6 +311,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     quantitySource: canonical ? "canonical_planned" : "legacy", canonical,
     legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
     objectProposal,
+    sourceDigests,
   };
 }
 
@@ -372,13 +393,14 @@ function draftOrigin(sources: readonly string[]): "import" | "generated" | "manu
   return "generated";
 }
 
-function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>): UpstreamDoc | null {
+function toUpstream(doc: AuthoritativeUpstream | null): UpstreamDoc | null {
   if (!doc) return null;
   const present = !!doc.content && doc.content.trim().length > 0;
   return {
     present, status: doc.status ?? null,
     contentHash: present ? draftContentHash(doc.content) : null,
     content: doc.content ?? "", origin: draftOrigin(doc.sources ?? []),
+    authority: doc.authority, version: doc.version,
   };
 }
 
@@ -397,8 +419,9 @@ export async function resolveDocumentAuthoringContext(params: {
 }): Promise<DocumentAuthoringContext> {
   const [process, dfd, etp, items] = await Promise.all([
     getProcess(params.processId, params.organizationId),
-    getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd"),
-    params.kind === "tr" ? getGeneratedDocumentByKind(params.processId, params.organizationId, "etp") : Promise.resolve(null),
+    // R9 / SEM-039 — fonte AUTORITATIVA a montante (versão emitida quando existir; senão o rascunho, rotulado).
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "dfd"),
+    params.kind === "tr" ? resolveAuthoritativeUpstream(params.organizationId, params.processId, "etp") : Promise.resolve(null),
     listIntelligentItems(params.processId, params.organizationId),
   ]);
   const approved = items.filter((i) => i.status === "aprovado");
