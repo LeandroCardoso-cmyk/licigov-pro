@@ -111,6 +111,16 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
     rationale: "Justificativa de preço registrada pelo servidor (rascunho revisável).",
     sideEffects: "price_justifications + official_documents (Document Engine) + process_timeline(change). Sem IA.",
   },
+  acceptJustification: {
+    rbacClass: "DRAFT_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
+    rationale: "R5 / PR-11 — aceite HUMANO da justificativa da contratação (a IA só sugere); persiste e gera o documento oficial com autor humano.",
+    sideEffects: "contract_justifications (registro do aceite) + official_documents (justificativa_contratacao) + process_timeline(decision). Sem IA.",
+  },
+  getJustifications: {
+    rbacClass: "READ", oldBuilder: "tenantProcedure", minRole: null, newBuilder: "tenantProcedure",
+    rationale: "R5 / PR-11 — justificativas persistidas para hidratação dos formulários, escopadas pelo órgão do contexto.",
+    sideEffects: "Nenhum.",
+  },
   validateDocuments: {
     rbacClass: "EVIDENCE_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
     rationale: "Checklist documental: semeia ou marca pendente/anexado/validado (conferência documental, não decisão).",

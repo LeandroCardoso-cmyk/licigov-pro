@@ -191,14 +191,29 @@ export async function importDirectPriceResearch(params: {
   }
 }
 
-// ─── Justificativa da Contratação (copilotos, revisável) ──────────────────────
+// ─── Justificativa da Contratação (copilotos = SUGESTÃO; registro = aceite humano) ─────
 
+/** R5 / PR-11 (SEM-021) — texto mínimo exigido nos campos centrais do registro. */
+const MIN_JUSTIFICATION_CHARS = 10;
+export const JUSTIFICATION_FIELDS_REQUIRED = "JUSTIFICATION_FIELDS_REQUIRED";
+export const HUMAN_ACCEPTANCE_REQUIRED = "HUMAN_APPROVAL_REQUIRED";
+
+export interface ContractJustificationSuggestion {
+  readonly need: string; readonly publicInterest: string; readonly motivation: string;
+  readonly legalFoundation: string; readonly benefits: string; readonly alternatives: string;
+}
+
+/**
+ * R5 / PR-11 (SEM-021) — os copilotos produzem SÓ uma SUGESTÃO: nada é persistido como justificativa e nenhum
+ * documento oficial é gerado aqui (antes: upsert sobre a justificativa existente + documento oficial com autor
+ * "multi_copilot", sem aceite). A timeline registra apenas que uma sugestão foi gerada (sem conteúdo).
+ */
 export async function generateContractJustification(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
   invoke?: (prompt: string) => Promise<string>;
-}): Promise<{ justification: Awaited<ReturnType<typeof upsertContractJustification>>; recommendation: Recommendation }> {
+}): Promise<{ suggestion: ContractJustificationSuggestion; justification: Awaited<ReturnType<typeof getContractJustification>>; recommendation: Recommendation }> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
   assertKernelAccess(DOMAIN, "institutional_rag");
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
@@ -211,31 +226,22 @@ export async function generateContractJustification(params: {
     invoke: params.invoke,
   });
 
-  const draft = createContractJustification({
-    organizationId: params.organizationId, workspaceId: ws.id,
+  // Sugestão apenas com o que os copilotos produziram — nenhum texto padrão é inventado como se fosse análise.
+  const suggestion: ContractJustificationSuggestion = {
     need: orchestration.consolidated.summary,
-    publicInterest: "Atendimento ao interesse público na contratação.",
+    publicInterest: "",
     motivation: orchestration.consolidated.suggestions.join(" "),
     legalFoundation: orchestration.consolidated.legalBasis.join("; "),
     benefits: orchestration.consolidated.suggestions.slice(0, 2).join(" "),
-    alternatives: "Avaliadas alternativas de mercado.",
-    correlationId: params.correlationId,
-  });
-  const justification = await upsertContractJustification(draft);
-  // RC-3 — justificativa oficial pelo pipeline ÚNICO (Document Engine).
-  await generateOfficialDocument({
-    organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_contratacao",
-    origin: ws.id, title: `Justificativa da Contratação — ${ws.processNumber}`,
-    content: `# Justificativa da Contratação\n\n## Necessidade\n${draft.need}\n\n## Motivação\n${draft.motivation}\n\n## Fundamento\n${draft.legalFoundation}`,
-    author: "multi_copilot", correlationId: params.correlationId,
-    metadata: { copilots: orchestration.selectedCopilots, confidence: orchestration.consolidated.confidence },
-  });
+    alternatives: "",
+  };
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "recommendation",
-    actor: "multi_copilot", summary: "Justificativa da contratação gerada (rascunho revisável).", refId: draft.id, correlationId: params.correlationId,
+    actor: "multi_copilot", summary: "Sugestão de justificativa gerada pelos copilotos (não aceita; nada foi registrado).", refId: ws.id, correlationId: params.correlationId,
   });
   return {
-    justification,
+    suggestion,
+    justification: await getContractJustification(ws.id, params.organizationId),
     recommendation: {
       reasoning: orchestration.consolidated.summary,
       explainability: orchestration.consolidated.suggestions.join(" · "),
@@ -244,6 +250,43 @@ export async function generateContractJustification(params: {
       rejectable: true,
     },
   };
+}
+
+/**
+ * R5 / PR-11 (SEM-021) — ACEITE HUMANO: a pessoa revisa (sugestão ou texto próprio) e registra a justificativa. Só
+ * então a justificativa é persistida e o documento oficial é gerado, com o autor humano. Campos centrais em branco ⇒
+ * recusa antes de qualquer escrita (salvar vazio nunca sobrescreve).
+ */
+export async function acceptContractJustification(params: {
+  workspaceId: string;
+  organizationId: number;
+  actorUserId: number;
+  fields: ContractJustificationSuggestion;
+  basedOnSuggestion: boolean;
+  correlationId: string;
+}): Promise<{ justification: Awaited<ReturnType<typeof upsertContractJustification>> }> {
+  const ws = await requireWorkspace(params.workspaceId, params.organizationId);
+  const f = Object.fromEntries(Object.entries(params.fields).map(([k, v]) => [k, String(v ?? "").trim()])) as unknown as ContractJustificationSuggestion;
+  const missing = (["need", "motivation", "legalFoundation"] as const).filter((k) => f[k].length < MIN_JUSTIFICATION_CHARS);
+  if (missing.length) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Preencha necessidade, motivação e fundamento (mín. ${MIN_JUSTIFICATION_CHARS} caracteres cada) antes de registrar; nada foi gravado (${JUSTIFICATION_FIELDS_REQUIRED}).` });
+  }
+  const draft = createContractJustification({
+    organizationId: params.organizationId, workspaceId: ws.id, ...f, correlationId: params.correlationId,
+  });
+  const justification = await upsertContractJustification(draft);
+  await generateOfficialDocument({
+    organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_contratacao",
+    origin: ws.id, title: `Justificativa da Contratação — ${ws.processNumber}`,
+    content: `# Justificativa da Contratação\n\n## Necessidade\n${f.need}\n\n## Interesse público\n${f.publicInterest || "—"}\n\n## Motivação\n${f.motivation}\n\n## Fundamento\n${f.legalFoundation}\n\n## Benefícios\n${f.benefits || "—"}\n\n## Alternativas\n${f.alternatives || "—"}`,
+    author: String(params.actorUserId), correlationId: params.correlationId,
+    metadata: { acceptedBy: params.actorUserId, basedOnSuggestion: params.basedOnSuggestion },
+  });
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: ws.id, eventType: "decision",
+    actor: String(params.actorUserId), summary: `Justificativa da contratação registrada pelo servidor${params.basedOnSuggestion ? " (a partir de sugestão revisada)" : ""}.`, refId: draft.id, correlationId: params.correlationId,
+  });
+  return { justification };
 }
 
 // ─── Justificativa do Preço ───────────────────────────────────────────────────
@@ -257,9 +300,19 @@ export async function generatePriceJustification(params: {
   researchId?: string;
   documentReferences?: string[];
   correlationId: string;
+  /** R5 / PR-11 — aceite humano explícito do registro oficial. */
+  confirmOfficial?: boolean;
+  actorUserId?: number;
 }): Promise<{ priceJustification: Awaited<ReturnType<typeof upsertPriceJustification>>; recommendation: Recommendation }> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
   assertKernelAccess(DOMAIN, "institutional_rag");
+  // R5 / PR-11 (SEM-022) — formulário vazio nunca sobrescreve nem emite documento oficial.
+  if ((params.justification ?? "").trim().length < MIN_JUSTIFICATION_CHARS || !(Number(params.referenceValue) > 0)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe a fundamentação (mín. ${MIN_JUSTIFICATION_CHARS} caracteres) e um valor de referência maior que zero; nada foi gravado (${JUSTIFICATION_FIELDS_REQUIRED}).` });
+  }
+  if (params.confirmOfficial !== true) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Confirme explicitamente que esta é a justificativa de preço institucional antes de registrá-la; nada foi gravado (${HUMAN_ACCEPTANCE_REQUIRED}).` });
+  }
 
   const draft = createPriceJustification({
     organizationId: params.organizationId, workspaceId: ws.id, source: params.source,
@@ -277,13 +330,13 @@ export async function generatePriceJustification(params: {
     organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_preco",
     origin: ws.id, title: `Justificativa de Preço — ${ws.processNumber}`,
     content: `# Justificativa de Preço\nProcesso: ${ws.processNumber} · Objeto: ${ws.object}\nFonte: ${sourceLabel}\nValor de referência: R$ ${draft.referenceValue.toFixed(2)}\n\n## Fundamentação\n${draft.justification || "—"}\n\n> Documento gerado a partir dos dados persistidos. Revisão obrigatória pelo servidor competente.`,
-    author: "sistema", correlationId: params.correlationId,
-    metadata: { source: draft.source, referenceValue: draft.referenceValue, researchId: draft.researchId || null },
+    author: params.actorUserId ? String(params.actorUserId) : "sistema", correlationId: params.correlationId,
+    metadata: { source: draft.source, referenceValue: draft.referenceValue, researchId: draft.researchId || null, acceptedBy: params.actorUserId ?? null },
   });
 
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "change",
-    actor: "sistema", summary: `Justificativa do preço registrada (${params.source}).`, refId: draft.id, correlationId: params.correlationId,
+    actor: params.actorUserId ? String(params.actorUserId) : "sistema", summary: `Justificativa do preço registrada (${params.source}).`, refId: draft.id, correlationId: params.correlationId,
   });
   return {
     priceJustification,

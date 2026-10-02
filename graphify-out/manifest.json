@@ -6590,8 +6590,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/canonical-document-quantity.test.ts": {
-    "mtime": 1790943287.4440832,
-    "ast_hash": "ae1e36d92ec03cee06ab2fd300bab5f8",
+    "mtime": 1790943764.6253774,
+    "ast_hash": "8c0fb4657d911630de5e93a95a70aa42",
     "semantic_hash": ""
   },
   "server/__tests__/unit/canonical-procurement-context.test.ts": {
@@ -6670,8 +6670,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/p0-pilot-foundation.test.ts": {
-    "mtime": 1790881396.2928767,
-    "ast_hash": "dee3f64b9eff79f5323bc1978682e9ad",
+    "mtime": 1790943764.6247933,
+    "ast_hash": "f3a90bfb998c6ec74fd1b42401b03774",
     "semantic_hash": ""
   },
   "server/__tests__/unit/p0-pilot-hardening.test.ts": {

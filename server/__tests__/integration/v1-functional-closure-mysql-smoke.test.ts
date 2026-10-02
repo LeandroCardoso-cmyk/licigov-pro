@@ -265,7 +265,7 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     const ws = await seedDirect(ORG, "DIR-B1");
     await generatePriceJustification({
       workspaceId: ws.id, organizationId: ORG, source: "pesquisa", justification: "Preço fundamentado em 3 cotações.",
-      referenceValue: 15000, researchId: "res-1", correlationId: "v1-closure",
+      referenceValue: 15000, researchId: "res-1", correlationId: "v1-closure", confirmOfficial: true, actorUserId: USER,
     });
     const docs = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "justificativa_preco");
     expect(docs.length).toBe(1);
