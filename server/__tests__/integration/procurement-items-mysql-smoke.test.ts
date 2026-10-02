@@ -59,8 +59,9 @@ async function seedResearch(processId: string) {
     await conn.execute(
       `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
          suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, NULL, 'done', 'items-smoke')`,
-      [`${r.id}-${ORG}`, ORG, processId, rid, r.d, r.q, r.u, r.v.toFixed(2), JSON.stringify(suppliers), r.st],
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', '[]', '[]', '[]', ?, ?, 'done', 'items-smoke')`,
+      // R9 / SEM-030: item "aprovado" exige o aprovador humano.
+      [`${r.id}-${ORG}`, ORG, processId, rid, r.d, r.q, r.u, r.v.toFixed(2), JSON.stringify(suppliers), r.st, r.st === "aprovado" ? owner : null],
     );
   }
 }
@@ -120,6 +121,12 @@ describe.skipIf(!DB)("Itens da contratação — fluxo integrado (MySQL estrito)
     pid = process.id;
     await seedResearch(pid);
     const c = await caller(owner);
+    // R9 / SEM-030: item da sessão promovida AINDA sem decisão humana não é candidato (aprovar a extração ≠ aprovar o item).
+    const pre = await c.procurementItems.candidates({ processId: pid, source: "price_research" });
+    expect(pre.candidates.map((x: any) => x.description)).not.toContain("Pano de microfibra");
+    expect(pre.candidates).toHaveLength(4);
+    // decisão humana do Item Inteligente (fixture) ⇒ passa a ser candidato
+    await conn.execute("UPDATE intelligent_items SET status = 'aprovado', approved_by = ? WHERE id = ? AND organization_id = ?", [owner, `sm-ii3-${ORG}`, ORG]);
     const a = await c.procurementItems.candidates({ processId: pid, source: "price_research" });
     const b = await c.procurementItems.candidates({ processId: pid, source: "price_research" });
     expect(a.candidates).toHaveLength(5);
@@ -231,7 +238,8 @@ describe.skipIf(!DB)("Itens da contratação — fluxo integrado (MySQL estrito)
     expect(cera.priceContext.unitReferencePriceCents).toBe(3_000);
     const pano = ctx.items.find((i) => i.description.value === "Pano de microfibra")!;
     expect(pano.plannedQuantity.value).toBeNull();
-    expect(pano.priceContext.unitReferencePriceCents).toBeNull(); // evidência pendente de aprovação
+    expect(pano.priceContext.unitReferencePriceCents).toBe(1_200); // aprovado por humano em 1) (SEM-030)
+    expect(pano.estimatedTotalCents).toBeNull(); // sem quantidade prevista, não há estimativa
     expect(ctx.priceContext.complete).toBe(false);
   }, 60_000);
 

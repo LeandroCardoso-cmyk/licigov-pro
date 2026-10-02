@@ -169,6 +169,8 @@ export interface ItemsWorkspaceItem {
   plannedQuantity: { value: number | null; status: string; sourceType: string | null; mode: string | null; actorUserId: number | null; updatedAt: string | null };
   sources: Array<{ sourceType: string; sourceId: string; sourceQuantity: number | null; sourceLotCode: string | null; sourceDescription: string; sourceUnit: string }>;
   unitReferencePriceCents: number | null; priceAmbiguous: boolean; estimatedTotalCents: number | null;
+  /** R9 / SEM-028, SEM-031 — por que o preço vinculado não é autoritativo (null = sem bloqueio). */
+  priceBlockedReason: "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
 }
 
 export interface ItemsWorkspace {
@@ -234,6 +236,7 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
         })),
         unitReferencePriceCents: c?.priceContext.unitReferencePriceCents ?? null,
         priceAmbiguous: c?.priceContext.priceAmbiguous ?? false,
+        priceBlockedReason: c?.priceContext.priceBlockedReason ?? null,
         estimatedTotalCents: c?.estimatedTotalCents ?? null,
       };
     });
