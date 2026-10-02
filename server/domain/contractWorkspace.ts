@@ -104,14 +104,80 @@ export function createContractWorkspace(params: {
 }
 
 export function canContractTransition(from: ContractStatus, to: ContractStatus): boolean {
-  return STATUS_TRANSITIONS[from].includes(to);
+  // Fail-closed: status desconhecido (linha legada/corrompida) não tem transição alguma.
+  return STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/** Token estável da recusa de transição de status do contrato (não traduzir; usado por testes/cliente). */
+export const CONTRACT_STATUS_TRANSITION_INVALID = "CONTRACT_STATUS_TRANSITION_INVALID";
+
+/**
+ * Transição de status recusada pela máquina de estados do contrato. A mensagem é a MESMA que a máquina
+ * sempre emitiu ("Transição de contrato inválida: de → para"), então callers que já tratavam `Error`
+ * (ex.: `contractWorkspace.updateContract` → BAD_REQUEST) mantêm o comportamento.
+ */
+export class ContractStatusTransitionError extends Error {
+  readonly code = CONTRACT_STATUS_TRANSITION_INVALID;
+  constructor(public readonly from: ContractStatus, public readonly to: ContractStatus) {
+    super(`Transição de contrato inválida: ${from} → ${to}`);
+    this.name = "ContractStatusTransitionError";
+  }
 }
 
 export function transitionContractStatus(ws: ContractWorkspace, to: ContractStatus, at?: string): ContractWorkspace {
   if (!canContractTransition(ws.status, to)) {
-    throw new Error(`Transição de contrato inválida: ${ws.status} → ${to}`);
+    throw new ContractStatusTransitionError(ws.status, to);
   }
   return { ...ws, status: to, updatedAt: at ?? new Date().toISOString() };
+}
+
+// ─── SEM-025 — status do contrato imprimido por instrumento (aditivo/apostilamento) ──────────────
+
+/** Instrumentos que imprimem status no contrato e o status que cada um imprime (comportamento existente). */
+export const INSTRUMENT_CONTRACT_STATUS = { aditivo: "aditado", apostilamento: "apostilado" } as const satisfies Record<string, ContractStatus>;
+export type ContractInstrumentKind = keyof typeof INSTRUMENT_CONTRACT_STATUS;
+
+/**
+ * Como o status do contrato muda ao registrar um instrumento (decisão do responsável pelo produto, PR-08 rev. 2):
+ *  - `machine`   — transição DEFINIDA em `STATUS_TRANSITIONS` (ex.: vigente → aditado; apostilado → aditado);
+ *  - `unchanged` — o contrato já está no status do instrumento (ex.: 2º aditivo em contrato `aditado`).
+ *                  Não é transição: mesma convenção de `contractWorkspace.updateContract` (status igual ⇒
+ *                  a máquina não é consultada). Instrumentos SUCESSIVOS são histórico/filhos do contrato:
+ *                  `aditado`/`apostilado` nunca bloqueiam um novo aditivo/apostilamento;
+ *  - `deferred_pending_legal_opinion` — o instrumento é ADMISSÍVEL no status atual (um dos dois casos acima),
+ *                  mas o próprio fluxo declarou que ele exige parecer jurídico (`requiresLegalOpinion`) e o
+ *                  parecer ainda não existe. Fail-closed: o instrumento é registrado aguardando parecer e o
+ *                  status do contrato NÃO muda (`to === from`). A efetivação posterior depende do comando de
+ *                  finalização do instrumento, que ainda não existe (PR-18/PR-20 — ver
+ *                  docs/design/CONTRACT_ACTIVATION_TRANSITION.md).
+ * Qualquer outro caso é RECUSADO com `ContractStatusTransitionError`, antes de qualquer efeito:
+ *  - `minuta` — contrato ainda não formalizado. A máquina NÃO lista minuta → aditado/apostilado e não há exceção:
+ *               aditivo/apostilamento só existem sobre contrato formalizado (a ativação minuta → vigente é uma
+ *               transição institucional explícita, proposta em docs/design/CONTRACT_ACTIVATION_TRANSITION.md);
+ *  - encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina; nunca reabrem.
+ */
+export type InstrumentStatusChangeMode = "machine" | "unchanged" | "deferred_pending_legal_opinion";
+
+export interface InstrumentStatusChangePlan {
+  readonly from: ContractStatus;
+  /** Status que o contrato terá ao final da operação (igual a `from` em `unchanged` e `deferred_pending_legal_opinion`). */
+  readonly to: ContractStatus;
+  /** Status que o instrumento imprime no contrato quando efetivado (`aditado`/`apostilado`). */
+  readonly instrumentStatus: ContractStatus;
+  readonly mode: InstrumentStatusChangeMode;
+}
+
+export function planInstrumentStatusChange(
+  from: ContractStatus,
+  instrument: ContractInstrumentKind,
+  opts: { readonly requiresLegalOpinion?: boolean } = {},
+): InstrumentStatusChangePlan {
+  const instrumentStatus: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
+  const admissible = from === instrumentStatus || canContractTransition(from, instrumentStatus);
+  if (!admissible) throw new ContractStatusTransitionError(from, instrumentStatus);
+  if (opts.requiresLegalOpinion === true) return { from, to: from, instrumentStatus, mode: "deferred_pending_legal_opinion" };
+  if (from === instrumentStatus) return { from, to: from, instrumentStatus, mode: "unchanged" };
+  return { from, to: instrumentStatus, instrumentStatus, mode: "machine" };
 }
 
 /** Atualiza campos editáveis do contrato (sempre supervisionado). */

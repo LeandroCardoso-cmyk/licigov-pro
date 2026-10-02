@@ -342,6 +342,16 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
       organizationId: ORG, contractNumber: "CT-D2/2026", contractor: "Fornecedor Y", object: "Objeto D2",
       value: 80000, term: "12 meses", correlationId: "v1-closure", createdBy: USER,
     });
+    // PR-08 rev. 2 (decisão do responsável pelo produto): aditivo só existe sobre contrato FORMALIZADO — em
+    // `minuta` é recusado (CONTRACT_STATUS_TRANSITION_INVALID), sem documento. A ativação minuta → vigente é
+    // uma transição institucional explícita ainda não implementada (docs/design/CONTRACT_ACTIVATION_TRANSITION.md),
+    // então o fixture posiciona o contrato em `vigente` diretamente no banco. O objetivo do D2 (aditivo
+    // materializa documento oficial exportável) é o mesmo.
+    await expect(createAddendum({
+      organizationId: ORG, contractId: contract.id, addendumType: "prazo", justification: "Em minuta.", correlationId: "v1-closure",
+    })).rejects.toMatchObject({ code: "CONTRACT_STATUS_TRANSITION_INVALID" });
+    expect((await docsByOrigin(ORG, "contratos", contract.id)).filter(d => d.documentType === "aditivo").length).toBe(0);
+    await conn.execute("UPDATE contract_workspaces SET status = 'vigente' WHERE id = ? AND organization_id = ?", [contract.id, ORG]);
     await createAddendum({
       organizationId: ORG, contractId: contract.id, addendumType: "prazo", justification: "Prorrogação de 6 meses.",
       newTerm: "18 meses", correlationId: "v1-closure",
