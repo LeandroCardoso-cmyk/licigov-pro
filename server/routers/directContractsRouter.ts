@@ -14,6 +14,7 @@ import {
 } from "../services/directContractPackage";
 import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
 import { generateAuditReport } from "../services/directContractAuditReport";
+import { getEstimatedActiveValueCents } from "../db/directContractsValueKpi";
 import { runDirectContractShadow } from "../services/directContractShadowService";
 import type { DirectContractDocType } from "../domain/directContractShadow";
 import { tenantProcedure, router } from "../_core/trpc";
@@ -1200,7 +1201,12 @@ export const directContractsRouter = router({
   analytics: router({
     // Buscar estatísticas gerais (RC-SEC-PR-A: agregação isolada por organização)
     getOverview: tenantProcedure.query(async ({ ctx }) => {
-      return await getDirectContractsOverviewForOrganization(ctx.organizationId);
+      // R6 / PR-14 (SEM-012): KPI rotulado como valor ESTIMADO, sem rascunho/cancelada (centavos).
+      const [overview, estimatedValueActiveCents] = await Promise.all([
+        getDirectContractsOverviewForOrganization(ctx.organizationId),
+        getEstimatedActiveValueCents(ctx.organizationId),
+      ]);
+      return overview ? { ...overview, estimatedValueActiveCents } : null;
     }),
 
     // Buscar dados para gráficos

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCentsBRL, MONEY_MEANING } from "@/lib/money";
 
 interface Props {
   total: number;
@@ -39,11 +40,11 @@ export function DirectContractStats({ total, dispensas, inexigibilidades, totalV
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Valor Total</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">{MONEY_MEANING.estimated} (total)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-green-600">
-            R$ {(totalValue / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {formatCentsBRL(totalValue)}
           </div>
         </CardContent>
       </Card>

@@ -23,6 +23,7 @@
  *
  * Puro e determinístico (sem IO, sem Intl/locale do ambiente).
  */
+import { formatCentsBRL } from "@shared/money";
 
 /** Centavos inteiros (safe integer). DECIMAL(14,2) máximo = 99.999.999.999.999 centavos < 2^53. */
 export type Cents = number;
@@ -165,13 +166,12 @@ export function centsToReais(cents: Cents): number {
   return Number(centsToDecimalString(cents));
 }
 
-/** Formatação pt-BR DETERMINÍSTICA ("R$ 1.234,56"), independente do locale do servidor. */
+/**
+ * Formatação pt-BR DETERMINÍSTICA ("R$ 1.234,56"), independente do locale do servidor.
+ * R6 / PR-14 (SEM-012, INV-16): delega ao formatador ÚNICO compartilhado com o cliente.
+ */
 export function formatBRL(cents: Cents): string {
-  const negative = cents < 0;
-  const abs = Math.abs(cents);
-  const reais = String(Math.trunc(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const c = String(abs % 100).padStart(2, "0");
-  return `${negative ? "-" : ""}R$ ${reais},${c}`;
+  return formatCentsBRL(cents);
 }
 
 /** Soma exata de centavos. */
