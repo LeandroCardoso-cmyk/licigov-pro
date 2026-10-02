@@ -44,7 +44,8 @@ import { createHash } from "crypto";
 import { discardEvidenceFile, storeEvidenceFile } from "./evidenceStorageService";
 import { isAllowedTaskAttachmentMime, sanitizeAttachmentFileName, validateTaskAttachment } from "../domain/taskAttachmentPolicy";
 import {
-  REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey,
+  REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey, checklistPublicationGate,
+  CHECKLIST_NOT_CONFIGURED,
   type RequiredDocumentStatus,
 } from "../domain/requiredDocumentEvidence";
 
@@ -516,6 +517,18 @@ export async function generatePublications(params: {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: `Publicação bloqueada: a decisão registrada é "${ratification.outcome}". Somente uma ratificação "ratificado" permite publicar.`,
+    });
+  }
+
+  // NEW-029 — FAIL-CLOSED: o checklist configurado de documentos obrigatórios precisa estar VALIDADO (com evidência
+  // real) antes de publicar. O `pending` do workspace deixou de ser só informativo.
+  const checklist = checklistPublicationGate(await listRequiredDocuments(ws.id, params.organizationId), ws.id);
+  if (!checklist.ok) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: checklist.code === CHECKLIST_NOT_CONFIGURED
+        ? `Publicação bloqueada: o checklist de documentos obrigatórios ainda não foi configurado para este processo (${CHECKLIST_NOT_CONFIGURED}).`
+        : `Publicação bloqueada: documentos obrigatórios sem validação — ${checklist.pending.join("; ")} (${checklist.code}).`,
     });
   }
 

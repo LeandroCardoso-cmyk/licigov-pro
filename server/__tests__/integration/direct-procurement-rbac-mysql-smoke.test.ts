@@ -220,6 +220,17 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     await expectDeniedWithoutEffect("viewer publish (ratificado)", async () => publishCall(await caller(viewer, ORG_A)), { code: "FORBIDDEN", message: ROLE_DENIED("manager") });
     await expectDeniedWithoutEffect("operator publish (ratificado)", async () => publishCall(await caller(operator, ORG_A)), { code: "FORBIDDEN", message: ROLE_DENIED("manager") });
 
+    // NEW-029: ratificado, mas com checklist obrigatório sem validação ⇒ publicação recusada sem efeito.
+    const before = Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n);
+    await expect(publishCall(await caller(manager, ORG_A))).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/CHECKLIST_(PENDING|NOT_CONFIGURED)/) });
+    expect(Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n)).toBe(before);
+    // fixture: checklist configurado e validado com evidência real (upload do servidor + hash).
+    await (await caller(manager, ORG_A)).directProcurement.validateDocuments({ workspaceId: wsId });
+    await conn.execute(
+      "UPDATE required_documents SET status = 'validado', content_hash = REPEAT('a', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-doc.pdf') WHERE workspace_id = ? AND organization_id = ?",
+      [wsId, ORG_A],
+    );
+
     const out = await publishCall(await caller(manager, ORG_A));
     expect(out.publications.map(p => p.kind)).toEqual(expect.arrayContaining(["aviso", "ratificacao", "extrato_contrato"]));
     expect(Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n)).toBeGreaterThanOrEqual(3);
