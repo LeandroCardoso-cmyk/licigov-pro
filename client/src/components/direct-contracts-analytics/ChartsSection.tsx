@@ -3,6 +3,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+import { formatCentsBRL, MONEY_MEANING } from "@/lib/money";
 
 const COLORS = {
   dispensa: "#3b82f6",
@@ -60,8 +61,8 @@ export function ChartsSection({ monthlyChartData, platformData, statusData }: Pr
 
       <Card>
         <CardHeader>
-          <CardTitle>Valor Total por Plataforma</CardTitle>
-          <CardDescription>Distribuição de valores contratados</CardDescription>
+          <CardTitle>{MONEY_MEANING.estimated} por Plataforma</CardTitle>
+          <CardDescription>Distribuição dos valores estimados (não contratados)</CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -70,12 +71,10 @@ export function ChartsSection({ monthlyChartData, platformData, statusData }: Pr
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip
-                formatter={(value: number) =>
-                  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
-                }
+                formatter={(value: number) => formatCentsBRL(value)}
               />
               <Legend />
-              <Bar dataKey="value" name="Valor Total" fill={COLORS.dispensa} />
+              <Bar dataKey="value" name={MONEY_MEANING.estimated} fill={COLORS.dispensa} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
