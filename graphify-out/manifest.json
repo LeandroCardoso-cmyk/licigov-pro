@@ -8760,8 +8760,8 @@
     "semantic_hash": ""
   },
   "server/routers/directContractsRouter.ts": {
-    "mtime": 1790944254.5982456,
-    "ast_hash": "e9c35a765a18e6d3667af199aa91d502",
+    "mtime": 1790945339.1302493,
+    "ast_hash": "58c5f5880b9d0be60be5cc6f69358cab",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1790945061.7615616,
-    "ast_hash": "2fa0f4a6091bc01445000d79a80b2c31",
+    "mtime": 1790945339.1294231,
+    "ast_hash": "cc6c21122e89698748af2220a7ddb7b3",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -13040,13 +13040,28 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr17-instrument-terms-mysql-smoke.test.ts": {
-    "mtime": 1790945213.233929,
-    "ast_hash": "03d5629ea2b99a9a40aea4e41d81c15d",
+    "mtime": 1790945361.252889,
+    "ast_hash": "6d7ced62aa913a2cfef5aa115271c3db",
     "semantic_hash": ""
   },
   "server/domain/instrumentTerms.ts": {
-    "mtime": 1790944991.6859157,
-    "ast_hash": "775765e64591b02c1f9264b012eef927",
+    "mtime": 1790945339.1282814,
+    "ast_hash": "732a86618e145ec33f9b53f225d9045e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r8-legal-review-policy.test.ts": {
+    "mtime": 1790945361.2389944,
+    "ast_hash": "0aae7690c6d3fd47ef6ed4c8e1f39279",
+    "semantic_hash": ""
+  },
+  "server/domain/legalReviewPolicy.ts": {
+    "mtime": 1790945330.1699357,
+    "ast_hash": "15a0957a53c588d71a17c51b4cd4046b",
+    "semantic_hash": ""
+  },
+  "docs/audits/LEGAL_REVIEW_DECISION_PACKET.md": {
+    "mtime": 1790945427.9379416,
+    "ast_hash": "80cba8afe212ee83b31438eef8d0f18b",
     "semantic_hash": ""
   }
 }

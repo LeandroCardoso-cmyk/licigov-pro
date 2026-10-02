@@ -7,6 +7,7 @@
  * incorporadas; nada é inventado (campo ausente ⇒ "sem alteração" / [REVISAR]).
  */
 import { formatCentsBRL } from "@shared/money";
+import { legalPolicyReviewLine } from "./legalReviewPolicy";
 
 export const INSTRUMENT_REFERENCE_REQUIRED = "INSTRUMENT_REFERENCE_REQUIRED";
 export const INSTRUMENT_NOT_FOUND = "INSTRUMENT_NOT_FOUND";
@@ -73,6 +74,10 @@ export function buildAddendumTermContent(c: ContractHeader, a: AddendumData, sug
     "Permanecem inalteradas as demais cláusulas do contrato original.",
     "",
     ...(a.status === "aguardando_parecer" ? ["> [REVISAR: aditivo aguardando parecer jurídico — não assinar antes do parecer.]", ""] : []),
+    // R8 / PR-20 scaffolding (SEM-084): limites do art. 125 não são afirmados pelo sistema sem parecer.
+    ...(a.addendumType === "valor" || a.addendumType === "quantitativo" || a.addendumType === "prazo"
+      ? [legalPolicyReviewLine("SEM-084_CANONICAL_ADDENDUM_LIMITS"), ""].filter((x): x is string => x !== null)
+      : []),
     ...(legalBasis.length ? ["## Fundamentação (referências sugeridas — revisar)", ...legalBasis.map((l) => `- ${l}`), ""] : []),
     ...suggestionsSection(suggestions),
     `> Termo gerado a partir do aditivo registrado (${a.id}). Revisão obrigatória — nunca automática.`,
