@@ -77,6 +77,9 @@ vi.mock("../../db/contractWorkspace", async (orig) => ({
   insertContractApostille: cw.insertContractApostille,
   compareAndSetContractWorkspaceStatus: cw.compareAndSetContractWorkspaceStatus,
   insertContractWsDocument: cw.insertContractWsDocument,
+  // R7 / PR-17 (SEM-024) — o termo nasce do instrumento PERSISTIDO: a leitura devolve o que foi inserido.
+  listContractAddenda: vi.fn(async () => cw.insertContractAddendum.mock.calls.map((c) => c[0])),
+  listContractApostilles: vi.fn(async () => cw.insertContractApostille.mock.calls.map((c) => c[0])),
 }));
 vi.mock("../../services/workspaceOrchestratorService", () => ({ orchestrateMultiCopilot: cw.orchestrateMultiCopilot }));
 vi.mock("../../services/documentEngineService", () => ({ generateOfficialDocument: cw.generateOfficialDocument }));
