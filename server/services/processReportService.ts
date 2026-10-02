@@ -1,5 +1,6 @@
 import * as db from "../db";
 import { documentConverter } from "./_core/documentConverter";
+import { formatCentsBRL, MONEY_MEANING } from "@shared/money";
 
 /**
  * Gerar relatório completo do processo em PDF
@@ -15,7 +16,7 @@ export async function generateProcessReport(processId: number): Promise<Buffer> 
   const documents = await db.getDocumentsByProcess(processId);
 
   // Buscar checklist da plataforma (se houver)
-  let checklist: any[] = [];
+  let checklist: Awaited<ReturnType<typeof db.getPlatformChecklist>> = [];
   if (process.platformId) {
     checklist = await db.getPlatformChecklist(process.platformId);
   }
@@ -42,7 +43,7 @@ export async function generateProcessReport(processId: number): Promise<Buffer> 
 
 | **Modalidade** | ${process.modality} |
 | **Categoria** | ${process.category} |
-| **Valor Estimado** | ${process.estimatedValue ? `R$ ${process.estimatedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "Não informado"} |
+| **${MONEY_MEANING.estimated}** | ${process.estimatedValue ? formatCentsBRL(process.estimatedValue) : "Não informado"} |
 | **Status** | ${process.status} |
 | **Plataforma** | ${process.platform?.name || "Nenhuma selecionada"} |
 | **Criado em** | ${new Date(process.createdAt).toLocaleDateString("pt-BR")} |
@@ -62,12 +63,12 @@ ${
     ? "_Nenhum documento gerado ainda._"
     : documents
         .map(
-          (doc: any, index: number) => `
+          (doc, index: number) => `
 ### ${index + 1}. ${doc.type.toUpperCase()}
 
 - **Versão:** ${doc.version}
 - **Gerado em:** ${new Date(doc.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-- **Status:** ${doc.status}
+- **Status:** ${doc.documentStatus}
 `
         )
         .join("\n")

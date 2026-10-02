@@ -945,23 +945,23 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts-analytics/ChartsSection.tsx": {
-    "mtime": 1790643728.9233341,
-    "ast_hash": "e73b988e0873648760723eb9c384cbcc",
+    "mtime": 1790943997.132904,
+    "ast_hash": "c151e77c6969627ec7e1431c673eb2dd",
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts-analytics/MetricsGrid.tsx": {
-    "mtime": 1790643728.9235525,
-    "ast_hash": "3a1b25562564fb3fea048c577ca4b6bb",
+    "mtime": 1790943997.1313326,
+    "ast_hash": "557cd6d40b5bad0950f5a6e256b57963",
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts-analytics/RankingTables.tsx": {
-    "mtime": 1790643728.9235525,
-    "ast_hash": "116ffb6be4b29b17adb312e24c46d1e2",
+    "mtime": 1790943997.133454,
+    "ast_hash": "2a45188c4c53cc7336a6799abe047d62",
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts/DirectContractCard.tsx": {
-    "mtime": 1790643728.9235525,
-    "ast_hash": "936aba6b10b74d30d3c33f8827ed4ea9",
+    "mtime": 1790944191.3809042,
+    "ast_hash": "1f9373d63a7590265831e8dca7e197fc",
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts/DirectContractFilters.tsx": {
@@ -970,8 +970,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-contracts/DirectContractStats.tsx": {
-    "mtime": 1790643728.9236708,
-    "ast_hash": "3b6e16e72a2949bbf0706adc646708e1",
+    "mtime": 1790943997.133898,
+    "ast_hash": "8174b42ab35399fef32c74a7ea341456",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
@@ -2950,8 +2950,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/money.ts": {
-    "mtime": 1790881396.1608768,
-    "ast_hash": "5b8f31364eb88497c5dc2a48db61058e",
+    "mtime": 1790943964.948631,
+    "ast_hash": "39cb301034cdac4e6774ea5aa7282290",
     "semantic_hash": ""
   },
   "client/src/lib/publicRoutes.test.ts": {
@@ -6965,7 +6965,7 @@
     "semantic_hash": ""
   },
   "server/db/directContracts.ts": {
-    "mtime": 1790643729.3348873,
+    "mtime": 1790944184.8178678,
     "ast_hash": "692196e31a46c99959f0777ebc906d71",
     "semantic_hash": ""
   },
@@ -8210,8 +8210,8 @@
     "semantic_hash": ""
   },
   "server/domain/money.ts": {
-    "mtime": 1790881396.3048766,
-    "ast_hash": "102dc6b1902169ead19275acf8d72eff",
+    "mtime": 1790943964.9499488,
+    "ast_hash": "5424712b7a7e683bb3541e06b4526d3d",
     "semantic_hash": ""
   },
   "server/domain/ocr.ts": {
@@ -8760,8 +8760,8 @@
     "semantic_hash": ""
   },
   "server/routers/directContractsRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "9bba9ee1ab6c50b74330ad10d73dd3d4",
+    "mtime": 1790944254.5982456,
+    "ast_hash": "e9c35a765a18e6d3667af199aa91d502",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
@@ -9475,8 +9475,8 @@
     "semantic_hash": ""
   },
   "server/services/directContractAuditReport.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "a66099be6474ea0583030fa8f004958b",
+    "mtime": 1790944191.3826478,
+    "ast_hash": "4d63a5764c968df5599914ccd19d9a2f",
     "semantic_hash": ""
   },
   "server/services/directContractDocuments.ts": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "0027b6187b2cfda84679c583ca2dd47b",
+    "mtime": 1790944366.8649542,
+    "ast_hash": "5a49061b06c4b3c2bfbb799afb2169a7",
     "semantic_hash": ""
   },
   "server/services/documentRenderService.ts": {
@@ -10050,8 +10050,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentExportAdapter.ts": {
-    "mtime": 1790881396.3288767,
-    "ast_hash": "25d749c4504a884c148abfbbb3a491c7",
+    "mtime": 1790944374.8927743,
+    "ast_hash": "ccaf041a7b9e7d12dba6599535d5278a",
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
@@ -10155,8 +10155,8 @@
     "semantic_hash": ""
   },
   "server/services/processReportService.ts": {
-    "mtime": 1790643729.398198,
-    "ast_hash": "ec9c80c88bb5d3e62b49fee79f8e75f4",
+    "mtime": 1790944231.4219441,
+    "ast_hash": "f4c7599c7d101c2e5d94c254053ca6d5",
     "semantic_hash": ""
   },
   "server/services/procurementItemsService.ts": {
@@ -12992,6 +12992,26 @@
   "docs/architecture/QUANTITY_AUTHORITY_CONTRACT.md": {
     "mtime": 1790943835.5698469,
     "ast_hash": "2b74ab237cb61ebc33d378dc9003f9bd",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr14-money-formatter-mysql-smoke.test.ts": {
+    "mtime": 1790944254.5995812,
+    "ast_hash": "2109e0b7a64c2058760c31dd1cd0b4d5",
+    "semantic_hash": ""
+  },
+  "server/db/directContractsValueKpi.ts": {
+    "mtime": 1790944254.582059,
+    "ast_hash": "24775846eed46ab9d90f430b9ba0d7cb",
+    "semantic_hash": ""
+  },
+  "shared/money.ts": {
+    "mtime": 1790943954.717854,
+    "ast_hash": "6004942bbc1ea7d7f4e0765f22a8beb3",
+    "semantic_hash": ""
+  },
+  "docs/architecture/MONEY_FORMATTING_CONTRACT.md": {
+    "mtime": 1790944326.4978762,
+    "ast_hash": "1b52a142724ddd15efcfa7644b39f2ca",
     "semantic_hash": ""
   }
 }

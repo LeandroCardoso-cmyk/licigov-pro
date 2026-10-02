@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Scale } from "lucide-react";
+import { formatCentsBRL } from "@/lib/money";
 
 interface Supplier {
   supplierName: string | null;
@@ -22,8 +23,8 @@ interface Props {
 }
 
 export function RankingTables({ topSuppliers, topArticles, loadingSuppliers, loadingArticles }: Props) {
-  const formatBRL = (value: number | string) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
+  // R6 / PR-14 (SEM-012): `totalValue` vem em CENTAVOS (SUM de direct_contracts.value) — formatador único.
+  const formatBRL = (value: number | string) => formatCentsBRL(value);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

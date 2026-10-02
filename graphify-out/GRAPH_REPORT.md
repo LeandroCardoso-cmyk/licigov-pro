@@ -1,26 +1,26 @@
 # Graph Report - licigov-pro  (2026-10-02)
 
 ## Corpus Check
-- 2551 files · ~4,057,903 words
+- 2555 files · ~4,058,996 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 18988 nodes · 40462 edges · 992 communities (857 shown, 135 thin omitted)
+- 19000 nodes · 40515 edges · 987 communities (858 shown, 129 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 218 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `67ccbbfd`
+- Built from commit: `db184f11`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - schema.ts
 - cn
-- button.tsx
+- card.tsx
 - pdf-layout-golden-e.test.ts
-- documentService.ts
-- itemMaterializationService.ts
+- connection.ts
+- importPromotionService.ts
 - ai/gemini.ts
 - legalOpinions.ts
 - getDb
@@ -34,17 +34,17 @@
 - dfdPrefill.ts
 - sprint49-copilots.test.ts
 - App.tsx
-- db/workspace.ts
+- sprint50-workspace.test.ts
 - procurementProcessService.ts
 - OperationalRecordList.tsx
 - structuredAuthoringService.ts
-- input.tsx
+- lib/trpc.ts
 - institutionalConsultationService.ts
 - sprint30-itemtr-catmat.test.ts
-- directContractDocuments.ts
+- importTypes.ts
 - legalOpinionWorkspaceService.ts
 - institutionalRequests.ts
-- observabilityService.ts
+- ingestionUploadRoute.ts
 - domain/contractWorkspace.ts
 - sprint34-pilot-readiness.test.ts
 - makeContext
@@ -56,8 +56,8 @@
 - rcx2-institutional-bootstrap-framework.test.ts
 - aiExecutionEngine.ts
 - sprint32-production-hardening.test.ts
-- sprint51-procurement.test.ts
-- r2-pr02-legacy-endpoints-disabled.test.ts
+- itemMaterializationService.ts
+- experimentalApiGate.ts
 - rc461-normative-foundation.test.ts
 - dependencies
 - directContractsRouter.ts
@@ -67,19 +67,19 @@
 - OperationalDashboardPage.tsx
 - rc462-knowledge-binding-framework.test.ts
 - itemMatchingEngine.ts
-- StagingReviewDrawer.tsx
+- StagingReviewDrawer.test.ts
 - contracts.ts
 - ocrExtraction.ts
-- procurement.ts
+- authoringContext.ts
 - sprint29-semantic-review.test.ts
 - documentDrafting.ts
-- officialCorpusBuilder.ts
+- rc49-official-knowledge-corpus.test.ts
 - devDependencies
 - PRODUCT_NORTH_STAR.md
 - reconciliation-mysql-smoke.test.ts
 - aiWorkflow.ts
 - sprint47-institutional-rag.test.ts
-- importTypes.ts
+- baseParser.ts
 - rc47-institutional-knowledge-framework.test.ts
 - DirectProcurementHome.tsx
 - legalOpinionWorkspaceRouter.ts
@@ -92,17 +92,17 @@
 - db/legalReference.ts
 - ContractWorkspace.tsx
 - rc45-legal-knowledge-foundation.test.ts
-- vectorIndexService.ts
+- semanticRetrievalRouter.ts
 - integrationLayer.ts
-- lib/trpc.ts
-- copilotRouter.ts
+- useOrgRole
+- bootstrap.ts
 - new006-contract-workspace-rbac.test.ts
-- sprint43-legal-ai.test.ts
+- structuredGenerationService.ts
 - contextAssembly.ts
 - pdfParser.ts
-- Usuarios.tsx
+- BemVindo
 - departmentOperationService.ts
-- promptOrchestrationRouter.ts
+- sprint42-context-engine.test.ts
 - legalOntology.ts
 - sprint46-vector-infrastructure.test.ts
 - sprint41-semantic-retrieval.test.ts
@@ -120,7 +120,7 @@
 - operatingModel.ts
 - legacyBoundaries.ts
 - clauseIntelligence.ts
-- operationRecordService.ts
+- sprint5op-department-operation.test.ts
 - 📊 Análise Comparativa: Sistema Moreira Sales vs LiciGov Pro
 - services/documentConverter.ts
 - domain/legalValidation.ts
@@ -136,33 +136,33 @@
 - rc451-institutional-corpus-framework.test.ts
 - operationRecordScheduleBackfill.ts
 - actionSafety.ts
-- businessDomainRegistryService.ts
+- businessDomain.ts
 - pilotReadinessService.ts
 - 🔍 Endpoints Auxiliares
 - LiciGov Pro — Arquitetura do Sistema
-- ai.ts
+- providerAdapter.ts
 - ProcurementItemsWorkspace.tsx
-- documentTimelineService.ts
+- documentService.ts
 - DepartmentOperationHome.tsx
 - documentEngineService.ts
-- contractWorkspaceRouter.ts
+- sprint5w-contracts.test.ts
+- server/storage.ts
 - _core/index.ts
-- catalogSearchEngine.ts
 - compilerOptions
 - productionMonitoringService.ts
 - operationalCalendar.ts
 - priceResearchReview.ts
 - ontologyValidation.ts
-- sprint18-foundation.test.ts
+- officialDocumentExportAdapter.ts
 - releaseMigrate.ts
-- documentEvents.ts
+- VersionHistoryDialog.tsx
 - humanApprovalService.ts
 - structuredExportService.ts
-- tenantOnboardingService.ts
-- processItems.ts
-- documentVersionService.ts
+- operationalIncident.ts
+- manifestV1.ts
+- logActivity
 - agentExecution.ts
-- providerRoutingService.ts
+- providerFailoverService.ts
 - importAnalyticsService.ts
 - tasks.ts
 - DFDWorkspace.tsx
@@ -173,8 +173,8 @@
 - new003-lgpd-export-disabled.test.ts
 - department-operation/labels.ts
 - aiResilience.ts
-- llm.ts
-- operation-record-lifecycle-mysql-smoke.test.ts
+- processesRouter.ts
+- operation-record-schedule-backfill.ts
 - suggestions.ts
 - webhookRouter.ts
 - sprint501-business-domains.test.ts
@@ -184,32 +184,32 @@
 - scripts
 - departmentOperation.ts
 - institutionalCorpus.ts
-- semanticRetrievalRouter.ts
+- rerankingService.ts
 - contractValidation.ts
-- documentDiff.ts
-- documentDraftingEngine.ts
+- llm.ts
+- sprint43-legal-ai.test.ts
 - Inventário de Código Legado (RC-2)
 - PR A — Relatório de Remediação de Segurança e Isolamento
 - LiciGov Pro — Segurança e RBAC
 - retrieveRelevantLaw
-- importReprocessService.ts
-- operationalStabilityService.ts
+- layoutExtraction.ts
+- TRWorkspace.tsx
 - copilotContextService.ts
 - corpusFramework.ts
 - db/businessDomains.ts
 - RAG (Retrieval-Augmented Generation) - Arquitetura Futura
 - collaborationRouter.ts
 - getContractWorkspace
-- pr12-contract-governed-change-mysql-smoke.test.ts
+- contractWorkspaceRouter.ts
 - RAG-QUALITY-002 — Revisão focalizada pós-validação em staging
 - Regras de Negócio Críticas
 - featureFlagAdminService.ts
-- providerFailoverService.ts
+- providerRegistryService.ts
 - 3. Fases Executadas
-- ProcessDetails.tsx
+- ContractDetails.tsx
 - semanticMemory.ts
-- activityLogService.ts
-- knowledgeRetrievalService.ts
+- departmentTasksRouter.ts
+- itemAnalyticsService.ts
 - legalFrameworkAssistant.ts
 - priceResearchReviewGroups.ts
 - LiciGov Pro — Modelo Multi-tenant
@@ -217,32 +217,32 @@
 - adaptiveRecommendationEngine.ts
 - docs/README.md
 - LiciGov Pro — Workflows Documentais
-- CopilotType
-- aiOrchestration.ts
+- db/contractWorkspace.ts
+- retrievalService.ts
 - directContractShadowService.ts
 - sprint36-deployment-stability.test.ts
 - rc2-legacy-consolidation.test.ts
 - LiciGov Pro — Engineering Overview
 - sprint40-ai-foundation.test.ts
-- taskRouter.ts
+- contractsRouter.ts
 - memoryRetentionGovernance.ts
 - operationalGovernance.ts
-- providerExecutionService.ts
+- ProviderAdapter
 - Exemplos de Integração - Correções da Auditoria
 - semanticObservabilityService.ts
 - Changelog — LiciGov Pro
 - Skill: Geração de Documentos — DFD, ETP, TR, Edital
-- providerObservabilityService.ts
+- sprint45-provider-activation.test.ts
 - Business Domain — Tirar Dúvidas (Institutional Consultation) (RC-5.1)
 - LiciGov Pro — Pilot Closure Report
 - Sistema de Recomendacoes
 - LiciGov Pro — Documentação Técnica
-- FeatureFlagShadowDialog.tsx
-- LegalOpinionHome.tsx
+- shadowFlagSurface.ts
+- legal-opinion/labels.ts
 - promptGovernance.ts
-- sprint50-workspace.test.ts
+- ontologyValidationService.ts
 - Integrations Architecture
-- sprint45-provider-activation.test.ts
+- providerGovernanceRouter.ts
 - Plano Mestre — Piloto Institucional Interno · Prefeitura Municipal de Moreira Sales
 - Modelo de Grafo
 - package.json
@@ -250,12 +250,12 @@
 - OperationalCalendar.tsx
 - Decisões humanas pós-NIGHT SHIFT (2026-09-28)
 - sdk.ts
-- aiReasoning.ts
+- price-research-review-groups.test.ts
 - normativeTree.ts
 - EditalWorkspace.tsx
-- db/collaboration.ts
-- aiAuditService.ts
-- providerExecution.ts
+- observabilityService.ts
+- retrievalObservabilityService.ts
+- providerExecutionService.ts
 - ContactForm.tsx
 - NEW-004 — ids e ordem de eventos derivados de contagem (`count`/`length`) seguida de upsert
 - SOURCE-SCOPE-ROUTER-001 — Seleção determinística de fontes no "Tirar Dúvidas"
@@ -276,15 +276,15 @@
 - Product Roadmap — LiciGov Pro
 - generate-recovery-plan-pdf.ts
 - rc48-institutional-knowledge-pipeline.test.ts
-- db/contractWorkspace.ts
+- contractService.ts
 - R2.2 — Decisão por tenant sobre `FF_CANONICAL_INGESTION` (SEM-005)
-- operationRecordRouter.ts
+- email.ts
 - LegalOpinionEditor.tsx
 - retrievalEngineService.ts
 - w
 - semanticChunkingService.ts
 - Release History — LiciGov Pro
-- ExportCard.tsx
+- ExportCenterPage.tsx
 - ProcurementItemPanel.tsx
 - PR B — Fluxo Canônico e Interface · Corte controlado do pipeline legado
 - Itens planejados (NÃO implementados)
@@ -295,13 +295,13 @@
 - F-LEGAL1.1 — Authoritative Legal Reference Contract & Temporal Model
 - Runbook — Migrations & Release Safety (Fase B)
 - Anatomia de um Prompt Eficaz
-- hybridSearchService.ts
+- operation-record-lifecycle-mysql-smoke.test.ts
 - SemanticScoreBar.tsx
 - contextPolicies.ts
 - ssoFoundationService.ts
 - Motor de Importação — Import Engine
 - chunkingService.ts
-- workspaceTaskService.ts
+- feature-flag-admin-mysql-smoke.test.ts
 - RAG-QUALITY-001 — Correção da recuperação jurídica no "Tirar Dúvidas"
 - R2.1 — Inventário congelado de superfícies legadas montadas
 - Auditoria arquitetural transversal — autoridade semântica, proveniência e ações cegas
@@ -330,15 +330,15 @@
 - OpinionHistory.tsx
 - domain/collaboration.ts
 - map.ts
-- operationalCommunicationService.ts
+- sprint481-kg-wiring.test.ts
 - externalStorageFoundation.ts
 - pilotReadinessScoreService.ts
 - semanticIndexEngine.ts
-- legal-opinions-tenant-isolation-mysql-smoke.test.ts
+- serviceHealthService.ts
 - Entregas
 - Entregas
 - Fase 27 - Módulo de Gestão do Departamento de Licitações
-- sprint42-context-engine.test.ts
+- ClauseCard.tsx
 - Institutional Memory — Memória Institucional
 - Institutional Legal Ontology (RC-4.4)
 - Arquitetura — Acesso Institucional (PR A.1)
@@ -356,10 +356,10 @@
 - LiciGov Pro — Governança Arquitetural e Estratégica
 - LiciGov Pro — Master Index
 - approve-legal-reference-set.ts
-- contractService.ts
+- contractCreation.ts
 - 3. Contrato técnico proposto
 - document-settings-governance-contract.test.ts
-- institutionalIdentityService.ts
+- NewContract.tsx
 - Correções de Testes
 - R2.3 — Uso de dados legados em produção (verificação read-only)
 - ingestion-ui-guards.test.ts
@@ -380,10 +380,10 @@
 - Scalability
 - LEGAL REFERENCE MANIFEST V1 (2026) — Lei nº 14.133/2021 · `BR-FEDERAL`
 - Governança — workspaceGovernanceRouter + Approval Layer
-- providerAdapter.ts
+- createContractWorkspace
 - NEW-003 — `lgpd.exportMyData` devolve a linha completa de `users` (hashes bcrypt e segredos internos)
 - r2-leg028-experimental-api-gate.test.ts
-- workspaceDecisionService.ts
+- interoperabilityObservabilityService.ts
 - graphRecommendationService.ts
 - stripeService.ts
 - pr0-security-emergency-closure.test.ts
@@ -398,7 +398,7 @@
 - IA — Documentação
 - Plano de Migração da IA Legada → Kernel Cognitivo Canônico
 - Decisão arquitetural
-- documentIntegrityService.ts
+- DocumentImportPanel.tsx
 - providerRouter.ts
 - Institutional Knowledge Pipeline (RC-4.8)
 - Edital — Modalidade, Forma e Plataforma
@@ -414,8 +414,8 @@
 - Roadmap — Cognitive Procurement Workspace
 - Nomenclatura
 - Prompt History Index — LiciGov Pro
-- agentExecutionRouter.ts
-- bindingSample.ts
+- taskSimulationService.ts
+- bindingProjection.ts
 - responseValidation.ts
 - Notas de Implementação
 - Domínio
@@ -430,7 +430,7 @@
 - create-not-reset-legal-contract-mysql-smoke.test.ts
 - EntityResolutionWorkspace.tsx
 - ClauseConflictViewer.tsx
-- catmatMatcher.ts
+- gemini-schema-normalize.test.ts
 - IncidentList.tsx
 - SemanticGraphViewer.tsx
 - Consolidação Arquitetural dos Business Domains (Sprint 5.X.X)
@@ -473,22 +473,22 @@
 - schema-reconciliation.test.ts
 - materialize-governed-law-corpus.ts
 - corpusRegistry.ts
-- Map.tsx
+- procurement-presentation-fallbacks.test.ts
 - legalArticleLocator.ts
 - aiOutputValidation.ts
 - vectorStoreAbstractionService.ts
-- r2-leg005-legacy-items-catmat-mysql-smoke.test.ts
+- ontologyRouter.ts
 - Entregas
 - Arquivos Criados / Modificados
 - Cobertura
 - Sprint 2 — Resultados dos Testes
 - Camada de Inteligência Artificial — LiciGov Pro
-- businessDomain.ts
+- businessDomainRouter.ts
 - Bounded Contexts
 - ContextDriftPanel.tsx
 - ContextRankingPanel.tsx
 - PromptVersionHistory.tsx
-- lgpd.ts
+- priceResearchReviewService.ts
 - RecommendationPanel.tsx
 - LegalGraphViewer.tsx
 - RelationshipPanel.tsx
@@ -501,7 +501,7 @@
 - Grounding Engine — Motor de Fundamentação
 - Arquitetura do RAG Institucional
 - Response Validation — Validação de Respostas
-- contractEditService.ts
+- groundingSession.ts
 - Federal Procurement Corpus · Normative Foundation (RC-4.6.1)
 - Institutional Bootstrap Framework (RC-X.2)
 - Institutional Corpus Framework (RC-4.5.1)
@@ -532,14 +532,14 @@
 - Ação operacional — Vínculo do corpus municipal (Lei Municipal nº 769) no staging
 - G5 — Auditoria de Prontidão de Segredos (2026-09-20)
 - citationEngineService.ts
-- documentRenderService.ts
+- providerReplayService.ts
 - Configuração de Integração Contínua
-- experimentalApiGate.ts
+- reviewWorkspaceRouter.ts
 - Funcionalidades Principais
 - 📋 Plano de Implementação: RAG + Melhorias LiciGov Pro
 - normativeQueries.ts
 - Pilot Reset B2/B3 — lifecycle governado do Processo Licitatório
-- evidenceSelectionService.ts
+- knowledgeEdge.ts
 - rc-c01a1-contracts-legacy-freeze.test.ts
 - Sprint 1.5 — Hardening Multi-tenant
 - Arquivos Modificados
@@ -575,7 +575,7 @@
 - Rollback Engine
 - CI/CD — Arquitetura de Gates e Deploy (PR D)
 - Fundação de Governança Cognitiva e Documental (PR C.1)
-- seed-complete.mjs
+- tenantService.ts
 - Federal Procurement Corpus Package (RC-4.6)
 - SEC-036 — Homologação da CSP em staging (landing + login)
 - 5. Achados P1 e P2 por classe (Entregável 4 / F–G)
@@ -600,7 +600,7 @@
 - audit-gate.mjs
 - DocumentRetriever
 - Institutional Knowledge Integration Layer (RC-5.0)
-- r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts
+- BusinessDomainCard.tsx
 - document-settings-governance-mysql-smoke.test.ts
 - Arquivos Modificados
 - Sprint 1.8 — Preparação Core Documental
@@ -691,7 +691,7 @@
 - AIExecutionPanel.tsx
 - PromptViewer.tsx
 - SemanticMemoryPanel.tsx
-- AdminOrganizacoes.tsx
+- Usuarios.tsx
 - direct-procurement-rbac-mysql-smoke.test.ts
 - Institutional Ontology Validation (RC-4.3.1)
 - DecisionTraceViewer.tsx
@@ -761,6 +761,7 @@
 - WorkspaceSelector.tsx
 - bcrypt
 - CopilotSelector.tsx
+- WorkspaceOverview.tsx
 - RecoveryCheckpointPanel.tsx
 - TemplateSelector.tsx
 - OntologyExplorer.tsx
@@ -777,7 +778,7 @@
 - Retrieval Explainability — Sprint 4.6
 - Semantic Governance — Sprint 4.6
 - Semantic Memory — Sprint 4.6
-- post-blockers-tenant-isolation-mysql-smoke.test.ts
+- useItemTR.ts
 - Agenda dos registros operacionais
 - Exports — Diagrams
 - Exports — Migrations
@@ -793,9 +794,9 @@
 - Release Snapshots
 - Staging Releases
 - Roadmap de Médio Prazo
-- proposalZipGenerator.ts
+- CopilotExplainability.tsx
 - c4b1-official-promotion.test.ts
-- v1-functional-closure-mysql-smoke.test.ts
+- CopilotHistoryViewer.tsx
 - schema.test.ts
 - Sprint 1 — Decisões Arquiteturais
 - Sprint 2.5 — Decisões Arquiteturais
@@ -824,9 +825,9 @@
 - ProviderReplayViewer.tsx
 - ProviderRoutingVisualizer.tsx
 - KernelStatusPanel.tsx
-- TaskChartsSection.tsx
+- CopilotReasoningPanel.tsx
 - helmet
-- r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts
+- ResponsePanel.tsx
 - DeploymentHealthCard.tsx
 - ExecutiveOperationsDashboard.tsx
 - GovernancePolicyList.tsx
@@ -858,7 +859,7 @@
 - PR B.2 — Achados funcionais de importação (REGISTRO — não implementado nesta PR)
 - Exports — Schemas
 - GUIA_CONFIGURACAO_GITHUB.md
-- institutionalQuery.ts
+- GraphMetricsDashboard.tsx
 - @radix-ui/react-checkbox
 - 📊 Priorização de Desenvolvimento
 - 🎯 Critérios de Sucesso
@@ -869,7 +870,7 @@
 - db-push-guard.ts
 - imageGeneration.ts
 - migrations-chain.test.ts
-- platforms
+- WorkspaceHome.tsx
 - Sprint 1.5 — Decisões Arquiteturais
 - Sprint 1.8 — Resultados dos Testes
 - Prioridade ALTA - Sprint 1
@@ -916,68 +917,67 @@
 - Fase 15 - Dashboard de Analytics
 - Fase 6 - Aplicar Personalização e Downloads
 - run.sh
-- contractReconstruction.ts
-- documentConcurrencyService.ts
+- CopilotCenter.tsx
 - axios
 - groundingExpansionService.ts
 - parsers-pdf-docx.test.ts
-- directContractAuditReport.ts
+- r5-hydration-human-authority-guard.test.ts
 - cmdk
 - sprint15-hardening.test.ts
 - date-fns
 - @dnd-kit/core
 - @dnd-kit/utilities
-- ingestion-canonical-guard.test.ts
-- documentTemplateService.ts
-- emailService.ts
+- LicensedModulesPanel.tsx
+- CopilotComparisonPanel.tsx
+- r2-pr02-legacy-endpoints-disabled.test.ts
 - exceljs
 - pre-commit
 - corpusHierarchy.ts
-- zipService.ts
+- db/index.ts
 - Autoridade da quantidade — a cotação nunca vira necessidade (R6 / PR-13 · SEM-008 · INV-09)
 - recharts
-- seedDirectContractLegalArticles.ts
-- cnpjValidator.ts
-- collaboration-tenant-isolation-mysql-smoke.test.ts
+- CopilotMetricsDashboard.tsx
+- KnowledgeGraphViewer.tsx
+- isFeatureEnabled
 - @radix-ui/react-accordion
-- rc-sec-pr-a-onboarding-rbac-mysql-smoke.test.ts
-- create-not-reset-processes-mysql-smoke.test.ts
-- institutional-decision-ledger-mysql-smoke.test.ts
+- @aws-sdk/client-s3
+- busboy
+- cookie
 - @trpc/server
-- copilotMemoryService.ts
+- @dnd-kit/sortable
 - legalOpinionObservabilityService.ts
 - process-lifecycle-0313-migration-mysql-smoke.test.ts
-- rbac.test.ts
+- MONEY_FORMATTING_CONTRACT.md
 - @radix-ui/react-select
 - xlsx
-- archiver
-- @aws-sdk/s3-request-presigner
+- embla-carousel-react
+- input-otp
 - @radix-ui/react-toggle-group
-- clsx
-- document-generation-mysql-smoke.test.ts
-- diff-match-patch
-- dotenv
-- drizzle-orm
-- framer-motion
+- jose
+- jspdf
+- ProcessDetails.tsx
+- marked
+- @radix-ui/react-avatar
+- @radix-ui/react-collapsible
 - tailwind-merge
-- lucide-react
+- @radix-ui/react-label
 - @tesseract.js-data/por
 - @tiptap/extension-placeholder
-- mammoth
-- mysql2
-- openai
+- @radix-ui/react-radio-group
+- @radix-ui/react-slider
+- @radix-ui/react-tooltip
 - @trpc/react-query
 - use-debounce
 - vaul
-- pdfkit
-- @radix-ui/react-dropdown-menu
+- react-resizable-panels
+- tailwindcss-animate
 - init-github.sh
 - cookie.d.ts
 - rag.config.ts
 - reindexAll.sh
 - @radix-ui/react-alert-dialog
 - @radix-ui/react-aspect-ratio
-- @radix-ui/react-navigation-menu
+- @tanstack/react-query
 - @radix-ui/react-dialog
 - @radix-ui/react-menubar
 - @radix-ui/react-scroll-area
@@ -985,19 +985,14 @@
 - @radix-ui/react-tabs
 - react-day-picker
 - react-dom
-- @radix-ui/react-separator
-- OfficialDocumentPanel.tsx
+- @tiptap/react
+- LegalOpinionHome.tsx
 - @trpc/client
 - zod
-- @radix-ui/react-toggle
-- react-hook-form
-- resend
-- stripe
-- superjson
-- wouter
+- @tiptap/starter-kit
 
 ## God Nodes (most connected - your core abstractions)
-1. `getDb()` - 769 edges
+1. `getDb()` - 771 edges
 2. `cn()` - 312 edges
 3. `trpc` - 174 edges
 4. `Button()` - 139 edges
@@ -1009,105 +1004,105 @@
 10. `router` - 85 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `CopilotWorkspace()` --references--> `react`  [EXTRACTED]
-  client/src/components/copilots/CopilotWorkspace.tsx → package.json
-- `rankByRelevance()` --indirect_call--> `ev()`  [INFERRED]
-  server/domain/legalEvidence.ts → client/src/components/department-operation/OperationalCalendar.test.ts
+- `EFFECT_MOCKS()` --indirect_call--> `f()`  [INFERRED]
+  server/__tests__/integration/new006-contract-workspace-rbac.test.ts → client/src/components/procurement/DFDFieldSources.test.ts
 - `sentenceHasEvidenceSupport()` --indirect_call--> `ev()`  [INFERRED]
   server/domain/responseValidation.ts → client/src/components/department-operation/OperationalCalendar.test.ts
 - `OperationalCalendar()` --indirect_call--> `monthNavigationReducer()`  [INFERRED]
   client/src/components/department-operation/OperationalCalendar.tsx → shared/operationalCalendar.ts
+- `getMergeConflicts()` --indirect_call--> `field()`  [INFERRED]
+  server/services/documentCollaborationService.ts → client/src/components/ingestion/StagingReviewDrawer.test.ts
 - `stageRaw()` --indirect_call--> `field()`  [INFERRED]
   server/services/normalizationPipelineService.ts → client/src/components/ingestion/StagingReviewDrawer.test.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (992 total, 135 thin omitted)
+## Communities (987 total, 129 thin omitted)
 
 ### Community 0 - "schema.ts"
 Cohesion: 0.00
-Nodes (409): actionSafetyLogsTable, ActivityLog, agentExecutionsTable, AIExecutionAuditRow, aiExecutionAuditsTable, AIOrchestrationRow, aiOrchestrationsTable, AIPromptVersionRow (+401 more)
+Nodes (415): actionSafetyLogsTable, ActivityLog, agentExecutionsTable, AIExecutionAuditRow, aiExecutionAuditsTable, AIOrchestrationRow, aiOrchestrationsTable, AIPromptVersionRow (+407 more)
 
 ### Community 1 - "cn"
 Cohesion: 0.01
-Nodes (269): AiAssistantPanel(), Props, Result, Tab, TAB_CONFIG, AIChatBox(), AIChatBoxProps, Message (+261 more)
+Nodes (283): AiAssistantPanel(), Props, Result, Tab, TAB_CONFIG, AIChatBox(), AIChatBoxProps, Message (+275 more)
 
-### Community 2 - "button.tsx"
+### Community 2 - "card.tsx"
 Cohesion: 0.02
-Nodes (191): AdminStatsGrid(), Props, StatCardProps, AdminUser, AdminUsersTable(), Props, ChecklistPreviewDialogWrapper(), Props (+183 more)
+Nodes (218): Props, StatCardProps, AdminUser, Props, ChecklistPreviewDialogWrapper(), Props, TemplateInstructionsDialog(), Props (+210 more)
 
 ### Community 3 - "pdf-layout-golden-e.test.ts"
-Cohesion: 0.09
-Nodes (30): pdf-parse, pdf-parse, PdfTextItemLike, PositionedTextSource, TextOrientation, tokensFromPdfTextItems(), ViewportPointFn, matrixToRawItems() (+22 more)
+Cohesion: 0.15
+Nodes (17): collect(), fmtCents(), GOLDEN_E, GOLDEN_E_ITEMS, GOLDEN_E_V2, goldenEPdf(), goldenEV2Pdf(), MapItem (+9 more)
 
-### Community 4 - "documentService.ts"
-Cohesion: 0.10
-Nodes (37): buildExportFilename(), DOCUMENT_TYPE_LABELS, DocumentBlockType, DocumentMetadataFields, DocumentSectionType, DocumentVariableType, ExportPipelineOptions, ExportResult (+29 more)
+### Community 4 - "connection.ts"
+Cohesion: 0.08
+Nodes (40): catmatDecisionsTable, catmatThresholdConfigTable, idempotencyKeys, ActiveThreshold, CatmatDecisionRecord, getActiveCatmatThreshold(), getLatestCatmatDecision(), insertCatmatDecision() (+32 more)
 
-### Community 5 - "itemMaterializationService.ts"
-Cohesion: 0.04
-Nodes (126): intelligentItemIdentityAliasesTable, intelligentItemsTable, priceResearchItemsTable, priceResearchTable, findDirectPriceImport(), fromDb(), insertDirectPriceImportTx(), listDirectPriceImportItems() (+118 more)
+### Community 5 - "importPromotionService.ts"
+Cohesion: 0.05
+Nodes (72): importPromotions, importSessions, institutionalConsultationSourcesTable, institutionalConsultationsTable, priceResearchItemsTable, priceResearchTable, findDirectPriceImport(), fromDb() (+64 more)
 
 ### Community 6 - "ai/gemini.ts"
 Cohesion: 0.10
 Nodes (22): GeminiProvider, mapFinishReason(), REQUEST_OPTIONS, SAFETY_SETTINGS, shouldDisableThinking(), THINKING_DISABLE_COMPATIBLE_MODELS, normalizeGeminiResponseSchema(), UNSUPPORTED_KEYS (+14 more)
 
 ### Community 7 - "legalOpinions.ts"
-Cohesion: 0.06
-Nodes (41): auditLogs, digitalSignatures, InsertDigitalSignature, InsertLegalOpinion, legalOpinions, SignatureHistory, users, BootstrapOutcome (+33 more)
+Cohesion: 0.05
+Nodes (46): auditLogs, contractRenewals, digitalSignatures, InsertDigitalSignature, InsertLegalOpinion, legalOpinions, SignatureHistory, subscriptionPlans (+38 more)
 
 ### Community 8 - "getDb"
 Cohesion: 0.02
-Nodes (161): AIUsageTracking, comments, companyDocuments, DocumentReviewDecisionRow, documentReviewDecisionsTable, documentTemplates, idempotencyKeys, InsertAuditLog (+153 more)
+Nodes (185): AIUsageTracking, catmatSuggestions, comments, companyDocuments, DocumentSettings, documentTemplates, editalParameters, InsertActivityLog (+177 more)
 
 ### Community 9 - "invitationService.ts"
-Cohesion: 0.04
-Nodes (105): OrgRole, bumpTokenVersion(), createUser(), getUserByEmail(), getUserById(), normalizeEmailInput(), touchLastSignedIn(), updateUserPassword() (+97 more)
+Cohesion: 0.03
+Nodes (125): InsertUser, institutionalInvitations, PasswordResetToken, passwordResetTokens, createUser(), getUserByEmail(), normalizeEmailInput(), touchLastSignedIn() (+117 more)
 
 ### Community 10 - "tabularExtraction.ts"
-Cohesion: 0.05
-Nodes (67): aggregateConfidence(), buildFieldConfidence(), ConfidenceLevel, ConfidenceMetadata, EMPTY_CONFIDENCE, ExtractionError, ExtractionErrorCode, ExtractionWarning (+59 more)
+Cohesion: 0.07
+Nodes (54): OcrBBox, OcrWord, assessDocumentText(), assessPageText(), DocumentTextAssessment, MIN_USEFUL_CHARS, MIN_WORDS, NATIVE_TEXT_HEURISTIC_VERSION (+46 more)
 
 ### Community 11 - "DocumentIngestionLauncher.tsx"
 Cohesion: 0.03
-Nodes (101): DocumentApprovalPanel(), DocumentImportPanelProps, STEP_LABELS, DocumentIngestionLauncher(), DocumentIngestionLauncherProps, REVIEW_PHASES, FileDropzone(), FileDropzoneProps (+93 more)
+Nodes (94): DocumentApprovalPanel(), DocumentIngestionLauncher(), DocumentIngestionLauncherProps, REVIEW_PHASES, FileDropzone(), FileDropzoneProps, IngestionErrorState(), IngestionErrorStateProps (+86 more)
 
 ### Community 12 - "cognitiveProvenanceService.ts"
 Cohesion: 0.06
-Nodes (54): cognitiveProvenanceTable, generatedDocumentsTable, CognitiveProvenanceRecord, countProvenanceForTenant(), envelopeToRow(), getOriginalProvenanceByIdempotencyKey(), getProvenanceByExecutionId(), insertCognitiveProvenance() (+46 more)
+Nodes (63): cognitiveProvenanceTable, generatedDocumentsTable, CognitiveProvenanceRecord, countProvenanceForTenant(), envelopeToRow(), getOriginalProvenanceByIdempotencyKey(), getProvenanceByExecutionId(), insertCognitiveProvenance() (+55 more)
 
 ### Community 13 - "procurementItemsService.ts"
 Cohesion: 0.04
-Nodes (129): procurementItemEventsTable, ProcurementItemRow, procurementItemSourceLinksTable, procurementItemsTable, ProcurementLotRow, procurementLotsTable, ProcurementExecutor, appendItemEvents() (+121 more)
+Nodes (128): ProcurementExecutor, appendContextFacts(), appendItemEvents(), exec(), insertItemIfAbsent(), insertLotIfAbsent(), insertSourceLinkIfAbsent(), ItemEvent (+120 more)
 
 ### Community 14 - "directProcurementRouter.ts"
-Cohesion: 0.04
-Nodes (121): contractJustificationsTable, directProcurementProceduresTable, generatedPublicationsTable, priceJustificationsTable, proposalCollectionsTable, proposalDocumentsTable, ratificationsTable, requiredDocumentsTable (+113 more)
+Cohesion: 0.03
+Nodes (133): contractJustificationsTable, directProcurementProceduresTable, generatedPublicationsTable, priceJustificationsTable, proposalCollectionsTable, proposalDocumentsTable, ratificationsTable, requiredDocumentsTable (+125 more)
 
 ### Community 15 - "routers.ts"
-Cohesion: 0.03
-Nodes (84): SESSION_TTL_MS, TrpcContext, getSessionCookieOptions(), isSecureRequest(), LOCAL_HOSTS, sdk, adminProcedure, assertOrgRoleAtLeast() (+76 more)
+Cohesion: 0.02
+Nodes (77): adminProcedure, assertOrgRoleAtLeast(), hasOrgRoleAtLeast(), ORG_ROLE_RANK, OrgRoleCheckContext, protectedProcedure, publicProcedure, requireUser (+69 more)
 
 ### Community 16 - "dfdPrefill.ts"
 Cohesion: 0.04
-Nodes (145): appendContextFacts(), factDedupKey(), NewFactAssertion, allFields(), asNumberField(), AssertionStatus, AUTHORITY_POLICY, CANONICAL_CONTEXT_VERSION (+137 more)
+Nodes (135): factDedupKey(), NewFactAssertion, allFields(), asNumberField(), AssertionStatus, AUTHORITY_POLICY, CANONICAL_CONTEXT_VERSION, CanonicalField (+127 more)
 
 ### Community 17 - "sprint49-copilots.test.ts"
-Cohesion: 0.09
-Nodes (48): appendTraceStep(), computeReplaySnapshot(), CopilotDecisionTrace, createCopilotDecisionTrace(), TraceStepType, verifyReplay(), CopilotPolicy, createCopilotPolicy() (+40 more)
+Cohesion: 0.04
+Nodes (119): copilotDecisionTracesTable, copilotMetricsTable, copilotPoliciesTable, copilotRecommendationsTable, copilotSessionsTable, copilotsTable, tenantProcedure, getCopilotPolicy() (+111 more)
 
 ### Community 18 - "App.tsx"
 Cohesion: 0.02
-Nodes (123): AdminOrganizacoesShellRoute, AdminPlatformsRoute, App(), AuthenticatedRoute(), ContratosWorkspaceShellRoute, DashboardShellRoute, DirectProcurementShellRoute, OperationsHomeShellRoute (+115 more)
+Nodes (119): AdminOrganizacoesShellRoute, AdminPlatformsRoute, App(), AuthenticatedRoute(), ContratosWorkspaceShellRoute, DashboardShellRoute, DirectProcurementShellRoute, OperationsHomeShellRoute (+111 more)
 
-### Community 19 - "db/workspace.ts"
-Cohesion: 0.08
-Nodes (40): cognitiveWorkspacesTable, workspaceDecisionsTable, workspaceMetricsTable, workspaceRisksTable, workspaceTasksTable, workspaceTimelineTable, getWorkspace(), insertWorkspace() (+32 more)
+### Community 19 - "sprint50-workspace.test.ts"
+Cohesion: 0.04
+Nodes (96): cognitiveWorkspacesTable, workspaceDecisionsTable, workspaceMetricsTable, workspaceRisksTable, workspaceTasksTable, workspaceTimelineTable, getWorkspace(), insertDecision() (+88 more)
 
 ### Community 20 - "procurementProcessService.ts"
 Cohesion: 0.02
-Nodes (194): CRITICAL_COLUMNS, CRITICAL_TABLES, MIGRATIONS_FOLDER, runMigrations(), SchemaValidationLevel, linkProvenanceArtifact(), ProvenanceExecutor, getLatestOfficialPromotion() (+186 more)
+Nodes (203): runMigrations(), linkProvenanceArtifact(), ProvenanceExecutor, getLatestOfficialPromotion(), insertOfficialPromotion(), OfficialPromotionRecord, PromoDb, PromotionExecutor (+195 more)
 
 ### Community 21 - "OperationalRecordList.tsx"
 Cohesion: 0.21
@@ -1115,47 +1110,47 @@ Nodes (13): ExtraEventDraft, OperationalRecordList(), ScheduleDraft, EMPTY_LIST_
 
 ### Community 22 - "structuredAuthoringService.ts"
 Cohesion: 0.05
-Nodes (95): AuthoredLegalReference, AuthoredLegalReferenceSchema, AuthoredSection, AuthoredSectionSchema, AUTHORING_CONTRACT_VERSION, AUTHORING_LIMITS, AuthoringContractError, AuthoringKind (+87 more)
+Nodes (84): AuthoredLegalReference, AuthoredLegalReferenceSchema, AuthoredSection, AuthoredSectionSchema, AUTHORING_CONTRACT_VERSION, AUTHORING_LIMITS, AuthoringContractError, AuthoringKind (+76 more)
 
-### Community 23 - "input.tsx"
-Cohesion: 0.05
-Nodes (100): Props, Props, Props, TemplateInstructionsDialog(), CandidateDecisionModalProps, CandidateInfo, AddStepDialog(), Props (+92 more)
+### Community 23 - "lib/trpc.ts"
+Cohesion: 0.04
+Nodes (118): Props, Props, PendingAction, Props, Props, AuditTimelineProps, BackToDashboard(), BackToDashboardProps (+110 more)
 
 ### Community 24 - "institutionalConsultationService.ts"
 Cohesion: 0.05
-Nodes (85): institutionalConsultationSourcesTable, institutionalConsultationsTable, LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS, setActiveProvider(), mysqlConsultationRepository, recordValues(), Row, rowToRecord() (+77 more)
+Nodes (85): ComponentsShowcase(), LEGAL_ANALYSIS_MAX_OUTPUT_TOKENS, setActiveProvider(), mysqlConsultationRepository, getOrganizationInstitutionalProfile(), AUTHORITY_LABEL, buildApplicabilityCaveat(), buildConsultationAnswer() (+77 more)
 
 ### Community 25 - "sprint30-itemtr-catmat.test.ts"
-Cohesion: 0.06
-Nodes (77): ReviewActor, appendItemReviewTransition(), assertOverrideJustification(), buildItemReviewTransition(), currentItemStateFromHistory(), guardItemReviewTransition(), isTerminalItemReviewState(), isValidItemReviewTransition() (+69 more)
+Cohesion: 0.07
+Nodes (69): ClauseItemInput, ClauseTemplate, selectClauseTemplate(), scoreToLevel(), withConflict(), CellLocation, ExtractionLineage, ExtractionProvenance (+61 more)
 
-### Community 26 - "directContractDocuments.ts"
-Cohesion: 0.17
-Nodes (19): getDocumentSettingsByOrg(), getDirectContractById(), getLegalArticleById(), updateDirectContract(), opinionExportSettings(), generateDirectContractDoc(), generateMapaComparativo(), generateMinutaContrato() (+11 more)
+### Community 26 - "importTypes.ts"
+Cohesion: 0.08
+Nodes (42): buildDocumentProjection(), detectHeadingLevel(), DOCUMENT_IMPORT_TYPES, DOCUMENT_PROJECTION_VERSION, DocumentBlock, DocumentBlockType, DocumentImportType, DocumentProjection (+34 more)
 
 ### Community 27 - "legalOpinionWorkspaceService.ts"
 Cohesion: 0.05
-Nodes (99): legalOpinionDraftsTable, legalOpinionHistoryTable, legalOpinionTemplatesTable, legalOpinionVersionsTable, listDocumentReferences(), listRequestTimeline(), claimNewLegalOpinionDraft(), countLegalOpinionHistory() (+91 more)
+Nodes (99): legalOpinionDraftsTable, legalOpinionHistoryTable, legalOpinionTemplatesTable, legalOpinionVersionsTable, claimNewLegalOpinionDraft(), countLegalOpinionHistory(), draftInsertValues(), getLegalOpinionDraft() (+91 more)
 
 ### Community 28 - "institutionalRequests.ts"
 Cohesion: 0.06
-Nodes (79): documentReferencesTable, institutionalRequestsTable, institutionalResponsesTable, requestAssignmentsTable, requestNotificationsTable, requestTimelinesTable, countTimeline(), fromDb() (+71 more)
+Nodes (82): documentReferencesTable, institutionalRequestsTable, institutionalResponsesTable, requestAssignmentsTable, requestNotificationsTable, requestTimelinesTable, countTimeline(), fromDb() (+74 more)
 
-### Community 29 - "observabilityService.ts"
-Cohesion: 0.06
-Nodes (42): documentAttachments, OrganizationMember, organizationMembers, fail(), log, registerIngestionUploadRoute(), trpcCodeToHttp(), getAttachment() (+34 more)
+### Community 29 - "ingestionUploadRoute.ts"
+Cohesion: 0.20
+Nodes (9): fail(), log, registerIngestionUploadRoute(), trpcCodeToHttp(), attachStoredFile(), assertCanonicalIngestionEnabled(), streamFileToStorage(), ValidationTransform (+1 more)
 
 ### Community 30 - "domain/contractWorkspace.ts"
-Cohesion: 0.09
-Nodes (33): assertContractFieldsEditable(), assignmentFieldChanges(), changedFields(), CONTRACT_ASSIGNMENT_FIELDS, CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION, CONTRACT_DRAFT_STATUS, CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT, CONTRACT_EDITABLE_FIELDS (+25 more)
+Cohesion: 0.07
+Nodes (41): compareAndSetContractWorkspace(), assertContractFieldsEditable(), assignmentFieldChanges(), changedFields(), CONTRACT_ASSIGNMENT_FIELDS, CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION, CONTRACT_DRAFT_STATUS, CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT (+33 more)
 
 ### Community 31 - "sprint34-pilot-readiness.test.ts"
 Cohesion: 0.04
-Nodes (74): advanceWorkflow(), assignReviewer(), balanceWorkload(), canAdvance(), createApprovalChain(), currentStageAssignees(), delegateApproval(), emergencyApprove() (+66 more)
+Nodes (73): advanceWorkflow(), assignReviewer(), balanceWorkload(), canAdvance(), createApprovalChain(), currentStageAssignees(), delegateApproval(), emergencyApprove() (+65 more)
 
 ### Community 32 - "makeContext"
 Cohesion: 0.04
-Nodes (60): aiAssistantRouter, documentsRouter, ingestionRouter, processesRouter, procurementItemsRouter, assertLegacyPriceResearchPasteAllowed(), procurementProcessRouter, cache (+52 more)
+Nodes (53): Process, getSessionCookieOptions(), isSecureRequest(), LOCAL_HOSTS, aiAssistantRouter, analyticsRouter, authRouter, directContractsRouter (+45 more)
 
 ### Community 33 - "rcx1-institutional-experience-framework.test.ts"
 Cohesion: 0.07
@@ -1166,48 +1161,48 @@ Cohesion: 0.06
 Nodes (65): CollectionManifest, computeReplayHash(), createCollectionManifest(), CreateCollectionManifestParams, isValidCollectionManifest(), CompatibilitySpec, computeReplayHash(), CorpusManifest (+57 more)
 
 ### Community 35 - "sprint48-knowledge-graph.test.ts"
-Cohesion: 0.04
-Nodes (68): assessClauseRisk(), ClauseCategory, ClauseKnowledgeItem, ClauseRiskLevel, createClauseKnowledge(), createEntityResolution(), EntityResolutionRecord, markRejected() (+60 more)
+Cohesion: 0.05
+Nodes (60): assessClauseRisk(), ClauseCategory, ClauseKnowledgeItem, ClauseRiskLevel, createClauseKnowledge(), createLegalReference(), formatLegalCitation(), isVigente() (+52 more)
 
 ### Community 36 - "legalReasoning.ts"
 Cohesion: 0.05
-Nodes (67): assessComplianceScore, assessLegalRisk(), buildReasoningExplainability, clamp01(), ComplianceCheck, ComplianceCheckLegacy, ComplianceStatus, ContradictionLegacy (+59 more)
+Nodes (73): assessComplianceScore, assessExtendedComplianceScore(), assessLegalRisk(), buildExtendedReasoningExplainability(), buildReasoningExplainability, clamp01(), ComplianceCheck, ComplianceCheckLegacy (+65 more)
 
 ### Community 37 - "sprint25-hardening.test.ts"
-Cohesion: 0.14
-Nodes (21): assertPolicy(), evaluatePolicies(), evaluatePolicy(), hasMinRole(), isEffectivelyLocked(), isLockExpired(), PolicyAction, PolicyEvaluationContext (+13 more)
+Cohesion: 0.05
+Nodes (64): block(), CSS, ROOT, documentRenderCache, BlockDiff, computeDiff(), diffBlocks(), DiffChangeType (+56 more)
 
 ### Community 38 - "rcx2-institutional-bootstrap-framework.test.ts"
 Cohesion: 0.07
 Nodes (60): BootstrapDependencyGraph, buildDependencyGraph(), directDependencies(), directDependents(), hasCycle(), HasDependencies, topologicalOrder(), BootstrapExplanation (+52 more)
 
 ### Community 39 - "aiExecutionEngine.ts"
-Cohesion: 0.05
-Nodes (78): AIExecutionPolicy, AITaskId, getExecutionPolicy(), AIExecutionContext, CognitiveGroundingUsage, CognitiveOutcome, CognitiveRequest, contextReplayHash() (+70 more)
+Cohesion: 0.04
+Nodes (91): AIExecutionPolicy, AITaskId, getObservabilityByCorrelation(), AIExecutionContext, CognitiveGroundingUsage, CognitiveOutcome, CognitiveRequest, contextReplayHash() (+83 more)
 
 ### Community 40 - "sprint32-production-hardening.test.ts"
 Cohesion: 0.04
-Nodes (61): TRSection, exportHistory, exportRouter, CacheService, buildExportAuditEntry(), computeExportHash(), ExportAuditEntry, ExportMetadata (+53 more)
+Nodes (56): exportHistory, exportRouter, lastIngestionJobs, productionReadinessRouter, CacheConfig, CacheEntry, CacheMetrics, CacheService (+48 more)
 
-### Community 41 - "sprint51-procurement.test.ts"
+### Community 41 - "itemMaterializationService.ts"
 Cohesion: 0.04
-Nodes (93): catmatDecisionsTable, catmatThresholdConfigTable, ActiveThreshold, CatmatDecisionRecord, getActiveCatmatThreshold(), getLatestCatmatDecision(), getLatestCatmatDecisionsForItems(), insertCatmatDecision() (+85 more)
+Nodes (113): intelligentItemIdentityAliasesTable, intelligentItemsTable, orgRoleProcedure(), getIntelligentItem(), insertCatmatMatch(), insertIntelligentItem(), insertItemRecommendation(), insertItemRisk() (+105 more)
 
-### Community 42 - "r2-pr02-legacy-endpoints-disabled.test.ts"
-Cohesion: 0.04
-Nodes (40): LEGACY_PROCESS_PIPELINE_DISABLED, throwLegacyProcessPipelineDisabled(), contactRouter, ALLOWED_MIME_TYPES, LegacyDocType, LegacyDocumentByType, LegacyDocumentList, LegacyDocumentVersions (+32 more)
+### Community 42 - "experimentalApiGate.ts"
+Cohesion: 0.05
+Nodes (33): EXPERIMENTAL_API_CONFIG, EXPERIMENTAL_IN_MEMORY_APIS_ENV_KEY, OPT_IN, middleware, contactRouter, ALLOWED_MIME_TYPES, LegacyDocType, LegacyDocumentByType (+25 more)
 
 ### Community 43 - "rc461-normative-foundation.test.ts"
-Cohesion: 0.10
-Nodes (30): ALL_NORMATIVE_LEVELS, canContain(), getNormativeLevel(), isNormativeLevel(), levelPath(), NORMATIVE_HIERARCHY, normativeDepth(), NormativeLevel (+22 more)
+Cohesion: 0.11
+Nodes (28): ALL_NORMATIVE_LEVELS, canContain(), getNormativeLevel(), isNormativeLevel(), levelPath(), NORMATIVE_HIERARCHY, normativeDepth(), NormativeLevel (+20 more)
 
 ### Community 44 - "dependencies"
 Cohesion: 0.03
-Nodes (67): @aws-sdk/client-s3, busboy, class-variance-authority, cookie, @dnd-kit/sortable, docx, embla-carousel-react, html2canvas (+59 more)
+Nodes (67): archiver, @aws-sdk/s3-request-presigner, class-variance-authority, clsx, docx, dotenv, drizzle-orm, framer-motion (+59 more)
 
 ### Community 45 - "directContractsRouter.ts"
-Cohesion: 0.06
-Nodes (46): directContractAuditLogs, DirectContractChecklistProgress, directContractDocuments, directContractQuotations, directContracts, InsertDirectContract, InsertDirectContractAuditLog, InsertDirectContractChecklistProgress (+38 more)
+Cohesion: 0.03
+Nodes (91): directContractAuditLogs, DirectContractChecklistProgress, directContractDocuments, directContractLegalArticles, directContractQuotations, directContracts, InsertDirectContract, InsertDirectContractAuditLog (+83 more)
 
 ### Community 46 - "processLifecycleService.ts"
 Cohesion: 0.07
@@ -1215,51 +1210,51 @@ Nodes (57): procurementProcessLifecycleEventsTable, firstRow(), getGenerationRow
 
 ### Community 47 - "pdf-ocr-fallback.test.ts"
 Cohesion: 0.06
-Nodes (45): OcrEngineIdentity, OcrError, OcrErrorCode, OcrLine, OcrPageImage, OcrPageResult, OcrPort, OcrRecognizeOptions (+37 more)
+Nodes (43): OcrEngineIdentity, OcrError, OcrErrorCode, OcrLine, OcrPageImage, OcrPort, OcrRecognizeOptions, OcrResult (+35 more)
 
 ### Community 48 - "sprint35-pilot-execution.test.ts"
 Cohesion: 0.05
-Nodes (62): computeIncidentMetrics(), getCriticalIncidents(), getOpenIncidents(), ACTIVATION_TRANSITIONS, ActivationState, addRiskIndicator(), addRolloutStage(), AdoptionScore (+54 more)
+Nodes (59): ACTIVATION_TRANSITIONS, ActivationState, addRiskIndicator(), addRolloutStage(), AdoptionScore, assessOperationalHealth(), completeRolloutStage(), computeMaturityLevel() (+51 more)
 
 ### Community 49 - "OperationalDashboardPage.tsx"
-Cohesion: 0.24
-Nodes (7): ConfidenceDataPoint, ConfidenceDriftChart(), ConfidenceDriftChartProps, OperationalDashboardPageProps, msToReadable(), ReviewProductivityWidget(), ReviewProductivityWidgetProps
+Cohesion: 0.08
+Nodes (23): ConfidenceDataPoint, ConfidenceDriftChart(), ConfidenceDriftChartProps, KPIWidget(), KPIWidgetProps, OperationalDashboardPageProps, msToReadable(), ReviewProductivityWidget() (+15 more)
 
 ### Community 50 - "rc462-knowledge-binding-framework.test.ts"
-Cohesion: 0.10
-Nodes (45): BindingExplanation, explainBinding(), TYPE_REASON, articlesOfKnowledgeUnit(), bindingsByArticle(), bindingsByType(), knowledgeUnitsOfArticle(), listLineages() (+37 more)
+Cohesion: 0.11
+Nodes (46): BindingExplanation, explainBinding(), TYPE_REASON, articlesOfKnowledgeUnit(), bindingsByArticle(), bindingsByType(), knowledgeUnitsOfArticle(), listLineages() (+38 more)
 
 ### Community 51 - "itemMatchingEngine.ts"
-Cohesion: 0.06
-Nodes (62): BlendedResult, buildConsensus(), CandidateConsensus, computeBlendedScore(), ConfidenceBreakdown, ConsensusWeights, DEFAULT_WEIGHTS, getRejectionReason() (+54 more)
+Cohesion: 0.05
+Nodes (87): BlendedResult, buildConsensus(), CandidateConsensus, computeBlendedScore(), ConfidenceBreakdown, ConsensusWeights, DEFAULT_WEIGHTS, getRejectionReason() (+79 more)
 
-### Community 52 - "StagingReviewDrawer.tsx"
-Cohesion: 0.09
-Nodes (41): IngestionWarningsPanel(), CorrectionFieldInput(), CorrectionFieldInputProps, CorrectionSectionHeader(), ExtractedValuesSummary(), StagingReviewDrawer(), StagingReviewDrawerProps, item (+33 more)
+### Community 52 - "StagingReviewDrawer.test.ts"
+Cohesion: 0.10
+Nodes (33): CorrectionFieldInput(), CorrectionFieldInputProps, CorrectionSectionHeader(), ExtractedValuesSummary(), StagingReviewDrawer(), StagingReviewDrawerProps, field(), item (+25 more)
 
 ### Community 53 - "contracts.ts"
 Cohesion: 0.10
 Nodes (27): contractAmendments, contractApostilles, contractDocuments, InsertContract, InsertContractAmendment, InsertContractApostille, InsertContractAuditLog, InsertContractDocument (+19 more)
 
 ### Community 54 - "ocrExtraction.ts"
-Cohesion: 0.09
-Nodes (41): intIn(), OCR_CONFIG, OcrConfig, OcrConfigEnv, resolveOcrConfig(), OcrBBox, tokensFromOcrPage(), assessDocumentText() (+33 more)
+Cohesion: 0.16
+Nodes (18): pdf-parse, pdf-parse, layoutWarningsToImport(), tokensFromOcrPage(), annotateOcr(), extractItemsFromOcrPage(), FieldKey, minConf() (+10 more)
 
-### Community 55 - "procurement.ts"
-Cohesion: 0.03
-Nodes (133): fromDbDatetime(), createProcessWithInitialEvent(), DraftEditOperation, DraftExpectedState, DraftMutationInput, DraftMutationResult, fromDb(), GeneratedDocRow (+125 more)
+### Community 55 - "authoringContext.ts"
+Cohesion: 0.05
+Nodes (80): getLatestCatmatDecisionsForItems(), listIntelligentItems(), AUTHORITATIVE_ITEMS_BEGIN, AUTHORITATIVE_ITEMS_CONTRACT_VERSION, AUTHORITATIVE_ITEMS_END, AuthoritativeItemInput, AuthoritativeItemRow, AuthoritativeItemsEstimate (+72 more)
 
 ### Community 56 - "sprint29-semantic-review.test.ts"
-Cohesion: 0.07
-Nodes (46): addEvidenceEntry(), buildHumanCorrectionEvidence(), buildRawExtractionEvidence(), buildUnitNormalizationEvidence(), EvidenceEntry, EvidenceStrength, evidenceSummary(), EvidenceType (+38 more)
+Cohesion: 0.06
+Nodes (48): ALIAS_MAP, normalizeUnit(), REGISTRY, UnitCategory, UnitEntry, UnitNormalizationResult, addEvidenceEntry(), buildHumanCorrectionEvidence() (+40 more)
 
 ### Community 57 - "documentDrafting.ts"
-Cohesion: 0.07
-Nodes (42): assembleSections(), BlockType, computeDraftHash(), countWords(), createDraftBlockLegacy(), createDraftBlockV2(), createDraftSectionLegacy(), createDraftSectionV2() (+34 more)
+Cohesion: 0.06
+Nodes (43): assembleSections(), BlockType, computeDraftHash(), countWords(), createDraftBlockLegacy(), createDraftBlockV2(), createDraftSectionLegacy(), createDraftSectionV2() (+35 more)
 
-### Community 58 - "officialCorpusBuilder.ts"
-Cohesion: 0.07
-Nodes (51): inferTenantLocation(), InstitutionalContext, UserContext, explainOfficialDocument(), OfficialDocumentExplanation, IngestedDocument, IngestNormParams, addOfficialDocument() (+43 more)
+### Community 58 - "rc49-official-knowledge-corpus.test.ts"
+Cohesion: 0.09
+Nodes (33): inferTenantLocation(), InstitutionalContext, InstitutionalContextInput, UserContext, explainOfficialDocument(), OfficialDocumentExplanation, buildOfficialCorpora(), findByAuthority() (+25 more)
 
 ### Community 59 - "devDependencies"
 Cohesion: 0.03
@@ -1275,39 +1270,39 @@ Nodes (10): collectSchemaProblems(), expectedLatestMigration(), actualSchema(), 
 
 ### Community 62 - "aiWorkflow.ts"
 Cohesion: 0.05
-Nodes (51): addApproval(), addAutonomousStageToWorkflow(), addCheckpointToHistory(), addInferenceSnapshot(), AIWorkflowState, applyOverride(), ApprovalDecision, assertStatus() (+43 more)
+Nodes (54): addApproval(), addAutonomousStageToWorkflow(), addCheckpointToHistory(), addDraftingCheckpointToHistory(), addInferenceSnapshot(), AIWorkflowState, applyOverride(), ApprovalDecision (+46 more)
 
 ### Community 63 - "sprint47-institutional-rag.test.ts"
-Cohesion: 0.06
-Nodes (55): assembleRAGContext(), compressRAGContext(), estimateRAGTokens(), buildEvidenceGraph(), computeGroundingScore(), createGroundingSession(), EvidenceEdge, EvidenceEdgeRelationship (+47 more)
+Cohesion: 0.05
+Nodes (71): ev(), classifyIntent(), ContextStrategy, createQuery(), determineContextStrategy(), determineRetrievalStrategy(), InstitutionalQuery, normalizeQuery() (+63 more)
 
-### Community 64 - "importTypes.ts"
-Cohesion: 0.06
-Nodes (47): buildDocumentProjection(), detectHeadingLevel(), DOCUMENT_IMPORT_TYPES, DOCUMENT_PROJECTION_VERSION, DocumentBlock, DocumentBlockType, DocumentImportType, DocumentProjection (+39 more)
+### Community 64 - "baseParser.ts"
+Cohesion: 0.10
+Nodes (22): ExtractionSummary, ImportError, ImportWarning, numberToDecimalString(), formatQuantityBR(), BaseParser, noopObservability, ParseOptions (+14 more)
 
 ### Community 65 - "rc47-institutional-knowledge-framework.test.ts"
 Cohesion: 0.05
-Nodes (72): isBlockKind(), KnowledgeBlockKind, allBlocks(), CreateKnowledgeDocumentParams, explainDocument(), KnowledgeExplanation, ALL_LIFECYCLE_STATES, canTransitionLifecycle() (+64 more)
+Nodes (69): isBlockKind(), KnowledgeBlockKind, allBlocks(), CreateKnowledgeDocumentParams, explainDocument(), KnowledgeExplanation, ALL_LIFECYCLE_STATES, canTransitionLifecycle() (+61 more)
 
 ### Community 66 - "DirectProcurementHome.tsx"
-Cohesion: 0.08
-Nodes (33): DirectProcurementHome(), View, DirectProcurementOverview(), DirectProcurementOverviewProps, DOC_STATUS_CLASSES, DOC_STATUS_LABELS, formatCurrency(), formatDate() (+25 more)
+Cohesion: 0.09
+Nodes (30): DirectProcurementHome(), View, DirectProcurementOverview(), DirectProcurementOverviewProps, DOC_STATUS_CLASSES, DOC_STATUS_LABELS, formatCurrency(), formatDate() (+22 more)
 
 ### Community 67 - "legalOpinionWorkspaceRouter.ts"
-Cohesion: 0.05
-Nodes (46): lawyerAssignmentsTable, legalOpinionWorkspacesTable, claimLegalOpinionWorkspaceForLawyer(), claimOnce(), Db, getLawyerAssignmentForWorkspace(), isDeadlock(), isDuplicateEntry() (+38 more)
+Cohesion: 0.04
+Nodes (51): lawyerAssignmentsTable, legalOpinionWorkspacesTable, claimLegalOpinionWorkspaceForLawyer(), claimOnce(), Db, getLawyerAssignmentForWorkspace(), isDeadlock(), isDuplicateEntry() (+43 more)
 
 ### Community 68 - "ingestionUploadService.ts"
-Cohesion: 0.10
-Nodes (13): buildIngestionStorageKey(), ContentCategory, isAllowedMime(), log, PARSER_CONTENT_COMPAT, sanitizeFileName(), sniffContent(), streamFileToStorage() (+5 more)
+Cohesion: 0.17
+Nodes (11): buildIngestionStorageKey(), ContentCategory, isAllowedMime(), log, PARSER_CONTENT_COMPAT, sanitizeFileName(), sniffContent(), StreamUploadInput (+3 more)
 
 ### Community 69 - "institutionalKnowledgeIntegration.ts"
-Cohesion: 0.10
-Nodes (31): CONTEXT_PACKAGE_CONTRACT, InstitutionalContextInput, classifyApplicability(), ConsultationIntent, decideSourceScope(), DecideSourceScopeInput, detectIntent(), detectRequestedDiplomas() (+23 more)
+Cohesion: 0.07
+Nodes (48): Citation, CONTEXT_PACKAGE_CONTRACT, ContextDocument, ContextExplainabilityEntry, CreateContextPackageParams, RetrievedPassage, classifyApplicability(), ConsultationIntent (+40 more)
 
 ### Community 70 - "knowledgeGraph.ts"
-Cohesion: 0.05
-Nodes (85): entityResolutionsTable, graphChangeLogTable, graphMetricsTable, graphVersionsTable, knowledgeEdgesTable, knowledgeNodesTable, procurementConceptsTable, conceptRowToDto() (+77 more)
+Cohesion: 0.08
+Nodes (37): entityResolutionsTable, graphChangeLogTable, graphMetricsTable, graphVersionsTable, knowledgeEdgesTable, knowledgeNodesTable, procurementConceptsTable, conceptRowToDto() (+29 more)
 
 ### Community 71 - "jurisprudenceReference.ts"
 Cohesion: 0.06
@@ -1318,12 +1313,12 @@ Cohesion: 0.07
 Nodes (42): AssignmentData, AssignmentPanel(), AssignmentPanelProps, formatDateTime(), MOCK_ASSIGNMENT, CompletedRequests(), CompletedRequestsProps, IN_PROGRESS_STATUSES (+34 more)
 
 ### Community 73 - "governedLawCorpusMaterializer.ts"
-Cohesion: 0.07
-Nodes (36): InsertLawChunk, LawChunk, LegalReferenceEntry, ResolvedReference, asRecord(), GOVERNED_LAW_CORPUS_VERSION, GovernedChunkMetadata, readGovernedChunkMetadata() (+28 more)
+Cohesion: 0.06
+Nodes (42): InsertLawChunk, LawChunk, LegalReferenceEntry, LegalReferenceSet, ResolvedReference, asRecord(), GOVERNED_LAW_CORPUS_VERSION, GovernedChunkMetadata (+34 more)
 
 ### Community 74 - "db/legalReference.ts"
-Cohesion: 0.08
-Nodes (44): legalReferenceEntries, LegalReferenceSet, legalReferenceSetEvents, legalReferenceSets, LegalValueOverride, legalValueOverrides, log(), main() (+36 more)
+Cohesion: 0.14
+Nodes (22): legalReferenceEntries, legalReferenceSetEvents, legalReferenceSets, LegalValueOverride, legalValueOverrides, ApproveActivateInput, getGovernedCatalog(), getReferenceEntries() (+14 more)
 
 ### Community 75 - "ContractWorkspace.tsx"
 Cohesion: 0.06
@@ -1333,61 +1328,61 @@ Nodes (53): AddendumWorkspace(), AddendumWorkspaceProps, Origin, ORIGIN_LABELS, 
 Cohesion: 0.09
 Nodes (54): createKnowledgeBase(), KnowledgeBase, structuralSampleBase(), conflictId(), ConflictResolutionStrategy, ConflictSeverity, ConflictType, detectConflicts() (+46 more)
 
-### Community 77 - "vectorIndexService.ts"
-Cohesion: 0.18
-Nodes (12): appendToIndex(), createVectorIndex(), detectOrphans(), getIndex(), getIndicesByCorpus(), IndexStatus, _indices, rebuildIndex() (+4 more)
+### Community 77 - "semanticRetrievalRouter.ts"
+Cohesion: 0.09
+Nodes (33): cosineSimilarity(), createVectorEmbedding(), isEmbeddingStale(), normalizeVector(), sha256(), VectorEmbedding, semanticRetrievalRouter, getChunkingStats() (+25 more)
 
 ### Community 78 - "integrationLayer.ts"
 Cohesion: 0.10
 Nodes (39): conceptsForObject(), eventsForConcept(), IntegrationEdge, integrationFingerprint(), IntegrationNode, IntegrationValidation, legalCrossRef, linksByType() (+31 more)
 
-### Community 79 - "lib/trpc.ts"
-Cohesion: 0.02
-Nodes (125): BusinessDomainCard(), BusinessDomainCardDomain, BusinessDomainCardProps, DEFAULT_DOMAIN, BusinessDomainCode, DomainWorkspaceLauncherProps, LicensedModulesPanel(), Plan (+117 more)
+### Community 79 - "useOrgRole"
+Cohesion: 0.18
+Nodes (14): CatmatThresholdConfig(), CatmatThresholdInput, CatmatThresholdParse, parseThresholdInput(), brl(), ITEM_STATUS_CLASSES, ITEM_STATUS_LABELS, ItemIntelligenceWorkspace() (+6 more)
 
-### Community 80 - "copilotRouter.ts"
-Cohesion: 0.08
-Nodes (38): copilotDecisionTracesTable, copilotMetricsTable, copilotPoliciesTable, copilotRecommendationsTable, copilotSessionsTable, copilotsTable, getCopilotPolicy(), getCopilotSession() (+30 more)
+### Community 80 - "bootstrap.ts"
+Cohesion: 0.07
+Nodes (29): bootstrap(), CRITICAL_COLUMNS, CRITICAL_TABLES, decideSchemaValidation(), log(), MIGRATIONS_FOLDER, SchemaValidationLevel, validateSchema() (+21 more)
 
 ### Community 81 - "new006-contract-workspace-rbac.test.ts"
 Cohesion: 0.10
-Nodes (20): CONTRACT_WORKSPACE_RBAC_MATRIX, ContractWorkspaceProcedureClass, ContractWorkspaceProcedureName, ContractWorkspaceRbacEntry, call(), caller(), denialLogs(), expectDeniedWithoutEffects() (+12 more)
+Nodes (19): CONTRACT_WORKSPACE_RBAC_MATRIX, ContractWorkspaceProcedureName, call(), caller(), denialLogs(), expectDeniedWithoutEffects(), ORGS, rev() (+11 more)
 
-### Community 82 - "sprint43-legal-ai.test.ts"
-Cohesion: 0.07
-Nodes (43): addDraftingCheckpointToHistory(), createDraftingCheckpoint(), evaluateDraftCompliance(), analyzeClauseRisk(), buildClauseConflictMap(), buildClauseHierarchy(), checkClauseCompatibility(), ClauseConflictMap (+35 more)
+### Community 82 - "structuredGenerationService.ts"
+Cohesion: 0.15
+Nodes (19): clauseConflictDetected(), complianceScoreRecorded(), computeDraftingHealth(), draftCompleteness(), DraftingMetric, DraftingTrace, draftLatency(), getDraftingTraces() (+11 more)
 
 ### Community 83 - "contextAssembly.ts"
-Cohesion: 0.08
-Nodes (39): addFragmentToLayer(), assembleContext(), ContextLayer, ContextWindow, ContextWindowStatus, createFragment(), createLayer(), createWindow() (+31 more)
+Cohesion: 0.05
+Nodes (63): addFragmentToLayer(), assembleContext(), assembleRAGContext(), compressRAGContext(), ContextFragment, ContextLayer, ContextPriority, ContextWindow (+55 more)
 
 ### Community 84 - "pdfParser.ts"
-Cohesion: 0.10
-Nodes (28): computeExtractionFingerprint(), deriveExtractionMode(), EXTRACTION_LINEAGE_VERSION, ExtractionLineage, LayoutLineageInfo, LayoutPageInfo, LayoutValidationSummary, OcrLineageInfo (+20 more)
+Cohesion: 0.09
+Nodes (29): computeExtractionFingerprint(), deriveExtractionMode(), EXTRACTION_LINEAGE_VERSION, ExtractionLineage, LayoutLineageInfo, LayoutPageInfo, LayoutValidationSummary, OcrLineageInfo (+21 more)
 
-### Community 85 - "Usuarios.tsx"
-Cohesion: 0.07
-Nodes (35): ModuleCard(), DropdownMenu(), DropdownMenuCheckboxItem(), DropdownMenuContent(), DropdownMenuItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuSeparator() (+27 more)
+### Community 85 - "BemVindo"
+Cohesion: 0.48
+Nodes (4): BemVindo(), hasSeenWelcome(), markWelcomeSeen(), WELCOME_SEEN_KEY
 
 ### Community 86 - "departmentOperationService.ts"
-Cohesion: 0.10
-Nodes (37): countContractAddendaByOrg(), countCompletedOperationRecords(), listOperationalEvents(), listLegalOpinionWorkspaces(), computeIndicators(), CONCLUDED_CONTRACT, CONCLUDED_PROCESS, ConsolidatedInput (+29 more)
+Cohesion: 0.11
+Nodes (33): countContractAddendaByOrg(), countCompletedOperationRecords(), listOperationalEvents(), computeIndicators(), CONCLUDED_CONTRACT, CONCLUDED_PROCESS, ConsolidatedInput, MonitoringRow (+25 more)
 
-### Community 87 - "promptOrchestrationRouter.ts"
-Cohesion: 0.08
-Nodes (42): ContextAssembly, applyFallback(), buildExecutionPlan(), createPromptChain(), createPromptStage(), genId(), getNextStages(), PromptChain (+34 more)
+### Community 87 - "sprint42-context-engine.test.ts"
+Cohesion: 0.05
+Nodes (73): buildExplainabilityTree(), createReasoningStage(), createReasoningTrace(), detectAmbiguities(), detectContradictions(), formatReasoningForHuman(), genId(), propagateConfidence() (+65 more)
 
 ### Community 88 - "legalOntology.ts"
 Cohesion: 0.09
 Nodes (44): ALL_LEGAL_CONCEPT_IDS, conceptsByCategory(), getLegalConcept(), isLegalConcept(), LEGAL_CONCEPTS, LegalConcept, LegalConceptCategory, LegalConceptId (+36 more)
 
 ### Community 89 - "sprint46-vector-infrastructure.test.ts"
-Cohesion: 0.06
-Nodes (55): CorpusType, createSemanticCorpus(), IndexingStatus, IndexingStrategy, isCorpusStale(), SemanticCorpus, setIndexingStatus(), sha256() (+47 more)
+Cohesion: 0.08
+Nodes (40): CorpusType, createSemanticCorpus(), IndexingStatus, IndexingStrategy, isCorpusStale(), SemanticCorpus, setIndexingStatus(), sha256() (+32 more)
 
 ### Community 90 - "sprint41-semantic-retrieval.test.ts"
 Cohesion: 0.08
-Nodes (43): addEdge(), addNode(), computeGraphMetrics(), EdgeType, findRelated(), genId(), getGraph(), getOrCreateGraph() (+35 more)
+Nodes (42): addEdge(), addNode(), computeGraphMetrics(), EdgeType, findRelated(), genId(), getGraph(), getOrCreateGraph() (+34 more)
 
 ### Community 91 - "LiciGov Pro - TODO"
 Cohesion: 0.04
@@ -1406,8 +1401,8 @@ Cohesion: 0.10
 Nodes (36): directProcurementWorkspacesTable, institutionalDecisionsTable, DecisionWriteRaceError, fromRow(), getCurrentDecision(), getDecisionByIdempotencyKey(), insertDecision(), listDecisions() (+28 more)
 
 ### Community 95 - "sprint295-pre-itemtr.test.ts"
-Cohesion: 0.12
-Nodes (30): addDecision(), approveCandidate(), attachEvidence(), buildDecision(), compareCandidates(), createContract(), escalateReview(), finalizeContract() (+22 more)
+Cohesion: 0.10
+Nodes (35): addDecision(), approveCandidate(), attachEvidence(), buildDecision(), compareCandidates(), createContract(), escalateReview(), finalizeContract() (+27 more)
 
 ### Community 96 - "Módulo de Contratos"
 Cohesion: 0.04
@@ -1418,8 +1413,8 @@ Cohesion: 0.05
 Nodes (43): Benchmarks Esperados, ✅ Checklist de Validação e Testes - LiciGov Pro, ✅ Checklist Final de Entrega, Critérios de Sucesso, Critérios de Sucesso, Critérios de Sucesso, Critérios de Sucesso, Critérios de Sucesso (+35 more)
 
 ### Community 98 - "pr08-rbac-state-machine.test.ts"
-Cohesion: 0.07
-Nodes (28): compareAndSetContractWorkspaceStatus(), countContractAddenda(), advanceAddendum(), canContractTransition(), CONTRACT_STATUS_TRANSITION_INVALID, ContractStatusTransitionError, planInstrumentStatusChange(), transitionContractStatus() (+20 more)
+Cohesion: 0.09
+Nodes (16): canContractTransition(), CONTRACT_STATUS_TRANSITION_INVALID, ContractStatusTransitionError, transitionContractStatus(), itemIntelligenceRouter, ContractStatusConflictError, caller(), Role (+8 more)
 
 ### Community 99 - "realUsageMonitoringService.ts"
 Cohesion: 0.08
@@ -1427,11 +1422,11 @@ Nodes (24): _alerts, analyzeContinuousOperation(), computeWorkflowAnalytics(), C
 
 ### Community 100 - "TaskDetailModal.tsx"
 Cohesion: 0.11
-Nodes (21): TaskComments(), PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS, Task, TaskInfoPanel(), TaskLinkedProcess() (+13 more)
+Nodes (23): TaskComments(), PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS, Task, TaskInfoPanel(), TaskLinkedProcess() (+15 more)
 
 ### Community 101 - "organizations.ts"
-Cohesion: 0.07
-Nodes (41): InsertOrganization, InsertOrganizationMember, addMemberToOrg(), countActiveAdmins(), createOrganization(), getActiveOrganizationUserByEmail(), getActiveOrganizationUserById(), getAllMembersOfOrg() (+33 more)
+Cohesion: 0.05
+Nodes (56): InsertOrganization, InsertOrganizationMember, InstitutionalInvitation, Organization, organizations, addMemberToOrg(), countActiveAdmins(), createOrganization() (+48 more)
 
 ### Community 102 - "operatingModel.ts"
 Cohesion: 0.10
@@ -1439,39 +1434,39 @@ Nodes (35): INSTITUTIONAL_EVENTS, InstitutionalEvent, DOC_STATES, getInstitution
 
 ### Community 103 - "legacyBoundaries.ts"
 Cohesion: 0.07
-Nodes (35): f(), AI_SDK_ALLOWLIST, AWS_SDK_ALLOWLIST, BOUNDARY_CLASSIFICATIONS, BoundaryClassification, BoundaryClassificationEntry, BoundaryDisposition, BUSINESS_DOMAIN_SERVICES (+27 more)
+Nodes (33): AI_SDK_ALLOWLIST, AWS_SDK_ALLOWLIST, BOUNDARY_CLASSIFICATIONS, BoundaryClassification, BoundaryClassificationEntry, BoundaryDisposition, BUSINESS_DOMAIN_SERVICES, CANONICAL_NOT_YET_WIRED (+25 more)
 
 ### Community 104 - "clauseIntelligence.ts"
-Cohesion: 0.08
-Nodes (42): buildRecommendation(), clamp01(), ClauseCompatibilityResult, ClauseHierarchyNode, ClauseItemInput, ClauseItemLink, ClauseRecommendation, ClauseRecommendationContext (+34 more)
+Cohesion: 0.06
+Nodes (58): buildClauseHierarchy(), buildRecommendation(), clamp01(), ClauseCompatibilityResult, ClauseHierarchyNode, ClauseItemLink, ClauseRecommendation, ClauseRecommendationContext (+50 more)
 
-### Community 105 - "operationRecordService.ts"
+### Community 105 - "sprint5op-department-operation.test.ts"
 Cohesion: 0.09
-Nodes (42): countOperationalTimeline(), insertOperationalEvent(), insertOperationalTimelineEntry(), insertOperationRecord(), upsertPublicationRecord(), createExpirationEvents(), createOperationalEvent(), EXPIRATION_ALERT_OFFSETS (+34 more)
+Nodes (32): insertOperationRecord(), SITUATION_MEANING, createExpirationEvents(), createOperationalEvent(), EXPIRATION_ALERT_OFFSETS, EXPIRATION_TYPE, OperationalEvent, OperationalEventType (+24 more)
 
 ### Community 106 - "📊 Análise Comparativa: Sistema Moreira Sales vs LiciGov Pro"
 Cohesion: 0.05
 Nodes (39): 10. **Notificações Push** ⭐⭐⭐, 11. **Modo Dark/Light** ⭐⭐, 12. **PWA Offline** ❌, 13. **Backup Automático Diário** ❌, 1. **Gestão de Atividades (Robusto)**, **1. Kanban (Padrão)**, 1. **Numeração Automática Sequencial** ⭐⭐⭐⭐⭐, 2. **Gestão de Protocolos (Inovador)** (+31 more)
 
 ### Community 107 - "services/documentConverter.ts"
-Cohesion: 0.07
-Nodes (37): buildInstitutionalModel(), DocBlock, draftNotice(), flattenInline(), InlineRun, InstitutionalMeta, InstitutionalModel, metaLines() (+29 more)
+Cohesion: 0.10
+Nodes (28): buildInstitutionalModel(), convertToPDF(), DocBlock, draftNotice(), flattenInline(), InlineRun, InstitutionalMeta, InstitutionalModel (+20 more)
 
 ### Community 108 - "domain/legalValidation.ts"
 Cohesion: 0.09
 Nodes (36): applyExtendedValidationRules(), applyValidationRules, computeLegalIntegrityScore(), createExtendedValidationReport(), createExtendedValidationRule(), createValidationReport, createValidationRule, createValidationRuleLegacy() (+28 more)
 
 ### Community 109 - "stabilityRouter.ts"
-Cohesion: 0.07
-Nodes (36): stabilityRouter, buildRecoveryPlan(), _checkpoints, CheckpointType, computeIntegrityHash(), createCheckpoint(), estimateRecoveryTime(), executeRecoveryStep() (+28 more)
+Cohesion: 0.06
+Nodes (44): stabilityRouter, buildRecoveryPlan(), _checkpoints, CheckpointType, computeIntegrityHash(), createCheckpoint(), estimateRecoveryTime(), executeRecoveryStep() (+36 more)
 
 ### Community 110 - "11. Itens da Contratação & Lotes (Canonical Procurement Items & Lots — migration 0306)"
 Cohesion: 0.05
 Nodes (39): 10. Contrato para os próximos consumidores (ETP / TR / Edital — não implementados nesta entrega), 11.10 Contexto, DFD e desatualização, 11.11 Guarda de governança (antecipa a Alteração Governada da Necessidade), 11.12 Auditoria e observabilidade, 11.13 RBAC e tenant, 11.14 Migration 0306 — justificativa, 11.15 Futuro, 11.1 Item Canônico (+31 more)
 
 ### Community 111 - "catalogIntegrationService.ts"
-Cohesion: 0.05
-Nodes (56): ALIAS_MAP, normalizeUnit(), REGISTRY, UnitCategory, UnitEntry, UnitNormalizationResult, addToHistory(), CacheMetadata (+48 more)
+Cohesion: 0.07
+Nodes (45): addToHistory(), CacheMetadata, CatalogSnapshot, CatalogSyncHistory, CatalogType, computeChecksum(), createSnapshot(), IntegrityMetadata (+37 more)
 
 ### Community 112 - "P0 Piloto — Document Intake + Pesquisa de Preços → Itens Inteligentes → TR → Edital"
 Cohesion: 0.09
@@ -1479,11 +1474,11 @@ Nodes (23): 10. MIGRATION 0304 (replay-safe, aditiva), 11. LIMITATIONS (declarad
 
 ### Community 113 - "emailDispatcher.ts"
 Cohesion: 0.05
-Nodes (49): EmailOutboxMessage, EMAIL_CONFIG, BrevoProviderConfig, BrevoTransactionalEmailProvider, redactApiKey(), ConsoleEmailProvider, kick(), log (+41 more)
+Nodes (52): emailOutbox, EmailOutboxMessage, EMAIL_CONFIG, BrevoProviderConfig, BrevoTransactionalEmailProvider, redactApiKey(), ConsoleEmailProvider, kick() (+44 more)
 
 ### Community 114 - "tableLayoutReconstructor.ts"
-Cohesion: 0.10
-Nodes (35): PositionedTextToken, Box, buildPhysicalRows(), CarriedHeader, classifyFragmentText(), clean(), colIndex(), ColumnKind (+27 more)
+Cohesion: 0.08
+Nodes (42): OcrPageResult, PdfTextItemLike, PositionedTextSource, PositionedTextToken, TextOrientation, tokensFromPdfTextItems(), ViewportPointFn, Box (+34 more)
 
 ### Community 115 - "LiciGov Pro — Histórico de Sprints"
 Cohesion: 0.05
@@ -1502,16 +1497,16 @@ Cohesion: 0.17
 Nodes (24): CorpusExplanation, explainCorpus(), corpusById(), findCollections(), findCorpus(), findCorpusChildren(), findCorpusDependencies(), findCorpusHierarchy() (+16 more)
 
 ### Community 119 - "operationRecordScheduleBackfill.ts"
-Cohesion: 0.11
-Nodes (27): COMPLETION_REASON_MAX, isActiveOperationRecord(), LIFECYCLE_LABEL, LIFECYCLE_TARGET, LIFECYCLE_TIMELINE_ACTION, LifecycleAction, LifecycleTransitionPlan, normalizeLifecycle() (+19 more)
+Cohesion: 0.16
+Nodes (20): isActiveOperationRecord(), normalizeLifecycle(), planLifecycleTransition(), BackfillRecord, BackfillStatus, BackfillSummary, canonicalItem(), escapeRegex() (+12 more)
 
 ### Community 120 - "actionSafety.ts"
 Cohesion: 0.11
-Nodes (30): ActionClassification, assessHallucinationRisk(), BLOCKED_ACTIONS, buildRollbackPlan(), HallucinationRisk, HIGH_RISK_ACTIONS, isActionBlocked(), LOW_RISK_ACTIONS (+22 more)
+Nodes (34): ActionClassification, assessHallucinationRisk(), BLOCKED_ACTIONS, buildRollbackPlan(), classifyAction(), HallucinationRisk, HIGH_RISK_ACTIONS, isActionBlocked() (+26 more)
 
-### Community 121 - "businessDomainRegistryService.ts"
-Cohesion: 0.14
-Nodes (22): code(), upsertBusinessDomain(), upsertKernelService(), upsertModuleDependency(), BusinessDomain, listBusinessDomains(), ALL_KERNEL_SERVICE_IDS, createKernelServiceRecord() (+14 more)
+### Community 121 - "businessDomain.ts"
+Cohesion: 0.13
+Nodes (24): code(), upsertBusinessDomain(), upsertKernelService(), upsertModuleDependency(), BASE_KERNEL, BUSINESS_DOMAIN_DEFINITIONS, BusinessDomain, BusinessDomainCategory (+16 more)
 
 ### Community 122 - "pilotReadinessService.ts"
 Cohesion: 0.10
@@ -1525,109 +1520,109 @@ Nodes (34): 10. Consultar Unidade de Medida de Serviço, 1. **Busca de Itens ao 
 Cohesion: 0.06
 Nodes (34): 1. tRPC API Layer, 2. Domain Layer (DDD Aggregates), 3. Infrastructure Services, Business Domain "Tirar Dúvidas" (RC-5.1), Componentes Principais, ConcurrencyService, Decisões de Escalabilidade, Deploy e Infraestrutura (+26 more)
 
-### Community 125 - "ai.ts"
-Cohesion: 0.12
-Nodes (22): AI_MAX_ATTEMPTS, AI_TIMEOUT_MS, AIProviderName, CANONICAL_GEMINI_MODEL, CREDENTIAL_ENV_BY_PROVIDER, DEFAULT_MODEL_BY_PROVIDER, isUnstableModelId(), KNOWN_AI_PROVIDERS (+14 more)
+### Community 125 - "providerAdapter.ts"
+Cohesion: 0.08
+Nodes (41): AI_ALLOW_MOCK_FALLBACK, AI_CONFIG, AI_MAX_ATTEMPTS, AI_TIMEOUT_MS, AIProviderName, CANONICAL_GEMINI_MODEL, CREDENTIAL_ENV_BY_PROVIDER, DEFAULT_MODEL_BY_PROVIDER (+33 more)
 
 ### Community 126 - "ProcurementItemsWorkspace.tsx"
-Cohesion: 0.15
-Nodes (25): adoptableQuantities(), brl(), CANDIDATE_STATUS_LABELS, formatQty(), groupItems(), ItemGroup, ItemSourceView, ItemView (+17 more)
+Cohesion: 0.14
+Nodes (28): adoptableQuantities(), brl(), CANDIDATE_STATUS_LABELS, formatQty(), groupItems(), ItemGroup, ItemSourceView, ItemView (+20 more)
 
-### Community 127 - "documentTimelineService.ts"
-Cohesion: 0.10
-Nodes (21): documentTimeline, BaseTenantRepository, DocumentRepository, DocumentRow, buildPaginatedResult(), calculateOffset(), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE (+13 more)
+### Community 127 - "documentService.ts"
+Cohesion: 0.03
+Nodes (97): documentDrafts, documentTimeline, RETRY_POLICIES, BaseTenantRepository, DocumentRepository, DocumentRow, batchByIds(), batchByKey() (+89 more)
 
 ### Community 128 - "DepartmentOperationHome.tsx"
 Cohesion: 0.11
 Nodes (18): DepartmentOperationHomeProps, Tab, TABS, RECORD_TYPE_LABELS, LegacyImportWizard(), LegacyImportWizardProps, TYPES, OperationalDashboard() (+10 more)
 
 ### Community 129 - "documentEngineService.ts"
-Cohesion: 0.06
-Nodes (69): officialDocumentsTable, officialDocumentTimelineTable, countDocumentTimeline(), countVersions(), Db, getLatestByLineage(), getOfficialDocument(), insertDocumentTimelineEntry() (+61 more)
-
-### Community 130 - "contractWorkspaceRouter.ts"
 Cohesion: 0.08
-Nodes (32): countContractApostilles(), insertContractOccurrence(), insertContractWsDocument(), listContractAddenda(), listContractApostilles(), listContractWorkspaces(), listContractWsDocuments(), listImportedContractWorkspaces() (+24 more)
+Nodes (59): countDocumentTimeline(), countVersions(), Db, getLatestByLineage(), getOfficialDocument(), insertDocumentTimelineEntry(), insertOfficialDocument(), isDuplicateKeyError() (+51 more)
 
-### Community 131 - "_core/index.ts"
-Cohesion: 0.04
-Nodes (64): express, express, bootstrap(), decideSchemaValidation(), log(), validateSchema(), AI_CONFIG, ADMIN_PASSWORD (+56 more)
+### Community 130 - "sprint5w-contracts.test.ts"
+Cohesion: 0.13
+Nodes (19): listContractAddenda(), listContractApostilles(), listImportedContractWorkspaces(), createAssistedReconstruction(), ImportedContract, ImportedContractSource, matchAfter(), parseMoney() (+11 more)
 
-### Community 132 - "catalogSearchEngine.ts"
-Cohesion: 0.16
-Nodes (27): createSearchEntry(), globalSemanticIndex, incrementFrequency(), isFuzzyMatch(), levenshtein(), scoreAgainstEntry(), SemanticSearchEntry, stemPt() (+19 more)
+### Community 131 - "server/storage.ts"
+Cohesion: 0.09
+Nodes (27): APP_CONFIG, ADMIN_PASSWORD, ALLOW_PUBLIC_REGISTRATION, AUTH_CONFIG, JWT_SECRET, SESSION_TTL_HOURS, SESSION_TTL_MS, AWS_CONFIG (+19 more)
+
+### Community 132 - "_core/index.ts"
+Cohesion: 0.09
+Nodes (32): express, express, ANALYTICS_CONNECT_SRC, ANALYTICS_IMG_SRC, ANALYTICS_SCRIPT_SRC, buildCspDirectives(), buildHelmetContentSecurityPolicy(), CspDirectives (+24 more)
 
 ### Community 133 - "compilerOptions"
 Cohesion: 0.06
 Nodes (31): build, client/src/**/*, dist, dom, dom.iterable, esnext, node, node_modules (+23 more)
 
 ### Community 134 - "productionMonitoringService.ts"
-Cohesion: 0.08
-Nodes (51): checkEnv(), checkS3(), REQUIRED_ENV_KEYS, systemRouter, renderContent(), exportDocument(), ExportedDocument, ExportFormat (+43 more)
+Cohesion: 0.06
+Nodes (48): Document, checkEnv(), checkS3(), REQUIRED_ENV_KEYS, systemRouter, clearHealthCheckRuns(), cognitiveModules(), computeHealthScore() (+40 more)
 
 ### Community 135 - "operationalCalendar.ts"
 Cohesion: 0.13
 Nodes (29): IsoDate, calls, EVENTS, record(), RECORDS, addDays(), buildMonthGrid(), CalendarDayItem (+21 more)
 
 ### Community 136 - "priceResearchReview.ts"
-Cohesion: 0.11
-Nodes (39): ExtractionObservationsPanel(), ItemCardProps, PriceResearchItemCard(), PriceResearchQuoteRow(), QuoteRowProps, ListProps, PendingDecision, PriceResearchReviewList() (+31 more)
+Cohesion: 0.12
+Nodes (38): ExtractionObservationsPanel(), ItemCardProps, PriceResearchItemCard(), PriceResearchQuoteRow(), QuoteRowProps, ListProps, PendingDecision, PriceResearchReviewList() (+30 more)
 
 ### Community 137 - "ontologyValidation.ts"
 Cohesion: 0.12
 Nodes (43): ALL_EVENT_IDS, InstitutionalEventId, isInstitutionalEvent(), ALL_OBJECT_IDS, isInstitutionalObject(), detectCycle(), eventRefValid(), FINAL_STATES (+35 more)
 
-### Community 138 - "sprint18-foundation.test.ts"
-Cohesion: 0.11
-Nodes (28): documentDrafts, batchByIds(), batchByKey(), AUDIT_ACTION_CLASSIFICATIONS, AuditCategory, AuditClassification, AuditRetention, classifyAction() (+20 more)
+### Community 138 - "officialDocumentExportAdapter.ts"
+Cohesion: 0.10
+Nodes (29): renderContent(), renderInstitutionalContent(), exportDocument(), ExportedDocument, ExportFormat, ExportHeader, formatBrazilianDateTime(), MIME (+21 more)
 
 ### Community 139 - "releaseMigrate.ts"
 Cohesion: 0.27
 Nodes (7): log(), main(), LogFn, migrateWithAdvisoryLock(), MIGRATION_LOCK_NAME, MIGRATION_LOCK_TIMEOUT_SECONDS, MIGRATIONS_FOLDER
 
-### Community 140 - "documentEvents.ts"
-Cohesion: 0.08
-Nodes (27): ComentarioAdicionado, ComentarioAdicionadoPayload, DOCUMENT_EVENT_TYPES, DocumentEventType, DocumentoAprovado, DocumentoAprovadoPayload, DocumentoAtualizado, DocumentoAtualizadoPayload (+19 more)
+### Community 140 - "VersionHistoryDialog.tsx"
+Cohesion: 0.19
+Nodes (23): AdminStatsGrid(), AdminUsersTable(), AddStepDialog(), EditStepDialog(), CommentsSectionProps, RegenerationConfirmDialogProps, BulkReviewBarProps, Template (+15 more)
 
 ### Community 141 - "humanApprovalService.ts"
-Cohesion: 0.13
-Nodes (27): ApprovalDecision, ApprovalGate, ApprovalPriority, ApprovalStatus, ApprovalWorkflow, createApprovalWorkflow(), delegateWorkflow(), escalateWorkflow() (+19 more)
+Cohesion: 0.12
+Nodes (27): ApprovalDecision, ApprovalGate, ApprovalPriority, ApprovalStatus, ApprovalWorkflow, delegateWorkflow(), escalateWorkflow(), getApprovalSummary() (+19 more)
 
 ### Community 142 - "structuredExportService.ts"
-Cohesion: 0.20
-Nodes (16): ApprovalChain, structuredExportRouter, AuditEvent, computeExportChecksum(), CONTRACTS, exportAuditTrailAsJson(), exportItemTRsAsJson(), exportItemTRsAsXml() (+8 more)
+Cohesion: 0.11
+Nodes (27): ApprovalChain, structuredExportRouter, AuditCategory, AuditEvent, AuditQuery, auditStore, AuditSummary, clearAuditStore() (+19 more)
 
-### Community 143 - "tenantOnboardingService.ts"
-Cohesion: 0.10
-Nodes (20): InstitutionalInvitation, Organization, getOrganizationBySlug(), TENANT_ALREADY_EXISTS, tenantOnboardingRouter, isDuplicateEntryError(), log, onboardTenant() (+12 more)
+### Community 143 - "operationalIncident.ts"
+Cohesion: 0.09
+Nodes (29): addEscalationStep(), addIncidentComment(), assignIncident(), computeImpactScore(), computeIncidentMetrics(), correlateIncidents(), _correlationMap, createIncident() (+21 more)
 
-### Community 144 - "processItems.ts"
+### Community 144 - "manifestV1.ts"
 Cohesion: 0.15
-Nodes (22): catmatSuggestions, processItems, assertProcessInOrganization(), createCatmatSuggestion(), createCatmatSuggestionForOrganization(), deleteProcessItem(), deleteProcessItemForOrganization(), getCatmatSuggestionById() (+14 more)
+Nodes (21): log(), main(), installGovernedLegalReferenceV1(), canonicalize(), canonicalStringify(), sha256Hex(), computeManifestHashes(), coverageManifestObject() (+13 more)
 
-### Community 145 - "documentVersionService.ts"
-Cohesion: 0.10
-Nodes (21): documents, documentVersions, ActorSnapshot, VersionSourceContext, WorkflowSnapshot, CreateVersionParams, Db, getLatestVersion() (+13 more)
+### Community 145 - "logActivity"
+Cohesion: 0.03
+Nodes (85): documentAttachments, DocumentReviewDecisionRow, documentReviewDecisionsTable, documents, documentVersions, InsertDocumentReviewDecision, OrgRole, DocumentReviewAction (+77 more)
 
 ### Community 146 - "agentExecution.ts"
 Cohesion: 0.12
-Nodes (28): classifyAction(), performSafetyCheck(), SafetyCheck, addExecutionCheckpoint(), advanceExecutionStage(), AgentExecution, AgentExecutionStatus, createAgentExecution() (+20 more)
+Nodes (27): SafetyCheck, addExecutionCheckpoint(), advanceExecutionStage(), AgentExecution, AgentExecutionStatus, createAgentExecution(), createExecutionReplay(), ExecutionCheckpoint (+19 more)
 
-### Community 147 - "providerRoutingService.ts"
-Cohesion: 0.24
-Nodes (16): AIProvider, isProviderAvailable(), createRouting(), FallbackStrategy, getFallbackChain(), ProviderRouting, RoutingStrategy, selectProvider() (+8 more)
+### Community 147 - "providerFailoverService.ts"
+Cohesion: 0.14
+Nodes (26): AIProvider, isProviderAvailable(), createRouting(), FallbackStrategy, getFallbackChain(), ProviderRouting, RoutingStrategy, selectProvider() (+18 more)
 
 ### Community 148 - "importAnalyticsService.ts"
-Cohesion: 0.09
-Nodes (37): avg(), buildKpi(), compareSnapshots(), computeAnalytics(), computeApprovalRate(), computeAvgConfidence(), computeCorrectionRate(), computeParserAccuracy() (+29 more)
+Cohesion: 0.17
+Nodes (22): avg(), buildKpi(), compareSnapshots(), computeAnalytics(), computeApprovalRate(), computeAvgConfidence(), computeCorrectionRate(), computeParserAccuracy() (+14 more)
 
 ### Community 149 - "tasks.ts"
-Cohesion: 0.09
-Nodes (30): InsertTask, taskAttachments, taskComments, taskEditLocks, TaskHistory, tasks, db, sampleTasks (+22 more)
+Cohesion: 0.06
+Nodes (47): contracts, InsertTask, taskAttachments, taskComments, taskEditLocks, TaskHistory, tasks, db (+39 more)
 
 ### Community 150 - "DFDWorkspace.tsx"
-Cohesion: 0.12
-Nodes (29): DocumentImportPanel(), assistSummary, DFDFieldSources(), DFDFieldSourcesProps, DFDFieldStateUI, DFDFieldViewUI, FieldDetail, fieldDetails() (+21 more)
+Cohesion: 0.15
+Nodes (22): assistSummary, DFDFieldSources(), DFDFieldSourcesProps, DFDFieldStateUI, DFDFieldViewUI, FieldDetail, fieldDetails(), fieldIndicator (+14 more)
 
 ### Community 151 - "LiciGov Pro — Política Documental"
 Cohesion: 0.07
@@ -1642,8 +1637,8 @@ Cohesion: 0.07
 Nodes (27): 1. **Listagem de Solicitações de Propostas**, 1. **Upload de Documentos**, 2. **Controle de Validade**, 2. **Registro de Empenho**, 3. **Ativação de Assinatura**, 3. **Atualização de Documentos**, 4. **Download de Documentos**, 🎯 Acesso (+19 more)
 
 ### Community 154 - "agentPlanningService.ts"
-Cohesion: 0.17
-Nodes (25): addDependency(), addTaskToPlan(), AgentAction, AgentConstraint, AgentGoal, createExecutionPlan(), estimatePlanDuration(), ExecutionDependency (+17 more)
+Cohesion: 0.16
+Nodes (26): addDependency(), addTaskToPlan(), AgentAction, AgentConstraint, AgentGoal, createExecutionPlan(), estimatePlanDuration(), ExecutionDependency (+18 more)
 
 ### Community 155 - "new003-lgpd-export-disabled.test.ts"
 Cohesion: 0.06
@@ -1654,16 +1649,16 @@ Cohesion: 0.16
 Nodes (17): CHANNEL_LABELS, EVENT_TYPE_CLASSES, EVENT_TYPE_LABELS, formatDate(), SITUATION_CLASSES, SITUATION_LABELS, EventList(), OperationalDashboardProps (+9 more)
 
 ### Community 157 - "aiResilience.ts"
-Cohesion: 0.09
-Nodes (31): APP_CONFIG, calculateBackoffMs(), isRetryable(), RETRY_POLICIES, RetryPolicy, RetryPolicyName, AiCallContext, buildAiRetryPolicy() (+23 more)
+Cohesion: 0.15
+Nodes (19): calculateBackoffMs(), isRetryable(), RetryPolicy, RetryPolicyName, AiCallContext, buildAiRetryPolicy(), errorType(), isTransientAiError() (+11 more)
 
-### Community 158 - "llm.ts"
+### Community 158 - "processesRouter.ts"
 Cohesion: 0.06
-Nodes (41): getProvider(), FileContent, flattenContent(), generateText(), ImageContent, invokeLLM(), InvokeParams, InvokeResult (+33 more)
+Nodes (33): trackAIUsage(), LEGACY_PROCESS_PIPELINE_DISABLED, throwLegacyProcessPipelineDisabled(), LegacyCatmatSuggestions, LegacyGenerateCatmatSuggestionsResult, LegacyParsedItem, LegacyParseItemsFileResult, LegacyProcessItems (+25 more)
 
-### Community 159 - "operation-record-lifecycle-mysql-smoke.test.ts"
-Cohesion: 0.11
-Nodes (21): organizations, assertDatasetOutsideGit(), CliArgs, ConfigError, formatPlan(), main(), parseArgs(), readDataset() (+13 more)
+### Community 159 - "operation-record-schedule-backfill.ts"
+Cohesion: 0.18
+Nodes (18): assertDatasetOutsideGit(), CliArgs, ConfigError, formatPlan(), main(), parseArgs(), readDataset(), REPO_ROOT (+10 more)
 
 ### Community 160 - "suggestions.ts"
 Cohesion: 0.24
@@ -1674,8 +1669,8 @@ Cohesion: 0.13
 Nodes (25): deliveryStore, endpointStore, getDeliveries(), getEndpoints(), saveDelivery(), saveEndpoint(), webhookEventTypeSchema, webhookRouter (+17 more)
 
 ### Community 162 - "sprint501-business-domains.test.ts"
-Cohesion: 0.19
-Nodes (21): getLicensedModule(), listLicensedModules(), setModuleActive(), upsertLicensedModule(), ALL_BUSINESS_DOMAIN_CODES, createLicensedModule(), deactivateModule(), hasFeature() (+13 more)
+Cohesion: 0.17
+Nodes (23): getLicensedModule(), listLicensedModules(), setModuleActive(), upsertLicensedModule(), ALL_BUSINESS_DOMAIN_CODES, getBusinessDomainDefinition(), ALL_KERNEL_SERVICE_IDS, isKernelService() (+15 more)
 
 ### Community 163 - "✅ MÓDULOS IMPLEMENTADOS E PRONTOS PARA USO"
 Cohesion: 0.08
@@ -1694,28 +1689,28 @@ Cohesion: 0.08
 Nodes (25): scripts, admin:bootstrap, ai:models, audit:gate, build, check, db:audit, db:embedding:reindex (+17 more)
 
 ### Community 167 - "departmentOperation.ts"
-Cohesion: 0.08
-Nodes (38): operationalEventsTable, operationalMilestonesTable, operationalSettingsTable, operationalTimelineTable, operationRecordsTable, publicationRecordsTable, applyOperationRecordScheduleBackfill(), BackfillStateChangedError (+30 more)
+Cohesion: 0.06
+Nodes (61): operationalEventsTable, operationalMilestonesTable, operationalSettingsTable, operationalTimelineTable, operationRecordsTable, publicationRecordsTable, applyOperationRecordScheduleBackfill(), BackfillStateChangedError (+53 more)
 
 ### Community 168 - "institutionalCorpus.ts"
 Cohesion: 0.15
 Nodes (21): hasHierarchyCycle(), CorpusValidation, validateCorpusFramework(), activateCorpus(), archiveCorpus(), buildCorpusVersionChains(), CorpusChange, CorpusVersion (+13 more)
 
-### Community 169 - "semanticRetrievalRouter.ts"
-Cohesion: 0.08
-Nodes (38): compareEvidence(), createRetrievalEvidence(), EvidenceType, getEvidenceBreakdown(), RetrievalEvidence, sha256(), addTraceEntry(), completeRetrieval() (+30 more)
+### Community 169 - "rerankingService.ts"
+Cohesion: 0.14
+Nodes (18): compareEvidence(), createRetrievalEvidence(), EvidenceType, getEvidenceBreakdown(), RetrievalEvidence, sha256(), contextualRerank(), getRerankStrategies() (+10 more)
 
 ### Community 170 - "contractValidation.ts"
 Cohesion: 0.14
 Nodes (22): AmendmentValueValidation, ApostilamentoValidation, ContractDurationValidation, DISPENSA_LIMITS, DispensaValidation, fetchOfficialIndex(), getIndexSourceURL(), JustificationValidation (+14 more)
 
-### Community 171 - "documentDiff.ts"
-Cohesion: 0.12
-Nodes (20): block(), CSS, ROOT, BlockDiff, computeDiff(), diffBlocks(), DiffChangeType, diffMetadata() (+12 more)
+### Community 171 - "llm.ts"
+Cohesion: 0.10
+Nodes (23): getProvider(), FileContent, flattenContent(), generateText(), ImageContent, invokeLLM(), InvokeParams, InvokeResult (+15 more)
 
-### Community 172 - "documentDraftingEngine.ts"
-Cohesion: 0.15
-Nodes (21): createDraftBlock, createDraftSection, createDraftTemplate, createDraftVariable, DraftGeneration, DraftTemplate, DraftVariable, extractTemplateSkeleton() (+13 more)
+### Community 172 - "sprint43-legal-ai.test.ts"
+Cohesion: 0.11
+Nodes (31): analyzeClauseRisk(), buildClauseConflictMap(), checkClauseCompatibility(), ClauseConflictMap, ClauseRiskAnalysis, createDraftBlock, createDraftSection, createDraftTemplate (+23 more)
 
 ### Community 173 - "Inventário de Código Legado (RC-2)"
 Cohesion: 0.08
@@ -1730,16 +1725,16 @@ Cohesion: 0.08
 Nodes (24): ActivityLog (Imutável), Auditoria, Autenticação, Avaliação de Permissões — PolicyEngine, Cadeia de Fingerprints, Camadas de Isolamento, Correlação de Requests, Hardening da Camada Multi-tenant (+16 more)
 
 ### Community 176 - "retrieveRelevantLaw"
-Cohesion: 0.18
-Nodes (21): @google/generative-ai, @google/generative-ai, testRAG(), testRAG(), buildDocGenerationConfig(), DOC_GENERATION_CONFIG, extractValidatedText(), genAI (+13 more)
+Cohesion: 0.25
+Nodes (19): @google/generative-ai, @google/generative-ai, testRAG(), testRAG(), buildDocGenerationConfig(), DOC_GENERATION_CONFIG, extractValidatedText(), genAI (+11 more)
 
-### Community 177 - "importReprocessService.ts"
+### Community 177 - "layoutExtraction.ts"
 Cohesion: 0.15
-Nodes (17): assessReprocessEligibility(), isReextractionReservationActive(), REEXTRACTION_LEASE_MS, REEXTRACTION_STAGE, ReextractionRecord, REPROCESS_BLOCKER_MESSAGE, REPROCESS_EXPLANATION, ReprocessBlocker (+9 more)
+Nodes (22): ConfidenceMetadata, ExtractionError, ExtractionWarning, hasExtractionErrors(), isItemReviewable(), ParserMetadata, RawExtractedItem, RawTypedValues (+14 more)
 
-### Community 178 - "operationalStabilityService.ts"
-Cohesion: 0.11
-Nodes (21): analyzeTrend(), _anomalies, AnomalySeverity, buildStabilitySnapshot(), computeStabilityScore(), DegradationLevel, detectAnomalies(), getActiveAnomalies() (+13 more)
+### Community 178 - "TRWorkspace.tsx"
+Cohesion: 0.19
+Nodes (16): AuthoringSourcesSummary(), AuthoringSourcesSummaryProps, DraftEditor(), DraftEditorProps, ETPWorkspace(), ETPWorkspaceProps, GroundingDescriptor, GroundingNotice() (+8 more)
 
 ### Community 179 - "copilotContextService.ts"
 Cohesion: 0.15
@@ -1765,9 +1760,9 @@ Nodes (18): authorizeProcessAccess(), authzLog, collaborationRouter, DenialReaso
 Cohesion: 0.15
 Nodes (13): fromDbDatetime(), getContractWorkspace(), requireContract(), assertNoGenericContractActivation(), CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION, CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION_MESSAGE, GenericActivationCallContext, isGenericContractActivation() (+5 more)
 
-### Community 185 - "pr12-contract-governed-change-mysql-smoke.test.ts"
-Cohesion: 0.29
-Nodes (3): contractWorkspaceRouter, caller(), seedContract()
+### Community 185 - "contractWorkspaceRouter.ts"
+Cohesion: 0.12
+Nodes (11): listContractWorkspaces(), listContractWsDocuments(), ADDENDUM_ORIGINS, ADDENDUM_TYPES, APOSTILLE_KINDS, CONTRACT_STATUSES, contractWorkspaceRouter, DOC_KINDS (+3 more)
 
 ### Community 186 - "RAG-QUALITY-002 — Revisão focalizada pós-validação em staging"
 Cohesion: 0.09
@@ -1778,40 +1773,40 @@ Cohesion: 0.09
 Nodes (23): 1. Criação e Aprovação de Documento, 2. Importação de Planilha de Pesquisa de Preços, 3. Gestão de Membros da Organização, Admin, Casos de Uso por Papel, Contrato, Edital, Estudo Técnico Preliminar (ETP) (+15 more)
 
 ### Community 188 - "featureFlagAdminService.ts"
-Cohesion: 0.08
-Nodes (36): featureFlags, tenantFeatureFlags, AppEnv, featureFlagAdminRouter, FF_DIRECT_CONTRACT_SHADOW, assertGovernable(), FlagOrigin, GOVERNABLE_TENANT_FLAGS (+28 more)
+Cohesion: 0.12
+Nodes (30): featureFlags, tenantFeatureFlags, AppEnv, assertGovernable(), FlagOrigin, GOVERNABLE_TENANT_FLAGS, isGovernableFlag(), isKillSwitch() (+22 more)
 
-### Community 189 - "providerFailoverService.ts"
-Cohesion: 0.10
-Nodes (29): CircuitBreakerState, closeCircuitBreaker(), createProvider(), getProviderScore(), halfOpenCircuitBreaker(), HealthStatus, openCircuitBreaker(), ProviderType (+21 more)
+### Community 189 - "providerRegistryService.ts"
+Cohesion: 0.14
+Nodes (19): CircuitBreakerState, closeCircuitBreaker(), createProvider(), getProviderScore(), halfOpenCircuitBreaker(), HealthStatus, openCircuitBreaker(), ProviderType (+11 more)
 
 ### Community 190 - "3. Fases Executadas"
 Cohesion: 0.09
 Nodes (22): 1. Contexto e Objetivo, 2. Restrições que Guiaram Todo o Projeto, 3. Fases Executadas, 4.1 Modelo de IA, 4.2 RAG com Lei 14.133/21, 4.3 Autorização em Dois Níveis, 4.4 Composição de Prompts, 4. Decisões Arquiteturais Transversais (+14 more)
 
-### Community 191 - "ProcessDetails.tsx"
+### Community 191 - "ContractDetails.tsx"
 Cohesion: 0.03
-Nodes (105): AuditTimeline(), ChecklistTab(), ContractDocumentsTab(), DirectContractHeader(), Props, STATUS_CONFIG, DocumentsTab(), brl() (+97 more)
+Nodes (75): AuditTimeline(), CatmatSuggestionsModal(), ChecklistTab(), ContractDocumentsTab(), Props, ContractDocument, DirectContractHeader(), Props (+67 more)
 
 ### Community 192 - "semanticMemory.ts"
 Cohesion: 0.11
 Nodes (22): computeMemoryStats(), createMemoryEntry(), createPrecedent(), createRetrievalReference(), deactivateMemory(), findApplicablePrecedents(), genId(), getProcurementPatterns() (+14 more)
 
-### Community 193 - "activityLogService.ts"
-Cohesion: 0.11
-Nodes (21): ALLOWED_TASK_ATTACHMENT_MIME_TYPES, ByteSignature, isAllowedTaskAttachmentMime(), matchesSignature(), MAX_TASK_ATTACHMENT_BASE64_CHARS, MAX_TASK_ATTACHMENT_BYTES, MIME_SIGNATURES, sanitizeAttachmentFileName() (+13 more)
+### Community 193 - "departmentTasksRouter.ts"
+Cohesion: 0.13
+Nodes (18): ALLOWED_TASK_ATTACHMENT_MIME_TYPES, ByteSignature, isAllowedTaskAttachmentMime(), matchesSignature(), MAX_TASK_ATTACHMENT_BASE64_CHARS, MAX_TASK_ATTACHMENT_BYTES, MIME_SIGNATURES, sanitizeAttachmentFileName() (+10 more)
 
-### Community 194 - "knowledgeRetrievalService.ts"
-Cohesion: 0.20
-Nodes (18): Citation, ContextDocument, ContextExplainabilityEntry, CreateContextPackageParams, RetrievedPassage, buildResult(), clipPassage(), expandQueryTerms() (+10 more)
+### Community 194 - "itemAnalyticsService.ts"
+Cohesion: 0.21
+Nodes (17): itemAnalyticsRouter, candidateAcceptanceRate(), catalogAccuracy(), ClauseUsageData, clauseUsageRate(), computeItemAnalytics(), ConfidenceWindow, ItemAnalyticsSnapshot (+9 more)
 
 ### Community 195 - "legalFrameworkAssistant.ts"
-Cohesion: 0.09
-Nodes (21): directContractsRouter, generateJustification(), GenerateJustificationParams, GovernedLegalArticleSuggestion, legalArticleResponseSchema, LegalFrameworkMeta, ResolvedLegalContext, suggestLegalArticle() (+13 more)
+Cohesion: 0.11
+Nodes (18): generateJustification(), GenerateJustificationParams, GovernedLegalArticleSuggestion, legalArticleResponseSchema, LegalFrameworkMeta, ResolvedLegalContext, suggestLegalArticle(), SuggestLegalArticleParams (+10 more)
 
 ### Community 196 - "priceResearchReviewGroups.ts"
-Cohesion: 0.09
-Nodes (37): toDto(), aggregateWarnings(), asArray(), asRecord(), buildPriceResearchReviewProjection(), clean(), confidenceOf(), deriveGroupStatus() (+29 more)
+Cohesion: 0.14
+Nodes (23): toDto(), aggregateWarnings(), asArray(), asRecord(), buildPriceResearchReviewProjection(), clean(), confidenceOf(), deriveGroupStatus() (+15 more)
 
 ### Community 197 - "LiciGov Pro — Modelo Multi-tenant"
 Cohesion: 0.09
@@ -1833,21 +1828,21 @@ Nodes (23): Aggregate: DocumentoLicitatorio, Concorrência Colaborativa, Integri
 Cohesion: 0.09
 Nodes (22): approved → archived (`archive`), Block Diff, Diagrama de Transições, DiffEngine — Tipos de Diff, draft → in_review (`submitForReview`), Estados Possíveis, Eventos de Domínio, Hard Lock (+14 more)
 
-### Community 202 - "CopilotType"
+### Community 202 - "db/contractWorkspace.ts"
 Cohesion: 0.14
-Nodes (20): CapabilityKind, CopilotCapability, createCopilotCapability(), matchesCapability(), scoreCapabilityMatch(), RecommendationRisk, CopilotType, CopilotConflict (+12 more)
+Nodes (19): contractAddendaTable, contractOccurrencesTable, contractWorkspacesTable, contractWsApostillesTable, contractWsDocumentsTable, importedContractsTable, ContractWsDb, ContractWsExecutor (+11 more)
 
-### Community 203 - "aiOrchestration.ts"
-Cohesion: 0.19
-Nodes (20): AIOrchestration, assertTransition(), cancelOrchestration(), completeOrchestration(), computeOrchestrationMetrics(), computeReplayKey(), createOrchestration(), dispatchOrchestration() (+12 more)
+### Community 203 - "retrievalService.ts"
+Cohesion: 0.17
+Nodes (17): addTraceEntry(), completeRetrieval(), createRetrievalSession(), getRetrievalReplayKey(), RetrievalSession, RetrievalStrategy, RetrievalTraceEntry, sha256() (+9 more)
 
 ### Community 204 - "directContractShadowService.ts"
-Cohesion: 0.18
-Nodes (17): compareDirectContractShadow(), DirectContractDocType, normalize(), REQUIRED_SIGNALS, sha256Hex(), ShadowComparison, ShadowEquivalenceClass, ShadowStructuralSignals (+9 more)
+Cohesion: 0.14
+Nodes (22): cognitiveObservabilityTable, countObservabilityForTenant(), insertObservability(), ObservabilityRow, rowId(), compareDirectContractShadow(), DirectContractDocType, normalize() (+14 more)
 
 ### Community 205 - "sprint36-deployment-stability.test.ts"
-Cohesion: 0.06
-Nodes (63): advancePhase(), applyGovernance(), computeDeploymentHealth(), createDeployment(), DeploymentEvent, DeploymentEventType, DeploymentGovernance, DeploymentPhase (+55 more)
+Cohesion: 0.07
+Nodes (48): advancePhase(), applyGovernance(), computeDeploymentHealth(), createDeployment(), DeploymentEvent, DeploymentEventType, DeploymentGovernance, DeploymentPhase (+40 more)
 
 ### Community 206 - "rc2-legacy-consolidation.test.ts"
 Cohesion: 0.12
@@ -1858,12 +1853,12 @@ Cohesion: 0.07
 Nodes (28): 1. MySQL em vez de PostgreSQL, 2. tRPC v11 em vez de REST ou GraphQL, 3. Outbox Pattern, 4. Staging antes de Domínio (Import), 5. Optimistic Locking, 6. Retenção Documental como Código, Arquitetura Geral, Backend (+20 more)
 
 ### Community 208 - "sprint40-ai-foundation.test.ts"
-Cohesion: 0.07
-Nodes (45): AIExecutionRequest, AIExecutionResult, AIModel, AIProvider, AVAILABLE_MODELS, deterministicInt(), estimateTokens(), executeWithProvider() (+37 more)
+Cohesion: 0.05
+Nodes (77): AIOrchestration, assertTransition(), cancelOrchestration(), completeOrchestration(), computeOrchestrationMetrics(), computeReplayKey(), createOrchestration(), dispatchOrchestration() (+69 more)
 
-### Community 209 - "taskRouter.ts"
-Cohesion: 0.08
-Nodes (34): contractAuditLogs, contracts, NotificationPayload, notifyOwner(), validate(), createTask(), getOverdueTasksForOrganization(), getTaskByIdForOrganization() (+26 more)
+### Community 209 - "contractsRouter.ts"
+Cohesion: 0.15
+Nodes (17): contractAuditLogs, contractsRouter, log, OpCtx, AmendmentData, ApostilleData, ContractData, formatCurrency() (+9 more)
 
 ### Community 210 - "memoryRetentionGovernance.ts"
 Cohesion: 0.13
@@ -1873,9 +1868,9 @@ Nodes (20): appendGovernanceEvent(), applyRetentionPolicy(), ArchivalReason, _ar
 Cohesion: 0.13
 Nodes (19): _appendEvent(), auditPolicy(), computeComplianceScore(), createPolicy(), enforcePolicy(), getActivePolicies(), GovernanceAction, GovernanceAuditTrail (+11 more)
 
-### Community 212 - "providerExecutionService.ts"
-Cohesion: 0.10
-Nodes (12): claudeAdapter, geminiAdapter, mockAdapter, ProviderAdapter, ProviderAdapterResult, openaiAdapter, ADAPTERS, _byCorrelation (+4 more)
+### Community 212 - "ProviderAdapter"
+Cohesion: 0.11
+Nodes (6): claudeAdapter, geminiAdapter, mockAdapter, ProviderAdapter, ProviderAdapterResult, openaiAdapter
 
 ### Community 213 - "Exemplos de Integração - Correções da Auditoria"
 Cohesion: 0.10
@@ -1893,8 +1888,8 @@ Nodes (19): [0.1.0] — Sprint 1 — Multi-tenant Foundation (Maio 2026), [0.1.5
 Cohesion: 0.10
 Nodes (19): Aditivo, Arquitetura de geração (sempre via llm.ts), Avisos obrigatórios ao usuário, Checklist antes de entregar ao usuário, Contrato, DFD — Documento de Formalização da Demanda, Documentos adicionais (além do fluxo DFD→ETP→TR→Edital), Edital (+11 more)
 
-### Community 217 - "providerObservabilityService.ts"
-Cohesion: 0.15
+### Community 217 - "sprint45-provider-activation.test.ts"
+Cohesion: 0.17
 Nodes (15): append(), computeReliabilityScore(), ErrorRecord, _errors, FallbackRecord, _fallbacks, getProviderHealth(), _latency (+7 more)
 
 ### Community 218 - "Business Domain — Tirar Dúvidas (Institutional Consultation) (RC-5.1)"
@@ -1913,29 +1908,29 @@ Nodes (19): 1. Travessia a partir do contexto atual, 2. Scoring de relevancia, 3
 Cohesion: 0.10
 Nodes (20): ConcurrencyService, Configuração do Ambiente, DiffEngine, DocumentoLicitatorio, documents, imports, ImportSession, IntegrityService (+12 more)
 
-### Community 222 - "FeatureFlagShadowDialog.tsx"
-Cohesion: 0.21
-Nodes (19): FeatureFlagShadowDialog(), PendingAction, Props, ACTIVATION_NOTICE, ActivationInput, BackendEnvironment, buildConfirmationSummary(), canOperate() (+11 more)
+### Community 222 - "shadowFlagSurface.ts"
+Cohesion: 0.19
+Nodes (17): FeatureFlagShadowDialog(), ACTIVATION_NOTICE, ActivationInput, BackendEnvironment, buildConfirmationSummary(), canOperate(), ConfirmationSummary, DEFAULT_ACTIVATION_REASON (+9 more)
 
-### Community 223 - "LegalOpinionHome.tsx"
-Cohesion: 0.13
-Nodes (26): InstitutionalInbox(), InstitutionalInboxProps, CONCLUSION_LABELS, DOMAIN_LABELS, domainLabel(), formatDate(), PRIORITY_CLASSES, PRIORITY_LABELS (+18 more)
+### Community 223 - "legal-opinion/labels.ts"
+Cohesion: 0.26
+Nodes (15): InstitutionalInbox(), InstitutionalInboxProps, DOMAIN_LABELS, domainLabel(), formatDate(), PRIORITY_CLASSES, PRIORITY_LABELS, REQUEST_TYPE_LABELS (+7 more)
 
 ### Community 224 - "promptGovernance.ts"
 Cohesion: 0.21
 Nodes (19): approvePromptVersion(), computeChecksum(), createPromptVersion(), deprecatePromptVersion(), extractVariables(), genId(), getLatestApproved(), makeEvent() (+11 more)
 
-### Community 225 - "sprint50-workspace.test.ts"
-Cohesion: 0.14
-Nodes (28): insertRisk(), insertTimelineEntry(), listTimeline(), aggregateWorkspaceRisk(), correlateRisks(), createWorkspaceRisk(), mitigateRisk(), RiskCategory (+20 more)
+### Community 225 - "ontologyValidationService.ts"
+Cohesion: 0.16
+Nodes (17): RelationshipType, createKnowledgeNode(), deactivateNode(), KnowledgeNode, matchesAlias(), NodeType, normalizeTitle(), updateNodeVersion() (+9 more)
 
 ### Community 226 - "Integrations Architecture"
 Cohesion: 0.11
 Nodes (17): AWS S3 (Armazenamento de Arquivos), ComprasNet, IA / LLM (Sprint 4+), ICP-Brasil (Assinatura Digital), Integrations Architecture, Integrações Ativas, Integrações Planejadas (Roadmap), Padrão de Configuração (+9 more)
 
-### Community 227 - "sprint45-provider-activation.test.ts"
-Cohesion: 0.15
-Nodes (23): ProviderExecution, createPolicy(), isCapabilityAllowed(), ProviderPolicy, requiresApproval(), sha256(), validateExecution(), providerGovernanceRouter (+15 more)
+### Community 227 - "providerGovernanceRouter.ts"
+Cohesion: 0.22
+Nodes (14): createPolicy(), isCapabilityAllowed(), ProviderPolicy, requiresApproval(), sha256(), validateExecution(), providerGovernanceRouter, getFailoverHistory() (+6 more)
 
 ### Community 228 - "Plano Mestre — Piloto Institucional Interno · Prefeitura Municipal de Moreira Sales"
 Cohesion: 0.11
@@ -1962,36 +1957,36 @@ Cohesion: 0.10
 Nodes (20): 0. Autorização de referência, 10. Exceção registrada: hook Graphify, 11. Resultado da execução (2026-09-28/29), 12. Ledger de achados fora do baseline (NEW-00x): severidade candidata e tratamento, 13.1 Estado inicial reconstruído pelo remoto, 13.2 Resultado por frente, 13.3 Novo achado de integração (corrigido na própria branch), 13.4 Ordem futura (candidata, validada na integração descartável) (+12 more)
 
 ### Community 234 - "sdk.ts"
-Cohesion: 0.10
-Nodes (11): User, isNonEmptyString(), SDKServer, SessionPayload, getUserByOpenId(), PublicUser, sanitizeUser(), sanitizeUsers() (+3 more)
+Cohesion: 0.07
+Nodes (22): OrganizationMember, User, TrpcContext, isNonEmptyString(), sdk, SDKServer, SessionPayload, getUserByOpenId() (+14 more)
 
-### Community 235 - "aiReasoning.ts"
-Cohesion: 0.20
-Nodes (15): buildExplainabilityTree(), createReasoningStage(), createReasoningTrace(), detectAmbiguities(), detectContradictions(), formatReasoningForHuman(), genId(), propagateConfidence() (+7 more)
+### Community 235 - "price-research-review-groups.test.ts"
+Cohesion: 0.19
+Nodes (13): QuoteReviewStatus, reviewGroupKey(), ReviewStagingRow, buildReviewFixtureRows(), FIXTURE_SOURCES, FixtureItem, formatBRLText(), REVIEW_FIXTURE_EXPECTED (+5 more)
 
 ### Community 236 - "normativeTree.ts"
-Cohesion: 0.24
-Nodes (14): NormativeLevelId, computeNormativeLineage(), computeReplayHash(), createNormativeNode(), CreateNormativeNodeParams, NormativeMetadata, NormativeNode, normativeNodeId() (+6 more)
+Cohesion: 0.23
+Nodes (15): NormativeLevelId, computeNormativeLineage(), computeReplayHash(), createNormativeNode(), CreateNormativeNodeParams, NormativeMetadata, NormativeNode, normativeNodeId() (+7 more)
 
 ### Community 237 - "EditalWorkspace.tsx"
-Cohesion: 0.06
-Nodes (56): AuthoringSourcesSummary(), AuthoringSourcesSummaryProps, EditalWorkspace(), EditalWorkspaceProps, Form, FORM_LABELS, labelSource(), Modality (+48 more)
-
-### Community 238 - "db/collaboration.ts"
 Cohesion: 0.07
-Nodes (43): DocumentSettings, InsertActivityLog, InsertDocumentSettings, InsertNotification, InsertProcessMember, InsertStageAssignment, stageAssignments, addProcessMember() (+35 more)
+Nodes (43): EditalWorkspace(), EditalWorkspaceProps, Form, FORM_LABELS, labelSource(), Modality, MODALITY_LABELS, Platform (+35 more)
 
-### Community 239 - "aiAuditService.ts"
-Cohesion: 0.26
-Nodes (12): AIAuditRecord, AuditLineage, _auditLog, buildForensicSignature(), computeAuditMetrics(), exportForensicReport(), generateId(), getAuditRecords() (+4 more)
+### Community 238 - "observabilityService.ts"
+Cohesion: 0.07
+Nodes (41): outboxDeadLetters, outboxEvents, CollaborationExecutor, getStageAssignmentRowsTx(), insertActivityLogForOrganizationTx(), insertNotificationTx(), insertStageAssignmentTx(), lockProcessForOrganizationTx() (+33 more)
 
-### Community 240 - "providerExecution.ts"
-Cohesion: 0.21
-Nodes (12): completeExecution(), createProviderExecution(), createReplaySnapshot(), ExecutionStatus, ExecutionType, failExecution(), isReplayable(), ReplaySnapshot (+4 more)
+### Community 239 - "retrievalObservabilityService.ts"
+Cohesion: 0.20
+Nodes (16): computeAvg(), computeHealthSnapshot(), computeP95(), createMetric(), generateReport(), _metrics, recordChunkEfficiency(), recordEvidenceQuality() (+8 more)
+
+### Community 240 - "providerExecutionService.ts"
+Cohesion: 0.16
+Nodes (18): completeExecution(), createProviderExecution(), createReplaySnapshot(), ExecutionStatus, ExecutionType, failExecution(), isReplayable(), ReplaySnapshot (+10 more)
 
 ### Community 241 - "ContactForm.tsx"
-Cohesion: 0.25
-Nodes (5): AnimatedSection(), AnimatedSectionProps, features, useIntersectionObserver(), UseIntersectionObserverOptions
+Cohesion: 0.36
+Nodes (4): AnimatedSection(), AnimatedSectionProps, useIntersectionObserver(), UseIntersectionObserverOptions
 
 ### Community 242 - "NEW-004 — ids e ordem de eventos derivados de contagem (`count`/`length`) seguida de upsert"
 Cohesion: 0.11
@@ -2019,7 +2014,7 @@ Nodes (17): 🔍 Como Acompanhar o Progresso, ✅ Como Saber Quando Terminou, �
 
 ### Community 248 - "ingestionRouter.ts"
 Cohesion: 0.02
-Nodes (174): importPromotions, importSessions, importStagingItems, procurementProcessesTable, DocumentImportKind, documentKindForImportType(), importTypeForDocumentKind(), isDocumentImportType() (+166 more)
+Nodes (213): importItemCorrections, importStagingItems, procurementProcessesTable, intIn(), OCR_CONFIG, OcrConfig, OcrConfigEnv, resolveOcrConfig() (+205 more)
 
 ### Community 249 - "3. Matriz por branch"
 Cohesion: 0.11
@@ -2066,20 +2061,20 @@ Cohesion: 0.16
 Nodes (11): C, codeBlock(), doc, ensureSpace(), h1(), h2(), h3(), OUTPUT (+3 more)
 
 ### Community 260 - "rc48-institutional-knowledge-pipeline.test.ts"
-Cohesion: 0.04
-Nodes (110): ALL_BLOCK_KINDS, blockFingerprint(), createBlock(), CreateBlockParams, createFragment(), KnowledgeBlock, KnowledgeFragment, computeDocumentLineage() (+102 more)
+Cohesion: 0.03
+Nodes (118): ALL_BLOCK_KINDS, blockFingerprint(), createBlock(), CreateBlockParams, createFragment(), KnowledgeBlock, KnowledgeFragment, computeDocumentLineage() (+110 more)
 
-### Community 261 - "db/contractWorkspace.ts"
+### Community 261 - "contractService.ts"
 Cohesion: 0.08
-Nodes (33): contractAddendaTable, contractOccurrencesTable, contractWorkspacesTable, contractWsApostillesTable, contractWsDocumentsTable, importedContractsTable, ContractWsDb, ContractWsExecutor (+25 more)
+Nodes (43): compareAndSetContractWorkspaceStatus(), countContractAddenda(), countContractApostilles(), insertContractAddendum(), insertContractApostille(), insertContractOccurrence(), insertContractWsDocument(), getResponseForRequest() (+35 more)
 
 ### Community 262 - "R2.2 — Decisão por tenant sobre `FF_CANONICAL_INGESTION` (SEM-005)"
 Cohesion: 0.12
 Nodes (17): 10.1 Estratégia, 10.2 Parâmetros aprovados para a ativação futura, 10.3 Sequência institucional aprovada, 10.4 Rollback futuro (decisão operacional supervisionada), 10.5 Status resultante, 10. Decisão humana registrada — 2026-09-28 (HUMAN DECISION RECORDED — OPTION B), 1. Por que R2.2 não é PASS, 2.1 Matriz de superfícies governadas pela flag (+9 more)
 
-### Community 263 - "operationRecordRouter.ts"
-Cohesion: 0.15
-Nodes (12): getOperationalSettings(), listOperationalMilestones(), listPublicationRecords(), CHANNELS, EVENT_TYPES, EXPIRATION_KINDS, MILESTONE_TYPES, operationRecordRouter (+4 more)
+### Community 263 - "email.ts"
+Cohesion: 0.19
+Nodes (14): EmailConfig, EmailConfigEnv, EmailProviderName, EmailRuntimeContext, parsePositiveInt(), resolveEmailConfig(), resolveEmailEnabled(), resolveEmailProvider() (+6 more)
 
 ### Community 264 - "LegalOpinionEditor.tsx"
 Cohesion: 0.13
@@ -2090,8 +2085,8 @@ Cohesion: 0.18
 Nodes (16): computeBM25Score(), computeContextualScore(), computeInstitutionalScore(), computeLexicalScore(), computeSemanticScoreMock(), CorpusItem, createQuery(), executeRetrieval() (+8 more)
 
 ### Community 266 - "w"
-Cohesion: 0.18
-Nodes (19): ev(), Props, ReviewerWorkload, WorkloadCongestionMap(), scoreMatch(), buildSimilarityMetadata(), computeSimilarity(), analyzeContradictions() (+11 more)
+Cohesion: 0.12
+Nodes (15): Props, ReviewerWorkload, WorkloadCongestionMap(), buildSimilarityMetadata(), computeSimilarity(), createEntityResolution(), EntityResolutionRecord, markRejected() (+7 more)
 
 ### Community 267 - "semanticChunkingService.ts"
 Cohesion: 0.21
@@ -2101,9 +2096,9 @@ Nodes (16): buildChunks(), chunkDocument(), ChunkingResult, _chunkStore, ChunkSt
 Cohesion: 0.12
 Nodes (13): Branch Model, Estratégia de Versionamento, Processo de Release, Release History — LiciGov Pro, Releases em Produção (Railway), Formato, Release Notes, Releases (+5 more)
 
-### Community 269 - "ExportCard.tsx"
-Cohesion: 0.15
-Nodes (11): ExportCard(), ExportCardProps, formatBadge, ExportCenterPageProps, ExportEntry, ExportHistoryList(), ExportHistoryListProps, ExportPreviewPanel() (+3 more)
+### Community 269 - "ExportCenterPage.tsx"
+Cohesion: 0.20
+Nodes (8): ExportCenterPageProps, ExportEntry, ExportHistoryList(), ExportHistoryListProps, ExportPreviewPanel(), ExportPreviewPanelProps, TRClause, TRSection
 
 ### Community 270 - "ProcurementItemPanel.tsx"
 Cohesion: 0.28
@@ -2145,13 +2140,13 @@ Nodes (15): A3-RD1 — orquestrador de Pre-Deploy (`db:release:predeploy`), A3-R
 Cohesion: 0.12
 Nodes (14): Histórico de Sprints, Lições Aprendidas, Prompts de Implementação, Template de Prompt de Sprint, 1. Contexto do Projeto, 2. Sprints Anteriores Relevantes, 3. Princípios Inegociáveis, 4. O Que NÃO Implementar (+6 more)
 
-### Community 280 - "hybridSearchService.ts"
-Cohesion: 0.22
-Nodes (15): applyContextualBoost(), applySemanticBoost(), applyTypoCorrections(), computeSemanticScoreMock(), expandQuery(), findSynonyms(), LEGAL_SYNONYMS, search() (+7 more)
+### Community 280 - "operation-record-lifecycle-mysql-smoke.test.ts"
+Cohesion: 0.14
+Nodes (10): fromDb(), lifecycleCondition(), listOperationalTimeline(), listOperationRecords(), listScheduledOperationRecords(), mapOperationRecordRow(), getTimeline(), asUser() (+2 more)
 
 ### Community 281 - "SemanticScoreBar.tsx"
-Cohesion: 0.17
-Nodes (9): CandidateCardProps, sourceLabels, MEDALS, RankingItem, RankingVisualizationProps, Progress(), scoreColor(), SemanticScoreBar() (+1 more)
+Cohesion: 0.10
+Nodes (14): CandidateCardProps, sourceLabels, CandidateComparisonViewProps, CandidateData, MEDALS, RankingItem, RankingVisualizationProps, SemanticCandidateItem (+6 more)
 
 ### Community 282 - "contextPolicies.ts"
 Cohesion: 0.19
@@ -2166,12 +2161,12 @@ Cohesion: 0.13
 Nodes (13): CanonicalUnits Registry, Confidence Infrastructure, ExtractionProvenance, Lifecycle do ImportSession, Motor de Importação — Import Engine, Pipeline Completo, Princípio Fundamental, Retry e Dead Letter Queue (+5 more)
 
 ### Community 285 - "chunkingService.ts"
-Cohesion: 0.16
-Nodes (17): ChunkStrategy, createSemanticChunk(), getChunkLineage(), isChunkDuplicate(), SemanticChunk, sha256(), SourceType, _chunks (+9 more)
+Cohesion: 0.19
+Nodes (15): ChunkStrategy, createSemanticChunk(), getChunkLineage(), isChunkDuplicate(), SemanticChunk, sha256(), SourceType, _chunks (+7 more)
 
-### Community 286 - "workspaceTaskService.ts"
-Cohesion: 0.20
-Nodes (17): insertTask(), canTransitionTask(), createWorkspaceTask(), isReady(), prioritizeTasks(), PRIORITY_RANK, readyQueue(), TASK_TRANSITIONS (+9 more)
+### Community 286 - "feature-flag-admin-mysql-smoke.test.ts"
+Cohesion: 0.17
+Nodes (8): FF_DIRECT_CONTRACT_SHADOW, invalidateAllFlagsForTenant(), EXPIRES, MIGRATION, dc(), shadowInput(), cleanup(), cleanupProd()
 
 ### Community 287 - "RAG-QUALITY-001 — Correção da recuperação jurídica no "Tirar Dúvidas""
 Cohesion: 0.13
@@ -2210,8 +2205,8 @@ Cohesion: 0.13
 Nodes (14): build, builder, deploy, healthcheckPath, healthcheckTimeout, preDeployCommand, restartPolicyMaxRetries, restartPolicyType (+6 more)
 
 ### Community 296 - "institutionalRetrievalService.ts"
-Cohesion: 0.16
-Nodes (23): getEdgesForNodes(), getNodesByIds(), loadSubgraph(), searchKnowledgeNodes(), contextDensity(), createWorkspaceContext(), WorkspaceContext, WorkspaceContextDocument (+15 more)
+Cohesion: 0.23
+Nodes (16): getEdgesForNodes(), getNodesByIds(), loadSubgraph(), EvidenceItem, generateId(), HistoryItem, retrieveAll(), RetrievedChunk (+8 more)
 
 ### Community 297 - "Matriz de integração pré-PR — branches pós-night-shift (simulação local)"
 Cohesion: 0.13
@@ -2219,7 +2214,7 @@ Nodes (14): 1. Ordem validada, 2. Dependências de ordem (verificadas), 4. `pack
 
 ### Community 298 - "direct-procurement-rbac-contract.test.ts"
 Cohesion: 0.12
-Nodes (14): DIRECT_PROCUREMENT_RBAC_MATRIX, DirectProcurementProcedureName, DirectProcurementRbacClass, DirectProcurementRbacEntry, directProcurementRouter, Caller, CALLS, FLOOR_BY_CLASS (+6 more)
+Nodes (13): DIRECT_PROCUREMENT_RBAC_MATRIX, DirectProcurementProcedureName, DirectProcurementRbacClass, DirectProcurementRbacEntry, Caller, CALLS, FLOOR_BY_CLASS, RANK (+5 more)
 
 ### Community 299 - "contextualRankingService.ts"
 Cohesion: 0.15
@@ -2285,9 +2280,9 @@ Nodes (25): addCommentToThread(), buildMentionNotification(), CollaborationComme
 Cohesion: 0.14
 Nodes (12): DirectionsResult, DistanceMatrixResult, ElevationResult, GeocodingResult, LatLng, MapType, PlaceDetailsResult, PlacesSearchResult (+4 more)
 
-### Community 315 - "operationalCommunicationService.ts"
-Cohesion: 0.19
-Nodes (13): acknowledgeCommunication(), CommunicationPriority, CommunicationRecord, CommunicationType, create(), getRecentCommunications(), _records, sendAlert() (+5 more)
+### Community 315 - "sprint481-kg-wiring.test.ts"
+Cohesion: 0.30
+Nodes (14): bfs(), buildAdjacencyMap(), dfs(), dijkstra(), getActiveEdgesForOrg(), getAdjacentEdges(), getOtherNode(), GraphEdge (+6 more)
 
 ### Community 316 - "externalStorageFoundation.ts"
 Cohesion: 0.19
@@ -2301,9 +2296,9 @@ Nodes (13): computeReadinessEvolution(), computeReadinessScore(), DIMENSION_LABE
 Cohesion: 0.24
 Nodes (13): buildTokenMap(), getIndexStats(), IndexedEntityType, indexEntity(), IndexStats, _indexStore, searchIndex(), SemanticIndexEntry (+5 more)
 
-### Community 319 - "legal-opinions-tenant-isolation-mysql-smoke.test.ts"
-Cohesion: 0.20
-Nodes (3): Caller, kernelCalls, makeCaller()
+### Community 319 - "serviceHealthService.ts"
+Cohesion: 0.16
+Nodes (14): assessMetricHealth(), buildHealthSnapshot(), computeSlaScore(), detectSlaBreaches(), getHealthHistory(), HealthMetric, _history, isMaxMetric() (+6 more)
 
 ### Community 320 - "Entregas"
 Cohesion: 0.14
@@ -2317,9 +2312,9 @@ Nodes (13): Comments com Threading, Document Templates, DocumentoLicitatorio Agg
 Cohesion: 0.14
 Nodes (14): Backend tRPC, Dashboard, Fase 27 - Módulo de Gestão do Departamento de Licitações, Filtros Avançados, Funcionalidades Colaborativas, Funções do Backend, Integração com Processos Licitatórios, Interface Kanban (+6 more)
 
-### Community 323 - "sprint42-context-engine.test.ts"
-Cohesion: 0.10
-Nodes (38): ContextFragment, ContextPriority, estimateTokens(), contextRouter, compareAssemblies(), getAssemblySnapshots(), avg(), computeContextHealth() (+30 more)
+### Community 323 - "ClauseCard.tsx"
+Cohesion: 0.18
+Nodes (9): ClauseCard(), ClauseCardProps, ClauseOverrideModal(), ClauseRecommendation, ClauseRecommendationList(), ClauseRecommendationListProps, ClauseWorkspacePageProps, LegalReferenceTag() (+1 more)
 
 ### Community 324 - "Institutional Memory — Memória Institucional"
 Cohesion: 0.15
@@ -2366,8 +2361,8 @@ Cohesion: 0.15
 Nodes (12): 10. Fora de escopo (C.4B.2 e além), 1. Modelo de autoridade (ratificado — Modelo A), 2. Contrato de promoção (rascunho → `emitido`), 3. Ledger imutável (auditoria), 4.1 Hardening de governança (fail-closed), 4. Export (duas ações distintas) — gate SERVER-OWNED, 5. UI (ETP/TR/Edital), 6. DFD (fora de escopo — explícito) (+4 more)
 
 ### Community 335 - "sprint33-collaboration-interop.test.ts"
-Cohesion: 0.12
-Nodes (26): field(), buildChangeSummary(), buildDocumentDiff(), buildVersionLineage(), computeDiff(), computeDiffSummary(), computeTextSimilarity(), DiffChange (+18 more)
+Cohesion: 0.21
+Nodes (12): buildChangeSummary(), buildDocumentDiff(), buildVersionLineage(), computeDiff(), computeDiffSummary(), computeTextSimilarity(), DiffChange, DocumentDiff (+4 more)
 
 ### Community 336 - "Arquitetura — Cognitive Procurement Workspace (Sprint 5.0)"
 Cohesion: 0.15
@@ -2389,9 +2384,9 @@ Nodes (13): Aggregates do Domínio, Cobertura de Testes, Convenções de Nomencl
 Cohesion: 0.24
 Nodes (9): ApproveCliArgs, ApproveDeps, main(), parseApproveArgs(), runApprove(), approveAndActivateReferenceSet(), approveMock, baseArgv (+1 more)
 
-### Community 341 - "contractService.ts"
-Cohesion: 0.12
-Nodes (30): findContractByNormalizedNumber(), findManualContractByNumber(), insertImportedContract(), insertNewContractWorkspace(), cents(), CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED, CONTRACT_NUMBER_REQUIRED_MESSAGE (+22 more)
+### Community 341 - "contractCreation.ts"
+Cohesion: 0.17
+Nodes (12): cents(), CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED_MESSAGE, contractAlreadyExistsMessage(), ContractCreateDecision, contractNumberTakenText(), decideContractCreateOnExisting(), isSameContractCreate() (+4 more)
 
 ### Community 342 - "3. Contrato técnico proposto"
 Cohesion: 0.12
@@ -2401,9 +2396,9 @@ Nodes (15): 1. Decisão do responsável pelo produto, 2. Auditoria: existe evid�
 Cohesion: 0.15
 Nodes (10): COLLAB, CONSUMERS, DOCS_ROUTER, ENGINE, EXPORT_ADAPTER, MIGRATION, ROOT, ROUTER (+2 more)
 
-### Community 344 - "institutionalIdentityService.ts"
-Cohesion: 0.22
-Nodes (9): upsertDocumentSettings(), clean(), InstitutionalIdentity, institutionalIdentityFingerprint(), institutionalIdentityFromMetadataOrLive(), InstitutionalIdentitySnapshot, saveInstitutionalIdentity(), SaveInstitutionalIdentityInput (+1 more)
+### Community 344 - "NewContract.tsx"
+Cohesion: 0.18
+Nodes (10): ContractStepper(), LABELS, Step1BasicData(), Step2Contractor(), Props, Step3Validity(), Checkbox(), NewContract() (+2 more)
 
 ### Community 345 - "Correções de Testes"
 Cohesion: 0.15
@@ -2481,9 +2476,9 @@ Nodes (12): 0. Verification method — `cross-environment-official-source-handof
 Cohesion: 0.17
 Nodes (11): Alinhamento legal, Approval Layer, Arquivamento, Configuração, Endpoints do `workspaceGovernanceRouter`, Exportações, Garantias, Governança — workspaceGovernanceRouter + Approval Layer (+3 more)
 
-### Community 365 - "providerAdapter.ts"
-Cohesion: 0.11
-Nodes (31): cognitiveObservabilityTable, AI_ALLOW_MOCK_FALLBACK, mockFallbackAllowed(), environmentDiagnostic(), ProviderName, ALL_PROVIDER_NAMES, buildPrimaryProvider(), getActiveProvider() (+23 more)
+### Community 365 - "createContractWorkspace"
+Cohesion: 0.24
+Nodes (13): findContractByNormalizedNumber(), findManualContractByNumber(), normalizeContractNumber(), createContractWorkspace(), createFromDirectProcurement(), createFromProcurement(), createManualContract(), importExternalContract() (+5 more)
 
 ### Community 366 - "NEW-003 — `lgpd.exportMyData` devolve a linha completa de `users` (hashes bcrypt e segredos internos)"
 Cohesion: 0.22
@@ -2493,9 +2488,9 @@ Nodes (9): Alcance e impacto, Classificação das colunas de `users` (`drizzle/s
 Cohesion: 0.15
 Nodes (12): AnyRouter, ctxFor(), ENV_KEYS, expectAllRefused(), GATED, MOUNT_NAMES, ORIGINAL_ENV, PROBE_INPUTS (+4 more)
 
-### Community 368 - "workspaceDecisionService.ts"
-Cohesion: 0.26
-Nodes (11): insertDecision(), updateDecisionStatus(), approveDecision(), createWorkspaceDecision(), DecisionOutcome, DecisionStatus, isValidDecision(), rejectDecision() (+3 more)
+### Community 368 - "interoperabilityObservabilityService.ts"
+Cohesion: 0.21
+Nodes (13): ApiUsageMetric, CollaborationMetric, computeApiMetrics(), detectCollaborationSpike(), detectWebhookAnomalies(), emit(), IntegrationTrace, recordApiUsage() (+5 more)
 
 ### Community 369 - "graphRecommendationService.ts"
 Cohesion: 0.32
@@ -2549,13 +2544,13 @@ Nodes (11): 1. Princípio de migração (não-negociável), 2. Inventário da IA
 Cohesion: 0.18
 Nodes (10): 1. `components/operational-dashboard/` — Analytics de Itens & Review (Sprint 3.1, #94), 2. `components/executive-operations/` — Operação Executiva & SLA (Sprint 3.6, #104), Auditoria de sobreposição — dashboards órfãos (decisão RC-6 nº 7), Como a duplicação de shell é evitada, Decisão arquitetural, Dívidas menores registradas (pós-homologação, não bloqueiam), Headers próprios ajustados, Recomendação (futuro, não agora) (+2 more)
 
-### Community 383 - "documentIntegrityService.ts"
+### Community 383 - "DocumentImportPanel.tsx"
 Cohesion: 0.27
-Nodes (11): buildIntegrityRecord(), computeRenderChecksum(), computeSnapshotFingerprint(), hashContent(), IntegrityRecord, IntegrityValidationResult, validateIntegrity(), computeAndStoreIntegrity() (+3 more)
+Nodes (9): DocumentImportPanel(), DocumentImportPanelProps, STEP_LABELS, PesquisaPrecosWorkspace(), useIngestionCapabilities(), DOCUMENT_KIND_LABEL, documentImportCapabilities(), documentImportStep() (+1 more)
 
 ### Community 384 - "providerRouter.ts"
-Cohesion: 0.23
-Nodes (12): checkQuota(), CostRecord, detectAnomaly(), estimateCost(), getMonthlyUsage(), getTodayUsage(), getUsageSummary(), recordUsage() (+4 more)
+Cohesion: 0.21
+Nodes (13): providerRouter, checkQuota(), CostRecord, detectAnomaly(), estimateCost(), getMonthlyUsage(), getTodayUsage(), getUsageSummary() (+5 more)
 
 ### Community 385 - "Institutional Knowledge Pipeline (RC-4.8)"
 Cohesion: 0.06
@@ -2613,13 +2608,13 @@ Nodes (10): Arquivos e Pastas, Banco de Dados, Conventions, Guard clauses primei
 Cohesion: 0.18
 Nodes (9): Formato de Arquivo, Prompts Históricos, Propósito, Índice, Convenções, Prompt History Index — LiciGov Pro, Prompts de Arquitetura, Prompts de Governança (+1 more)
 
-### Community 399 - "agentExecutionRouter.ts"
-Cohesion: 0.17
-Nodes (14): SafetyLevel, agentExecutionRouter, getExecutionHistory(), getPlanHistory(), buildSafetyReport(), getSimulationHistory(), maxRisk(), RISK_RANK (+6 more)
+### Community 399 - "taskSimulationService.ts"
+Cohesion: 0.25
+Nodes (10): SafetyLevel, getSimulationHistory(), maxRisk(), RISK_RANK, sha256(), SimulatedTask, simulateTasks(), _store (+2 more)
 
-### Community 400 - "bindingSample.ts"
-Cohesion: 0.23
-Nodes (11): BindingGraphEdge, BindingGraphNode, BindingProjection, projectBindings(), sampleBindingRegistry(), addBinding(), bindingsForTenant(), createKnowledgeBindingRegistry() (+3 more)
+### Community 400 - "bindingProjection.ts"
+Cohesion: 0.15
+Nodes (10): BindingGraphEdge, BindingGraphNode, BindingProjection, projectBindings(), BindingEvent, BindingEventType, _byCorrelation, clearBindingEvents() (+2 more)
 
 ### Community 401 - "responseValidation.ts"
 Cohesion: 0.29
@@ -2677,9 +2672,9 @@ Nodes (8): Entity, EntityPair, mockPairs, ResolutionStatus, ResolutionStrategy, 
 Cohesion: 0.24
 Nodes (9): ClauseConflictViewer(), ClauseInput, compatibilityBg(), compatibilityColor(), Conflict, ConflictType, DEFAULT_CLAUSES, MOCK_CONFLICTS (+1 more)
 
-### Community 415 - "catmatMatcher.ts"
-Cohesion: 0.16
-Nodes (9): CATMAT_RESPONSE_SCHEMA, CatmatMatch, CatmatMatchRequest, findCatmatMatches(), matchesSchema, LEGAL_ARTICLE_SCHEMA, LEGAL_OPINION_SCHEMA, { executeCognitiveTask } (+1 more)
+### Community 415 - "gemini-schema-normalize.test.ts"
+Cohesion: 0.40
+Nodes (3): CATMAT_RESPONSE_SCHEMA, LEGAL_ARTICLE_SCHEMA, LEGAL_OPINION_SCHEMA
 
 ### Community 416 - "IncidentList.tsx"
 Cohesion: 0.20
@@ -2849,9 +2844,9 @@ Nodes (8): Environment, main(), MaterializeCliOptions, Mode, parseArgs(), valida
 Cohesion: 0.27
 Nodes (9): buildCorpusRegistry(), CorpusRegistry, CorpusRegistryEntry, findRegistryEntry(), registerCorpus(), registryByType(), toEntry(), CorpusTypeId (+1 more)
 
-### Community 458 - "Map.tsx"
-Cohesion: 0.22
-Nodes (10): loadMapScript(), MapView(), MapViewProps, Window, TimerResponse, useComposition(), UseCompositionOptions, UseCompositionReturn (+2 more)
+### Community 458 - "procurement-presentation-fallbacks.test.ts"
+Cohesion: 0.18
+Nodes (8): PROCESS_STATUS_CLASSES, PROCESS_STATUS_LABELS, ProcessoLicitatorioHome(), ProcessoLicitatorioHomeProps, STAGE_LABELS, mutation, QueryState, state
 
 ### Community 459 - "legalArticleLocator.ts"
 Cohesion: 0.35
@@ -2865,9 +2860,9 @@ Nodes (8): detectFormat(), DocumentValidation, hasRequiredSections(), isValidMar
 Cohesion: 0.22
 Nodes (13): addToIndex(), cosineSimilarity(), createIndex(), deleteFromIndex(), generateId(), getIndexStats(), indexKey(), _indices (+5 more)
 
-### Community 462 - "r2-leg005-legacy-items-catmat-mysql-smoke.test.ts"
-Cohesion: 0.29
-Nodes (4): Ids, makeCaller(), MISSING_IDS, PROCEDURES
+### Community 462 - "ontologyRouter.ts"
+Cohesion: 0.22
+Nodes (9): insertProcurementConcept(), ConceptCategory, createProcurementConcept(), isChildOf(), matchesConcept(), ProcurementConcept, CONCEPT_CATEGORIES, ontologyRouter (+1 more)
 
 ### Community 463 - "Entregas"
 Cohesion: 0.20
@@ -2889,9 +2884,9 @@ Nodes (9): Arquivo de Testes, Correções Necessárias, Distribuição por funci
 Cohesion: 0.22
 Nodes (8): 🧱 Benefícios, Camada de Inteligência Artificial — LiciGov Pro, 🧠 Estratégia técnica, 🔄 Nova abordagem, 🎯 Objetivo, ⚠️ Problema identificado, 🚀 Próximos passos, 📌 Situação atual
 
-### Community 468 - "businessDomain.ts"
-Cohesion: 0.16
-Nodes (18): getDomainWorkspace(), insertDomainWorkspace(), BASE_KERNEL, BUSINESS_DOMAIN_DEFINITIONS, BusinessDomainCategory, createBusinessDomain(), getBusinessDomainDefinition(), isKernelService() (+10 more)
+### Community 468 - "businessDomainRouter.ts"
+Cohesion: 0.27
+Nodes (10): getDomainWorkspace(), insertDomainWorkspace(), createBusinessDomain(), createDomainWorkspace(), DomainWorkspace, businessDomainRouter, DOMAIN_CODES, getDomain() (+2 more)
 
 ### Community 469 - "Bounded Contexts"
 Cohesion: 0.22
@@ -2909,9 +2904,9 @@ Nodes (6): BREAKDOWN_CONFIG, ContextRankingPanelProps, MOCK_FRAGMENTS, PRIORITY_
 Cohesion: 0.25
 Nodes (7): LINEAGE, MOCK_VERSIONS, PromptVersionHistory(), PromptVersionHistoryProps, STATUS_CONFIG, TemplateVersion, VersionStatus
 
-### Community 473 - "lgpd.ts"
+### Community 473 - "priceResearchReviewService.ts"
 Cohesion: 0.17
-Nodes (12): activityLogs, editalParameters, InsertUserConsent, notifications, processes, processMembers, userConsents, createUserConsent() (+4 more)
+Nodes (15): activityLogs, GroupReviewAction, GroupReviewRequest, planGroupReview(), PriceResearchReviewProjection, ReviewGroupKeyCollision, GROUP_REVIEW_MAX_QUOTES, log (+7 more)
 
 ### Community 474 - "RecommendationPanel.tsx"
 Cohesion: 0.22
@@ -2961,9 +2956,9 @@ Nodes (8): Arquitetura do RAG Institucional, Controle de Qualidade, Fontes de Co
 Cohesion: 0.22
 Nodes (8): Cobertura de Grounding, Detecção de Alucinações, Detecção de Contradições, Determinação de Aprovação, Response Validation — Validação de Respostas, Resultado da Validação, Utilização de Evidências, Visão Geral
 
-### Community 487 - "contractEditService.ts"
-Cohesion: 0.26
-Nodes (10): compareAndSetContractWorkspace(), ContractRevisionConflictError, isSameContractRevision(), nextContractRevision(), assertExpectedContractRevision(), clip(), describeContractChanges(), log (+2 more)
+### Community 487 - "groundingSession.ts"
+Cohesion: 0.24
+Nodes (10): buildEvidenceGraph(), computeGroundingScore(), createGroundingSession(), EvidenceEdge, EvidenceEdgeRelationship, EvidenceGraph, EvidenceNode, generateReplaySnapshot() (+2 more)
 
 ### Community 488 - "Federal Procurement Corpus · Normative Foundation (RC-4.6.1)"
 Cohesion: 0.22
@@ -3085,17 +3080,17 @@ Nodes (9): Adendo — Atestação da rotação do JWT_SECRET (2026-09-21), Class
 Cohesion: 0.26
 Nodes (11): ChunkItem, Citation, determineCitationType(), EvidenceItem, formatCitationBlock(), generateCitations(), groupCitationsByType(), matchResponseToEvidence() (+3 more)
 
-### Community 518 - "documentRenderService.ts"
+### Community 518 - "providerReplayService.ts"
 Cohesion: 0.22
-Nodes (12): documentRenderCache, ExportFormat, buildRenderHash(), escapeHtml(), invalidateRenderCache(), isFormatSupported(), log, renderDocument() (+4 more)
+Nodes (9): ProviderExecution, createSnapshot(), getReplayHistory(), replayFromSnapshot(), _replayHistory, ReplayRecord, sha256(), _snapshots (+1 more)
 
 ### Community 519 - "Configuração de Integração Contínua"
 Cohesion: 0.22
 Nodes (9): 1. CI/CD Principal (`.github/workflows/ci.yml`), Como Executar Localmente, Configuração de Integração Contínua, Configuração no GitHub, Notas, Próximos Passos, Status Badges, Testes Incluídos (+1 more)
 
-### Community 520 - "experimentalApiGate.ts"
-Cohesion: 0.11
-Nodes (19): lastIngestionJobs, productionReadinessRouter, getAllItems(), initializeDemoStore(), itemReviewStateSchema, itemStoreRef, makeItem(), makeProv() (+11 more)
+### Community 520 - "reviewWorkspaceRouter.ts"
+Cohesion: 0.29
+Nodes (9): getAllItems(), initializeDemoStore(), itemReviewStateSchema, itemStoreRef, makeItem(), makeProv(), reviewWorkspaceRouter, STATE_ORDER (+1 more)
 
 ### Community 521 - "Funcionalidades Principais"
 Cohesion: 0.22
@@ -3106,16 +3101,16 @@ Cohesion: 0.22
 Nodes (8): ✅ Entrega Final, 📊 Estimativa de Custos (IA), Indexação Inicial (uma vez), Matching CATMAT (1000 processos, 20 itens cada), 🎯 Objetivo Geral, 📋 Plano de Implementação: RAG + Melhorias LiciGov Pro, 📊 Resumo Executivo, Uso Mensal (1000 processos)
 
 ### Community 523 - "normativeQueries.ts"
-Cohesion: 0.31
-Nodes (11): explainNode(), NormativeExplanation, ancestorsOf(), byId(), childrenOf(), descendantsOf(), findByType(), findNode() (+3 more)
+Cohesion: 0.27
+Nodes (13): explainNode(), NormativeExplanation, ancestorsOf(), byId(), childrenOf(), descendantsOf(), findByType(), findNode() (+5 more)
 
 ### Community 524 - "Pilot Reset B2/B3 — lifecycle governado do Processo Licitatório"
 Cohesion: 0.17
 Nodes (11): 10. Execução futura no piloto (NÃO feita), 1. Por que, 2. Modelo, 3. Operações, 4. Elegibilidade, 5. Digest, CAS e idempotência, 6. RBAC e IA, 7. Migration 0313 (+3 more)
 
-### Community 525 - "evidenceSelectionService.ts"
-Cohesion: 0.31
-Nodes (8): detectContradictions(), diversifyEvidence(), EvidenceCandidate, getWordSet(), jaccardSimilarity(), rankEvidence(), removeDuplicates(), selectEvidence()
+### Community 525 - "knowledgeEdge.ts"
+Cohesion: 0.25
+Nodes (8): computeDeterministicKey(), createKnowledgeEdge(), deactivateEdge(), EdgeDirection, KnowledgeEdge, OntologyValidationOutcome, reverseEdge(), strengthenEdge()
 
 ### Community 526 - "rc-c01a1-contracts-legacy-freeze.test.ts"
 Cohesion: 0.22
@@ -3257,9 +3252,9 @@ Nodes (8): Auditoria de dependências — gate de não-regressão (baseline), CI
 Cohesion: 0.25
 Nodes (8): 1. Gateway cognitivo canônico, 2. CorrelationId ponta a ponta, 3. Idempotência e replay-safety, 4. Aprovações institucionais (segregação de deveres), 5. CATMAT/CATSER supervisionado, 6. Estado desta fundação (C.1) e próximo bloco (C.2), Fundação de Governança Cognitiva e Documental (PR C.1), Ledger de governança (tenant-aware, auditável)
 
-### Community 561 - "seed-complete.mjs"
-Cohesion: 0.28
-Nodes (5): contractRenewals, subscriptionPlans, subscriptions, db, db
+### Community 561 - "tenantService.ts"
+Cohesion: 0.25
+Nodes (4): organizationMembers, log, NO_ORGANIZATION_MEMBERSHIP, TenantResolution
 
 ### Community 562 - "Federal Procurement Corpus Package (RC-4.6)"
 Cohesion: 0.25
@@ -3356,6 +3351,10 @@ Nodes (3): DocumentChunk, DocumentRetriever, RetrievalQuery
 ### Community 586 - "Institutional Knowledge Integration Layer (RC-5.0)"
 Cohesion: 0.17
 Nodes (11): Componentes (`server/domain/institutionalIntegration/` + `server/services/institutionalIntegration/`), Fluxo, Garantias, Garantias por teste (`rc50-institutional-knowledge-integration.test.ts`), Institutional Knowledge Integration Layer (RC-5.0), Integração com o AIExecutionEngine, Integração com o Orchestrator, Limites arquiteturais (+3 more)
+
+### Community 587 - "BusinessDomainCard.tsx"
+Cohesion: 0.33
+Nodes (4): BusinessDomainCard(), BusinessDomainCardDomain, BusinessDomainCardProps, DEFAULT_DOMAIN
 
 ### Community 588 - "document-settings-governance-mysql-smoke.test.ts"
 Cohesion: 0.29
@@ -3674,8 +3673,8 @@ Cohesion: 0.36
 Nodes (3): main(), PredeployDeps, runPredeploy()
 
 ### Community 669 - "BusinessDomainCode"
-Cohesion: 0.28
-Nodes (8): AssembledProcess, assembleProcess(), ProcessDefinition, ProcessStepDefinition, recommendSteps(), validateProcessDefinition(), BusinessDomainCode, PortalEntry
+Cohesion: 0.17
+Nodes (14): AssembledProcess, assembleProcess(), ProcessDefinition, ProcessStepDefinition, recommendSteps(), validateProcessDefinition(), BusinessDomainCode, deactivateModule() (+6 more)
 
 ### Community 670 - "rc-legal-sec-001-legal-opinions-freeze.test.ts"
 Cohesion: 0.29
@@ -3709,9 +3708,9 @@ Nodes (4): PromptVersion, PromptViewerProps, STATUS_COLORS, STATUS_LABELS
 Cohesion: 0.33
 Nodes (4): SemanticMemoryEntry, SemanticMemoryPanelProps, TYPE_COLORS, TYPE_LABELS
 
-### Community 678 - "AdminOrganizacoes.tsx"
-Cohesion: 0.05
-Nodes (61): DOCUMENT_TYPES, DocumentUploadDialog(), UploadData, AIHistoryTable(), AIRecord, OPERATION_LABELS, Props, CatmatItem (+53 more)
+### Community 678 - "Usuarios.tsx"
+Cohesion: 0.06
+Nodes (55): DOCUMENT_TYPES, DocumentUploadDialog(), UploadData, AIHistoryTable(), AIRecord, OPERATION_LABELS, Props, CatmatItem (+47 more)
 
 ### Community 679 - "direct-procurement-rbac-mysql-smoke.test.ts"
 Cohesion: 0.29
@@ -3973,6 +3972,10 @@ Nodes (3): DEFAULT_DOMAINS, WorkspaceSelectorDomain, WorkspaceSelectorProps
 Cohesion: 0.40
 Nodes (3): CopilotOption, CopilotSelectorProps, DEFAULT_COPILOTS
 
+### Community 748 - "WorkspaceOverview.tsx"
+Cohesion: 0.29
+Nodes (5): SEVERITY_ORDER, SEVERITY_STYLES, STATUS_LABELS, STATUS_STYLES, WorkspaceOverviewProps
+
 ### Community 749 - "RecoveryCheckpointPanel.tsx"
 Cohesion: 0.40
 Nodes (3): Checkpoint, Props, TYPE_LABELS
@@ -4097,17 +4100,17 @@ Nodes (4): Branch de Staging, Checklist de Teste em Staging, Processo, Staging R
 Cohesion: 0.40
 Nodes (4): Roadmap de Médio Prazo, Sprint 5 — Dashboard + Analytics, Sprint 6 — Assinatura Digital, Sprint 7 — Integrações Governamentais
 
-### Community 781 - "proposalZipGenerator.ts"
-Cohesion: 0.39
-Nodes (7): Document, generateMinutaContrato(), generatePropostaComercial(), generateTermoReferencia(), ProposalData, generateProposalZip(), ProposalData
+### Community 781 - "CopilotExplainability.tsx"
+Cohesion: 0.40
+Nodes (5): CopilotExplainability(), CopilotExplainabilityProps, STEP_LABEL, toSteps(), TraceStep
 
 ### Community 782 - "c4b1-official-promotion.test.ts"
-Cohesion: 0.17
-Nodes (11): base(), checkIdempotency, createDocument, DRAFT, effectOrder, failIdempotencyKey, fakeTx, getGeneratedDocumentByKind (+3 more)
+Cohesion: 0.08
+Nodes (21): base(), checkIdempotency, createDocument, DRAFT, effectOrder, failIdempotencyKey, fakeTx, getGeneratedDocumentByKind (+13 more)
 
-### Community 783 - "v1-functional-closure-mysql-smoke.test.ts"
-Cohesion: 0.19
-Nodes (14): insertDirectProcurementWorkspace(), insertLegalOpinionWorkspace(), createDirectProcurementWorkspace(), createLegalOpinionWorkspace(), cleanup(), count(), counts(), RUN (+6 more)
+### Community 783 - "CopilotHistoryViewer.tsx"
+Cohesion: 0.47
+Nodes (5): COPILOT_LABEL, CopilotHistoryViewer(), fmtDate(), STATUS_BADGE, truncate()
 
 ### Community 785 - "Sprint 1 — Decisões Arquiteturais"
 Cohesion: 0.40
@@ -4141,9 +4144,13 @@ Nodes (5): Módulo 2: Gestão de Contratos, Módulo 3: Parecer Jurídico, Módul
 Cohesion: 0.60
 Nodes (4): main(), manifest_paths(), Decide se um conjunto de caminhos staged exige regenerar o Graphify — LiciGov…, reason_for()
 
-### Community 812 - "TaskChartsSection.tsx"
-Cohesion: 0.24
-Nodes (9): ChartEntry, MonthlyEntry, PRIORITY_COLORS, Props, STATUS_COLORS, TaskChartsSection(), TypeEntry, TaskKPIGrid() (+1 more)
+### Community 812 - "CopilotReasoningPanel.tsx"
+Cohesion: 0.40
+Nodes (5): CopilotReasoningPanel(), CopilotReasoningPanelProps, STEP_LABEL, toSteps(), TraceStep
+
+### Community 814 - "ResponsePanel.tsx"
+Cohesion: 0.33
+Nodes (5): RESPONSE_STATUSES, RESPONSE_TYPES, ResponsePanel(), ResponsePanelProps, SIGNATURE_METHODS
 
 ### Community 837 - "landingpage.test.ts"
 Cohesion: 0.50
@@ -4173,9 +4180,9 @@ Nodes (3): Achados, Observações de encaminhamento (para a PR B.2), PR B.2 — 
 Cohesion: 0.50
 Nodes (3): Conteúdo, Exports — Schemas, Geração
 
-### Community 847 - "institutionalQuery.ts"
-Cohesion: 0.27
-Nodes (10): classifyIntent(), ContextStrategy, createQuery(), determineContextStrategy(), determineRetrievalStrategy(), InstitutionalQuery, normalizeQuery(), QueryIntent (+2 more)
+### Community 847 - "GraphMetricsDashboard.tsx"
+Cohesion: 0.47
+Nodes (5): getHealthBg(), getHealthColor(), GraphMetric, GraphMetricsDashboard(), MetricsData
 
 ### Community 849 - "📊 Priorização de Desenvolvimento"
 Cohesion: 0.50
@@ -4201,9 +4208,9 @@ Nodes (3): Impacto, Prompts de Governança, Prompts Desta Pasta
 Cohesion: 0.50
 Nodes (3): Princípios que Guiam os Prompts de Importação, Prompts de Importação, Prompts Desta Pasta
 
-### Community 858 - "platforms"
-Cohesion: 0.24
-Nodes (5): platformChecklists, platforms, platformTemplates, db, seedPlatforms()
+### Community 858 - "WorkspaceHome.tsx"
+Cohesion: 0.33
+Nodes (3): STATUS_LABELS, STATUS_STYLES, StatusKey
 
 ### Community 859 - "Sprint 1.5 — Decisões Arquiteturais"
 Cohesion: 0.50
@@ -4329,13 +4336,9 @@ Nodes (3): Fase 15 - Dashboard de Analytics, Interface de Analytics, Métricas d
 Cohesion: 0.67
 Nodes (3): Fase 6 - Aplicar Personalização e Downloads, Implementação de Downloads, Integração de Cabeçalho/Rodapé nos Documentos
 
-### Community 906 - "contractReconstruction.ts"
-Cohesion: 0.29
-Nodes (9): createAssistedReconstruction(), ImportedContract, ImportedContractSource, matchAfter(), parseMoney(), reconstructContractFields(), ReconstructedContractFields, RECONSTRUCTION_DISCLAIMER (+1 more)
-
-### Community 907 - "documentConcurrencyService.ts"
-Cohesion: 0.24
-Nodes (9): acquireLock(), cleanupExpiredLocks(), detectAutosaveCollision(), getLockStatus(), LockStatus, LockType, log, parseLockType() (+1 more)
+### Community 906 - "CopilotCenter.tsx"
+Cohesion: 0.50
+Nodes (4): COPILOT_META, CopilotCenter(), metaFor(), STATUS_BADGE
 
 ### Community 909 - "groundingExpansionService.ts"
 Cohesion: 0.38
@@ -4345,49 +4348,45 @@ Nodes (9): buildProvenanceGraph(), computeHallucinationRisk(), createGroundingSo
 Cohesion: 0.22
 Nodes (5): cell(), docx, HEADER, pdf, tableOf()
 
-### Community 912 - "directContractAuditReport.ts"
-Cohesion: 0.42
-Nodes (8): getDirectContractAuditLogs(), AuditReportOptions, calculateStatistics(), formatDate(), formatDetails(), generateAuditReport(), getActionLabel(), getStatusLabel()
-
 ### Community 914 - "sprint15-hardening.test.ts"
 Cohesion: 0.25
 Nodes (5): assertTenantOwnership(), TenantScopedRepository, getFlagCacheSnapshot(), ActivityLogPayload, OutboxEventPayload
 
-### Community 918 - "ingestion-canonical-guard.test.ts"
-Cohesion: 0.22
-Nodes (7): APP, INDEX, QUEUE, ROOT, ROUTER, UPLOAD, UPLOAD_SVC
+### Community 918 - "LicensedModulesPanel.tsx"
+Cohesion: 0.67
+Nodes (3): LicensedModulesPanel(), Plan, planBadgeClasses()
 
-### Community 919 - "documentTemplateService.ts"
-Cohesion: 0.31
-Nodes (8): DocumentVariable, applyTemplate(), createTemplate(), CreateTemplateParams, getTemplate(), listTemplates(), log, updateTemplate()
+### Community 919 - "CopilotComparisonPanel.tsx"
+Cohesion: 0.67
+Nodes (3): COPILOT_META, CopilotComparisonPanel(), metaFor()
 
-### Community 920 - "emailService.ts"
-Cohesion: 0.36
-Nodes (8): EmailNotification, resend, sendCommentAddedEmail(), sendDocumentApprovedEmail(), sendDocumentEditedEmail(), sendEmailNotification(), sendMemberAddedEmail(), sendStatusChangeEmail()
+### Community 920 - "r2-pr02-legacy-endpoints-disabled.test.ts"
+Cohesion: 0.11
+Nodes (18): directProcurementRouter, EmailNotification, resend, sendCommentAddedEmail(), sendDocumentApprovedEmail(), sendDocumentEditedEmail(), sendEmailNotification(), sendMemberAddedEmail() (+10 more)
 
 ### Community 923 - "corpusHierarchy.ts"
 Cohesion: 0.25
 Nodes (7): buildCorpusHierarchy(), CorpusHierarchy, CorpusHierarchyNode, CorpusScopeLevel, DEFAULT_SCOPE_TAXONOMY, isScopeLevel(), scopeDepth()
 
-### Community 924 - "zipService.ts"
-Cohesion: 0.43
-Nodes (6): generateItemsSpreadsheet(), getSpreadsheetFileName(), ProcessItem, generatePublicationZip(), generateReadmeContent(), ZipGenerationResult
+### Community 924 - "db/index.ts"
+Cohesion: 0.09
+Nodes (11): downloadRouter, editalParametersRouter, documentConverter, generateItemsSpreadsheet(), getSpreadsheetFileName(), ProcessItem, generateProcessReport(), generatePublicationZip() (+3 more)
 
 ### Community 925 - "Autoridade da quantidade — a cotação nunca vira necessidade (R6 / PR-13 · SEM-008 · INV-09)"
 Cohesion: 0.40
 Nodes (4): Autoridade da quantidade — a cotação nunca vira necessidade (R6 / PR-13 · SEM-008 · INV-09), Dependências humanas, Regra, Testes
 
-### Community 927 - "seedDirectContractLegalArticles.ts"
-Cohesion: 0.40
-Nodes (3): directContractLegalArticles, articles, db
+### Community 927 - "CopilotMetricsDashboard.tsx"
+Cohesion: 0.67
+Nodes (3): COPILOT_META, CopilotMetricsDashboard(), metaFor()
 
-### Community 928 - "cnpjValidator.ts"
-Cohesion: 0.90
-Nodes (4): cleanCNPJ(), consultCNPJ(), formatCNPJ(), validateCNPJ()
+### Community 928 - "KnowledgeGraphViewer.tsx"
+Cohesion: 0.67
+Nodes (3): colorFor(), KnowledgeGraphViewer(), NODE_COLORS
 
-### Community 935 - "copilotMemoryService.ts"
-Cohesion: 0.39
-Nodes (7): clearMemory(), getMemory(), MemoryEntry, memoryKey(), recordMemory(), _store, summarizeMemory()
+### Community 929 - "isFeatureEnabled"
+Cohesion: 0.67
+Nodes (4): cacheGet(), cacheSet(), isFeatureEnabled(), isGlobalFlagEnabled()
 
 ### Community 936 - "legalOpinionObservabilityService.ts"
 Cohesion: 0.32
@@ -4397,33 +4396,33 @@ Nodes (6): averageAnalysisMs(), emittedOpinions(), LegalOpinionMetricRow, pendin
 Cohesion: 0.67
 Nodes (3): xlsx, xlsxOf(), xlsx
 
-### Community 945 - "document-generation-mysql-smoke.test.ts"
-Cohesion: 0.29
-Nodes (4): callGenerate(), LegacyDocType, MockBehavior, nextBehavior
+### Community 946 - "ProcessDetails.tsx"
+Cohesion: 0.08
+Nodes (39): DocActionsProps, DocTabContent(), formatDate(), Props, Props, StageAssignmentPanel(), StepBadge(), Props (+31 more)
 
-### Community 983 - "OfficialDocumentPanel.tsx"
-Cohesion: 0.50
-Nodes (3): DOC_TYPE_LABELS, OfficialDocumentPanel(), OfficialDocumentPanelProps
+### Community 983 - "LegalOpinionHome.tsx"
+Cohesion: 0.13
+Nodes (16): DOC_TYPE_LABELS, OfficialDocumentPanel(), OfficialDocumentPanelProps, CONCLUSION_LABELS, LegalOpinionHome(), Tab, reasoningQueryEnabled(), reasoningViewState (+8 more)
 
 ## Knowledge Gaps
-- **7605 isolated node(s):** `SettingsRoute`, `TemplatesRoute`, `AdminPlatformsRoute`, `DashboardShellRoute`, `OperationsHomeShellRoute` (+7600 more)
+- **7609 isolated node(s):** `SettingsRoute`, `TemplatesRoute`, `AdminPlatformsRoute`, `DashboardShellRoute`, `OperationsHomeShellRoute` (+7604 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **135 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **129 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `getDb()` connect `getDb` to `documentService.ts`, `itemMaterializationService.ts`, `documentRenderService.ts`, `legalOpinions.ts`, `invitationService.ts`, `cognitiveProvenanceService.ts`, `procurementItemsService.ts`, `directProcurementRouter.ts`, `dfdPrefill.ts`, `db/workspace.ts`, `procurementProcessService.ts`, `institutionalConsultationService.ts`, `directContractDocuments.ts`, `legalOpinionWorkspaceService.ts`, `institutionalRequests.ts`, `observabilityService.ts`, `makeContext`, `sprint25-hardening.test.ts`, `sprint51-procurement.test.ts`, `directContractsRouter.ts`, `processLifecycleService.ts`, `contracts.ts`, `procurement.ts`, `legalOpinionWorkspaceRouter.ts`, `knowledgeGraph.ts`, `governedLawCorpusMaterializer.ts`, `db/legalReference.ts`, `copilotRouter.ts`, `departmentOperationService.ts`, `embeddingReindex.ts`, `institutionalDecisionService.ts`, `pr08-rbac-state-machine.test.ts`, `organizations.ts`, `operationRecordService.ts`, `emailDispatcher.ts`, `embeddings.ts`, `businessDomainRegistryService.ts`, `documentTimelineService.ts`, `documentEngineService.ts`, `contractWorkspaceRouter.ts`, `productionMonitoringService.ts`, `sprint18-foundation.test.ts`, `tenantOnboardingService.ts`, `processItems.ts`, `documentVersionService.ts`, `tasks.ts`, `new003-lgpd-export-disabled.test.ts`, `aiResilience.ts`, `llm.ts`, `operation-record-lifecycle-mysql-smoke.test.ts`, `sprint501-business-domains.test.ts`, `departmentOperation.ts`, `documentDiff.ts`, `retrieveRelevantLaw`, `importReprocessService.ts`, `db/businessDomains.ts`, `getContractWorkspace`, `featureFlagAdminService.ts`, `activityLogService.ts`, `taskRouter.ts`, `sprint50-workspace.test.ts`, `sdk.ts`, `db/collaboration.ts`, `ingestionRouter.ts`, `db/contractWorkspace.ts`, `operationRecordRouter.ts`, `v1-functional-closure-mysql-smoke.test.ts`, `workspaceTaskService.ts`, `institutionalRetrievalService.ts`, `approve-legal-reference-set.ts`, `contractService.ts`, `institutionalIdentityService.ts`, `platforms`, `providerAdapter.ts`, `workspaceDecisionService.ts`, `documentIntegrityService.ts`, `documentConcurrencyService.ts`, `directContractAuditReport.ts`, `documentTemplateService.ts`, `businessDomain.ts`, `lgpd.ts`, `contractEditService.ts`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **Why does `d()` connect `ontologyValidation.ts` to `rc47-institutional-knowledge-framework.test.ts`, `knowledgeRetrievalService.ts`, `institutionalKnowledgeIntegration.ts`, `rcx2-institutional-bootstrap-framework.test.ts`, `itemMaterializationService.ts`, `rc45-legal-knowledge-foundation.test.ts`, `procurement.ts`, `institutionalConsultationService.ts`, `businessDomainRegistryService.ts`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
-- **Why does `router` connect `routers.ts` to `providerRouter.ts`, `documentEngineService.ts`, `contractWorkspaceRouter.ts`, `productionMonitoringService.ts`, `operationRecordRouter.ts`, `experimentalApiGate.ts`, `invitationService.ts`, `humanApprovalService.ts`, `directProcurementRouter.ts`, `agentExecutionRouter.ts`, `procurementItemsService.ts`, `structuredExportService.ts`, `tenantOnboardingService.ts`, `db/workspace.ts`, `procurementProcessService.ts`, `institutionalConsultationService.ts`, `sprint30-itemtr-catmat.test.ts`, `new003-lgpd-export-disabled.test.ts`, `institutionalRequests.ts`, `sprint34-pilot-readiness.test.ts`, `suggestions.ts`, `webhookRouter.ts`, `sprint501-business-domains.test.ts`, `legalReasoning.ts`, `sprint32-production-hardening.test.ts`, `sprint51-procurement.test.ts`, `r2-pr02-legacy-endpoints-disabled.test.ts`, `semanticRetrievalRouter.ts`, `documentDraftingEngine.ts`, `directContractsRouter.ts`, `processLifecycleService.ts`, `collaborationRouter.ts`, `domain/collaboration.ts`, `featureFlagAdminService.ts`, `activityLogService.ts`, `sprint42-context-engine.test.ts`, `legalOpinionWorkspaceRouter.ts`, `knowledgeGraph.ts`, `adaptiveRecommendationEngine.ts`, `sprint36-deployment-stability.test.ts`, `copilotRouter.ts`, `taskRouter.ts`, `businessDomain.ts`, `departmentOperationService.ts`, `promptOrchestrationRouter.ts`, `sprint46-vector-infrastructure.test.ts`, `sprint45-provider-activation.test.ts`, `organizations.ts`, `clauseIntelligence.ts`, `stabilityRouter.ts`, `ingestionRouter.ts`, `pilotReadinessService.ts`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `getDb()` connect `getDb` to `schema.ts`, `documentEngineService.ts`, `sprint5w-contracts.test.ts`, `_core/index.ts`, `connection.ts`, `contractService.ts`, `importPromotionService.ts`, `legalOpinions.ts`, `invitationService.ts`, `productionMonitoringService.ts`, `cognitiveProvenanceService.ts`, `procurementItemsService.ts`, `directProcurementRouter.ts`, `routers.ts`, `manifestV1.ts`, `sprint49-copilots.test.ts`, `logActivity`, `dfdPrefill.ts`, `procurementProcessService.ts`, `tasks.ts`, `sprint50-workspace.test.ts`, `operation-record-lifecycle-mysql-smoke.test.ts`, `institutionalConsultationService.ts`, `legalOpinionWorkspaceService.ts`, `institutionalRequests.ts`, `ingestionUploadRoute.ts`, `domain/contractWorkspace.ts`, `processesRouter.ts`, `operation-record-schedule-backfill.ts`, `isFeatureEnabled`, `sprint501-business-domains.test.ts`, `new003-lgpd-export-disabled.test.ts`, `sprint25-hardening.test.ts`, `aiExecutionEngine.ts`, `departmentOperation.ts`, `institutionalRetrievalService.ts`, `itemMaterializationService.ts`, `directContractsRouter.ts`, `processLifecycleService.ts`, `retrieveRelevantLaw`, `tenantService.ts`, `db/businessDomains.ts`, `contracts.ts`, `authoringContext.ts`, `getContractWorkspace`, `contractWorkspaceRouter.ts`, `featureFlagAdminService.ts`, `legalOpinionWorkspaceRouter.ts`, `knowledgeGraph.ts`, `governedLawCorpusMaterializer.ts`, `db/contractWorkspace.ts`, `db/legalReference.ts`, `directContractShadowService.ts`, `ontologyRouter.ts`, `contractsRouter.ts`, `businessDomainRouter.ts`, `approve-legal-reference-set.ts`, `departmentOperationService.ts`, `priceResearchReviewService.ts`, `embeddingReindex.ts`, `institutionalDecisionService.ts`, `organizations.ts`, `sprint5op-department-operation.test.ts`, `sdk.ts`, `createContractWorkspace`, `observabilityService.ts`, `emailDispatcher.ts`, `embeddings.ts`, `ingestionRouter.ts`, `businessDomain.ts`, `documentService.ts`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `d()` connect `ontologyValidation.ts` to `rc47-institutional-knowledge-framework.test.ts`, `institutionalKnowledgeIntegration.ts`, `rcx2-institutional-bootstrap-framework.test.ts`, `aiExecutionEngine.ts`, `rc45-legal-knowledge-foundation.test.ts`, `authoringContext.ts`, `institutionalConsultationService.ts`, `businessDomain.ts`?**
+  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Why does `router` connect `routers.ts` to `providerRouter.ts`, `documentEngineService.ts`, `productionMonitoringService.ts`, `reviewWorkspaceRouter.ts`, `invitationService.ts`, `humanApprovalService.ts`, `directProcurementRouter.ts`, `procurementItemsService.ts`, `structuredExportService.ts`, `sprint49-copilots.test.ts`, `sprint50-workspace.test.ts`, `procurementProcessService.ts`, `tasks.ts`, `institutionalConsultationService.ts`, `sprint30-itemtr-catmat.test.ts`, `new003-lgpd-export-disabled.test.ts`, `db/index.ts`, `institutionalRequests.ts`, `processesRouter.ts`, `sprint34-pilot-readiness.test.ts`, `suggestions.ts`, `makeContext`, `sprint501-business-domains.test.ts`, `webhookRouter.ts`, `departmentOperation.ts`, `sprint32-production-hardening.test.ts`, `itemMaterializationService.ts`, `experimentalApiGate.ts`, `directContractsRouter.ts`, `processLifecycleService.ts`, `collaborationRouter.ts`, `contractWorkspaceRouter.ts`, `domain/collaboration.ts`, `departmentTasksRouter.ts`, `itemAnalyticsService.ts`, `legalOpinionWorkspaceRouter.ts`, `knowledgeGraph.ts`, `adaptiveRecommendationEngine.ts`, `semanticRetrievalRouter.ts`, `ontologyRouter.ts`, `contractsRouter.ts`, `businessDomainRouter.ts`, `sprint42-context-engine.test.ts`, `sprint46-vector-infrastructure.test.ts`, `providerGovernanceRouter.ts`, `organizations.ts`, `clauseIntelligence.ts`, `sdk.ts`, `stabilityRouter.ts`, `ingestionRouter.ts`, `pilotReadinessService.ts`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `getDb()` (e.g. with `rag.f-emb1.test.ts` and `db-users-hardening.test.ts`) actually correct?**
   _`getDb()` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `SettingsRoute`, `TemplatesRoute`, `AdminPlatformsRoute` to the rest of the system?**
-  _7605 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _7609 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `schema.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.004866180048661801 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.004818137812250228 - nodes in this community are weakly interconnected._
 - **Should `cn` be split into smaller, more focused modules?**
-  _Cohesion score 0.013041228221493876 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.01244996423298784 - nodes in this community are weakly interconnected._
