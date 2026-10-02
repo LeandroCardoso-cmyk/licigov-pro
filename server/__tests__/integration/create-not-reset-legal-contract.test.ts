@@ -149,7 +149,8 @@ describe("R3 / PR-06 — contrato: decisão de criação (SEM-007)", () => {
     const msg = contractAlreadyExistsMessage(ws);
     expect(msg).toMatch(/^Já existe um contrato do Processo Licitatório com o número "CT-1" nesta organização\./);
     expect(msg).toContain(CONTRACT_ALREADY_EXISTS);
-    expect(msg).toMatch(/único na organização, qualquer que seja a origem/);
+    // HD-15 (CONTRACT_NUMBER_SCOPE) pendente: a mensagem não afirma escopo entre origens.
+    expect(msg).not.toMatch(/qualquer que seja a origem/);
     expect(msg.match(/\(id: ([a-f0-9]+)\)/)?.[1]).toBe(ws.id);
     const err = new ContractAlreadyExistsError(ws);
     expect(err.code).toBe("CONFLICT");
@@ -181,10 +182,12 @@ describe("R3 / PR-06 — freeze: caminhos de criação não usam upsert", () => 
     const creation = svc.slice(svc.indexOf("export async function createFromProcurement"), svc.indexOf("// ─── Geração inteligente de minutas"));
     expect(creation).not.toContain("insertContractWorkspace(");
     expect((creation.match(/persistNewContract\(/g) ?? []).length).toBe(4);
-    // decisão B: a chave institucional é o número normalizado na organização (qualquer origem) — checada no servidor
-    // antes do INSERT, e todos os fluxos normalizam o número.
+    // 2º passe: a chave é a PK que já existia (órgão, origem, número normalizado) — lida antes do INSERT; o escopo entre
+    // origens (HD-15) não decide a criação: a colisão com outra origem só é registrada (observabilidade).
     const persist = svc.slice(svc.indexOf("async function persistNewContract"), svc.indexOf("export interface Recommendation"));
-    expect(persist).toContain("findContractByNormalizedNumber(ws.organizationId, ws.contractNumber)");
+    expect(persist).toContain("getContractWorkspace(ws.id, ws.organizationId)");
+    expect(persist).toContain("create_contract_number_used_by_other_origin");
+    expect(persist).not.toMatch(/findContractByNormalizedNumber\([^)]*\)\s*;\s*\n\s*if \(before\)/);
     expect((creation.match(/requireContractNumber\(/g) ?? []).length).toBe(4);
     const db = src("db/contractWorkspace.ts");
     const fn = db.slice(db.indexOf("export async function insertNewContractWorkspace"), db.indexOf("export async function getContractWorkspace"));

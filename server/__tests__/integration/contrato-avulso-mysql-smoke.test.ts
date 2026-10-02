@@ -144,30 +144,18 @@ describe.skipIf(!DB)("Contrato avulso — MySQL real", () => {
     expect(notFound).toBeNull();
   });
 
-  // REESCRITO (R3 / PR-06, decisão B do responsável): antes este caso afirmava que o import externo com o MESMO número
-  // de um avulso "não colide" (a origem fazia parte da chave). Agora o número oficial é ÚNICO POR ORGANIZAÇÃO,
-  // qualquer que seja a origem: o import com o número do avulso é CONFLICT CONTRACT_ALREADY_EXISTS e nada é gravado.
-  it("13. número único na organização entre avulso e importado: importExternalContract com número de avulso ⇒ CONFLICT, zero escrita", async () => {
-    const avulso = await createManualContract({ organizationId: ORG_A, contractNumber: "CT-SMOKE-SEPARACAO", createdBy: USER_A, correlationId: CORR });
-    const [before] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM contract_workspaces WHERE organization_id = ?`, [ORG_A]);
-    const [impBefore] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM imported_contracts WHERE organization_id = ?`, [ORG_A]);
-    const err = await importExternalContract({
-      organizationId: ORG_A, source: "pdf", contractNumber: "CT-SMOKE-SEPARACAO", createdBy: USER_A,
+  it("13. separação entre avulso e importado: importExternalContract não colide com número avulso igual (originType diferente)", async () => {
+    await createManualContract({ organizationId: ORG_A, contractNumber: "CT-SMOKE-SEPARACAO", createdBy: USER_A, correlationId: CORR });
+    const imported = await importExternalContract({
+      organizationId: ORG_A, source: "pdf", contractNumber: "CT-SMOKE-SEPARACAO",
       rawText: "CONTRATO Nº SMOKE\nCONTRATADO: Fulano ME\nVALOR: R$ 1.000,00", correlationId: CORR,
-    }).then(() => null, (e: unknown) => e as { code?: string; message?: string });
-    expect(err?.code).toBe("CONFLICT");
-    expect(err?.message).toContain("CONTRACT_ALREADY_EXISTS");
-    expect(err?.message).toContain(`(id: ${avulso.id})`);
-    const [after] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM contract_workspaces WHERE organization_id = ?`, [ORG_A]);
-    const [impAfter] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS cnt FROM imported_contracts WHERE organization_id = ?`, [ORG_A]);
-    expect(Number(after[0].cnt)).toBe(Number(before[0].cnt));
-    expect(Number(impAfter[0].cnt)).toBe(Number(impBefore[0].cnt));
+    });
+    expect(imported.workspace.originType).toBe("externo");
+    expect(imported.assisted).toBe(true); // importado carrega o disclaimer de reconstrução assistida
+    // avulso não tem esse campo — confirma que são fluxos e ids distintos, sem colisão
     const avulsoFound = await findManualContractByNumber(ORG_A, "CT-SMOKE-SEPARACAO");
-    expect(avulsoFound!.id).toBe(avulso.id);
+    expect(avulsoFound).not.toBeNull();
+    expect(avulsoFound!.id).not.toBe(imported.workspace.id);
   });
 
   it("14. criação concorrente com a MESMA idempotencyKey: a segunda corrida vê o resultado já registrado (sem duplicar efeito)", async () => {

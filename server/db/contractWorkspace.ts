@@ -7,7 +7,7 @@
  * Nomes namespaced para não colidir com o repo legado `server/db/contracts.ts`.
  */
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { CONTRACT_ALREADY_EXISTS } from "../domain/contractCreation";
@@ -92,9 +92,8 @@ export async function insertContractWorkspace(ws: ContractWorkspace): Promise<Co
 }
 
 /**
- * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre chave existente — UNIQUE(organization_id,
- * normalized_number) (0310: número único na organização, qualquer origem) ou PRIMARY KEY hash(org, origem, número) —
- * devolve "duplicate" sem escrever nada; o serviço decide convergir ou CONFLICT.
+ * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre a PRIMARY KEY existente
+ * hash(org, origem, número) devolve "duplicate" sem escrever nada; o serviço decide convergir ou CONFLICT.
  * (`insertContractWorkspace`, o upsert, segue restrito à edição `updateContract` — escopo da PR-12.) Sem DB ⇒ null.
  */
 export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise<"inserted" | "duplicate" | null> {
@@ -116,17 +115,18 @@ export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise
 }
 
 /**
- * R3 / PR-06 — contrato da organização com o MESMO número oficial normalizado, QUALQUER origem (chave institucional).
- * `normalizedNumber` já vem normalizado (`normalizeContractNumber`); compara com a coluna gerada `normalized_number`
- * (utf8mb4_bin — exata). Sem DB ⇒ null (degrada).
+ * R3 / PR-06 — OUTRO contrato da organização com o MESMO número oficial normalizado (qualquer origem). Só leitura de
+ * OBSERVABILIDADE enquanto CONTRACT_NUMBER_SCOPE (HD-15) estiver pendente — não decide criação. Coluna gerada
+ * `normalized_number` (utf8mb4_bin — exata, índice idx_ctw_org_normalized_number). Sem DB ⇒ null (degrada).
  */
-export async function findContractByNormalizedNumber(orgId: number, normalizedNumber: string): Promise<ContractWorkspace | null> {
+export async function findContractByNormalizedNumber(orgId: number, normalizedNumber: string, excludeId?: string): Promise<ContractWorkspace | null> {
   const db = await getDb();
   if (!db || !normalizedNumber) return null;
   const rows = await db.select({ id: contractWorkspacesTable.id }).from(contractWorkspacesTable)
     .where(and(
       eq(contractWorkspacesTable.organizationId, orgId),
       eq(contractWorkspacesTable.normalizedNumber, normalizedNumber),
+      ...(excludeId ? [ne(contractWorkspacesTable.id, excludeId)] : []),
     )).limit(1);
   return rows.length > 0 ? getContractWorkspace(rows[0].id, orgId) : null;
 }

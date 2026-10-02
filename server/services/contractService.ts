@@ -81,13 +81,14 @@ function requireContractNumber(raw: string | null | undefined): string {
 }
 
 /**
- * Persiste a CRIAÇÃO de um contrato — INSERT-only, nunca upsert (padrão R3). A chave institucional é (organização,
- * número normalizado), QUALQUER QUE SEJA A ORIGEM (decisão do responsável). Número já existente na organização ⇒ retry
- * idempotente da MESMA criação converge (devolve o existente, `created: false`, sem escrita); qualquer outra coisa —
- * inclusive o mesmo número vindo de outra origem, ou o contrato já fora de "minuta" — ⇒ `onConflict`.
- *  1. checagem no servidor (leitura) do número na organização — recusa/converge sem escrever nada;
- *  2. INSERT puro; a garantia no BANCO é UNIQUE(organization_id, normalized_number) (0310) + a PRIMARY KEY: em corrida
- *     (inclusive entre origens diferentes) exatamente um INSERT vence; o perdedor relê e passa pela mesma decisão.
+ * Persiste a CRIAÇÃO de um contrato — INSERT-only, nunca upsert (padrão R3). A chave é a que JÁ existia: a PRIMARY KEY
+ * `id` = hash(organização, origem, número normalizado). Mesma chave ⇒ retry idempotente da MESMA criação converge
+ * (devolve o existente, `created: false`, sem escrita); qualquer outra coisa (payload diferente, contrato já fora de
+ * "minuta") ⇒ `onConflict`. O ESCOPO da unicidade do número entre ORIGENS é decisão humana pendente
+ * (CONTRACT_NUMBER_SCOPE, HD-15): enquanto não decidida, o mesmo número em OUTRA origem não é bloqueado (comportamento
+ * anterior preservado) — só registrado (`create_contract_number_used_by_other_origin`).
+ *  1. leitura pela PK — recusa/converge sem escrever nada;
+ *  2. INSERT puro na PK: em corrida exatamente um INSERT vence; o perdedor relê pela PK e passa pela mesma decisão.
  * Não há transação a estender: a criação é um único INSERT atômico; os eventos só são gravados pelo vencedor.
  * Sem DB ⇒ degrada (`created: true`, como antes).
  */
@@ -104,15 +105,23 @@ async function persistNewContract(
     throw onConflict(existing);
   };
 
-  const before = await findContractByNormalizedNumber(ws.organizationId, ws.contractNumber);
+  const before = await getContractWorkspace(ws.id, ws.organizationId);
   if (before) return decide(before);
 
   const inserted = await insertNewContractWorkspace(ws);
-  if (inserted !== "duplicate") return { workspace: ws, created: true };
-  // Perdeu a corrida (UNIQUE do número na organização ou PRIMARY KEY): relê pelo número; se a colisão foi só de PK
-  // (linha cujo número foi editado depois da criação), relê pelo id.
-  const existing = (await findContractByNormalizedNumber(ws.organizationId, ws.contractNumber))
-    ?? (await getContractWorkspace(ws.id, ws.organizationId));
+  if (inserted !== "duplicate") {
+    // HD-15 pendente: o mesmo número em OUTRA origem não bloqueia — só observabilidade (sem número/contratado no log).
+    const other = inserted === "inserted" ? await findContractByNormalizedNumber(ws.organizationId, ws.contractNumber, ws.id) : null;
+    if (other) {
+      log.warn("create_contract_number_used_by_other_origin", {
+        organizationId: ws.organizationId, contractId: ws.id, originType: ws.originType, otherOriginType: other.originType,
+        policy: "CONTRACT_NUMBER_SCOPE_PENDING", correlationId,
+      });
+    }
+    return { workspace: ws, created: true };
+  }
+  // Perdeu a corrida na PRIMARY KEY: relê pelo id e passa pela mesma decisão.
+  const existing = await getContractWorkspace(ws.id, ws.organizationId);
   if (!existing) throw new TRPCError({ code: "CONFLICT", message: `Criação concorrente do contrato; tente novamente (${CONTRACT_ALREADY_EXISTS}).` });
   return decide(existing);
 }
