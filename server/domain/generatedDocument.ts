@@ -101,6 +101,12 @@ export interface GeneratedDocument {
   readonly form: EditalForm | null;
   readonly platform: EditalPlatform | null;
   readonly legalJustification: string;
+  /**
+   * PR-09 / R5 (0311) — Somente Edital: critério de julgamento e regime de execução (fatos institucionais,
+   * decisão humana). null = ainda não definido ⇒ "requer revisão" (nunca um valor inferido).
+   */
+  readonly judgmentCriterion: string | null;
+  readonly executionRegime: string | null;
   /** C.4B.1 — autor do rascunho (quem gerou/originou). Base da segregação de deveres na emissão. */
   readonly authorUserId: number | null;
   /** C.4B.3A — último humano responsável por alteração material do conteúdo atual (edição/regeneração). */
@@ -122,6 +128,8 @@ export function createGeneratedDocument(params: {
   form?: EditalForm | null;
   platform?: EditalPlatform | null;
   legalJustification?: string;
+  judgmentCriterion?: string | null;
+  executionRegime?: string | null;
   authorUserId?: number | null;
   lastSubstantiveActorUserId?: number | null;
   lastSubstantiveAt?: string | null;
@@ -145,6 +153,8 @@ export function createGeneratedDocument(params: {
     form: params.form ?? null,
     platform: params.platform ?? null,
     legalJustification: params.legalJustification ?? "",
+    judgmentCriterion: params.judgmentCriterion ?? null,
+    executionRegime: params.executionRegime ?? null,
     authorUserId: params.authorUserId ?? null,
     lastSubstantiveActorUserId: params.lastSubstantiveActorUserId ?? null,
     lastSubstantiveAt: params.lastSubstantiveAt ?? null,

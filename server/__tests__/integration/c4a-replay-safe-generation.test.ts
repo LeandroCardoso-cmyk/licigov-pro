@@ -29,6 +29,8 @@ vi.mock("../../services/kernelAccessService", () => ({
 // (vazia ⇒ modo legado inalterado).
 vi.mock("../../db/procurementItems", () => ({ listProcurementItems: vi.fn(async () => []) }));
 
+// R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
+vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({
     transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx),

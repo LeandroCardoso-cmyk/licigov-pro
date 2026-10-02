@@ -5,6 +5,9 @@ import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel"
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
+import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
+import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
 import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 
@@ -38,8 +41,13 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
     { processId, kind: "tr" }, { enabled: !!processId },
   );
+  // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const generateTR = trpc.procurementProcess.generateTR.useMutation({
+    // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
+    onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
     onSuccess: () => {
+      setConfirmOpen(false);
       rotateTrKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "tr" });
@@ -49,9 +57,21 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
   });
   const draft = reviewable.data?.draft ?? null;
 
-  const handleGenerate = () => {
+  // R5 — documento aprovado/oficial: sem regeneração direta (o botão fica indisponível e a tela explica).
+  const regenerationBlock = draft?.regenerationBlock ?? null;
+
+  const handleGenerate = (confirmReplace = false) => {
     if (!processId || !object.trim()) return;
-    generateTR.mutate({ processId, object: object.trim(), idempotencyKey: trKey });
+    // Decisão PURA antes de qualquer chamada: bloqueado ⇒ nada; humano sem confirmação ⇒ diálogo (cancelar =
+    // zero efeito); só `mutate` chama o servidor. Sem justificativa textual obrigatória.
+    const plan = planRegeneration({ confirmed: confirmReplace, needsReplace: needsReplaceConfirmation(draft), block: regenerationBlock });
+    if (plan === "blocked") return;
+    if (plan === "confirm") { setConfirmOpen(true); return; }
+    generateTR.mutate({
+      processId, object: object.trim(), idempotencyKey: trKey,
+      // Hash do rascunho que o humano VIU: a confirmação vale só para este conteúdo (divergente ⇒ CONFLICT).
+      expectedContentHash: draft?.contentHash, confirmReplace: confirmReplace || undefined,
+    });
   };
 
   return (
@@ -76,8 +96,8 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
         </label>
         <button
           type="button"
-          onClick={handleGenerate}
-          disabled={!processId || !object.trim() || generateTR.isPending}
+          onClick={() => handleGenerate()}
+          disabled={!processId || !object.trim() || generateTR.isPending || !!regenerationBlock}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {generateTR.isPending ? "Gerando..." : "Gerar TR com base no processo"}
@@ -87,7 +107,8 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
             Selecione um processo para gerar o TR.
           </p>
         )}
-        {generateTR.isError && (
+        <RegenerationBlockedNotice documentLabel="TR" block={regenerationBlock} />
+        {generateTR.isError && !isHumanEditRefusal(generateTR.error?.message) && (
           <p className="mt-2 text-sm text-destructive">{domainErrorMessage(generateTR.error?.message, "Falha ao gerar o TR.")}</p>
         )}
       </div>
@@ -116,6 +137,12 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
           </div>
         </div>
       )}
+
+      <RegenerationConfirmDialog
+        open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="TR"
+        humanEdit={draft?.humanEdit ?? null} currentLength={draft?.content.length}
+        pending={generateTR.isPending} onConfirm={() => handleGenerate(true)}
+      />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="tr" reviewSnapshot={reviewable.data?.draft ?? null} />

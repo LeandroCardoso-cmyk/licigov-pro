@@ -24,7 +24,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
-import { generateDocument, canonicalDocumentIdentity } from "../../services/procurementProcessService";
+import { generateDocument, canonicalDocumentIdentity, saveReviewableDraft } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { promoteOfficialDocument, draftContentHash } from "../../services/documentPromotionService";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
@@ -35,6 +35,7 @@ const ORG = 991041;
 const ORG2 = 991042;
 const AUTHOR = 5;   // autor do rascunho (gera)
 const EMITTER = 7;  // emissor/revisor (manager) — distinto do autor (SoD)
+const EDITOR = 9;   // R5 — editor humano do rascunho após a emissão (≠ emissor, ≠ autor)
 
 let conn: mysql.Connection;
 
@@ -44,6 +45,20 @@ async function seedDraft(org: number, processId: string, object: string) {
     organizationId: org, processId, kind: "etp", object,
     correlationId: "c4b1-smoke", idempotencyKey: `gen-${org}-${processId}-${object}`,
     actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("etp"),
+  });
+}
+
+/**
+ * R5 (decisão do owner) — depois da emissão oficial o rascunho NÃO é mais regenerado diretamente
+ * (OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE). O caminho EXISTENTE para uma nova versão oficial é a edição
+ * HUMANA governada do rascunho (ledger human_edit) seguida de nova emissão governada — é o que estes cenários
+ * (5 e 7/8) exercitam agora; antes alteravam o rascunho por regeneração.
+ */
+async function alterDraftByHumanEdit(org: number, processId: string, content: string) {
+  return saveReviewableDraft({
+    organizationId: org, processId, kind: "etp", content, actorUserId: EDITOR,
+    expectedContentHash: await currentDraftHash(org, processId), idempotencyKey: `edit-${org}-${processId}-${content}`,
+    correlationId: "c4b1-edit",
   });
 }
 
@@ -109,6 +124,9 @@ async function emitidoContent(org: number, processId: string): Promise<string | 
 
 async function cleanup() {
   for (const org of [ORG, ORG2]) {
+    // PR-09 — o ledger de edições do rascunho de TESTE também é limpo: sem isso, uma reexecução recria o
+    // rascunho com ledger órfão da execução anterior (hash divergente ⇒ conteúdo tratado como não-IA).
+    await conn.execute("DELETE FROM generated_document_edits WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_promotions WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_documents WHERE tenant_id = ?", [org]).catch(() => {});
@@ -177,8 +195,11 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     const pid = "c4b1-p5";
     await seedDraft(ORG, pid, "Material p5 A");
     await emit(ORG, pid, "k5");
-    // Altera o rascunho (novo conteúdo) e tenta reusar a MESMA chave → CONFLICT.
-    await seedDraft(ORG, pid, "Material p5 B DIFERENTE");
+    // Altera o rascunho (novo conteúdo) e tenta reusar a MESMA chave → CONFLICT. R5: a alteração pós-emissão
+    // é edição humana governada — regenerar diretamente o documento oficial é recusado.
+    await expect(seedDraft(ORG, pid, "Material p5 B DIFERENTE"))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE:/) });
+    await alterDraftByHumanEdit(ORG, pid, "Material p5 B DIFERENTE");
     await expect(emit(ORG, pid, "k5")).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await countEmitido(ORG, pid)).toBe(1); // nenhuma emissão nova
   }, 60_000);
@@ -201,8 +222,11 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     const originalEmitido = await emitidoContent(ORG, pid);
     expect(originalEmitido).toContain("Conteudo ORIGINAL p78"); // conteúdo do ETP gerado (objeto)
 
-    // Altera o rascunho e emite de novo com NOVA chave.
-    await seedDraft(ORG, pid, "Conteudo ALTERADO p78 xyz");
+    // Altera o rascunho e emite de novo com NOVA chave. R5: regeneração direta do documento oficial é recusada
+    // (rascunho intacto); a nova versão oficial nasce da edição humana governada + nova emissão.
+    await expect(seedDraft(ORG, pid, "Conteudo ALTERADO p78 xyz"))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE:/) });
+    await alterDraftByHumanEdit(ORG, pid, "Conteudo ALTERADO p78 xyz");
     const res2 = await emit(ORG, pid, "k78-b");
     expect(res2.promoted).toBe(true);
     // Agora há DUAS versões emitidas; a primeira permanece imutável (conteúdo inalterado).
