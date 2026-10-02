@@ -5167,7 +5167,56 @@ export const procurementProcessesTable = mysqlTable("procurement_processes", {
   correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-});
+  /**
+   * Pilot Reset B2/B3 (0313) — identidade de GERAÇÃO desacoplada do número administrativo.
+   * `lineage_id` (opaco) agrupa as gerações do mesmo processo; NULL = processo de geração única ainda não
+   * materializado (todas as linhas anteriores à 0313). `lifecycle_state`: active | superseded | discarded | cancelled
+   * | archived. Só a geração `active` é resolvida pelos caminhos de trabalho (getProcess/listProcesses); as demais são
+   * históricas e imutáveis. As colunas GERADAS garantem no banco: uma única geração ativa por linhagem e um único
+   * processo ATIVO por número (comparação binária) no órgão.
+   */
+  lineageId:          varchar("lineage_id", { length: 24 }),
+  generationNo:       int("generation_no").notNull().default(1),
+  lifecycleState:     varchar("lifecycle_state", { length: 20 }).notNull().default("active"),
+  lifecycleRevision:  int("lifecycle_revision").notNull().default(0),
+  supersedesProcessId: varchar("supersedes_process_id", { length: 20 }),
+  activeLineageKey:   varchar("active_lineage_key", { length: 24 }).generatedAlwaysAs(sql`if((\`lifecycle_state\` = 'active'),\`lineage_id\`,NULL)`, { mode: "stored" }),
+  activeNumberKey:    varchar("active_number_key", { length: 64 }).generatedAlwaysAs(sql`if((\`lifecycle_state\` = 'active'),nullif(\`process_number\`,''),NULL)`, { mode: "stored" }),
+}, (table) => [
+  unique("uq_pp_active_lineage").on(table.organizationId, table.activeLineageKey),
+  unique("uq_pp_active_number").on(table.organizationId, table.activeNumberKey),
+  index("idx_pp_lineage").on(table.organizationId, table.lineageId),
+]);
+
+/**
+ * Pilot Reset B2/B3 (0313) — ledger APPEND-ONLY do lifecycle do Processo Licitatório (correção de número, descarte,
+ * reset por nova geração, cancelamento, arquivamento). Nunca UPDATE/DELETE pela aplicação.
+ */
+export const procurementProcessLifecycleEventsTable = mysqlTable("procurement_process_lifecycle_events", {
+  id:                varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  lineageId:         varchar("lineage_id", { length: 24 }).notNull(),
+  processId:         varchar("process_id", { length: 20 }).notNull(),
+  action:            varchar("action", { length: 32 }).notNull(),
+  eventType:         varchar("event_type", { length: 32 }).notNull(),
+  fromState:         varchar("from_state", { length: 20 }).notNull(),
+  toState:           varchar("to_state", { length: 20 }).notNull(),
+  beforeJson:        text("before_json"),
+  afterJson:         text("after_json"),
+  reason:            text("reason").notNull(),
+  actorUserId:       int("actor_user_id").notNull(),
+  eligibilityDigest: varchar("eligibility_digest", { length: 64 }).notNull(),
+  revisionBefore:    int("revision_before").notNull(),
+  revisionAfter:     int("revision_after").notNull(),
+  idempotencyKey:    varchar("idempotency_key", { length: 128 }).notNull(),
+  requestHash:       varchar("request_hash", { length: 64 }).notNull(),
+  resultJson:        text("result_json"),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_pple_org_idem_event").on(table.organizationId, table.idempotencyKey, table.eventType),
+  index("idx_pple_lineage").on(table.organizationId, table.lineageId),
+]);
 
 export const processStagesTable = mysqlTable("process_stages", {
   id:            varchar("id", { length: 20 }).notNull().primaryKey(),

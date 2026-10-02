@@ -141,8 +141,14 @@ export async function createProcessWithInitialEvent(
 export async function getProcess(id: string, orgId: number): Promise<ProcurementWorkspace | null> {
   const db = await getDb();
   if (!db) return null;
+  // Pilot Reset B2/B3 (0313): só a geração ATIVA é resolvida pelos caminhos de trabalho. Gerações superadas,
+  // descartadas, canceladas ou arquivadas são históricas e imutáveis — nenhuma mutação as alcança por aqui (o
+  // histórico é lido pelo router de lifecycle).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId))).limit(1);
+    .where(and(
+      eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId),
+      eq(procurementProcessesTable.lifecycleState, "active"),
+    )).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
   return {
@@ -160,7 +166,7 @@ export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ 
   // Ordenação determinística: updatedAt desc + id como desempate estável
   // (a Central depende de ordem previsível — Escopo 3 da PR B).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(eq(procurementProcessesTable.organizationId, orgId))
+    .where(and(eq(procurementProcessesTable.organizationId, orgId), eq(procurementProcessesTable.lifecycleState, "active")))
     .orderBy(desc(procurementProcessesTable.updatedAt), asc(procurementProcessesTable.id)).limit(limit);
   return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
@@ -169,7 +175,7 @@ export async function updateProcessStage(id: string, orgId: number, stage: strin
   const db = await getDb();
   if (!db) return false;
   await db.update(procurementProcessesTable).set({ currentStage: stage, status, updatedAt: toDb(updatedAt) })
-    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId)));
+    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId), eq(procurementProcessesTable.lifecycleState, "active")));
   return true;
 }
 
