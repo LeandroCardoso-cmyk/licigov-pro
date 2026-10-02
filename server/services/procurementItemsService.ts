@@ -54,14 +54,20 @@ function domainError(err: unknown): never {
 
 // ─── Governança ────────────────────────────────────────────────────────────────────────
 
-async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonicalContext | null): Promise<GovernanceState> {
+/**
+ * R9 / SEM-050 — a governança é FAIL-CLOSED nas escritas: erro ao ler emissões oficiais ou documentos aprovados
+ * propaga (a escrita é recusada), nunca vira "nada emitido/consumido" ⇒ "define". Só a LEITURA do workspace
+ * (`displayOnly`) degrada para exibir a tela.
+ */
+async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonicalContext | null, opts: { displayOnly?: boolean } = {}): Promise<GovernanceState> {
+  const soft = <T>(p: Promise<T>): Promise<T | null> => (opts.displayOnly ? p.catch(() => null) : p);
   const officialEmittedKinds: string[] = [];
   for (const k of ["etp", "tr", "edital"] as const) {
-    if (await getLatestOfficialPromotion(org, pid, k).catch(() => null)) officialEmittedKinds.push(k);
+    if (await soft(getLatestOfficialPromotion(org, pid, k))) officialEmittedKinds.push(k);
   }
   const consumed = new Set<string>();
   for (const k of ["dfd", "etp", "tr", "edital"] as const) {
-    const doc = await getGeneratedDocumentByKind(pid, org, k).catch(() => null);
+    const doc = await soft(getGeneratedDocumentByKind(pid, org, k));
     if (!doc || doc.status !== "aprovado") continue;
     for (const key of Object.keys(readMarkers(doc.sources ?? []).prefill)) if (key.startsWith("item:")) consumed.add(key.slice(5));
     // ETP/TR/Edital APROVADO gerado no modo canônico (`qtd:prevista`) consumiu a quantidade PREVISTA de todos
@@ -150,6 +156,11 @@ async function ctxOrNull(a: Actor, executor?: ProcurementExecutor): Promise<Proc
   return resolveProcurementContext({ organizationId: a.organizationId, processId: a.processId, correlationId: a.correlationId, executor }).catch(() => null);
 }
 
+/** R9 / SEM-050 — contexto para GOVERNAR uma escrita: falha de leitura recusa a escrita (fail-closed). */
+async function ctxForWrite(a: Actor, executor?: ProcurementExecutor): Promise<ProcurementCanonicalContext> {
+  return resolveProcurementContext({ organizationId: a.organizationId, processId: a.processId, correlationId: a.correlationId, executor });
+}
+
 // ─── Workspace (leitura) ─────────────────────────────────────────────────────────────────
 
 export interface ItemsWorkspaceItem {
@@ -200,7 +211,7 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     priceResearchEvidence(a.organizationId, a.processId).catch(() => null),
     getGeneratedDocumentByKind(a.processId, a.organizationId, "dfd").catch(() => null),
   ]);
-  const gov = await loadGovernance(a.organizationId, a.processId, ctx);
+  const gov = await loadGovernance(a.organizationId, a.processId, ctx, { displayOnly: true });
   const byCtx = new Map((ctx?.items ?? []).map((i) => [i.key, i]));
   const active = items.filter((i) => i.status === "active");
   const activeLots = lots.filter((l) => l.status === "active");
@@ -498,7 +509,7 @@ export async function setPlannedQuantities(a: Actor & { changes: QuantityChange[
   });
   return runItemsWrite({ ...a, op: "procurement.items.quantity", payload: { c: a.changes, r: a.reason ?? null } }, async (tx) => {
     const links = await listItemSourceLinks(a.organizationId, a.processId, tx);
-    const ctx = await ctxOrNull(a, tx);
+    const ctx = await ctxForWrite(a, tx);
     const gov = await loadGovernance(a.organizationId, a.processId, ctx);
     const events: ItemEvent[] = [];
     const updated: string[] = [];
@@ -547,7 +558,7 @@ export async function updateProcurementItem(a: Actor & {
     const unit = a.unit === undefined ? it.unit : normalizeText(a.unit);
     if (!description || !unit) throw new TRPCError({ code: "BAD_REQUEST", message: "INVALID_ITEM: descrição e unidade são obrigatórias." });
     if (description === it.description && unit === it.unit) return { itemId: it.id, revision: it.revision };
-    const gov = await loadGovernance(a.organizationId, a.processId, await ctxOrNull(a, tx));
+    const gov = await loadGovernance(a.organizationId, a.processId, await ctxForWrite(a, tx));
     if (description !== it.description) assertNotGoverned(gov, "description", it.id);
     if (unit !== it.unit) assertNotGoverned(gov, "unit", it.id);
     const now = new Date().toISOString();
@@ -572,7 +583,7 @@ export async function withdrawProcurementItem(a: Actor & { itemId: string; expec
   return runItemsWrite({ ...a, op: "procurement.items.withdraw", payload: { i: a.itemId, r: a.expectedRevision, why: a.reason } }, async (tx) => {
     const it = await requireItem(tx, a, a.itemId, a.expectedRevision);
     if (it.status === "withdrawn") return { itemId: it.id };
-    assertNotGoverned(await loadGovernance(a.organizationId, a.processId, await ctxOrNull(a, tx)), "withdraw", it.id);
+    assertNotGoverned(await loadGovernance(a.organizationId, a.processId, await ctxForWrite(a, tx)), "withdraw", it.id);
     if (!(await updateItemCAS(tx, a.organizationId, a.processId, it.id, it.revision, a.actorUserId, { status: "withdrawn", withdrawnReason: a.reason.trim() }))) staleRevision();
     await appendItemEvents(tx, a.organizationId, a.processId, [{ itemId: it.id, lotId: it.lotId, eventType: "procurement_item_withdrawn", actorUserId: a.actorUserId, beforeHash: stateHash("active"), afterHash: stateHash("withdrawn"), source: "user", reason: a.reason }], a.correlationId);
     return { itemId: it.id };

@@ -10160,8 +10160,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementItemsService.ts": {
-    "mtime": 1790881396.3288767,
-    "ast_hash": "0811f483515c6368b05be19a1d931e0c",
+    "mtime": 1790945608.7468088,
+    "ast_hash": "b55447e0958fbeaf6c3cb9869a3e05ed",
     "semantic_hash": ""
   },
   "server/services/procurementOntologyService.ts": {
@@ -13062,6 +13062,21 @@
   "docs/audits/LEGAL_REVIEW_DECISION_PACKET.md": {
     "mtime": 1790945427.9379416,
     "ast_hash": "80cba8afe212ee83b31438eef8d0f18b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem050-governance-fail-closed.test.ts": {
+    "mtime": 1790945631.294012,
+    "ast_hash": "a00a40b9eafa1b14e1854a2424de010a",
+    "semantic_hash": ""
+  },
+  "docs/audits/R10_P2_REMEDIATION_PLAN.md": {
+    "mtime": 1790945543.4832063,
+    "ast_hash": "365e96d468b6f8676882e3b6a946e9ff",
+    "semantic_hash": ""
+  },
+  "docs/audits/R9_P1_REMEDIATION_PLAN.md": {
+    "mtime": 1790945543.482979,
+    "ast_hash": "31661e157ac2311df6d4240ce0d52858",
     "semantic_hash": ""
   }
 }
