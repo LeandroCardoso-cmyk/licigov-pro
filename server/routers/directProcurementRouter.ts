@@ -45,11 +45,11 @@ import {
   insertDirectProcurementWorkspace, getDirectProcurementWorkspace, listDirectProcurementWorkspaces,
   updateDirectProcurementStage, insertDirectProcedure, getDirectProcedure,
   insertProposalCollection, listProposalCollections, insertProposalDocument,
-  getRatification, listRequiredDocuments, updateRequiredDocumentStatus, listGeneratedPublications,
+  getRatification, getContractJustification, getPriceJustification, listRequiredDocuments, updateRequiredDocumentStatus, listGeneratedPublications,
 } from "../db/directProcurement";
 import { recordProcessEvent, listProcessTimeline } from "../db/procurement";
 import {
-  importDirectPriceResearch, generateContractJustification, generatePriceJustification,
+  importDirectPriceResearch, generateContractJustification, generatePriceJustification, acceptContractJustification,
   seedRequiredDocuments, requestLegalOpinion, getLegalOpinionResult, generatePublications,
 } from "../services/directProcurementService";
 
@@ -272,15 +272,46 @@ export const directProcurementRouter = router({
     .input(z.object({
       workspaceId: z.string().min(1),
       source: z.enum(["pesquisa", "manual", "documento"]),
-      justification: z.string().optional(),
+      justification: z.string().max(20000).optional(),
       referenceValue: z.number().optional(),
       researchId: z.string().optional(),
       documentReferences: z.array(z.string()).optional(),
+      /** R5 / PR-11 (SEM-022) — aceite humano explícito do registro oficial. */
+      confirmOfficial: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      return generatePriceJustification({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, justification: input.justification, referenceValue: input.referenceValue, researchId: input.researchId, documentReferences: input.documentReferences, correlationId: ctx.correlationId });
+      return generatePriceJustification({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, justification: input.justification, referenceValue: input.referenceValue, researchId: input.researchId, documentReferences: input.documentReferences, correlationId: ctx.correlationId, confirmOfficial: input.confirmOfficial, actorUserId: ctx.user.id });
+    }),
+
+  /**
+   * R5 / PR-11 (SEM-021) — ACEITE HUMANO da justificativa da contratação (a partir da sugestão revisada ou de texto
+   * próprio). Só aqui a justificativa é persistida e o documento oficial é gerado, com autor humano.
+   */
+  acceptJustification: orgRoleProcedure("operator")
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      need: z.string().max(20000), publicInterest: z.string().max(20000), motivation: z.string().max(20000),
+      legalFoundation: z.string().max(20000), benefits: z.string().max(20000), alternatives: z.string().max(20000),
+      basedOnSuggestion: z.boolean(),
+      confirmAccept: z.literal(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireWs(input.workspaceId, orgId);
+      const { workspaceId, basedOnSuggestion, confirmAccept: _confirm, ...fields } = input;
+      return acceptContractJustification({ workspaceId, organizationId: orgId, actorUserId: ctx.user.id, fields, basedOnSuggestion, correlationId: ctx.correlationId });
+    }),
+
+  /** R5 / PR-11 — justificativas PERSISTIDAS (fonte da hidratação dos formulários; leitura tenant). */
+  getJustifications: tenantProcedure
+    .input(z.object({ workspaceId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireWs(input.workspaceId, orgId);
+      const [contract, price] = await Promise.all([getContractJustification(input.workspaceId, orgId), getPriceJustification(input.workspaceId, orgId)]);
+      return { contract, price };
     }),
 
   validateDocuments: orgRoleProcedure("operator")

@@ -98,7 +98,12 @@ const CALLS: Record<DirectProcurementProcedureName, (c: Caller) => Promise<unkno
   configureProcedure: (c) => c.configureProcedure({ workspaceId: WS, procedureType: "eletronico", platform: "compras_gov" }),
   registerProposal: (c) => c.registerProposal({ workspaceId: WS, supplierName: "Fornecedor" }),
   generateJustification: (c) => c.generateJustification({ workspaceId: WS }),
-  generatePriceJustification: (c) => c.generatePriceJustification({ workspaceId: WS, source: "manual", justification: "x", referenceValue: 10 }),
+  generatePriceJustification: (c) => c.generatePriceJustification({ workspaceId: WS, source: "manual", justification: "Justificativa de preço RBAC.", referenceValue: 10, confirmOfficial: true }),
+  acceptJustification: (c) => c.acceptJustification({
+    workspaceId: WS, need: "Necessidade RBAC teste", publicInterest: "", motivation: "Motivação RBAC teste", legalFoundation: "Art. 75, II (teste)",
+    benefits: "", alternatives: "", basedOnSuggestion: false, confirmAccept: true,
+  }),
+  getJustifications: (c) => c.getJustifications({ workspaceId: WS }),
   validateDocuments: (c) => c.validateDocuments({ workspaceId: WS }),
   requestLegalOpinion: (c) => c.requestLegalOpinion({ workspaceId: WS }),
   getLegalOpinion: (c) => c.getLegalOpinion({ requestId: "req-1" }),

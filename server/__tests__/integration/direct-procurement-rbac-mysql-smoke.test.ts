@@ -154,7 +154,8 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     { name: "configureProcedure", call: (c) => c.directProcurement.configureProcedure({ workspaceId: wsId, procedureType: "eletronico", platform: "compras_gov" }) },
     { name: "registerProposal", call: (c) => c.directProcurement.registerProposal({ workspaceId: wsId, supplierName: "Fornecedor V" }) },
     { name: "generateJustification", call: (c) => c.directProcurement.generateJustification({ workspaceId: wsId }) },
-    { name: "generatePriceJustification", call: (c) => c.directProcurement.generatePriceJustification({ workspaceId: wsId, source: "manual", justification: "x", referenceValue: 10 }) },
+    { name: "generatePriceJustification", call: (c) => c.directProcurement.generatePriceJustification({ workspaceId: wsId, source: "manual", justification: "Justificativa de preço viewer.", referenceValue: 10, confirmOfficial: true }) },
+    { name: "acceptJustification", call: (c) => c.directProcurement.acceptJustification({ workspaceId: wsId, need: "Necessidade viewer teste", publicInterest: "", motivation: "Motivação viewer teste", legalFoundation: "Art. 75, II (teste)", benefits: "", alternatives: "", basedOnSuggestion: false, confirmAccept: true }) },
     { name: "validateDocuments", call: (c) => c.directProcurement.validateDocuments({ workspaceId: wsId }) },
     { name: "requestLegalOpinion", call: (c) => c.directProcurement.requestLegalOpinion({ workspaceId: wsId }) },
   ];
