@@ -17,7 +17,9 @@
  */
 
 import { createHash } from "crypto";
-import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
+import { getProcess, listIntelligentItems } from "../../db/procurement";
+import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
+import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import { formatBRL, reaisToCents } from "../../domain/money";
@@ -50,6 +52,9 @@ export interface EditalUpstreamDoc {
   readonly status: string | null;
   readonly contentHash: string | null;
   readonly content: string;
+  /** R9 / SEM-039 — autoridade da fonte consumida (emitido > aprovado > rascunho); ausente em chamadores legados. */
+  readonly authority?: UpstreamAuthority;
+  readonly version?: number | null;
 }
 
 export interface EditalApprovedItem {
@@ -124,6 +129,8 @@ export interface EditalSourceContext {
   readonly legacyQuotedItemCount: number;
   /** R9 / SEM-029 — objeto digitado que DIVERGE de `process.object` (ignorado; mudar o objeto é ação explícita no processo). */
   readonly objectProposal: { current: string; proposed: string; source: "client_input" } | null;
+  /** R9 / SEM-047 — hash POR FONTE (conteúdo integral da fonte autoritativa); gravado como `srcd:` na geração. */
+  readonly sourceDigests: Partial<Record<SourceKey, string>>;
 }
 
 function short(hash: string | null): string {
@@ -184,7 +191,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const ex = selectDocumentExcerpt(doc.content, MAX_DOC_CHARS);
       excerpts[key] = { h: sha256Hex(ex.text), cov: ex.coverage, used: ex.usedChars, total: ex.totalChars };
       const cov = ex.coverage === "full" ? "cobertura: integral" : `cobertura: PARCIAL — ${ex.usedChars} de ${ex.totalChars} caracteres; todas as ${ex.sections.length} seção(ões) representadas`;
-      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}; ${cov})`);
+      lines.push(`## Base — ${label} (estado: ${doc.authority ? authorityLabel(doc) : (doc.status ?? "?")}; ${cov})`);
       lines.push(ex.text);
       lines.push("");
     } else {
@@ -267,8 +274,20 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     tr: { present: !!input.tr?.present, status: input.tr?.status ?? null, contentHash: input.tr?.contentHash ?? null },
   };
 
+  // R9 / SEM-047 — hash POR FONTE: conteúdo INTEGRAL da fonte autoritativa (não o recorte de 6000/4000 chars).
+  const docHash = (d: EditalUpstreamDoc | null) => (d?.present && d.contentHash ? d.contentHash.slice(0, 12) : "ausente");
+  const sourceDigests: Partial<Record<SourceKey, string>> = {
+    processo: sourceHash({ obj: objeto, pn: input.processNumber ?? null }),
+    parametros: sourceHash({ m: input.modality, f: input.form, pl: input.platform ?? null, cj: input.criterioJulgamento ?? null, rc: input.regimeContratacao ?? null }),
+    dfd: docHash(input.dfd), etp: docHash(input.etp), tr: docHash(input.tr),
+    itens: sourceHash(canonical
+      ? { items: canonicalItemsSignature(canonical.items), mp: canonical.state.missingPlannedQuantity.map((m) => m.id).sort(), un: canonical.state.unlinkedApprovedItemCount }
+      : { items: itemsSignature(input.approvedItems) }),
+  };
   const lineageMarkers = [
     `srcdigest:${sourcesDigest.slice(0, 16)}`,
+    ...sourceDigestMarkers(sourceDigests),
+    authorityMarker("tr", input.tr), authorityMarker("etp", input.etp), authorityMarker("dfd", input.dfd),
     `base:tr@${short(sourceVersions.tr.contentHash)}`,
     `base:etp@${short(sourceVersions.etp.contentHash)}`,
     `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
@@ -291,6 +310,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     canonical: canonical?.state ?? null,
     legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
     objectProposal,
+    sourceDigests,
   };
 }
 
@@ -302,13 +322,14 @@ function canonicalItemsSignature(items: readonly ContextItem[]): Array<Record<st
   }));
 }
 
-function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>): EditalUpstreamDoc | null {
+function toUpstream(doc: AuthoritativeUpstream | null): EditalUpstreamDoc | null {
   if (!doc) return null;
   return {
     present: !!doc.content && doc.content.trim().length > 0,
     status: doc.status ?? null,
     contentHash: doc.content ? draftContentHash(doc.content) : null,
     content: doc.content ?? "",
+    authority: doc.authority, version: doc.version,
   };
 }
 
@@ -331,9 +352,10 @@ export async function resolveEditalSources(params: {
 }): Promise<EditalSourceContext> {
   const [process, dfd, etp, tr, items] = await Promise.all([
     getProcess(params.processId, params.organizationId),
-    getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd"),
-    getGeneratedDocumentByKind(params.processId, params.organizationId, "etp"),
-    getGeneratedDocumentByKind(params.processId, params.organizationId, "tr"),
+    // R9 / SEM-039 — fontes AUTORITATIVAS a montante (versão emitida quando existir; senão o rascunho, rotulado).
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "dfd"),
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "etp"),
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "tr"),
     listIntelligentItems(params.processId, params.organizationId),
   ]);
   const approved = items.filter((i) => i.status === "aprovado");

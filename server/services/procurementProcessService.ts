@@ -14,6 +14,7 @@ import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
 import { resolveEditalSources } from "./authoring/editalContext";
 import { resolveDocumentAuthoringContext, storedSourcesDigest, type CanonicalItemsState } from "./authoring/authoringContext";
+import { compareSources, SOURCE_LABELS, type SourceKey } from "../domain/sourceDigests";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -1158,8 +1159,9 @@ export async function generateNotice(params: {
         organizationId: params.organizationId, processId: params.processId, kind: "edital",
         title: `Edital — ${params.object}`, content: authoring.content,
         // Lineage/explicabilidade nas `sources` (consumidas por reviewableDraft: grounding:… / evidencias:…).
+        // R9 / SEM-039 — sem o antigo marcador fixo "tr_aprovado": a autoridade REAL do TR consumido (emitido vN /
+        // aprovado / rascunho) vem em `autoridade:tr=…` dentro de `sourceContext.lineageMarkers`.
         sources: [
-          "tr_aprovado",
           `grounding:${authoring.groundingState}`,
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
@@ -1253,6 +1255,8 @@ export async function getEditalSourceState(params: {
   usedSources: string[]; missing: string[];
   /** PR-09 (SEM-009) — parâmetros persistidos × proposta (a proposta NÃO altera o estado de staleness). */
   parameters: { persisted: EditalParameters | null; proposedDiffers: boolean };
+  /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
+  changedSources: Array<{ key: SourceKey; label: string }>;
 }> {
   const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
   const persisted = persistedEditalParameters(existing);
@@ -1277,13 +1281,13 @@ export async function getEditalSourceState(params: {
     criterioJulgamento: effective?.judgmentCriterion ?? null, regimeContratacao: effective?.executionRegime ?? null,
   });
   if (!existing || !existing.content.trim()) {
-    return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters };
+    return { state: "never_generated", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters, changedSources: [] };
   }
   const stored = (existing.sources ?? []).find((s) => s.startsWith("srcdigest:"))?.slice("srcdigest:".length) ?? null;
-  // O marcador guarda o prefixo (16 chars) do digest — compara com o mesmo prefixo do digest atual.
-  const currentShort = current.sourcesDigest.slice(0, 16);
-  const state = stored === null ? "source_changed" : stored === currentShort ? "current" : "source_changed";
-  return { state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters };
+  // R9 / SEM-047 — por FONTE quando o documento tem `srcd:` (diz o QUE mudou); senão o digest global legado
+  // (prefixo de 16 chars) — documentos antigos não mudam de estado por causa desta versão.
+  const cmp = compareSources(existing.sources, { perSource: current.sourceDigests, globalDigest: current.sourcesDigest });
+  return { state: cmp.state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters, changedSources: describeChangedSources(cmp.changed) };
 }
 
 /**
@@ -1304,6 +1308,8 @@ export async function getAuthoringSourceState(params: {
     pricedItems: number; unpricedItems: number; confirmedClassifications: number; pendingClassifications: number;
     estimatedGlobalTotalCents: number;
   };
+  /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
+  changedSources: Array<{ key: SourceKey; label: string }>;
 }> {
   const ctx = await resolveDocumentAuthoringContext(params);
   const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
@@ -1317,10 +1323,17 @@ export async function getAuthoringSourceState(params: {
     estimatedGlobalTotalCents: ctx.estimate.globalTotalCents,
   };
   const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
-  if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base };
+  if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };
   const stored = storedSourcesDigest(existing.sources);
   if (stored === null) {
-    return { state: existing.sources.includes("origem:import") ? "imported" : "source_changed", storedDigest: null, ...base };
+    return { state: existing.sources.includes("origem:import") ? "imported" : "source_changed", storedDigest: null, ...base, changedSources: [] };
   }
-  return { state: stored === ctx.sourcesDigest.slice(0, 16) ? "current" : "source_changed", storedDigest: stored, ...base };
+  // R9 / SEM-047 — por FONTE quando há `srcd:`; senão o digest global legado.
+  const cmp = compareSources(existing.sources, { perSource: ctx.sourceDigests, globalDigest: ctx.sourcesDigest });
+  return { state: cmp.state, storedDigest: stored, ...base, changedSources: describeChangedSources(cmp.changed) };
+}
+
+/** R9 / SEM-047 — fontes alteradas com rótulo para a UI (lista o QUE mudou, não só "fontes mudaram"). */
+function describeChangedSources(keys: readonly SourceKey[]): Array<{ key: SourceKey; label: string }> {
+  return keys.map((key) => ({ key, label: SOURCE_LABELS[key] }));
 }

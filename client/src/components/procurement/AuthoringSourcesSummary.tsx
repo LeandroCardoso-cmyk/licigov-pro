@@ -70,7 +70,13 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
       {state === "source_changed" && (
         <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
+          <span>
+            As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
+            {/* R9 / SEM-047 — lista O QUE mudou (documentos antigos, sem marcador por fonte, mostram só o aviso). */}
+            {(q.data.changedSources ?? []).length > 0 && (
+              <span className="mt-1 block">Mudou: {q.data.changedSources.map((c) => c.label).join(", ")}.</span>
+            )}
+          </span>
         </p>
       )}
       {state === "imported" && (
