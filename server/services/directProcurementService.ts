@@ -40,7 +40,7 @@ import {
   getRequiredDocument, updateRequiredDocumentStatus, recordRequiredDocumentAttachment, type RequiredDocumentRow,
 } from "../db/directProcurement";
 import { createHash } from "crypto";
-import { assertStorageUsable, storageDelete, storagePut } from "../storage";
+import { discardEvidenceFile, storeEvidenceFile } from "./evidenceStorageService";
 import { isAllowedTaskAttachmentMime, sanitizeAttachmentFileName, validateTaskAttachment } from "../domain/taskAttachmentPolicy";
 import {
   REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey,
@@ -417,17 +417,16 @@ export async function attachRequiredDocument(params: {
   const validation = validateTaskAttachment(params.content, params.mimeType);
   if (!validation.valid) throw new TRPCError({ code: "BAD_REQUEST", message: validation.reason ?? "Arquivo inválido." });
 
-  assertStorageUsable();
   const contentHash = createHash("sha256").update(params.content).digest("hex");
   const key = requiredDocumentStorageKey(ws.id, sanitizeAttachmentFileName(params.fileName), Date.now());
-  const stored = await storagePut(key, params.content, params.mimeType);
+  const stored = await storeEvidenceFile({ key, content: params.content, mimeType: params.mimeType });
   try {
     await recordRequiredDocumentAttachment({
       id: doc.id, workspaceId: ws.id, organizationId: params.organizationId, storageKey: stored.key, contentHash,
       sizeBytes: params.content.length, mimeType: params.mimeType, actorUserId: params.actorUserId,
     });
   } catch (e) {
-    await storageDelete(stored.key).catch(() => undefined);
+    await discardEvidenceFile(stored.key);
     throw e;
   }
   await recordProcessEvent({

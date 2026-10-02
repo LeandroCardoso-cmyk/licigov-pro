@@ -1025,8 +1025,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx": {
-    "mtime": 1790944812.181324,
-    "ast_hash": "70a715766062556f62490b6c889e5ac9",
+    "mtime": 1790946112.6515465,
+    "ast_hash": "15326417389861076d00c914a1c31c56",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/TimelinePanel.tsx": {
@@ -5910,8 +5910,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-context.test.ts": {
-    "mtime": 1790881396.2848766,
-    "ast_hash": "ee99b194dfd9ae8ea8492c138aeb9c96",
+    "mtime": 1790946129.6294281,
+    "ast_hash": "65af9f2bd2eb9cf94fd258ceecb8e015",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation-mysql-smoke.test.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1790944721.5805974,
-    "ast_hash": "40432ac9ef461b3ec0dbe24eeda783dc",
+    "mtime": 1790946112.6508887,
+    "ast_hash": "303804f6b26762f8e1f5623229834d0c",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -13070,18 +13070,38 @@
     "semantic_hash": ""
   },
   "docs/audits/R10_P2_REMEDIATION_PLAN.md": {
-    "mtime": 1790945543.4832063,
+    "mtime": 1790946019.6379852,
     "ast_hash": "365e96d468b6f8676882e3b6a946e9ff",
     "semantic_hash": ""
   },
   "docs/audits/R9_P1_REMEDIATION_PLAN.md": {
-    "mtime": 1790945543.482979,
-    "ast_hash": "31661e157ac2311df6d4240ce0d52858",
+    "mtime": 1790946019.6372886,
+    "ast_hash": "9976e821877570a676f3bc1e26bae210",
     "semantic_hash": ""
   },
   "server/__tests__/unit/r11-semantic-authority-guards.test.ts": {
     "mtime": 1790945719.865959,
     "ast_hash": "791807c4a689dac7c734395716adee5f",
+    "semantic_hash": ""
+  },
+  "server/services/evidenceStorageService.ts": {
+    "mtime": 1790946112.6344328,
+    "ast_hash": "ed2ef2eaa6383e982b273f59e567af59",
+    "semantic_hash": ""
+  },
+  "docs/audits/AUTONOMOUS_REMEDIATION_BLOCKERS.md": {
+    "mtime": 1790945926.2139711,
+    "ast_hash": "f9782745cefba4d2cc2afb3c49510d2a",
+    "semantic_hash": ""
+  },
+  "docs/audits/AUTONOMOUS_REMEDIATION_COMMIT_MAP.md": {
+    "mtime": 1790945956.681973,
+    "ast_hash": "b7671c48c72b71fb92e026874baa7884",
+    "semantic_hash": ""
+  },
+  "docs/audits/HUMAN_DECISION_PACKET.md": {
+    "mtime": 1790945912.8259704,
+    "ast_hash": "cb39733c8177c785e74c76e0c06271fd",
     "semantic_hash": ""
   }
 }

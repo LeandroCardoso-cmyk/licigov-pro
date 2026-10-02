@@ -66,8 +66,8 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
                 <div className="flex gap-1">
                   <input type="file" className="hidden" ref={(el) => { fileRefs.current[d.id] = el; }}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(d.id, f); e.target.value = ""; }} />
-                  <button type="button" disabled={attach.isPending} onClick={() => fileRefs.current[d.id]?.click()} className="rounded bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-200 disabled:opacity-50">{hasEvidence(d) ? "Substituir arquivo" : "Anexar arquivo"}</button>
-                  <button type="button" disabled={!hasEvidence(d) || mutate.isPending} title={hasEvidence(d) ? undefined : "Anexe o arquivo antes de validar"} onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 dark:bg-green-900 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:text-green-200 hover:bg-green-200 disabled:opacity-50">Validar</button>
+                  <button type="button" disabled={attach.isPending} onClick={() => fileRefs.current[d.id]?.click()} className="rounded bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-200 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">{hasEvidence(d) ? "Substituir arquivo" : "Anexar arquivo"}</button>
+                  <button type="button" disabled={!hasEvidence(d) || mutate.isPending} title={hasEvidence(d) ? undefined : "Anexe o arquivo antes de validar"} onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 dark:bg-green-900 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:text-green-200 hover:bg-green-200 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">Validar</button>
                   <button type="button" onClick={() => setStatus(d.id, "pendente")} className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted">Pendenciar</button>
                 </div>
               </div>
