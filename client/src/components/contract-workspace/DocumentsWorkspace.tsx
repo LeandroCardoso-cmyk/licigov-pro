@@ -21,7 +21,9 @@ export interface DocumentsWorkspaceProps {
   documents?: Array<{ id: string; kind: string; title: string; createdAt: string; metadata?: MinutaMetadataView | null }>;
 }
 
-const KINDS: Array<"contrato" | "aditivo" | "apostilamento" | "rescisao" | "anexo"> = ["contrato", "aditivo", "apostilamento", "rescisao"];
+// R7 / PR-17 (SEM-024): termo aditivo e apostilamento NÃO são gerados "em branco" aqui — nascem do instrumento
+// registrado (Aditivos/Apostilamentos), com justificativa, valor, prazo, gestor e fiscal do próprio registro.
+const KINDS: Array<"contrato" | "rescisao"> = ["contrato", "rescisao"];
 
 export default function DocumentsWorkspace({ contractId, documents = [] }: DocumentsWorkspaceProps) {
   const utils = trpc.useUtils();
@@ -43,6 +45,7 @@ export default function DocumentsWorkspace({ contractId, documents = [] }: Docum
         ))}
       </div>
 
+      <p className="text-[11px] text-muted-foreground">Termos de aditivo e de apostilamento são gerados a partir do instrumento registrado (seções Aditivos e Apostilamentos).</p>
       {generate.isError && <p className="text-xs text-red-600 dark:text-red-400">{generate.error.message}</p>}
       {(rec || generate.isPending) && <CopilotPanel recommendation={rec} busy={generate.isPending} />}
 
