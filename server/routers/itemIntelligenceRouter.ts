@@ -2,12 +2,15 @@
  * Sprint 5.1 — Item Intelligence Router (operational).
  *
  * Painel do Item Inteligente e decisões de CATMAT/recomendações. O servidor SEMPRE
- * decide (aceitar/rejeitar/pesquisar/manual). tenantProcedure, multi-tenant.
+ * decide (aceitar/rejeitar/pesquisar/manual). Multi-tenant: leituras em tenantProcedure;
+ * mutações que decidem sobre o item exigem papel mínimo `operator` (SEM-026 — paridade RBAC
+ * com a aprovação canônica `procurementProcess.approveItem`).
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
-import { getItemPanel, catmatCandidates, applyGovernedItemTransition } from "../services/itemIntelligenceService";
+import { getItemPanel, catmatCandidates } from "../services/itemIntelligenceService";
 import { rankCATMAT, manualMatch } from "../domain/catmatMatching";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
 import { decideCatmat, type AvailableSuggestion } from "../services/catmatGovernanceService";
@@ -128,17 +131,19 @@ export const itemIntelligenceRouter = router({
       return { recommendation: rec };
     }),
 
+  /**
+   * SEM-026 — rota DUPLICADA retirada (desligamento governado). Era `tenantProcedure` (viewer aprovava item e
+   * tornava a média o preço de referência canônico) e não tem caller de UI: a aprovação canônica é
+   * `procurementProcess.approveItem` (`orgRoleProcedure("operator")`, mesma transição CAS). A procedure segue
+   * registrada com o MESMO input; toda chamada é recusada antes de qualquer leitura/escrita/evento.
+   */
   approveItem: tenantProcedure
     .input(z.object({ itemId: z.string().min(1) }))
-    .mutation(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      // Transição atômica (compare-and-set) — segura sob concorrência: exatamente uma
-      // requisição aplica e registra um evento; duplo clique converge sem novo efeito.
-      return applyGovernedItemTransition({
-        itemId: input.itemId, orgId, target: "aprovado", approvedBy: ctx.user!.id,
-        actorUserId: ctx.user!.id, correlationId: ctx.correlationId, eventType: "approval",
-        summary: (d) => `Item aprovado (painel): ${d}.`,
-      });
+    .mutation(async ({ ctx }): Promise<{ success: true; itemId: string; status: "aprovado" }> => {
+      throwLegacyEndpointDisabled(
+        "itemIntelligence.approveItem", "SEM-026", ctx,
+        "a aprovação canônica do item (procurementProcess.approveItem, papel mínimo operator)",
+      );
     }),
 
   // ─── PR C.2 — CATMAT/CATSER operacional supervisionado ─────────────────────
@@ -148,8 +153,10 @@ export const itemIntelligenceRouter = router({
   /**
    * Decisão supervisionada única: confirmar | rejeitar | substituir |
    * sem_correspondencia_segura. Requer `idempotencyKey` explícito (Block A).
+   * SEM-026 — papel mínimo `operator` (paridade com `procurementProcess.approveItem` e com
+   * `acceptCATMAT`/`rejectCATMAT`/`manualCATMAT`): viewer é recusado antes de qualquer leitura/escrita.
    */
-  decidirCATMAT: tenantProcedure
+  decidirCATMAT: orgRoleProcedure("operator")
     .input(z.object({
       itemId: z.string().min(1),
       decision: z.enum(CATMAT_GOVERNANCE_DECISIONS as unknown as [string, ...string[]]),

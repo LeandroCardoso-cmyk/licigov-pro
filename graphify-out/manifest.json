@@ -685,13 +685,13 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/AddendumWorkspace.tsx": {
-    "mtime": 1790643728.9212408,
-    "ast_hash": "2d6bad3e33d2adb0b836280f22fcf881",
+    "mtime": 1790905078.2040913,
+    "ast_hash": "48e8c36db6ea144e7fd9a85ab57c3c62",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ApostilleWorkspace.tsx": {
-    "mtime": 1790643728.9214704,
-    "ast_hash": "a3e09315b3bca60ec832adf050f3ea37",
+    "mtime": 1790905013.9040875,
+    "ast_hash": "2cb5f7033411b97b545da019467cd7f2",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractEditor.tsx": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790892281.326592,
-    "ast_hash": "76f664d31d397a6f5b5c903a4a04d5a7",
+    "mtime": 1790905078.2453983,
+    "ast_hash": "5c56fcf43736fad513d9ce7ebf06d210",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6555,8 +6555,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "a47f5ecd74abc853530fde5c451b7865",
+    "mtime": 1790905078.2040913,
+    "ast_hash": "214f88b42c560740135607b63b560de2",
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1790891538.3733706,
-    "ast_hash": "5ee3b7989080af7598491816af904c22",
+    "mtime": 1790905078.2040913,
+    "ast_hash": "2be706854fde02cbf84d2fffb15af2e4",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -7335,8 +7335,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1790643729.3378096,
-    "ast_hash": "14186701318590cdda4a9835d8a556ff",
+    "mtime": 1790905078.2040913,
+    "ast_hash": "0f461e84c34e5c472d66f41bfc229f68",
     "semantic_hash": ""
   },
   "server/domain/copilotCapability.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1790891497.3867948,
-    "ast_hash": "7a8613e5da793f8e0fd7ba80e876ecb6",
+    "mtime": 1790905013.9040875,
+    "ast_hash": "5546efaed74a140c7de50e612e592a20",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -8845,8 +8845,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1790881396.3168766,
-    "ast_hash": "5c4bba47264290acacdba38282743ca9",
+    "mtime": 1790905013.9040875,
+    "ast_hash": "b02aae30d0fa041bc5d84ae02193674d",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1790891538.3777397,
-    "ast_hash": "cac13719c7a580161dcd3be9fa622265",
+    "mtime": 1790905078.2040913,
+    "ast_hash": "c39b7ced1b9c86f5b4cda16de8b6a017",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -12777,6 +12777,21 @@
   "docs/architecture/CREATE_REPLAY_CONTRACT.md": {
     "mtime": 1790892431.4633515,
     "ast_hash": "2ef5ae7fc84c94b89e93dcca3d6ef205",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr08-rbac-state-machine-mysql-smoke.test.ts": {
+    "mtime": 1790905078.2040913,
+    "ast_hash": "f7b3d1058e15f0ce253dd1f026af1ea0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr08-rbac-state-machine.test.ts": {
+    "mtime": 1790905078.2040913,
+    "ast_hash": "aaffd02141c9a7226f4aa4cd78ab84d6",
+    "semantic_hash": ""
+  },
+  "docs/design/CONTRACT_ACTIVATION_TRANSITION.md": {
+    "mtime": 1790905078.2040913,
+    "ast_hash": "da9b8dc47fd7a772618a661050794552",
     "semantic_hash": ""
   }
 }
