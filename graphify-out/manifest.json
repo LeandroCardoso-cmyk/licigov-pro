@@ -2950,8 +2950,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/money.ts": {
-    "mtime": 1790943964.948631,
-    "ast_hash": "39cb301034cdac4e6774ea5aa7282290",
+    "mtime": 1790965279.8644612,
+    "ast_hash": "205739fd7ee045fbb0218c14dd8012ad",
     "semantic_hash": ""
   },
   "client/src/lib/publicRoutes.test.ts": {
@@ -3085,8 +3085,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/DirectContractDetails.tsx": {
-    "mtime": 1790881396.1608768,
-    "ast_hash": "94c39a39af2d0996f5072dcbb7f3fe47",
+    "mtime": 1790965282.8682215,
+    "ast_hash": "73e12917625bf7208b06b3a2dfae7ac2",
     "semantic_hash": ""
   },
   "client/src/pages/DirectContracts.tsx": {
@@ -3160,8 +3160,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/NewContract.tsx": {
-    "mtime": 1790643728.9392886,
-    "ast_hash": "d7d52ccb9f28af748bc0c2e35ce11b52",
+    "mtime": 1790965371.4493244,
+    "ast_hash": "e42c5776f32421ec14edf3664022f4b5",
     "semantic_hash": ""
   },
   "client/src/pages/NewDirectContract.tsx": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessDetails.tsx": {
-    "mtime": 1790643728.9392886,
-    "ast_hash": "45e8ac8060d379e08cad91c0ba62b894",
+    "mtime": 1790965371.4501233,
+    "ast_hash": "16fb99886b0effe2dec3edfd65f04663",
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
@@ -9385,8 +9385,8 @@
     "semantic_hash": ""
   },
   "server/services/contractDocuments.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "74fe634f0bceb83fae7c2b1ec2f8d31a",
+    "mtime": 1790965261.0684643,
+    "ast_hash": "4db76f680a4eeaa6f49c874bced8378d",
     "semantic_hash": ""
   },
   "server/services/contractNotifications.ts": {
@@ -13137,6 +13137,11 @@
   "server/__tests__/integration/r9-sem035-catmat-governed-mysql-smoke.test.ts": {
     "mtime": 1790964980.5244434,
     "ast_hash": "abd34e0198f5cc1ad051caf59abf8257",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/new036-legacy-contract-money.test.ts": {
+    "mtime": 1790965296.4764621,
+    "ast_hash": "f93a2e099c7627ce1fe8a823fc705230",
     "semantic_hash": ""
   }
 }
