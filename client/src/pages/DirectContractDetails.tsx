@@ -11,6 +11,7 @@ import { DirectContractHeader } from "@/components/direct-contract-details/Direc
 import { OverviewTab } from "@/components/direct-contract-details/OverviewTab";
 import { DocumentsTab } from "@/components/direct-contract-details/DocumentsTab";
 import { QuotationsTab } from "@/components/direct-contract-details/QuotationsTab";
+import { centsToLegacyReaisInput } from "@/lib/money";
 
 export default function DirectContractDetails() {
   const params = useParams();
@@ -52,7 +53,8 @@ export default function DirectContractDetails() {
       object: contract.object,
       contractedName: contract.supplierName || "",
       contractedCnpj: contract.supplierCNPJ || "",
-      value: (contract.value / 100).toString(),
+      // NEW-036: centavos → reais no formato que o NewContract interpreta ("1500,50"; o ponto seria descartado).
+      value: centsToLegacyReaisInput(contract.value),
     });
     setLocation(`/contratos/novo?${qs.toString()}`);
   };
