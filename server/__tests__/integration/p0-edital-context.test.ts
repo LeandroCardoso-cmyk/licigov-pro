@@ -101,7 +101,10 @@ describe("P0 — buildEditalSourceContext (reuso estruturado)", () => {
     expect(ctx.promptContext).toContain("R$ 25,50");
     expect(ctx.promptContext).not.toContain("R$ 0,26");
     expect(ctx.authoritativeBlock).toContain("| 1 | Papel A4 | 100 | resma | 25,50 | 2.550,00 |");
-    expect(ctx.authoritativeBlock).toContain("**Valor estimado global:** R$ 2.550,00");
+    // R6 / PR-13 (SEM-008): contexto LEGADO (sem Itens da contratação) — o total é INDICATIVO (quantidade cotada);
+    // o serviço bloqueia o Edital nesse modo (CANONICAL_ITEMS_REQUIRED). O valor em reais continua correto.
+    expect(ctx.authoritativeBlock).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 2.550,00");
+    expect(ctx.legacyQuotedItemCount).toBe(1);
   });
 
   it("P0 piloto — sugestão de CATMAT NÃO aparece como código oficial; confirmação humana sim", () => {
