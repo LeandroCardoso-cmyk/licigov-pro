@@ -128,6 +128,30 @@ export function updateLegalOpinionDraft(
   };
 }
 
+/** R5 / PR-10 — a versão vista pelo editor não é mais a atual. */
+export const LEGAL_OPINION_STALE_VERSION = "LEGAL_OPINION_STALE_VERSION";
+
+type OpinionPatch = Partial<Pick<LegalOpinionDraft,
+  "report" | "foundation" | "conclusion" | "conclusionType" | "recommendations" | "reservations" | "attachments">>;
+
+/**
+ * R5 / PR-10 (SEM-019) — patch EFETIVO: descarta texto em branco (salvar vazio nunca apaga o que existe), descarta
+ * campos iguais ao persistido e nunca transforma conclusão em null por omissão. Pura.
+ */
+export function effectiveOpinionPatch(current: LegalOpinionDraft, patch: OpinionPatch): OpinionPatch {
+  const out: { -readonly [K in keyof OpinionPatch]: OpinionPatch[K] } = {};
+  for (const k of ["report", "foundation", "conclusion"] as const) {
+    const v = patch[k];
+    if (typeof v === "string" && v.trim() !== "" && v !== current[k]) out[k] = v;
+  }
+  if (patch.conclusionType && patch.conclusionType !== current.conclusionType) out.conclusionType = patch.conclusionType;
+  for (const k of ["recommendations", "reservations", "attachments"] as const) {
+    const v = patch[k];
+    if (Array.isArray(v) && JSON.stringify(v) !== JSON.stringify(current[k])) out[k] = v;
+  }
+  return out;
+}
+
 /**
  * Assina o parecer. Apenas o método MANUAL é implementado nesta fase; os demais
  * lançam erro explícito (arquitetura preparada, comportamento não implementado).

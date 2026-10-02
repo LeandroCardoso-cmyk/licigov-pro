@@ -1,7 +1,7 @@
 # Graph Report - licigov-pro  (2026-10-02)
 
 ## Corpus Check
-- 2549 files · ~4,057,117 words
+- 2549 files · ~4,057,194 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `da5e7aab`
+- Built from commit: `68c84260`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

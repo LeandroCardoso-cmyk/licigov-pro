@@ -5920,8 +5920,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation.test.ts": {
-    "mtime": 1790905546.8281193,
-    "ast_hash": "431bff6bac5e2c63676c426abbb081f0",
+    "mtime": 1790943659.701776,
+    "ast_hash": "05457319fd46239f716e0bfd56abe399",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts": {
