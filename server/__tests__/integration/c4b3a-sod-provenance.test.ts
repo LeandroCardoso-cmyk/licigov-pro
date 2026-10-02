@@ -21,6 +21,11 @@ vi.mock("../../services/officialDocumentLifecycleService", () => ({
 const getGeneratedDocumentByKind = vi.fn();
 vi.mock("../../db/procurement", () => ({
   getGeneratedDocumentByKind: (...a: unknown[]) => getGeneratedDocumentByKind(...a),
+  // R7 / PR-15 (SEM-013) — a emissão congela nº do processo/objeto e a identidade institucional da época.
+  getProcess: vi.fn(async () => ({ processNumber: "SINT/0001", object: "Objeto sintético" })),
+}));
+vi.mock("../../services/institutionalIdentityService", () => ({
+  snapshotInstitutionalIdentity: vi.fn(async () => ({ snapshot: { organizationName: "Órgão Sintético" }, fingerprint: "fp-sint" })),
 }));
 
 const insertOfficialPromotion = vi.fn(async () => undefined);

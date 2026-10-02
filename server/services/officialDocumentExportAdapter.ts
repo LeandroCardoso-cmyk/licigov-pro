@@ -20,6 +20,9 @@ import {
   institutionalIdentityFingerprint,
 } from "./institutionalIdentityService";
 import type { OfficialFormat } from "../domain/officialDocument";
+import { serviceLogger } from "./observabilityService";
+
+const log = serviceLogger("officialDocumentExportAdapter");
 
 const TYPE_TITLES: Record<string, string> = {
   dfd: "DFD — Documento de Formalização da Demanda",
@@ -129,6 +132,14 @@ export async function exportOfficialDocument(params: {
     doc.metadata as Record<string, unknown> | null | undefined,
     params.organizationId,
   );
+  // R7 / PR-15 (SEM-013) — versões anteriores ao snapshot caem para a identidade VIGENTE (não reproduzem o
+  // cabeçalho da época). Rastreável em log; o backfill dessas versões é decisão humana (R7.2), nunca automático.
+  if (!(doc.metadata as Record<string, unknown> | null | undefined)?.["institutionalIdentitySnapshot"]) {
+    log.warn("official_export_identity_live_fallback", {
+      organizationId: params.organizationId, documentId: doc.id, documentType: doc.documentType, version: doc.version,
+      status: doc.status, correlationId: params.correlationId ?? null,
+    });
+  }
   const identityFingerprint = institutionalIdentityFingerprint(identity);
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();
   const statusSlug = STATUS_SLUGS[doc.status] ?? doc.status;
