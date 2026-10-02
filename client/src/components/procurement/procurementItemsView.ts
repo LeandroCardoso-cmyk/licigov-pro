@@ -2,6 +2,7 @@
  * Itens da contratação — view-model PURO (testável sem DOM). Nenhuma decisão de identidade, lote ou
  * quantidade é tomada aqui: só apresentação do que o servidor resolveu.
  */
+import { formatCentsBRL } from "@/lib/money";
 
 export interface ItemSourceView {
   sourceType: string; sourceId: string; sourceQuantity: number | null; sourceLotCode: string | null;
@@ -19,6 +20,15 @@ export interface ItemView {
   plannedQuantity: { value: number | null; status: string; sourceType: string | null; mode: string | null; actorUserId: number | null };
   sources: ItemSourceView[];
   unitReferencePriceCents: number | null; priceAmbiguous: boolean; estimatedTotalCents: number | null;
+  /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (opcional para payloads antigos). */
+  priceBlockedReason?: "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
+}
+
+/** R9 / SEM-028, SEM-031 — explicação do preço suspenso (null = sem bloqueio). */
+export function priceBlockedText(reason: ItemView["priceBlockedReason"]): string | null {
+  if (reason === "SOURCE_NOT_CURRENT") return "Preço de referência suspenso: a fonte da Pesquisa de Preços mudou ou exige revisão. Revise o Item Inteligente antes de usar o preço.";
+  if (reason === "UNIT_MISMATCH") return "Preço de referência suspenso: a unidade da cotação é diferente da unidade deste item (nenhuma conversão é feita). Ajuste a unidade ou o vínculo.";
+  return null;
 }
 
 export interface LotView { id: string; code: string; name: string; description: string | null; ordinal: number; revision: number; itemCount: number }
@@ -116,6 +126,17 @@ export function quantityInputError(raw: string): string | null {
   return null;
 }
 
+/** INV-16 — formatador monetário ÚNICO (centavos → "R$ 1.234,56"). */
 export function brl(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCentsBRL(cents);
+}
+
+/**
+ * R9 / SEM-030 — estado GOVERNADO do Item Inteligente no painel de candidatos: aprovar a EXTRAÇÃO não é aprovar o ITEM.
+ */
+export function candidateEvidenceText(e: { status: string; sourceState: string; averagePriceCents: number | null; quoteCount: number }): string {
+  const status = e.status === "aprovado" ? "aprovado" : e.status === "rejeitado" ? "rejeitado" : "aguardando decisão humana";
+  const fonte = e.sourceState === "current" ? "fonte vigente" : "fonte alterada — revisar";
+  const preco = e.averagePriceCents !== null && e.quoteCount > 0 ? `preço médio ${brl(e.averagePriceCents)} (${e.quoteCount} cotação(ões))` : "sem preço";
+  return `Item Inteligente: ${status} · ${fonte} · ${preco}`;
 }

@@ -167,15 +167,23 @@ describe("Preparar itens — candidatos", () => {
     };
     const html = renderToStaticMarkup(createElement(CandidatesPanel, { processId: "p1", source: "price_research", lots: [], items: [item({})], onClose: () => {}, onDone: () => {}, onError: () => {} }));
     expect(html).toContain("4 item(ns) identificado(s)");
-    expect(html).toContain('value="Concentrado ativado"');
-    expect(html).toContain('value="Tambor"');
-    expect(html).toContain('placeholder="Não definida"');
-    expect(html).toContain("Usar 1 como quantidade prevista");
     expect(html).toContain("Possível item já cadastrado");
     expect(html).toContain("Mais de um item cadastrado corresponde");
     expect(html).toContain("Já está nos itens da contratação");
-    expect(html).toMatch(/data-status="new"[\s\S]*checked=""/); // novo vem marcado; nada é gravado sem confirmar
+    // R9 / SEM-055 (reescrito): NADA vem pré-marcado — o formulário do item só abre quando a pessoa o inclui.
+    expect(html).not.toMatch(/data-status="new"[^>]*>[\s\S]{0,200}checked=""/);
+    expect(html).not.toContain('value="Concentrado ativado"');
+    expect(html).toContain("Confirmar 0 item(ns)");
     expect(html).toContain("Nada é gravado até a confirmação");
+  });
+
+  it("R9 / SEM-030, SEM-055 — painel mostra o estado governado do Item Inteligente e rotula a quantidade como cotada", () => {
+    state.cands = {
+      sourceDigest: "0".repeat(32), counts: { sourceItemCount: 1 },
+      candidates: [cand({ evidence: { status: "pendente", sourceState: "source_changed", averagePriceCents: 4500, quoteCount: 3 } })],
+    };
+    const html = renderToStaticMarkup(createElement(CandidatesPanel, { processId: "p1", source: "price_research", lots: [], items: [], onClose: () => {}, onDone: () => {}, onError: () => {} }));
+    expect(html).toContain("Item Inteligente: aguardando decisão humana · fonte alterada — revisar · preço médio R$ 45,00 (3 cotação(ões))");
   });
 });
 

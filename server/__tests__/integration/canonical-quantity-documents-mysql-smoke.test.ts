@@ -49,8 +49,9 @@ async function seedItem(processId: string, id: string, description: string, quan
   await conn.execute(
     `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
        suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-     VALUES (?, ?, ?, ?, ?, ?, 'UN', ?, ?, NULL, '[]', '[]', '[]', '[]', 'aprovado', NULL, 'done', 'cqd-smoke')`,
-    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, price.toFixed(2), JSON.stringify(suppliers)],
+     VALUES (?, ?, ?, ?, ?, ?, 'UN', ?, ?, NULL, '[]', '[]', '[]', '[]', 'aprovado', ?, 'done', 'cqd-smoke')`,
+    // R9 / SEM-030: item "aprovado" exige o aprovador humano (antes o fixture gravava aprovado sem ator).
+    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, price.toFixed(2), JSON.stringify(suppliers), owner],
   );
 }
 async function row(processId: string, kind: string) {

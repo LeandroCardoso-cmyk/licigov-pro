@@ -49,7 +49,7 @@ export async function resolveProcurementContext(p: {
     assertions: assertions ?? [],
     intelligentItems: (items ?? []).map((i) => ({
       id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status,
-      averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount,
+      averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount, sourceState: i.sourceState ?? "current",
     })),
     procurementItems: (pItems ?? []).map((i) => ({
       id: i.id, description: i.description, unit: i.unit, lotId: i.lotId, ordinal: i.ordinal,
