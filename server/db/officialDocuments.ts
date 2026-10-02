@@ -140,6 +140,23 @@ export async function getLatestByLineage(lineageId: string, tenantId: number, ex
   return rows.length ? rowToDoc(rows[0]) : null;
 }
 
+/**
+ * R9 / SEM-039 — a ÚLTIMA versão `emitido` de um tipo documental de uma origem (processo), tenant-scoped. É a fonte
+ * AUTORITATIVA que os documentos a jusante consomem (o snapshot `gerado` e o rascunho não são oficiais).
+ */
+export async function getLatestEmittedByOrigin(tenantId: number, businessDomain: string, origin: string, documentType: string): Promise<OfficialDocument | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(officialDocumentsTable)
+    .where(and(
+      eq(officialDocumentsTable.tenantId, tenantId), eq(officialDocumentsTable.businessDomain, businessDomain),
+      eq(officialDocumentsTable.origin, origin), eq(officialDocumentsTable.documentType, documentType),
+      eq(officialDocumentsTable.status, "emitido"),
+    ))
+    .orderBy(desc(officialDocumentsTable.version)).limit(1);
+  return rows.length ? rowToDoc(rows[0]) : null;
+}
+
 export async function countVersions(lineageId: string, tenantId: number, executor?: OfficialDocsExecutor): Promise<number> {
   const db = executor ?? await getDb();
   if (!db) return 0;

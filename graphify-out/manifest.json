@@ -1765,8 +1765,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/AuthoringSourcesSummary.tsx": {
-    "mtime": 1790881396.1528766,
-    "ast_hash": "473f8079826c7239d0f1117c4c5f06b2",
+    "mtime": 1790967130.6795893,
+    "ast_hash": "2f7b2e7b202138988f227f2f07760867",
     "semantic_hash": ""
   },
   "client/src/components/procurement/CatmatThresholdConfig.tsx": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1790905565.118501,
-    "ast_hash": "76c79eee89aae6a57cfd8d49d252747a",
+    "mtime": 1790967140.6377828,
+    "ast_hash": "4176d677c79cde8f2a0b1caaeda98881",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -5920,8 +5920,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation.test.ts": {
-    "mtime": 1790943659.701776,
-    "ast_hash": "05457319fd46239f716e0bfd56abe399",
+    "mtime": 1790967177.5464168,
+    "ast_hash": "943cdfe6a396e9f52812e1e6615a7a3c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts": {
@@ -7030,8 +7030,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1790881530.0408845,
-    "ast_hash": "dac803fc297a25aa90f1848976284007",
+    "mtime": 1790966937.476015,
+    "ast_hash": "5532d94229a8f28b689351bd064063cb",
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1790964222.1920993,
-    "ast_hash": "53bc1523a9d03ec6ea9a3002c6756fe5",
+    "mtime": 1790967003.2125094,
+    "ast_hash": "344cb053fd52ebfd10f5fd347187ff20",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9255,8 +9255,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/editalContext.ts": {
-    "mtime": 1790964222.1927276,
-    "ast_hash": "5b55dfa6b002a6bbdcb69f06de41d3f6",
+    "mtime": 1790967025.5939043,
+    "ast_hash": "b1b473f375eb903b0bd348f047b55674",
     "semantic_hash": ""
   },
   "server/services/authoring/legalReferenceValidationService.ts": {
@@ -10170,8 +10170,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1790965848.6146994,
-    "ast_hash": "116b410db5f47c75421c32504382f113",
+    "mtime": 1790967093.2654045,
+    "ast_hash": "f27538d5f6402710dbdf59cbc47ffe15",
     "semantic_hash": ""
   },
   "server/services/productionMonitoringService.ts": {
@@ -13172,6 +13172,26 @@
   "server/__tests__/unit/new028-ratification-current-decision-guard.test.ts": {
     "mtime": 1790966678.7068222,
     "ast_hash": "ac2eb37320861a53f34941b79eec9bba",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem039-upstream-authority-mysql-smoke.test.ts": {
+    "mtime": 1790967228.276577,
+    "ast_hash": "a36764ca0b00b9c1a2d6e0de241e5f4c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem039-047-source-authority-digests.test.ts": {
+    "mtime": 1790967209.5949013,
+    "ast_hash": "4b5eb457e382082955ae1f3f561ff8a2",
+    "semantic_hash": ""
+  },
+  "server/domain/sourceDigests.ts": {
+    "mtime": 1790966964.5645614,
+    "ast_hash": "00c042070f3eba8077ae75c8c643c46d",
+    "semantic_hash": ""
+  },
+  "server/services/authoring/upstreamAuthority.ts": {
+    "mtime": 1790966951.7765605,
+    "ast_hash": "4f8d9a956876434653b2be6804c315db",
     "semantic_hash": ""
   }
 }
