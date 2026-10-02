@@ -5400,8 +5400,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "08b0e5fddb66cb3f8e20f9bb2438c223",
+    "mtime": 1790944549.717666,
+    "ast_hash": "4bc75e1a4653acbcd410672857c96d51",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts": {
@@ -5425,8 +5425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-sod-provenance.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "2fa364c67199fea12753e845423817e1",
+    "mtime": 1790944549.7182696,
+    "ast_hash": "6ba469166c811559aec4c672661f4dae",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts": {
@@ -13012,6 +13012,11 @@
   "docs/architecture/MONEY_FORMATTING_CONTRACT.md": {
     "mtime": 1790944326.4978762,
     "ast_hash": "1b52a142724ddd15efcfa7644b39f2ca",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr15-emission-identity-snapshot-mysql-smoke.test.ts": {
+    "mtime": 1790944444.3395479,
+    "ast_hash": "f540e59f7d8d8f87a46a0b08f0a94c99",
     "semantic_hash": ""
   }
 }

@@ -18,12 +18,13 @@
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
-import { getGeneratedDocumentByKind } from "../db/procurement";
+import { getGeneratedDocumentByKind, getProcess } from "../db/procurement";
 import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
 import { draftContentHash } from "../domain/generatedDocument";
+import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 import type { OrgRole } from "../../drizzle/schema";
 
 const PROMOTE_OP = "procurement.document.promote";
@@ -143,6 +144,14 @@ export async function promoteOfficialDocument(params: {
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — emissão oficial recusada (nenhuma versão emitida)." });
     }
 
+    // R7 / PR-15 (SEM-013) — a versão emitida CONGELA a identidade institucional e a referência do processo da
+    // época (mesmo mecanismo do Document Engine: `metadata.institutionalIdentitySnapshot`). Sem isso a reexportação
+    // da MESMA versão mostrava a identidade vigente. Leituras determinísticas FORA da transação.
+    const [identity, process] = await Promise.all([
+      snapshotInstitutionalIdentity(params.organizationId),
+      getProcess(params.processId, params.organizationId),
+    ]);
+
     let result!: PromoteOfficialResult;
     await db.transaction(async (tx) => {
       // Versão oficial IMUTÁVEL "emitido" (append-only; GET_LOCK por linhagem serializa a numeração).
@@ -156,6 +165,10 @@ export async function promoteOfficialDocument(params: {
           // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
           reason: params.reason ?? null,
+          institutionalIdentitySnapshot: identity.snapshot,
+          institutionalIdentityFingerprint: identity.fingerprint,
+          processNumber: process?.processNumber ?? null,
+          object: process?.object ?? null,
         },
       }, tx);
 
