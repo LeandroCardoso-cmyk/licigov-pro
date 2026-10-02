@@ -120,6 +120,8 @@ export interface EditalSourceContext {
   /** "canonical_planned" = quantidade PREVISTA dos Itens da contratação; "legacy" = quantidade da cotação. */
   readonly quantitySource: "canonical_planned" | "legacy";
   readonly canonical: CanonicalItemsState | null;
+  /** R6 / PR-13 (SEM-008) — itens aprovados só com quantidade da COTAÇÃO (sem Itens da contratação). */
+  readonly legacyQuotedItemCount: number;
 }
 
 function short(hash: string | null): string {
@@ -280,6 +282,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     }),
     quantitySource: canonical ? "canonical_planned" : "legacy",
     canonical: canonical?.state ?? null,
+    legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
   };
 }
 

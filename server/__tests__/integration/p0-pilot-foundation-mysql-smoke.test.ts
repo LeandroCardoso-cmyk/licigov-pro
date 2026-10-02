@@ -53,6 +53,7 @@ import { buildMockProviderAuthoring } from "../../services/authoring/structuredA
 import { insertProcess, getGeneratedDocumentByKind, listIntelligentItems, transitionItemStatusCAS } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { draftContentHash } from "../../domain/generatedDocument";
+import { confirmCanonicalItemsFromResearch } from "../helpers/canonicalItems";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -344,6 +345,8 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     await approveAll(ORG, pid);
     const [item] = await listIntelligentItems(pid, ORG);
     await confirmCatmat(ORG, pid, item.id, "461234");
+    // R6 / PR-13 (SEM-008): a necessidade (10) é decisão humana nos Itens da contratação — nunca a quantidade cotada.
+    await confirmCanonicalItemsFromResearch({ organizationId: ORG, processId: pid, actorUserId: U_OPERATOR, idempotencyKey: `p0-7-items-${pid}`, planned: { "Cadeira giratória": 10 } });
 
     const pre = await getAuthoringSourceState({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras" });
     expect(pre.state).toBe("never_generated");
@@ -381,6 +384,8 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     const { result } = await importPriceMap(ORG, pid, MAPA);
     expect(result.intelligentItems?.total).toBe(1);
     await approveAll(ORG, pid);
+    // R6 / PR-13 (SEM-008): sem Itens da contratação o TR é fail-closed; a quantidade prevista é decisão humana.
+    await confirmCanonicalItemsFromResearch({ organizationId: ORG, processId: pid, actorUserId: U_OPERATOR, idempotencyKey: `ga-items-${pid}`, planned: { "Cadeira giratória": 10 } });
 
     let trPrompt = "";
     const tr = await generateDocument({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras", correlationId: "ga", idempotencyKey: "ga-tr", actorUserId: U_OTHER, invoke: async (p) => { trPrompt = p; return buildMockProviderAuthoring("tr"); } });

@@ -121,6 +121,11 @@ export interface DocumentAuthoringContext {
   /** "canonical_planned" = quantidade PREVISTA dos Itens da contratação; "legacy" = quantidade da cotação (processos sem Itens Canônicos). */
   readonly quantitySource: "canonical_planned" | "legacy";
   readonly canonical: CanonicalItemsState | null;
+  /**
+   * R6 / PR-13 (SEM-008, INV-09) — itens aprovados da Pesquisa cuja ÚNICA quantidade é a da COTAÇÃO (modo legado,
+   * sem Itens da contratação). > 0 ⇒ TR/Edital fail-closed: quantidade cotada nunca vira necessidade.
+   */
+  readonly legacyQuotedItemCount: number;
 }
 
 function short(hash: string | null): string {
@@ -277,12 +282,14 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       : null,
     estimate, pendingItemCount: input.pendingItemCount,
     quantitySource: canonical ? "canonical_planned" : "legacy", canonical,
+    legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
   };
 }
 
 /** Texto da quantidade de um item no prompt: PREVISTA no modo canônico ("[a definir]" se ausente); legado = cotação. */
 function canonicalQuantityText(r: { id: string; quantity: number; unit: string }, canonical: boolean, undefinedQty: ReadonlySet<string>): string {
-  if (!canonical) return `${formatQuantity(r.quantity)} ${r.unit}`;
+  // R6 / PR-13 (SEM-008): no modo legado a quantidade é a da COTAÇÃO — dita como tal, nunca como necessidade.
+  if (!canonical) return `${formatQuantity(r.quantity)} ${r.unit} (quantidade da cotação — não confirmada como necessidade)`;
   if (undefinedQty.has(r.id)) return `quantidade prevista: [a definir] (${r.unit}) — NÃO inferir nem usar a quantidade da Pesquisa`;
   return `${formatQuantity(r.quantity)} ${r.unit} (quantidade prevista)`;
 }

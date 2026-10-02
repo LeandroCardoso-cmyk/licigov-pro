@@ -193,15 +193,18 @@ describe.skipIf(!DB)("P0.3 — quantidade PREVISTA como fonte única em DFD/ETP/
     expect((await ws()).items.find((i: any) => i.description === "Detergente neutro").plannedQuantity.value).toBe(60);
   }, 180_000);
 
-  it("5) legado (sem Itens da contratação): ETP e Edital seguem com o comportamento anterior", async () => {
+  // R6 / PR-13 (SEM-008, INV-09): o teste antigo CODIFICAVA o legado (Edital com a quantidade da cotação). Agora o
+  // ETP rotula a quantidade como da COTAÇÃO e o Edital é fail-closed (CANONICAL_ITEMS_REQUIRED, nada gravado).
+  it("5) legado (sem Itens da contratação): ETP rotula a quantidade cotada; Edital fail-closed", async () => {
     const { process } = await (await caller(owner)).procurementProcess.createProcess({ processNumber: `CQDL-${Date.now()}`, object: OBJ, startOption: "iniciar_pesquisa" });
     await seedItem(process.id, "cqd-leg1", "Vassoura", 3, 25);
     const etpCtx = await resolveDocumentAuthoringContext({ organizationId: ORG, processId: process.id, kind: "etp", object: OBJ });
     expect(etpCtx.quantitySource).toBe("legacy");
-    expect(etpCtx.promptContext).toContain("Vassoura — 3 UN");
-    const ed = await genEdital(`cqd-ed-legacy-${process.id}`, process.id);
-    expect(ed.document.content).toMatch(/\| \d+ \| Vassoura \| 3 \| UN \| 25,00 \| 75,00 \|/);
-    expect((await row(process.id, "edital"))!.sources).not.toContain("qtd:prevista");
+    expect(etpCtx.legacyQuotedItemCount).toBe(1);
+    expect(etpCtx.promptContext).toContain("Vassoura — 3 UN (quantidade da cotação — não confirmada como necessidade)");
+    await expect(genEdital(`cqd-ed-legacy-${process.id}`, process.id))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CANONICAL_ITEMS_REQUIRED") });
+    expect(await row(process.id, "edital")).toBeFalsy();
   }, 180_000);
 
   it("6) tenant: outro órgão não usa Itens da contratação nem quantidades do processo no ETP/Edital", async () => {
