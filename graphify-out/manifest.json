@@ -13078,5 +13078,10 @@
     "mtime": 1790945543.482979,
     "ast_hash": "31661e157ac2311df6d4240ce0d52858",
     "semantic_hash": ""
+  },
+  "server/__tests__/unit/r11-semantic-authority-guards.test.ts": {
+    "mtime": 1790945719.865959,
+    "ast_hash": "791807c4a689dac7c734395716adee5f",
+    "semantic_hash": ""
   }
 }
