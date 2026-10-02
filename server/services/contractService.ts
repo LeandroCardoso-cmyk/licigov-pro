@@ -18,6 +18,7 @@ import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
 import { recordProcessEvent } from "../db/procurement";
+import { timelineActor } from "../domain/timelineActor";
 import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
 import {
@@ -345,7 +346,7 @@ export async function generateContractDocument(params: {
       ...(instrument?.kind === "aditivo" ? { addendumLimitPolicy: legalPolicyMarker("SEM-084_CANONICAL_ADDENDUM_LIMITS") } : {}),
     },
   });
-  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: "multi_copilot", summary: `Minuta de ${params.kind} gerada (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
+  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: timelineActor(params.actorUserId), summary: `Minuta de ${params.kind} gerada por IA (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
 
   return {
     document,
