@@ -84,6 +84,9 @@ describe.skipIf(!DB)("PR-17 — termos a partir do instrumento (MySQL 8)", () =>
     expect(doc.content).not.toMatch(/^CLÁUSULA \d+\./m);
     expect(doc.author).toBe(String(ACTOR));
     expect(doc.meta).toMatchObject({ instrumentId: addendum.id, instrumentKind: "aditivo" });
+    // R8 / PR-20 scaffolding (SEM-084): o sistema não afirma os limites do art. 125 sem parecer.
+    expect(doc.content).toContain("não verificados pelo sistema — política jurídica pendente");
+    expect(doc.meta.addendumLimitPolicy).toMatchObject({ policy: "SEM-084_CANONICAL_ADDENDUM_LIMITS", validation: "NOT_VALIDATED_LEGAL_POLICY_PENDING" });
   }, 120_000);
 
   it("T2) apostilamento de gestor ⇒ termo com descrição e novo gestor do registro", async () => {
