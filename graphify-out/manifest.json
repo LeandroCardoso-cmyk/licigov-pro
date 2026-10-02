@@ -13168,5 +13168,10 @@
     "mtime": 1790966494.4085333,
     "ast_hash": "74c67f1e77376c684de436397a94c196",
     "semantic_hash": ""
+  },
+  "server/__tests__/unit/new028-ratification-current-decision-guard.test.ts": {
+    "mtime": 1790966678.7068222,
+    "ast_hash": "ac2eb37320861a53f34941b79eec9bba",
+    "semantic_hash": ""
   }
 }
