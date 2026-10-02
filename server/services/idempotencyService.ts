@@ -1,4 +1,4 @@
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
@@ -36,19 +36,35 @@ type IdemDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 export type IdempotencyExecutor = IdemDb | Parameters<Parameters<IdemDb["transaction"]>[0]>[0];
 
 /**
- * Avalia uma linha já existente (ou recém-vencedora de corrida) e a converte no
- * lifecycle público. Expirada (>TTL) é tratada como "new" (permite novo processamento).
+ * R9 / SEM-075 — a chave é VINCULADA à operação que a reservou primeiro. Reusar a mesma (org, user, key) para OUTRA
+ * operação nunca devolve a resposta (nem o estado "em voo") da primeira: é um conflito explícito. Sem migration — a
+ * unicidade física continua (org, user, key); a identidade lógica passa a ser (org, user, key, operation).
+ */
+export const IDEMPOTENCY_OPERATION_MISMATCH = "IDEMPOTENCY_KEY_OPERATION_MISMATCH";
+
+function assertSameOperation(record: IdempotencyRow, operation: string, ctx: { key: string; userId: number; organizationId: number }): void {
+  if (record.operation === operation) return;
+  log.warn("idempotency_operation_mismatch", { ...ctx, storedOperation: record.operation, operation });
+  throw new TRPCError({
+    code: "CONFLICT",
+    message: `${IDEMPOTENCY_OPERATION_MISMATCH}: Idempotency-Key já usada por outra operação — gere uma nova chave.`,
+  });
+}
+
+/** Linha re-reservável: falhou (retry permitido) ou venceu o TTL (inclusive "processing" órfão de um crash). */
+function isReReservable(record: IdempotencyRow): boolean {
+  return record.status === "failed" || record.expiresAt < new Date();
+}
+
+/**
+ * Avalia uma linha já existente (ou recém-vencedora de corrida) e a converte no lifecycle público.
+ * Só é chamada para linhas NÃO re-reserváveis (vigentes e não-falhas) — ver `checkIdempotency`.
  */
 function evaluateExistingRow(
   record: IdempotencyRow,
   payloadHash: string | undefined,
   ctx: { key: string; userId: number; organizationId: number },
 ): IdempotencyResult {
-  if (record.expiresAt < new Date()) {
-    log.info("key_expired_treating_as_new", ctx);
-    return { status: "new" };
-  }
-
   if (record.status === "completed") {
     // Payload mudou: o CALLER deve rejeitar como conflito (nunca sobrescrever/repetir
     // o efeito com dados diferentes sob a mesma chave) — não é replay seguro.
@@ -83,6 +99,10 @@ function evaluateExistingRow(
  *   - status=completed + mesmo payloadHash → retornar response cacheado (idempotente)
  *   - status=completed + payloadHash diferente → lançar erro (payload mudou)
  *   - Expirado (>24h) → tratar como "new" (TTL venceu, novo processamento permitido)
+ *
+ * R9 / SEM-075 — "failed" e expirada são RE-RESERVADAS atomicamente (UPDATE condicional): só UM retry concorrente
+ * recebe "new" (os demais recebem "processing"), a reserva grava o payloadHash do NOVO pedido (o cache futuro fica
+ * sob o hash certo), renova o TTL e limpa a resposta antiga. Mesma chave para OUTRA operação ⇒ CONFLICT.
  */
 export async function checkIdempotency(
   key: string,
@@ -127,11 +147,37 @@ export async function checkIdempotency(
       log.info("idempotency_insert_race_reread", ctx);
       const raced = await db.select().from(idempotencyKeys).where(whereKey).limit(1);
       if (raced.length === 0) throw err;
+      assertSameOperation(raced[0], operation, ctx);
       return evaluateExistingRow(raced[0], payloadHash, ctx);
     }
   }
 
-  return evaluateExistingRow(existing[0], payloadHash, ctx);
+  const record = existing[0];
+  assertSameOperation(record, operation, ctx);
+  if (!isReReservable(record)) return evaluateExistingRow(record, payloadHash, ctx);
+
+  // Re-reserva ATÔMICA: a condição repete o predicado de re-reservabilidade; o perdedor de uma corrida afeta 0
+  // linhas e relê o estado real (o vencedor já marcou "processing").
+  const now = new Date();
+  const res = await db
+    .update(idempotencyKeys)
+    .set({
+      status: "processing",
+      requestPayloadHash: payloadHash ?? null,
+      responsePayload: null,
+      expiresAt: new Date(now.getTime() + TTL_MS),
+    })
+    .where(and(whereKey, eq(idempotencyKeys.operation, operation), or(eq(idempotencyKeys.status, "failed"), lt(idempotencyKeys.expiresAt, now))));
+  const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+  if ((header?.affectedRows ?? 0) === 1) {
+    log.info(record.status === "failed" ? "idempotency_failed_rereserved" : "idempotency_expired_rereserved", ctx);
+    return { status: "new" };
+  }
+  log.info("idempotency_rereserve_race_reread", ctx);
+  const raced = await db.select().from(idempotencyKeys).where(whereKey).limit(1);
+  if (raced.length === 0) return { status: "processing" }; // removida pelo cleanup no meio da corrida: não executa às cegas
+  assertSameOperation(raced[0], operation, ctx);
+  return isReReservable(raced[0]) ? { status: "processing" } : evaluateExistingRow(raced[0], payloadHash, ctx);
 }
 
 /**
