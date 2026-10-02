@@ -2,7 +2,14 @@
  * Serviço de Geração de Documentos de Contratos
  * Gera Minuta de Contrato, Termos de Aditivo, Apostilamento e Rescisão
  * Baseado na Lei 14.133/2021 (Nova Lei de Licitações)
+ *
+ * NEW-036 — UNIDADE MONETÁRIA DO LEGADO: as colunas de dinheiro de `contracts`/`contract_amendments`/
+ * `contract_apostilles` (módulo legado congelado, Classe 3) guardam REAIS na prática — todo produtor (NewContract,
+ * aditivo, apostilamento, prefill da contratação direta) grava reais e toda tela legada exibe reais, apesar do
+ * comentário "em centavos" do schema. A conversão reais → centavos é feita aqui, explícita, e a exibição passa pelo
+ * formatador ÚNICO (`formatCentsBRL`). Nunca `Intl`/`toLocaleString` direto, e nada de "por extenso" fabricado.
  */
+import { formatCentsBRL } from "@shared/money";
 
 interface ContractData {
   number: string;
@@ -60,14 +67,12 @@ interface RescissionData {
 }
 
 /**
- * Formatar valor monetário
+ * Formatar valor monetário do legado (REAIS) pelo formatador único.
  */
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
+export function formatLegacyReais(value: number): string {
+  return formatCentsBRL(Math.round(value * 100));
 }
+const formatCurrency = formatLegacyReais;
 
 /**
  * Formatar data por extenso
@@ -128,7 +133,7 @@ export function generateContractMinuta(data: ContractData): string {
 
 ## CLÁUSULA SEGUNDA – DO VALOR E DA DOTAÇÃO ORÇAMENTÁRIA
 
-**2.1.** O valor total do presente Contrato é de **${formatCurrency(data.value)}** (${data.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/[R$\s]/g, "")} reais).
+**2.1.** O valor total do presente Contrato é de **${formatCurrency(data.value)}** ([VALOR POR EXTENSO — REVISAR]).
 
 **2.2.** Os recursos necessários à execução deste Contrato correrão por conta da seguinte dotação orçamentária:
 

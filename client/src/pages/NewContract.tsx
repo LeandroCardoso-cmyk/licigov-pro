@@ -10,6 +10,7 @@ import { ContractStepper } from "@/components/new-contract/ContractStepper";
 import { Step1BasicData } from "@/components/new-contract/Step1BasicData";
 import { Step2Contractor } from "@/components/new-contract/Step2Contractor";
 import { Step3Validity } from "@/components/new-contract/Step3Validity";
+import { parseLegacyReaisInput } from "@/lib/money";
 
 const STEP_TITLES = ["Dados Básicos do Contrato", "Dados do Contratado", "Vigência e Fiscalização"];
 const STEP_DESCRIPTIONS = [
@@ -36,7 +37,7 @@ export default function NewContract() {
   const [contractorAddress, setContractorAddress] = useState("");
   const [contractorContact, setContractorContact] = useState("");
   const [cnpjValid, setCnpjValid] = useState<boolean | null>(null);
-  const [cnpjData, setCnpjData] = useState<any>(null);
+  const [cnpjData, setCnpjData] = useState<unknown>(null);
 
   // Step 3
   const [startDate, setStartDate] = useState("");
@@ -100,10 +101,10 @@ export default function NewContract() {
 
   const handleSubmit = () => {
     if (!startDate || !endDate) { toast.error("Preencha as datas de vigência"); return; }
-    const valueNum = parseFloat(value.replace(/[^\d,]/g, "").replace(",", "."));
+    const valueNum = parseLegacyReaisInput(value);
     if (isNaN(valueNum) || valueNum <= 0) { toast.error("Valor inválido"); return; }
     createMutation.mutate({
-      number, year, object, type: type as any, contractorName,
+      number, year, object, type: type as "fornecimento" | "servico" | "obra" | "concessao" | "outro", contractorName,
       contractorCNPJ: contractorCNPJ || undefined, contractorAddress: contractorAddress || undefined,
       contractorContact: contractorContact || undefined, value: valueNum, currentValue: valueNum,
       startDate: new Date(startDate), endDate: new Date(endDate), autoRenewal,
