@@ -26,7 +26,7 @@ import { createDirectProcurementWorkspace } from "../../domain/directProcurement
 import { createRatification } from "../../domain/directProcurementJustifications";
 import { insertDirectProcurementWorkspace, insertRatification } from "../../db/directProcurement";
 import { recordDirectProcurementRatification } from "../../services/institutionalDecisionService";
-import { generatePriceJustification, generatePublications } from "../../services/directProcurementService";
+import { generatePriceJustification, generatePublications, seedRequiredDocuments } from "../../services/directProcurementService";
 import { createManualContract, generateContractDocument, createAddendum } from "../../services/contractService";
 import { listOfficialDocuments, getOfficialDocument } from "../../db/officialDocuments";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
@@ -286,6 +286,12 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
   it("B2) RATIFICAÇÃO materializa a decisão REAL do ledger (autoridade declarada ≠ registrador; não texto genérico)", async () => {
     const ws = await seedDirect(ORG, "DIR-B2");
     await ledgerRatify(ws.id, "ratificado", "Ratifico a contratação direta por dispensa, art. 75.", "v1-b2-key-0001");
+    // NEW-029: checklist obrigatório configurado e validado com evidência (fixture do upload do servidor + hash).
+    await seedRequiredDocuments({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await conn.execute(
+      "UPDATE required_documents SET status = 'validado', content_hash = REPEAT('a', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-doc.pdf') WHERE workspace_id = ? AND organization_id = ?",
+      [ws.id, ORG],
+    );
     await generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
     const ratDoc = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).find(d => d.documentType === "ratificacao");
     expect(ratDoc).toBeTruthy();
@@ -313,6 +319,21 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     await expect(generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" }))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);
+  }, 120_000);
+
+  it("B2c) NEW-029: ratificado + checklist ausente/pendente/só anexado ⇒ publicação bloqueada, nenhum doc", async () => {
+    const ws = await seedDirect(ORG, "DIR-B2C");
+    await ledgerRatify(ws.id, "ratificado", "Ratifico a contratação direta por dispensa, art. 75.", "v1-b2c-key-0001");
+    const publish = () => generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await expect(publish()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CHECKLIST_NOT_CONFIGURED") });
+    await seedRequiredDocuments({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await expect(publish()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CHECKLIST_PENDING") });
+    // "anexado" com evidência não basta; "validado" legado `s3://anexo` sem hash também não.
+    await conn.execute("UPDATE required_documents SET status = 'anexado', content_hash = REPEAT('b', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-a.pdf') WHERE workspace_id = ?", [ws.id]);
+    await expect(publish()).rejects.toMatchObject({ message: expect.stringContaining("CHECKLIST_PENDING") });
+    await conn.execute("UPDATE required_documents SET status = 'validado', content_hash = '', document_reference = 's3://anexo' WHERE workspace_id = ?", [ws.id]);
+    await expect(publish()).rejects.toMatchObject({ message: expect.stringContaining("CHECKLIST_PENDING") });
+    expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).length).toBe(0);
   }, 120_000);
 
   it("B4) FAIL-CLOSED: decisão 'nao_ratificado' → bloqueado, nenhum doc ratificacao", async () => {

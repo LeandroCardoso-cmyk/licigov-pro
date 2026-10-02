@@ -6555,8 +6555,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1790942932.2144744,
-    "ast_hash": "dddf769d23ca6563712ae2f58d411d29",
+    "mtime": 1790966529.888677,
+    "ast_hash": "bfb5abacee4457e96ab63e6302169d46",
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1790965848.6139708,
-    "ast_hash": "8ce2965db3cf06e31e64938695a9edbf",
+    "mtime": 1790966449.0383832,
+    "ast_hash": "cf2791973551b712fcbb80cbb83f6f12",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -12660,8 +12660,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
-    "mtime": 1790944874.8478801,
-    "ast_hash": "0d0736524b2008696051d7f89d94a7b5",
+    "mtime": 1790966494.404653,
+    "ast_hash": "5e95420d21d9f1f1b45d4a5e99b44261",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRbacMatrix.ts": {
@@ -13020,8 +13020,8 @@
     "semantic_hash": ""
   },
   "server/domain/requiredDocumentEvidence.ts": {
-    "mtime": 1790944678.393897,
-    "ast_hash": "8c8966b3a5b0b6ba6bf87143424d14b0",
+    "mtime": 1790966436.70853,
+    "ast_hash": "61d12162bdf799ca62601641dcffa456",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr17-instrument-terms-mysql-smoke.test.ts": {
@@ -13162,6 +13162,11 @@
   "client/src/components/institutional-request/ResponsePanel.test.ts": {
     "mtime": 1790966320.336523,
     "ast_hash": "0444511b8771c639b5f83662f6910ebf",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/new029-checklist-publication-gate.test.ts": {
+    "mtime": 1790966494.4085333,
+    "ast_hash": "74c67f1e77376c684de436397a94c196",
     "semantic_hash": ""
   }
 }
