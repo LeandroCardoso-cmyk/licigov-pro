@@ -538,20 +538,38 @@ Registro técnico versionado de governança (não é sistema de workflow). Atual
 | R2.2 | IN_PROGRESS | **decisão humana registrada (Opção B, 2026-09-28)** em [`R2_CANONICAL_INGESTION_TENANT_DECISION.md`](R2_CANONICAL_INGESTION_TENANT_DECISION.md) §10 (percentage 100, `expiresAt` NULL, só `featureFlagAdmin.setTenantFlag`). Falta a confirmação read-only do estado atual da flag em produção (RUNTIME_STATE_READONLY_PENDING). Flag **não** alterada | docs (branch `audit/r2-2-r2-3-prep`, importado em 2026-10-01) | — |
 | R2.3 | BLOCKED | plano de consulta agregado read-only congelado em [`R2_LEGACY_DATA_USAGE_READONLY.md`](R2_LEGACY_DATA_USAGE_READONLY.md) §4; nenhuma contagem obtida (sem acesso read-only legítimo do ambiente de execução) — BLOCKED_PRODUCTION_ACCESS | — | — |
 | R2.4 | PASS | PR-02 (#272) mergeada em squash `3b0b30d` (LEG-006/008/010/011 → `LEGACY_ENDPOINT_DISABLED`; SEM-015, SEM-018); CI da main #689 (run `36732294315`) SUCCESS. LEG-005 (#274, `b168274`, CI #691 `36854666823` SUCCESS) entrou como PR subordinada sem checkpoint próprio | PR #272 | 2026-09-30 |
-| R2.5 – R2.6 | TODO | — | — | — |
-| R2.7 | TODO | — | — | — |
+| R2.5 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: PR-03 (LEG-012, parecer legado só leitura) na branch `work/autonomous-semantic-remediation-r3-r11` | `296f831` (sem PR) | 2026-10-02 |
+| R2.6 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: PR-04 + PR-04A na branch `work/autonomous-semantic-remediation-r3-r11` | `ae8a286`, `d722256` (sem PR) | 2026-10-02 |
+| R2.7 | TODO | BLOCKED_PRODUCTION_VALIDATION (depende de merge + deploy) | — | — |
 | R3.1 | PASS | reprodução em MySQL real na main `570a962` (§6.2): SEM-002 e SEM-003 resetam estado (11/14 casos do smoke falham antes; 14/14 depois); SEM-006 e SEM-007 também reproduzidos (discovery; correção na PR-06) | PR #276 | 2026-10-01 |
 | R3.2 | PASS | contrato "CONFLICT em chave natural existente; convergência só com mesmo payload" documentado em `server/domain/processCreateContract.ts` e §6.2 | PR #276 | 2026-10-01 |
 | R3.3 | PASS | PR-05 (#276) mergeada em squash `aac4241`; CI da main #697 (run `36922114503`) SUCCESS; deploy Railway `83381768-14f7-4be2-ae46-87064a3c1451` SUCCESS (commit `aac4241`, `/readyz` ok, boot limpo). A validação comportamental em produção pertence a R3.6 | PR #276 | 2026-10-01 |
-| R3.4 – R3.6 | TODO | — | — | — |
-| R4.1 – R4.7 | TODO | — | — | — |
-| R5.1 – R5.7 | TODO | — | — | — |
-| R6.1 – R6.6 | TODO | — | — | — |
-| R7.1 – R7.6 | TODO | — | — | — |
-| R8.1 – R8.6 | TODO | — | — | — |
-| R9.1 – R9.10 | TODO | — | — | — |
-| R10.1 – R10.4 | TODO | — | — | — |
-| R11.1 – R11.8 | TODO | — | — | — |
+| R3.4 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: PR-06 + migration 0310 na branch `work/autonomous-semantic-remediation-r3-r11` (FCC-06) | `b0d9588`, `62b0d3c` | 2026-10-02 |
+| R3.5 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: contrato de replay tardio fixado (16/16 MySQL local) | `9559153` | 2026-10-02 |
+| R3.6 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R4.1 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: `docs/architecture/INSTITUTIONAL_DECISION_CONTRACT.md` | `da5e7aa` | 2026-10-02 |
+| R4.2 | BLOCKED | BLOCKED_LEGAL_REVIEW: perguntas J-1 em `LEGAL_REVIEW_DECISION_PACKET.md` | — | — |
+| R4.3 – R4.6 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: 0312 testada só localmente; PR-07 e PR-08; testes que protegiam o default reescritos | `da5e7aa`, `87e8635` | 2026-10-02 |
+| R4.7 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R5.1 – R5.6 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: guard de hidratação, PR-09 (0311), PR-10, PR-11, PR-12; teste de regeneração sem confirmação verde localmente | `8b88522`, `3ff78a1`, `67ccbbf`, `2d22545` | 2026-10-02 |
+| R5.7 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R6.1 | BLOCKED | BLOCKED_PRODUCTION_ACCESS: SQL agregado `scripts/inventory-r6-1-quoted-quantity-without-items.sql` (validado só localmente) | `db184f1` | — |
+| R6.2 | BLOCKED | BLOCKED_HUMAN_DECISION (HD-01) | — | — |
+| R6.3 – R6.5 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: PR-13, testes legados reescritos, PR-14 | `db184f1`, `7f35be3`, `00a3c2a` | 2026-10-02 |
+| R6.6 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R7.1, R7.3 – R7.5 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: PR-15, PR-16 (0314), PR-17, guard de imutabilidade | `98918a9`, `65c4fe7`, `d6f8c84`, `00a3c2a` | 2026-10-02 |
+| R7.2 | BLOCKED | BLOCKED_HUMAN_DECISION (HD-03) | — | — |
+| R7.6 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R8.1 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: pacote de consulta jurídica preparado (não enviado; sem PR) | `9b25de7` | 2026-10-02 |
+| R8.2 – R8.5 | BLOCKED | BLOCKED_LEGAL_REVIEW: só o scaffolding fail-closed (`legalReviewPolicy.ts`), sem regra jurídica alterada | `9b25de7` | — |
+| R8.6 | TODO | BLOCKED_PRODUCTION_VALIDATION | — | — |
+| R9.1 | IN_PROGRESS | PLAN_PREPARED_AWAITING_HUMAN_APPROVAL: `R9_P1_REMEDIATION_PLAN.md` (54/54) | `c56b0ae` | 2026-10-02 |
+| R9.2 – R9.10 | TODO | aguardam R9.1 (SEM-050 corrigido localmente em `c56b0ae`) | — | — |
+| R10.1 | IN_PROGRESS | PLAN_PREPARED_AWAITING_HUMAN_APPROVAL: `R10_P2_REMEDIATION_PLAN.md` (12/12) | `c56b0ae` | 2026-10-02 |
+| R10.2 – R10.4 | TODO | aguardam aprovação (R10.3: 5 contratos novos em docs/architecture, sem PR) | — | — |
+| R11.1 – R11.6 | IN_PROGRESS | IMPLEMENTED_PENDING_REVIEW: `unit/r11-semantic-authority-guards` (18 testes) | `a75ac0e` | 2026-10-02 |
+| R11.7 | IN_PROGRESS | TECHNICAL_REAUDIT_COMPLETE — **não PASS** (P0 abertos) — `SEMANTIC_AUTHORITY_CLOSURE_REAUDIT.md` | (docs) | 2026-10-02 |
+| R11.8 | TODO | rascunho `SEMANTIC_AUTHORITY_CLOSURE_REPORT.md` (BLOCKED_PR_REQUIRED) | — | — |
 
 Nota: o CI de um commit não pode ser gravado como PASS dentro do próprio commit; R0.10 é evidenciado no relatório da
 execução (resultado do CI do head) e registrado neste ledger na execução seguinte.
@@ -569,6 +587,7 @@ PRs. Por isso o roadmap continua **v1.0**. O baseline da auditoria permanece byt
 | 2026-09-27 | Estado pós-merge da R1 e início da R2 | R1.9 / R1.10 / NEW-001 / R2.1 | O registro retroativo do estado pós-merge (#261 `141bcad`, CI #657, deploy `b85dd763`) faz: R1.9 → PASS; R1.10 TODO → IN_PROGRESS (deploy, migration e boot validados; falta o smoke comportamental, impraticável com um único tenant em produção); NEW-001 → DEPLOYED_AWAITING_FINAL_VALIDATION. A R2 começa em paralelo à pendência de R1.10: o DAG (§5) não condiciona a R2 ao fechamento da R1. R2.1 → IN_PROGRESS com o inventário (33 superfícies, decisões humanas pendentes). Correções factuais candidatas FCC-01…05 ficam registradas no inventário (§11), **não aplicadas** aqui | fases, checkpoints (87), baseline 92/26/54/12, tratamentos congelados (SEM-005/012/015/016/017/018), numeração de PRs | R1 9/10; R2 0/7; global 19/87 |
 | 2026-09-27 | Decisões humanas de R2.1 | R2.1 / PR-02 / PR-04 / PR-04A / NEW-002 | Todas as superfícies do inventário recebem disposição humana (§13 do inventário). FCC-01 (→ PR-04A), FCC-02 (→ PR-02), FCC-03 (guard server-side na PR-04), FCC-04 (comentários de código) e FCC-05 (taxonomia de SEM-018) são aceitas. Escopo da PR-02 congelado (LEG-006/008/010/011); LEG-005/009 em PRs separadas. PR-04A criada (subordinada, sem checkpoint). NEW-002 (P0, fora do baseline) registrado. R2.1 → PASS | fases, checkpoints (87), DAG, baseline 92/26/54/12, tratamentos congelados de SEM-005/012/015/016/017/018, roadmap v1.0 | R2 1/7; global 20/87 |
 | 2026-10-01 | Reconciliação do ledger pós-PR #276 (gap documental) | R2.2 / R2.3 / R2.4 / R3.1–R3.3 / NEW-003…NEW-027 | O ledger da main estava defasado: R2.2–R2.7 apareciam como TODO e R3.1–R3.3 como IN_PROGRESS. Com evidência objetiva na main: R2.4 → PASS (#272 `3b0b30d`, CI #689); R3.1/R3.2/R3.3 → PASS (#276 `aac4241`, CI #697, deploy `83381768` SUCCESS). R2.2 → IN_PROGRESS (decisão humana Opção B registrada; estado runtime da flag não confirmado). R2.3 → BLOCKED (sem acesso read-only legítimo). Importados, sem alteração de conteúdo, os registros de decisão humana da branch `audit/r2-2-r2-3-prep` (`POST_NIGHT_SHIFT_DECISIONS.md`, `R2_CANONICAL_INGESTION_TENANT_DECISION.md`, `R2_LEGACY_DATA_USAGE_READONLY.md`, `POST_NS_TRIAGE_NEW_003_004_015.md`, `PRE_PR_BRANCH_INTEGRATION_MATRIX.md`); o ledger NEW-003…NEW-027 passa a ser referenciado em §9.2 | fases, checkpoints (87), baseline 92/26/54/12, roadmap v1.0, R1.10 (IN_PROGRESS), R2.5–R2.7 e R3.4–R3.6 (TODO) | R2 2/7; R3 3/6; global 24/87 = 27,6% |
+| 2026-10-02 | Lote autônomo R0→R11 (sem PR/merge/deploy) | R2.5–R11.8 | Checkpoints com trabalho local passam a IN_PROGRESS com a anotação IMPLEMENTED_PENDING_REVIEW e o commit; bloqueios explícitos (BLOCKED_HUMAN_DECISION / LEGAL_REVIEW / PRODUCTION_ACCESS / PRODUCTION_VALIDATION). FCC-06: a migration de unicidade da PR-06 (0310) cobre `contract_workspaces` (SEM-007); SEM-085 (legado `contracts.number`) segue em R9. Ver `AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md` | definição e total (87) · baseline 92/26/54/12 · nenhum checkpoint passou a PASS por trabalho local | R2.5–R11.8 (status oficial; PASS oficial continua 24/87) |
 
 ---
 
@@ -581,6 +600,7 @@ Contagens separadas: **baseline 92 = 26 P0 + 54 P1 + 12 P2** (congelado). **Fora
 | NEW-001 | 2026-09-26 | Drift de schema: `drizzle/schema.ts` declara `notifications.type = 'stage_assigned'`, mas nenhuma migration SQL adiciona o valor ao ENUM (só `0004` cria o ENUM, sem ele). No banco migrado, `collaboration.assignStage` grava a atribuição e **falha** no insert da notificação (escrita parcial). | **P1 operacional** (reclassificado; antes P2) | **DEPLOYED_AWAITING_FINAL_VALIDATION** (antes FIX_IMPLEMENTED_PENDING_MERGE / BLOCKER_R1_7) | Detalhes em §9.2.1. Corrigido na PR-01A (migration 0307 + `assignStage` atômico): §6.1.1. Fechamento exige merge + CI da main + migration aplicada pelo deploy + produção validada. |
 | NEW-002 | 2026-09-27 | Hard delete institucional e da trilha de auditoria via `lgpd.deleteMyAccount` (`lgpdRouter.ts:37-42`, `db/lgpd.ts:43-71`). Um `protectedProcedure` sem UI permite ao próprio usuário excluir `activity_logs`, os processos legados que possui, os documentos relacionados, comentários, notificações, `process_members`, consentimentos e o próprio usuário (LEG-033). | **P0 operacional / governança de retenção** (fora do baseline) | **OPEN — TRIAGED — DISABLE decidido — não implementado** | Viola auditabilidade, rastreabilidade, retenção institucional e irreversibilidade supervisionada. Direção futura: workflow governado de solicitação; retenção ou anonimização quando juridicamente cabível; sem apagar evidência institucional. A revisão jurídica do desenho final continua necessária. |
 | NEW-003…NEW-027 | 2026-09-28/29 | Registrados no turno noturno e no hardening pré-PR; ficha completa em [`POST_NIGHT_SHIFT_DECISIONS.md`](POST_NIGHT_SHIFT_DECISIONS.md) §12 e [`POST_NS_TRIAGE_NEW_003_004_015.md`](POST_NS_TRIAGE_NEW_003_004_015.md) | ver §12 de lá | **Já na main:** NEW-016 (#264 `0194900`), NEW-003 (#267 `2b2d355`), NEW-022 (#268 `667ab9e`). **Preparados em branch, fora da main:** NEW-002, NEW-005, NEW-006, NEW-007. Demais: abertos/mitigados conforme a ficha | Fora do baseline; numeração NEW continua a partir de NEW-028 |
+| NEW-028…NEW-037 | 2026-10-02 | Registrados no lote autônomo; ficha em [`AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md`](AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md) §6 (NEW-036 é candidato a P0: minuta de contrato legado formata centavos como reais) | ver ficha | ver ficha | fora do baseline |
 
 #### 9.2.1 NEW-001 — ficha
 

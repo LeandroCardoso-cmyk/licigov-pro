@@ -11340,8 +11340,8 @@
     "semantic_hash": ""
   },
   "docs/audits/SEMANTIC_AUTHORITY_REMEDIATION_MASTER_PLAN.md": {
-    "mtime": 1790889664.9786859,
-    "ast_hash": "14ea8df6461c44db107087f226d63d6a",
+    "mtime": 1790947256.0538208,
+    "ast_hash": "26d92c65340db7a62fede1166d57d759",
     "semantic_hash": ""
   },
   "docs/audits/production-readiness/CSP_STAGING_HOMOLOGATION.md": {
@@ -13095,13 +13095,28 @@
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_COMMIT_MAP.md": {
-    "mtime": 1790945956.681973,
-    "ast_hash": "b7671c48c72b71fb92e026874baa7884",
+    "mtime": 1790946281.8524818,
+    "ast_hash": "4eb3e90980cd31cf78b3e7ebcd9912c0",
     "semantic_hash": ""
   },
   "docs/audits/HUMAN_DECISION_PACKET.md": {
     "mtime": 1790945912.8259704,
     "ast_hash": "cb39733c8177c785e74c76e0c06271fd",
+    "semantic_hash": ""
+  },
+  "docs/audits/AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md": {
+    "mtime": 1790947256.0274467,
+    "ast_hash": "15a3f96232a1bf6947754537c060a703",
+    "semantic_hash": ""
+  },
+  "docs/audits/SEMANTIC_AUTHORITY_CLOSURE_REAUDIT.md": {
+    "mtime": 1790946310.4659941,
+    "ast_hash": "67a8ec910d2e2376a73cb2fe822e6160",
+    "semantic_hash": ""
+  },
+  "docs/audits/SEMANTIC_AUTHORITY_CLOSURE_REPORT.md": {
+    "mtime": 1790946328.373995,
+    "ast_hash": "d5dc2c494e9179e3ee057a22b73e3f80",
     "semantic_hash": ""
   }
 }
