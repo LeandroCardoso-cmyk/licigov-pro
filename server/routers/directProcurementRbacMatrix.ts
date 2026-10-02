@@ -123,8 +123,13 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
   },
   validateDocuments: {
     rbacClass: "EVIDENCE_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
-    rationale: "Checklist documental: semeia ou marca pendente/anexado/validado (conferência documental, não decisão).",
-    sideEffects: "required_documents (insert/update). Sem timeline/IA/notificação.",
+    rationale: "Checklist documental: semeia ou marca pendente/validado (conferência documental, não decisão). R7 / PR-16: validar exige anexo real; \"anexado\" só por upload.",
+    sideEffects: "required_documents (insert/update) + timeline. Sem IA/notificação.",
+  },
+  attachRequiredDocument: {
+    rbacClass: "EVIDENCE_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
+    rationale: "R7 / PR-16 (SEM-020) — anexa a evidência REAL (upload S3 pelo servidor, SHA-256) a um item do checklist.",
+    sideEffects: "S3 (objeto do anexo) + required_documents (update) + timeline. Sem IA/notificação.",
   },
   requestLegalOpinion: {
     rbacClass: "DRAFT_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',

@@ -45,13 +45,15 @@ import {
   insertDirectProcurementWorkspace, getDirectProcurementWorkspace, listDirectProcurementWorkspaces,
   updateDirectProcurementStage, insertDirectProcedure, getDirectProcedure,
   insertProposalCollection, listProposalCollections, insertProposalDocument,
-  getRatification, getContractJustification, getPriceJustification, listRequiredDocuments, updateRequiredDocumentStatus, listGeneratedPublications,
+  getRatification, getContractJustification, getPriceJustification, listRequiredDocuments, listGeneratedPublications,
 } from "../db/directProcurement";
 import { recordProcessEvent, listProcessTimeline } from "../db/procurement";
 import {
   importDirectPriceResearch, generateContractJustification, generatePriceJustification, acceptContractJustification,
   seedRequiredDocuments, requestLegalOpinion, getLegalOpinionResult, generatePublications,
+  setRequiredDocumentStatus, attachRequiredDocument,
 } from "../services/directProcurementService";
+import { MAX_TASK_ATTACHMENT_BASE64_CHARS } from "../domain/taskAttachmentPolicy";
 
 const START_OPTIONS = ["criar_dfd", "importar_dfd", "importar_pdf", "importar_memorando", "importar_oficio", "sem_dfd"] as const;
 const PROCUREMENT_TYPES = ["dispensa", "inexigibilidade"] as const;
@@ -338,18 +340,36 @@ export const directProcurementRouter = router({
       return { contract, price };
     }),
 
+  /**
+   * R7 / PR-16 (SEM-020) — sem `documentId`: semeia o checklist. Com `documentId`+`status`: "pendente"/"validado"
+   * (validar exige anexo REAL); "anexado" só via `attachRequiredDocument`. A referência do cliente é IGNORADA.
+   */
   validateDocuments: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), documentId: z.string().optional(), status: z.enum(DOC_STATUSES).optional(), documentReference: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      if (input.documentId && input.status) {
-        await updateRequiredDocumentStatus(input.documentId, orgId, input.status, input.documentReference ?? "");
-      } else {
-        await seedRequiredDocuments({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId });
-      }
-      const documents = await listRequiredDocuments(input.workspaceId, orgId);
+      const documents = input.documentId && input.status
+        ? await setRequiredDocumentStatus({ workspaceId: input.workspaceId, organizationId: orgId, documentId: input.documentId, status: input.status, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
+        : await seedRequiredDocuments({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId });
       return { documents, pending: documents.filter(d => d.required && d.status === "pendente").length };
+    }),
+
+  /** R7 / PR-16 (SEM-020) — anexar = upload REAL (base64 → S3 pelo servidor, SHA-256). Nunca URL/referência do cliente. */
+  attachRequiredDocument: orgRoleProcedure("operator")
+    .input(z.object({
+      workspaceId: z.string().min(1), documentId: z.string().min(1),
+      fileName: z.string().min(1).max(255).regex(/^[^\\/]+$/, "Nome de arquivo inválido"),
+      fileBase64: z.string().min(1).max(MAX_TASK_ATTACHMENT_BASE64_CHARS),
+      mimeType: z.string().min(1).max(120),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireWs(input.workspaceId, orgId);
+      return attachRequiredDocument({
+        workspaceId: input.workspaceId, organizationId: orgId, documentId: input.documentId, fileName: input.fileName,
+        mimeType: input.mimeType, content: Buffer.from(input.fileBase64, "base64"), actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+      });
     }),
 
   requestLegalOpinion: orgRoleProcedure("operator")

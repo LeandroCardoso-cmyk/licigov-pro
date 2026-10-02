@@ -37,7 +37,15 @@ import {
   getDirectProcurementWorkspace, upsertContractJustification, upsertPriceJustification,
   insertGeneratedPublication, insertRequiredDocument, listRequiredDocuments, getDirectProcedure,
   getContractJustification, getPriceJustification,
+  getRequiredDocument, updateRequiredDocumentStatus, recordRequiredDocumentAttachment, type RequiredDocumentRow,
 } from "../db/directProcurement";
+import { createHash } from "crypto";
+import { assertStorageUsable, storageDelete, storagePut } from "../storage";
+import { isAllowedTaskAttachmentMime, sanitizeAttachmentFileName, validateTaskAttachment } from "../domain/taskAttachmentPolicy";
+import {
+  REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey,
+  type RequiredDocumentStatus,
+} from "../domain/requiredDocumentEvidence";
 
 const DOMAIN = "contratacao_direta" as const;
 
@@ -357,7 +365,7 @@ export async function seedRequiredDocuments(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
-}): Promise<Array<{ id: string; name: string; required: boolean; status: string; documentReference: string }>> {
+}): Promise<RequiredDocumentRow[]> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
   const existing = await listRequiredDocuments(ws.id, params.organizationId);
   if (existing.length > 0) return existing;
@@ -368,6 +376,66 @@ export async function seedRequiredDocuments(params: {
     await insertRequiredDocument(doc);
   }
   return listRequiredDocuments(ws.id, params.organizationId);
+}
+
+/**
+ * R7 / PR-16 (SEM-020) — muda o status de um item do checklist SEM upload. "anexado" só via
+ * `attachRequiredDocument` (upload real); "validado" exige evidência real (chave emitida pelo servidor + hash).
+ * A referência nunca vem do cliente.
+ */
+export async function setRequiredDocumentStatus(params: {
+  workspaceId: string; organizationId: number; documentId: string; status: RequiredDocumentStatus; actorUserId: number; correlationId: string;
+}): Promise<RequiredDocumentRow[]> {
+  const ws = await requireWorkspace(params.workspaceId, params.organizationId);
+  const doc = await getRequiredDocument(params.documentId, ws.id, params.organizationId);
+  if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento do checklist não encontrado neste processo." });
+  const plan = planRequiredDocumentStatusChange(doc, ws.id, params.status);
+  if (!plan.ok) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${REQUIRED_DOCUMENT_MESSAGES[plan.code]} (${plan.code})` });
+  }
+  await updateRequiredDocumentStatus(doc.id, ws.id, params.organizationId, plan.next, params.actorUserId);
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: String(params.actorUserId),
+    summary: `Documento obrigatório "${doc.name}" ${plan.next === "validado" ? "validado" : "pendenciado"}.`, refId: doc.id, correlationId: params.correlationId,
+  });
+  return listRequiredDocuments(ws.id, params.organizationId);
+}
+
+/**
+ * R7 / PR-16 (SEM-020) — ANEXAR = upload REAL: valida MIME/magic-bytes/tamanho (mesma política dos anexos de tarefa),
+ * grava no S3 com chave `contratacao_direta/{workspace}/{ts}-{arquivo}`, registra SHA-256/tamanho/MIME/autor. Falha de
+ * persistência ⇒ compensação (remove o objeto). Cross-tenant/workspace ⇒ NOT_FOUND antes de qualquer upload.
+ */
+export async function attachRequiredDocument(params: {
+  workspaceId: string; organizationId: number; documentId: string; fileName: string; mimeType: string; content: Buffer;
+  actorUserId: number; correlationId: string;
+}): Promise<{ document: RequiredDocumentRow; contentHash: string }> {
+  const ws = await requireWorkspace(params.workspaceId, params.organizationId);
+  const doc = await getRequiredDocument(params.documentId, ws.id, params.organizationId);
+  if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento do checklist não encontrado neste processo." });
+  if (!isAllowedTaskAttachmentMime(params.mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de arquivo não permitido." });
+  const validation = validateTaskAttachment(params.content, params.mimeType);
+  if (!validation.valid) throw new TRPCError({ code: "BAD_REQUEST", message: validation.reason ?? "Arquivo inválido." });
+
+  assertStorageUsable();
+  const contentHash = createHash("sha256").update(params.content).digest("hex");
+  const key = requiredDocumentStorageKey(ws.id, sanitizeAttachmentFileName(params.fileName), Date.now());
+  const stored = await storagePut(key, params.content, params.mimeType);
+  try {
+    await recordRequiredDocumentAttachment({
+      id: doc.id, workspaceId: ws.id, organizationId: params.organizationId, storageKey: stored.key, contentHash,
+      sizeBytes: params.content.length, mimeType: params.mimeType, actorUserId: params.actorUserId,
+    });
+  } catch (e) {
+    await storageDelete(stored.key).catch(() => undefined);
+    throw e;
+  }
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: String(params.actorUserId),
+    summary: `Documento obrigatório "${doc.name}" anexado (sha256 ${contentHash.slice(0, 12)}…, ${params.content.length} bytes).`, refId: doc.id, correlationId: params.correlationId,
+  });
+  const document = await getRequiredDocument(doc.id, ws.id, params.organizationId);
+  return { document: document!, contentHash };
 }
 
 // ─── Parecer Jurídico (REUTILIZA o Institutional Request Engine) ──────────────

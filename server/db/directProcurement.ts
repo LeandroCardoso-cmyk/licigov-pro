@@ -256,19 +256,60 @@ export async function insertRequiredDocument(d: RequiredDocument): Promise<Requi
   return d;
 }
 
-export async function listRequiredDocuments(workspaceId: string, orgId: number): Promise<Array<{ id: string; name: string; required: boolean; status: string; documentReference: string }>> {
+export interface RequiredDocumentRow {
+  id: string; name: string; required: boolean; status: string; documentReference: string;
+  /** R7 / PR-16 — evidência real (0314). */
+  contentHash: string; sizeBytes: number; mimeType: string;
+  attachedBy: number | null; attachedAt: string | null; validatedBy: number | null; validatedAt: string | null;
+}
+
+function toRequiredDocumentRow(r: typeof requiredDocumentsTable.$inferSelect): RequiredDocumentRow {
+  return {
+    id: r.id, name: r.name, required: r.required === 1, status: r.status, documentReference: r.documentReference,
+    contentHash: r.contentHash, sizeBytes: r.sizeBytes, mimeType: r.mimeType,
+    attachedBy: r.attachedBy ?? null, attachedAt: r.attachedAt ?? null, validatedBy: r.validatedBy ?? null, validatedAt: r.validatedAt ?? null,
+  };
+}
+
+export async function listRequiredDocuments(workspaceId: string, orgId: number): Promise<RequiredDocumentRow[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(requiredDocumentsTable)
     .where(and(eq(requiredDocumentsTable.workspaceId, workspaceId), eq(requiredDocumentsTable.organizationId, orgId)));
-  return rows.map(r => ({ id: r.id, name: r.name, required: r.required === 1, status: r.status, documentReference: r.documentReference }));
+  return rows.map(toRequiredDocumentRow);
 }
 
-export async function updateRequiredDocumentStatus(id: string, orgId: number, status: string, documentReference: string): Promise<boolean> {
+/** R7 / PR-16 — um item do checklist, tenant- E workspace-scoped (outro workspace/órgão ⇒ null). */
+export async function getRequiredDocument(id: string, workspaceId: string, orgId: number): Promise<RequiredDocumentRow | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(requiredDocumentsTable)
+    .where(and(eq(requiredDocumentsTable.id, id), eq(requiredDocumentsTable.workspaceId, workspaceId), eq(requiredDocumentsTable.organizationId, orgId))).limit(1);
+  return rows.length ? toRequiredDocumentRow(rows[0]) : null;
+}
+
+/**
+ * R7 / PR-16 (SEM-020) — muda só o STATUS (a referência nunca vem do cliente). `validado` registra quem validou.
+ */
+export async function updateRequiredDocumentStatus(id: string, workspaceId: string, orgId: number, status: "pendente" | "validado", actorUserId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(requiredDocumentsTable).set({ status, documentReference })
-    .where(and(eq(requiredDocumentsTable.id, id), eq(requiredDocumentsTable.organizationId, orgId)));
+  await db.update(requiredDocumentsTable)
+    .set(status === "validado" ? { status, validatedBy: actorUserId, validatedAt: toDb(new Date().toISOString()) } : { status, validatedBy: null, validatedAt: null })
+    .where(and(eq(requiredDocumentsTable.id, id), eq(requiredDocumentsTable.workspaceId, workspaceId), eq(requiredDocumentsTable.organizationId, orgId)));
+  return true;
+}
+
+/** R7 / PR-16 (SEM-020) — grava a evidência do upload REAL (chave emitida pelo servidor + SHA-256). */
+export async function recordRequiredDocumentAttachment(p: {
+  id: string; workspaceId: string; organizationId: number; storageKey: string; contentHash: string; sizeBytes: number; mimeType: string; actorUserId: number;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  await db.update(requiredDocumentsTable).set({
+    status: "anexado", documentReference: p.storageKey, contentHash: p.contentHash, sizeBytes: p.sizeBytes, mimeType: p.mimeType,
+    attachedBy: p.actorUserId, attachedAt: toDb(new Date().toISOString()), validatedBy: null, validatedAt: null,
+  }).where(and(eq(requiredDocumentsTable.id, p.id), eq(requiredDocumentsTable.workspaceId, p.workspaceId), eq(requiredDocumentsTable.organizationId, p.organizationId)));
   return true;
 }
 

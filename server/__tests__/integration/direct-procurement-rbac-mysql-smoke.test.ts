@@ -157,6 +157,7 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     { name: "generatePriceJustification", call: (c) => c.directProcurement.generatePriceJustification({ workspaceId: wsId, source: "manual", justification: "Justificativa de preço viewer.", referenceValue: 10, confirmOfficial: true }) },
     { name: "acceptJustification", call: (c) => c.directProcurement.acceptJustification({ workspaceId: wsId, need: "Necessidade viewer teste", publicInterest: "", motivation: "Motivação viewer teste", legalFoundation: "Art. 75, II (teste)", benefits: "", alternatives: "", basedOnSuggestion: false, confirmAccept: true }) },
     { name: "validateDocuments", call: (c) => c.directProcurement.validateDocuments({ workspaceId: wsId }) },
+    { name: "attachRequiredDocument", call: (c) => c.directProcurement.attachRequiredDocument({ workspaceId: wsId, documentId: "doc-viewer-1", fileName: "certidao.pdf", fileBase64: Buffer.from("%PDF-1.4").toString("base64"), mimeType: "application/pdf" }) },
     { name: "requestLegalOpinion", call: (c) => c.directProcurement.requestLegalOpinion({ workspaceId: wsId }) },
   ];
   // R4 / PR-07: o ratify exige o ato completo (autoridade declarada, data, referência, CAS e chave por tentativa).

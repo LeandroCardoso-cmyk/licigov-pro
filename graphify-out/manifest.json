@@ -1025,8 +1025,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx": {
-    "mtime": 1790890348.2707264,
-    "ast_hash": "a0391666da1fe60d809302c15b3b9195",
+    "mtime": 1790944812.181324,
+    "ast_hash": "70a715766062556f62490b6c889e5ac9",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/TimelinePanel.tsx": {
@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1790906858.3850505,
-    "ast_hash": "a90dcfe165f4187c48ad4486b55f4eea",
+    "mtime": 1790944655.0912998,
+    "ast_hash": "b2cc3a6c96856553888d6f9d0614e7d2",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1790906820.4432604,
-    "ast_hash": "f48f67594b266b1cf95695bf7a69e702",
+    "mtime": 1790944631.154938,
+    "ast_hash": "ae1969c73db0cb0788190a141342e1ac",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790943584.65631,
-    "ast_hash": "47fd1813401c58740cf8fa148133d4cf",
+    "mtime": 1790944920.3167803,
+    "ast_hash": "43798fc556b4be9f1e2d9df5a9c1fc93",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6970,8 +6970,8 @@
     "semantic_hash": ""
   },
   "server/db/directProcurement.ts": {
-    "mtime": 1790906286.841977,
-    "ast_hash": "0cd9ebf422accefec63eda8d2bec3710",
+    "mtime": 1790944693.0937645,
+    "ast_hash": "0377033b8f2215d2400dcf5b6a1b4bc0",
     "semantic_hash": ""
   },
   "server/db/documentRepository.ts": {
@@ -8765,8 +8765,8 @@
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
-    "mtime": 1790942651.8169413,
-    "ast_hash": "ceabe60daa2cfbd7236e11ea8f4f0a91",
+    "mtime": 1790944727.699742,
+    "ast_hash": "7cf2b7e8c388b2990b491ae3cfadf45f",
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1790942632.3902154,
-    "ast_hash": "983b8470e50af8af61053c6fcfaa2d05",
+    "mtime": 1790944721.5805974,
+    "ast_hash": "40432ac9ef461b3ec0dbe24eeda783dc",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -12655,18 +12655,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-contract.test.ts": {
-    "mtime": 1790942932.2132838,
-    "ast_hash": "7dfeca7bf973cd5a9cb2242d59c71bdd",
+    "mtime": 1790944874.84731,
+    "ast_hash": "32d7148d694978a528c96b003492ec06",
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
-    "mtime": 1790942932.2140496,
-    "ast_hash": "18ffc0606b1a89c057212244629256e8",
+    "mtime": 1790944874.8478801,
+    "ast_hash": "0d0736524b2008696051d7f89d94a7b5",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRbacMatrix.ts": {
-    "mtime": 1790942651.8319595,
-    "ast_hash": "c76988b67c85c556fac567bf41fccc99",
+    "mtime": 1790944784.9622054,
+    "ast_hash": "bb98de3c89187d8c690efb0a9d93fe3f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
@@ -13017,6 +13017,26 @@
   "server/__tests__/integration/pr15-emission-identity-snapshot-mysql-smoke.test.ts": {
     "mtime": 1790944444.3395479,
     "ast_hash": "f540e59f7d8d8f87a46a0b08f0a94c99",
+    "semantic_hash": ""
+  },
+  "drizzle/0314_required_document_evidence.sql": {
+    "mtime": 1790944655.0652473,
+    "ast_hash": "6192d4a7f9391934d1275aadb496930e",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0314_snapshot.json": {
+    "mtime": 1790944633.7658944,
+    "ast_hash": "41b48a6a9905beadf9c13a824b8e8b95",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr16-required-document-evidence-mysql-smoke.test.ts": {
+    "mtime": 1790944867.5339084,
+    "ast_hash": "e7c872284b32e9702022e559ed167821",
+    "semantic_hash": ""
+  },
+  "server/domain/requiredDocumentEvidence.ts": {
+    "mtime": 1790944678.393897,
+    "ast_hash": "8c8966b3a5b0b6ba6bf87143424d14b0",
     "semantic_hash": ""
   }
 }

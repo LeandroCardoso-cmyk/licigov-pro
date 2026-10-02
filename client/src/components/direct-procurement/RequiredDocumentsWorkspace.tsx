@@ -6,22 +6,34 @@ import { DOC_STATUS_LABELS, DOC_STATUS_CLASSES } from "./labels";
  * RequiredDocumentsWorkspace — REAL (tRPC).
  *
  * Checklist dinâmico de documentação obrigatória (por modalidade/fundamento).
- * Permite anexar (referência), validar e pendenciar cada item.
+ * R7 / PR-16 (SEM-020): "Anexar" envia o ARQUIVO (upload S3 pelo servidor, com SHA-256) — nunca uma referência
+ * digitada/fictícia; "Validar" só fica disponível para itens com anexo real.
  */
 
 export interface RequiredDocumentsWorkspaceProps {
   workspaceId: string;
-  documents?: Array<{ id: string; name: string; required: boolean; status: string; documentReference: string }>;
+  documents?: Array<{ id: string; name: string; required: boolean; status: string; documentReference: string; contentHash?: string }>;
 }
+
+const hasEvidence = (d: { contentHash?: string }) => /^[0-9a-f]{64}$/.test(d.contentHash ?? "");
 
 export default function RequiredDocumentsWorkspace({ workspaceId, documents = [] }: RequiredDocumentsWorkspaceProps) {
   const utils = trpc.useUtils();
-  const mutate = trpc.directProcurement.validateDocuments.useMutation({
-    onSuccess: () => void utils.directProcurement.loadProcess.invalidate({ workspaceId }),
-  });
+  const refresh = () => void utils.directProcurement.loadProcess.invalidate({ workspaceId });
+  const mutate = trpc.directProcurement.validateDocuments.useMutation({ onSuccess: refresh });
+  const attach = trpc.directProcurement.attachRequiredDocument.useMutation({ onSuccess: refresh });
+  const fileRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
-  const setStatus = (documentId: string, status: "pendente" | "anexado" | "validado") =>
-    mutate.mutate({ workspaceId, documentId, status, documentReference: status === "anexado" ? "s3://anexo" : "" });
+  const setStatus = (documentId: string, status: "pendente" | "validado") => mutate.mutate({ workspaceId, documentId, status });
+  const upload = (documentId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const fileBase64 = result.includes(",") ? result.slice(result.indexOf(",") + 1) : result;
+      attach.mutate({ workspaceId, documentId, fileName: file.name, fileBase64, mimeType: file.type || "application/octet-stream" });
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">
@@ -36,6 +48,7 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
       </div>
 
       {mutate.isError && <p className="text-xs text-red-600 dark:text-red-400">{mutate.error.message}</p>}
+      {attach.isError && <p className="text-xs text-red-600 dark:text-red-400">{attach.error.message}</p>}
 
       {documents.length === 0 ? (
         <p className="text-xs text-muted-foreground">Gere o checklist dinâmico conforme a modalidade.</p>
@@ -51,8 +64,10 @@ export default function RequiredDocumentsWorkspace({ workspaceId, documents = []
                   {DOC_STATUS_LABELS[d.status] ?? d.status}
                 </span>
                 <div className="flex gap-1">
-                  <button type="button" onClick={() => setStatus(d.id, "anexado")} className="rounded bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-200">Anexar</button>
-                  <button type="button" onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 dark:bg-green-900 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:text-green-200 hover:bg-green-200">Validar</button>
+                  <input type="file" className="hidden" ref={(el) => { fileRefs.current[d.id] = el; }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(d.id, f); e.target.value = ""; }} />
+                  <button type="button" disabled={attach.isPending} onClick={() => fileRefs.current[d.id]?.click()} className="rounded bg-amber-100 dark:bg-amber-900 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-200 disabled:opacity-50">{hasEvidence(d) ? "Substituir arquivo" : "Anexar arquivo"}</button>
+                  <button type="button" disabled={!hasEvidence(d) || mutate.isPending} title={hasEvidence(d) ? undefined : "Anexe o arquivo antes de validar"} onClick={() => setStatus(d.id, "validado")} className="rounded bg-green-100 dark:bg-green-900 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:text-green-200 hover:bg-green-200 disabled:opacity-50">Validar</button>
                   <button type="button" onClick={() => setStatus(d.id, "pendente")} className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted">Pendenciar</button>
                 </div>
               </div>
