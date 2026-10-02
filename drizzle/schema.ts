@@ -5955,6 +5955,14 @@ export const requiredDocumentsTable = mysqlTable("required_documents", {
   documentReference: varchar("document_reference", { length: 500 }).notNull().default(""),
   correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  // R7 / PR-16 (SEM-020, 0314) — evidência REAL do anexo (upload S3 pelo servidor) e de quem validou.
+  contentHash:       varchar("content_hash", { length: 64 }).notNull().default(""),
+  sizeBytes:         int("size_bytes").notNull().default(0),
+  mimeType:          varchar("mime_type", { length: 120 }).notNull().default(""),
+  attachedBy:        int("attached_by"),
+  attachedAt:        datetime("attached_at", { mode: "string", fsp: 3 }),
+  validatedBy:       int("validated_by"),
+  validatedAt:       datetime("validated_at", { mode: "string", fsp: 3 }),
 });
 
 export const ratificationsTable = mysqlTable("ratifications", {

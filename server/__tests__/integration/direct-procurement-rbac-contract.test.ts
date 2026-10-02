@@ -105,6 +105,7 @@ const CALLS: Record<DirectProcurementProcedureName, (c: Caller) => Promise<unkno
   }),
   getJustifications: (c) => c.getJustifications({ workspaceId: WS }),
   validateDocuments: (c) => c.validateDocuments({ workspaceId: WS }),
+  attachRequiredDocument: (c) => c.attachRequiredDocument({ workspaceId: WS, documentId: "doc-rbac-1", fileName: "certidao.pdf", fileBase64: Buffer.from("%PDF-1.4").toString("base64"), mimeType: "application/pdf" }),
   requestLegalOpinion: (c) => c.requestLegalOpinion({ workspaceId: WS }),
   getLegalOpinion: (c) => c.getLegalOpinion({ requestId: "req-1" }),
   ratify: (c) => c.ratify({
