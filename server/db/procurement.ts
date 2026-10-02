@@ -6,8 +6,8 @@
  * Padrão getDb(): degrada graciosamente sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { createHash } from "crypto";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
@@ -439,16 +439,27 @@ export async function recordProcessEvent(params: {
   const existing = await db.select({ id: processTimelineTable.id }).from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, params.processId), eq(processTimelineTable.organizationId, params.organizationId)));
   const order = existing.length;
-  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id por ORDEM (append). Espaços de hash
-  // disjuntos por prefixo ("ptl-key:" × "ptl:") — nunca colidem entre si.
+  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id ÚNICO POR EVENTO (aleatório). Espaços de hash
+  // disjuntos por prefixo ("ptl-key:" × "ptl-evt:") — nunca colidem entre si.
+  //
+  // R9 / SEM-076 — antes o id sem chave era `sha256(org:process:ORDEM:tipo)`: dois eventos concorrentes do mesmo
+  // tipo liam a mesma contagem, caíam no MESMO id e o upsert SOBRESCREVIA o `summary` do primeiro (histórico
+  // reescrito). Agora cada evento tem id próprio (append-only real; `eventOrder` pode empatar sob concorrência e a
+  // leitura desempata por createdAt/id) e o evento singleton com chave é "insert-or-ignore": o retry NUNCA reescreve
+  // o resumo original.
   const id = params.idempotencyKey
     ? createHash("sha256").update(`ptl-key:${params.organizationId}:${params.processId}:${params.eventType}:${params.idempotencyKey}`).digest("hex").slice(0, 20)
-    : createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
-  await db.insert(processTimelineTable).values({
+    : createHash("sha256").update(`ptl-evt:${params.organizationId}:${params.processId}:${randomUUID()}`).digest("hex").slice(0, 20);
+  const row = {
     id, organizationId: params.organizationId, processId: params.processId, eventOrder: order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, refId: params.refId ?? "",
     correlationId: params.correlationId,
-  }).onDuplicateKeyUpdate({ set: { summary: params.summary } });
+  };
+  if (params.idempotencyKey) {
+    await db.insert(processTimelineTable).values(row).onDuplicateKeyUpdate({ set: { id: sql`id` } });
+  } else {
+    await db.insert(processTimelineTable).values(row);
+  }
 }
 
 export async function listProcessTimeline(processId: string, orgId: number): Promise<Array<{ id: string; order: number; eventType: string; actor: string; summary: string; refId: string; createdAt: string }>> {
@@ -456,7 +467,7 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
   if (!db) return [];
   const rows = await db.select().from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, processId), eq(processTimelineTable.organizationId, orgId)))
-    .orderBy(asc(processTimelineTable.eventOrder));
+    .orderBy(asc(processTimelineTable.eventOrder), asc(processTimelineTable.createdAt), asc(processTimelineTable.id));
   return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: fromDb(r.createdAt) }));
 }
 

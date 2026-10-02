@@ -34,6 +34,7 @@ import {
   getGeneratedDocumentByKind, getLatestDraftEdit, type ProcurementExecutor, type DraftEditOperation,
   type DraftExpectedState,
 } from "../db/procurement";
+import { timelineActor } from "../domain/timelineActor";
 // PR-09 (SEM-014/SEM-009) — preservação do estado humano na regeneração + parâmetros do Edital persistidos.
 import {
   classifyDraftHumanState, humanEditRefusalMessage, persistedEditalParameters, resolveEditalParameters,
@@ -964,7 +965,7 @@ export async function generateDocument(params: {
           }
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
-            actor: "multi_copilot",
+            actor: timelineActor(params.actorUserId),
             summary: `${params.kind.toUpperCase()} gerado (rascunho) com base no processo — fontes: ${sourceContext.usedSources.join(", ") || "objeto"}${sourceContext.missing.length ? ` · pendências: ${sourceContext.missing.join(", ")}` : ""}.${humanState.human ? " Substituiu conteúdo humano por confirmação explícita (anterior preservado no histórico)." : ""}`,
             refId: doc.id, correlationId: params.correlationId,
           }, tx);
@@ -1217,7 +1218,7 @@ export async function generateNotice(params: {
           }
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "decision",
-            actor: "multi_copilot",
+            actor: timelineActor(params.actorUserId),
             summary: `Edital gerado (rascunho) — ${modality}/${form} — fundamentação: ${authoring.groundingState}.`
               + (resolution.source === "explicit_change" && resolution.previous
                 ? ` Parâmetros trocados explicitamente: ${describeEditalParameters(resolution.previous)} → ${describeEditalParameters(resolution.params)}.`
