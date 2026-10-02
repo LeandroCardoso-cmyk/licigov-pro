@@ -137,8 +137,9 @@ export const workspaceRouter = router({
       });
       await recordEvent({
         organizationId: orgId, workspaceId: input.workspaceId, eventType: "recommendation",
-        actor: "multi_copilot",
-        summary: `Recomendação consolidada de ${result.selectedCopilots.length} copiloto(s).`,
+        // R9 / SEM-076 — ator = humano solicitante; o resumo diz que é recomendação dos copilotos.
+        actor: `user:${ctx.user!.id}`,
+        summary: `Recomendação consolidada de ${result.selectedCopilots.length} copiloto(s) (sugestão, não decisão).`,
         refId: input.workspaceId, correlationId: ctx.correlationId,
       });
       return result;

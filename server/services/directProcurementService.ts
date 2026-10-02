@@ -21,6 +21,7 @@ import { getResponseForRequest, listDocumentReferences } from "../db/institution
 import type { PriceResearchSource } from "../domain/priceResearch";
 import { planDirectPriceImport, computeDirectPriceImportPayloadHash } from "../domain/directPriceImport";
 import { recordProcessEvent } from "../db/procurement";
+import { timelineActor } from "../domain/timelineActor";
 import { getDb } from "../db/connection";
 import { lockDirectWorkspaceForImport, findDirectPriceImport, insertDirectPriceImportTx } from "../db/directPriceImport";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
@@ -220,6 +221,8 @@ export async function generateContractJustification(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
+  /** R9 / SEM-076 — quem pediu a sugestão (ator da timeline). */
+  actorUserId?: number;
   invoke?: (prompt: string) => Promise<string>;
 }): Promise<{ suggestion: ContractJustificationSuggestion; justification: Awaited<ReturnType<typeof getContractJustification>>; recommendation: Recommendation }> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
@@ -245,7 +248,7 @@ export async function generateContractJustification(params: {
   };
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "recommendation",
-    actor: "multi_copilot", summary: "Sugestão de justificativa gerada pelos copilotos (não aceita; nada foi registrado).", refId: ws.id, correlationId: params.correlationId,
+    actor: timelineActor(params.actorUserId), summary: "Sugestão de justificativa gerada pelos copilotos (não aceita; nada foi registrado).", refId: ws.id, correlationId: params.correlationId,
   });
   return {
     suggestion,

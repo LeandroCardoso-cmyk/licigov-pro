@@ -291,7 +291,7 @@ export const directProcurementRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      return generateContractJustification({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId });
+      return generateContractJustification({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId, actorUserId: ctx.user!.id });
     }),
 
   generatePriceJustification: orgRoleProcedure("operator")
