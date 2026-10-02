@@ -12983,5 +12983,15 @@
     "mtime": 1790942411.5257623,
     "ast_hash": "419225f0f79ef91f670991c6b0c6421e",
     "semantic_hash": ""
+  },
+  "scripts/inventory-r6-1-quoted-quantity-without-items.sql": {
+    "mtime": 1790943820.6090827,
+    "ast_hash": "bb69f5d35748826311642e171ea958b5",
+    "semantic_hash": ""
+  },
+  "docs/architecture/QUANTITY_AUTHORITY_CONTRACT.md": {
+    "mtime": 1790943835.5698469,
+    "ast_hash": "2b74ab237cb61ebc33d378dc9003f9bd",
+    "semantic_hash": ""
   }
 }

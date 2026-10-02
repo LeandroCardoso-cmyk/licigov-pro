@@ -62,6 +62,7 @@ import {
   insertProcess, listIntelligentItems, transitionItemStatusCAS, getGeneratedDocumentByKind, listProcessTimeline,
 } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
+import { confirmCanonicalItemsFromResearch } from "../helpers/canonicalItems";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -433,6 +434,8 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     const [it] = await listIntelligentItems(pid, ORG);
     expect([it.suppliers.length, it.quoteCount, it.averagePriceCents]).toEqual([3, 2, 10500]);
     await approveAllItems(ORG, pid);
+    // R6 / PR-13 (SEM-008): quantidade prevista declarada nos Itens da contratação (TR é fail-closed sem eles).
+    await confirmCanonicalItemsFromResearch({ organizationId: ORG, processId: pid, actorUserId: U1, idempotencyKey: `q-items-${pid}`, planned: { Cadeira: 10 } });
     const { document } = await generateDocument({ organizationId: ORG, processId: pid, kind: "tr", object: "Cadeiras", correlationId: "q", idempotencyKey: `q-${pid}`, actorUserId: U2, invoke: async () => buildMockProviderAuthoring("tr") });
     expect(document.content).toContain("Baseado em 2 cotação(ões) válida(s)");
   }, 60_000);
@@ -468,6 +471,8 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     const promo = await approveAndPromote(ORG, pid, sid);
     expect(promo.intelligentItems).toMatchObject({ created: 1, total: 1, validQuotes: 3 });
     await approveAllItems(ORG, pid);
+    // R6 / PR-13 (SEM-008): a necessidade (10) é decisão humana nos Itens da contratação, não a quantidade cotada.
+    await confirmCanonicalItemsFromResearch({ organizationId: ORG, processId: pid, actorUserId: U1, idempotencyKey: `ga-items-${pid}`, planned: { "Cadeira giratória": 10 } });
     const src = await getAuthoringSourceState({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras" });
     expect(src.summary).toMatchObject({ quoteCount: 3, estimatedGlobalTotalCents: 100000, dfd: { present: true, origin: "import" } });
     const tr = await generateDocument({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras", correlationId: "ga", idempotencyKey: `ga-tr-${pid}`, actorUserId: U2, invoke: async () => buildMockProviderAuthoring("tr") });

@@ -193,14 +193,15 @@ describe.skipIf(!DB)("P0.1 — TR usa a quantidade PREVISTA dos Itens da contrat
     expect((await trRow(pid))!.content).toBe(before.content); // nenhuma mutação automática do TR
   }, 120_000);
 
-  it("6) legado (processo SEM Itens da contratação) ⇒ gate determinístico mantém o TR histórico (quantidade da cotação)", async () => {
+  // R6 / PR-13 (SEM-008, INV-09): o teste antigo CODIFICAVA o legado (TR com a quantidade da cotação). Agora o TR
+  // é fail-closed: sem Itens da contratação, a quantidade cotada nunca vira necessidade — zero TR gravado.
+  it("6) legado (processo SEM Itens da contratação) ⇒ TR fail-closed CANONICAL_ITEMS_REQUIRED, nada gravado", async () => {
     const { process } = await (await caller(owner)).procurementProcess.createProcess({ processNumber: `TRQL-${Date.now()}`, object: "Material de limpeza", startOption: "iniciar_pesquisa" });
     legacyPid = process.id;
     await seedItem(legacyPid, "trq-leg1", "Vassoura", "UN", 3, 25);
-    const r = await gen(`trq-legacy-${legacyPid}`, legacyPid);
-    expect(r.document.content).toMatch(/\| \d+ \| Vassoura \| 3 \| UN \| 25,00 \| 75,00 \|/);
-    expect(r.document.content).not.toContain("Qtd. prevista");
-    expect((await trRow(legacyPid))!.sources).not.toContain("qtd:prevista");
+    await expect(gen(`trq-legacy-${legacyPid}`, legacyPid))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CANONICAL_ITEMS_REQUIRED") });
+    expect(await trRow(legacyPid)).toBeFalsy();
   }, 120_000);
 
   it("7) tenant: outro órgão não vê itens, quantidades nem o contexto canônico do processo", async () => {

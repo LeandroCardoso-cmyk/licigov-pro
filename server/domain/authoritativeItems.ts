@@ -119,12 +119,16 @@ export function renderAuthoritativeItemsBlock(
       ? "> Tabela gerada pelo sistema a partir dos Itens da contratação (quantidade PREVISTA) e do preço de " +
         "referência da Pesquisa de Preços vinculado a cada item. Os valores NÃO foram redigidos por IA. " +
         "Valor estimado do item = quantidade prevista × preço de referência."
+      // R6 / PR-13 (SEM-008, INV-09): sem Itens da contratação a única quantidade é a da COTAÇÃO (evidência) —
+      // rotulada como tal e nunca como necessidade; TR/Edital nem chegam aqui (fail-closed no serviço).
       : "> Tabela gerada pelo sistema a partir dos Itens Inteligentes APROVADOS e da Pesquisa de Preços. " +
-        "Os valores NÃO foram redigidos por IA. Valor estimado do item = quantidade × preço médio.",
+        "Os valores NÃO foram redigidos por IA. [REVISAR: a quantidade é a da COTAÇÃO — não é a quantidade da " +
+        "contratação; cadastre os Itens da contratação com a quantidade prevista.] Valor indicativo do item = " +
+        "quantidade cotada × preço médio.",
     "",
     canonical
       ? "| Item | Descrição | Qtd. prevista | Unid. | Valor de referência (R$) | Valor estimado (R$) | CATMAT/CATSER | Cotações |"
-      : "| Item | Descrição | Qtd. | Unid. | Valor médio (R$) | Valor estimado (R$) | CATMAT/CATSER | Cotações |",
+      : "| Item | Descrição | Qtd. cotada (não confirmada) | Unid. | Valor médio (R$) | Valor indicativo (R$) | CATMAT/CATSER | Cotações |",
     "|---:|---|---:|---|---:|---:|---|---:|",
   );
   for (const r of estimate.rows) {
@@ -136,7 +140,9 @@ export function renderAuthoritativeItemsBlock(
     lines.push(`| ${r.index} | ${cell(r.description) || "[item sem descrição]"} | ${formatQuantity(r.quantity)} | ${cell(r.unit)} | ${avg} | ${total} | ${catalog} | ${r.quoteCount} |`);
   }
   lines.push("");
-  lines.push(`**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`);
+  lines.push(canonical
+    ? `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`
+    : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
   // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
   lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);

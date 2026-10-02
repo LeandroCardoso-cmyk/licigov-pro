@@ -850,7 +850,7 @@ export async function generateDocument(params: {
   // ou cognição (guarda compartilhada com o Edital). O ETP NÃO bloqueia: exibe "[a definir]" e nunca usa a
   // quantidade da Pesquisa.
   if (params.kind === "tr") {
-    assertCanonicalQuantitiesComplete("tr", sourceContext.canonical, params);
+    assertCanonicalQuantitiesComplete("tr", sourceContext.canonical, params, sourceContext.legacyQuotedItemCount);
   }
 
   // Assinatura determinística dos itens aprovados (campos relevantes, não só IDs) → alterar um item
@@ -982,13 +982,32 @@ export async function generateDocument(params: {
  * Inteligente sem vínculo represente a necessidade (nenhum vínculo é criado aqui). Legado (sem Itens da
  * contratação) ⇒ `canonical = null` ⇒ no-op.
  */
+/** R6 / PR-13 (SEM-008) — código estável do bloqueio "quantidade da cotação sem Itens da contratação". */
+export const CANONICAL_ITEMS_REQUIRED = "CANONICAL_ITEMS_REQUIRED";
+
 function assertCanonicalQuantitiesComplete(
   documentKind: "tr" | "edital",
   canonical: CanonicalItemsState | null,
   ids: { organizationId: number; processId: string; correlationId: string },
+  legacyQuotedItemCount = 0,
 ): void {
-  if (!canonical) return;
   const docName = documentKind === "tr" ? "o Termo de Referência" : "o Edital";
+  if (!canonical) {
+    // R6 / PR-13 (SEM-008, INV-09) — sem Itens da contratação, a única quantidade disponível é a da COTAÇÃO
+    // (evidência), que nunca afirma a necessidade. Fail-closed ANTES de qualquer reserva/cognição; sem itens
+    // aprovados não há quantidade alguma a afirmar (o documento não traz quadro quantitativo).
+    if (legacyQuotedItemCount > 0) {
+      log.warn("document_generation_blocked_quoted_quantity_without_items", {
+        organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+        documentKind, quotedItemCount: legacyQuotedItemCount,
+      });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `${CANONICAL_ITEMS_REQUIRED}: cadastre os "Itens da contratação" com a quantidade prevista antes de gerar ${docName}. A quantidade da cotação (${legacyQuotedItemCount} item(ns) da Pesquisa de Preços) é evidência de preço e não representa a necessidade.`,
+      });
+    }
+    return;
+  }
   const { missingPlannedQuantity, unlinkedApprovedItemCount } = canonical;
   if (missingPlannedQuantity.length > 0) {
     log.warn("document_generation_blocked_missing_planned_quantity", {
@@ -1111,7 +1130,7 @@ export async function generateNotice(params: {
     modality, form, platform, criterioJulgamento: judgmentCriterion, regimeContratacao: executionRegime,
   });
   // Modo canônico (Itens da contratação): Edital nunca sai com quantidade da Pesquisa por fallback.
-  assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params);
+  assertCanonicalQuantitiesComplete("edital", sourceContext.canonical, params, sourceContext.legacyQuotedItemCount);
 
   // Replay-safe: o digest das FONTES entra no payload → retry técnico com as MESMAS fontes replaya; fonte
   // alterada sob a MESMA chave → CONFLICT (não cria duas versões independentes).

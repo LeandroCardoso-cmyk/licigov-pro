@@ -116,7 +116,9 @@ describe("P0 — bloco AUTORITATIVO de itens (servidor, nunca IA)", () => {
     const md = renderAuthoritativeItemsBlock(est);
     expect(md).toContain("| 2 | Papel A4 | 10 | resma | 100,00 | 1.000,00 | 461234 | 3 |");
     expect(md).toContain("| 1 | Caneta azul | 100 | un | 1,50 | 150,00 | a revisar (sugestão não confirmada) | 2 |");
-    expect(md).toContain("**Valor estimado global:** R$ 1.150,00");
+    // R6 / PR-13 (SEM-008): sem Itens da contratação o total é INDICATIVO (quantidade cotada, não confirmada).
+    expect(md).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 1.150,00");
+    expect(md).toContain("Qtd. cotada (não confirmada)");
     expect(md).toContain("Baseado em 5 cotação(ões) válida(s) em 2 item(ns) aprovado(s)."); // risco A: contagem de VÁLIDAS
     expect(md).not.toContain("| 999 |"); // sugestão NUNCA vira código oficial
   });
@@ -131,7 +133,7 @@ describe("P0 — bloco AUTORITATIVO de itens (servidor, nunca IA)", () => {
     expect(renderAuthoritativeItemsBlock(computeItemEstimates([]))).toContain("[REVISAR: nenhum Item Inteligente aprovado");
     const md = renderAuthoritativeItemsBlock(computeItemEstimates([{ ...items[0], averagePriceCents: 0 }]));
     expect(md).toContain("[REVISAR: sem preço]");
-    expect(md).toContain("**Valor estimado global:** R$ 0,00");
+    expect(md).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 0,00");
   });
 });
 
@@ -299,9 +301,12 @@ describe("P0 — contexto REAL de autoria (ETP/TR)", () => {
     expect(prompt).toContain("10 cadeiras");
     expect(prompt).toContain("Cadeira giratória");
     expect(prompt).toContain("NÃO redija quantidades, preços");
-    expect(r.content).toContain("**Valor estimado global:** R$ 1.000,00");
+    // R6 / PR-13 (SEM-008): contexto LEGADO (sem Itens da contratação) — o serviço bloqueia o TR
+    // (CANONICAL_ITEMS_REQUIRED); aqui, na camada pura, o quadro rotula o total como indicativo.
+    expect(sourceContext.legacyQuotedItemCount).toBe(1);
+    expect(r.content).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 1.000,00");
     expect(r.content).toContain("Fontes do processo utilizadas:** dfd, etp, itens, pesquisa_precos");
-    expect(r.content.indexOf("Valor estimado global")).toBeLessThan(r.content.lastIndexOf("Revisão OBRIGATÓRIA"));
+    expect(r.content.indexOf("Valor indicativo")).toBeLessThan(r.content.lastIndexOf("Revisão OBRIGATÓRIA"));
   });
 });
 
