@@ -2096,6 +2096,13 @@
       "when": 1790905567601,
       "tag": "0311_edital_institutional_parameters",
       "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "5",
+      "when": 1790906035270,
+      "tag": "0312_institutional_decision_ledger",
+      "breakpoints": true
     }
   ]
 }

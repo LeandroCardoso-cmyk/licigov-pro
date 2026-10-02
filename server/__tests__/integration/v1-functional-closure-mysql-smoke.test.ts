@@ -25,6 +25,7 @@ import { createOpinionDraft, updateOpinionDraft, signOpinion } from "../../servi
 import { createDirectProcurementWorkspace } from "../../domain/directProcurementWorkspace";
 import { createRatification } from "../../domain/directProcurementJustifications";
 import { insertDirectProcurementWorkspace, insertRatification } from "../../db/directProcurement";
+import { recordDirectProcurementRatification } from "../../services/institutionalDecisionService";
 import { generatePriceJustification, generatePublications } from "../../services/directProcurementService";
 import { createManualContract, generateContractDocument, createAddendum } from "../../services/contractService";
 import { listOfficialDocuments, getOfficialDocument } from "../../db/officialDocuments";
@@ -273,19 +274,38 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     expect(full!.content).toContain("15000");
   }, 120_000);
 
-  it("B2) RATIFICAÇÃO materializa a decisão REAL persistida (não texto genérico)", async () => {
-    const ws = await seedDirect(ORG, "DIR-B2");
-    const rat = createRatification({
-      organizationId: ORG, workspaceId: ws.id, responsible: USER, decision: "ratificado",
-      justification: "Ratifico a contratação direta por dispensa, art. 75.", evidence: ["parecer-123"], correlationId: "v1-closure",
+  // R4 / PR-07 — a decisão vem do ledger append-only (0312), com autoridade DECLARADA, data e referência do ato.
+  const ledgerRatify = (wsId: string, outcome: "ratificado" | "nao_ratificado", reason: string, key: string) =>
+    recordDirectProcurementRatification({
+      organizationId: ORG, subjectType: "direct_procurement.ratification", subjectId: wsId, decisionType: "ratification",
+      outcome, decidedByName: "Autoridade de Teste", decidedByRole: "Secretário(a) de Administração", decidedByUserId: null,
+      decidedAt: "2026-09-30", basisReference: "Despacho nº 1/2026", reason, evidence: ["parecer-123"],
+      recordedByUserId: USER, expectedRevision: 0, idempotencyKey: key, correlationId: "v1-closure",
     });
-    await insertRatification(rat);
+
+  it("B2) RATIFICAÇÃO materializa a decisão REAL do ledger (autoridade declarada ≠ registrador; não texto genérico)", async () => {
+    const ws = await seedDirect(ORG, "DIR-B2");
+    await ledgerRatify(ws.id, "ratificado", "Ratifico a contratação direta por dispensa, art. 75.", "v1-b2-key-0001");
     await generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
     const ratDoc = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).find(d => d.documentType === "ratificacao");
     expect(ratDoc).toBeTruthy();
     const full = await getOfficialDocument(ratDoc!.id, ORG);
     expect(full!.content).toContain("Ratifico a contratação direta por dispensa, art. 75.");
     expect(full!.content).toContain("ratificado");
+    expect(full!.content).toContain("Autoridade de Teste — Secretário(a) de Administração");
+    expect(full!.content).toContain(`Registrada por (usuário id): ${USER}`);
+    expect(full!.content).toContain("não é validada pelo sistema");
+  }, 120_000);
+
+  it("B2b) FAIL-CLOSED: linha LEGADA de `ratifications` (pré-0312, sem autoridade/ato) não basta para publicar", async () => {
+    const ws = await seedDirect(ORG, "DIR-B2B");
+    await insertRatification(createRatification({
+      organizationId: ORG, workspaceId: ws.id, responsible: USER, decision: "ratificado",
+      justification: "Registro antigo.", correlationId: "v1-closure",
+    }));
+    await expect(generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);
   }, 120_000);
 
   it("B3) FAIL-CLOSED: publicar SEM ratificação registrada → bloqueado, nenhum doc ratificacao", async () => {
@@ -297,11 +317,7 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
 
   it("B4) FAIL-CLOSED: decisão 'nao_ratificado' → bloqueado, nenhum doc ratificacao", async () => {
     const ws = await seedDirect(ORG, "DIR-B4");
-    const rat = createRatification({
-      organizationId: ORG, workspaceId: ws.id, responsible: USER, decision: "nao_ratificado",
-      justification: "Contratação não ratificada.", correlationId: "v1-closure",
-    });
-    await insertRatification(rat);
+    await ledgerRatify(ws.id, "nao_ratificado", "Contratação não ratificada.", "v1-b4-key-0001");
     await expect(generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" }))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);

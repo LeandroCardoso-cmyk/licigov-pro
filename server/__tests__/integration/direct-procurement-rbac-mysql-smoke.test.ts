@@ -44,7 +44,7 @@ const ORG_TABLES = [
   "direct_procurement_workspaces", "direct_procurement_procedures", "proposal_collections", "proposal_documents",
   "contract_justifications", "price_justifications", "required_documents", "ratifications", "generated_publications",
   "price_research", "price_research_items", "process_timeline", "institutional_requests", "request_assignments",
-  "request_timelines", "request_notifications", "ai_execution_audits",
+  "request_timelines", "request_notifications", "ai_execution_audits", "institutional_decisions",
 ] as const;
 
 describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", () => {
@@ -158,7 +158,14 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     { name: "validateDocuments", call: (c) => c.directProcurement.validateDocuments({ workspaceId: wsId }) },
     { name: "requestLegalOpinion", call: (c) => c.directProcurement.requestLegalOpinion({ workspaceId: wsId }) },
   ];
-  const ratifyCall = (c: Caller) => c.directProcurement.ratify({ workspaceId: wsId, decision: "ratificado", justification: "Registro NEW005 (teste de RBAC)." });
+  // R4 / PR-07: o ratify exige o ato completo (autoridade declarada, data, referência, CAS e chave por tentativa).
+  let ratKey = 0;
+  const ratifyInput = (workspaceId: string) => ({
+    workspaceId, decision: "ratificado" as const, decidedByName: "Autoridade NEW005", decidedByRole: "Secretário(a)",
+    decidedAt: "2026-09-30", basisReference: "Despacho NEW005/2026", justification: "Registro NEW005 (teste de RBAC).",
+    expectedRevision: 0, idempotencyKey: `new005-rat-${stamp}-${ratKey++}`,
+  });
+  const ratifyCall = (c: Caller) => c.directProcurement.ratify(ratifyInput(wsId));
   const publishCall = (c: Caller) => c.directProcurement.publish({ workspaceId: wsId });
   const flagsCall = (c: Caller) => c.directProcurement.configureFlags({ workspaceId: wsId, requiresLegalOpinion: false });
 
@@ -199,9 +206,10 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     expect(JSON.parse(String((await one(`SELECT flags FROM direct_procurement_workspaces WHERE id = ?`, [wsId])).flags)).requiresLegalOpinion).toBe(false);
 
     const r = await ratifyCall(m);
-    expect(r.ratification.decision).toBe("ratificado");
-    const row = await one(`SELECT responsible, decision FROM ratifications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A]);
-    expect(row).toMatchObject({ responsible: manager, decision: "ratificado" });
+    expect(r.decision.outcome).toBe("ratificado");
+    // PR-07: quem REGISTROU (manager) ≠ autoridade declarada; competência não validada pelo sistema.
+    const row = await one(`SELECT recorded_by_user_id, decided_by_name, outcome, revision, authority_validation FROM institutional_decisions WHERE subject_id = ? AND organization_id = ?`, [wsId, ORG_A]);
+    expect(row).toMatchObject({ recorded_by_user_id: manager, decided_by_name: "Autoridade NEW005", outcome: "ratificado", revision: 1, authority_validation: "NOT_VALIDATED_POLICY_PENDING" });
     expect((await one(`SELECT current_stage FROM direct_procurement_workspaces WHERE id = ?`, [wsId])).current_stage).toBe("RATIFICATION");
   }, 120_000);
 
@@ -226,12 +234,12 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     ] as Array<[string, () => Promise<unknown>]>) {
       await expectDeniedWithoutEffect(`foreign owner ${label}`, fn, neutral);
     }
-    expect(await errOf(() => fo.directProcurement.ratify({ workspaceId: missing, decision: "ratificado" }))).toEqual(neutral);
+    expect(await errOf(() => fo.directProcurement.ratify(ratifyInput(missing)))).toEqual(neutral);
     expect((await fo.directProcurement.loadProcess({ workspaceId: wsId })).workspace).toBeNull();
 
     const fv = await caller(foreignViewer, ORG_B);
     await expectDeniedWithoutEffect("foreign viewer ratify (existente)", () => ratifyCall(fv), { code: "FORBIDDEN", message: ROLE_DENIED("manager") });
-    expect(await errOf(() => fv.directProcurement.ratify({ workspaceId: missing, decision: "ratificado" }))).toEqual({ code: "FORBIDDEN", message: ROLE_DENIED("manager") });
+    expect(await errOf(() => fv.directProcurement.ratify(ratifyInput(missing)))).toEqual({ code: "FORBIDDEN", message: ROLE_DENIED("manager") });
 
     // Membro do órgão B tentando se passar pelo órgão A via header: barrado pela resolução de tenant, sem efeito.
     await expectDeniedWithoutEffect("foreign owner com header do órgão A", async () => ratifyCall(await caller(foreignOwner, ORG_A)),

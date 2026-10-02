@@ -5920,6 +5920,39 @@ export const ratificationsTable = mysqlTable("ratifications", {
   ratifiedAt:     datetime("ratified_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
 
+/**
+ * R4 / PR-07 (SEM-004) — ledger APPEND-ONLY de decisões institucionais (0312). Separa quem DECIDIU (autoridade
+ * declarada no ato) de quem REGISTROU (usuário autenticado). Revisão monotônica por assunto (UNIQUE) + superação
+ * explícita; idempotência por (órgão, chave). Nunca UPDATE/DELETE pela aplicação. Competência jurídica NÃO validada
+ * (`authority_validation` = NOT_VALIDATED_POLICY_PENDING até a política da R4.2).
+ */
+export const institutionalDecisionsTable = mysqlTable("institutional_decisions", {
+  id:                   varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  subjectType:          varchar("subject_type", { length: 48 }).notNull(),
+  subjectId:            varchar("subject_id", { length: 64 }).notNull(),
+  decisionType:         varchar("decision_type", { length: 48 }).notNull(),
+  outcome:              varchar("outcome", { length: 48 }).notNull(),
+  revision:             int("revision").notNull(),
+  supersedesDecisionId: varchar("supersedes_decision_id", { length: 24 }),
+  decidedByName:        varchar("decided_by_name", { length: 255 }).notNull(),
+  decidedByRole:        varchar("decided_by_role", { length: 255 }).notNull(),
+  decidedByUserId:      int("decided_by_user_id"),
+  decidedAt:            varchar("decided_at", { length: 10 }).notNull(),
+  basisReference:       varchar("basis_reference", { length: 500 }).notNull(),
+  reason:               text("reason").notNull(),
+  evidence:             text("evidence"),
+  recordedByUserId:     int("recorded_by_user_id").notNull(),
+  authorityValidation:  varchar("authority_validation", { length: 40 }).notNull().default("NOT_VALIDATED_POLICY_PENDING"),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  idempotencyKey:       varchar("idempotency_key", { length: 128 }).notNull(),
+  requestHash:          varchar("request_hash", { length: 64 }).notNull(),
+  recordedAt:           datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_idc_subject_revision").on(table.organizationId, table.subjectType, table.subjectId, table.revision),
+  unique("uq_idc_org_idempotency").on(table.organizationId, table.idempotencyKey),
+]);
+
 export const generatedPublicationsTable = mysqlTable("generated_publications", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
   organizationId: int("organization_id").notNull(),

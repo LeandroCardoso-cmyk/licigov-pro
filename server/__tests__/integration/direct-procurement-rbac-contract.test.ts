@@ -102,7 +102,11 @@ const CALLS: Record<DirectProcurementProcedureName, (c: Caller) => Promise<unkno
   validateDocuments: (c) => c.validateDocuments({ workspaceId: WS }),
   requestLegalOpinion: (c) => c.requestLegalOpinion({ workspaceId: WS }),
   getLegalOpinion: (c) => c.getLegalOpinion({ requestId: "req-1" }),
-  ratify: (c) => c.ratify({ workspaceId: WS, decision: "ratificado", justification: "x" }),
+  ratify: (c) => c.ratify({
+    workspaceId: WS, decision: "ratificado", decidedByName: "Autoridade", decidedByRole: "Secretário(a)", decidedAt: "2026-09-30",
+    basisReference: "Despacho 1/2026", justification: "Justificativa de teste RBAC.", expectedRevision: 0, idempotencyKey: "rbac-contract-rat-01",
+  }),
+  getRatificationDecision: (c) => c.getRatificationDecision({ workspaceId: WS }),
   publish: (c) => c.publish({ workspaceId: WS }),
   configureFlags: (c) => c.configureFlags({ workspaceId: WS, requiresLegalOpinion: false }),
 };

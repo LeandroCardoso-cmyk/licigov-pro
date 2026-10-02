@@ -11,6 +11,8 @@
  */
 
 import { TRPCError } from "@trpc/server";
+import { getCurrentDecision } from "../db/institutionalDecisions";
+import type { InstitutionalDecision } from "../domain/institutionalDecision";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
@@ -34,7 +36,7 @@ import {
 import {
   getDirectProcurementWorkspace, upsertContractJustification, upsertPriceJustification,
   insertGeneratedPublication, insertRequiredDocument, listRequiredDocuments, getDirectProcedure,
-  getRatification, getContractJustification, getPriceJustification,
+  getContractJustification, getPriceJustification,
 } from "../db/directProcurement";
 
 const DOMAIN = "contratacao_direta" as const;
@@ -377,17 +379,20 @@ export async function generatePublications(params: {
   // `ratificado` persistida. Sem ratificação, ou com `nao_ratificado`, nunca se materializa um
   // `official_documents.documentType = ratificacao` (o Termo de Ratificação é ato institucional,
   // jamais texto de preenchimento). O caller não avança para PUBLICATION porque este erro propaga.
-  const ratification = await getRatification(ws.id, params.organizationId);
+  // R4 / PR-07 — a decisão que vale é a CORRENTE do ledger append-only (0312), com autoridade declarada, data e
+  // referência do ato. Linhas legadas de `ratifications` (pré-0312, sem esses dados) são histórico e NÃO bastam
+  // para publicar (fail-closed: nada é fabricado a partir delas).
+  const ratification = await getCurrentDecision(null, params.organizationId, "direct_procurement.ratification", ws.id);
   if (!ratification) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: "Publicação bloqueada: a Ratificação ainda não foi registrada pela autoridade competente.",
+      message: "Publicação bloqueada: a decisão de ratificação ainda não foi registrada com a autoridade declarada, a data e a referência do ato.",
     });
   }
-  if (ratification.decision !== "ratificado") {
+  if (ratification.outcome !== "ratificado") {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: `Publicação bloqueada: a decisão registrada é "${ratification.decision}". Somente uma ratificação "ratificado" permite publicar.`,
+      message: `Publicação bloqueada: a decisão registrada é "${ratification.outcome}". Somente uma ratificação "ratificado" permite publicar.`,
     });
   }
 
@@ -435,7 +440,7 @@ export async function generatePublications(params: {
  */
 function buildRatificationContent(
   ws: { processNumber: string; procurementType: string; legalBasis: string | null; object: string },
-  ratification: { responsible: number; decision: string; justification: string; evidence: string[]; ratifiedAt: string } | null,
+  ratification: InstitutionalDecision | null,
   contractJustification: { need: string; legalFoundation: string } | null,
   priceJustification: { source: string; referenceValue: number; justification: string } | null,
 ): string {
@@ -448,12 +453,14 @@ function buildRatificationContent(
   if (ratification) {
     lines.push(
       `## Decisão`,
-      `Autoridade responsável (id): ${ratification.responsible}`,
-      `Decisão: ${ratification.decision}`,
-      `Ratificado em: ${ratification.ratifiedAt}`,
+      `Autoridade (declarada no registro): ${ratification.decidedByName} — ${ratification.decidedByRole}`,
+      `Decisão: ${ratification.outcome}`,
+      `Data do ato: ${ratification.decidedAt} · Referência: ${ratification.basisReference}`,
+      `Registrada por (usuário id): ${ratification.recordedByUserId} · Revisão: ${ratification.revision}`,
+      `> A competência da autoridade declarada não é validada pelo sistema (política jurídica pendente).`,
       ``,
       `## Justificativa da Ratificação`,
-      ratification.justification || "—",
+      ratification.reason || "—",
     );
     if (ratification.evidence.length > 0) {
       lines.push(``, `## Evidências`, ...ratification.evidence.map(e => `- ${e}`));
