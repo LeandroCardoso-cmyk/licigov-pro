@@ -186,9 +186,155 @@ export function updateContractFields(
   patch: Partial<Pick<ContractWorkspace, "contractor" | "object" | "value" | "term" | "manager" | "inspector" | "contractNumber">>,
   at?: string,
 ): ContractWorkspace {
-  return { ...ws, ...patch, updatedAt: at ?? new Date().toISOString() };
+  // SEM-023 — fora da minuta, nenhum campo muda por esta edição genérica: econômicos/de identidade só por
+  // instrumento; gestor/fiscal só por ação própria de designação (recusa antes de qualquer efeito).
+  assertContractFieldsEditable(ws, patch);
+  return { ...ws, ...pickEditableContractFields(patch), updatedAt: at ?? new Date().toISOString() };
 }
 
 export function isContractTerminal(ws: ContractWorkspace): boolean {
   return STATUS_TRANSITIONS[ws.status].length === 0;
+}
+
+// ─── SEM-023 — fora da minuta a edição genérica não altera campos (instrumento / ação governada) ────
+
+/** Único status em que o contrato ainda é rascunho (todos os fluxos de nascimento criam `minuta`). */
+export const CONTRACT_DRAFT_STATUS = "minuta" as const satisfies ContractStatus;
+
+/** Tokens estáveis (não traduzir; usados por testes e pelo cliente). */
+export const CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT = "CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT";
+export const CONTRACT_REVISION_CONFLICT = "CONTRACT_REVISION_CONFLICT";
+export const CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION = "CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION";
+
+/**
+ * Campos econômicos/de identidade do contrato. Fora de `minuta` só mudam por INSTRUMENTO — o próprio
+ * domínio já modela o caminho: aditivo de `valor`/`prazo`/`quantitativo`/`qualitativo` (`newValue`,
+ * `newTerm`) e apostilamento de `reajuste` (`newValue`). `contractor` (contratado) e `contractNumber`
+ * são a identidade do contrato; `object` só muda por aditivo qualitativo.
+ */
+export const CONTRACT_INSTRUMENT_GOVERNED_FIELDS = ["contractNumber", "contractor", "object", "value", "term"] as const;
+
+/**
+ * Designações do contrato (gestor e fiscal). Editáveis pela edição genérica SOMENTE na minuta (decisão do
+ * responsável pelo produto, PR-12 rev. 2). Fora dela a recusa é fail-closed com token próprio
+ * (`CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION`), e não o token de instrumento, porque:
+ *  - gestor/fiscal não são termo econômico do contrato — apontar "Termo Aditivo" seria orientação errada;
+ *  - o apostilamento `gestor`/`fiscal` existente (`createApostille`) só registra o instrumento e a minuta;
+ *    ele NÃO aplica o novo nome em `manager`/`inspector`, logo não é (ainda) o caminho que efetiva a troca.
+ *
+ * DÍVIDA / CAPACIDADE FUTURA (não implementada aqui, de propósito): a designação ou substituição de gestor
+ * e fiscal após a formalização precisa de uma AÇÃO ESPECÍFICA, auditada e semanticamente nomeada (ex.:
+ * "designar/substituir gestor" e "designar/substituir fiscal"), com ator, motivo, ato de referência e
+ * evento de timeline próprios — nunca de volta pelo editor genérico `updateContract`.
+ */
+export const CONTRACT_ASSIGNMENT_FIELDS = ["manager", "inspector"] as const;
+
+export type ContractGovernedField = (typeof CONTRACT_INSTRUMENT_GOVERNED_FIELDS)[number];
+export type ContractAssignmentField = (typeof CONTRACT_ASSIGNMENT_FIELDS)[number];
+export type ContractEditableField = ContractGovernedField | ContractAssignmentField;
+export type ContractFieldPatch = Partial<Pick<ContractWorkspace, ContractEditableField>>;
+
+/**
+ * Tudo o que a edição genérica aceita — e, por consequência das duas listas acima, fora da minuta NENHUM
+ * campo muda por `updateContract` (só o reenvio idêntico do formulário, que não é alteração). A troca de
+ * `status` pela máquina de estados (`transitionContractStatus`) é independente destas listas e não mudou.
+ */
+export const CONTRACT_EDITABLE_FIELDS: readonly ContractEditableField[] = [...CONTRACT_INSTRUMENT_GOVERNED_FIELDS, ...CONTRACT_ASSIGNMENT_FIELDS];
+
+/** Recusa: tentativa de alterar campo econômico/de identidade de contrato que não está em minuta. */
+export class ContractEconomicFieldsRequireInstrumentError extends Error {
+  readonly code = CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT;
+  constructor(public readonly status: ContractStatus, public readonly fields: readonly ContractGovernedField[]) {
+    super(
+      `Contrato em status "${status}" não admite alteração direta de ${fields.join(", ")}. ` +
+      "Após a minuta, valor, contratado, objeto, vigência e número mudam somente por instrumento " +
+      `(Termo Aditivo ou Apostilamento) — ${CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT}.`,
+    );
+    this.name = "ContractEconomicFieldsRequireInstrumentError";
+  }
+}
+
+/** Recusa: tentativa de trocar gestor/fiscal pela edição genérica de contrato que não está em minuta. */
+export class ContractAssignmentRequiresGovernedActionError extends Error {
+  readonly code = CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION;
+  constructor(public readonly status: ContractStatus, public readonly fields: readonly ContractAssignmentField[]) {
+    super(
+      `Contrato em status "${status}" não admite troca direta de gestor/fiscal (${fields.join(", ")}). ` +
+      "Após a minuta, a designação ou substituição de gestor e fiscal exige uma ação própria e auditada, " +
+      `que ainda não está disponível nesta tela — nada foi gravado (${CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION}).`,
+    );
+    this.name = "ContractAssignmentRequiresGovernedActionError";
+  }
+}
+
+/** Recusa: a revisão que o cliente carregou não é mais a revisão persistida (outro salvamento venceu). */
+export class ContractRevisionConflictError extends Error {
+  readonly code = CONTRACT_REVISION_CONFLICT;
+  constructor() {
+    super(
+      "O contrato foi alterado por outra pessoa ou aba depois que você o abriu. Recarregue o contrato " +
+      `e refaça a edição — nada foi gravado (${CONTRACT_REVISION_CONFLICT}).`,
+    );
+    this.name = "ContractRevisionConflictError";
+  }
+}
+
+/** Mantém somente os campos editáveis conhecidos (whitelist — nada de status, ids ou datas via patch). */
+export function pickEditableContractFields(patch: Record<string, unknown>): ContractFieldPatch {
+  const out: Record<string, unknown> = {};
+  for (const k of CONTRACT_EDITABLE_FIELDS) if (patch[k] !== undefined) out[k] = patch[k];
+  return out as ContractFieldPatch;
+}
+
+function sameFieldValue(field: ContractEditableField, current: unknown, next: unknown): boolean {
+  // `value` é DECIMAL(15,2): compara em centavos (o formulário reenvia o valor carregado).
+  if (field === "value") return Math.round(Number(current) * 100) === Math.round(Number(next) * 100);
+  return String(current ?? "") === String(next ?? "");
+}
+
+function changedFields<F extends ContractEditableField>(fields: readonly F[], ws: ContractWorkspace, patch: Record<string, unknown>): F[] {
+  return fields.filter(f => patch[f] !== undefined && !sameFieldValue(f, ws[f], patch[f]));
+}
+
+/**
+ * Campos econômicos/de identidade que o patch REALMENTE altera (valor reenviado igual ao persistido não é
+ * alteração — o editor envia o formulário inteiro).
+ */
+export function governedFieldChanges(ws: ContractWorkspace, patch: Record<string, unknown>): ContractGovernedField[] {
+  return changedFields(CONTRACT_INSTRUMENT_GOVERNED_FIELDS, ws, patch);
+}
+
+/** Gestor/fiscal que o patch REALMENTE altera (reenvio do nome persistido não é alteração). */
+export function assignmentFieldChanges(ws: ContractWorkspace, patch: Record<string, unknown>): ContractAssignmentField[] {
+  return changedFields(CONTRACT_ASSIGNMENT_FIELDS, ws, patch);
+}
+
+/**
+ * Fora da minuta, recusa (fail-closed) qualquer alteração real feita pela edição genérica:
+ *  - campo econômico/de identidade ⇒ `ContractEconomicFieldsRequireInstrumentError` (tem precedência: se o
+ *    patch mexe nos dois grupos, a orientação de instrumento vem primeiro);
+ *  - gestor/fiscal ⇒ `ContractAssignmentRequiresGovernedActionError`.
+ * Reenvio do valor persistido não é alteração e passa.
+ */
+export function assertContractFieldsEditable(ws: ContractWorkspace, patch: Record<string, unknown>): void {
+  if (ws.status === CONTRACT_DRAFT_STATUS) return;
+  const changed = governedFieldChanges(ws, patch);
+  if (changed.length > 0) throw new ContractEconomicFieldsRequireInstrumentError(ws.status, changed);
+  const assignments = assignmentFieldChanges(ws, patch);
+  if (assignments.length > 0) throw new ContractAssignmentRequiresGovernedActionError(ws.status, assignments);
+}
+
+/** A revisão do contrato é o `updatedAt` persistido (DATETIME(3)); compara por instante, não por texto. */
+export function isSameContractRevision(a: string, b: string): boolean {
+  const ta = Date.parse(a); const tb = Date.parse(b);
+  return Number.isFinite(ta) && Number.isFinite(tb) && ta === tb;
+}
+
+/**
+ * Próxima revisão: sempre ESTRITAMENTE posterior à revisão esperada (mesmo com dois salvamentos no mesmo
+ * milissegundo ou relógio atrasado), para que um CAS perdedor nunca case com a revisão nova.
+ */
+export function nextContractRevision(expectedUpdatedAt: string, now: Date = new Date()): string {
+  const floor = Date.parse(expectedUpdatedAt) + 1;
+  return new Date(Math.max(now.getTime(), Number.isFinite(floor) ? floor : 0)).toISOString();
 }

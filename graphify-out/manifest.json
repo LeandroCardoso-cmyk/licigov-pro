@@ -695,8 +695,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractEditor.tsx": {
-    "mtime": 1790643728.9214704,
-    "ast_hash": "64dca99105449e1ec7b00b3b60b80e8c",
+    "mtime": 1790905365.8641086,
+    "ast_hash": "2a2431a95ab246ce4cacfffceb30d364",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractOverview.tsx": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790905078.2453983,
-    "ast_hash": "5c56fcf43736fad513d9ce7ebf06d210",
+    "mtime": 1790905365.8886774,
+    "ast_hash": "bf3a00fce380a79513ab2cb106c91d26",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6490,8 +6490,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "c34dfc51fa3316a8bb1dc4c3be6d6fe0",
+    "mtime": 1790905365.8641086,
+    "ast_hash": "8389dcebb4c61f44100d022cb03d30e8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1790905078.2040913,
-    "ast_hash": "2be706854fde02cbf84d2fffb15af2e4",
+    "mtime": 1790905380.6951501,
+    "ast_hash": "2400281a08465d26dbb0324a98082967",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -7335,8 +7335,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1790905078.2040913,
-    "ast_hash": "0f461e84c34e5c472d66f41bfc229f68",
+    "mtime": 1790905365.8641086,
+    "ast_hash": "a6568129b3279614f47f9c7ddff8a68f",
     "semantic_hash": ""
   },
   "server/domain/copilotCapability.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1790905013.9040875,
-    "ast_hash": "5546efaed74a140c7de50e612e592a20",
+    "mtime": 1790905365.8641086,
+    "ast_hash": "8cc82aa2bfb01fddcf5f9f5a6b9eaea4",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -12760,8 +12760,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts": {
-    "mtime": 1790891755.7999299,
-    "ast_hash": "c0daeb327c5f1f950b36bfcb205cffd9",
+    "mtime": 1790905396.141341,
+    "ast_hash": "05059d0078d8b553e240d6c6fa395857",
     "semantic_hash": ""
   },
   "server/__tests__/integration/create-not-reset-legal-contract.test.ts": {
@@ -12792,6 +12792,21 @@
   "docs/design/CONTRACT_ACTIVATION_TRANSITION.md": {
     "mtime": 1790905078.2040913,
     "ast_hash": "da9b8dc47fd7a772618a661050794552",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr12-contract-governed-change-mysql-smoke.test.ts": {
+    "mtime": 1790905365.8641086,
+    "ast_hash": "7db81efab6933ca06549ead6d389044d",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr12-contract-governed-change.test.ts": {
+    "mtime": 1790905374.5904708,
+    "ast_hash": "dc091af4d13e0e7330b90bd886a94819",
+    "semantic_hash": ""
+  },
+  "server/services/contractEditService.ts": {
+    "mtime": 1790905365.8641086,
+    "ast_hash": "c66ef4dafa7b69910be5c0373f8b3266",
     "semantic_hash": ""
   }
 }
