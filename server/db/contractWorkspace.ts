@@ -148,6 +148,46 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
 }
 
 /**
+ * SEM-023 — gravação da edição do contrato por COMPARE-AND-SET da revisão (`updated_at`, DATETIME(3)).
+ * Numa ÚNICA sentença SQL:
+ *   UPDATE contract_workspaces SET contract_number=?, contractor=?, object=?, value=?, term=?, status=?,
+ *          manager=?, inspector=?, updated_at=? WHERE id=? AND organization_id=? AND updated_at=?
+ * Grava somente se a revisão persistida ainda for `expectedUpdatedAt`; `ws.updatedAt` precisa ser
+ * estritamente posterior (ver `nextContractRevision`), então de dois salvamentos concorrentes com a
+ * mesma revisão exatamente um casa. Nunca insere (não é upsert) e nunca toca id/origem/tenant/createdBy.
+ * Retorna `false` quando 0 linhas casam (revisão mudou em paralelo, ou contrato inexistente no tenant):
+ * nesse caso NADA foi gravado. Degrada sem DB (`false`).
+ */
+export async function compareAndSetContractWorkspace(ws: ContractWorkspace, expectedUpdatedAt: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  let result: unknown;
+  try {
+    result = await db.update(contractWorkspacesTable)
+      .set({
+        contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+        term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector, updatedAt: toDbDatetime(ws.updatedAt),
+      })
+      .where(and(
+        eq(contractWorkspacesTable.id, ws.id),
+        eq(contractWorkspacesTable.organizationId, ws.organizationId),
+        eq(contractWorkspacesTable.updatedAt, toDbDatetime(expectedUpdatedAt)),
+      ));
+  } catch (err) {
+    // Integração PR-06 × PR-12: renomear para um número já usado por outro contrato da organização viola
+    // UNIQUE(organization_id, normalized_number) (0310). O UPDATE falha INTEIRO (nada gravado) ⇒ CONFLICT
+    // governado `CONTRACT_ALREADY_EXISTS` (mesma recusa que o upsert legado emitia), nunca 500.
+    if (!isDuplicateKeyError(err)) throw err;
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Já existe outro contrato com o número "${ws.contractNumber}" nesta organização. O número do contrato é único na organização, qualquer que seja a origem; nada foi alterado (${CONTRACT_ALREADY_EXISTS}).`,
+    });
+  }
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  return (header?.affectedRows ?? 0) > 0;
+}
+
+/**
  * Busca um contrato AVULSO existente pelo número, na mesma organização — usada para
  * detectar colisão ANTES de criar (unicidade institucional do contrato avulso; ver
  * revisão arquitetural). Não cobre os outros 3 fluxos (processo/direta/externo),

@@ -636,7 +636,8 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     // Integração NEW-022 (fix-up 0009): o editor genérico NÃO ativa contrato (minuta → vigente exige ação governada
     // ainda inexistente) — nem para manager (piso NEW-006). O objeto do C12 é o retry DEPOIS que o contrato saiu de
     // minuta; o estado `vigente` é, portanto, fixture direta no banco.
-    const act = await errOf(async () => (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente" }));
+    const act = await errOf(async () => (await caller(managerA, ORG_A)).contractWorkspace.updateContract({ contractId: workspace.id, status: "vigente", expectedUpdatedAt: workspace.updatedAt }));
+    // (PR-12, fix-up 0005: o save exige a revisão carregada — CAS `expectedUpdatedAt`.)
     expect(act.code).toBe("FORBIDDEN");
     expect(act.message).toContain("CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION");
     expect((await contractRow(ORG_A, workspace.id)).status).toBe("minuta");
@@ -654,7 +655,7 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     const a = await c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-13`, contractNumber: `CT-${RUN}-C13A`, contractor: "Mi" });
     const b = await c.contractWorkspace.createManual({ idempotencyKey: `k-c13-${RUN}`, contractNumber: `CT-${RUN}-C13B`, contractor: "Ni" });
     const before = await orgContractsSnapshot(ORG_A);
-    const e = await errOf(() => c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado" }));
+    const e = await errOf(() => c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado", expectedUpdatedAt: a.workspace.updatedAt }));
     expect(e.code).toBe("CONFLICT");
     expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
     expect(await orgContractsSnapshot(ORG_A)).toBe(before);
