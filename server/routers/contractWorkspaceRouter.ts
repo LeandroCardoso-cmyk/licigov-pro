@@ -224,11 +224,12 @@ export const contractWorkspaceRouter = router({
     }),
 
   generateDocuments: orgRoleProcedure("operator")
-    .input(z.object({ contractId: z.string().min(1), kind: z.enum(DOC_KINDS) }))
+    // R7 / PR-17 (SEM-024): aditivo/apostilamento exigem `refId` do instrumento registrado (termo a partir dele).
+    .input(z.object({ contractId: z.string().min(1), kind: z.enum(DOC_KINDS), refId: z.string().min(1).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return generateContractDocument({ organizationId: orgId, contractId: input.contractId, kind: input.kind, correlationId: ctx.correlationId });
+      return generateContractDocument({ organizationId: orgId, contractId: input.contractId, kind: input.kind, refId: input.refId, actorUserId: ctx.user.id, correlationId: ctx.correlationId });
     }),
 
   createAddendum: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
@@ -236,7 +237,7 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, correlationId: ctx.correlationId })
+      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
         .catch(mapInstrumentStatusError);
     }),
 
@@ -245,7 +246,7 @@ export const contractWorkspaceRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, correlationId: ctx.correlationId })
+      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
         .catch(mapInstrumentStatusError);
       return { apostille };
     }),

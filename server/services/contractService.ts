@@ -32,8 +32,12 @@ import {
 import { createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER, type ImportedContractSource } from "../domain/contractReconstruction";
 import { getDb } from "../db/connection";
 import {
+  buildAddendumTermContent, buildApostilleTermContent, INSTRUMENT_NOT_FOUND, INSTRUMENT_REFERENCE_REQUIRED,
+  type AddendumData, type ApostilleData,
+} from "../domain/instrumentTerms";
+import {
   getContractWorkspace, compareAndSetContractWorkspaceStatus, type ContractWsExecutor,
-  insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda,
+  insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda, listContractApostilles,
   insertContractApostille, countContractApostilles, insertContractOccurrence, insertImportedContract,
   findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
 } from "../db/contractWorkspace";
@@ -237,12 +241,37 @@ export async function importExternalContract(params: {
 
 // ─── Geração inteligente de minutas (Document Engine + copilotos) ─────────────
 
+/**
+ * R7 / PR-17 (SEM-024) — carrega o instrumento (aditivo/apostilamento) referenciado, tenant- e contrato-scoped.
+ * Sem referência ⇒ PRECONDITION_FAILED; inexistente/de outro contrato ⇒ NOT_FOUND. Nada é gerado sem o instrumento.
+ */
+async function loadInstrumentForTerm(kind: "aditivo" | "apostilamento", contractId: string, orgId: number, refId: string | undefined):
+  Promise<{ kind: "aditivo"; data: AddendumData } | { kind: "apostilamento"; data: ApostilleData }> {
+  if (!refId) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Informe o ${kind === "aditivo" ? "aditivo" : "apostilamento"} registrado para gerar o termo; nada foi gerado (${INSTRUMENT_REFERENCE_REQUIRED}).` });
+  }
+  if (kind === "aditivo") {
+    const a = (await listContractAddenda(contractId, orgId)).find((x) => x.id === refId);
+    if (!a) throw new TRPCError({ code: "NOT_FOUND", message: `Aditivo não encontrado neste contrato (${INSTRUMENT_NOT_FOUND}).` });
+    return { kind, data: a };
+  }
+  const ap = (await listContractApostilles(contractId, orgId)).find((x) => x.id === refId);
+  if (!ap) throw new TRPCError({ code: "NOT_FOUND", message: `Apostilamento não encontrado neste contrato (${INSTRUMENT_NOT_FOUND}).` });
+  return { kind, data: ap };
+}
+
 /** Gera a minuta (revisável) de um documento contratual usando os copilotos do domínio. */
 export async function generateContractDocument(params: {
   organizationId: number; contractId: string; kind: ContractDocumentKind; refId?: string; correlationId: string;
   invoke?: (prompt: string) => Promise<string>;
+  /** R7 / PR-17 — quem pediu a geração (autor do documento); ausente ⇒ "sistema" (nunca `multi_copilot`). */
+  actorUserId?: number;
 }): Promise<{ document: Awaited<ReturnType<typeof insertContractWsDocument>>; officialDocumentId: string; recommendation: Recommendation }> {
   const ws = await requireContract(params.contractId, params.organizationId);
+  // R7 / PR-17 (SEM-024) — aditivo/apostilamento só a partir do INSTRUMENTO registrado (fail-closed antes da IA).
+  const instrument = params.kind === "aditivo" || params.kind === "apostilamento"
+    ? await loadInstrumentForTerm(params.kind, ws.id, params.organizationId, params.refId)
+    : null;
   assertKernelAccess(DOMAIN, "document_engine");
   assertKernelAccess(DOMAIN, "institutional_rag");
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
@@ -255,25 +284,32 @@ export async function generateContractDocument(params: {
     invoke: params.invoke,
   });
 
-  const content = [
-    `# ${titleForKind(params.kind)} — ${ws.contractNumber}`,
-    `Contratado: ${ws.contractor || "—"} · Objeto: ${ws.object || "—"} · Vigência: ${ws.term || "—"}`,
-    "",
-    "## Cláusulas",
-    ...orchestration.consolidated.suggestions.map((s, i) => `CLÁUSULA ${i + 1}. ${s}`),
-    "",
-    "## Fundamentação",
-    ...orchestration.consolidated.legalBasis.map(l => `- ${l}`),
-    "",
-    "> Minuta gerada com apoio dos copilotos. Revisão obrigatória — nunca automática.",
-  ].join("\n");
+  const contractHeader = { contractNumber: ws.contractNumber, contractor: ws.contractor ?? "", object: ws.object ?? "", term: ws.term ?? "" };
+  const content = instrument?.kind === "aditivo"
+    ? buildAddendumTermContent(contractHeader, instrument.data, orchestration.consolidated.suggestions, orchestration.consolidated.legalBasis)
+    : instrument?.kind === "apostilamento"
+      ? buildApostilleTermContent(contractHeader, instrument.data, orchestration.consolidated.suggestions)
+      : [
+        `# ${titleForKind(params.kind)} — ${ws.contractNumber}`,
+        `Contratado: ${ws.contractor || "—"} · Objeto: ${ws.object || "—"} · Vigência: ${ws.term || "—"}`,
+        "",
+        "## Cláusulas",
+        ...orchestration.consolidated.suggestions.map((s, i) => `CLÁUSULA ${i + 1}. ${s}`),
+        "",
+        "## Fundamentação",
+        ...orchestration.consolidated.legalBasis.map(l => `- ${l}`),
+        "",
+        "> Minuta gerada com apoio dos copilotos. Revisão obrigatória — nunca automática.",
+      ].join("\n");
+  const author = params.actorUserId ? String(params.actorUserId) : "sistema";
 
   // SPRINT 5.3.1 — metadados institucionais auditáveis da minuta.
   const doc = createContractGeneratedDocument({
     organizationId: params.organizationId, contractId: ws.id, kind: params.kind,
     title: `${titleForKind(params.kind)} — ${ws.contractNumber}`, content, refId: params.refId,
     metadata: {
-      clauseOrigin: "template_institucional",
+      clauseOrigin: instrument ? "instrumento_registrado" : "template_institucional",
+      ...(instrument ? { instrumentId: instrument.data.id, instrumentKind: instrument.kind } : {}),
       template: `contrato_${params.kind}`,
       templateVersion: "1.0",
       legalBasis: orchestration.consolidated.legalBasis,
@@ -291,8 +327,11 @@ export async function generateContractDocument(params: {
   const official = await generateOfficialDocument({
     organizationId: params.organizationId, businessDomain: "contratos",
     documentType: params.kind === "rescisao" ? "rescisao" : params.kind === "aditivo" ? "aditivo" : params.kind === "apostilamento" ? "apostilamento" : "contrato",
-    origin: ws.id, title: doc.title, content, author: "multi_copilot", correlationId: params.correlationId,
-    metadata: { copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, confidence: orchestration.consolidated.confidence },
+    origin: ws.id, title: doc.title, content, author, correlationId: params.correlationId,
+    metadata: {
+      copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, confidence: orchestration.consolidated.confidence,
+      ...(instrument ? { instrumentId: instrument.data.id, instrumentKind: instrument.kind, contractNumber: ws.contractNumber } : {}),
+    },
   });
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "recommendation", actor: "multi_copilot", summary: `Minuta de ${params.kind} gerada (rascunho revisável).`, refId: doc.id, correlationId: params.correlationId });
 
@@ -419,7 +458,7 @@ async function persistInstrumentWithGovernedStatus(params: {
  */
 export async function createAddendum(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
-  newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string;
+  newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId?: number;
 }): Promise<{ addendum: Awaited<ReturnType<typeof insertContractAddendum>>; requiresLegalOpinion: boolean }> {
   const ws = await requireContract(params.contractId, params.organizationId);
   // Adaptive Process Engine (regra PRÉ-EXISTENTE, não definida juridicamente aqui — PR-18/PR-20 são donas do
@@ -441,7 +480,7 @@ export async function createAddendum(params: {
     write: (tx) => insertContractAddendum(updated, tx, { failOnDuplicate: true }),
     event: { summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? `requer parecer; status do contrato mantido (${plan.to}) até o parecer` : "finalizado"}.`, refId: updated.id, correlationId: params.correlationId },
   });
-  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "aditivo", refId: updated.id, correlationId: params.correlationId });
+  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "aditivo", refId: updated.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
   return { addendum: updated, requiresLegalOpinion };
 }
 
@@ -454,7 +493,7 @@ export async function createAddendum(params: {
  */
 export async function createApostille(params: {
   organizationId: number; contractId: string; kind: ApostilleKind; description?: string;
-  newValue?: number; newManager?: string; newInspector?: string; correlationId: string;
+  newValue?: number; newManager?: string; newInspector?: string; correlationId: string; actorUserId?: number;
 }): Promise<Awaited<ReturnType<typeof insertContractApostille>>> {
   const ws = await requireContract(params.contractId, params.organizationId);
   const plan = planInstrumentStatusChange(ws.status, "apostilamento");
@@ -468,7 +507,7 @@ export async function createApostille(params: {
     write: (tx) => insertContractApostille(apostille, tx, { failOnDuplicate: true }),
     event: { summary: `Apostilamento ${sequence} (${params.kind}).`, refId: apostille.id, correlationId: params.correlationId },
   });
-  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "apostilamento", refId: apostille.id, correlationId: params.correlationId });
+  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "apostilamento", refId: apostille.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
   return apostille;
 }
 
