@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1790944655.0912998,
-    "ast_hash": "b2cc3a6c96856553888d6f9d0614e7d2",
+    "mtime": 1790963377.6785018,
+    "ast_hash": "62241e6d961dd2dc8e674e7db849507b",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1790944631.154938,
-    "ast_hash": "ae1969c73db0cb0788190a141342e1ac",
+    "mtime": 1790963336.3754852,
+    "ast_hash": "cd7286c42877a733f9dabe49fcc12833",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790945231.948394,
-    "ast_hash": "7f6617abd5d20f21386d4f92c6a6a26f",
+    "mtime": 1790963538.3363576,
+    "ast_hash": "072e6bb80fafcd382b9aa78e51045379",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5500,8 +5500,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
-    "mtime": 1790891509.3147955,
-    "ast_hash": "231fb46cf4aec822c1792a8842072d7b",
+    "mtime": 1790963692.336367,
+    "ast_hash": "dceac990b7e022e2624789790116a16d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/csp-headers.test.ts": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1790905380.6951501,
-    "ast_hash": "2400281a08465d26dbb0324a98082967",
+    "mtime": 1790963440.4558082,
+    "ast_hash": "0fadf9b6cd1bc007a0aef89ce68a3c56",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1790945339.1294231,
-    "ast_hash": "cc6c21122e89698748af2220a7ddb7b3",
+    "mtime": 1790963435.4982338,
+    "ast_hash": "c7ac1309b3a0141f47090de4a3cebe5a",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -12739,39 +12739,24 @@
     "ast_hash": "3a243780ec00e39b437ecb6141888fb9",
     "semantic_hash": ""
   },
-  "drizzle/0310_contract_number_unique_per_org.sql": {
-    "mtime": 1790891572.8622067,
-    "ast_hash": "39f8935e37c4c1e04805c3528b569415",
-    "semantic_hash": ""
-  },
   "drizzle/meta/0310_snapshot.json": {
-    "mtime": 1790891574.5147994,
-    "ast_hash": "6a646d2eaa37330caa5ea7da41b7a2f5",
-    "semantic_hash": ""
-  },
-  "scripts/preflight-0310-contract-number.sql": {
-    "mtime": 1790891538.366819,
-    "ast_hash": "da79530fa090004542ca400b5509f9d0",
-    "semantic_hash": ""
-  },
-  "server/__tests__/integration/contract-number-unique-0310-mysql-smoke.test.ts": {
-    "mtime": 1790891694.9247818,
-    "ast_hash": "dfbd40192bbd316f947dd8473b9419f1",
+    "mtime": 1790963336.4083457,
+    "ast_hash": "c2e640bbba0fa7b3bd93569bc82804fd",
     "semantic_hash": ""
   },
   "server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts": {
-    "mtime": 1790905396.141341,
-    "ast_hash": "05059d0078d8b553e240d6c6fa395857",
+    "mtime": 1790963821.8999918,
+    "ast_hash": "8392f579bf036a48a22ad535ca4ad43b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/create-not-reset-legal-contract.test.ts": {
-    "mtime": 1790891509.3147955,
-    "ast_hash": "a1c5711dac79320bf4e02486b8eb9fc6",
+    "mtime": 1790963626.1808689,
+    "ast_hash": "baed705095d65241c20a717e6ccb1ec1",
     "semantic_hash": ""
   },
   "server/domain/contractCreation.ts": {
-    "mtime": 1790891538.3756354,
-    "ast_hash": "6f4746c7c43a2a08a249f22d320a2a4e",
+    "mtime": 1790963435.4994304,
+    "ast_hash": "86d2fb97afee2c0c3a93f843cb6660a2",
     "semantic_hash": ""
   },
   "docs/architecture/CREATE_REPLAY_CONTRACT.md": {
@@ -12840,8 +12825,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/0311_snapshot.json": {
-    "mtime": 1790905567.6001205,
-    "ast_hash": "2ea0d3b8f402cf7754e76c020fd552d6",
+    "mtime": 1790963336.4523456,
+    "ast_hash": "1ff4f80627e4ecd7b8b404e5707b35ab",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr09-regeneration-human-state-mysql-smoke.test.ts": {
@@ -12875,8 +12860,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/0312_snapshot.json": {
-    "mtime": 1790906035.2681484,
-    "ast_hash": "89a261bba3a46296a495b1f50d6b66b7",
+    "mtime": 1790963336.4923456,
+    "ast_hash": "2869527bdcec9ec7feba59986a603b06",
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-decision-ledger-mysql-smoke.test.ts": {
@@ -12925,8 +12910,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/0313_snapshot.json": {
-    "mtime": 1790906828.0921955,
-    "ast_hash": "d0ef77540673cc1324d036dcaa2fe64f",
+    "mtime": 1790963336.6563456,
+    "ast_hash": "f5b3004adaaec11c8ba80ebd91ba8cbb",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/canonicalItems.ts": {
@@ -13025,8 +13010,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/0314_snapshot.json": {
-    "mtime": 1790944633.7658944,
-    "ast_hash": "41b48a6a9905beadf9c13a824b8e8b95",
+    "mtime": 1790963336.6963456,
+    "ast_hash": "fde258b25354d2e886b28849c71a02b2",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr16-required-document-evidence-mysql-smoke.test.ts": {
@@ -13090,8 +13075,8 @@
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_BLOCKERS.md": {
-    "mtime": 1790945926.2139711,
-    "ast_hash": "f9782745cefba4d2cc2afb3c49510d2a",
+    "mtime": 1790963852.747057,
+    "ast_hash": "5188b1cd3a93dd2ed2fcef04b718bcd7",
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_COMMIT_MAP.md": {
@@ -13100,8 +13085,8 @@
     "semantic_hash": ""
   },
   "docs/audits/HUMAN_DECISION_PACKET.md": {
-    "mtime": 1790945912.8259704,
-    "ast_hash": "cb39733c8177c785e74c76e0c06271fd",
+    "mtime": 1790963852.7465713,
+    "ast_hash": "d741290e168cfa498077f4e80fe2c386",
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md": {
@@ -13117,6 +13102,31 @@
   "docs/audits/SEMANTIC_AUTHORITY_CLOSURE_REPORT.md": {
     "mtime": 1790946328.373995,
     "ast_hash": "d5dc2c494e9179e3ee057a22b73e3f80",
+    "semantic_hash": ""
+  },
+  "drizzle/0310_contract_number_normalized_index.sql": {
+    "mtime": 1790963377.6803482,
+    "ast_hash": "39d88615a602dbc72824c276d922963d",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/contract_number_scope_A_unique_per_org.sql": {
+    "mtime": 1790963396.1451392,
+    "ast_hash": "037b39e55a3cde6445955849b85a8ab8",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/preflight_contract_number_scope_A.sql": {
+    "mtime": 1790963435.4811459,
+    "ast_hash": "ebff8f4887ae1f1d131485a8b45ce233",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contract-number-scope-0310-mysql-smoke.test.ts": {
+    "mtime": 1790963873.256157,
+    "ast_hash": "97b53a97fcfb988a8d4e34a780526420",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/README.md": {
+    "mtime": 1790963396.1523492,
+    "ast_hash": "7064d37f6f9c48f1e9087b0600940437",
     "semantic_hash": ""
   }
 }

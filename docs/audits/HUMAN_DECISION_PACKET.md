@@ -19,6 +19,7 @@
 | HD-11 | **R10** P2 e LEG-007 | Aprovar `R10_P2_REMEDIATION_PLAN.md`; decidir remover ou manter UI morta (LEG-007) | aprovar / ajustar | P2 seguem abertos |
 | HD-12 | **Fatiamento em PRs** | Aprovar a ordem de PRs proposta em `AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md` §8 (migrations 0310→0314 em ordem) | aprovar / ajustar | nenhuma PR é aberta por este lote |
 | HD-13 | **SEM-027** método do valor de referência | Qual método institucional (média, mediana, menor preço, com/sem exclusão de outliers) e quem decide por processo? | definir | P1 permanece aberto |
+| HD-15 | **CONTRACT_NUMBER_SCOPE** (2º passe) | O número oficial do contrato deve ser único por órgão independentemente da origem? | **A** único por órgão, qualquer origem (SQL pronto e testado em `drizzle/policy-pending/`, com preflight read-only; aborta se já houver duplicatas); **B** único por órgão **e** origem — comportamento atual (PK hash(org, origem, número)); **C** outro padrão (ex.: normalização de caixa — NEW-027) | B continua valendo; o SEM-007 já está resolvido sem depender da escolha (INSERT-only na PK). Impacto de A: o mesmo número em outra origem e o rename para número usado passam a ser CONFLICT; exige preflight sem duplicatas |
 | HD-14 | **SEM-051** emissão do DFD | O DFD passa a ter emissão oficial governada (como ETP/TR/Edital)? | sim / não | guardas de "aprovado" do DFD seguem inalcançáveis |
 
 ## Riscos que o owner precisa aceitar ou recusar explicitamente

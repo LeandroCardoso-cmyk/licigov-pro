@@ -2087,7 +2087,7 @@
       "idx": 310,
       "version": "5",
       "when": 1790891574520,
-      "tag": "0310_contract_number_unique_per_org",
+      "tag": "0310_contract_number_normalized_index",
       "breakpoints": true
     },
     {

@@ -21,7 +21,7 @@
  *
  * Decisões do responsável (pós night-shift), verificadas em L8 e C8–C13:
  *  A) um único parecer vigente por solicitação/trabalho (evolução por versões; novo parecer = nova solicitação);
- *  B) número oficial do contrato ÚNICO POR ORGANIZAÇÃO, qualquer origem (chave = org + número normalizado por trim;
+ *  B) (2º passe) chave = PK (org, origem, número normalizado por trim); o escopo entre origens é HD-15 (pendente);
  *     checagem no servidor + UNIQUE(organization_id, normalized_number) da 0310);
  *  C) retry depois que o contrato saiu de "minuta" ⇒ CONFLICT (a idempotência não mascara a evolução institucional).
  */
@@ -406,9 +406,7 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     expect(a2.workspace.status).toBe("minuta");
     expect(await contractSnapshot(ORG_A, a.workspace.id)).toBe(beforeA);
 
-    // REESCRITO (decisão B): antes a Contratação Direta reusava o MESMO número ("origem faz parte da chave natural").
-    // Agora o número é único na organização qualquer que seja a origem — a Contratação Direta usa número próprio; o
-    // mesmo número entre origens é coberto por C8/C11.
+    // A Contratação Direta usa número próprio aqui; o mesmo número entre origens (HD-15 pendente) é coberto por C8.
     const d = { directWorkspaceId: `dp-${RUN}-3`, contractNumber: `CT-${RUN}-C3D`, contractor: "Delta", value: 7_000 };
     const b = await c.contractWorkspace.createFromDirectProcurement(d);
     expect(b.workspace.id).not.toBe(a.workspace.id);
@@ -534,33 +532,27 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     ]));
   }
 
-  it("C8 — número ÚNICO POR ORGANIZAÇÃO qualquer origem: o mesmo número via outra origem ⇒ CONFLICT CONTRACT_ALREADY_EXISTS, zero escrita", async () => {
+  // 2º passe: CONTRACT_NUMBER_SCOPE (HD-15) é decisão humana PENDENTE. O SEM-007 (reset sobre a mesma chave) é resolvido
+  // pela PK (órgão, origem, número) + INSERT-only (C1); o MESMO número em OUTRA origem continua aceito como antes —
+  // nada é decidido aqui, só registrado (`create_contract_number_used_by_other_origin`). A opção A (único por órgão)
+  // está preparada e testada fora da cadeia (contract-number-scope-0310-mysql-smoke A1/A2).
+  it("C8 — escopo entre origens pendente (HD-15): mesmo número em outra origem NÃO reseta nem bloqueia; mesma origem ⇒ CONFLICT", async () => {
     const number = `CT-${RUN}-C8`;
     const c = await caller(lawyerA, ORG_A);
     const { workspace } = await c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-8`, contractNumber: number, contractor: "Iota", value: 10 });
+    const original = await contractRow(ORG_A, workspace.id);
+    const d = await c.contractWorkspace.createFromDirectProcurement({ directWorkspaceId: `dp-${RUN}-8`, contractNumber: number, contractor: "Iota", value: 10 });
+    const m = await c.contractWorkspace.createManual({ idempotencyKey: `k-c8-${RUN}`, contractNumber: number, contractor: "Iota", value: 10 });
+    expect(new Set([workspace.id, d.workspace.id, m.workspace.id]).size).toBe(3);
+    expect(await contractRow(ORG_A, workspace.id)).toEqual(original); // o contrato de outra origem nunca é tocado
+    // Mesma ORIGEM e mesmo número com outro payload ⇒ CONFLICT, zero escrita.
     const before = await orgContractsSnapshot(ORG_A);
-    const attempts: Array<() => Promise<unknown>> = [
-      () => c.contractWorkspace.createFromDirectProcurement({ directWorkspaceId: `dp-${RUN}-8`, contractNumber: number, contractor: "Iota", value: 10 }),
-      () => c.contractWorkspace.createManual({ idempotencyKey: `k-c8-${RUN}`, contractNumber: number, contractor: "Iota", value: 10 }),
-      () => c.contractWorkspace.importExternalContract({ source: "pdf", rawText: `CONTRATADO: Iota\nOBJETO: c8 ${RUN}`, contractNumber: number }),
-    ];
-    for (const fn of attempts) {
-      const e = await errOf(fn);
-      expect(e.code).toBe("CONFLICT");
-      expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
-      expect(e.message).toMatch(/único na organização, qualquer que seja a origem/);
-      expect(e.message).toContain(`(id: ${workspace.id})`);
-      expect(await orgContractsSnapshot(ORG_A)).toBe(before);
-    }
-    // Ao contrário também: número nascido como avulso bloqueia o Processo Licitatório.
-    const n2 = `CT-${RUN}-C8M`;
-    const m = await c.contractWorkspace.createManual({ idempotencyKey: `k-c8m-${RUN}`, contractNumber: n2 });
-    const before2 = await orgContractsSnapshot(ORG_A);
-    const e2 = await errOf(() => c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-8m`, contractNumber: n2 }));
-    expect(e2.code).toBe("CONFLICT");
-    expect(e2.message).toContain(`(id: ${m.workspace.id})`);
-    expect(await orgContractsSnapshot(ORG_A)).toBe(before2);
-    expect(await count(`SELECT COUNT(*) n FROM contract_workspaces WHERE organization_id = ? AND contract_number IN (?, ?)`, [ORG_A, number, n2])).toBe(2);
+    const e = await errOf(() => c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-8b`, contractNumber: number, contractor: "Outro", value: 99 }));
+    expect(e.code).toBe("CONFLICT");
+    expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
+    expect(e.message).toContain(`(id: ${workspace.id})`);
+    expect(await orgContractsSnapshot(ORG_A)).toBe(before);
+    expect(await count(`SELECT COUNT(*) n FROM contract_workspaces WHERE organization_id = ? AND contract_number = ?`, [ORG_A, number])).toBe(3);
   }, 30_000);
 
   it("C9 — normalização mínima: \" CT-1 \" e \"CT-1\" são a MESMA chave (grava sem espaços); zeros/caixa preservados; vazio ⇒ BAD_REQUEST sem escrita", async () => {
@@ -575,8 +567,8 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     const r = await c.contractWorkspace.createFromProcurement({ ...p, contractNumber: base });
     expect(r.workspace.id).toBe(a.workspace.id);
     expect(await orgContractsSnapshot(ORG_A)).toBe(before);
-    // mesma chave por outra origem, com espaços diferentes ⇒ CONFLICT
-    const e = await errOf(() => c.contractWorkspace.createManual({ idempotencyKey: `k-c9-${RUN}`, contractNumber: `${base}   ` }));
+    // mesma chave (mesma origem) com espaços diferentes e outro payload ⇒ CONFLICT
+    const e = await errOf(() => c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-9other`, contractNumber: `${base}   ` }));
     expect(e.code).toBe("CONFLICT");
     expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
     expect(await orgContractsSnapshot(ORG_A)).toBe(before);
@@ -604,27 +596,30 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     expect(await count(`SELECT COUNT(*) n FROM contract_workspaces WHERE contract_number = ? AND organization_id IN (?, ?)`, [number, ORG_A, ORG_B])).toBe(2);
   }, 30_000);
 
-  it("C11 — criação concorrente do MESMO número por DUAS origens (Promise.all) ⇒ exatamente UMA linha, o outro CONFLICT", async () => {
+  it("C11 — concorrência: MESMA chave (origem, número) com payloads diferentes ⇒ exatamente UMA linha, o outro CONFLICT; origens diferentes não se resetam", async () => {
     const c = await caller(lawyerA, ORG_A);
     for (let i = 0; i < 3; i++) {
       const number = `CT-${RUN}-C11-${i}`;
       const settled = await Promise.allSettled([
         c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-11-${i}`, contractNumber: number, contractor: "P" }),
-        c.contractWorkspace.createFromDirectProcurement({ directWorkspaceId: `dp-${RUN}-11-${i}`, contractNumber: ` ${number}`, contractor: "D" }),
-        c.contractWorkspace.createManual({ idempotencyKey: `k-c11-${RUN}-${i}`, contractNumber: number, contractor: "M" }),
+        c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-11b-${i}`, contractNumber: ` ${number}`, contractor: "Q" }),
       ]);
       const ok = settled.filter(s => s.status === "fulfilled") as PromiseFulfilledResult<any>[];
       const ko = settled.filter(s => s.status === "rejected") as PromiseRejectedResult[];
       expect(ok).toHaveLength(1);
-      expect(ko).toHaveLength(2);
-      for (const k of ko) {
-        expect(String(k.reason?.code)).toBe("CONFLICT");
-        expect(String(k.reason?.message)).toContain("CONTRACT_ALREADY_EXISTS");
-      }
-      expect(await count(`SELECT COUNT(*) n FROM contract_workspaces WHERE organization_id = ? AND TRIM(contract_number) = ?`, [ORG_A, number])).toBe(1);
+      expect(ko).toHaveLength(1);
+      expect(String(ko[0].reason?.code)).toBe("CONFLICT");
+      expect(String(ko[0].reason?.message)).toContain("CONTRACT_ALREADY_EXISTS");
       const winner = ok[0].value.workspace;
       expect((await contractRow(ORG_A, winner.id)).contractor).toBe(winner.contractor);
       expect(await count(`SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND organization_id = ?`, [winner.id, ORG_A])).toBe(1);
+      // HD-15 pendente: outras origens com o mesmo número nascem em paralelo sem tocar no vencedor.
+      const others = await Promise.all([
+        c.contractWorkspace.createFromDirectProcurement({ directWorkspaceId: `dp-${RUN}-11-${i}`, contractNumber: number, contractor: "D" }),
+        c.contractWorkspace.createManual({ idempotencyKey: `k-c11-${RUN}-${i}`, contractNumber: number, contractor: "M" }),
+      ]);
+      expect(new Set([winner.id, ...others.map((o) => o.workspace.id)]).size).toBe(3);
+      expect((await contractRow(ORG_A, winner.id)).contractor).toBe(winner.contractor);
     }
   }, 60_000);
 
@@ -650,16 +645,16 @@ describe.skipIf(!DB)("R3 / PR-06 — Create ≠ Reset: parecer e contrato (MySQL
     expect((await contractRow(ORG_A, workspace.id)).status).toBe("vigente");
   }, 30_000);
 
-  it("C13 — edição que renomeia para número já usado por outro contrato da organização ⇒ CONFLICT governado (UNIQUE 0310), nenhum dos dois alterado", async () => {
+  // 2º passe: sem a UNIQUE de escopo (HD-15 pendente) renomear para um número usado por OUTRO contrato não é bloqueado
+  // pelo banco (comportamento anterior ao lote); o que o SEM-007 exige — nunca alterar o OUTRO contrato — continua valendo.
+  it("C13 — edição que renomeia para número já usado por outro contrato: o outro contrato nunca é alterado (escopo HD-15 pendente)", async () => {
     const c = await caller(lawyerA, ORG_A);
     const a = await c.contractWorkspace.createFromProcurement({ processId: `proc-${RUN}-13`, contractNumber: `CT-${RUN}-C13A`, contractor: "Mi" });
     const b = await c.contractWorkspace.createManual({ idempotencyKey: `k-c13-${RUN}`, contractNumber: `CT-${RUN}-C13B`, contractor: "Ni" });
-    const before = await orgContractsSnapshot(ORG_A);
-    const e = await errOf(() => c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado", expectedUpdatedAt: a.workspace.updatedAt }));
-    expect(e.code).toBe("CONFLICT");
-    expect(e.message).toContain("CONTRACT_ALREADY_EXISTS");
-    expect(await orgContractsSnapshot(ORG_A)).toBe(before);
-    expect((await contractRow(ORG_A, b.workspace.id)).contractor).toBe("Ni");
-    expect((await contractRow(ORG_A, a.workspace.id)).contractor).toBe("Mi");
+    const bBefore = await contractRow(ORG_A, b.workspace.id);
+    await c.contractWorkspace.updateContract({ contractId: a.workspace.id, contractNumber: ` CT-${RUN}-C13B `, contractor: "Mi alterado", expectedUpdatedAt: a.workspace.updatedAt });
+    expect(await contractRow(ORG_A, b.workspace.id)).toEqual(bBefore);
+    expect((await contractRow(ORG_A, a.workspace.id)).contractor).toBe("Mi alterado");
+    expect(await count(`SELECT COUNT(*) n FROM contract_workspaces WHERE organization_id = ? AND id IN (?, ?)`, [ORG_A, a.workspace.id, b.workspace.id])).toBe(2);
   }, 30_000);
 });

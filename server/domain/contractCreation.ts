@@ -1,17 +1,14 @@
 /**
  * R3 / PR-06 (SEM-007) — Create ≠ Reset para o CONTRATO canônico (`contract_workspaces`).
  *
- * Chave institucional (decisão do responsável, pós night-shift): o NÚMERO OFICIAL do contrato é ÚNICO POR ORGANIZAÇÃO,
- * QUALQUER QUE SEJA A ORIGEM (Processo Licitatório, Contratação Direta, avulso/manual, importado). A chave é
- * (organização, número normalizado) — ver `normalizeContractNumber`; a origem NÃO faz parte dela. O `id` continua
- * determinístico hash(org, originType, número normalizado) (identidade técnica da linha, inalterada), mas quem decide a
- * unicidade é a chave institucional: checagem no servidor antes do INSERT + UNIQUE(organization_id, normalized_number)
- * no banco (migration 0310, coluna gerada). Antes, os quatro fluxos de nascimento gravavam por upsert: um contrato
+ * Chave: a que JÁ existia — `id` determinístico hash(org, originType, número normalizado). O ESCOPO da unicidade do
+ * número entre ORIGENS ("único por órgão, qualquer origem") é decisão humana PENDENTE (CONTRACT_NUMBER_SCOPE, HD-15);
+ * a opção A está preparada fora da cadeia em drizzle/policy-pending/. Antes, os quatro fluxos de nascimento gravavam por upsert: um contrato
  * VIGENTE voltava a "minuta" com contratado/objeto/valor/prazo de outra criação, e o 2º import externo sem número
- * ("IMPORTADO") sobrescrevia o 1º. Agora a criação é INSERT-only; sobre número já existente na organização:
+ * ("IMPORTADO") sobrescrevia o 1º. Agora a criação é INSERT-only; sobre a MESMA chave (órgão, origem, número):
  *  - retry idempotente da MESMA criação (mesma origem + mesmo ator + mesmo payload normalizado + contrato ainda
  *    "minuta") ⇒ converge, devolvendo o existente SEM escrita;
- *  - qualquer outra coisa (inclusive o mesmo número vindo de OUTRA origem, ou o contrato já fora de "minuta") ⇒
+ *  - qualquer outra coisa (payload diferente, ou o contrato já fora de "minuta") ⇒
  *    CONFLICT com mensagem pt-BR estável e o token `CONTRACT_ALREADY_EXISTS`.
  * Pura e determinística (sem DB).
  */
@@ -55,8 +52,7 @@ export function contractAlreadyExistsMessage(existing: Pick<ContractWorkspace, "
 /** Texto do CONFLICT sem o sufixo "(id: …)" — o fluxo avulso anexa o id no router (convenção pré-existente). */
 export function contractNumberTakenText(existing: Pick<ContractWorkspace, "originType" | "contractNumber">): string {
   return `Já existe um contrato ${ORIGIN_LABEL[existing.originType]} com o número "${existing.contractNumber}" nesta organização. ` +
-    `O número do contrato é único na organização, qualquer que seja a origem; a criação não altera o contrato existente ` +
-    `(${CONTRACT_ALREADY_EXISTS}).`;
+    `A criação não altera o contrato existente (${CONTRACT_ALREADY_EXISTS}).`;
 }
 
 const cents = (v: number) => Math.round(Number(v) * 100);

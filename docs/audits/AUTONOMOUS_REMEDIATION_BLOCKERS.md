@@ -21,6 +21,7 @@
 | B-12 | BLOCKED_HUMAN_DECISION | Pilot Reset real (2026/253) | merge+deploy da 0313, preview read-only, decisão da ação | HD-06 |
 | B-13 | BLOCKED_HUMAN_DECISION | regularização de ratificações legadas e checklists `s3://anexo` | HD-07, HD-08 | HD-07, HD-08 |
 | B-14 | BLOCKED_HUMAN_DECISION | NEW-028 (status após "não ratificado") | HD-09 | HD-09 |
+| B-15 | BLOCKED_HUMAN_DECISION | CONTRACT_NUMBER_SCOPE: unicidade do número do contrato entre origens (a UNIQUE da 0310 original foi retirada da cadeia) | HD-15 | HD-15 |
 
 ## EXPECTED_SKIP × UNEXECUTED_REQUIRED_TEST
 
