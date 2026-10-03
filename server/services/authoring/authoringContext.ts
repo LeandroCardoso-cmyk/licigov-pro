@@ -304,7 +304,9 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     contractVersion: AUTHORING_CONTEXT_VERSION, kind: input.kind,
     promptContext: lines.join("\n"),
     usedSources, missing, sourcesDigest, snapshot, sourceVersions, lineageMarkers,
-    authoritativeBlock: input.kind === "tr"
+    // R9 / SEM-080 — o ETP também traz o quadro autoritativo quando há Itens da contratação (quantidade PREVISTA);
+    // no modo legado o ETP não recebe quadro (a quantidade seria a cotada — SEM-008).
+    authoritativeBlock: input.kind === "tr" || canonical
       ? renderAuthoritativeItemsBlock(estimate, canonical ? { quantitySource: "canonical_planned" } : {})
       : null,
     estimate, pendingItemCount: input.pendingItemCount,

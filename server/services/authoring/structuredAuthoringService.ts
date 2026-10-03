@@ -19,6 +19,7 @@
  */
 
 import { createHash } from "crypto";
+import { authoritativeAmounts, flagUnverifiedAmounts, serverEstimateProse, ESTIMATE_SECTION_KEY, type EstimateAuthorityInput } from "../../domain/aiNumericAuthority";
 import type { OfficialCorpusBuildResult } from "../officialCorpus/officialCorpusBuilder";
 import type { ContextPackage } from "../../domain/institutionalIntegration/contextPackage";
 import type { EvidenceRef, GroundingState } from "../../domain/cognitiveProvenance";
@@ -248,7 +249,7 @@ function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: Docu
     "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
     kind === "tr"
       ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
-      : "Não fixe valores monetários: a estimativa de valor é consolidada pelo sistema a partir da Pesquisa de Preços.",
+      : "Não fixe valores monetários: a seção de estimativa do valor é redigida pelo sistema a partir da Pesquisa de Preços (valores citados fora do quadro serão marcados para revisão).",
     "",
     "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
     sourceContext.promptContext,
@@ -348,6 +349,19 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   }
   const fillByKey = new Map<string, ProviderSectionFill>(providerOutput.sections.map((s) => [s.key, s]));
 
+  // R9 / SEM-080 — autoridade NUMÉRICA: a estimativa do valor é redigida pelo SERVIDOR (quadro autoritativo) e
+  // todo `R$ …` da IA fora dos valores do quadro recebe [REVISAR]. Sem contexto do processo, nenhum valor é conferível.
+  const ctx = input.sourceContext;
+  const estimateInput: EstimateAuthorityInput = ctx
+    ? {
+        itemCount: ctx.estimate.itemCount, pricedItemCount: ctx.estimate.pricedItemCount, unpricedItemCount: ctx.estimate.unpricedItemCount,
+        globalTotalCents: ctx.estimate.globalTotalCents, rows: ctx.estimate.rows,
+        missingPlannedQuantity: ctx.canonical?.missingPlannedQuantity.length ?? 0, hasAuthoritativeBlock: !!ctx.authoritativeBlock,
+      }
+    : { itemCount: 0, pricedItemCount: 0, unpricedItemCount: 0, globalTotalCents: 0, rows: [], missingPlannedQuantity: 0, hasAuthoritativeBlock: false };
+  const allowedAmounts = authoritativeAmounts(estimateInput);
+  let unverifiedAmounts = 0;
+
   // 6) Monta seções (autoridade do servidor: key/title/anchor/modo/grounding) + prosa do provider sanitizada.
   const rejectedAll: { raw: string; reason: string }[] = [];
   const limitations: string[] = [];
@@ -359,7 +373,11 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     // Gap 6 — citações inexistentes/revogadas na prosa: validar e REMOVER (não permanecem no rascunho).
     const cite = validateCitedLegalReferences(index, rawProse);
     rejectedAll.push(...cite.rejected);
-    const prose = isProvided ? sanitizeProse(rawProse, cite.rejected).trim() : "";
+    const sanitized = isProvided ? sanitizeProse(rawProse, cite.rejected).trim() : "";
+    const flaggedProse = flagUnverifiedAmounts(sanitized, allowedAmounts);
+    unverifiedAmounts += section.key === ESTIMATE_SECTION_KEY ? 0 : flaggedProse.flagged;
+    // R9 / SEM-080 — a seção de estimativa é SEMPRE do servidor (a prosa do provider é descartada).
+    const prose = section.key === ESTIMATE_SECTION_KEY ? serverEstimateProse(estimateInput) : flaggedProse.prose;
     // Gap 4 — a referência rejeitada DEGRADA a seção: só aterrada se produzida, com âncora recuperada E
     // SEM nenhuma citação rejeitada (recalculado APÓS a validação do output do provider).
     const { sourceId, locatorPath } = anchorParts(section.legalAnchor);
@@ -375,7 +393,7 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     for (const l of fill?.limitations ?? []) limitations.push(`${section.title}: ${l}`);
     return {
       key: section.key, title: section.title, legalAnchorLabel: section.legalAnchorLabel,
-      contentMode, prose: truncate(prose, 8000),
+      contentMode: section.key === ESTIMATE_SECTION_KEY ? "provided" : contentMode, prose: truncate(prose, 8000),
       omissionJustification: isProvided ? "" : truncate((fill?.omissionJustification ?? "").trim(), 8000),
       grounded, legalReferences: [...refs.values()].slice(0, 24),
     };
@@ -397,6 +415,8 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   if (omittedSections.length > 0) limitations.push(`Seções não contempladas (com justificativa): ${omittedSections.join("; ")}.`);
   const pendingGrounding = sections.filter((s) => s.contentMode === "provided" && !s.grounded).map((s) => s.title);
   if (pendingGrounding.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções produzidas com fundamentação pendente: ${pendingGrounding.join("; ")}.`);
+  limitations.push("Estimativa do valor da contratação redigida pelo sistema a partir do quadro autoritativo (não pela IA).");
+  if (unverifiedAmounts > 0) limitations.push(`${unverifiedAmounts} valor(es) monetário(s) citado(s) pela IA não coincidem com o quadro do sistema — marcados [REVISAR].`);
   if (input.sourceContext && input.sourceContext.missing.length > 0) {
     limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
   }

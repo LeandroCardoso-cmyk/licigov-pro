@@ -5395,8 +5395,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion-mysql-smoke.test.ts": {
-    "mtime": 1790905546.8281193,
-    "ast_hash": "9d08ae910b5bdce1ea7dcd1bcc3b2b3d",
+    "mtime": 1791040792.1290193,
+    "ast_hash": "7a814a952bbf1eca5ff4f23963b0e3ed",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
@@ -5415,8 +5415,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "ff5347a9e6882e7f91629425e9aa7e1d",
+    "mtime": 1791040956.936803,
+    "ast_hash": "e9133fed4425cdbc2725510a1f750e18",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-savedfd-failclosed.test.ts": {
@@ -5445,8 +5445,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts": {
-    "mtime": 1791040039.5074494,
-    "ast_hash": "d7af44d878fd8813cdbb9e3031f9354f",
+    "mtime": 1791041076.888167,
+    "ast_hash": "b01b9cd27ef1bd548f338d37bd63ec49",
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-decision.test.ts": {
@@ -5840,8 +5840,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new016-official-document-immutability-mysql-smoke.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "e932b4e95ab5b447e98dea8659d4963d",
+    "mtime": 1791040792.1303892,
+    "ast_hash": "244ceb8ebc387ac6c23b723cf0799dd6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new022-generic-contract-activation-mysql-smoke.test.ts": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1790965848.6110597,
-    "ast_hash": "97396c23fe137ee9b4ad095079dee751",
+    "mtime": 1791041076.880167,
+    "ast_hash": "187e182d282eaa2128071a173845ae86",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1790967003.2125094,
-    "ast_hash": "344cb053fd52ebfd10f5fd347187ff20",
+    "mtime": 1791040560.3091567,
+    "ast_hash": "2a4a4ff305bfdc851d21c32cec20b2bf",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9265,8 +9265,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/structuredAuthoringService.ts": {
-    "mtime": 1790881396.3208766,
-    "ast_hash": "6d3de6894ceaa0b50703234a0540ea8c",
+    "mtime": 1791040560.3085532,
+    "ast_hash": "269932d887e1ce9b0ac8b64bedea1799",
     "semantic_hash": ""
   },
   "server/services/autonomousWorkflowService.ts": {
@@ -13000,8 +13000,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr15-emission-identity-snapshot-mysql-smoke.test.ts": {
-    "mtime": 1790944444.3395479,
-    "ast_hash": "f540e59f7d8d8f87a46a0b08f0a94c99",
+    "mtime": 1791040792.1307962,
+    "ast_hash": "2d01b2ce94bb974f11573765b6f813c0",
     "semantic_hash": ""
   },
   "drizzle/0314_required_document_evidence.sql": {
@@ -13282,6 +13282,16 @@
   "shared/taskDeadline.ts": {
     "mtime": 1791040301.582531,
     "ast_hash": "9cd1b7ba441ecb8c2e9515208defa9ed",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem080-ai-numeric-authority.test.ts": {
+    "mtime": 1791040614.8890903,
+    "ast_hash": "19ff40c56fa28e0d77d209f62a5435eb",
+    "semantic_hash": ""
+  },
+  "server/domain/aiNumericAuthority.ts": {
+    "mtime": 1791040538.528135,
+    "ast_hash": "42d54cd021bfd005a6ca68097f97b214",
     "semantic_hash": ""
   }
 }
