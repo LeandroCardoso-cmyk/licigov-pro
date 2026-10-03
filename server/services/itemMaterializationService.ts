@@ -36,7 +36,10 @@ import {
   consolidateQuotes, mergeQuotes, intelligentItemIdForKey, intelligentItemLogicalKey, normalizeDescription,
   canonicalUnit, quantityMilli, quoteSetSignature, validQuotes, withContentHash, type PriceQuote, type ConsolidatedItem,
 } from "../domain/priceQuoteConsolidation";
-import { averageCents, centsToDecimalString, centsToReais, reaisToCents, type Cents } from "../domain/money";
+import { averageCents, centsToDecimalString, centsToReais, formatBRL, reaisToCents, type Cents } from "../domain/money";
+import {
+  buildSourceUpdatePreview, parseSourceUpdateToken, sourceUpdateTargetHash, type SourceUpdatePreview,
+} from "../domain/itemSourceUpdate";
 import type { IntelligentItemSupplier } from "../domain/intelligentItem";
 import { rankCATMAT, suggestedAndAlternatives } from "../domain/catmatMatching";
 import { createItemRecommendation, createItemRisk, detectPriceOutlier } from "../domain/itemRecommendation";
@@ -320,20 +323,65 @@ export async function recordMaterializationSignals(p: {
 
 // ─── Ações humanas explícitas ────────────────────────────────────────────────────
 
+/** Prévia (puro) a partir da linha persistida — base comum da prévia e da aplicação (mesmo token). */
+function previewFromRow(row: ItemRow, pendingRaw: string): SourceUpdatePreview {
+  return buildSourceUpdatePreview({
+    itemId: row.id, description: row.description ?? "", status: row.status,
+    currentQuotes: quotesOf(row.suppliers, row), currentAverageCents: reaisToCents(row.averagePrice),
+    pendingQuotes: quotesOf(pendingRaw, row),
+  });
+}
+
+/**
+ * R9 / SEM-052 — PRÉVIA de "Aplicar cotações atualizadas": comparativo atual × proposto (nº de cotações
+ * válidas, média em centavos, cotações incluídas/removidas/alteradas), a decisão humana que será revogada
+ * e o `expectedStateToken` que a confirmação deve devolver. Somente leitura, tenant-scoped.
+ */
+export async function previewItemSourceUpdate(p: { organizationId: number; itemId: string }): Promise<SourceUpdatePreview> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível." });
+  const rows = await db.select().from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.id, p.itemId), eq(intelligentItemsTable.organizationId, p.organizationId))).limit(1);
+  const row = rows[0];
+  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+  if (row.sourceState !== "source_changed" || !row.pendingSuppliers) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SOURCE_UPDATE_NOT_PENDING: Não há atualização de cotações pendente para este item." });
+  }
+  return previewFromRow(row, row.pendingSuppliers);
+}
+
 /**
  * Aplica as cotações ATUALIZADAS (`pending_suppliers`) a um item com fonte alterada. Um item aprovado/
  * rejeitado volta a `em_analise` (a decisão anterior deixa de valer para números novos — nunca silencioso).
+ *
+ * R9 / SEM-052 — só aplica com o `expectedStateToken` da prévia que o usuário CONFIRMOU (recalculado sob
+ * lock da linha): estado diferente do confirmado ⇒ CONFLICT (`SOURCE_UPDATE_STALE`), nada aplicado.
+ * Idempotente: repetir a confirmação já aplicada (mesmo token) responde `replayed: true` sem novo efeito.
  */
 export async function applyItemSourceUpdate(p: {
-  organizationId: number; itemId: string; actorUserId: number; correlationId: string;
-}): Promise<{ itemId: string; status: string; averageCents: Cents; quoteCount: number }> {
+  organizationId: number; itemId: string; expectedStateToken: string; actorUserId: number; correlationId: string;
+}): Promise<{ itemId: string; status: string; averageCents: Cents; quoteCount: number; replayed: boolean }> {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível." });
+  const token = parseSourceUpdateToken(p.expectedStateToken);
+  if (!token) throw new TRPCError({ code: "BAD_REQUEST", message: "SOURCE_UPDATE_TOKEN_INVALID: Confirmação inválida. Abra novamente a comparação das cotações." });
   const out = await db.transaction(async (tx) => {
     const row = await lockItem(tx, p.organizationId, p.itemId);
     if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
     if (row.sourceState !== "source_changed" || !row.pendingSuppliers) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há atualização de cotações pendente para este item." });
+      // Replay da MESMA confirmação já aplicada: o conjunto vigente é exatamente o alvo confirmado.
+      const current = quotesOf(row.suppliers, row);
+      if (row.sourceState === "current" && sourceUpdateTargetHash(row.id, current) === token.target) {
+        return { itemId: row.id, status: row.status, averageCents: reaisToCents(row.averagePrice), quoteCount: validQuotes(current).length, processId: row.processId, replayed: true };
+      }
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SOURCE_UPDATE_NOT_PENDING: Não há atualização de cotações pendente para este item." });
+    }
+    const preview = previewFromRow(row, row.pendingSuppliers);
+    if (preview.expectedStateToken !== p.expectedStateToken) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "SOURCE_UPDATE_STALE: As cotações ou a decisão deste item mudaram depois da comparação que você confirmou. Nada foi aplicado — revise a nova comparação.",
+      });
     }
     const quotes = quotesOf(row.pendingSuppliers, row);
     const avg = avgOf(quotes);
@@ -347,13 +395,15 @@ export async function applyItemSourceUpdate(p: {
     }).where(and(eq(intelligentItemsTable.id, row.id), eq(intelligentItemsTable.organizationId, p.organizationId)));
     await recordProcessEvent({
       organizationId: p.organizationId, processId: row.processId, eventType: "change", actor: String(p.actorUserId),
-      summary: `Cotações atualizadas aplicadas ao item "${(row.description ?? "").slice(0, 80)}"${decided ? ` — decisão anterior (${row.status}) invalidada; item volta a análise` : ""}.`,
+      summary: `Cotações atualizadas aplicadas ao item "${(row.description ?? "").slice(0, 80)}" (confirmado: ${preview.current.quoteCount}→${preview.proposed.quoteCount} cotação(ões) válida(s); média ${formatBRL(preview.current.averageCents)}→${formatBRL(preview.proposed.averageCents)})${decided ? ` — decisão anterior (${row.status}) revogada; item volta a análise` : ""}.`,
       refId: row.id, correlationId: p.correlationId,
     }, tx);
-    return { itemId: row.id, status: decided ? "em_analise" : row.status, averageCents: avg, quoteCount: validQuotes(quotes).length, processId: row.processId };
+    return { itemId: row.id, status: decided ? "em_analise" : row.status, averageCents: avg, quoteCount: validQuotes(quotes).length, processId: row.processId, replayed: false };
   });
-  await enrichMaterializedItems({ organizationId: p.organizationId, processId: out.processId, itemIds: [out.itemId], correlationId: p.correlationId });
-  return { itemId: out.itemId, status: out.status, averageCents: out.averageCents, quoteCount: out.quoteCount };
+  if (!out.replayed) {
+    await enrichMaterializedItems({ organizationId: p.organizationId, processId: out.processId, itemIds: [out.itemId], correlationId: p.correlationId });
+  }
+  return { itemId: out.itemId, status: out.status, averageCents: out.averageCents, quoteCount: out.quoteCount, replayed: out.replayed };
 }
 
 /** Cotações da pesquisa do processo cuja chave lógica tem o hash informado (base da re-materialização). */
