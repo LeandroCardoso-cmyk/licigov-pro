@@ -314,6 +314,10 @@ export function DocumentIngestionLauncher({
                   result={ingestion.promotionResult}
                   onPromote={ingestion.promote}
                   onReviewItems={onReviewItems}
+                  preview={ingestion.promotionPreview}
+                  isPreviewLoading={ingestion.isPromotionPreviewLoading}
+                  previewError={ingestion.promotionPreviewError}
+                  onRequestPreview={ingestion.requestPromotionPreview}
                 />
               </div>
             ) : (

@@ -240,6 +240,18 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     pending,
   );
 
+  // R9 / SEM-053 — prévia do impacto (servidor, somente leitura), pedida ao abrir a confirmação e recalculada a
+  // cada nova abertura (o estado dos Itens Inteligentes pode mudar entre aberturas).
+  const [previewRequested, setPreviewRequested] = useState(false);
+  const previewQuery = trpc.ingestion.previewPromotion.useQuery(
+    { sessionId: sessionId ?? 0, procurementProcessId: opts.procurementProcessId },
+    { enabled: previewRequested && sessionId != null && canPromote, refetchOnWindowFocus: false, retry: false, staleTime: 0 },
+  );
+  const requestPromotionPreview = useCallback(() => {
+    if (previewRequested) void previewQuery.refetch();
+    else setPreviewRequested(true);
+  }, [previewRequested, previewQuery]);
+
   const promote = useCallback(async () => {
     if (sessionId == null || promotingRef.current || !canPromote) return;
     promotingRef.current = true;
@@ -251,6 +263,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
         procurementProcessId: opts.procurementProcessId,
         idempotencyKey: promoteKeyRef.current,
       });
+      setPreviewRequested(false);
       void statusQuery.refetch(); // reflete o estado de promoção PERSISTIDO (após reload também)
     } catch (err) {
       setPromoteError(err instanceof Error ? err.message : "Falha ao promover o conteúdo revisado.");
@@ -276,6 +289,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     submittingRef.current = false;
     idempotencyRef.current = null;
     promoteKeyRef.current = null;
+    setPreviewRequested(false);
     setSessionId(null);
     setClientPhase("idle");
     setClientError(null);
@@ -300,6 +314,11 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     isPromoting: promoteMut.isPending,
     promoteError,
     promotionResult: promoteMut.data ?? null,
+    // R9 / SEM-053 — prévia do impacto da promoção nos Itens Inteligentes
+    promotionPreview: previewQuery.data ?? null,
+    isPromotionPreviewLoading: previewQuery.isFetching,
+    promotionPreviewError: previewQuery.error?.message ?? null,
+    requestPromotionPreview,
     // Layout v2 — reprocessamento governado da extração
     reprocessState: statusQuery.data?.reprocess ?? null,
     reprocess,
