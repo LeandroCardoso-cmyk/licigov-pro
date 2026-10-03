@@ -3,23 +3,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Users, FileText, TrendingUp, Activity } from "lucide-react";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { formatMonthYear } from "@/utils/formatters";
-import { BackToDashboard } from "@/components/BackToDashboard";
 import { Badge } from "@/components/ui/badge";
 
+// R9 / SEM-074 — `processesByStatus[].status` carrega a ETAPA canônica (`procurement_processes.current_stage`);
+// o legado (`processes.status` = em_dfd/em_etp/…) não recebe mais escritas. Rótulos alinhados ao ProcessOverview.
 const statusLabels: Record<string, string> = {
-  em_etp: "Em ETP",
-  em_tr: "Em TR",
-  em_dfd: "Em DFD",
-  em_edital: "Em Edital",
-  concluido: "Concluído",
+  NEW_PROCESS: "Novo Processo",
+  DFD: "DFD",
+  ETP: "ETP",
+  PRICE_RESEARCH: "Pesquisa de Preços",
+  ITEM_WORKSPACE: "Workspace de Itens",
+  TR: "Termo de Referência",
+  NOTICE: "Edital",
+  REVIEW: "Revisão",
+  ISSUED: "Emitido",
+  ARCHIVED: "Arquivado",
 };
 
 const statusColors: Record<string, string> = {
-  em_etp: "bg-blue-500/10 text-blue-500",
-  em_tr: "bg-purple-500/10 text-purple-500",
-  em_dfd: "bg-orange-500/10 text-orange-500",
-  em_edital: "bg-green-500/10 text-green-500",
-  concluido: "bg-gray-500/10 text-gray-500",
+  NEW_PROCESS: "bg-gray-500/10 text-gray-500",
+  DFD: "bg-orange-500/10 text-orange-500",
+  ETP: "bg-blue-500/10 text-blue-500",
+  PRICE_RESEARCH: "bg-cyan-500/10 text-cyan-500",
+  ITEM_WORKSPACE: "bg-teal-500/10 text-teal-500",
+  TR: "bg-purple-500/10 text-purple-500",
+  NOTICE: "bg-green-500/10 text-green-500",
+  REVIEW: "bg-amber-500/10 text-amber-500",
+  ISSUED: "bg-emerald-500/10 text-emerald-600",
+  ARCHIVED: "bg-gray-500/10 text-gray-500",
 };
 
 export default function Analytics() {
