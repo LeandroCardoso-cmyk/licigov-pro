@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { CONTRACT_EXPIRING_WINDOW_DAYS } from "@shared/operationalIndicators";
 
 /**
  * OperationalIndicators — REAL (tRPC).
@@ -20,7 +21,8 @@ const CARDS: Array<{ key: string; label: string; alert?: boolean }> = [
   { key: "concludedProcesses", label: "Concluídos" },
   { key: "legalOpinionsAwaiting", label: "Pareceres aguardando" },
   { key: "activeContracts", label: "Contratos ativos" },
-  { key: "contractsExpiring", label: "Contratos vencendo", alert: true },
+  // R9 / SEM-070 — contratos distintos com término nos próximos N dias (janela documentada no rótulo).
+  { key: "contractsExpiring", label: `Contratos vencendo (${CONTRACT_EXPIRING_WINDOW_DAYS} dias)`, alert: true },
   { key: "addenda", label: "Aditivos" },
   { key: "pendingTasks", label: "Tarefas pendentes" },
   { key: "pendingRequests", label: "Solicitações pendentes" },

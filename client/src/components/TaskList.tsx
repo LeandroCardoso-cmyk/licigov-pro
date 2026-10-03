@@ -10,33 +10,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Calendar,
   Search,
-  Download,
-  FileText,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { taskDeadlineBucket, TASK_DEADLINE_BUCKET_LABELS } from "@shared/taskDeadline";
+import { DEADLINE_BUCKET_CLASSES } from "@/lib/taskDeadlineClasses";
 
 type TaskStatus = "pendente" | "em_andamento" | "pausada" | "atrasada" | "aguardando_informacao" | "concluida" | "cancelada";
 type TaskPriority = "baixa" | "media" | "alta" | "urgente";
-
-interface Task {
-  id: number;
-  title: string;
-  description: string | null;
-  type: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  deadline: Date | null;
-  assignedTo: number | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string }> = {
   pendente: { label: "Pendente", color: "bg-gray-500" },
@@ -54,19 +40,6 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = 
   alta: { label: "Alta", color: "bg-orange-500" },
   urgente: { label: "Urgente", color: "bg-red-500" },
 };
-
-function getDeadlineColor(deadline: Date | null): string {
-  if (!deadline) return "text-gray-500";
-  
-  const now = new Date();
-  const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (daysUntilDeadline < 0) return "text-red-600 font-bold";
-  if (daysUntilDeadline <= 2) return "text-red-500";
-  if (daysUntilDeadline <= 7) return "text-orange-500";
-  if (daysUntilDeadline <= 15) return "text-yellow-600";
-  return "text-green-600";
-}
 
 export default function TaskList() {
   const [searchText, setSearchText] = useState("");
@@ -86,16 +59,6 @@ export default function TaskList() {
         task.type?.toLowerCase().includes(searchLower)
     );
   }, [tasks, searchText]);
-
-  const handleExportPDF = () => {
-    // TODO: Implementar exportação PDF
-    alert("Exportação PDF em desenvolvimento");
-  };
-
-  const handleExportExcel = () => {
-    // TODO: Implementar exportação Excel
-    alert("Exportação Excel em desenvolvimento");
-  };
 
   if (isLoading) {
     return (
@@ -126,16 +89,8 @@ export default function TaskList() {
                 className="pl-10"
               />
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                <Download className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-            </div>
+            {/* R9 / SEM-071 — botões PDF/Excel "em desenvolvimento" (alert) removidos: as exportações reais
+                ficam no cabeçalho da Gestão do Departamento (tasks.exportExcel / tasks.exportPDF). */}
           </div>
           <p className="text-sm text-muted-foreground mt-2">
             {filteredTasks.length} {filteredTasks.length === 1 ? "tarefa" : "tarefas"} no total
@@ -203,7 +158,10 @@ export default function TaskList() {
                               <Calendar className="h-3.5 w-3.5" />
                               {format(new Date(task.deadline), "dd/MM/yyyy")}
                             </div>
-                            <span className={`text-xs ${getDeadlineColor(new Date(task.deadline))}`}>
+                            <span
+                              className={`text-xs ${DEADLINE_BUCKET_CLASSES[taskDeadlineBucket(task, new Date())]}`}
+                              title={TASK_DEADLINE_BUCKET_LABELS[taskDeadlineBucket(task, new Date())]}
+                            >
                               {formatDistanceToNow(new Date(task.deadline), { addSuffix: true, locale: ptBR })}
                             </span>
                           </div>

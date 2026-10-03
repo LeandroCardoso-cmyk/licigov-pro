@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, User } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { taskDeadlineBucket, TASK_DEADLINE_BUCKET_LABELS } from "@shared/taskDeadline";
+import { DEADLINE_BUCKET_CLASSES } from "@/lib/taskDeadlineClasses";
 
 export type TaskStatus =
   | "pendente"
@@ -35,16 +37,6 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = 
   urgente: { label: "Urgente", color: "bg-red-500" },
 };
 
-function getDeadlineColor(deadline: Date | null): string {
-  if (!deadline) return "text-gray-500";
-  const days = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return "text-red-600 font-bold";
-  if (days <= 2) return "text-red-500";
-  if (days <= 7) return "text-orange-500";
-  if (days <= 15) return "text-yellow-600";
-  return "text-green-600";
-}
-
 interface Props {
   task: Task;
   isDragging?: boolean;
@@ -52,7 +44,9 @@ interface Props {
 }
 
 export function TaskCard({ task, isDragging = false, onClick }: Props) {
-  const deadlineColor = getDeadlineColor(task.deadline);
+  // R9 / SEM-071 — faixa ÚNICA de prazo (inclui "Atrasada" manual e ignora tarefas encerradas).
+  const bucket = taskDeadlineBucket(task, new Date());
+  const deadlineColor = DEADLINE_BUCKET_CLASSES[bucket];
 
   return (
     <Card
@@ -73,7 +67,7 @@ export function TaskCard({ task, isDragging = false, onClick }: Props) {
         )}
         <div className="flex flex-col gap-1.5 text-xs">
           {task.deadline && (
-            <div className={`flex items-center gap-1.5 ${deadlineColor}`}>
+            <div className={`flex items-center gap-1.5 ${deadlineColor}`} title={TASK_DEADLINE_BUCKET_LABELS[bucket]}>
               <Calendar className="h-3.5 w-3.5" />
               <span>{formatDistanceToNow(task.deadline, { addSuffix: true, locale: ptBR })}</span>
             </div>

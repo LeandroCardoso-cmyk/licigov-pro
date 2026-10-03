@@ -11,33 +11,35 @@
 import { assertKernelAccess } from "./kernelAccessService";
 import { recommendStep } from "../domain/adaptiveRecommendationEngine";
 import {
-  computeIndicators, situationColor, type OperationalIndicators, type MonitoringRow,
+  classifyProcessStatus, computeIndicatorsFromCounts, contractExpiringWindow, isOperationRecordOverdue, situationColor,
+  type OperationalIndicators, type MonitoringRow,
 } from "../domain/operationalDashboard";
 import { listProcesses } from "../db/procurement";
 import { listDirectProcurementWorkspaces } from "../db/directProcurement";
-import { listContractWorkspaces, countContractAddendaByOrg } from "../db/contractWorkspace";
+import { countContractAddendaByOrg } from "../db/contractWorkspace";
 import { listLegalOpinionWorkspaces } from "../db/legalOpinionWorkspace";
 import { listPendingForDomain } from "../db/institutionalRequests";
 import { countCompletedOperationRecords, listOperationalEvents, listOperationalTimeline, listOperationRecords, listScheduledOperationRecords, type OperationRecordListRow } from "../db/departmentOperation";
 import { isFinalizedOperationRecord } from "../domain/operationRecordSchedule";
+import { countDepartmentIndicators } from "../db/departmentIndicators";
+import { CONTRACT_EXPIRING_WINDOW_DAYS } from "@shared/operationalIndicators";
 
 const DOMAIN = "gestao_departamento" as const;
 const LEGAL_DOMAIN = "parecer_juridico" as const;
 
-/** Reúne o estado consolidado do departamento (sem duplicar dados dos domínios). */
-async function collect(orgId: number) {
-  const [processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords] = await Promise.all([
+/**
+ * Reúne as LISTAS das superfícies (painel de acompanhamento, agenda). R9 / SEM-070: listas servem só para
+ * exibir linhas — NENHUM indicador é contado sobre elas (seriam truncadas pelo `limit`); os números vêm de
+ * `countDepartmentIndicators` (SQL COUNT/GROUP BY por tenant).
+ */
+async function collectLists(orgId: number) {
+  const [processes, directs, records] = await Promise.all([
     listProcesses(orgId, 200),
     listDirectProcurementWorkspaces(orgId, 200),
-    listContractWorkspaces(orgId, 200),
-    listLegalOpinionWorkspaces(orgId, { activeOnly: true, limit: 200 }),
-    listPendingForDomain(orgId, LEGAL_DOMAIN, 200),
-    countContractAddendaByOrg(orgId),
     // Superfícies operacionais ATIVAS: registros concluídos ficam fora (histórico preservado no banco/timeline).
     listOperationRecords(orgId, 5000, "active"),
-    countCompletedOperationRecords(orgId),
   ]);
-  return { processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords };
+  return { processes, directs, records };
 }
 
 function recordCalendarEvent(record: OperationRecordListRow) {
@@ -66,45 +68,54 @@ export interface DepartmentSnapshot {
 /** ÁREA 1 — Centro de Operações: indicadores + eventos de hoje e futuros. */
 export async function getDashboard(params: { organizationId: number; today: string }): Promise<DepartmentSnapshot> {
   assertKernelAccess(DOMAIN, "observability");
-  const { processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords } = await collect(params.organizationId);
-  const events = await listOperationalEvents(params.organizationId, { from: params.today, limit: 500 });
+  const [records, counts, addendaCount, completedRecords, events] = await Promise.all([
+    // Lista só para a agenda (hoje/próximos) — os indicadores não são contados sobre ela.
+    listOperationRecords(params.organizationId, 5000, "active"),
+    // R9 / SEM-070 — cada indicador lê a fonte canônica com a definição correta (contagem exata no banco).
+    countDepartmentIndicators(params.organizationId, contractExpiringWindow(params.today)),
+    countContractAddendaByOrg(params.organizationId),
+    countCompletedOperationRecords(params.organizationId),
+    listOperationalEvents(params.organizationId, { from: params.today, limit: 500 }),
+  ]);
   const scheduled = records.filter(r => r.eventDate).map(recordCalendarEvent);
   const allEvents = [...events.map(e => ({ ...e, eventEndDate: "" })), ...scheduled]
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.eventTime.localeCompare(b.eventTime));
 
-  const contractsExpiringSoon = events.filter(e =>
-    e.eventType === "vencimento_contrato" && e.eventDate >= params.today).length;
-
-  const indicators = computeIndicators({
-    processes, directProcurements: directs, contracts,
-    legalOpinionsPending: legalPending.length, institutionalRequestsPending: requestsPending.length,
-    addendaCount, contractsExpiringSoon, pendingTasks: 0, operationalRecords: records, completedOperationalRecords: completedRecords,
-  });
+  const indicators = computeIndicatorsFromCounts({ ...counts, addendaCount, completedOperationalRecords: completedRecords });
 
   const todayEvents = allEvents.filter(e => e.eventDate <= params.today && lastEventDate(e) >= params.today);
   const upcomingEvents = allEvents.filter(e => e.eventDate > params.today).slice(0, 50);
   return { indicators, todayEvents, upcomingEvents };
 }
 
-/** ÁREA 2 — Painel de Acompanhamento: uma linha por contratação (versão inteligente). */
+/**
+ * ÁREA 2 — Painel de Acompanhamento: uma linha por contratação (versão inteligente).
+ * R9 / SEM-070 — "Concluído" usa o status REAL de conclusão (`classifyProcessStatus`): arquivados saem do
+ * painel ativo e a entrada em PUBLICATION não é conclusão. "Atrasado" (vermelho) aparece quando a agenda do
+ * registro já passou e ele não foi finalizado. Processos/contratações diretas não têm prazo canônico
+ * persistido — por isso nunca são marcados atrasados por inferência.
+ */
 export async function getMonitoringPanel(params: { organizationId: number; today: string }): Promise<MonitoringRow[]> {
-  const { processes, directs, records } = await collect(params.organizationId);
-  const concluded = new Set(["emitido", "arquivado", "concluido", "publicado"]);
+  const { processes, directs, records } = await collectLists(params.organizationId);
 
-  const fromProcesses: MonitoringRow[] = processes.map(p => ({
-    processId: p.id, processNumber: p.processNumber, object: p.object, modality: p.modality ?? "",
-    currentStage: p.currentStage, origin: "processo_licitatorio",
-    situation: situationColor({ overdue: false, concluded: concluded.has(p.status), hasFutureEvent: false, started: p.currentStage !== "NEW_PROCESS" }),
-  }));
-  const fromDirects: MonitoringRow[] = directs.map(d => ({
-    processId: d.id, processNumber: d.processNumber, object: d.object, modality: d.procurementType,
-    currentStage: d.currentStage, origin: "contratacao_direta",
-    situation: situationColor({ overdue: false, concluded: concluded.has(d.status), hasFutureEvent: false, started: d.currentStage !== "NEW" }),
-  }));
+  const fromProcesses: MonitoringRow[] = processes
+    .filter(p => classifyProcessStatus(p.status) !== "arquivado")
+    .map(p => ({
+      processId: p.id, processNumber: p.processNumber, object: p.object, modality: p.modality ?? "",
+      currentStage: p.currentStage, origin: "processo_licitatorio",
+      situation: situationColor({ overdue: false, concluded: classifyProcessStatus(p.status) === "concluido", hasFutureEvent: false, started: p.currentStage !== "NEW_PROCESS" }),
+    }));
+  const fromDirects: MonitoringRow[] = directs
+    .filter(d => classifyProcessStatus(d.status) !== "arquivado")
+    .map(d => ({
+      processId: d.id, processNumber: d.processNumber, object: d.object, modality: d.procurementType,
+      currentStage: d.currentStage, origin: "contratacao_direta",
+      situation: situationColor({ overdue: false, concluded: classifyProcessStatus(d.status) === "concluido", hasFutureEvent: false, started: d.currentStage !== "NEW" }),
+    }));
   const fromRecords: MonitoringRow[] = records.map(r => ({
     processId: r.id, processNumber: r.number || "Sem número", object: r.object,
     modality: r.modality, currentStage: r.currentStage, origin: r.recordType,
-    situation: situationColor({ overdue: false, concluded: isFinalizedOperationRecord(r.currentStage),
+    situation: situationColor({ overdue: isOperationRecordOverdue(r, params.today), concluded: isFinalizedOperationRecord(r.currentStage),
       hasFutureEvent: Boolean(r.eventDate && r.eventDate > params.today), started: Boolean(r.currentStage) }),
     eventDate: r.eventDate, eventEndDate: r.eventEndDate, eventTime: r.eventTime,
   }));
@@ -158,31 +169,34 @@ export interface OperationalRecommendation {
  */
 export async function getRecommendations(params: { organizationId: number; today: string }): Promise<OperationalRecommendation[]> {
   assertKernelAccess(DOMAIN, "explainability");
-  const { legalPending, requestsPending } = await collect(params.organizationId);
-  const events = await listOperationalEvents(params.organizationId, { limit: 500 });
+  // R9 / SEM-070 — mesmas contagens exatas dos indicadores: contratos DISTINTOS na janela documentada
+  // (não eventos/alertas) e filas contadas no banco (não listas filtradas depois do `limit`).
+  const counts = await countDepartmentIndicators(params.organizationId, contractExpiringWindow(params.today));
+  const expiringContracts = counts.contractsExpiringSoon;
+  const legalPending = counts.legalOpinionsPending;
+  const requestsPending = counts.institutionalRequestsPending;
   const out: OperationalRecommendation[] = [];
 
-  const expiring = events.filter(e => e.eventType === "vencimento_contrato" && e.eventDate >= params.today);
-  if (expiring.length > 0) {
+  if (expiringContracts > 0) {
     const base = recommendStep({ step: "aditivo" });
     out.push({
-      kind: "vencimento", title: `${expiring.length} contrato(s) com vencimento próximo`,
+      kind: "vencimento", title: `${expiringContracts} contrato(s) com vencimento próximo`,
       reasoning: "Contratos próximos do vencimento podem exigir aditivo de prorrogação ou nova contratação.",
       legalBasis: base.legalBasis, confidence: 0.85, impact: "alto",
       alternatives: ["Elaborar aditivo de prazo", "Iniciar nova contratação", "Encerrar o contrato"],
     });
   }
-  if (legalPending.length >= 5) {
+  if (legalPending >= 5) {
     out.push({
-      kind: "gargalo", title: `Fila de pareceres com ${legalPending.length} itens`,
+      kind: "gargalo", title: `Fila de pareceres com ${legalPending} itens`,
       reasoning: "Volume elevado de pareceres pendentes indica possível gargalo no jurídico.",
       legalBasis: [], confidence: 0.7, impact: "medio",
       alternatives: ["Redistribuir pareceres", "Priorizar por prazo", "Reforçar a equipe"],
     });
   }
-  if (requestsPending.length >= 5) {
+  if (requestsPending >= 5) {
     out.push({
-      kind: "sobrecarga", title: `${requestsPending.length} solicitações institucionais pendentes`,
+      kind: "sobrecarga", title: `${requestsPending} solicitações institucionais pendentes`,
       reasoning: "Solicitações acumuladas podem atrasar processos que dependem de resposta institucional.",
       legalBasis: [], confidence: 0.68, impact: "medio",
       alternatives: ["Priorizar solicitações críticas", "Acompanhar respostas", "Rever prazos internos"],
@@ -212,7 +226,8 @@ export async function generateOperationalReport(params: { organizationId: number
     `- Processos concluídos: ${i.concludedProcesses}`,
     `- Pareceres aguardando: ${i.legalOpinionsAwaiting}`,
     `- Contratos ativos: ${i.activeContracts}`,
-    `- Contratos vencendo: ${i.contractsExpiring}`,
+    `- Contratos vencendo (próximos ${CONTRACT_EXPIRING_WINDOW_DAYS} dias): ${i.contractsExpiring}`,
+    `- Tarefas pendentes: ${i.pendingTasks}`,
     `- Solicitações pendentes: ${i.pendingRequests}`,
     "",
     "> Relatório consolidado automaticamente dos Business Domains. Revisão pelo servidor.",

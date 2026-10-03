@@ -11,8 +11,15 @@ import {
   sanitizeAttachmentFileName,
   validateTaskAttachment,
 } from "../domain/taskAttachmentPolicy";
+import { assertTaskAssigneeIsActiveMember } from "../services/taskAssigneePolicy";
+import type { InsertTask } from "../../drizzle/schema";
 
 const authzLog = serviceLogger("departmentTasksRouter");
+
+const TASK_STATUSES = ["pendente", "em_andamento", "pausada", "atrasada", "aguardando_informacao", "concluida", "cancelada"] as const;
+
+/** Prazo recebido como string (ISO); recusado se não for uma data válida (antes: gravado cru via `as any`). */
+const deadlineInput = z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), "Prazo inválido.");
 
 export const departmentTasksRouter = router({
   list: tenantProcedure.query(async ({ ctx }) => {
@@ -25,18 +32,30 @@ export const departmentTasksRouter = router({
         title: z.string(),
         description: z.string().optional(),
         type: z.string(),
-        status: z.enum(["pendente", "em_andamento", "pausada", "atrasada", "aguardando_informacao", "concluida", "cancelada"]).default("pendente"),
+        status: z.enum(TASK_STATUSES).default("pendente"),
         priority: z.enum(["baixa", "media", "alta", "urgente"]).default("media"),
-        deadline: z.string(),
-        assignedTo: z.number(),
+        deadline: deadlineInput,
+        assignedTo: z.number().int().positive(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      return await db.createTask({
-        ...input,
+      // R9 / SEM-071 — responsável validado no servidor (membro ATIVO do órgão) ANTES de gravar.
+      await assertTaskAssigneeIsActiveMember({
+        assignedTo: input.assignedTo, organizationId: ctx.organizationId,
+        actorUserId: ctx.user.id, procedure: "departmentTasks.create",
+      });
+      const task: InsertTask = {
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        status: input.status,
+        priority: input.priority,
+        deadline: new Date(input.deadline),
+        assignedTo: input.assignedTo,
         organizationId: ctx.organizationId,
         createdBy: ctx.user.id,
-      } as any);
+      };
+      return await db.createTask(task);
     }),
 
   update: tenantProcedure
@@ -46,16 +65,32 @@ export const departmentTasksRouter = router({
         title: z.string().optional(),
         description: z.string().optional(),
         type: z.string().optional(),
-        status: z.enum(["pendente", "em_andamento", "pausada", "atrasada", "aguardando_informacao", "concluida", "cancelada"]).optional(),
+        status: z.enum(TASK_STATUSES).optional(),
         priority: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
-        deadline: z.string().optional(),
-        assignedTo: z.number().optional(),
+        deadline: deadlineInput.optional(),
+        assignedTo: z.number().int().positive().optional(),
         processId: z.number().nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { id, ...updateData } = input;
-      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData as any);
+      const { id, deadline, ...rest } = input;
+      // R9 / SEM-071 — troca de responsável só para membro ATIVO do órgão; recusa sem escrever.
+      if (rest.assignedTo !== undefined) {
+        await assertTaskAssigneeIsActiveMember({
+          assignedTo: rest.assignedTo, organizationId: ctx.organizationId,
+          actorUserId: ctx.user.id, procedure: "departmentTasks.update",
+        });
+      }
+      // R9 / SEM-071 — vínculo de processo pelo update segue a mesma regra de `linkProcess` (mesmo órgão).
+      if (rest.processId !== undefined && rest.processId !== null) {
+        const process = await db.getProcessByIdForOrganization(rest.processId, ctx.organizationId);
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+      }
+      const updateData: Partial<InsertTask> = {
+        ...rest,
+        ...(deadline !== undefined ? { deadline: new Date(deadline) } : {}),
+      };
+      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData);
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.update",

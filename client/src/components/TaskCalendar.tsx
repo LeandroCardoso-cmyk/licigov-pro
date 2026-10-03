@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
 import {
   format,
@@ -11,7 +10,6 @@ import {
   endOfMonth,
   eachDayOfInterval,
   isSameMonth,
-  isSameDay,
   addMonths,
   subMonths,
   startOfWeek,
@@ -19,6 +17,7 @@ import {
   isToday,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { isTaskOverdue } from "@shared/taskDeadline";
 
 const PRIORITY_COLORS = {
   baixa: "bg-gray-100 text-gray-700 border-gray-300",
@@ -234,7 +233,8 @@ export default function TaskCalendar() {
               <div className="text-2xl font-bold text-red-600">
                 {tasks.filter((t) => {
                   if (!t.deadline) return false;
-                  return isSameMonth(new Date(t.deadline), currentMonth) && t.status === "atrasada";
+                  // R9 / SEM-071 — regra ÚNICA de "Atrasada" (antes: só o status manual `atrasada`).
+                  return isSameMonth(new Date(t.deadline), currentMonth) && isTaskOverdue(t, new Date());
                 }).length}
               </div>
               <div className="text-sm text-muted-foreground">Atrasadas</div>

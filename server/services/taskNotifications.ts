@@ -1,7 +1,9 @@
 import { getDb } from "../db";
 import { tasks } from "../../drizzle/schema";
 import { notifyOwner } from "../_core/notification";
-import { and, lte, gte, eq, sql } from "drizzle-orm";
+import { and, lte, gte, eq, notInArray } from "drizzle-orm";
+import { taskOverdueCondition } from "../db/tasks";
+import { TASK_TERMINAL_STATUSES } from "@shared/taskDeadline";
 
 /**
  * Verifica tarefas próximas do prazo e envia notificações
@@ -33,7 +35,7 @@ export async function checkTaskDeadlines(organizationId: number) {
           eq(tasks.organizationId, organizationId),
           gte(tasks.deadline, tomorrow),
           lte(tasks.deadline, threeDaysFromNow),
-          sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
+          notInArray(tasks.status, [...TASK_TERMINAL_STATUSES])
         )
       );
 
@@ -76,15 +78,15 @@ export async function checkTaskDeadlines(organizationId: number) {
       }
     }
 
-    // Buscar tarefas atrasadas (prazo já passou)
+    // Buscar tarefas atrasadas (prazo já passou ou marcadas manualmente como atrasadas)
     const overdueTasks = await db
       .select()
       .from(tasks)
       .where(
         and(
           eq(tasks.organizationId, organizationId),
-          lte(tasks.deadline, now),
-          sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
+          // R9 / SEM-071 — regra ÚNICA de "Atrasada" (shared/taskDeadline.ts), espelhada no banco.
+          taskOverdueCondition(now)
         )
       );
 
@@ -144,7 +146,7 @@ export async function getTaskDeadlineSummary(organizationId: number) {
           eq(tasks.organizationId, organizationId),
           gte(tasks.deadline, tomorrow),
           lte(tasks.deadline, threeDaysFromNow),
-          sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
+          notInArray(tasks.status, [...TASK_TERMINAL_STATUSES])
         )
       );
 
@@ -154,8 +156,8 @@ export async function getTaskDeadlineSummary(organizationId: number) {
       .where(
         and(
           eq(tasks.organizationId, organizationId),
-          lte(tasks.deadline, now),
-          sql`${tasks.status} NOT IN ('concluida', 'cancelada')`
+          // R9 / SEM-071 — regra ÚNICA de "Atrasada" (shared/taskDeadline.ts), espelhada no banco.
+          taskOverdueCondition(now)
         )
       );
 

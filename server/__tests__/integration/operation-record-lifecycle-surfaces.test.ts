@@ -32,6 +32,16 @@ vi.mock("../../db/departmentOperation", () => ({
   listOperationalTimeline: async () => [],
 }));
 
+// R9 / SEM-070 (reescrito) — indicadores agora vêm de contagens agregadas no banco (não das listas truncadas);
+// o mock reproduz o GROUP BY sobre os mesmos dados sintéticos (processo canônico + registros ATIVOS por etapa).
+vi.mock("../../db/departmentIndicators", () => ({
+  countDepartmentIndicators: async () => ({
+    processesByStatus: [{ key: "rascunho", count: 1 }], directProcurementsByStatus: [], contractsByStatus: [],
+    legalOpinionsPending: 0, institutionalRequestsPending: 0, contractsExpiringSoon: 0, pendingTasks: 0,
+    activeRecordsByStage: active("active").map((r) => ({ key: r.currentStage, count: 1 })),
+  }),
+}));
+
 import { getCalendar, getDashboard, getMonitoringPanel } from "../../services/departmentOperationService";
 
 describe("ciclo de vida nas superfícies operacionais", () => {

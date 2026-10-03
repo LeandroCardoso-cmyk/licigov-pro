@@ -185,13 +185,13 @@
     "semantic_hash": ""
   },
   "client/src/components/TaskCalendar.tsx": {
-    "mtime": 1790643728.9139369,
-    "ast_hash": "1b84269b0a84f5a694eb33f8f0daeef8",
+    "mtime": 1791040301.5820963,
+    "ast_hash": "06c64ec7240613d6a6c079e24c4c7f22",
     "semantic_hash": ""
   },
   "client/src/components/TaskDashboard.tsx": {
-    "mtime": 1790643728.9139369,
-    "ast_hash": "0218e0b9c584b4df5bc0f39aa1c72f23",
+    "mtime": 1791040301.582148,
+    "ast_hash": "fb8e407ef8ad370d087a78fd27d93992",
     "semantic_hash": ""
   },
   "client/src/components/TaskDetailModal.tsx": {
@@ -205,8 +205,8 @@
     "semantic_hash": ""
   },
   "client/src/components/TaskList.tsx": {
-    "mtime": 1790643728.9139369,
-    "ast_hash": "6e9599381e1a5415e5c31a950a25d88d",
+    "mtime": 1791040301.5821629,
+    "ast_hash": "f9165046b39d72872bd76d29a0611865",
     "semantic_hash": ""
   },
   "client/src/components/UploadContractDialog.tsx": {
@@ -875,8 +875,8 @@
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationalIndicators.tsx": {
-    "mtime": 1790881529.9568846,
-    "ast_hash": "0495b0054016fa81d58a19a058dded6b",
+    "mtime": 1791040301.5821629,
+    "ast_hash": "a9fbda96c28f90156fb586dc7f6ddc6a",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationalMonitoringPanel.tsx": {
@@ -2205,8 +2205,8 @@
     "semantic_hash": ""
   },
   "client/src/components/task-kanban/TaskCard.tsx": {
-    "mtime": 1790643728.9333062,
-    "ast_hash": "ead2204608175b049b86018744ccdac7",
+    "mtime": 1791040301.5821629,
+    "ast_hash": "854d19fb6f7081f4491ab2851d4ef521",
     "semantic_hash": ""
   },
   "client/src/components/templates/TemplateCard.tsx": {
@@ -3080,8 +3080,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/DepartmentManagement.tsx": {
-    "mtime": 1790643728.9392886,
-    "ast_hash": "31f3e426f1ba1e62df12b376de289bd6",
+    "mtime": 1791040301.5821629,
+    "ast_hash": "4d95f9501d47f41643ae8f88686a5e8b",
     "semantic_hash": ""
   },
   "client/src/pages/DirectContractDetails.tsx": {
@@ -5885,13 +5885,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/operation-record-lifecycle-surfaces.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "5426f029efe4543311060d4b07ad9c25",
+    "mtime": 1791040301.5821629,
+    "ast_hash": "66b9872d1a91618189ed484c51a625ef",
     "semantic_hash": ""
   },
   "server/__tests__/integration/operation-record-schedule.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "9c3fc24f7735aae85ede1a999e3e16ff",
+    "mtime": 1791040301.5822601,
+    "ast_hash": "aa7ba3f390cfa8b40d9a80d0f27274fa",
     "semantic_hash": ""
   },
   "server/__tests__/integration/operational-calendar-month-view.test.ts": {
@@ -7080,8 +7080,8 @@
     "semantic_hash": ""
   },
   "server/db/tasks.ts": {
-    "mtime": 1790643729.3348873,
-    "ast_hash": "9b7a678bfac2afbffdaa1e45883dfdc0",
+    "mtime": 1791040301.5823922,
+    "ast_hash": "0ac304f7d8a4caf834ee5ae7b5e7686d",
     "semantic_hash": ""
   },
   "server/db/templates.ts": {
@@ -8265,8 +8265,8 @@
     "semantic_hash": ""
   },
   "server/domain/operationalDashboard.ts": {
-    "mtime": 1790881530.0408845,
-    "ast_hash": "a05fdaf3e7d761fa2dbec9061d083452",
+    "mtime": 1791040301.5823922,
+    "ast_hash": "a4f065323d414c4edb909139207cffbd",
     "semantic_hash": ""
   },
   "server/domain/operationalEvent.ts": {
@@ -8750,8 +8750,8 @@
     "semantic_hash": ""
   },
   "server/routers/departmentTasksRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "a97822b24d4d7d58873c446478d69ee1",
+    "mtime": 1791040301.5823922,
+    "ast_hash": "92679c4d345f1046a35106dccdd8bf65",
     "semantic_hash": ""
   },
   "server/routers/deploymentRouter.ts": {
@@ -8990,8 +8990,8 @@
     "semantic_hash": ""
   },
   "server/routers/taskRouter.ts": {
-    "mtime": 1790643729.3491526,
-    "ast_hash": "9b5b6372d83a9dfb09d332da58761c1e",
+    "mtime": 1791040301.582441,
+    "ast_hash": "952963cc6245999d7acee229b7cbf958",
     "semantic_hash": ""
   },
   "server/routers/templatesRouter.ts": {
@@ -9460,8 +9460,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1790881530.0448847,
-    "ast_hash": "ba3ef0e0ee65a8f53b4124732bd15b4a",
+    "mtime": 1791040301.582441,
+    "ast_hash": "44a961ee4059ac6c27b6288c23a192b4",
     "semantic_hash": ""
   },
   "server/services/deploymentValidationService.ts": {
@@ -10385,13 +10385,13 @@
     "semantic_hash": ""
   },
   "server/services/taskNotifications.ts": {
-    "mtime": 1790643729.398198,
-    "ast_hash": "941dc86d5cb855ac1ae1d8f213e64982",
+    "mtime": 1791040301.582483,
+    "ast_hash": "3bba0d984cc85288e168a1c70d5541c8",
     "semantic_hash": ""
   },
   "server/services/taskReports.ts": {
-    "mtime": 1790643729.398198,
-    "ast_hash": "a6daab05dfeae2eee2d4699eecad0f99",
+    "mtime": 1791040301.5824964,
+    "ast_hash": "68e6aef3cb2208f10530672ef136376f",
     "semantic_hash": ""
   },
   "server/services/taskSimulationService.ts": {
@@ -13237,6 +13237,51 @@
   "server/services/packageAuthority.ts": {
     "mtime": 1791040148.2183769,
     "ast_hash": "fc38baa547b10dff782a468e360f066b",
+    "semantic_hash": ""
+  },
+  "client/src/lib/taskDeadlineClasses.ts": {
+    "mtime": 1791040301.5821629,
+    "ast_hash": "a89592aeef04d34ecb6a84fbb11f8da9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem070-operational-indicators-mysql-smoke.test.ts": {
+    "mtime": 1791040301.5822737,
+    "ast_hash": "285be101650266689f952368fa7a4ed8",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem071-task-assignee-overdue-mysql-smoke.test.ts": {
+    "mtime": 1791040301.5822935,
+    "ast_hash": "f9d8f74bd663a782edc665df65bc4a29",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem070-operational-indicators.test.ts": {
+    "mtime": 1791040301.5822935,
+    "ast_hash": "d668353cab3e780943a997e3bc5fe81a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem071-task-deadline-authority.test.ts": {
+    "mtime": 1791040301.5823262,
+    "ast_hash": "02ea6ef7e8fd5a3dbb05865c9ceae473",
+    "semantic_hash": ""
+  },
+  "server/db/departmentIndicators.ts": {
+    "mtime": 1791040301.5823262,
+    "ast_hash": "05e91ccfce2405e8ce864d1c65a6aa44",
+    "semantic_hash": ""
+  },
+  "server/services/taskAssigneePolicy.ts": {
+    "mtime": 1791040301.5824728,
+    "ast_hash": "b3f3eb916a4c0d37ca98edd27e8b7acb",
+    "semantic_hash": ""
+  },
+  "shared/operationalIndicators.ts": {
+    "mtime": 1791040301.5824964,
+    "ast_hash": "9bbf29467e1853376d20813491ec5cfa",
+    "semantic_hash": ""
+  },
+  "shared/taskDeadline.ts": {
+    "mtime": 1791040301.582531,
+    "ast_hash": "9cd1b7ba441ecb8c2e9515208defa9ed",
     "semantic_hash": ""
   }
 }

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet, Bell } from "lucide-react";
-import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TaskKanban from "@/components/TaskKanban";
@@ -10,59 +9,58 @@ import TaskList from "@/components/TaskList";
 import TaskCalendar from "@/components/TaskCalendar";
 import TaskDashboard from "@/components/TaskDashboard";
 
+/**
+ * Classes de botão desabilitado (padrão do design system, sem `opacity-50`): `disabled:opacity-100` neutraliza,
+ * via tailwind-merge, o `disabled:opacity-50` da base do <Button>.
+ */
+const DISABLED_BUTTON_CLASSES = "disabled:opacity-100 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground";
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function DepartmentManagement() {
   const [activeTab, setActiveTab] = useState("kanban");
-  
-  // Mutation para exportar Excel
-  const exportExcelMutation = (trpc as any).departmentTasks.exportExcel.useMutation({
-    onSuccess: (data: any) => {
+
+  // R9 / SEM-071 — as exportações existem em `tasks.*` (taskRouter). Antes os botões chamavam
+  // `departmentTasks.exportExcel/exportPDF/checkDeadlines` (inexistentes) via `(trpc as any)`.
+  const exportExcelMutation = trpc.tasks.exportExcel.useMutation({
+    onSuccess: (data) => {
       const byteCharacters = atob(data.data);
-      const byteNumbers = new Array(byteCharacters.length);
+      const byteArray = new Uint8Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+        byteArray[i] = byteCharacters.charCodeAt(i);
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = data.filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      downloadBlob(
+        new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+        data.filename,
+      );
       toast.success("Relatório Excel exportado com sucesso!");
     },
-    onError: (error: any) => {
-      toast.error("Erro ao exportar relatório", {
-        description: error.message,
-      });
+    onError: (error) => {
+      toast.error("Erro ao exportar relatório", { description: error.message });
     },
   });
 
-  // Mutation para exportar PDF (Markdown)
-  const exportPDFMutation = (trpc as any).departmentTasks.exportPDF.useMutation({
-    onSuccess: (data: any) => {
-      const blob = new Blob([data.content], { type: "text/markdown" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = data.filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
-      toast.success("Relatório resumido exportado com sucesso!");
+  // Relatório resumido: o servidor gera MARKDOWN (.md) — o rótulo diz isso (não é um PDF).
+  const exportSummaryMutation = trpc.tasks.exportPDF.useMutation({
+    onSuccess: (data) => {
+      downloadBlob(new Blob([data.content], { type: "text/markdown" }), data.filename);
+      toast.success("Resumo (Markdown) exportado com sucesso!");
     },
-    onError: (error: any) => {
-      toast.error("Erro ao exportar relatório", {
-        description: error.message,
-      });
+    onError: (error) => {
+      toast.error("Erro ao exportar relatório", { description: error.message });
     },
   });
 
-  // Mutation para verificar prazos
-  const checkDeadlinesMutation = (trpc as any).departmentTasks.checkDeadlines.useMutation({
-    onSuccess: (result: any) => {
-      if (result.success) {
+  const checkDeadlinesMutation = trpc.tasks.checkDeadlines.useMutation({
+    onSuccess: (result) => {
+      if (result.success && "upcomingCount" in result) {
         toast.success(`Verificação concluída!`, {
           description: `${result.notificationsSent} notificação(s) enviada(s). ${result.upcomingCount} tarefa(s) próximas do prazo, ${result.overdueCount} atrasada(s).`,
         });
@@ -70,9 +68,8 @@ export default function DepartmentManagement() {
         toast.error("Erro ao verificar prazos");
       }
     },
-    onError: (error: any) => {      toast.error("Erro ao verificar prazos", {
-        description: error.message,
-      });
+    onError: (error) => {
+      toast.error("Erro ao verificar prazos", { description: error.message });
     },
   });
 
@@ -91,29 +88,33 @@ export default function DepartmentManagement() {
             variant="outline"
             onClick={() => checkDeadlinesMutation.mutate()}
             disabled={checkDeadlinesMutation.isPending}
+            className={DISABLED_BUTTON_CLASSES}
           >
             <Bell className="h-4 w-4 mr-2" />
             {checkDeadlinesMutation.isPending ? "Verificando..." : "Verificar Prazos"}
           </Button>
           <Button
             variant="outline"
-            onClick={() => exportPDFMutation.mutate()}
-            disabled={exportPDFMutation.isPending}
+            onClick={() => exportSummaryMutation.mutate()}
+            disabled={exportSummaryMutation.isPending}
+            className={DISABLED_BUTTON_CLASSES}
           >
             <Download className="h-4 w-4 mr-2" />
-            {exportPDFMutation.isPending ? "Exportando..." : "PDF Resumido"}
+            {exportSummaryMutation.isPending ? "Exportando..." : "Resumo (Markdown)"}
           </Button>
           <Button
             variant="outline"
             onClick={() => exportExcelMutation.mutate()}
             disabled={exportExcelMutation.isPending}
+            className={DISABLED_BUTTON_CLASSES}
           >
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             {exportExcelMutation.isPending ? "Exportando..." : "Excel Completo"}
           </Button>
-          <Button size="lg">
+          {/* R9 / SEM-071 — não há formulário de criação nesta tela: botão desabilitado com rótulo honesto. */}
+          <Button size="lg" disabled className={DISABLED_BUTTON_CLASSES} title="Cadastro de tarefas por esta tela ainda não disponível">
             <Plus className="h-5 w-5 mr-2" />
-            Nova Tarefa
+            Nova Tarefa (indisponível)
           </Button>
         </div>
       </div>

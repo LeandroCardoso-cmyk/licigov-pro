@@ -1,8 +1,27 @@
-import { eq, and, or, like, inArray, gte, lte, lt, ne } from "drizzle-orm";
+import { eq, and, or, like, inArray, gte, lte, lt, notInArray, isNotNull, type SQL } from "drizzle-orm";
 import {
-  tasks, taskComments, taskAttachments, taskHistory, taskEditLocks, InsertTask,
+  tasks, taskComments, taskAttachments, taskHistory, taskEditLocks, InsertTask, type Task,
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
+import { countOverdueTasks, TASK_MANUAL_OVERDUE_STATUS, TASK_TERMINAL_STATUSES } from "@shared/taskDeadline";
+
+type TaskStatus = Task["status"];
+type TaskPriority = Task["priority"];
+
+/**
+ * R9 / SEM-071 — espelho SQL EXATO de `isTaskOverdue` (shared/taskDeadline.ts): tarefa não encerrada
+ * (`concluida`/`cancelada`) cujo prazo já passou OU marcada manualmente como `atrasada`. Usado onde o filtro
+ * precisa rodar no banco (lista de atrasadas, notificações); a paridade é coberta por smoke MySQL.
+ */
+export function taskOverdueCondition(now: Date): SQL {
+  return and(
+    notInArray(tasks.status, [...TASK_TERMINAL_STATUSES]),
+    or(
+      eq(tasks.status, TASK_MANUAL_OVERDUE_STATUS),
+      and(isNotNull(tasks.deadline), lt(tasks.deadline, now)),
+    ),
+  ) as SQL;
+}
 
 export async function createTask(task: InsertTask): Promise<number> {
   const db = await getDb();
@@ -42,14 +61,13 @@ export async function listTasks(filters: {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db.select().from(tasks);
-  const conditions = [];
+  const conditions: Array<SQL | undefined> = [];
 
   if (filters.search) {
     conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`)));
   }
-  if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as any));
-  if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as any));
+  if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as TaskStatus[]));
+  if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as TaskPriority[]));
   if (filters.type) conditions.push(eq(tasks.type, filters.type));
   if (filters.assignedTo) conditions.push(eq(tasks.assignedTo, filters.assignedTo));
   if (filters.processId) conditions.push(eq(tasks.processId, filters.processId));
@@ -58,11 +76,11 @@ export async function listTasks(filters: {
   if (filters.deadlineFrom) conditions.push(gte(tasks.deadline, filters.deadlineFrom));
   if (filters.deadlineTo) conditions.push(lte(tasks.deadline, filters.deadlineTo));
 
-  if (conditions.length > 0) query = query.where(and(...conditions)) as any;
-
   const page = filters.page || 1;
   const pageSize = filters.pageSize || 20;
-  return await query.limit(pageSize).offset((page - 1) * pageSize);
+  return await db.select().from(tasks)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .limit(pageSize).offset((page - 1) * pageSize);
 }
 
 export async function updateTask(id: number, updates: Partial<InsertTask>) {
@@ -81,32 +99,32 @@ export async function deleteTask(id: number) {
   await db.delete(tasks).where(eq(tasks.id, id));
 }
 
-export async function updateTaskStatus(id: number, status: string) {
+export async function updateTaskStatus(id: number, status: TaskStatus) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(tasks).set({ status: status as any }).where(eq(tasks.id, id));
+  await db.update(tasks).set({ status }).where(eq(tasks.id, id));
 }
 
 export async function getTaskStats(assignedTo?: number) {
   const db = await getDb();
   if (!db) return { total: 0, inProgress: 0, completed: 0, overdue: 0 };
-  let query = db.select().from(tasks);
-  if (assignedTo) query = query.where(eq(tasks.assignedTo, assignedTo)) as any;
-  const allTasks = await query;
+  const allTasks = await db.select().from(tasks)
+    .where(assignedTo ? eq(tasks.assignedTo, assignedTo) : undefined);
   const now = new Date();
   return {
     total: allTasks.length,
     inProgress: allTasks.filter((t) => t.status === "em_andamento").length,
     completed: allTasks.filter((t) => t.status === "concluida").length,
-    overdue: allTasks.filter((t) => t.deadline && t.deadline < now && t.status !== "concluida").length,
+    // R9 / SEM-071 — regra ÚNICA de "Atrasada" (antes: ignorava `cancelada` e o status manual).
+    overdue: countOverdueTasks(allTasks, now),
   };
 }
 
 export async function getOverdueTasks(assignedTo?: number) {
   const db = await getDb();
   if (!db) return [];
-  const now = new Date();
-  const conditions: any[] = [lt(tasks.deadline, now), ne(tasks.status, "concluida")];
+  // R9 / SEM-071 — mesmo critério de `isTaskOverdue`, no banco.
+  const conditions: SQL[] = [taskOverdueCondition(new Date())];
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
   return await db.select().from(tasks).where(and(...conditions));
 }
@@ -204,14 +222,14 @@ export async function listTasksForOrganization(
   const db = await getDb();
   if (!db) return [];
 
-  const conditions: any[] = [eq(tasks.organizationId, organizationId)];
+  const conditions: Array<SQL | undefined> = [eq(tasks.organizationId, organizationId)];
 
   if (filters) {
     if (filters.search) {
       conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`)));
     }
-    if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as any));
-    if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as any));
+    if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as TaskStatus[]));
+    if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as TaskPriority[]));
     if (filters.type) conditions.push(eq(tasks.type, filters.type));
     if (filters.assignedTo) conditions.push(eq(tasks.assignedTo, filters.assignedTo));
     if (filters.processId) conditions.push(eq(tasks.processId, filters.processId));
@@ -249,14 +267,14 @@ export async function updateTaskForOrganization(
 export async function updateTaskStatusForOrganization(
   id: number,
   organizationId: number,
-  status: string,
+  status: TaskStatus,
 ): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (!(await assertTaskInOrganization(id, organizationId))) return false;
   const result = await db
     .update(tasks)
-    .set({ status: status as any })
+    .set({ status })
     .where(and(eq(tasks.id, id), eq(tasks.organizationId, organizationId)));
   return (result[0]?.affectedRows ?? 0) > 0;
 }
@@ -276,7 +294,7 @@ export async function deleteTaskForOrganization(
 export async function getTaskStatsForOrganization(organizationId: number, assignedTo?: number) {
   const db = await getDb();
   if (!db) return { total: 0, inProgress: 0, completed: 0, overdue: 0 };
-  const conditions: any[] = [eq(tasks.organizationId, organizationId)];
+  const conditions: SQL[] = [eq(tasks.organizationId, organizationId)];
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
   const allTasks = await db.select().from(tasks).where(and(...conditions));
   const now = new Date();
@@ -284,18 +302,18 @@ export async function getTaskStatsForOrganization(organizationId: number, assign
     total: allTasks.length,
     inProgress: allTasks.filter((t) => t.status === "em_andamento").length,
     completed: allTasks.filter((t) => t.status === "concluida").length,
-    overdue: allTasks.filter((t) => t.deadline && t.deadline < now && t.status !== "concluida").length,
+    // R9 / SEM-071 — regra ÚNICA de "Atrasada" (antes: ignorava `cancelada` e o status manual).
+    overdue: countOverdueTasks(allTasks, now),
   };
 }
 
 export async function getOverdueTasksForOrganization(organizationId: number, assignedTo?: number) {
   const db = await getDb();
   if (!db) return [];
-  const now = new Date();
-  const conditions: any[] = [
+  // R9 / SEM-071 — mesmo critério de `isTaskOverdue`, no banco (antes: só `prazo < agora` e `≠ concluida`).
+  const conditions: SQL[] = [
     eq(tasks.organizationId, organizationId),
-    lt(tasks.deadline, now),
-    ne(tasks.status, "concluida"),
+    taskOverdueCondition(new Date()),
   ];
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
   return await db.select().from(tasks).where(and(...conditions));

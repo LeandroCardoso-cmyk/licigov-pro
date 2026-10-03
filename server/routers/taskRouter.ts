@@ -15,6 +15,7 @@ import {
 import { generateTasksExcelReport, generateTasksPDFContent } from "../services/taskReports";
 import { checkTaskDeadlines, getTaskDeadlineSummary } from "../services/taskNotifications";
 import { serviceLogger } from "../services/observabilityService";
+import { assertTaskAssigneeIsActiveMember } from "../services/taskAssigneePolicy";
 
 const authzLog = serviceLogger("taskRouter");
 
@@ -36,6 +37,11 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // R9 / SEM-071 — responsável validado no servidor (membro ATIVO do órgão) ANTES de gravar.
+      await assertTaskAssigneeIsActiveMember({
+        assignedTo: input.assignedTo, organizationId: ctx.organizationId,
+        actorUserId: ctx.user.id, procedure: "task.create",
+      });
       // Se vinculada a um processo, ele precisa pertencer à organização.
       if (input.processId !== undefined) {
         const process = await getProcessByIdForOrganization(input.processId, ctx.organizationId);
@@ -141,6 +147,18 @@ export const taskRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
+      // R9 / SEM-071 — troca de responsável só para membro ATIVO do órgão; recusa sem escrever.
+      if (updates.assignedTo !== undefined) {
+        await assertTaskAssigneeIsActiveMember({
+          assignedTo: updates.assignedTo, organizationId: ctx.organizationId,
+          actorUserId: ctx.user.id, procedure: "task.update",
+        });
+      }
+      // R9 / SEM-071 — vínculo de processo pelo update segue a mesma regra do create (mesmo órgão).
+      if (updates.processId !== undefined) {
+        const process = await getProcessByIdForOrganization(updates.processId, ctx.organizationId);
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+      }
 
       const ok = await updateTaskForOrganization(id, ctx.organizationId, {
         ...updates,
@@ -270,7 +288,7 @@ export const taskRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const buffer = await generateTasksExcelReport(ctx.organizationId, input);
-      const base64 = Buffer.from(buffer as any).toString("base64");
+      const base64 = Buffer.from(buffer as ArrayBuffer).toString("base64");
       return {
         data: base64,
         filename: `tarefas-${new Date().toISOString().split('T')[0]}.xlsx`,

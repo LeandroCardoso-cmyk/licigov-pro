@@ -49,29 +49,110 @@ export interface OperationalIndicators {
 }
 
 import { isFinalizedOperationRecord } from "./operationRecordSchedule";
+import { addIsoDays, CONTRACT_EXPIRING_WINDOW_DAYS } from "@shared/operationalIndicators";
 
-const CONCLUDED_PROCESS = new Set(["emitido", "arquivado", "concluido", "publicado"]);
-const CONCLUDED_CONTRACT = new Set(["encerrado", "arquivado", "rescindido"]);
+// R9 / SEM-070 — classificação ÚNICA do status de processo/contratação direta.
+// "Concluído" é o status REAL de conclusão: `emitido` (processo licitatório, etapa ISSUED) e `concluido`
+// (contratação direta, etapa CONTRACT). `arquivado` NÃO é conclusão (fica fora de ativos e de concluídos) e
+// `publicado` (mera ENTRADA na etapa PUBLICATION da contratação direta) continua ATIVO.
+const CONCLUDED_PROCESS_STATUSES = new Set(["emitido", "concluido"]);
+const ARCHIVED_PROCESS_STATUSES = new Set(["arquivado"]);
 
-/** Indicadores operacionais consolidados. NUNCA inclui valores financeiros. */
-export function computeIndicators(input: ConsolidatedInput): OperationalIndicators {
-  const allProcesses = [...input.processes, ...input.directProcurements];
-  const activeProcesses = allProcesses.filter(p => !CONCLUDED_PROCESS.has(p.status)).length;
-  const concludedProcesses = allProcesses.filter(p => CONCLUDED_PROCESS.has(p.status)).length;
-  const activeContracts = input.contracts.filter(c => !CONCLUDED_CONTRACT.has(c.status)).length;
+/** Status de contrato que encerram a vigência (fora de "Contratos ativos" e de "Contratos vencendo"). */
+export const ENDED_CONTRACT_STATUSES: readonly string[] = ["encerrado", "rescindido", "arquivado"];
+const CONCLUDED_CONTRACT = new Set(ENDED_CONTRACT_STATUSES);
+
+export type ProcessSituationClass = "ativo" | "concluido" | "arquivado";
+
+/** R9 / SEM-070 — ativo × concluído (status real) × arquivado (fora das duas métricas). */
+export function classifyProcessStatus(status: string): ProcessSituationClass {
+  if (CONCLUDED_PROCESS_STATUSES.has(status)) return "concluido";
+  if (ARCHIVED_PROCESS_STATUSES.has(status)) return "arquivado";
+  return "ativo";
+}
+
+/** R9 / SEM-070 — janela documentada de "Contratos vencendo": [hoje, hoje + 30 dias]. */
+export function contractExpiringWindow(today: string): { from: string; to: string } {
+  return { from: today, to: addIsoDays(today, CONTRACT_EXPIRING_WINDOW_DAYS) };
+}
+
+/**
+ * R9 / SEM-070 — "Atrasado" de um registro operacional: a agenda (data final, ou a data do evento quando não
+ * há data final) já passou e o registro não está finalizado. Sem agenda ⇒ nunca atrasado (sem sinal inventado).
+ */
+export function isOperationRecordOverdue(record: { currentStage: string; eventDate: string; eventEndDate: string }, today: string): boolean {
+  if (!record.eventDate) return false;
+  if (isFinalizedOperationRecord(record.currentStage)) return false;
+  return (record.eventEndDate || record.eventDate) < today;
+}
+
+/** Contagem agregada por chave (resultado de GROUP BY no banco). */
+export interface KeyCount {
+  readonly key: string;
+  readonly count: number;
+}
+
+/**
+ * R9 / SEM-070 — entrada AGREGADA (SQL COUNT/GROUP BY por tenant) dos indicadores. Substitui a contagem em
+ * memória sobre listas truncadas por `limit` (200/500): cada número é exato para o órgão inteiro.
+ */
+export interface ConsolidatedCounts {
+  readonly processesByStatus: ReadonlyArray<KeyCount>;
+  readonly directProcurementsByStatus: ReadonlyArray<KeyCount>;
+  readonly contractsByStatus: ReadonlyArray<KeyCount>;
+  readonly legalOpinionsPending: number;
+  readonly institutionalRequestsPending: number;
+  readonly addendaCount: number;
+  readonly contractsExpiringSoon: number;
+  readonly pendingTasks: number;
+  /** Registros operacionais ATIVOS agrupados por etapa (finalizado = regra pura sobre a etapa). */
+  readonly activeRecordsByStage?: ReadonlyArray<KeyCount>;
+  readonly completedOperationalRecords?: number;
+}
+
+function sumWhere(rows: ReadonlyArray<KeyCount>, predicate: (key: string) => boolean): number {
+  return rows.reduce((n, r) => (predicate(r.key) ? n + r.count : n), 0);
+}
+
+/** R9 / SEM-070 — indicadores a partir das contagens agregadas. NUNCA inclui valores financeiros. */
+export function computeIndicatorsFromCounts(input: ConsolidatedCounts): OperationalIndicators {
+  const processRows = [...input.processesByStatus, ...input.directProcurementsByStatus];
+  const records = input.activeRecordsByStage ?? [];
   return {
-    activeProcesses,
-    concludedProcesses,
+    activeProcesses: sumWhere(processRows, s => classifyProcessStatus(s) === "ativo"),
+    concludedProcesses: sumWhere(processRows, s => classifyProcessStatus(s) === "concluido"),
     legalOpinionsAwaiting: input.legalOpinionsPending,
-    activeContracts,
+    activeContracts: sumWhere(input.contractsByStatus, s => !CONCLUDED_CONTRACT.has(s)),
     contractsExpiring: input.contractsExpiringSoon,
     addenda: input.addendaCount,
     pendingTasks: input.pendingTasks,
     pendingRequests: input.institutionalRequestsPending,
-    trackedRecords: input.operationalRecords?.length ?? 0,
-    finalizedRecords: input.operationalRecords?.filter(r => isFinalizedOperationRecord(r.currentStage)).length ?? 0,
+    trackedRecords: sumWhere(records, () => true),
+    finalizedRecords: sumWhere(records, s => isFinalizedOperationRecord(s)),
     completedRecords: input.completedOperationalRecords ?? 0,
   };
+}
+
+function countBy<T>(items: ReadonlyArray<T>, key: (item: T) => string): KeyCount[] {
+  const map = new Map<string, number>();
+  for (const item of items) map.set(key(item), (map.get(key(item)) ?? 0) + 1);
+  return [...map.entries()].map(([k, count]) => ({ key: k, count }));
+}
+
+/** Indicadores operacionais consolidados a partir de listas (adaptador puro de `computeIndicatorsFromCounts`). */
+export function computeIndicators(input: ConsolidatedInput): OperationalIndicators {
+  return computeIndicatorsFromCounts({
+    processesByStatus: countBy(input.processes, p => p.status),
+    directProcurementsByStatus: countBy(input.directProcurements, p => p.status),
+    contractsByStatus: countBy(input.contracts, c => c.status),
+    legalOpinionsPending: input.legalOpinionsPending,
+    institutionalRequestsPending: input.institutionalRequestsPending,
+    addendaCount: input.addendaCount,
+    contractsExpiringSoon: input.contractsExpiringSoon,
+    pendingTasks: input.pendingTasks,
+    activeRecordsByStage: countBy(input.operationalRecords ?? [], r => r.currentStage),
+    completedOperationalRecords: input.completedOperationalRecords,
+  });
 }
 
 /** Marco do painel: status + data (ex.: parecer inicial enviado/recebido, publicação). */

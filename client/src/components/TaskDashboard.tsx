@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { TaskKPIGrid } from "@/components/task-dashboard/TaskKPIGrid";
 import { TaskChartsSection, PRIORITY_COLORS, STATUS_COLORS } from "@/components/task-dashboard/TaskChartsSection";
+import { countOverdueTasks } from "@shared/taskDeadline";
 
 export default function TaskDashboard() {
   const { data: tasks = [], isLoading } = trpc.departmentTasks.list.useQuery();
@@ -10,11 +11,8 @@ export default function TaskDashboard() {
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === "concluida").length;
     const inProgress = tasks.filter(t => t.status === "em_andamento").length;
-    const delayed = tasks.filter(t => {
-      if (t.status === "concluida" || t.status === "cancelada") return false;
-      if (!t.deadline) return false;
-      return new Date(t.deadline) < new Date();
-    }).length;
+    // R9 / SEM-071 — regra ÚNICA de "Atrasada" (mesma do Excel/PDF, lista e servidor).
+    const delayed = countOverdueTasks(tasks, new Date());
     return { total, completed, inProgress, delayed };
   }, [tasks]);
 
