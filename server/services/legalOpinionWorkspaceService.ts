@@ -325,7 +325,8 @@ export async function createOpinionDraft(params: {
   // 3) Criação INSERT-only sob lock do workspace (rascunho + versão v1 na mesma transação).
   const claim = await claimNewLegalOpinionDraft(candidate, {
     contentHash: draftContentHash(candidate),
-    snapshot: JSON.stringify({ report: candidate.report, conclusion: candidate.conclusion }),
+    // R9 / SEM-041 — o snapshot da versão inclui a fundamentação e o tipo de conclusão (antes só relatório/conclusão).
+    snapshot: JSON.stringify({ report: candidate.report, foundation: candidate.foundation, conclusion: candidate.conclusion, conclusionType: candidate.conclusionType ?? null }),
     author: params.author, correlationId: params.correlationId,
   });
   if (claim?.status === "workspace_missing") throw new Error("Workspace de parecer não encontrado.");
@@ -379,7 +380,7 @@ export async function updateOpinionDraft(params: {
   }
   await insertLegalOpinionVersion({
     organizationId: params.organizationId, draftId: updated.id, workspaceId: ws.id, version: updated.version,
-    contentHash: draftContentHash(updated), snapshot: JSON.stringify({ report: updated.report, conclusion: updated.conclusion }),
+    contentHash: draftContentHash(updated), snapshot: JSON.stringify({ report: updated.report, foundation: updated.foundation, conclusion: updated.conclusion, conclusionType: updated.conclusionType ?? null }),
     author: params.author, correlationId: params.correlationId,
   });
   await recordHistory(ws, "draft_updated", String(params.author), `Parecer atualizado (v${updated.version}).`, updated.id);

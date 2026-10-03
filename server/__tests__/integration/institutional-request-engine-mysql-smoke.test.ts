@@ -63,7 +63,17 @@ async function cleanup() {
       "request_timelines", "request_notifications", "document_references"]) {
       await conn.query(`DELETE FROM \`${t}\` WHERE organization_id = ?`, [org]).catch(() => {});
     }
+    await conn.query("DELETE FROM official_documents WHERE tenant_id = ?", [org]).catch(() => {});
   }
+}
+
+/** R9 / SEM-041 (reescrito): o documento referenciado precisa EXISTIR no órgão (versão/conteúdo vêm do banco). */
+const docIdOf = (org: number) => (org === ORG ? "doc-cd-01" : "doc-cd-02");
+async function seedOfficialDoc(org: number) {
+  await conn.execute(
+    "INSERT INTO official_documents (id, tenant_id, business_domain, document_type, origin, title, version, status, content) VALUES (?, ?, 'contratacao_direta', 'outro', 'proc-b1-cd', 'Termo de Dispensa', 1, 'gerado', 'conteudo-do-termo')",
+    [docIdOf(org), org],
+  );
 }
 
 /** Cria a solicitação canônica de parecer jurídico originada da Contratação Direta. */
@@ -78,7 +88,7 @@ async function solicitarParecer(org = ORG, correlationId = "corr-b1-parecer") {
     description: "Solicitação de parecer jurídico inicial para contratação direta.",
     priority: "alta",
     requestedBy: REQUESTER,
-    documents: [{ documentId: "doc-cd-01", title: "Termo de Dispensa", version: 1, snapshotSource: "conteudo-do-termo" }],
+    documents: [{ documentId: docIdOf(org), title: "Termo de Dispensa", version: 1 }],
     correlationId,
   });
 }
@@ -92,6 +102,8 @@ describe.skipIf(!DB)("B1 — Institutional Request Engine (MySQL estrito, fluxo 
     await conn.query(`SET GLOBAL sql_mode = '${STRICT}'`).catch(() => {});
     await conn.query(`SET SESSION sql_mode = '${STRICT}'`);
     await cleanup();
+    await seedOfficialDoc(ORG);
+    await seedOfficialDoc(ORG_OTHER);
   }, 300_000);
 
   afterAll(async () => {

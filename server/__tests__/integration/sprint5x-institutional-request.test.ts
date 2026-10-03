@@ -153,17 +153,25 @@ describe("Sprint 5.X — Institutional Request Engine (Kernel)", () => {
   // ─── institutionalRequestService (a API única) ──────────────────────────────
 
   describe("institutionalRequestService", () => {
-    it("requestInstitutionalReview cria, encaminha (PENDING) e monta contexto por referência", async () => {
+    // R9 / SEM-041 (reescrito): referências fictícias ("tr-1") não são mais aceitas — o servidor resolve versão e
+    // conteúdo no próprio órgão; sem banco nada é verificável ⇒ recusa antes de gravar. A fixação real é coberta pelo
+    // smoke MySQL r9-sem041-legal-opinion-pinning.
+    it("requestInstitutionalReview cria e encaminha (PENDING); referência não verificável é recusada", async () => {
       const result = await requestInstitutionalReview({
         organizationId: ORG_ID, sourceDomain: "processo_licitatorio", destinationDomain: "parecer_juridico",
         requestType: "LEGAL_OPINION_INITIAL", referenceProcessId: "proc-1", title: "Parecer inicial", requestedBy: 7,
-        documents: [{ documentId: "tr-1", title: "TR" }, { documentId: "etp-1", title: "ETP" }], correlationId: CORR,
+        correlationId: CORR,
       });
       expect(result.request.status).toBe("PENDING");
       expect(result.request.sourceDomain).toBe("processo_licitatorio");
       expect(result.request.destinationDomain).toBe("parecer_juridico");
-      expect(result.context.documentReferenceIds).toHaveLength(2);
+      expect(result.context.documentReferenceIds).toHaveLength(0);
       expect(result.context.referenceProcessId).toBe("proc-1");
+      await expect(requestInstitutionalReview({
+        organizationId: ORG_ID, sourceDomain: "processo_licitatorio", destinationDomain: "parecer_juridico",
+        requestType: "LEGAL_OPINION_INITIAL", referenceProcessId: "proc-1", title: "Parecer inicial", requestedBy: 7,
+        documents: [{ documentId: "tr-1", title: "TR" }], correlationId: CORR,
+      })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("DOCUMENT_REFERENCE_NOT_FOUND") });
     });
 
     it("requestInstitutionalReview rejeita origem == destino", async () => {

@@ -27,6 +27,8 @@ import { createRequestAssignment } from "../domain/requestAssignment";
 import { createRequestNotification } from "../domain/requestNotification";
 import { createDocumentReference } from "../domain/documentReference";
 import { createRequestTimelineEntry, type RequestEventType } from "../domain/requestTimeline";
+import { TRPCError } from "@trpc/server";
+import { getOfficialDocument, listOfficialDocuments } from "../db/officialDocuments";
 import {
   insertRequest, getRequest, updateRequestStatus,
   insertResponse, insertAssignment, insertRequestTimelineEntry, countTimeline,
@@ -66,6 +68,50 @@ export interface ReviewResult {
  * de destino (PENDING), monta o contexto automático (referências documentais, sem
  * cópia), registra a timeline e notifica. Multi-tenant: jamais cruza organizações.
  */
+/**
+ * R9 / SEM-041 — FIXAÇÃO REAL dos documentos analisados. Antes a referência recebia versão default 1 e um snapshot
+ * de hash SEM conteúdo (o cliente nunca mandava `snapshotSource`): o parecer não fixava nada. Agora o SERVIDOR
+ * resolve cada documento no próprio órgão (`official_documents`): versão e conteúdo vêm do banco, o snapshot é o hash
+ * do CONTEÚDO, e referência inexistente/de outro órgão é recusada ANTES de qualquer escrita. Sem documentos
+ * informados, uma solicitação de parecer fixa automaticamente a versão vigente de cada documento oficial da origem.
+ */
+export interface PinnedDocument { documentId: string; title: string; version: number; snapshotSource: string }
+
+export const DOCUMENT_REFERENCE_NOT_FOUND = "DOCUMENT_REFERENCE_NOT_FOUND";
+
+export async function resolvePinnedDocuments(params: {
+  organizationId: number; referenceProcessId: string; destinationDomain: BusinessDomainCode;
+  documents?: ReadonlyArray<{ documentId: string; title?: string; version?: number }>;
+}): Promise<PinnedDocument[]> {
+  const out: PinnedDocument[] = [];
+  if (params.documents && params.documents.length > 0) {
+    for (const d of params.documents) {
+      const doc = await getOfficialDocument(d.documentId, params.organizationId);
+      if (!doc) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Documento referenciado não encontrado neste órgão — nada foi gravado (${DOCUMENT_REFERENCE_NOT_FOUND}).` });
+      }
+      if (d.version !== undefined && d.version !== doc.version) {
+        throw new TRPCError({ code: "CONFLICT", message: `O documento referenciado está na versão ${doc.version}, não ${d.version} — recarregue antes de solicitar.` });
+      }
+      out.push({ documentId: doc.id, title: d.title ?? doc.title, version: doc.version, snapshotSource: doc.content });
+    }
+    return out;
+  }
+  if (params.destinationDomain !== "parecer_juridico" || !params.referenceProcessId) return out;
+  // Automática: a versão VIGENTE (maior versão) de cada linhagem oficial da origem.
+  const listed = await listOfficialDocuments(params.organizationId, { origin: params.referenceProcessId, limit: 200 });
+  const latestByLineage = new Map<string, (typeof listed)[number]>();
+  for (const d of listed) {
+    const cur = latestByLineage.get(d.lineageId);
+    if (!cur || d.version > cur.version) latestByLineage.set(d.lineageId, d);
+  }
+  for (const d of [...latestByLineage.values()].sort((a, b) => a.documentType.localeCompare(b.documentType) || a.id.localeCompare(b.id))) {
+    const doc = await getOfficialDocument(d.id, params.organizationId);
+    if (doc) out.push({ documentId: doc.id, title: doc.title, version: doc.version, snapshotSource: doc.content });
+  }
+  return out;
+}
+
 export async function requestInstitutionalReview(params: {
   organizationId: number;
   sourceDomain: BusinessDomainCode;
@@ -76,12 +122,15 @@ export async function requestInstitutionalReview(params: {
   description?: string;
   priority?: RequestPriority;
   requestedBy: number;
-  documents?: Array<{ documentId: string; title?: string; version?: number; snapshotSource?: string }>;
+  /** R9 / SEM-041 — só a IDENTIDADE do documento; versão e conteúdo do snapshot são resolvidos pelo servidor. */
+  documents?: Array<{ documentId: string; title?: string; version?: number }>;
   correlationId: string;
 }): Promise<ReviewResult> {
   if (params.sourceDomain === params.destinationDomain) {
     throw new Error("Origem e destino não podem ser o mesmo domínio.");
   }
+  // R9 / SEM-041 — resolve e FIXA os documentos ANTES de qualquer escrita (referência inválida ⇒ nada gravado).
+  const pinned = await resolvePinnedDocuments(params);
 
   // 1) Cria e encaminha (NEW → PENDING)
   const created = createInstitutionalRequest({
@@ -105,7 +154,7 @@ export async function requestInstitutionalReview(params: {
 
   // 3) Contexto automático: documentos por REFERÊNCIA (nunca copiados)
   const refIds: string[] = [];
-  for (const d of params.documents ?? []) {
+  for (const d of pinned) {
     const ref = createDocumentReference({
       organizationId: params.organizationId, requestId: forwarded.id, originDomain: params.sourceDomain,
       documentId: d.documentId, version: d.version, title: d.title, snapshotSource: d.snapshotSource, correlationId: params.correlationId,

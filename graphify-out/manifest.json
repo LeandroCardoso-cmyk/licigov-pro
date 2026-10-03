@@ -5775,8 +5775,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "c65a9f554cfe8016bb4aa89faf870f7b",
+    "mtime": 1791041681.4810665,
+    "ast_hash": "47c92aa8d391740dd8e51232462340b7",
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitation-service.test.ts": {
@@ -6495,8 +6495,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "49e0756775ebe7f522faf385b6c5415f",
+    "mtime": 1791041568.380932,
+    "ast_hash": "d5e3834cbba747d00252bb1543bcf634",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5xx-consolidation.test.ts": {
@@ -9870,8 +9870,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalRequestService.ts": {
-    "mtime": 1790643729.3959823,
-    "ast_hash": "ab7d4c78deb4760d033b9f56f9a263a8",
+    "mtime": 1791041502.1555407,
+    "ast_hash": "e7d9ed80207ed86cd6cc36d9293d167a",
     "semantic_hash": ""
   },
   "server/services/institutionalRetrievalService.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1790942517.7339756,
-    "ast_hash": "9ce78ee01350cb20d39b7d0cc7a6e250",
+    "mtime": 1791041423.3374138,
+    "ast_hash": "7e1dfd7340e9f8d13b1b766348676713",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -13292,6 +13292,11 @@
   "server/domain/aiNumericAuthority.ts": {
     "mtime": 1791040538.528135,
     "ast_hash": "42d54cd021bfd005a6ca68097f97b214",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem041-legal-opinion-pinning-mysql-smoke.test.ts": {
+    "mtime": 1791041609.1950207,
+    "ast_hash": "0e6b86a07516d8f5821b8e032962ecf4",
     "semantic_hash": ""
   }
 }
