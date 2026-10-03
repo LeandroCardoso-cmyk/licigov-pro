@@ -155,8 +155,8 @@
     "semantic_hash": ""
   },
   "client/src/components/PresentialPackageModal.tsx": {
-    "mtime": 1790643728.9139369,
-    "ast_hash": "cf0f7233bd96fb72edcd4a6bb6f59161",
+    "mtime": 1791040148.2178688,
+    "ast_hash": "97a2d67d7ab728e27629cc125f819896",
     "semantic_hash": ""
   },
   "client/src/components/RescissionModal.tsx": {
@@ -1965,8 +1965,8 @@
     "semantic_hash": ""
   },
   "client/src/components/publication-package/PackageDocumentsTab.tsx": {
-    "mtime": 1790643728.9314384,
-    "ast_hash": "e5f252d4ee11ef9ff91ce697fcb7374d",
+    "mtime": 1791040148.2178688,
+    "ast_hash": "41ad2117214cbc510091326264ad0741",
     "semantic_hash": ""
   },
   "client/src/components/rag/CitationViewer.tsx": {
@@ -3030,8 +3030,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Analytics.tsx": {
-    "mtime": 1790643728.9392886,
-    "ast_hash": "1b170ea3f70e1576f286321fae9f6372",
+    "mtime": 1791040148.2178688,
+    "ast_hash": "acb0baf2af621787c1670bdf7d842244",
     "semantic_hash": ""
   },
   "client/src/pages/BemVindo.tsx": {
@@ -5975,8 +5975,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/post-blockers-tenant-isolation-mysql-smoke.test.ts": {
-    "mtime": 1790881396.2848766,
-    "ast_hash": "9e9348089fc0f221d7fb4dd383de9899",
+    "mtime": 1791040148.2178688,
+    "ast_hash": "80ba936df01a5e23456cd872f9aca5c1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr-b-runtime-release-safety.test.ts": {
@@ -6885,8 +6885,8 @@
     "semantic_hash": ""
   },
   "server/db/admin.ts": {
-    "mtime": 1790881396.2968767,
-    "ast_hash": "833faaba291cbc5928d556ab41fb2594",
+    "mtime": 1791040148.2180688,
+    "ast_hash": "b763151ea81446b24c314a42de206660",
     "semantic_hash": ""
   },
   "server/db/aiUsage.ts": {
@@ -8920,8 +8920,8 @@
     "semantic_hash": ""
   },
   "server/routers/platformsRouter.ts": {
-    "mtime": 1790881396.3208766,
-    "ast_hash": "63ed736bf3997bb7525449c280db6a0b",
+    "mtime": 1791040148.2180688,
+    "ast_hash": "c00f3ef131f288e828b0e367fb9a9392",
     "semantic_hash": ""
   },
   "server/routers/processesRouter.ts": {
@@ -9485,8 +9485,8 @@
     "semantic_hash": ""
   },
   "server/services/directContractPackage.ts": {
-    "mtime": 1790643729.3551946,
-    "ast_hash": "9c1af8720d1cff4a54bfacdfd01b20fd",
+    "mtime": 1791040148.2180688,
+    "ast_hash": "a70d2f25a1814b83583f2b66bbc7251b",
     "semantic_hash": ""
   },
   "server/services/directContractShadowService.ts": {
@@ -10490,8 +10490,8 @@
     "semantic_hash": ""
   },
   "server/services/zipService.ts": {
-    "mtime": 1790643729.398198,
-    "ast_hash": "a68421aa6ce44eb80c4938be735f4b03",
+    "mtime": 1791040148.2184026,
+    "ast_hash": "9dba981d04ccb3abc223ba82497194f2",
     "semantic_hash": ""
   },
   "server/storage.ts": {
@@ -13202,6 +13202,41 @@
   "server/domain/emissionPreconditions.ts": {
     "mtime": 1791039582.9000783,
     "ast_hash": "902dd7964e76fd87b0f13afb9c988bd4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/zipEntries.ts": {
+    "mtime": 1791040148.2178688,
+    "ast_hash": "e0bd8000e537ad2f3e2d62dc5aa05d4b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem072-package-authority-mysql-smoke.test.ts": {
+    "mtime": 1791040148.2180119,
+    "ast_hash": "bfdbf5a8232e73b3d184100ba583dd34",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem074-canonical-analytics-mysql-smoke.test.ts": {
+    "mtime": 1791040148.2180314,
+    "ast_hash": "ef3af90364623790f9abe7c7db1dd38a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem072-package-authority.test.ts": {
+    "mtime": 1791040148.2180314,
+    "ast_hash": "29eba3ca411432fe5bfee0d6b93c0896",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem074-canonical-analytics.test.ts": {
+    "mtime": 1791040148.2180688,
+    "ast_hash": "4547a6b505d2b2938ac8d1f81b4de81e",
+    "semantic_hash": ""
+  },
+  "server/domain/canonicalAnalytics.ts": {
+    "mtime": 1791040148.2180688,
+    "ast_hash": "7a59d56e18e2078ba6be259261047faf",
+    "semantic_hash": ""
+  },
+  "server/services/packageAuthority.ts": {
+    "mtime": 1791040148.2183769,
+    "ast_hash": "fc38baa547b10dff782a468e360f066b",
     "semantic_hash": ""
   }
 }
