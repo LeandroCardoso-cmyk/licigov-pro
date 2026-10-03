@@ -21,9 +21,11 @@ export type DraftEditorProps = {
   /** Conteúdo + hash do snapshot persistido (reviewableDraft) — par inseparável. */
   content: string;
   contentHash: string;
+  /** R9 / SEM-057 — avisa a workspace quando há edição NÃO salva (a emissão fica bloqueada até salvar). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function DraftEditor({ processId, kind, content, contentHash }: DraftEditorProps) {
+export default function DraftEditor({ processId, kind, content, contentHash, onDirtyChange }: DraftEditorProps) {
   const utils = trpc.useUtils();
   const { key: saveKey, rotate: rotateSaveKey } = useIdempotencyKey();
   const [text, setText] = useState(content);
@@ -59,6 +61,7 @@ export default function DraftEditor({ processId, kind, content, contentHash }: D
   });
 
   const dirty = text !== content;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
 
   return (
     <div>

@@ -294,6 +294,8 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
   it("R5.B — versão OFICIAL emitida: regenerar (router real) ⇒ OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE, zero IA/writes", async () => {
     const pid = await newProcess(ORG, "Serviço de vigilância");
     await genTR(ORG, pid, `seed-${pid}`, A);
+    // R9 / SEM-057 (reescrito): a emissão exige conteúdo sem marcadores [REVISAR] — fixture da revisão humana.
+    await conn.execute("UPDATE generated_documents SET content = REPLACE(content, '[REVISAR', '[REVISADO') WHERE organization_id = ? AND process_id = ? AND kind = ?", [ORG, pid, "tr"]);
     const tr = (await getGeneratedDocumentByKind(pid, ORG, "tr"))!;
     const emission = await promoteOfficialDocument({
       organizationId: ORG, processId: pid, kind: "tr", actorUserId: EMITTER, actorRole: "manager",
@@ -330,10 +332,17 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
 
   it("R5.B — Edital oficial: nem troca de parâmetros confirmada nem confirmReplace regeneram (router real)", async () => {
     const pid = await newProcess(ORG, "Aquisição de merenda");
+    // R9 / SEM-057 (reescrito): o Edital só é emitido depois do TR EMITIDO — fixture da versão oficial do TR ANTES da geração do Edital (a fonte consumida é a emitida).
+    await conn.execute(
+      "INSERT INTO official_documents (id, tenant_id, business_domain, document_type, origin, title, version, status, content) VALUES (?, ?, 'processo_licitatorio', 'tr', ?, 'TR', 1, 'emitido', 'TR emitido (fixture)')",
+      [`tr-fx-${Date.now()}`.slice(0, 20), ORG, pid],
+    );
     await generateNotice({
       organizationId: ORG, processId: pid, object: "Aquisição de merenda", modality: "pregao", form: "eletronico", platform: "bll",
       correlationId: "pr09-ed", idempotencyKey: `ed1-${pid}`, actorUserId: A, invoke: invokeFor("edital"),
     });
+    // R9 / SEM-057 (reescrito): a emissão exige conteúdo sem marcadores [REVISAR] — fixture da revisão humana.
+    await conn.execute("UPDATE generated_documents SET content = REPLACE(content, '[REVISAR', '[REVISADO') WHERE organization_id = ? AND process_id = ? AND kind = ?", [ORG, pid, "edital"]);
     const ed = (await getGeneratedDocumentByKind(pid, ORG, "edital"))!;
     await promoteOfficialDocument({
       organizationId: ORG, processId: pid, kind: "edital", actorUserId: EMITTER, actorRole: "manager",
