@@ -22,14 +22,15 @@ import {
 } from "../db/procurement";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import {
-  listProcurementItems, listProcurementLots, listItemSourceLinks, listPriceResearchProvenance, lockItem, lockLot, nextItemOrdinal, nextLotOrdinal,
+  listProcurementItems, listProcurementLots, listItemSourceLinks, listPriceResearchProvenance, lockItem, lockLot, lockLotsByCodeKey, nextItemOrdinal, nextLotOrdinal,
   insertItemIfAbsent, insertLotIfAbsent, updateItemCAS, updateLotCAS, insertSourceLinkIfAbsent, appendItemEvents,
   type ItemEvent,
 } from "../db/procurementItems";
 import {
   priceResearchCandidateSources, summarizePriceResearchEligibility, dfdCandidateSources, matchCandidates, planCandidateDecisions, parsePlannedQuantity,
-  procurementItemId, procurementLotId, itemFingerprint, lotCodeKey, governedChangeReason, stateHash, ItemDomainError,
-  GOVERNED_CHANGE_REQUIRED,
+  procurementItemId, itemFingerprint, lotCodeKey, formatQuantityBR, governedChangeReason, stateHash, ItemDomainError,
+  GOVERNED_CHANGE_REQUIRED, ITEM_PREVIOUSLY_WITHDRAWN, freshLotId, archivedLotCodeKey, parseDfdSourceItemKey,
+  checkAdoptSourceQuantity, adoptionNeedsReplaceConfirmation,
   type ItemCandidate, type CandidateDecision, type CandidateSourceType, type ProcurementItem, type ProcurementLot,
   type ItemSourceLink, type ItemProvenance, type GovernanceState, type NeedChange,
   type IntelligentItemSource, type PriceResearchEligibilitySummary,
@@ -46,7 +47,8 @@ interface Actor { organizationId: number; processId: string; actorUserId: number
 function domainError(err: unknown): never {
   if (err instanceof ItemDomainError) {
     const code = ["STALE_CANDIDATES", "CANDIDATE_ALREADY_LINKED", "DUPLICATE_DECISION"].includes(err.code) ? "CONFLICT"
-      : ["ITEM_NOT_FOUND", "LOT_NOT_FOUND"].includes(err.code) ? "NOT_FOUND" : "BAD_REQUEST";
+      : ["ITEM_NOT_FOUND", "LOT_NOT_FOUND"].includes(err.code) ? "NOT_FOUND"
+        : err.code === ITEM_PREVIOUSLY_WITHDRAWN ? "PRECONDITION_FAILED" : "BAD_REQUEST";
     throw new TRPCError({ code, message: err.message });
   }
   throw err;
@@ -130,6 +132,19 @@ async function requireLot(tx: ProcurementExecutor, a: Actor, lotId: string): Pro
 }
 
 /**
+ * R9 / SEM-067 — libera o código de lotes ARQUIVADOS que ainda o reservam (arquivados antes desta correção): renomeia o
+ * `code_key` deterministicamente (`archivedLotCodeKey`) sob lock, na transação do chamador, com evento de auditoria.
+ */
+async function releaseArchivedLotCodes(tx: ProcurementExecutor, a: Actor, codeKey: string, events: ItemEvent[]): Promise<void> {
+  for (const lot of await lockLotsByCodeKey(tx, a.organizationId, a.processId, codeKey)) {
+    if (lot.status !== "archived") continue;
+    const released = archivedLotCodeKey(lot.codeKey, lot.id);
+    if (!(await updateLotCAS(tx, a.organizationId, a.processId, lot.id, lot.revision, a.actorUserId, { codeKey: released }))) staleRevision();
+    events.push({ lotId: lot.id, eventType: "procurement_lot_code_released", actorUserId: a.actorUserId, beforeHash: stateHash(lot.codeKey), afterHash: stateHash(released), source: "system", reason: "lote arquivado não reserva o código" });
+  }
+}
+
+/**
  * Quantidade PREVISTA → ledger do Contexto Canônico (fonte "user", confirmada), com superação consciente:
  * `basisValueHash` = o valor vigente que o servidor viu; em CONFLITO, uma afirmação por valor divergente
  * (todas com o mesmo valor novo) — a decisão humana resolve o conflito explicitamente.
@@ -167,7 +182,14 @@ export interface ItemsWorkspaceItem {
   id: string; description: string; unit: string; lotId: string | null; ordinal: number; status: string; revision: number;
   origin: string; provenance: ItemProvenance;
   plannedQuantity: { value: number | null; status: string; sourceType: string | null; mode: string | null; actorUserId: number | null; updatedAt: string | null };
-  sources: Array<{ sourceType: string; sourceId: string; sourceQuantity: number | null; sourceLotCode: string | null; sourceDescription: string; sourceUnit: string }>;
+  /**
+   * `sourceQuantity` = valor CONGELADO no vínculo; `currentQuantity`/`sourceFound` (R9 / SEM-049) = valor ATUAL da fonte
+   * lido pelo servidor — a UI mostra o diff (vínculo × atual) antes de "Usar N" e confirma o valor atual.
+   */
+  sources: Array<{
+    sourceType: string; sourceId: string; sourceQuantity: number | null; sourceLotCode: string | null; sourceDescription: string; sourceUnit: string;
+    currentQuantity: number | null; sourceFound: boolean;
+  }>;
   unitReferencePriceCents: number | null; priceAmbiguous: boolean; estimatedTotalCents: number | null;
   /** R9 / SEM-028, SEM-031 — por que o preço vinculado não é autoritativo (null = sem bloqueio). */
   priceBlockedReason: "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
@@ -215,6 +237,7 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
   ]);
   const gov = await loadGovernance(a.organizationId, a.processId, ctx, { displayOnly: true });
   const byCtx = new Map((ctx?.items ?? []).map((i) => [i.key, i]));
+  const currentQty = currentSourceQuantities({ links, items, lots, dfd: dfd ?? null, intelligent: research?.items ?? null });
   const active = items.filter((i) => i.status === "active");
   const activeLots = lots.filter((l) => l.status === "active");
   const view: ItemsWorkspaceItem[] = active
@@ -230,10 +253,14 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
           mode: version ? version.split(":")[1] ?? null : pq?.source ? "dfd" : null,
           actorUserId: pq?.actorUserId ?? null, updatedAt: pq?.updatedAt ?? null,
         },
-        sources: links.filter((l) => l.itemId === it.id).map((l) => ({
-          sourceType: l.sourceType, sourceId: l.sourceId, sourceQuantity: l.sourceQuantity, sourceLotCode: l.sourceLotCode,
-          sourceDescription: l.sourceDescription, sourceUnit: l.sourceUnit,
-        })),
+        sources: links.filter((l) => l.itemId === it.id).map((l) => {
+          const k = sourceKey(l.itemId, l.sourceType, l.sourceId);
+          return {
+            sourceType: l.sourceType, sourceId: l.sourceId, sourceQuantity: l.sourceQuantity, sourceLotCode: l.sourceLotCode,
+            sourceDescription: l.sourceDescription, sourceUnit: l.sourceUnit,
+            currentQuantity: currentQty.get(k) ?? null, sourceFound: currentQty.has(k),
+          };
+        }),
         unitReferencePriceCents: c?.priceContext.unitReferencePriceCents ?? null,
         priceAmbiguous: c?.priceContext.priceAmbiguous ?? false,
         priceBlockedReason: c?.priceContext.priceBlockedReason ?? null,
@@ -281,11 +308,12 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
 // ─── Candidatos (projeção read-only) ─────────────────────────────────────────────────────
 
 /**
- * Linhas da tabela do DFD sem Item Canônico correspondente — mesma ligação do DFD assistido, na MESMA ordem de
+ * Ligação ATUAL das linhas da tabela do DFD aos Itens Canônicos — mesma ligação do DFD assistido, na MESMA ordem de
  * autoridade: linhagem persistida (canonicalItemId) → vínculo de fonte persistido (linha já confirmada como
- * item) → recuperação por fingerprint exato (legado). Linha já ligada NÃO volta a ser candidata.
+ * item; R9 / SEM-068: com o ORDINAL da linha quando a chave o tem) → recuperação por fingerprint exato (legado).
+ * Cada linha carrega seu `rowOrdinal` (posição 1-based na tabela INTEIRA).
  */
-function unlinkedRows(
+function dfdLinkedRows(
   doc: { id: string; content: string; sources?: string[] | null },
   items: readonly ProcurementItem[], lots: readonly ProcurementLot[], links: readonly ItemSourceLink[],
 ) {
@@ -294,12 +322,17 @@ function unlinkedRows(
     key: i.id, fingerprint: i.fingerprint, lotCode: i.lotId ? code.get(i.lotId) ?? null : null,
     description: i.description, unit: i.unit, plannedQuantity: null, qtyOrigin: null, qtyConflict: false,
   }));
-  const sourceLinks = links.filter((l) => l.sourceType === "dfd" && l.sourceId === doc.id).map((l) => {
-    const sep = l.sourceItemKey.indexOf(":"); // `${fingerprint}:${lotKey}` — fingerprint é hex (sem ":")
-    const lot = sep >= 0 ? l.sourceItemKey.slice(sep + 1) : "";
-    return { fingerprint: sep >= 0 ? l.sourceItemKey.slice(0, sep) : l.sourceItemKey, lotKey: lot || null, itemId: l.itemId };
-  });
-  return linkDFDRows(parseDFD(doc.content), linkable, doc.sources ?? [], sourceLinks).filter((l) => l.itemId === null).map((l) => l.row);
+  const sourceLinks = links.filter((l) => l.sourceType === "dfd" && l.sourceId === doc.id)
+    .map((l) => ({ ...parseDfdSourceItemKey(l.sourceItemKey), itemId: l.itemId }));
+  return linkDFDRows(parseDFD(doc.content), linkable, doc.sources ?? [], sourceLinks).map((l, i) => ({ ...l, rowOrdinal: i + 1 }));
+}
+
+/** Linhas do DFD sem Item Canônico correspondente. Linha já ligada NÃO volta a ser candidata. */
+function unlinkedRows(
+  doc: { id: string; content: string; sources?: string[] | null },
+  items: readonly ProcurementItem[], lots: readonly ProcurementLot[], links: readonly ItemSourceLink[],
+) {
+  return dfdLinkedRows(doc, items, lots, links).filter((l) => l.itemId === null).map((l) => ({ ...l.row, rowOrdinal: l.rowOrdinal }));
 }
 
 export interface CandidateProjection {
@@ -326,10 +359,10 @@ async function projectCandidates(org: number, pid: string, source: CandidateSour
   } else {
     const dfd = await getGeneratedDocumentByKind(pid, org, "dfd");
     // Só linhas do DFD que AINDA não correspondem a um Item Canônico (as demais já são o próprio item).
-    sources = dfd ? dfdCandidateSources(dfd.id, unlinkedRows(dfd, items, lots, links).map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode }))) : [];
+    sources = dfd ? dfdCandidateSources(dfd.id, unlinkedRows(dfd, items, lots, links).map((r) => ({ description: r.description, unit: r.unit, quantity: r.quantity, lotCode: r.lotCode, rowOrdinal: r.rowOrdinal }))) : [];
   }
   const candidates = matchCandidates(sources, items, links, lots);
-  const sourceDigest = createHash("sha256").update(JSON.stringify(candidates.map((c) => [c.candidateKey, c.sourceDigest, c.match.status, c.match.candidateItemIds]))).digest("hex").slice(0, 32);
+  const sourceDigest = createHash("sha256").update(JSON.stringify(candidates.map((c) => [c.candidateKey, c.sourceDigest, c.match.status, c.match.candidateItemIds, c.withdrawnItemId ?? null]))).digest("hex").slice(0, 32);
   const counts = {
     sourceItemCount: candidates.length,
     matchedCount: candidates.filter((c) => c.match.status === "linked").length,
@@ -359,7 +392,11 @@ export async function prepareItemCandidates(a: Omit<Actor, "actorUserId"> & { so
 
 // ─── Confirmar candidatos (transação única) ──────────────────────────────────────────────
 
-export interface ConfirmResult { created: string[]; linked: string[]; skipped: number; lotsCreated: string[] }
+/**
+ * `alreadyPresent` (R9 / SEM-069): itens/vínculos que JÁ existiam (ativos) e por isso não foram criados de novo — a
+ * resposta nunca diz "sucesso" escondendo que nada aconteceu.
+ */
+export interface ConfirmResult { created: string[]; linked: string[]; skipped: number; lotsCreated: string[]; alreadyPresent: string[] }
 
 export async function confirmItemCandidates(a: Actor & {
   source: CandidateSourceType; expectedSourceDigest: string; decisions: CandidateDecision[]; idempotencyKey: string;
@@ -380,14 +417,19 @@ export async function confirmItemCandidates(a: Actor & {
     const events: ItemEvent[] = [];
     const now = new Date().toISOString();
     for (const l of plan.lotsToCreate) {
+      // R9 / SEM-067 — lote arquivado (inclusive legado) não reserva o código; o novo lote tem id próprio (freshLotId).
+      await releaseArchivedLotCodes(tx, a, l.codeKey, events);
       const ord = await nextLotOrdinal(tx, a.organizationId, a.processId);
       const created = await insertLotIfAbsent(tx, {
         id: l.lotId, organizationId: a.organizationId, processId: a.processId, code: l.code, codeKey: l.codeKey,
         name: `Lote ${l.code}`, description: null, ordinal: ord, status: "active", revision: 1, createdBy: a.actorUserId, updatedBy: a.actorUserId,
       }, a.correlationId);
-      if (created) events.push({ lotId: l.lotId, eventType: "procurement_lot_created", actorUserId: a.actorUserId, afterHash: stateHash([l.code]), source: "source_structure" });
+      // Código tomado por outro lote ATIVO entre a leitura e a escrita: nunca deixar itens apontando para um lote que não
+      // foi criado (pertencimento pendente) — recusa e pede recarga.
+      if (!created) throw new TRPCError({ code: "CONFLICT", message: "STALE_CANDIDATES: os lotes do processo mudaram — recarregue e revise novamente." });
+      events.push({ lotId: l.lotId, eventType: "procurement_lot_created", actorUserId: a.actorUserId, afterHash: stateHash([l.code]), source: "source_structure" });
     }
-    const result: ConfirmResult = { created: [], linked: [], skipped: plan.skipped, lotsCreated: plan.lotsToCreate.map((l) => l.lotId) };
+    const result: ConfirmResult = { created: [], linked: [], skipped: plan.skipped, lotsCreated: plan.lotsToCreate.map((l) => l.lotId), alreadyPresent: [] };
     const link = (itemId: string, c: ItemCandidate): Omit<ItemSourceLink, "createdAt"> => ({
       itemId, sourceType: c.sourceType, sourceId: c.sourceId, sourceItemKey: c.sourceItemKey, sourceDigest: c.sourceDigest,
       sourceQuantity: c.sourceQuantity, sourceDescription: c.description, sourceUnit: c.unit, sourceLotCode: c.sourceLotCode, createdBy: a.actorUserId,
@@ -407,8 +449,18 @@ export async function confirmItemCandidates(a: Actor & {
         lotId, ordinal: ord, status: "active", fingerprint: itemFingerprint(c.description, c.unit), origin: src, provenance,
         revision: 1, createdBy: a.actorUserId, updatedBy: a.actorUserId,
       }, a.correlationId);
+      if (!inserted) {
+        // id determinístico pela origem ⇒ confirmar de novo não duplica. R9 / SEM-069: mas um item RETIRADO com esse id
+        // não é "reincluído" em silêncio — recusa explícita (não há transição retirado → ativo).
+        const existing = await lockItem(tx, a.organizationId, a.processId, c.itemId);
+        if (!existing || existing.status !== "active") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ITEM_PREVIOUSLY_WITHDRAWN}: este item já foi retirado da contratação e não é reincluído automaticamente — adicione-o manualmente se a necessidade voltou.` });
+        }
+        await insertSourceLinkIfAbsent(tx, a.organizationId, a.processId, link(c.itemId, c.candidate), a.correlationId);
+        result.alreadyPresent.push(c.itemId);
+        continue;
+      }
       const linked = await insertSourceLinkIfAbsent(tx, a.organizationId, a.processId, link(c.itemId, c.candidate), a.correlationId);
-      if (!inserted) continue; // id determinístico pela origem ⇒ confirmar de novo não duplica
       result.created.push(c.itemId);
       events.push({ itemId: c.itemId, eventType: "procurement_item_created", actorUserId: a.actorUserId, afterHash: stateHash([c.description, c.unit, lotId]), source: src,
         details: { descriptionOverridden: c.descriptionOverridden, unitOverridden: c.unitOverridden } });
@@ -427,7 +479,7 @@ export async function confirmItemCandidates(a: Actor & {
       if (await insertSourceLinkIfAbsent(tx, a.organizationId, a.processId, link(l.itemId, l.candidate), a.correlationId)) {
         result.linked.push(l.itemId);
         events.push({ itemId: l.itemId, eventType: "procurement_source_item_linked", actorUserId: a.actorUserId, source: l.candidate.sourceType, afterHash: l.candidate.sourceDigest.slice(0, 16), reason: "associado pelo servidor" });
-      }
+      } else result.alreadyPresent.push(l.itemId); // R9 / SEM-069: vínculo já existia — reportado, não silenciado
     }
     await appendItemEvents(tx, a.organizationId, a.processId, events, a.correlationId);
     if (result.created.length || result.linked.length) {
@@ -440,6 +492,7 @@ export async function confirmItemCandidates(a: Actor & {
     log.info("procurement_item_candidate_prepared", {
       organizationId: a.organizationId, processId: a.processId, correlationId: a.correlationId, actorUserId: a.actorUserId, source: a.source,
       created: result.created.length, linked: result.linked.length, skipped: result.skipped, lotsCreated: result.lotsCreated.length,
+      alreadyPresent: result.alreadyPresent.length,
     });
     return result;
   });
@@ -493,7 +546,42 @@ export async function createManualItem(a: Actor & {
 
 export type QuantityChange =
   | { itemId: string; expectedRevision: number; mode: "informed"; quantity: string | number | null }
-  | { itemId: string; expectedRevision: number; mode: "adopt_source"; sourceType: CandidateSourceType; sourceId: string };
+  | {
+      itemId: string; expectedRevision: number; mode: "adopt_source"; sourceType: CandidateSourceType; sourceId: string;
+      /** R9 / SEM-049 — valor ATUAL da fonte que a pessoa viu e confirmou (diff vínculo × atual exibido antes). */
+      expectedSourceQuantity?: number | null;
+      /** R9 / SEM-055 — confirmação explícita de SUBSTITUIR uma quantidade prevista já definida (antigo → novo). */
+      confirmReplace?: boolean;
+    };
+
+const sourceKey = (itemId: string, sourceType: string, sourceId: string) => `${itemId}|${sourceType}|${sourceId}`;
+
+/**
+ * R9 / SEM-049 — quantidade ATUAL de cada fonte vinculada (chave `sourceKey`), lida no servidor — o
+ * `source_quantity` do vínculo é só o valor CONGELADO no momento do vínculo:
+ *  - DFD: linha do DFD VIGENTE ligada ao item (mesma ligação do DFD assistido: linhagem → vínculo → fingerprint);
+ *    vínculo de outro documento ou linha ausente ⇒ chave ausente (fonte não encontrada);
+ *  - Pesquisa de Preços: quantidade atual do Item Inteligente (≤ 0 ⇒ null = sem quantidade).
+ */
+function currentSourceQuantities(p: {
+  links: readonly ItemSourceLink[]; items: readonly ProcurementItem[]; lots: readonly ProcurementLot[];
+  dfd: { id: string; content: string; sources?: string[] | null } | null;
+  intelligent: ReadonlyArray<{ id: string; quantity: number }> | null;
+}): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  const dfdRowByItem = new Map<string, number | null>();
+  if (p.dfd) for (const r of dfdLinkedRows(p.dfd, p.items, p.lots, p.links)) if (r.itemId) dfdRowByItem.set(r.itemId, r.row.quantity);
+  const ii = new Map((p.intelligent ?? []).map((i) => [i.id, Number.isFinite(i.quantity) && i.quantity > 0 ? i.quantity : null]));
+  for (const l of p.links) {
+    const k = sourceKey(l.itemId, l.sourceType, l.sourceId);
+    if (l.sourceType === "dfd") {
+      if (p.dfd && p.dfd.id === l.sourceId && dfdRowByItem.has(l.itemId)) out.set(k, dfdRowByItem.get(l.itemId) ?? null);
+    } else if (ii.has(l.sourceId)) out.set(k, ii.get(l.sourceId) ?? null);
+  }
+  return out;
+}
+
+const fmtQ = (q: number | string | null | undefined) => (q === null || q === undefined ? "sem quantidade" : typeof q === "number" ? formatQuantityBR(q) : q);
 
 /**
  * Aplica 1..N decisões de quantidade numa ÚNICA transação (a ação "Usar quantidades do documento" é esta
@@ -512,6 +600,18 @@ export async function setPlannedQuantities(a: Actor & { changes: QuantityChange[
   });
   return runItemsWrite({ ...a, op: "procurement.items.quantity", payload: { c: a.changes, r: a.reason ?? null } }, async (tx) => {
     const links = await listItemSourceLinks(a.organizationId, a.processId, tx);
+    // R9 / SEM-049 — "Usar N" lê a quantidade ATUAL da fonte (DFD vigente / Item Inteligente), nunca só a congelada.
+    const adopting = a.changes.some((c) => c.mode === "adopt_source");
+    const currentQty = adopting
+      ? await (async () => {
+        const [items, lots, dfd, intelligent] = await Promise.all([
+          listProcurementItems(a.organizationId, a.processId, tx), listProcurementLots(a.organizationId, a.processId, tx),
+          a.changes.some((c) => c.mode === "adopt_source" && c.sourceType === "dfd") ? getGeneratedDocumentByKind(a.processId, a.organizationId, "dfd") : Promise.resolve(null),
+          a.changes.some((c) => c.mode === "adopt_source" && c.sourceType === "price_research") ? listIntelligentItems(a.processId, a.organizationId) : Promise.resolve(null),
+        ]);
+        return currentSourceQuantities({ links, items, lots, dfd: dfd ?? null, intelligent });
+      })()
+      : new Map<string, number | null>();
     const ctx = await ctxForWrite(a, tx);
     const gov = await loadGovernance(a.organizationId, a.processId, ctx);
     const events: ItemEvent[] = [];
@@ -521,15 +621,26 @@ export async function setPlannedQuantities(a: Actor & { changes: QuantityChange[
       if (it.status !== "active") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "ITEM_WITHDRAWN: item retirado da contratação." });
       let value: number | null;
       let mode: string;
-      let observed: number | null = null;
+      let linkedQty: number | null = null;
       if (c.mode === "adopt_source") {
         const l = links.find((x) => x.itemId === it.id && x.sourceType === c.sourceType && x.sourceId === c.sourceId);
-        if (!l || l.sourceQuantity === null) throw new TRPCError({ code: "BAD_REQUEST", message: "NO_SOURCE_QUANTITY: a fonte vinculada não informa quantidade para este item." });
-        value = l.sourceQuantity; observed = l.sourceQuantity; mode = `adopted_source:${l.sourceType}`;
+        if (!l) throw new TRPCError({ code: "BAD_REQUEST", message: "NO_SOURCE_QUANTITY: a fonte vinculada não informa quantidade para este item." });
+        const k = sourceKey(it.id, l.sourceType, l.sourceId);
+        const check = checkAdoptSourceQuantity({ linked: l.sourceQuantity, current: currentQty.has(k) ? (currentQty.get(k) ?? null) : undefined, expected: c.expectedSourceQuantity });
+        if (!check.ok) {
+          if (check.code === "SOURCE_NOT_FOUND") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SOURCE_NOT_FOUND: a fonte vinculada não foi encontrada no documento vigente — nada foi adotado." });
+          if (check.code === "NO_SOURCE_QUANTITY") throw new TRPCError({ code: "BAD_REQUEST", message: "NO_SOURCE_QUANTITY: a fonte vinculada não informa quantidade para este item." });
+          throw new TRPCError({ code: "CONFLICT", message: `SOURCE_QUANTITY_CHANGED: a quantidade na fonte mudou (vínculo: ${fmtQ(check.linked)}; atual: ${fmtQ(check.current)}${check.expected !== undefined ? `; você confirmou: ${fmtQ(check.expected)}` : ""}). Confira o valor atual e confirme para usá-lo — nada foi adotado.` });
+        }
+        value = check.value; linkedQty = l.sourceQuantity; mode = `adopted_source:${l.sourceType}`;
       } else { value = parsed[i]; mode = "informed"; }
       const current = plannedField(ctx, it.id);
       const before = current?.value ?? null;
       if (current?.status !== "conflict" && stateHash(before) === stateHash(value)) continue; // no-op honesto
+      // R9 / SEM-055 — "Usar N" não substitui em silêncio uma quantidade prevista JÁ definida: exige confirmação explícita.
+      if (c.mode === "adopt_source" && !c.confirmReplace && adoptionNeedsReplaceConfirmation(current ? { value: before, status: current.status } : null)) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `REPLACE_CONFIRMATION_REQUIRED: a quantidade prevista já definida (${fmtQ(before)}) seria substituída por ${fmtQ(value)} — confirme a substituição.` });
+      }
       assertNotGoverned(gov, before === null && current?.status !== "conflict" ? "quantity_define" : "quantity_change", it.id);
       if (!(await updateItemCAS(tx, a.organizationId, a.processId, it.id, it.revision, a.actorUserId, {}))) staleRevision();
       await writePlannedQuantity(tx, a, it.id, current, value, it.revision + 1, mode);
@@ -538,7 +649,9 @@ export async function setPlannedQuantities(a: Actor & { changes: QuantityChange[
         itemId: it.id, eventType: c.mode === "adopt_source" ? "procurement_source_quantity_adopted" : "procurement_planned_quantity_changed",
         actorUserId: a.actorUserId, beforeHash: stateHash(before), afterHash: stateHash(value),
         source: c.mode === "adopt_source" ? c.sourceType : "user", reason: a.reason ?? null,
-        details: c.mode === "adopt_source" ? { observed, adopted: value } : { resolvedConflict: current?.status === "conflict" },
+        details: c.mode === "adopt_source"
+          ? { observed: value, linked: linkedQty, adopted: value, replaced: before !== null && current?.status !== "conflict" }
+          : { resolvedConflict: current?.status === "conflict" },
       });
     }
     await appendItemEvents(tx, a.organizationId, a.processId, events, a.correlationId);
@@ -602,13 +715,18 @@ export async function createProcurementLot(a: Actor & { code: string; name: stri
   const codeKey = lotCodeKey(code);
   return runItemsWrite({ ...a, op: "procurement.lots.create", payload: { code, name, d: a.description ?? null } }, async (tx) => {
     assertNotGoverned(await loadGovernance(a.organizationId, a.processId, null), "lot", null);
-    const lotId = procurementLotId(a.organizationId, a.processId, `manual:${codeKey}`);
+    // R9 / SEM-067 — lote ARQUIVADO não reserva o código (inclusive os arquivados antes desta correção) e o novo lote
+    // ganha id próprio: `manual:<código>` de um arquivado nunca é reaproveitado.
+    const events: ItemEvent[] = [];
+    await releaseArchivedLotCodes(tx, a, codeKey, events);
+    const lotId = freshLotId(a.organizationId, a.processId, `manual:${codeKey}`, (await listProcurementLots(a.organizationId, a.processId, tx)).map((l) => l.id));
     const ok = await insertLotIfAbsent(tx, {
       id: lotId, organizationId: a.organizationId, processId: a.processId, code, codeKey, name, description: a.description?.trim() || null,
       ordinal: await nextLotOrdinal(tx, a.organizationId, a.processId), status: "active", revision: 1, createdBy: a.actorUserId, updatedBy: a.actorUserId,
     }, a.correlationId);
     if (!ok) throw new TRPCError({ code: "CONFLICT", message: "LOT_CODE_EXISTS: já existe um lote com este código neste processo." });
-    await appendItemEvents(tx, a.organizationId, a.processId, [{ lotId, eventType: "procurement_lot_created", actorUserId: a.actorUserId, afterHash: stateHash([code, name]), source: "manual" }], a.correlationId);
+    events.push({ lotId, eventType: "procurement_lot_created", actorUserId: a.actorUserId, afterHash: stateHash([code, name]), source: "manual" });
+    await appendItemEvents(tx, a.organizationId, a.processId, events, a.correlationId);
     return { lotId };
   });
 }
@@ -621,17 +739,27 @@ export async function updateProcurementLot(a: Actor & { lotId: string; expectedR
     const name = a.name === undefined ? lot.name : normalizeText(a.name);
     if (!code || !name) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe código e nome do lote." });
     const codeKey = lotCodeKey(code);
-    if (codeKey !== lot.codeKey && (await listProcurementLots(a.organizationId, a.processId, tx)).some((l) => l.codeKey === codeKey)) {
-      throw new TRPCError({ code: "CONFLICT", message: "LOT_CODE_EXISTS: já existe um lote com este código neste processo." });
+    const events: ItemEvent[] = [];
+    if (codeKey !== lot.codeKey) {
+      // R9 / SEM-067 — só lote ATIVO reserva código; arquivado (legado) é liberado na mesma transação.
+      if ((await listProcurementLots(a.organizationId, a.processId, tx)).some((l) => l.status === "active" && l.codeKey === codeKey)) {
+        throw new TRPCError({ code: "CONFLICT", message: "LOT_CODE_EXISTS: já existe um lote com este código neste processo." });
+      }
+      await releaseArchivedLotCodes(tx, a, codeKey, events);
     }
     const description = a.description === undefined ? lot.description : a.description?.trim() || null;
     if (!(await updateLotCAS(tx, a.organizationId, a.processId, lot.id, lot.revision, a.actorUserId, { code, codeKey, name, description }))) staleRevision();
-    await appendItemEvents(tx, a.organizationId, a.processId, [{ lotId: lot.id, eventType: "procurement_lot_updated", actorUserId: a.actorUserId, beforeHash: stateHash([lot.code, lot.name, lot.description]), afterHash: stateHash([code, name, description]), source: "user" }], a.correlationId);
+    events.push({ lotId: lot.id, eventType: "procurement_lot_updated", actorUserId: a.actorUserId, beforeHash: stateHash([lot.code, lot.name, lot.description]), afterHash: stateHash([code, name, description]), source: "user" });
+    await appendItemEvents(tx, a.organizationId, a.processId, events, a.correlationId);
     return { lotId: lot.id };
   });
 }
 
-/** Arquiva o lote (nunca hard-delete). Exige lote vazio — itens são movidos explicitamente antes. */
+/**
+ * Arquiva o lote (nunca hard-delete). Exige lote vazio — itens são movidos explicitamente antes.
+ * R9 / SEM-067 — arquivar LIBERA o código: o `code_key` é renomeado deterministicamente (`archivedLotCodeKey`) na
+ * MESMA transação (o índice único cobre arquivados; sem migration). O código exibido fica no histórico.
+ */
 export async function archiveProcurementLot(a: Actor & { lotId: string; expectedRevision: number; reason: string; idempotencyKey: string }) {
   if (!a.reason?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o motivo do arquivamento." });
   return runItemsWrite({ ...a, op: "procurement.lots.archive", payload: { l: a.lotId, r: a.expectedRevision, why: a.reason } }, async (tx) => {
@@ -640,8 +768,12 @@ export async function archiveProcurementLot(a: Actor & { lotId: string; expected
     const items = await listProcurementItems(a.organizationId, a.processId, tx);
     if (items.some((i) => i.status === "active" && i.lotId === lot.id)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "LOT_NOT_EMPTY: mova os itens deste lote antes de arquivá-lo." });
     assertNotGoverned(await loadGovernance(a.organizationId, a.processId, null), "lot", null);
-    if (!(await updateLotCAS(tx, a.organizationId, a.processId, lot.id, lot.revision, a.actorUserId, { status: "archived" }))) staleRevision();
-    await appendItemEvents(tx, a.organizationId, a.processId, [{ lotId: lot.id, eventType: "procurement_lot_archived", actorUserId: a.actorUserId, source: "user", reason: a.reason }], a.correlationId);
+    const releasedKey = archivedLotCodeKey(lot.codeKey, lot.id);
+    if (!(await updateLotCAS(tx, a.organizationId, a.processId, lot.id, lot.revision, a.actorUserId, { status: "archived", codeKey: releasedKey }))) staleRevision();
+    await appendItemEvents(tx, a.organizationId, a.processId, [{
+      lotId: lot.id, eventType: "procurement_lot_archived", actorUserId: a.actorUserId, source: "user", reason: a.reason,
+      beforeHash: stateHash(lot.codeKey), afterHash: stateHash(releasedKey), details: { codeReleased: true },
+    }], a.correlationId);
     return { lotId: lot.id };
   });
 }

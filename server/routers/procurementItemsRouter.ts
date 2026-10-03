@@ -80,7 +80,11 @@ export const procurementItemsRouter = router({
       processId: z.string().min(1), reason: z.string().trim().max(500).nullable().optional(), idempotencyKey: KEY,
       changes: z.array(z.discriminatedUnion("mode", [
         z.object({ itemId: ID, expectedRevision: REV, mode: z.literal("informed"), quantity: QTY }),
-        z.object({ itemId: ID, expectedRevision: REV, mode: z.literal("adopt_source"), sourceType: SOURCE, sourceId: z.string().min(1).max(64) }),
+        // R9 / SEM-049, SEM-055 — valor ATUAL da fonte confirmado pela pessoa e confirmação explícita de substituir a prevista.
+        z.object({
+          itemId: ID, expectedRevision: REV, mode: z.literal("adopt_source"), sourceType: SOURCE, sourceId: z.string().min(1).max(64),
+          expectedSourceQuantity: z.number().positive().nullable().optional(), confirmReplace: z.boolean().optional(),
+        }),
       ])).min(1).max(500),
     }))
     .mutation(async ({ input, ctx }) => {
