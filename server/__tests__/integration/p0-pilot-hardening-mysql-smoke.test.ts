@@ -51,7 +51,8 @@ import { getImportSession, updateSessionStatus } from "../../services/fileIngest
 import { getStagingItems, bulkReviewStagingItems } from "../../services/importStagingService";
 import { promoteApprovedSessionToDomain } from "../../services/importPromotionService";
 import {
-  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity, recoverStaleEnrichment,
+  importManualPriceResearch, applyItemSourceUpdate as applyItemSourceUpdateWithToken, previewItemSourceUpdate,
+  resolveItemIdentity, recoverStaleEnrichment,
 } from "../../services/itemMaterializationService";
 import {
   getDocumentIntake, saveDocumentReview, approveDocumentStaging, promoteDocumentToDraft, rejectDocumentStaging, getDocumentReviewHistory,
@@ -117,6 +118,12 @@ async function approveAllItems(org: number, processId: string) {
   for (const it of await listIntelligentItems(processId, org)) {
     await transitionItemStatusCAS({ id: it.id, orgId: org, fromStatuses: ["pendente", "em_analise"], toStatus: "aprovado", approvedBy: U2, updatedAt: new Date().toISOString() });
   }
+}
+
+// R9 / SEM-052 (reescrito) — aplicar exige o token da PRÉVIA confirmada; o fluxo humano real é prévia → confirmação.
+async function applyItemSourceUpdate(p: { organizationId: number; itemId: string; actorUserId: number; correlationId: string }) {
+  const preview = await previewItemSourceUpdate({ organizationId: p.organizationId, itemId: p.itemId });
+  return applyItemSourceUpdateWithToken({ ...p, expectedStateToken: preview.expectedStateToken });
 }
 
 const manual = (org: number, processId: string, text: string) =>

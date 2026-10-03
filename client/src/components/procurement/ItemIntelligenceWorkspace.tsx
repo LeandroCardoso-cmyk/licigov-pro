@@ -1,6 +1,10 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { formatCentsBRL } from "@/lib/money";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import CatmatThresholdConfig from "./CatmatThresholdConfig";
+import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
+import { ITEM_STATUS_LABELS, approveButtonState, outlierSummary } from "./itemSourceUpdateView";
 
 /**
  * ItemIntelligenceWorkspace — REAL (wired to tRPC). *** NÚCLEO DO DOMÍNIO ***
@@ -11,22 +15,12 @@ import CatmatThresholdConfig from "./CatmatThresholdConfig";
  * sugere a classificação; a confirmação humana ocorre no painel do item.
  */
 
-const ITEM_STATUS_LABELS: Record<string, string> = {
-  pendente: "Pendente",
-  em_analise: "Em análise",
-  aprovado: "Aprovado",
-  rejeitado: "Rejeitado",
-};
-
 const ITEM_STATUS_CLASSES: Record<string, string> = {
   pendente: "bg-muted text-foreground",
   em_analise: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
   aprovado: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
   rejeitado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
-
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export type ItemIntelligenceWorkspaceProps = {
   processId?: string;
@@ -55,9 +49,9 @@ export default function ItemIntelligenceWorkspace({
   });
   // Hardening P0 — fonte alterada após decisão: aplicar as cotações novas é uma ação HUMANA explícita
   // (item decidido volta a "Em análise"); nunca acontece em silêncio.
-  const applySourceUpdate = trpc.procurementProcess.applyItemSourceUpdate.useMutation({
-    onSuccess: invalidate,
-  });
+  // R9 / SEM-052 — e nunca num clique: o botão só ABRE a confirmação (comparativo atual × proposto +
+  // revogação declarada); a aplicação acontece em ItemSourceUpdateConfirm, com o token da prévia vista.
+  const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
 
   const items = data?.items ?? [];
 
@@ -76,9 +70,9 @@ export default function ItemIntelligenceWorkspace({
         sugestão: abra o item para confirmá-la. Aprovar o item não confirma automaticamente o catálogo.
       </p>
 
-      {(approveItem.error || rejectItem.error || applySourceUpdate.error) && (
+      {(approveItem.error || rejectItem.error) && (
         <p role="alert" className="mb-4 rounded-lg border border-destructive/40 p-3 text-sm text-destructive">
-          {approveItem.error?.message || rejectItem.error?.message || applySourceUpdate.error?.message}
+          {domainErrorMessage(approveItem.error?.message || rejectItem.error?.message, "Não foi possível registrar a decisão.")}
         </p>
       )}
 
@@ -128,81 +122,114 @@ export default function ItemIntelligenceWorkspace({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {items.map((it) => (
-                <tr key={it.id} className="hover:bg-muted">
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenItem?.(it.id)}
-                      className="text-left font-medium text-blue-700 dark:text-blue-300 hover:underline"
-                    >
-                      {it.description}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{it.quantity}</td>
-                  <td className="px-4 py-3 text-foreground">{it.unit}</td>
-                  <td className="px-4 py-3 text-foreground">
-                    {brl(it.averagePrice)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 text-xs text-indigo-700 dark:text-indigo-300">
-                      {it.suggestedCATMAT ?? "—"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        ITEM_STATUS_CLASSES[it.status] ??
-                        "bg-muted text-foreground"
-                      }`}
-                    >
-                      {ITEM_STATUS_LABELS[it.status] ?? it.status}
-                    </span>
-                    {it.sourceState === "source_changed" && (
-                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300" title={it.sourceStateReason ?? undefined}>
-                        Fonte alterada
-                      </span>
-                    )}
-                    {it.sourceState === "review_required" && (
-                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        Identidade a revisar
-                      </span>
-                    )}
-                    <div className="mt-1 text-xs text-muted-foreground">{it.quoteCount} cotação(ões) válida(s)</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      {it.sourceState === "source_changed" && (
+              {items.map((it) => {
+                // R9 / SEM-054 — mesma regra do servidor: fonte não vigente ⇒ "Aprovar" bloqueado com motivo.
+                const approve = approveButtonState(it.sourceState, approveItem.isPending);
+                const outliers = outlierSummary(it.priceOutliers);
+                const confirming = confirmingId === it.id;
+                return (
+                  <React.Fragment key={it.id}>
+                    <tr className="hover:bg-muted">
+                      <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => applySourceUpdate.mutate({ itemId: it.id })}
-                          disabled={applySourceUpdate.isPending}
-                          title="Aplica as cotações atualizadas da pesquisa; um item já decidido volta a 'Em análise'."
-                          className="rounded-md border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                          onClick={() => onOpenItem?.(it.id)}
+                          className="text-left font-medium text-blue-700 dark:text-blue-300 hover:underline"
                         >
-                          Aplicar cotações atualizadas{it.pendingQuoteCount != null ? ` (${it.pendingQuoteCount})` : ""}
+                          {it.description}
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => approveItem.mutate({ itemId: it.id })}
-                        disabled={approveItem.isPending}
-                        className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
-                      >
-                        Aprovar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => rejectItem.mutate({ itemId: it.id })}
-                        disabled={rejectItem.isPending}
-                        className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 dark:hover:bg-red-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
-                      >
-                        Rejeitar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">{it.quantity}</td>
+                      <td className="px-4 py-3 text-foreground">{it.unit}</td>
+                      <td className="px-4 py-3 text-foreground">
+                        {/* R9 / SEM-054 — média em CENTAVOS (servidor) = preço que vira a referência canônica ao aprovar. */}
+                        <span className="font-mono">{formatCentsBRL(it.averagePriceCents)}</span>
+                        {!approve.block && it.status !== "aprovado" && (
+                          <div className="mt-1 text-xs text-muted-foreground">Referência canônica ao aprovar</div>
+                        )}
+                        {outliers.length > 0 && (
+                          <div className="mt-1 text-xs text-orange-700 dark:text-orange-300">
+                            <p className="font-medium">{outliers.length} cotação(ões) fora da curva (&gt;50% da média):</p>
+                            <ul className="list-disc pl-4">
+                              {outliers.map((o) => <li key={o}>{o}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 text-xs text-indigo-700 dark:text-indigo-300">
+                          {it.suggestedCATMAT ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            ITEM_STATUS_CLASSES[it.status] ??
+                            "bg-muted text-foreground"
+                          }`}
+                        >
+                          {ITEM_STATUS_LABELS[it.status] ?? it.status}
+                        </span>
+                        {it.sourceState === "source_changed" && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300" title={it.sourceStateReason ?? undefined}>
+                            Fonte alterada
+                          </span>
+                        )}
+                        {it.sourceState === "review_required" && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                            Identidade a revisar
+                          </span>
+                        )}
+                        <div className="mt-1 text-xs text-muted-foreground">{it.quoteCount} cotação(ões) válida(s)</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          {it.sourceState === "source_changed" && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingId(confirming ? null : it.id)}
+                              aria-expanded={confirming}
+                              aria-controls={`source-update-${it.id}`}
+                              className="rounded-md border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                            >
+                              Aplicar cotações atualizadas{it.pendingQuoteCount != null ? ` (${it.pendingQuoteCount})` : ""}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => approveItem.mutate({ itemId: it.id })}
+                            disabled={approve.disabled}
+                            title={approve.block?.reason}
+                            className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                          >
+                            Aprovar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => rejectItem.mutate({ itemId: it.id })}
+                            disabled={rejectItem.isPending}
+                            className="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-destructive hover:bg-red-50 dark:hover:bg-red-950 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                          >
+                            Rejeitar
+                          </button>
+                        </div>
+                        {approve.block && (
+                          <p className="mt-1 max-w-xs text-right text-xs text-amber-800 dark:text-amber-300" data-testid="approve-blocked-reason">
+                            Aprovação bloqueada: {approve.block.reason}
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                    {confirming && (
+                      <tr id={`source-update-${it.id}`}>
+                        <td colSpan={7} className="px-4 pb-4">
+                          <ItemSourceUpdateConfirm itemId={it.id} onClose={() => setConfirmingId(null)} onApplied={invalidate} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

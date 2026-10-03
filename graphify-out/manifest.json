@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
-    "mtime": 1790881396.1528766,
-    "ast_hash": "68dd1f43751078b430674c584b528ca0",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "3b490280a19c41787d6ccd049a33a1c5",
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1790643728.9302042,
-    "ast_hash": "f610e1f729b44bddc5f9c7628f2a6dcc",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "79a8546caff118dc46197aee5c99e05a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -2705,8 +2705,8 @@
     "semantic_hash": ""
   },
   "client/src/darkmode-tokens.test.ts": {
-    "mtime": 1790881529.9568846,
-    "ast_hash": "6668d206d5fc98e203eb45e1482f7e0d",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "f4e08553352d86d84f5665b15efc2cfd",
     "semantic_hash": ""
   },
   "client/src/g8-canonical-navigation.test.ts": {
@@ -5930,8 +5930,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts": {
-    "mtime": 1790943531.9509485,
-    "ast_hash": "64972149eef1a6e3d7e306ee8ed1eb99",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "d9fb460162c73322c278a1bcabcc5fc1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-rbac-router.test.ts": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1791041076.880167,
-    "ast_hash": "187e182d282eaa2128071a173845ae86",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "568c66ca51a4bf9bf50e4e547982e096",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1790905565.1438556,
-    "ast_hash": "483e5867bb1119aba37e919e8273d00d",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "475c337bec07069d18d8aa0e4f4a80a9",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9895,8 +9895,8 @@
     "semantic_hash": ""
   },
   "server/services/itemIntelligenceService.ts": {
-    "mtime": 1790643729.3959823,
-    "ast_hash": "afce308964b5079c213002546868bc83",
+    "mtime": 1791041824.3362114,
+    "ast_hash": "c95f18ad7cdc717fc3308f94679c68e9",
     "semantic_hash": ""
   },
   "server/services/itemMatchingEngine.ts": {
@@ -9905,8 +9905,8 @@
     "semantic_hash": ""
   },
   "server/services/itemMaterializationService.ts": {
-    "mtime": 1790881396.3288767,
-    "ast_hash": "4c8b206e1dbd98bcfcc68930835a2b50",
+    "mtime": 1791041824.3402114,
+    "ast_hash": "ce7d248982fa7704932253e807c37774",
     "semantic_hash": ""
   },
   "server/services/jurisprudenceCorrelationService.ts": {
@@ -13297,6 +13297,51 @@
   "server/__tests__/integration/r9-sem041-legal-opinion-pinning-mysql-smoke.test.ts": {
     "mtime": 1791041609.1950207,
     "ast_hash": "0e6b86a07516d8f5821b8e032962ecf4",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/ItemApprovalGate.render.test.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "d32b418f7bec89e7e01246c8a2d3e633",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/ItemSourceUpdateConfirm.tsx": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "976268203cbfb3278281aa65d31caf98",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/itemSourceUpdateView.test.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "d18b3769adadca490d21ade8e364464f",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/itemSourceUpdateView.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "46f4cbdf15a0a735d7524bb536a9348b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem052-054-item-source-gate-mysql-smoke.test.ts": {
+    "mtime": 1791042023.3098445,
+    "ast_hash": "911ae30a407ab0764d9eaa3f862a15fb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem052-source-update-token.test.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "db6b2a2d7f7cf91dbc5a5b26dcdb7e47",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem054-item-approval-gate.test.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "ae4c1feb3710159983b6523000d9ab43",
+    "semantic_hash": ""
+  },
+  "server/domain/itemSourceUpdate.ts": {
+    "mtime": 1791041824.3362114,
+    "ast_hash": "ff3f3e8351d3855b51168d0278844572",
+    "semantic_hash": ""
+  },
+  "shared/itemApprovalGate.ts": {
+    "mtime": 1791041824.3402114,
+    "ast_hash": "09d9b73c7b5a1310c5bae4f57536d8da",
     "semantic_hash": ""
   }
 }

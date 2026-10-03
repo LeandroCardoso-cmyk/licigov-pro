@@ -35,14 +35,33 @@ import {
   insertItemRisk,
   getIntelligentItem,
   transitionItemStatusCAS,
+  getIntelligentItemSourceState,
   recordProcessEvent,
   listCatmatMatches,
   listRecommendations,
   listItemRisks,
   listItemHistory,
 } from "../db/procurement";
+import {
+  findPriceOutliers, itemApprovalBlock, itemApprovalBlockMessage, type ItemApprovalBlock, type PriceOutlier,
+} from "@shared/itemApprovalGate";
+import { reaisToCents } from "../domain/money";
 
 const DOMAIN = "processo_licitatorio" as const;
+
+/**
+ * R9 / SEM-054 — APROVAR exige fonte vigente: item `source_changed` (pesquisa mudou após a decisão) ou
+ * `review_required` (identidade ambígua) é RECUSADO com PRECONDITION_FAILED e código estável
+ * (`ITEM_SOURCE_CHANGED` / `ITEM_IDENTITY_REVIEW_REQUIRED`) — inclusive no replay de um item já aprovado,
+ * para nunca reconfirmar em silêncio números que o servidor sabe estarem desatualizados. A resolução é
+ * explícita: aplicar as cotações atualizadas (com confirmação) ou resolver a identidade. A checagem também
+ * está DENTRO do CAS (`source_state = 'current'`), fechando a corrida com uma materialização concorrente.
+ */
+async function assertApprovableSource(itemId: string, orgId: number): Promise<void> {
+  const st = await getIntelligentItemSourceState(itemId, orgId);
+  const block = st ? itemApprovalBlock(st.sourceState) : null;
+  if (block) throw new TRPCError({ code: "PRECONDITION_FAILED", message: itemApprovalBlockMessage(block) });
+}
 
 /**
  * Transição GOVERNADA e CONCORRÊNCIA-SEGURA do status de um Item Inteligente
@@ -75,6 +94,8 @@ export async function applyGovernedItemTransition(params: {
   const { itemId, orgId, target } = params;
   const item = await getIntelligentItem(itemId, orgId);
   if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+  const approving = target === "aprovado";
+  if (approving) await assertApprovableSource(item.id, orgId);
   // Convergência idempotente: já no estado-alvo (replay/duplo clique) — sem novo efeito nem evento.
   if (item.status === target) return { success: true, itemId: item.id, status: target };
 
@@ -88,6 +109,7 @@ export async function applyGovernedItemTransition(params: {
     const res = await transitionItemStatusCAS({
       id: item.id, orgId, fromStatuses: itemTransitionSources(target), toStatus: target,
       approvedBy: params.approvedBy, updatedAt: new Date().toISOString(),
+      ...(approving ? { requireSourceState: "current" } : {}),
     }, tx);
     if (res.applied) {
       await recordProcessEvent({
@@ -104,6 +126,8 @@ export async function applyGovernedItemTransition(params: {
   // Perdeu a corrida (0 linhas afetadas): reconsulta a fronteira de persistência, fora da transação.
   const fresh = await getIntelligentItem(item.id, orgId);
   if (!fresh) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+  // R9 / SEM-054 — perdeu o CAS porque a fonte deixou de estar vigente: recusa explícita, nunca "convergiu".
+  if (approving) await assertApprovableSource(fresh.id, orgId);
   if (fresh.status === target) return { success: true, itemId: fresh.id, status: target }; // convergiu, sem evento
   throw new TRPCError({ code: "CONFLICT", message: `Não é possível levar o item do estado "${fresh.status}" para "${target}".` });
 }
@@ -236,6 +260,14 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   risks: Array<{ id: string; type: string; severity: string; description: string; explanation: string }>;
   history: Array<{ id: string; object: string; year: number; winningSupplier: string; homologatedPrice: number; catmatUsed: string; outcome: string }>;
   graphNodeIds: string[];
+  /**
+   * R9 / SEM-054 — o que a aprovação confirmaria: estado da fonte, bloqueio (se houver), preço que vira a
+   * referência canônica (média das cotações válidas, CENTAVOS) e cotações fora da curva.
+   */
+  governance: {
+    sourceState: string; sourceStateReason: string | null; approvalBlock: ItemApprovalBlock | null;
+    referencePriceCents: number; validQuoteCount: number; priceOutliers: PriceOutlier[];
+  } | null;
 }> {
   const item = await getIntelligentItem(itemId, organizationId);
   const [catmat, recommendations, risks] = await Promise.all([
@@ -245,5 +277,15 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   ]);
   const history = item ? await listItemHistory(item.processId, organizationId) : [];
   const graphNodes = item ? await searchKnowledgeNodes(organizationId, { query: item.description, limit: 8 }) : [];
-  return { item, catmat, recommendations, risks, history, graphNodeIds: graphNodes.map(n => n.id) };
+  const source = item ? await getIntelligentItemSourceState(item.id, organizationId) : null;
+  // Fornecedores persistidos em REAIS → CENTAVOS explicitamente (contrato monetário do cliente).
+  const quotesCents = item ? item.suppliers.map(s => ({ name: s.name, valueCents: reaisToCents(s.value) })) : [];
+  const governance = item ? {
+    sourceState: source?.sourceState ?? "current", sourceStateReason: source?.sourceStateReason ?? null,
+    approvalBlock: itemApprovalBlock(source?.sourceState ?? "current"),
+    referencePriceCents: reaisToCents(item.averagePrice),
+    validQuoteCount: quotesCents.filter(q => q.valueCents > 0).length,
+    priceOutliers: findPriceOutliers(quotesCents),
+  } : null;
+  return { item, catmat, recommendations, risks, history, graphNodeIds: graphNodes.map(n => n.id), governance };
 }
