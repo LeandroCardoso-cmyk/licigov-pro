@@ -7,22 +7,87 @@
  * não migrar. Novos fluxos DEVEM usar o Document Engine oficial.
  *
  * Serviço de geração de arquivos ZIP
- * Cria pacote completo com todos os documentos para publicação
+ * Cria pacote de publicação com o documento AUTORITATIVO (aprovado vigente) de cada tipo.
+ *
+ * R9 / SEM-072 — correção semântica autorizada (não é migração): seleção, nomes e formato passam pelo núcleo
+ * puro `packageAuthority.ts`; o uso do DocumentConverter permanece o mesmo (allowlist inalterada).
  */
 
 import archiver from "archiver";
-import { Readable } from "stream";
 import * as db from "../db";
+import type { Document, Platform } from "../../drizzle/schema";
 import { convertToPDF } from "./documentConverter";
 import { generateItemsSpreadsheet, getSpreadsheetFileName } from "./excelService";
+import {
+  LEGACY_PUBLICATION_POLICY, UniqueFileNamer, buildDocumentFiles, exclusionsToOmissions, renderManifestListing,
+  selectAuthoritativeDocuments, sha256Hex,
+  type BuiltPackageFile, type PackageDocumentInput, type PackageManifestEntry, type PackageOmission,
+} from "./packageAuthority";
 
 interface ZipGenerationResult {
   buffer: Buffer;
   filename: string;
 }
 
+// R9 / SEM-072 — ordem segue o fluxo oficial DFD → ETP → TR → Edital; todo tipo do enum legado tem nome (antes,
+// tipos fora de etp/tr/dfd/edital viravam entrada de nome VAZIO). `05_` é reservado à planilha de itens.
+const LEGACY_DOC_NAMING: Record<Document["type"], { order: string; base: string; label: string }> = {
+  dfd:      { order: "01", base: "DOCUMENTO_FORMALIZACAO_DEMANDA", label: "Documento de Formalização da Demanda (DFD)" },
+  etp:      { order: "02", base: "ESTUDO_TECNICO_PRELIMINAR",      label: "Estudo Técnico Preliminar (ETP)" },
+  tr:       { order: "03", base: "TERMO_REFERENCIA",               label: "Termo de Referência (TR)" },
+  edital:   { order: "04", base: "EDITAL",                         label: "Edital de Licitação" },
+  minuta:   { order: "06", base: "MINUTA",                         label: "Minuta" },
+  contrato: { order: "07", base: "CONTRATO",                       label: "Contrato" },
+  ata:      { order: "08", base: "ATA",                            label: "Ata" },
+  parecer:  { order: "09", base: "PARECER",                        label: "Parecer" },
+  aditivo:  { order: "10", base: "ADITIVO",                        label: "Aditivo" },
+};
+
+function namingOf(type: string): { order: string; base: string; label: string } {
+  return LEGACY_DOC_NAMING[type as Document["type"]] ?? { order: "99", base: "DOCUMENTO", label: type };
+}
+
+function toInput(doc: Document): PackageDocumentInput {
+  return {
+    id: doc.id, type: doc.type, version: doc.version, status: doc.documentStatus, createdAt: doc.createdAt,
+    title: doc.title, content: doc.content, isUpload: doc.sourceType === "upload",
+  };
+}
+
 /**
- * Gerar arquivo ZIP com todos os documentos do processo
+ * R9 / SEM-072 — planeja os arquivos de documento do pacote de publicação (sem acesso a banco).
+ *
+ * Antes: TODAS as linhas de `documents` do processo (cada save cria uma linha `version + 1`; rascunhos e aprovados
+ * juntos) eram convertidas sob um nome FIXO por tipo — N versões de ETP viravam N entradas
+ * `01_ESTUDO_TECNICO_PRELIMINAR.pdf` (colisão) e tipos sem mapeamento viravam entrada sem nome.
+ * Agora: por tipo, só a versão APROVADA vigente (aprovação governada pelo documentReviewService); rascunho/em revisão
+ * nunca entra (publicação ≠ rascunho); substituídas/arquivadas/rejeitadas ficam fora e aparecem no manifesto.
+ * Nome único `NN_TIPO_vN.pdf`; a extensão só é `.pdf` se o conversor produzir bytes PDF reais — senão `.md`.
+ */
+export async function planPublicationPackageFiles(
+  documents: readonly Document[],
+  toPdf: (markdown: string, doc: PackageDocumentInput) => Promise<Buffer>,
+): Promise<{ files: BuiltPackageFile[]; omissions: PackageOmission[] }> {
+  const selection = selectAuthoritativeDocuments(documents.map(toInput), LEGACY_PUBLICATION_POLICY);
+  const ordered = [...selection.official].sort((a, b) => namingOf(a.type).order.localeCompare(namingOf(b.type).order));
+  const built = await buildDocumentFiles(
+    ordered,
+    {
+      folder: "",
+      baseName: (doc) => { const n = namingOf(doc.type); return `${n.order}_${n.base}`; },
+      label: (doc) => namingOf(doc.type).label,
+    },
+    new UniqueFileNamer(),
+    { unofficial: false, toPdf },
+  );
+  return {
+    files: built.files,
+    omissions: [...built.omissions, ...exclusionsToOmissions(selection.excluded, (doc) => namingOf(doc.type).label)],
+  };
+}
+
+/**
+ * Gerar arquivo ZIP com os documentos AUTORITATIVOS (aprovados vigentes) do processo
  */
 export async function generatePublicationZip(
   processId: number,
@@ -37,8 +102,12 @@ export async function generatePublicationZip(
   // Buscar plataforma
   const platform = platformId ? await db.getPlatformById(platformId) : null;
 
-  // Buscar documentos do processo
-  const documents = await db.getDocumentsByProcess(processId);
+  // R9 / SEM-072 — documentos do processo escopados pela organização do PRÓPRIO processo (defesa em profundidade;
+  // linhas legadas sem organização caem no lookup por processo, como antes).
+  const organizationId = await db.getProcessOrganizationId(processId);
+  const documents = organizationId !== null
+    ? await db.getDocumentsByProcessForOrganization(processId, organizationId)
+    : await db.getDocumentsByProcess(processId);
 
   // Criar archive
   const archive = archiver("zip", {
@@ -50,35 +119,17 @@ export async function generatePublicationZip(
 
   // Criar promise para aguardar finalização
   const zipPromise = new Promise<Buffer>((resolve, reject) => {
-    archive.on("data", (chunk) => chunks.push(chunk));
+    archive.on("data", (chunk: Buffer) => chunks.push(chunk));
     archive.on("end", () => resolve(Buffer.concat(chunks)));
     archive.on("error", reject);
   });
 
-  // Adicionar documentos ao ZIP
-  for (const doc of documents) {
-    try {
-      // Converter documento para PDF
-      const pdfBuffer = await convertToPDF(doc.content || '', `${doc.type}.pdf`);
-
-      // Determinar nome do arquivo
-      let filename = "";
-      if (doc.type === "etp") {
-        filename = "01_ESTUDO_TECNICO_PRELIMINAR.pdf";
-      } else if (doc.type === "tr") {
-        filename = "02_TERMO_REFERENCIA.pdf";
-      } else if (doc.type === "dfd") {
-        filename = "03_DOCUMENTO_FORMALIZADOR_DEMANDA.pdf";
-      } else if (doc.type === "edital") {
-        filename = "04_EDITAL.pdf";
-      }
-
-      // Adicionar ao ZIP
-      archive.append(pdfBuffer, { name: filename });
-    } catch (error) {
-      console.error(`Erro ao adicionar documento ${doc.type} ao ZIP:`, error);
-      // Continuar mesmo se um documento falhar
-    }
+  // R9 / SEM-072 — só o documento autoritativo por tipo, nome único, extensão = formato real.
+  const manifest: PackageManifestEntry[] = [];
+  const planned = await planPublicationPackageFiles(documents, (markdown, doc) => convertToPDF(markdown, `${doc.type}.pdf`));
+  for (const f of planned.files) {
+    archive.append(f.data, { name: f.path });
+    manifest.push(f.entry);
   }
 
   // Adicionar planilha de itens (se houver itens)
@@ -86,23 +137,24 @@ export async function generatePublicationZip(
   if (items.length > 0) {
     try {
       const spreadsheetBuffer = await generateItemsSpreadsheet(processId, platformId);
-      const spreadsheetFilename = getSpreadsheetFileName(
-        process.name,
-        platform?.slug || null
-      );
+      const spreadsheetFilename = `05_${getSpreadsheetFileName(process.name, platform?.slug || null)}`;
 
-      archive.append(spreadsheetBuffer, { name: `05_${spreadsheetFilename}` });
+      archive.append(spreadsheetBuffer, { name: spreadsheetFilename });
+      manifest.push({
+        path: spreadsheetFilename, label: "Planilha de Itens CATMAT/CATSER", format: "xlsx", status: "",
+        version: null, sha256: sha256Hex(spreadsheetBuffer), bytes: spreadsheetBuffer.length, unofficial: false,
+      });
     } catch (error) {
       console.error("Erro ao adicionar planilha ao ZIP:", error);
     }
   }
 
-  // Adicionar arquivo README com instruções
-  const readmeContent = generateReadmeContent(process, platform);
+  // Adicionar arquivo README com instruções + manifesto do conteúdo real
+  const readmeContent = generateReadmeContent(process, platform, renderManifestListing(manifest, planned.omissions));
   archive.append(readmeContent, { name: "00_LEIA_ME.txt" });
 
   // Finalizar archive
-  archive.finalize();
+  void archive.finalize();
 
   // Aguardar conclusão
   const zipBuffer = await zipPromise;
@@ -126,9 +178,13 @@ export async function generatePublicationZip(
 /**
  * Gerar conteúdo do arquivo README
  */
+/** Processo legado como lido por `getProcessById` (projeção com join de plataforma). */
+type PackageProcess = NonNullable<Awaited<ReturnType<typeof db.getProcessById>>>;
+
 function generateReadmeContent(
-  process: any,
-  platform: any | null
+  process: PackageProcess,
+  platform: Platform | null | undefined,
+  contentListing: string
 ): string {
   const date = new Date().toLocaleDateString("pt-BR");
 
@@ -152,14 +208,13 @@ Website: ${platform.websiteUrl || "N/A"}
   CONTEÚDO DO PACOTE
 ═══════════════════════════════════════════════════════════════
 
-Este pacote contém todos os documentos necessários para publicação
-do processo licitatório:
+Este pacote contém SOMENTE a versão APROVADA vigente de cada documento
+do processo (R9 / SEM-072). Rascunhos, documentos em revisão e versões
+substituídas NÃO são incluídos — aparecem abaixo como "não incluídos".
+Documento sem versão aprovada deve ser aprovado no sistema antes da
+publicação.
 
-1. Estudo Técnico Preliminar (ETP)
-2. Termo de Referência (TR)
-3. Documento Formalizador de Demanda (DFD)
-4. Edital de Licitação
-5. Planilha de Itens CATMAT/CATSER (se aplicável)
+${contentListing}
 
 ═══════════════════════════════════════════════════════════════
   INSTRUÇÕES DE PUBLICAÇÃO
@@ -196,8 +251,10 @@ Para publicar:
   OBSERVAÇÕES IMPORTANTES
 ═══════════════════════════════════════════════════════════════
 
-- Todos os documentos estão em formato PDF
+- Os documentos estão em PDF; se a conversão falhar, o conteúdo segue em
+  Markdown (.md) — a extensão sempre corresponde ao formato real
 - A planilha de itens está em formato XLSX (Excel)
+- Confira o sha256 de cada arquivo listado acima para garantir integridade
 - Revise todos os documentos antes de publicar
 - Verifique se os valores e quantidades estão corretos
 - Consulte o checklist no sistema para não esquecer nenhum passo

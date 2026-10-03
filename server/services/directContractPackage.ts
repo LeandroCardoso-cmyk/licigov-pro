@@ -1,18 +1,90 @@
 import * as db from "../db";
 import archiver from "archiver";
-import { Readable } from "stream";
 import ExcelJS from "exceljs";
+import type { DirectContractDocument, DirectContractQuotation } from "../../drizzle/schema";
+import {
+  DIRECT_CONTRACT_PACKAGE_POLICY, UniqueFileNamer, buildDocumentFiles, exclusionsToOmissions,
+  renderManifestListing, sanitizeFileSegment, selectAuthoritativeDocuments, sha256Hex,
+  type BuiltPackageFile, type PackageDocumentInput, type PackageManifestEntry, type PackageNaming, type PackageOmission,
+} from "./packageAuthority";
 
 /**
  * Serviço de Exportação de Pacote Presencial
- * Gera ZIP com todos os documentos + planilha de cotações + README
+ * Gera ZIP com os documentos AUTORITATIVOS + planilha de cotações + README (manifesto)
  */
+
+/** Contratação direta como lida pelo router (com artigo legal e plataforma do join). */
+type PackageContract = NonNullable<Awaited<ReturnType<typeof db.getDirectContractById>>>;
 
 interface PackageOptions {
   contractId: number;
   includeDocuments?: boolean;
   includeQuotations?: boolean;
   includeReadme?: boolean;
+}
+
+// R9 / SEM-072 — ordem e nome base por tipo (enum de `direct_contract_documents.type`).
+const DIRECT_DOC_NAMING: Record<string, { order: string; base: string; label: string }> = {
+  termo_dispensa:        { order: "01", base: "TERMO_DISPENSA",                 label: "Termo de Dispensa" },
+  termo_inexigibilidade: { order: "02", base: "TERMO_INEXIGIBILIDADE",          label: "Termo de Inexigibilidade" },
+  dfd:                   { order: "03", base: "DOCUMENTO_FORMALIZACAO_DEMANDA", label: "Documento de Formalização da Demanda (DFD)" },
+  tr:                    { order: "04", base: "TERMO_REFERENCIA",               label: "Termo de Referência (TR)" },
+  minuta_contrato:       { order: "05", base: "MINUTA_CONTRATO",                label: "Minuta de Contrato" },
+  planilha_cotacao:      { order: "06", base: "PLANILHA_COTACAO",               label: "Planilha de Cotação" },
+  mapa_comparativo:      { order: "07", base: "MAPA_COMPARATIVO",               label: "Mapa Comparativo de Preços" },
+  ata_ratificacao:       { order: "08", base: "ATA_RATIFICACAO",                label: "Ata de Ratificação" },
+};
+
+/** Pasta dos documentos oficiais (status `final`). */
+export const DIRECT_PACKAGE_OFFICIAL_FOLDER = "documentos/";
+/** Pasta SEPARADA e explicitamente não oficial: último rascunho de tipos sem versão final. */
+export const DIRECT_PACKAGE_DRAFT_FOLDER = "rascunhos_NAO_OFICIAIS/";
+
+function directDocLabel(doc: { type: string; title?: string | null }): string {
+  const known = DIRECT_DOC_NAMING[doc.type];
+  if (known) return known.label;
+  return doc.title?.trim() ? `Outro — ${doc.title.trim()}` : "Outro documento";
+}
+
+function namingFor(folder: string): PackageNaming {
+  return {
+    folder,
+    baseName(doc: PackageDocumentInput): string {
+      const known = DIRECT_DOC_NAMING[doc.type];
+      if (known) return `${known.order}_${known.base}`;
+      // "outro" (e tipo não mapeado): o título distingue documentos avulsos.
+      return `09_OUTRO_${sanitizeFileSegment(doc.title ?? "", 40)}`;
+    },
+    label: directDocLabel,
+  };
+}
+
+function toInput(doc: DirectContractDocument): PackageDocumentInput {
+  return { id: doc.id, type: doc.type, version: doc.version, status: doc.status, createdAt: doc.createdAt, title: doc.title, content: doc.content };
+}
+
+/**
+ * R9 / SEM-072 — planeja os arquivos de documento do pacote presencial (sem I/O).
+ *
+ * Antes: TODAS as linhas de `direct_contract_documents` (rascunhos, finais, arquivados, regerações) entravam como
+ * `documentos/TIPO.pdf` — nomes colidentes (só a última sobrevivia no descompactador) e Markdown dentro de `.pdf`.
+ * Agora: por tipo, só a versão `final` vigente em `documentos/`; sem final, o ÚLTIMO rascunho vai à pasta separada
+ * `rascunhos_NAO_OFICIAIS/` com sufixo `_RASCUNHO`; arquivados/preteridos ficam fora e aparecem no manifesto.
+ * O conteúdo é Markdown ⇒ extensão `.md` (este serviço não tem conversor PDF autorizado).
+ */
+export async function planDirectContractPackageFiles(
+  documents: readonly DirectContractDocument[],
+): Promise<{ files: BuiltPackageFile[]; omissions: PackageOmission[] }> {
+  const selection = selectAuthoritativeDocuments(documents.map(toInput), DIRECT_CONTRACT_PACKAGE_POLICY);
+  const namer = new UniqueFileNamer();
+  const official = await buildDocumentFiles(selection.official, namingFor(DIRECT_PACKAGE_OFFICIAL_FOLDER), namer, { unofficial: false });
+  const drafts = await buildDocumentFiles(selection.draftsWithoutOfficial, namingFor(DIRECT_PACKAGE_DRAFT_FOLDER), namer, {
+    unofficial: true, nameSuffix: "_RASCUNHO",
+  });
+  return {
+    files: [...official.files, ...drafts.files],
+    omissions: [...official.omissions, ...drafts.omissions, ...exclusionsToOmissions(selection.excluded, directDocLabel)],
+  };
 }
 
 /**
@@ -33,41 +105,50 @@ export async function generatePresentialPackage(
   const archive = archiver("zip", { zlib: { level: 9 } });
   const chunks: Buffer[] = [];
 
-  archive.on("data", (chunk) => chunks.push(chunk));
+  archive.on("data", (chunk: Buffer) => chunks.push(chunk));
 
   const zipPromise = new Promise<Buffer>((resolve, reject) => {
     archive.on("end", () => resolve(Buffer.concat(chunks)));
     archive.on("error", reject);
   });
 
-  // Adicionar documentos gerados
+  // R9 / SEM-072 — manifesto do conteúdo REAL do pacote (vai no LEIA-ME).
+  const manifest: PackageManifestEntry[] = [];
+  const omissions: PackageOmission[] = [];
+
+  // Adicionar documentos autoritativos (um por tipo; rascunhos só em pasta separada não oficial)
   if (includeDocuments) {
     const documents = await db.getDirectContractDocuments(contractId);
-    
-    for (const doc of documents) {
-      const fileName = `${doc.type.replace(/_/g, "_").toUpperCase()}.pdf`;
-      archive.append(Buffer.from(doc.content), { name: `documentos/${fileName}` });
+    const planned = await planDirectContractPackageFiles(documents);
+    for (const f of planned.files) {
+      archive.append(f.data, { name: f.path });
+      manifest.push(f.entry);
     }
+    omissions.push(...planned.omissions);
   }
 
   // Adicionar planilha de cotações
   if (includeQuotations) {
     const quotations = await db.listQuotations(contractId);
-    
+
     if (quotations.length > 0) {
       const spreadsheet = await generateQuotationsSpreadsheet(contract, quotations);
       archive.append(spreadsheet, { name: "PLANILHA_COTACOES.xlsx" });
+      manifest.push({
+        path: "PLANILHA_COTACOES.xlsx", label: "Mapa comparativo de cotações registradas", format: "xlsx",
+        status: "", version: null, sha256: sha256Hex(spreadsheet), bytes: spreadsheet.length, unofficial: false,
+      });
     }
   }
 
   // Adicionar README
   if (includeReadme) {
-    const readme = generateReadme(contract);
+    const readme = generateReadme(contract, renderManifestListing(manifest, omissions));
     archive.append(readme, { name: "LEIA-ME.txt" });
   }
 
   // Finalizar ZIP
-  archive.finalize();
+  void archive.finalize();
 
   return zipPromise;
 }
@@ -76,8 +157,8 @@ export async function generatePresentialPackage(
  * Gera planilha XLSX com cotações comparativas
  */
 async function generateQuotationsSpreadsheet(
-  contract: any,
-  quotations: any[]
+  contract: PackageContract,
+  quotations: DirectContractQuotation[]
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Cotações");
@@ -148,7 +229,8 @@ async function generateQuotationsSpreadsheet(
       quotation.supplierName,
       quotation.supplierCNPJ || "Não informado",
       (quotation.value / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-      new Date(quotation.quotationDate).toLocaleDateString("pt-BR"),
+      // R9 / SEM-072 (tipagem) — `quotationDate` não existe no schema (gerava "Invalid Date"); usa a data de registro.
+      new Date(quotation.createdAt).toLocaleDateString("pt-BR"),
     ]);
 
     // Destacar menor valor
@@ -208,7 +290,14 @@ async function generateQuotationsSpreadsheet(
 /**
  * Gera arquivo README.txt com instruções
  */
-function generateReadme(contract: any): string {
+/** Documentos obrigatórios do artigo legal (JSON array no legado) em lista legível. */
+function formatRequiredDocuments(raw: unknown): string {
+  if (Array.isArray(raw) && raw.length > 0) return raw.map(item => `  • ${String(item)}`).join("\n");
+  if (typeof raw === "string" && raw.trim()) return raw;
+  return "• Consultar artigo legal aplicável";
+}
+
+function generateReadme(contract: PackageContract, contentListing: string): string {
   const valueInReais = (contract.value / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
   return `
@@ -229,25 +318,21 @@ ARTIGO LEGAL APLICÁVEL:
 
 ───────────────────────────────────────────────────────────────────────────────
 
-CONTEÚDO DESTE PACOTE:
+CONTEÚDO DESTE PACOTE (R9 / SEM-072 — listagem do conteúdo REAL, gerada a partir dos arquivos):
 
-📁 documentos/
-  • ${contract.type === "dispensa" ? "TERMO_DISPENSA.pdf" : "TERMO_INEXIGIBILIDADE.pdf"} - Termo de contratação direta
-  • MINUTA_CONTRATO.pdf - Minuta do contrato a ser assinado
-  • PLANILHA_COTACAO.pdf - Planilha para coleta de preços
-  • MAPA_COMPARATIVO.pdf - Mapa comparativo de cotações
+📁 documentos/ — somente a versão FINAL vigente de cada documento (Markdown, .md)
+📁 rascunhos_NAO_OFICIAIS/ — último rascunho de documentos AINDA SEM versão final (não oficial; revisar e
+   finalizar no sistema antes de qualquer uso formal)
+📊 PLANILHA_COTACOES.xlsx — cotações registradas, comparativo e estatísticas (quando houver cotações)
 
-📊 PLANILHA_COTACOES.xlsx
-  • Planilha Excel com cotações registradas
-  • Comparativo de preços entre fornecedores
-  • Estatísticas (menor, maior e valor médio)
+${contentListing}
 
 ───────────────────────────────────────────────────────────────────────────────
 
 INSTRUÇÕES PARA USO:
 
 1. COLETA DE COTAÇÕES:
-   • Imprima a PLANILHA_COTACAO.pdf
+   • Imprima a Planilha de Cotação (arquivo PLANILHA_COTACAO, listado acima)
    • Envie para no mínimo 3 fornecedores
    • Solicite proposta formal com CNPJ e validade
 
@@ -262,7 +347,7 @@ INSTRUÇÕES PARA USO:
    • Submeta para aprovação da autoridade competente
 
 4. CONTRATAÇÃO:
-   • Após aprovação, utilize a MINUTA_CONTRATO.pdf
+   • Após aprovação, utilize a Minuta de Contrato (arquivo MINUTA_CONTRATO, listado acima)
    • Preencha os dados do fornecedor vencedor
    • Assine o contrato e publique conforme legislação
 
@@ -270,7 +355,7 @@ INSTRUÇÕES PARA USO:
 
 DOCUMENTOS OBRIGATÓRIOS (conforme Lei 14.133/2021):
 
-${contract.legalArticle?.requiredDocuments || "• Consultar artigo legal aplicável"}
+${formatRequiredDocuments(contract.legalArticle?.requiredDocuments)}
 
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -296,7 +381,7 @@ Sistema: LiciGov Pro - Gestão de Licitações e Contratos
 /**
  * Gera template de email para envio ao fornecedor
  */
-export function generateEmailTemplate(contract: any): {
+export function generateEmailTemplate(contract: PackageContract): {
   subject: string;
   body: string;
 } {

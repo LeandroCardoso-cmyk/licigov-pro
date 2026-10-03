@@ -2,6 +2,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
+import { LEGACY_PUBLICATION_POLICY, selectAuthoritativeDocuments } from "../services/packageAuthority";
 
 /**
  * Router para gerenciamento de plataformas de pregão eletrônico
@@ -127,7 +128,12 @@ export const platformsRouter = router({
       return {
         process,
         platform,
-        documents: documents.map(doc => ({
+        // R9 / SEM-072 — a prévia lista o MESMO conjunto que o ZIP (`downloads.publicationPackage`): só a versão
+        // aprovada vigente por tipo — nunca todas as versões/rascunhos do processo.
+        documents: selectAuthoritativeDocuments(
+          documents.map(doc => ({ ...doc, status: doc.documentStatus })),
+          LEGACY_PUBLICATION_POLICY,
+        ).official.map(doc => ({
           id: doc.id,
           type: doc.type,
           version: doc.version,

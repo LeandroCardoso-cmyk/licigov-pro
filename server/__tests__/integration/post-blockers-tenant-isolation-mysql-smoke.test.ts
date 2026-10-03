@@ -12,6 +12,8 @@
  * Correções cobertas:
  *   A. analytics.getOverview → helpers org-scoped
  *      (getProcessCountByStatusForOrg / getDocumentCountByMonthForOrg / getMostActiveMembersForOrg).
+ *      R9 / SEM-074 (reescrito) — os helpers agora leem as fontes CANÔNICAS (procurement_processes /
+ *      generated_documents); o seed de analytics passou a ser canônico (o legado `processes` segue só para o edital).
  *   B. editalParameters.get/save → tenantProcedure + getProcessByIdForOrganization (NOT_FOUND cross-tenant).
  *   C. notifications.markAsRead → escopado por dono (WHERE id AND userId).
  */
@@ -32,9 +34,11 @@ describe.skipIf(!DB)("POST-BLOCKERS — isolamento persistido das correções da
   let userA2: number;
   let userB1: number;
 
-  // Org A: 3 processos (em_dfd, em_dfd, em_etp) → {em_dfd:2, em_etp:1}
+  // Processos LEGADOS (`processes`) — R9 / SEM-074 (reescrito): usados só pelo cenário do edital; o analytics
+  // usa o espelho canônico semeado abaixo (A: {DFD:2, ETP:1}; B: {DFD:5}).
+  // Org A: 3 processos (em_dfd, em_dfd, em_etp)
   const processesA: number[] = [];
-  // Org B: 5 processos (todos em_dfd) → {em_dfd:5}
+  // Org B: 5 processos (todos em_dfd)
   const processesB: number[] = [];
 
   let notificationB: number;
@@ -69,18 +73,32 @@ describe.skipIf(!DB)("POST-BLOCKERS — isolamento persistido das correções da
     processesA.push(await insertProcess(ORG_A, userA1, "em_etp"));
     for (let i = 0; i < 5; i++) processesB.push(await insertProcess(ORG_B, userB1, "em_dfd"));
 
-    async function insertDocument(org: number, processId: number, owner: number): Promise<void> {
+    // R9 / SEM-074 (reescrito) — analytics lê as fontes CANÔNICAS: o mesmo cenário (A: DFD×2 + ETP×1, 2 documentos;
+    // B: DFD×5, 3 documentos) é semeado em procurement_processes / generated_documents (mês corrente, UTC).
+    const nowDb = new Date().toISOString().replace("T", " ").replace("Z", "");
+    async function insertCanonicalProcess(id: string, org: number, owner: number, stage: string): Promise<void> {
       await conn.execute(
-        `INSERT INTO documents (organizationId, processId, type, content, version, createdBy, documentStatus) VALUES (?, ?, 'dfd', '# DFD', 1, ?, 'draft')`,
-        [org, processId, owner],
+        `INSERT INTO procurement_processes (id, organization_id, process_number, object, current_stage, responsible_user, created_at, updated_at) VALUES (?, ?, ?, 'Objeto', ?, ?, ?, ?)`,
+        [id, org, `${id}/2026`, stage, owner, nowDb, nowDb],
       );
     }
-    // Org A: 2 documentos; Org B: 3 documentos (mês corrente, defaultNow()).
-    await insertDocument(ORG_A, processesA[0], userA1);
-    await insertDocument(ORG_A, processesA[1], userA1);
-    await insertDocument(ORG_B, processesB[0], userB1);
-    await insertDocument(ORG_B, processesB[1], userB1);
-    await insertDocument(ORG_B, processesB[2], userB1);
+    await insertCanonicalProcess("pbA1", ORG_A, userA1, "DFD");
+    await insertCanonicalProcess("pbA2", ORG_A, userA1, "DFD");
+    await insertCanonicalProcess("pbA3", ORG_A, userA1, "ETP");
+    for (let i = 1; i <= 5; i++) await insertCanonicalProcess(`pbB${i}`, ORG_B, userB1, "DFD");
+
+    async function insertDocument(id: string, org: number, processId: string): Promise<void> {
+      await conn.execute(
+        `INSERT INTO generated_documents (id, organization_id, process_id, kind, title, content, created_at, updated_at) VALUES (?, ?, ?, 'dfd', 'DFD', '# DFD', ?, ?)`,
+        [id, org, processId, nowDb, nowDb],
+      );
+    }
+    // Org A: 2 documentos; Org B: 3 documentos (mês corrente).
+    await insertDocument("pbdA1", ORG_A, "pbA1");
+    await insertDocument("pbdA2", ORG_A, "pbA2");
+    await insertDocument("pbdB1", ORG_B, "pbB1");
+    await insertDocument("pbdB2", ORG_B, "pbB2");
+    await insertDocument("pbdB3", ORG_B, "pbB3");
 
     async function insertActivity(org: number, userId: number, n: number): Promise<void> {
       for (let i = 0; i < n; i++) {
@@ -119,7 +137,8 @@ describe.skipIf(!DB)("POST-BLOCKERS — isolamento persistido das correções da
     }
     await del(`DELETE FROM notifications WHERE userId IN (?, ?, ?)`, [userA1, userA2, userB1]);
     await del(`DELETE FROM activity_logs WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
-    await del(`DELETE FROM documents WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
+    await del(`DELETE FROM generated_documents WHERE organization_id IN (?, ?)`, [ORG_A, ORG_B]);
+    await del(`DELETE FROM procurement_processes WHERE organization_id IN (?, ?)`, [ORG_A, ORG_B]);
     await del(`DELETE FROM processes WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
     await del(`DELETE FROM organization_members WHERE organizationId IN (?, ?)`, [ORG_A, ORG_B]);
     await del(`DELETE FROM users WHERE id IN (?, ?, ?)`, [userA1, userA2, userB1]);
@@ -138,15 +157,16 @@ describe.skipIf(!DB)("POST-BLOCKERS — isolamento persistido das correções da
 
   // ── A. Analytics org-scoped (helpers reais contra MySQL) ──────────────────────
   it("getProcessCountByStatusForOrg conta SÓ a própria org (B não vaza para A)", async () => {
+    // R9 / SEM-074 (reescrito) — chave = etapa canônica (`current_stage`), não mais o status legado em_dfd/em_etp.
     const a = await db.getProcessCountByStatusForOrg(ORG_A);
     const byStatusA = Object.fromEntries(a.map((x) => [x.status, x.count]));
-    expect(byStatusA["em_dfd"]).toBe(2); // não 7 (2 de A + 5 de B)
-    expect(byStatusA["em_etp"]).toBe(1);
+    expect(byStatusA["DFD"]).toBe(2); // não 7 (2 de A + 5 de B)
+    expect(byStatusA["ETP"]).toBe(1);
     expect(a.reduce((s, x) => s + x.count, 0)).toBe(3);
 
     const b = await db.getProcessCountByStatusForOrg(ORG_B);
     const byStatusB = Object.fromEntries(b.map((x) => [x.status, x.count]));
-    expect(byStatusB["em_dfd"]).toBe(5); // cada org enxerga só a si
+    expect(byStatusB["DFD"]).toBe(5); // cada org enxerga só a si
     expect(b.reduce((s, x) => s + x.count, 0)).toBe(5);
   }, 30000);
 
