@@ -82,7 +82,31 @@ export interface MaterializationResult {
   /** Hash das chaves lógicas com identidade AMBÍGUA (nenhum item criado; revisão humana). */
   readonly reviewRequired: string[];
   readonly items: ReadonlyArray<MaterializedItemRef>;
+  /**
+   * R9 / SEM-053 — impacto por Item Inteligente EXISTENTE/novo (antes × depois), base da prévia da promoção.
+   * `merge` = cotações mescladas e média recalculada; `source_changed` = item decidido sinalizado (números
+   * preservados; "depois" = proposta pendente); `review_required` = candidato legado marcado (um por candidato).
+   */
+  readonly impacts?: ReadonlyArray<MaterializationImpact>;
 }
+
+export interface MaterializationImpact {
+  readonly kind: "create" | "merge" | "source_changed" | "review_required";
+  readonly itemId: string;
+  readonly description: string;
+  /** Status do item ANTES da materialização (null para itens novos). */
+  readonly status: string | null;
+  readonly beforeQuoteCount: number;
+  readonly afterQuoteCount: number;
+  readonly beforeAverageCents: Cents | null;
+  readonly afterAverageCents: Cents;
+}
+
+/**
+ * R9 / SEM-053 — modo PRÉVIA: mesma classificação, ZERO escrita e ZERO lock. Os aliases que a materialização real
+ * gravaria são simulados em memória (um legado reconciliado por uma chave não é reivindicado por outra).
+ */
+interface DryRunState { readonly aliased: Set<string> }
 
 export function logicalKeyHash(logicalKey: string): string {
   return createHash("sha256").update(logicalKey).digest("hex");
@@ -142,10 +166,11 @@ function legacyCompatible(row: ItemRow, g: ConsolidatedItem): boolean {
   return unitOk && qtyOk;
 }
 
-async function lockItem(tx: ProcurementExecutor, org: number, id: string): Promise<ItemRow | null> {
-  const rows = await tx.select().from(intelligentItemsTable)
-    .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, org)))
-    .for("update").limit(1);
+async function lockItem(tx: ProcurementExecutor, org: number, id: string, dry?: DryRunState): Promise<ItemRow | null> {
+  const q = tx.select().from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, org)));
+  // R9 / SEM-053 — prévia: leitura simples (sem FOR UPDATE).
+  const rows = dry ? await q.limit(1) : await q.for("update").limit(1);
   return rows[0] ?? null;
 }
 
@@ -171,9 +196,9 @@ type Resolution =
   | { kind: "create" }
   | { kind: "ambiguous"; candidates: ItemRow[] };
 
-async function resolveIdentity(tx: ProcurementExecutor, org: number, processId: string, g: ConsolidatedItem, correlationId: string): Promise<Resolution> {
+async function resolveIdentity(tx: ProcurementExecutor, org: number, processId: string, g: ConsolidatedItem, correlationId: string, dry?: DryRunState): Promise<Resolution> {
   const v2Id = intelligentItemIdForKey(org, processId, g.logicalKey);
-  const own = await lockItem(tx, org, v2Id);
+  const own = await lockItem(tx, org, v2Id, dry);
   if (own) return { kind: "row", row: own, reconciled: false };
 
   const keyHash = logicalKeyHash(g.logicalKey);
@@ -182,7 +207,7 @@ async function resolveIdentity(tx: ProcurementExecutor, org: number, processId: 
     .limit(1);
   if (alias[0]) {
     if (alias[0].resolution === "new_item") return { kind: "create" };
-    const target = await lockItem(tx, org, alias[0].itemId);
+    const target = await lockItem(tx, org, alias[0].itemId, dry);
     if (target) return { kind: "row", row: target, reconciled: false };
   }
 
@@ -194,10 +219,11 @@ async function resolveIdentity(tx: ProcurementExecutor, org: number, processId: 
   if (sameDesc.length === 0) return { kind: "create" };
   const aliased = await tx.select({ itemId: intelligentItemIdentityAliasesTable.itemId }).from(intelligentItemIdentityAliasesTable)
     .where(and(eq(intelligentItemIdentityAliasesTable.organizationId, org), eq(intelligentItemIdentityAliasesTable.processId, processId), inArray(intelligentItemIdentityAliasesTable.itemId, sameDesc.map((r) => r.id))));
-  const taken = new Set(aliased.map((a) => a.itemId));
+  const taken = new Set([...aliased.map((a) => a.itemId), ...(dry?.aliased ?? [])]);
   const candidates = sameDesc.filter((r) => !taken.has(r.id));
   if (candidates.length === 0) return { kind: "create" };
   if (candidates.length === 1 && legacyCompatible(candidates[0], g)) {
+    if (dry) { dry.aliased.add(candidates[0].id); return { kind: "row", row: candidates[0], reconciled: true }; }
     const winner = await insertAlias(tx, {
       org, processId, logicalKey: g.logicalKey, itemId: candidates[0].id, resolution: "auto_legacy",
       reason: "Reconciliação automática: único item legado com a mesma descrição e unidade/quantidade compatíveis.", correlationId,
@@ -214,19 +240,29 @@ async function resolveIdentity(tx: ProcurementExecutor, org: number, processId: 
 export async function materializeIntelligentItemsTx(
   tx: ProcurementExecutor,
   params: { organizationId: number; processId: string; researchId: string; quotes: readonly PriceQuote[]; correlationId: string },
+  // R9 / SEM-053 — `dryRun`: classificação idêntica, sem nenhuma escrita/lock (prévia da promoção).
+  options?: { dryRun?: boolean },
 ): Promise<MaterializationResult> {
   const { organizationId: org, processId } = params;
+  const dry: DryRunState | undefined = options?.dryRun ? { aliased: new Set<string>() } : undefined;
   const groups = consolidateQuotes(params.quotes);
   const r = { created: [] as string[], updated: [] as string[], unchanged: [] as string[], preserved: [] as string[], sourceChanged: [] as string[], reconciled: [] as string[], reviewRequired: [] as string[] };
   const items: MaterializedItemRef[] = [];
+  const impacts: MaterializationImpact[] = [];
   const now = toDb(new Date().toISOString());
+  const before = (row: ItemRow) => {
+    const cur = quotesOf(row.suppliers, row);
+    return { description: row.description ?? "", status: row.status, beforeQuoteCount: validQuotes(cur).length, beforeAverageCents: reaisToCents(row.averagePrice) };
+  };
 
   for (const g of groups) {
-    const res = await resolveIdentity(tx, org, processId, g, params.correlationId);
+    const res = await resolveIdentity(tx, org, processId, g, params.correlationId, dry);
 
     if (res.kind === "ambiguous") {
       const keyHash = logicalKeyHash(g.logicalKey);
       for (const c of res.candidates) {
+        impacts.push({ kind: "review_required", itemId: c.id, ...before(c), afterQuoteCount: validQuotes(quotesOf(c.suppliers, c)).length, afterAverageCents: reaisToCents(c.averagePrice) });
+        if (dry) continue;
         await tx.update(intelligentItemsTable).set({
           sourceState: "review_required",
           sourceStateReason: `identidade_ambigua:${keyHash}`.slice(0, 255),
@@ -239,6 +275,12 @@ export async function materializeIntelligentItemsTx(
 
     if (res.kind === "create") {
       const id = intelligentItemIdForKey(org, processId, g.logicalKey);
+      impacts.push({ kind: "create", itemId: id, description: g.description, status: null, beforeQuoteCount: 0, afterQuoteCount: g.pricedQuoteCount, beforeAverageCents: null, afterAverageCents: g.averageCents });
+      if (dry) {
+        r.created.push(id);
+        items.push({ id, logicalKey: g.logicalKey, quoteCount: g.pricedQuoteCount, averageCents: g.averageCents });
+        continue;
+      }
       await tx.insert(intelligentItemsTable).values({
         id, organizationId: org, processId, sourceResearchId: params.researchId,
         description: g.description, quantity: String(g.quantity), unit: g.unit,
@@ -266,6 +308,12 @@ export async function materializeIntelligentItemsTx(
         continue;
       }
       const avg = avgOf(merged);
+      impacts.push({ kind: "merge", itemId: row.id, ...before(row), afterQuoteCount: validQuotes(merged).length, afterAverageCents: avg });
+      if (dry) {
+        r.updated.push(row.id);
+        items.push({ id: row.id, logicalKey: g.logicalKey, quoteCount: validQuotes(merged).length, averageCents: avg });
+        continue;
+      }
       await tx.update(intelligentItemsTable).set({
         suppliers: JSON.stringify(merged.map(quoteToSupplier)),
         averagePrice: centsToDecimalString(avg),
@@ -284,9 +332,11 @@ export async function materializeIntelligentItemsTx(
     if (quoteSetSignature(merged) === quoteSetSignature(current)) {
       r.preserved.push(row.id); items.push(ref); continue;
     }
+    impacts.push({ kind: "source_changed", itemId: row.id, ...before(row), afterQuoteCount: validQuotes(merged).length, afterAverageCents: avgOf(merged) });
     if (pending && quoteSetSignature(merged) === quoteSetSignature(pending)) {
       r.sourceChanged.push(row.id); items.push(ref); continue; // já sinalizado com o mesmo conjunto
     }
+    if (dry) { r.sourceChanged.push(row.id); items.push(ref); continue; }
     await tx.update(intelligentItemsTable).set({
       sourceState: "source_changed",
       sourceStateReason: `Pesquisa alterada após decisão (${row.status}); média proposta ${centsToDecimalString(avgOf(merged))}.`.slice(0, 255),
@@ -297,7 +347,7 @@ export async function materializeIntelligentItemsTx(
     r.sourceChanged.push(row.id);
     items.push(ref);
   }
-  return { ...r, items };
+  return { ...r, items, impacts };
 }
 
 /** Timeline pós-commit das sinalizações (fonte alterada / identidade ambígua). Best-effort. */

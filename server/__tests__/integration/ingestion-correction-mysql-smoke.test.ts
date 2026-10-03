@@ -11,14 +11,28 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../db/connection";
-import { importStagingItems } from "../../../drizzle/schema";
+import { importSessions, importStagingItems } from "../../../drizzle/schema";
 import { runMigrations } from "../../bootstrap";
 import { correctStagingItem, getStagingItem, getItemCorrectionHistory } from "../../services/importStagingService";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 990201;
 const OTHER_ORG = 990202;
-const SESSION = 770201;
+let SESSION = 0;
+
+// R9 / SEM-048 (reescrito) — a correção agora trava e consulta a SESSÃO (status/promoção) na mesma transação:
+// o item precisa pertencer a uma sessão real em revisão (antes o teste usava um id de sessão inexistente).
+async function seedSession(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB indisponível");
+  const [s] = await db.insert(importSessions).values({
+    organizationId: ORG, uploadedBy: 1, sourceFileId: "imports/corr/1-cot.xlsx", sourceFileName: "cot.xlsx",
+    sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    procurementProcessId: "P-CORR", importType: "price_research", parserType: "xlsx", parserVersion: "1.0.0",
+    status: "awaiting_review", stage: "awaiting_review",
+  }).$returningId();
+  return s.id;
+}
 
 async function seedItem(): Promise<number> {
   const db = await getDb();
@@ -46,7 +60,7 @@ const baseParams = (itemId: number, over: Record<string, unknown>) => ({
   corrections:          { unitPrice: "7,50" },
   justification:        "valor unitário digitado errado",
   expectedRevision:     0,
-  idempotencyKey:       "corr-a-000001",
+  idempotencyKey:       `corr-a-${itemId}`,
   correlationId:        "corr-corr",
   ...over,
 });
@@ -57,13 +71,16 @@ describe.skipIf(!DB)("Correção humana auditável — MySQL real", () => {
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await conn.query("DELETE FROM `import_item_corrections` WHERE organizationId IN (?, ?)", [ORG, OTHER_ORG]);
-    await conn.query("DELETE FROM `import_staging_items` WHERE organizationId IN (?, ?)", [ORG, OTHER_ORG]);
+    for (const t of ["import_item_corrections", "import_staging_items", "import_sessions", "idempotency_keys", "activity_logs"]) {
+      await conn.query(`DELETE FROM \`${t}\` WHERE organizationId IN (?, ?)`, [ORG, OTHER_ORG]);
+    }
+    SESSION = await seedSession();
   }, 300_000);
 
   afterAll(async () => {
-    await conn?.query("DELETE FROM `import_item_corrections` WHERE organizationId IN (?, ?)", [ORG, OTHER_ORG]).catch(() => {});
-    await conn?.query("DELETE FROM `import_staging_items` WHERE organizationId IN (?, ?)", [ORG, OTHER_ORG]).catch(() => {});
+    for (const t of ["import_item_corrections", "import_staging_items", "import_sessions", "idempotency_keys", "activity_logs"]) {
+      await conn?.query(`DELETE FROM \`${t}\` WHERE organizationId IN (?, ?)`, [ORG, OTHER_ORG]).catch(() => {});
+    }
     await conn?.end();
   });
 
@@ -104,14 +121,17 @@ describe.skipIf(!DB)("Correção humana auditável — MySQL real", () => {
     expect(await getItemCorrectionHistory(id, ORG)).toHaveLength(0);
   }, 60_000);
 
-  it("idempotência: mesma chave não aplica de novo", async () => {
+  it("idempotência: mesma chave + mesmo payload não aplica de novo; payload diferente ⇒ CONFLICT", async () => {
+    // R9 / SEM-048 (reescrito) — antes a mesma chave com OUTRO payload era "replay" silencioso; agora é CONFLICT.
     const id = await seedItem();
     const key = `corr-idem-${id}`;
     const r1 = await correctStagingItem(baseParams(id, { idempotencyKey: key }));
-    const r2 = await correctStagingItem(baseParams(id, { idempotencyKey: key, corrections: { unitPrice: "9,99" } }));
+    const r2 = await correctStagingItem(baseParams(id, { idempotencyKey: key }));
     expect(r1.idempotent).toBe(false);
     expect(r2.idempotent).toBe(true);
     expect(r2.revision).toBe(1);
+    await expect(correctStagingItem(baseParams(id, { idempotencyKey: key, corrections: { unitPrice: "9,99" } })))
+      .rejects.toMatchObject({ code: "CONFLICT" });
     expect(await getItemCorrectionHistory(id, ORG)).toHaveLength(1);
   }, 60_000);
 
