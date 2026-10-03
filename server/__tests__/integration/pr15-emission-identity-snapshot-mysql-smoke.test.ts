@@ -68,6 +68,9 @@ describe.skipIf(!DB)("PR-15 / R7.5 — snapshot institucional na emissão (MySQL
       organizationId: ORG, processId: pid, kind: "etp", object: "Material sintético PR-15", correlationId: "pr15",
       idempotencyKey: `pr15-gen-${pid}`, actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("etp"),
     });
+    // R9 / SEM-080 (reescrito): sem Itens aprovados a estimativa sai com [REVISAR] (redigida pelo sistema) e a emissão
+    // exige conteúdo sem marcadores (SEM-057) — fixture da revisão humana do rascunho.
+    await conn.execute("UPDATE generated_documents SET content = REPLACE(content, '[REVISAR', '[REVISADO') WHERE organization_id = ? AND process_id = ? AND kind = 'etp'", [ORG, pid]);
   }, 300_000);
 
   afterAll(async () => {

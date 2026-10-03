@@ -643,6 +643,15 @@ export async function applyDraftContentMutationTx(
   // No-op determinístico: mesmo conteúdo em bytes (e mesmos parâmetros) → não muda último ator nem cria
   // ledger. Snapshot = atual.
   if (newHash === currentHash && !parametersChanged) {
+    // R9 / SEM-047 — regeneração com texto IDÊNTICO ainda é uma leitura NOVA das fontes: os marcadores de lineage
+    // (`srcd:`/`srcdigest:`/`autoridade:`…) passam a refletir as fontes consumidas agora; sem isso o documento ficava
+    // "fonte alterada" para sempre. Não é alteração substantiva: sem ledger, sem mudar último ator nem updatedAt.
+    const freshSources = JSON.stringify(doc.sources);
+    if (!contentOnly && (existing.sources ?? "[]") !== freshSources) {
+      await tx.update(generatedDocumentsTable).set({ sources: freshSources })
+        .where(and(eq(generatedDocumentsTable.id, existing.id), eq(generatedDocumentsTable.organizationId, organizationId)));
+      return { created: false, changed: false, document: { ...rowToGeneratedDocument(existing), sources: [...doc.sources] } };
+    }
     return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
   }
   await tx.update(generatedDocumentsTable).set(
