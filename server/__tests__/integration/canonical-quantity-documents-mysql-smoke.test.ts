@@ -182,6 +182,10 @@ describe.skipIf(!DB)("P0.3 — quantidade PREVISTA como fonte única em DFD/ETP/
     const etpBefore = (await row(pid, "etp"))!;
     await expect(setPlanned("Detergente neutro", "70", `cqd-q70-${pid}`))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("GOVERNED_CHANGE_REQUIRED") });
+    // R9 / SEM-080 (reescrito): o ETP agora traz o quadro autoritativo (quantidade 60) ⇒ o Edital gerado sobre o ETP
+    // anterior tem fonte alterada (SEM-039/047); regera o Edital sobre o ETP vigente antes de emitir.
+    await genEdital(`cqd-ed3-${pid}`);
+    expect((await editalState()).state).toBe("current");
     const edBefore = (await row(pid, "edital"))!;
     // R9 / SEM-057 (reescrito): o Edital só é emitido depois do TR EMITIDO — fixture da versão oficial do TR.
     await conn.execute(
