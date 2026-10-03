@@ -26,6 +26,9 @@ import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkfl
 import { draftContentHash } from "../domain/generatedDocument";
 import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 import type { OrgRole } from "../../drizzle/schema";
+import { getLatestEmittedByOrigin } from "../db/officialDocuments";
+import { getAuthoringSourceState, getEditalSourceState } from "./procurementProcessService";
+import { emissionBlockers, lineDiffStats, type EmissionBlocker } from "../domain/emissionPreconditions";
 
 const PROMOTE_OP = "procurement.document.promote";
 const BUSINESS_DOMAIN = "processo_licitatorio" as const;
@@ -43,6 +46,38 @@ function payloadHashOf(p: { organizationId: number; processId: string; kind: str
   return createHash("sha256")
     .update(JSON.stringify({ op: PROMOTE_OP, o: p.organizationId, p: p.processId, k: p.kind, h: p.contentHash }))
     .digest("hex");
+}
+
+/**
+ * R9 / SEM-057 — reúne as entradas das pré-condições semânticas da emissão (leituras tenant-scoped, sem efeito).
+ */
+async function resolveEmissionPreconditions(params: {
+  organizationId: number; processId: string; kind: PromotableKind; content: string; contentHash: string;
+}): Promise<{ blockers: EmissionBlocker[]; lastEmittedContent: string | null }> {
+  const process = await getProcess(params.processId, params.organizationId);
+  const object = process?.object ?? "";
+  const [source, lastPromotion, lastEmitted, trEmitted] = await Promise.all([
+    params.kind === "edital"
+      ? getEditalSourceState({ organizationId: params.organizationId, processId: params.processId, object })
+      : getAuthoringSourceState({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, object }),
+    getLatestOfficialPromotion(params.organizationId, params.processId, params.kind),
+    getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, params.kind),
+    params.kind === "edital" ? getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, "tr") : Promise.resolve(null),
+  ]);
+  // Sem objeto AUTORITATIVO no processo (legado/ausente), a autoria usou o objeto informado na geração, que não é
+  // reconstituível aqui: a fonte "processo" não é comparável (e o digest global legado também não) — não bloqueia.
+  const noAuthoritativeObject = !object.trim();
+  const changed = (source.changedSources ?? []).filter((c) => !(noAuthoritativeObject && c.key === "processo"));
+  const sourceState = noAuthoritativeObject && source.state === "source_changed" && changed.length === 0 ? "not_comparable" : source.state;
+  return {
+    blockers: emissionBlockers({
+      kind: params.kind, content: params.content, contentHash: params.contentHash,
+      sourceState, changedSourceLabels: changed.map((c) => c.label),
+      trEmitted: trEmitted !== null,
+      lastEmittedContentHash: lastPromotion?.contentHash ?? null, lastEmittedVersion: lastPromotion?.version ?? null,
+    }),
+    lastEmittedContent: lastEmitted?.content ?? null,
+  };
 }
 
 export interface PromoteOfficialResult {
@@ -137,6 +172,18 @@ export async function promoteOfficialDocument(params: {
       });
     }
 
+    // R9 / SEM-057 — pré-condições SEMÂNTICAS (depois da governança, antes de qualquer escrita): sem [REVISAR],
+    // fontes atuais, Edital só após TR emitido, e nunca uma nova versão idêntica à última emitida.
+    const { blockers } = await resolveEmissionPreconditions({
+      organizationId: params.organizationId, processId: params.processId, kind: params.kind, content: draft.content, contentHash,
+    });
+    if (blockers.length) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `Emissão bloqueada: ${blockers.map((b) => `${b.message} (${b.code})`).join(" ")}`,
+      });
+    }
+
     const db = await getDb();
     if (!db) {
       // GUARD (fail-closed) — a emissão CRIA autoridade institucional persistida e auditável. Sem
@@ -202,6 +249,10 @@ export interface OfficialPromotionSummary {
   diverged: boolean;
   /** true quando existe rascunho promovível mas nenhuma versão oficial foi emitida ainda. */
   neverEmitted: boolean;
+  /** R9 / SEM-057 — bloqueios semânticos da emissão (os MESMOS que o backend aplica no clique). */
+  blockers: EmissionBlocker[];
+  /** R9 / SEM-057 — diferença por linhas do rascunho contra a última versão emitida (null = nunca emitido). */
+  diffFromLatest: { added: number; removed: number } | null;
 }
 
 /**
@@ -215,6 +266,9 @@ export async function getOfficialPromotionSummary(params: {
   const latest = await getLatestOfficialPromotion(params.organizationId, params.processId, params.kind);
   const draftHash = draft && draft.content.trim() ? draftContentHash(draft.content) : null;
   const exists = !!(draft && draft.content.trim());
+  const pre = exists && draftHash
+    ? await resolveEmissionPreconditions({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, content: draft!.content, contentHash: draftHash })
+    : null;
   return {
     draft: { exists, status: draft?.status ?? null, contentHash: draftHash },
     latestOfficial: latest
@@ -222,5 +276,7 @@ export async function getOfficialPromotionSummary(params: {
       : null,
     diverged: !!(exists && latest && draftHash !== latest.contentHash),
     neverEmitted: exists && !latest,
+    blockers: pre?.blockers ?? [],
+    diffFromLatest: exists && pre ? lineDiffStats(pre.lastEmittedContent, draft!.content) : null,
   };
 }

@@ -33,11 +33,13 @@ export type OfficialPromotionSectionProps = {
   kind: "etp" | "tr" | "edital";
   /** C.4B.2 — conteúdo+hash EXATOS do rascunho persistido (query reviewableDraft), carregado na workspace. */
   reviewSnapshot: ReviewSnapshot | null;
+  /** R9 / SEM-057 — há edição não salva no editor acima: emitir agora emitiria o conteúdo PERSISTIDO, não o visível. */
+  hasUnsavedEdits?: boolean;
 };
 
 const KIND_LABEL: Record<string, string> = { etp: "ETP", tr: "TR", edital: "Edital" };
 
-export default function OfficialPromotionSection({ processId = "", kind, reviewSnapshot }: OfficialPromotionSectionProps) {
+export default function OfficialPromotionSection({ processId = "", kind, reviewSnapshot, hasUnsavedEdits = false }: OfficialPromotionSectionProps) {
   const utils = trpc.useUtils();
   const enabled = processId.trim().length > 0;
   const { key: emitKey, rotate: rotateEmitKey } = useIdempotencyKey();
@@ -99,7 +101,10 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
   // pelo hash do officialSummary sem o conteúdo correspondente à vista do humano.
   const hasReview = !!reviewSnapshot && reviewSnapshot.content.trim().length > 0 && reviewSnapshot.contentHash.length > 0;
   const confirming = confirmPin !== null;
-  const canEmit = hasReview && !promote.isPending;
+  // R9 / SEM-057 — os MESMOS bloqueios semânticos do backend, visíveis antes do clique; edição não salva bloqueia.
+  const blockers = s?.blockers ?? [];
+  const diff = s?.diffFromLatest ?? null;
+  const canEmit = hasReview && !promote.isPending && blockers.length === 0 && !hasUnsavedEdits;
 
   // "Emitir documento oficial": entra em confirmação PINANDO a identidade do snapshot revisado agora.
   const startConfirm = () => {
@@ -175,6 +180,25 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         {pinInvalidated && (
           <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             O rascunho mudou desde a revisão. Revise novamente antes de emitir.
+          </div>
+        )}
+
+        {latest && diff && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Diferença para a versão emitida v{latest.version}: +{diff.added} linha(s) / −{diff.removed} linha(s).
+          </p>
+        )}
+        {hasUnsavedEdits && (
+          <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            Há <strong>edição não salva</strong> no editor acima. Salve (ou descarte) antes de emitir — a emissão usa o conteúdo salvo.
+          </div>
+        )}
+        {blockers.length > 0 && (
+          <div role="alert" className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <strong>Emissão bloqueada:</strong>
+            <ul className="mt-1 list-disc pl-5">
+              {blockers.map((b) => <li key={b.code}>{b.message}</li>)}
+            </ul>
           </div>
         )}
 

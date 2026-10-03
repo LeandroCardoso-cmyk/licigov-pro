@@ -1795,18 +1795,18 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DraftEditor.tsx": {
-    "mtime": 1790643728.9302042,
-    "ast_hash": "957ae7d33045a804bedadfb74e09d768",
+    "mtime": 1791039705.5990925,
+    "ast_hash": "6bc5bff0e2a70f516336892e542b6d24",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1790905546.8201194,
-    "ast_hash": "b1a080e70b97cd7f30f0f998bb4f1f2b",
+    "mtime": 1791039705.5996697,
+    "ast_hash": "b8a9a101e8a2b2e1e19ddfe1aaf0b2d8",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1790967140.6377828,
-    "ast_hash": "4176d677c79cde8f2a0b1caaeda98881",
+    "mtime": 1791039705.600459,
+    "ast_hash": "a330f0908eeb3ed67de6a04db6b777a3",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1790643728.9302042,
-    "ast_hash": "b642197519e8d7a338eef4b24395b7b2",
+    "mtime": 1791039705.599442,
+    "ast_hash": "8556271c3069f9afc3b38ee4bac312db",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
@@ -1865,8 +1865,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1790905546.8201194,
-    "ast_hash": "1a119fce7c5b47f0f2a0c508e2f84f3a",
+    "mtime": 1791039705.5999737,
+    "ast_hash": "dc8becb57895899e3a536cb1c4d7bacb",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -5400,8 +5400,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
-    "mtime": 1790944549.717666,
-    "ast_hash": "4bc75e1a4653acbcd410672857c96d51",
+    "mtime": 1791039806.2025719,
+    "ast_hash": "5332675f3489d7a02a53ca4bb0850158",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts": {
@@ -5425,8 +5425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-sod-provenance.test.ts": {
-    "mtime": 1790944549.7182696,
-    "ast_hash": "6ba469166c811559aec4c672661f4dae",
+    "mtime": 1791039806.203584,
+    "ast_hash": "01c8a9d5c70794fced25b23c52fdc5d0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts": {
@@ -5445,8 +5445,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts": {
-    "mtime": 1790964599.214502,
-    "ast_hash": "23a584d2cf67cdd663b3fe2012ec9c24",
+    "mtime": 1791040039.5074494,
+    "ast_hash": "d7af44d878fd8813cdbb9e3031f9354f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-decision.test.ts": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1790944366.8649542,
-    "ast_hash": "5a49061b06c4b3c2bfbb799afb2169a7",
+    "mtime": 1791039907.7505975,
+    "ast_hash": "10128d47b413ff64fa8cfb689d252f2d",
     "semantic_hash": ""
   },
   "server/services/documentRenderService.ts": {
@@ -12830,8 +12830,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr09-regeneration-human-state-mysql-smoke.test.ts": {
-    "mtime": 1790905565.1594903,
-    "ast_hash": "a1a61766b8e8240877f8bf7c7cc57812",
+    "mtime": 1791040039.5081887,
+    "ast_hash": "4041baf200f1e06ca1498ba135860ee2",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr09-regeneration-human-state.test.ts": {
@@ -13192,6 +13192,16 @@
   "server/services/authoring/upstreamAuthority.ts": {
     "mtime": 1790966951.7765605,
     "ast_hash": "4f8d9a956876434653b2be6804c315db",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem057-emission-preconditions.test.ts": {
+    "mtime": 1791039787.4170208,
+    "ast_hash": "489905b89fadc8b85c8916f6fbb414a1",
+    "semantic_hash": ""
+  },
+  "server/domain/emissionPreconditions.ts": {
+    "mtime": 1791039582.9000783,
+    "ast_hash": "902dd7964e76fd87b0f13afb9c988bd4",
     "semantic_hash": ""
   }
 }

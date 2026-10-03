@@ -43,6 +43,8 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   );
   // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
+  const [editorDirty, setEditorDirty] = useState(false);
   const generateETP = trpc.procurementProcess.generateETP.useMutation({
     // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
     onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
@@ -138,7 +140,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
             {/* C.4B.3B — edição humana governada do rascunho persistido. */}
-            <DraftEditor processId={processId} kind="etp" content={draft.content} contentHash={draft.contentHash} />
+            <DraftEditor processId={processId} kind="etp" content={draft.content} contentHash={draft.contentHash} onDirtyChange={setEditorDirty} />
           </div>
         </div>
       )}
@@ -150,7 +152,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
       />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
-      <OfficialPromotionSection processId={processId} kind="etp" reviewSnapshot={reviewable.data?.draft ?? null} />
+      <OfficialPromotionSection processId={processId} kind="etp" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} />
     </div>
   );
 }
