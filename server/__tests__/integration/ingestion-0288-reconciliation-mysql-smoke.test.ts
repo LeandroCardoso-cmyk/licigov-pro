@@ -125,11 +125,28 @@ describe.skipIf(!DB)("Reconciliação da migration 0288 — MySQL real", () => {
     expect(idx.columns, "índice deve cobrir (organizationId, checksum)").toBe(2);
   }
 
+  // NEW-030 — este arquivo DERRUBA e recria `import_sessions` com colunas mínimas (cenários A–J). Antes ele não
+  // restaurava a tabela real: os smokes seguintes no MESMO banco perdiam colunas (`insert into import_sessions` falhava).
+  // Agora a tabela real é preservada por RENAME (as FKs dos filhos acompanham o rename no InnoDB) e restaurada ao fim;
+  // os cenários trabalham numa cópia de estrutura (CREATE TABLE … LIKE).
+  const BACKUP = "import_sessions__new030_bak";
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
-  });
+    await runMigrations(conn); // garante a tabela real antes de preservá-la (banco novo)
+    await conn.query("SET FOREIGN_KEY_CHECKS = 0");
+    await conn.query(`DROP TABLE IF EXISTS \`${BACKUP}\``);
+    await conn.query(`RENAME TABLE \`import_sessions\` TO \`${BACKUP}\``);
+    await conn.query(`CREATE TABLE \`import_sessions\` LIKE \`${BACKUP}\``);
+    await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+  }, 300_000);
 
   afterAll(async () => {
+    if (conn) {
+      await conn.query("SET FOREIGN_KEY_CHECKS = 0");
+      await conn.query("DROP TABLE IF EXISTS `import_sessions`");
+      await conn.query(`RENAME TABLE \`${BACKUP}\` TO \`import_sessions\``);
+      await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+    }
     await conn?.end();
   });
 
