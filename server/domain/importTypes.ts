@@ -46,7 +46,8 @@ export const IMPORT_TRANSITIONS: Record<ImportSessionStatus, ImportSessionStatus
   extracted:       ["normalized", "failed"],
   normalized:      ["awaiting_review", "failed"],
   awaiting_review: ["approved", "rejected"],
-  approved:        ["archived"],
+  // R9 / SEM-048 — correção de conteúdo de sessão aprovada (não promovida) INVALIDA a aprovação: volta a revisão.
+  approved:        ["archived", "awaiting_review"],
   rejected:        ["uploaded", "archived"], // upload pode ser reprocessado
   failed:          ["queued", "archived"],   // retry vai para queued
   archived:        [],

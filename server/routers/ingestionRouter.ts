@@ -36,7 +36,7 @@ import {
   type ReviewAction,
 } from "../services/importStagingService";
 import { isImportTypeCorrectable } from "../domain/importCorrectionFields";
-import { promoteApprovedSessionToDomain } from "../services/importPromotionService";
+import { promoteApprovedSessionToDomain, previewSessionPromotion } from "../services/importPromotionService";
 import {
   getDocumentIntake, saveDocumentReview, approveDocumentStaging, rejectDocumentStaging, promoteDocumentToDraft,
   getDocumentReviewHistory,
@@ -674,6 +674,9 @@ export const ingestionRouter = router({
    * sessão + item; valida campos permitidos por importType (rejeita chaves desconhecidas e raw);
    * exige justificativa; concorrência otimista por expectedRevision (CONFLICT acionável); idempotente
    * por idempotencyKey; grava histórico before/after. NÃO aprova o item nem promove ao domínio.
+   * R9 / SEM-048 — sessão promovida ⇒ SESSION_ALREADY_PROMOTED; item decidido volta a pendente e sessão aprovada
+   * volta a "aguardando revisão" (nova aprovação humana); item + histórico + reabertura numa transação;
+   * mesma chave + payload diferente ⇒ CONFLICT (replay só com o mesmo payload).
    */
   correctItem: orgRoleProcedure("operator")
     .input(z.object({
@@ -710,6 +713,7 @@ export const ingestionRouter = router({
         expectedRevision:     input.expectedRevision,
         idempotencyKey:       input.idempotencyKey,
         correlationId:        ctx.correlationId ?? input.correlationId ?? null,
+        requestId:            ctx.requestId ?? null,
       });
 
       await logActivity({
@@ -721,10 +725,17 @@ export const ingestionRouter = router({
         correlationId:  ctx.correlationId,
         requestId:      ctx.requestId,
         // Sem overlay/conteúdo — apenas identificadores seguros.
-        details:        { sessionId: input.sessionId, revision: result.revision, idempotent: result.idempotent },
+        details:        {
+          sessionId: input.sessionId, revision: result.revision, idempotent: result.idempotent,
+          reviewReopened: result.reviewReopened, sessionReopened: result.sessionReopened,
+        },
       });
 
-      return { itemId: input.itemId, revision: result.revision, idempotent: result.idempotent };
+      return {
+        itemId: input.itemId, revision: result.revision, idempotent: result.idempotent,
+        // R9 / SEM-048 — a UI explica que a decisão/aprovação anterior foi invalidada pela correção.
+        reviewReopened: result.reviewReopened, sessionReopened: result.sessionReopened,
+      };
     }),
 
   /** Revisão em lote de itens PENDENTES da sessão. Só afeta pendentes (idempotente por natureza). */
@@ -888,6 +899,29 @@ export const ingestionRouter = router({
    * Idempotente (uma promoção por sessão) e escopada por tenant + processo. Não faz merge nem decide juridicamente.
    * Exige papel institucional mínimo 'manager' (segregação de deveres: operador revisa; gestor promove ao domínio).
    */
+  /**
+   * R9 / SEM-053 — Prévia SOMENTE LEITURA do impacto da promoção nos Itens Inteligentes do processo (calculada pelo
+   * mesmo código da promoção, sem escrita/lock): quantos serão criados, mesclados/recalculados (média e nº de
+   * cotações antes × depois), marcados "Fonte alterada" (decididos; aprovação deixa de corresponder às cotações) e
+   * "Identidade a revisar". A UI exige confirmação explícita após exibi-la. Mesmo papel da promoção (manager+).
+   */
+  previewPromotion: orgRoleProcedure("manager")
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+      return previewSessionPromotion({
+        sessionId: input.sessionId, organizationId: orgId, procurementProcessId: input.procurementProcessId,
+        correlationId: ctx.correlationId ?? undefined,
+      });
+    }),
+
   promoteSession: orgRoleProcedure("manager")
     .input(z.object({
       sessionId:            z.number().int().positive(),

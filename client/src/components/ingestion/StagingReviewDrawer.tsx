@@ -130,6 +130,21 @@ export function ExtractedValuesSummary({ item }: { item: Pick<StagingItem, "rawQ
 }
 
 
+/**
+ * R9 / SEM-048 — a decisão anterior valia para o conteúdo anterior: corrigir um item já revisado o devolve a
+ * pendente e invalida a aprovação da sessão (o servidor aplica; aqui só se explica ANTES de salvar).
+ */
+export function CorrectionReopenNotice({ reviewStatus }: { reviewStatus: StagingItem["reviewStatus"] }) {
+  if (reviewStatus === "pending") return null;
+  return (
+    <p className="text-xs text-amber-800 dark:text-amber-200" data-testid="correction-reopens-review">
+      Este item já foi revisado ({REVIEW_STATUS_LABEL[reviewStatus]}). Salvar a correção o devolve a
+      {" "}<strong>pendente</strong> e exige nova decisão; se a revisão da sessão já estiver aprovada, a
+      aprovação é invalidada e precisa ser refeita antes da promoção.
+    </p>
+  );
+}
+
 export function StagingReviewDrawer({
   item, open, disabled, importType, isCorrecting, correctError, onOpenChange, onReview, onCorrect,
 }: StagingReviewDrawerProps) {
@@ -235,6 +250,7 @@ export function StagingReviewDrawer({
                   placeholder="Explique a correção (ex.: valor unitário digitado errado na planilha)…"
                 />
               </div>
+              <CorrectionReopenNotice reviewStatus={item.reviewStatus} />
               {isConflict && (
                 <p className="text-sm text-destructive" role="alert">
                   Este item foi alterado por outro revisor. Atualize os dados antes de continuar.

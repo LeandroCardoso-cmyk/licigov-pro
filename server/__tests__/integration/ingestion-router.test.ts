@@ -47,7 +47,7 @@ vi.mock("../../services/importStagingService", () => ({
   reviewStagingItem: vi.fn().mockResolvedValue(undefined),
   bulkReviewStagingItems: vi.fn().mockResolvedValue(0),
   getStagingSummary: vi.fn().mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 }),
-  correctStagingItem: vi.fn().mockResolvedValue({ item: {}, revision: 1, idempotent: false }),
+  correctStagingItem: vi.fn().mockResolvedValue({ item: {}, revision: 1, idempotent: false, reviewReopened: false, sessionReopened: false }),
 }));
 
 vi.mock("../../services/importQueueService", () => ({
@@ -239,10 +239,12 @@ describe("correctItem — correção humana (B.2.2)", () => {
 
   it("delega ao serviço e audita (idempotência refletida)", async () => {
     vi.mocked(ingestion.getImportSession).mockResolvedValue(sessionRow({ importType: "price_research", procurementProcessId: "P1" }) as any);
-    vi.mocked(staging.correctStagingItem).mockResolvedValue({ item: {} as any, revision: 1, idempotent: false });
+    // R9 / SEM-048 (reescrito) — o serviço agora informa a reabertura da revisão; o router a devolve à UI.
+    vi.mocked(staging.correctStagingItem).mockResolvedValue({ item: {} as any, revision: 1, idempotent: false, reviewReopened: true, sessionReopened: true });
     const r = await caller().correctItem(correctInput);
     expect(r.revision).toBe(1);
     expect(r.idempotent).toBe(false);
+    expect(r).toMatchObject({ reviewReopened: true, sessionReopened: true });
     expect(staging.correctStagingItem).toHaveBeenCalledWith(expect.objectContaining({
       itemId: 7, importType: "price_research", expectedRevision: 0, idempotencyKey: "corr-key-123456",
     }));

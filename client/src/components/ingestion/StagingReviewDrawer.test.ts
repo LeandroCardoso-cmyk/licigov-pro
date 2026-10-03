@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CorrectionFieldInput, CorrectionSectionHeader, ExtractedValuesSummary } from "./StagingReviewDrawer";
+import { CorrectionFieldInput, CorrectionReopenNotice, CorrectionSectionHeader, ExtractedValuesSummary } from "./StagingReviewDrawer";
 import {
   CORRECTABLE_FIELDS, CORRECTION_SCOPE_NOTE, CORRECTION_SECTION_TITLE, SOURCE_QUANTITY_CONTEXT, SOURCE_QUANTITY_HELP, SOURCE_QUANTITY_LABEL, buildCorrectionPatch,
 } from "@/lib/ingestion/correction";
@@ -137,5 +137,20 @@ describe("bloco de correção = correção da EXTRAÇÃO do documento-fonte", ()
     expect(drawerSource).toContain("await onCorrect(item.id, revision, patch, justification.trim(), newIdempotencyKey());");
     expect(drawerSource).not.toMatch(/from "@\/lib\/trpc"|trpc\./);
     expect(drawerSource.match(/<Button/g)).toHaveLength(5); // Salvar correção · Aceitar · Pular · Rejeitar · Fechar
+  });
+});
+
+// R9 / SEM-048 — corrigir item já revisado reabre a revisão (servidor); a UI explica ANTES de salvar.
+describe("R9 / SEM-048 — aviso de reabertura da revisão na correção", () => {
+  it("item pendente: sem aviso", () => {
+    expect(renderToStaticMarkup(createElement(CorrectionReopenNotice, { reviewStatus: "pending" }))).toBe("");
+  });
+
+  it("item aceito/rejeitado/pulado: avisa que volta a pendente e que a aprovação da sessão é invalidada", () => {
+    for (const reviewStatus of ["approved", "rejected", "skipped"] as const) {
+      const html = renderToStaticMarkup(createElement(CorrectionReopenNotice, { reviewStatus }));
+      expect(html).toContain("<strong>pendente</strong>");
+      expect(html).toContain("aprovação é invalidada");
+    }
   });
 });
