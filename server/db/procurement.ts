@@ -300,6 +300,21 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
   });
 }
 
+/**
+ * R9 / SEM-054 — estado da FONTE do item (`current` | `source_changed` | `review_required`), tenant-scoped.
+ * `null` ⇒ item inexistente neste tenant.
+ */
+export async function getIntelligentItemSourceState(
+  id: string, orgId: number, executor?: ProcurementExecutor,
+): Promise<{ sourceState: string; sourceStateReason: string | null } | null> {
+  const db = executor ?? await getDb();
+  if (!db) return null;
+  const rows = await db.select({ sourceState: intelligentItemsTable.sourceState, sourceStateReason: intelligentItemsTable.sourceStateReason })
+    .from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId))).limit(1);
+  return rows[0] ? { sourceState: rows[0].sourceState ?? "current", sourceStateReason: rows[0].sourceStateReason ?? null } : null;
+}
+
 export async function updateItemStatus(id: string, orgId: number, status: ItemStatus, approvedBy: number | null, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
@@ -319,6 +334,12 @@ export async function updateItemStatus(id: string, orgId: number, status: ItemSt
 export async function transitionItemStatusCAS(params: {
   id: string; orgId: number; fromStatuses: ItemStatus[]; toStatus: ItemStatus;
   approvedBy: number | null; updatedAt: string;
+  /**
+   * R9 / SEM-054 — condiciona a transição ao `source_state` (na MESMA sentença SQL): a aprovação só vence o
+   * CAS com a fonte vigente (`current`); uma materialização concorrente que sinalize `source_changed`/
+   * `review_required` faz o CAS perder (0 linhas) em vez de aprovar números desatualizados.
+   */
+  requireSourceState?: string;
 }, executor?: ProcurementExecutor): Promise<{ applied: boolean }> {
   const db = executor ?? await getDb();
   if (!db) return { applied: false };
@@ -329,6 +350,7 @@ export async function transitionItemStatusCAS(params: {
       eq(intelligentItemsTable.id, params.id),
       eq(intelligentItemsTable.organizationId, params.orgId),
       inArray(intelligentItemsTable.status, params.fromStatuses),
+      ...(params.requireSourceState !== undefined ? [eq(intelligentItemsTable.sourceState, params.requireSourceState)] : []),
     ));
   const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
   return { applied: affected > 0 };

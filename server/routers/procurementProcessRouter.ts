@@ -24,8 +24,10 @@ import { resolveProcurementContext, recordContextAssertions } from "../services/
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
-  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity,
+  importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
+import { findPriceOutliers } from "@shared/itemApprovalGate";
+import { reaisToCents } from "../domain/money";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
@@ -475,17 +477,35 @@ export const procurementProcessRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const items = await listIntelligentItems(input.processId, orgId);
-      return { items, total: items.length };
+      // R9 / SEM-054 — cotações fora da curva (mesma regra de detectPriceOutlier), em CENTAVOS: os
+      // fornecedores persistidos guardam o valor em REAIS e são convertidos explicitamente aqui.
+      return {
+        items: items.map((it) => ({
+          ...it,
+          priceOutliers: findPriceOutliers(it.suppliers.map((s) => ({ name: s.name, valueCents: reaisToCents(s.value) }))),
+        })),
+        total: items.length,
+      };
     }),
 
   /**
    * Hardening P0 — aplica as cotações ATUALIZADAS a um item cuja fonte mudou após a decisão. Item aprovado/
    * rejeitado volta a `em_analise` (decisão anterior invalidada de forma EXPLÍCITA, com timeline).
    */
-  applyItemSourceUpdate: orgRoleProcedure("operator")
+  /**
+   * R9 / SEM-052 — PRÉVIA obrigatória antes de aplicar: comparativo atual × proposto por item (nº de cotações,
+   * média em centavos), decisão que será revogada e o `expectedStateToken` que a confirmação devolve.
+   */
+  previewItemSourceUpdate: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1).max(20) }))
+    .query(async ({ input, ctx }) => previewItemSourceUpdate({ organizationId: ctx.organizationId!, itemId: input.itemId })),
+
+  applyItemSourceUpdate: orgRoleProcedure("operator")
+    // R9 / SEM-052 — só aplica com o token da prévia confirmada; estado diferente ⇒ CONFLICT (nada aplicado).
+    .input(z.object({ itemId: z.string().min(1).max(20), expectedStateToken: z.string().min(1).max(100) }))
     .mutation(async ({ input, ctx }) => applyItemSourceUpdate({
-      organizationId: ctx.organizationId!, itemId: input.itemId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+      organizationId: ctx.organizationId!, itemId: input.itemId, expectedStateToken: input.expectedStateToken,
+      actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
     })),
 
   /**
