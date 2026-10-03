@@ -183,6 +183,12 @@ describe.skipIf(!DB)("P0.3 — quantidade PREVISTA como fonte única em DFD/ETP/
     await expect(setPlanned("Detergente neutro", "70", `cqd-q70-${pid}`))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("GOVERNED_CHANGE_REQUIRED") });
     const edBefore = (await row(pid, "edital"))!;
+    // R9 / SEM-057 (reescrito): o Edital só é emitido depois do TR EMITIDO — fixture da versão oficial do TR.
+    await conn.execute(
+      // emite o MESMO conteúdo do TR consumido pelo Edital (fonte inalterada — SEM-039/047).
+      "INSERT INTO official_documents (id, tenant_id, business_domain, document_type, origin, title, version, status, content) SELECT ?, ?, 'processo_licitatorio', 'tr', ?, 'TR', 1, 'emitido', content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'tr'",
+      [`tr-fx-${Date.now()}`.slice(0, 20), ORG, pid, ORG, pid],
+    );
     await promoteOfficialDocument({
       organizationId: ORG, processId: pid, kind: "edital", actorUserId: emitter, actorRole: "manager",
       idempotencyKey: `cqd-emit-${pid}`, correlationId: "cqd-emit", expectedContentHash: draftContentHash(edBefore.content),
