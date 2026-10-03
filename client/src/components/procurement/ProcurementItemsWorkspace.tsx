@@ -3,9 +3,12 @@ import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import {
   groupItems, originLabel, formatQty, plannedQuantityLabel, provenanceLines, sourceQuantityLabel, adoptableQuantities,
-  quantityInputError, brl, priceBlockedText, candidateEvidenceText, CANDIDATE_STATUS_LABELS, type ItemView, type LotView,
+  quantityInputError, brl, priceBlockedText, candidateEvidenceText, CANDIDATE_STATUS_LABELS, sourceQuantityKindLabel,
+  adoptableSourceValue, sourceQuantityDiffText, adoptReplaceConfirmText, sourceChoiceKey, bulkAdoptChanges, itemFormHydration, ITEM_FORM_EMPTY,
+  type ItemView, type LotView, type AdoptableRow,
 } from "./procurementItemsView";
 import { shouldRotateAssistKeyOnError } from "./dfdFieldSources";
+import { useHydratedForm } from "../../lib/formHydration";
 
 /**
  * Itens da contratação — área TRANSVERSAL do processo (qualquer etapa de início). O sistema encontra os itens
@@ -172,10 +175,14 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
   processId: string; item: ItemView; number: number; lots: LotView[]; locked: boolean;
   onDone: () => void; onError: (e: { message: string; data?: { code?: string } | null }) => void;
 }) {
-  const [qty, setQty] = useState(formatQty(item.plannedQuantity.value));
+  // R9 / SEM-056 (R5.1) — campos hidratados a partir do PERSISTIDO e re-hidratados a cada escrita (revisão/valor
+  // mudam): após "Usar N" ou uma alteração de outra pessoa o campo mostra o valor vigente — "Salvar" nunca reverte.
+  const { server, key: formKey } = useMemo(() => itemFormHydration(item), [item]);
+  const form = useHydratedForm({ server, empty: ITEM_FORM_EMPTY, loading: false, key: formKey });
+  const qty = form.values.qty ?? "";
+  const desc = form.values.description ?? "";
+  const unit = form.values.unit ?? "";
   const [editing, setEditing] = useState(false);
-  const [desc, setDesc] = useState(item.description);
-  const [unit, setUnit] = useState(item.unit);
   const [showOrigin, setShowOrigin] = useState(false);
   const opts = { onSuccess: onDone, onError };
   const setQuantities = trpc.procurementItems.setQuantities.useMutation(opts);
@@ -185,7 +192,7 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
   const withdraw = trpc.procurementItems.withdrawItem.useMutation(opts);
   const busy = setQuantities.isPending || updateItem.isPending || assignLot.isPending || moveItem.isPending || withdraw.isPending;
   const qtyError = quantityInputError(qty);
-  const qtyChanged = qty.trim() !== formatQty(item.plannedQuantity.value);
+  const qtyChanged = form.ready && qty.trim() !== server.qty;
   const base = { processId, itemId: item.id, expectedRevision: item.revision };
 
   return (
@@ -196,9 +203,9 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
           {editing ? (
             <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_8rem]">
               <label className="flex flex-col text-xs"><span className="mb-1 text-muted-foreground">Descrição</span>
-                <input className={INPUT} value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={2000} /></label>
+                <input className={INPUT} value={desc} onChange={(e) => form.setField("description", e.target.value)} maxLength={2000} /></label>
               <label className="flex flex-col text-xs"><span className="mb-1 text-muted-foreground">Unidade</span>
-                <input className={INPUT} value={unit} onChange={(e) => setUnit(e.target.value)} maxLength={30} /></label>
+                <input className={INPUT} value={unit} onChange={(e) => form.setField("unit", e.target.value)} maxLength={30} /></label>
             </div>
           ) : (
             <p className="font-medium text-foreground">{item.description}</p>
@@ -208,9 +215,9 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
         <div className="flex flex-wrap items-center gap-1">
           {editing ? (
             <>
-              <button type="button" className={BTN_SM} disabled={busy || !desc.trim() || !unit.trim()}
+              <button type="button" className={BTN_SM} disabled={busy || !form.ready || !desc.trim() || !unit.trim()}
                 onClick={() => updateItem.mutate({ ...base, description: desc, unit, idempotencyKey: newKey() })}>Salvar</button>
-              <button type="button" className={BTN_SM} onClick={() => { setEditing(false); setDesc(item.description); setUnit(item.unit); }}>Cancelar</button>
+              <button type="button" className={BTN_SM} onClick={() => { setEditing(false); form.setField("description", server.description); form.setField("unit", server.unit); }}>Cancelar</button>
             </>
           ) : (
             <button type="button" className={BTN_SM} disabled={locked || busy} onClick={() => setEditing(true)}>Editar</button>
@@ -229,7 +236,7 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
           <span className="mb-1 text-muted-foreground">Quantidade prevista</span>
           <span className="flex items-center gap-2">
             <input className={`${INPUT} w-32`} inputMode="decimal" value={qty} placeholder="Não definida"
-              aria-invalid={qtyError ? true : undefined} onChange={(e) => setQty(e.target.value)} disabled={locked} />
+              aria-invalid={qtyError ? true : undefined} onChange={(e) => form.setField("qty", e.target.value)} disabled={locked || !form.ready} />
             {qtyChanged && (
               <button type="button" className={BTN_SM} disabled={busy || !!qtyError}
                 onClick={() => setQuantities.mutate({ processId, idempotencyKey: newKey(), changes: [{ ...base, mode: "informed", quantity: qty.trim() || null }] })}>
@@ -244,17 +251,31 @@ function ItemRow({ processId, item, number, lots, locked, onDone, onError }: {
             {plannedQuantityLabel(item.plannedQuantity)}
           </span>
         )}
-        {item.sources.filter((s) => s.sourceQuantity !== null).map((s) => (
-          <span key={`${s.sourceType}:${s.sourceId}`} className="flex items-center gap-2 text-sm text-muted-foreground">
-            {sourceQuantityLabel(s)}
-            {s.sourceQuantity !== item.plannedQuantity.value && (
-              <button type="button" className={BTN_SM} disabled={locked || busy}
-                onClick={() => setQuantities.mutate({ processId, idempotencyKey: newKey(), changes: [{ ...base, mode: "adopt_source", sourceType: s.sourceType as "price_research" | "dfd", sourceId: s.sourceId }] })}>
-                Usar {formatQty(s.sourceQuantity)}
-              </button>
-            )}
-          </span>
-        ))}
+        {item.sources.filter((s) => s.sourceQuantity !== null || adoptableSourceValue(s) !== null).map((s) => {
+          // R9 / SEM-049 — "Usar N" adota o valor ATUAL da fonte (diff vínculo × atual exibido antes) e o envia como
+          // valor confirmado; R9 / SEM-055 — substituir uma prevista já definida pede confirmação (antigo → novo).
+          const next = adoptableSourceValue(s);
+          const diff = sourceQuantityDiffText(s);
+          return (
+            <span key={sourceChoiceKey(s)} className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-source={s.sourceType}>
+              {sourceQuantityLabel(s) ?? `${sourceQuantityKindLabel(s.sourceType)}: sem quantidade no vínculo`}
+              {diff && <span className="text-xs text-amber-700 dark:text-amber-300" role="note">{diff}</span>}
+              {next !== null && next !== item.plannedQuantity.value && (
+                <button type="button" className={BTN_SM} disabled={locked || busy}
+                  onClick={() => {
+                    const ask = adoptReplaceConfirmText(item.plannedQuantity, next);
+                    if (ask && !window.confirm(ask)) return;
+                    setQuantities.mutate({ processId, idempotencyKey: newKey(), changes: [{
+                      ...base, mode: "adopt_source", sourceType: s.sourceType as "price_research" | "dfd", sourceId: s.sourceId,
+                      expectedSourceQuantity: next, ...(ask ? { confirmReplace: true } : {}),
+                    }] });
+                  }}>
+                  Usar {formatQty(next)}
+                </button>
+              )}
+            </span>
+          );
+        })}
         {lots.length > 0 && (
           <label className="flex flex-col text-xs">
             <span className="mb-1 text-muted-foreground">Lote</span>
@@ -357,7 +378,7 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
     lot: c.sourceLotCode ? "source" : "",
   };
   const set = (k: string, d: Partial<Decision>, c: (typeof candidates)[number]) => setDecisions((m) => ({ ...m, [k]: { ...get(c), ...d } }));
-  const usable = candidates.filter((c) => c.match.status !== "linked" && c.match.status !== "blocked");
+  const usable = candidates.filter((c) => c.match.status !== "linked" && c.match.status !== "blocked" && !c.withdrawnItemId);
   const chosen = usable.filter((c) => get(c).include);
   const invalid = chosen.some((c) => { const d = get(c); return d.action === "create" && (!!quantityInputError(d.quantity) || !d.description.trim() || !d.unit.trim()); });
 
@@ -401,7 +422,8 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
           <ul className="space-y-3">
             {candidates.map((c) => {
               const d = get(c);
-              const frozen = c.match.status === "linked" || c.match.status === "blocked";
+              // R9 / SEM-069 — evidência de item RETIRADO: não é reincluída por aqui (o servidor recusa); fica travada e explicada.
+              const frozen = c.match.status === "linked" || c.match.status === "blocked" || !!c.withdrawnItemId;
               return (
                 <li key={c.candidateKey} className="rounded-lg border border-border p-3" data-candidate={c.candidateKey} data-status={c.match.status}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -412,6 +434,11 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
                     <span className="text-xs text-muted-foreground">{CANDIDATE_STATUS_LABELS[c.match.status]}</span>
                   </div>
                   {c.match.reason && c.match.status === "blocked" && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{c.match.reason}</p>}
+                  {c.withdrawnItemId && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-withdrawn>
+                      Este item foi retirado da contratação e não é reincluído automaticamente. Se a necessidade voltou, use “+ Adicionar item”.
+                    </p>
+                  )}
                   {c.evidence && <p className="mt-1 text-xs text-muted-foreground" data-evidence>{candidateEvidenceText(c.evidence)}</p>}
                   {c.duplicateOfCandidateKey && <p className="mt-1 text-xs text-muted-foreground">Mesma descrição e unidade de outra linha desta fonte (ex.: cotada com outra quantidade).</p>}
                   {!frozen && d.include && (
@@ -443,7 +470,7 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
                       )}
                       {d.action === "create" && c.sourceQuantity !== null && (
                         <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          {source === "dfd" ? "Quantidade no DFD" : "Quantidade cotada (não é a necessidade)"}: {formatQty(c.sourceQuantity)}
+                          {sourceQuantityKindLabel(source)}: {formatQty(c.sourceQuantity)}
                           <label className="flex items-center gap-1 text-foreground">
                             <input type="checkbox" checked={d.adopt} onChange={(e) => set(c.candidateKey, { adopt: e.target.checked, quantity: "" }, c)} />
                             Usar {formatQty(c.sourceQuantity)} como quantidade prevista
@@ -480,31 +507,43 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
 
 // ─── "Usar quantidades do documento" (preview + confirmação) ──────────────────────────────
 
-function BulkAdoptPanel({ processId, rows, onClose, onDone, onError }: {
-  processId: string; rows: ReturnType<typeof adoptableQuantities>;
+export function BulkAdoptPanel({ processId, rows, onClose, onDone, onError }: {
+  processId: string; rows: AdoptableRow[];
   onClose: () => void; onDone: () => void; onError: (e: { message: string; data?: { code?: string } | null }) => void;
 }) {
-  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  // R9 / SEM-055 — NADA vem pré-escolhido: para cada item a pessoa escolhe QUAL fonte usar (a quantidade cotada da
+  // Pesquisa de Preços nunca é o padrão). R9 / SEM-049 — envia o valor ATUAL visto (o servidor recusa se mudou).
+  const [picked, setPicked] = useState<Record<string, string>>({});
   const set = trpc.procurementItems.setQuantities.useMutation({ onSuccess: onDone, onError });
-  const chosen = rows.filter((r) => picked[r.item.id] !== false);
+  const changes = bulkAdoptChanges(rows, picked);
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-label="Usar quantidades do documento">
       <h2 className="font-medium text-foreground">Usar quantidades do documento</h2>
-      <p className="mb-2 text-sm text-muted-foreground">Confira a lista. Só os itens marcados terão a quantidade do documento adotada como quantidade prevista.</p>
-      <ul className="space-y-1">
+      <p className="mb-2 text-sm text-muted-foreground">
+        Para cada item, escolha a fonte cuja quantidade será adotada como quantidade prevista. Nada vem escolhido: itens sem escolha não mudam.
+      </p>
+      <ul className="space-y-2">
         {rows.map((r) => (
-          <li key={r.item.id}>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input type="checkbox" checked={picked[r.item.id] !== false} onChange={(e) => setPicked((m) => ({ ...m, [r.item.id]: e.target.checked }))} />
-              {r.item.description} — {sourceQuantityLabel(r.source)}
+          <li key={r.item.id} className="flex flex-col gap-1 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span>{r.item.description}</span>
+            <label className="flex flex-col text-xs">
+              <span className="sr-only">Fonte da quantidade para {r.item.description}</span>
+              <select className={INPUT} value={picked[r.item.id] ?? ""} onChange={(e) => setPicked((m) => ({ ...m, [r.item.id]: e.target.value }))}>
+                <option value="">Não usar</option>
+                {r.sources.map((s) => (
+                  <option key={sourceChoiceKey(s)} value={sourceChoiceKey(s)}>
+                    {sourceQuantityKindLabel(s.sourceType)}: {formatQty(adoptableSourceValue(s))}{sourceQuantityDiffText(s) ? ` (vínculo: ${formatQty(s.sourceQuantity)})` : ""}
+                  </option>
+                ))}
+              </select>
             </label>
           </li>
         ))}
       </ul>
       <div className="mt-3 flex gap-2">
-        <button type="button" className={BTN_PRIMARY} disabled={set.isPending || chosen.length === 0}
-          onClick={() => set.mutate({ processId, idempotencyKey: newKey(), changes: chosen.map((r) => ({ itemId: r.item.id, expectedRevision: r.item.revision, mode: "adopt_source" as const, sourceType: r.source.sourceType as "price_research" | "dfd", sourceId: r.source.sourceId })) })}>
-          Confirmar {chosen.length} item(ns)
+        <button type="button" className={BTN_PRIMARY} disabled={set.isPending || changes.length === 0}
+          onClick={() => set.mutate({ processId, idempotencyKey: newKey(), changes })}>
+          Confirmar {changes.length} item(ns)
         </button>
         <button type="button" className={BTN} onClick={onClose}>Cancelar</button>
       </div>
