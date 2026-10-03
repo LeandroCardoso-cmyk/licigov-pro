@@ -61,13 +61,15 @@ describe("view-model", () => {
   it("quantidade: 'Não definida' ≠ quantidade no documento; proveniência por campo; adoção só onde prevista está vazia", () => {
     const it0 = item({});
     expect(plannedQuantityLabel(it0.plannedQuantity)).toBe("Não definida");
-    expect(sourceQuantityLabel(it0.sources[0])).toBe("Quantidade no documento: 1");
+    // R9 / SEM-055 (reescrito): quantidade da Pesquisa é rotulada como COTADA, não como necessidade.
+    expect(sourceQuantityLabel(it0.sources[0])).toBe("Quantidade cotada (não é a necessidade): 1");
     const it1 = item({ plannedQuantity: { value: 35, status: "confirmed", sourceType: "user", mode: "informed", actorUserId: 7 }, provenance: { ...it0.provenance, description: { source: "user", overriddenBy: 7, sourceValue: "Concentrado" } } });
     expect(provenanceLines(it1)).toEqual([
       'Descrição: alterada pelo usuário #7 (na fonte: "Concentrado")', "Unidade: Pesquisa de Preços",
-      "Quantidade prevista: Informada pelo usuário #7", "Quantidade no documento: 1 (Pesquisa de Preços)",
+      "Quantidade prevista: Informada pelo usuário #7", "Quantidade cotada (não é a necessidade): 1 (Pesquisa de Preços)", // R9 / SEM-055 (reescrito): rótulo "cotada"
     ]);
     expect(adoptableQuantities([it0, it1]).map((r) => r.item.id)).toEqual([it0.id]);
+    expect(adoptableQuantities([it0])[0].sources.map((s) => s.sourceId)).toEqual(["ii1"]); // R9 / SEM-055: fontes listadas, nenhuma escolhida
     expect(quantityInputError("1.200,5")).toBeNull();
     expect(quantityInputError("0")).toMatch(/maior que zero/);
   });
@@ -116,7 +118,7 @@ describe("ProcurementItemsWorkspace — estados", () => {
     expect(html).not.toContain("LOTE ");
     expect(html).toContain("Quantidade prevista");
     expect(html).toContain("Não definida");
-    expect(html).toContain("Quantidade no documento: 1");
+    expect(html).toContain("Quantidade cotada (não é a necessidade): 1"); // R9 / SEM-055 (reescrito): rótulo "cotada"
     expect(html).toContain("Usar 1");
     expect(html).toContain("Origem: Pesquisa de Preços");
     expect(html).toContain("Não encontrou um item?");

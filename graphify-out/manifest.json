@@ -1855,13 +1855,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
-    "mtime": 1790964315.8271263,
-    "ast_hash": "23211408771be7cde06b0487b07b3a3c",
+    "mtime": 1791042098.0322278,
+    "ast_hash": "4c2a2f1339b76203a3bb3c1b8b12b49e",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.tsx": {
-    "mtime": 1790964182.9373865,
-    "ast_hash": "7d3c62f333eaa57d6cf021432e27ef29",
+    "mtime": 1791042098.0322278,
+    "ast_hash": "c2e301eb37b65e320500beb09010eaee",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
@@ -1905,8 +1905,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/procurementItemsView.ts": {
-    "mtime": 1790964338.0278087,
-    "ast_hash": "7e7690e711f675affcfd360dce9f321e",
+    "mtime": 1791042098.0322278,
+    "ast_hash": "6bc7b26430bfa288444e6ec24fac9a08",
     "semantic_hash": ""
   },
   "client/src/components/procurement/reviewSnapshotPin.test.ts": {
@@ -7065,8 +7065,8 @@
     "semantic_hash": ""
   },
   "server/db/procurementItems.ts": {
-    "mtime": 1790881396.2968767,
-    "ast_hash": "5ecff24390ec74ab712f2b72a6082fd8",
+    "mtime": 1791042098.0322278,
+    "ast_hash": "a69212b445afd85b2fad0b1353b796f5",
     "semantic_hash": ""
   },
   "server/db/queryStrategy.ts": {
@@ -7480,8 +7480,8 @@
     "semantic_hash": ""
   },
   "server/domain/dfdPrefill.ts": {
-    "mtime": 1790881396.3008766,
-    "ast_hash": "8a1513f15a96aabb05a2d429467e5bb7",
+    "mtime": 1791042098.0322278,
+    "ast_hash": "fd6c59b84c6e1adff4766826116a14b7",
     "semantic_hash": ""
   },
   "server/domain/dfdState.ts": {
@@ -8340,8 +8340,8 @@
     "semantic_hash": ""
   },
   "server/domain/procurementItems.ts": {
-    "mtime": 1790964133.804445,
-    "ast_hash": "7d20d22a0443c62f09c3cffe2ed9bd87",
+    "mtime": 1791042098.0362277,
+    "ast_hash": "37bbc827b025f6520eab0b4e71d8bead",
     "semantic_hash": ""
   },
   "server/domain/procurementProcess.ts": {
@@ -8930,8 +8930,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementItemsRouter.ts": {
-    "mtime": 1790881396.3208766,
-    "ast_hash": "1572cc7323f3e10e4326d8fe7a0897ae",
+    "mtime": 1791042098.0362277,
+    "ast_hash": "61480f201d02d743eaa23512a0866883",
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
@@ -10160,8 +10160,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementItemsService.ts": {
-    "mtime": 1790964041.8880305,
-    "ast_hash": "b541d22cf2db370a6ce64c6bbc56dab1",
+    "mtime": 1791042098.0362277,
+    "ast_hash": "53e9c5a99c41c0807d188db8a9d41c69",
     "semantic_hash": ""
   },
   "server/services/procurementOntologyService.ts": {
@@ -13342,6 +13342,21 @@
   "shared/itemApprovalGate.ts": {
     "mtime": 1791041824.3402114,
     "ast_hash": "09d9b73c7b5a1310c5bae4f57536d8da",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/procurementItemsView.r9-sem049-055-056-069.test.ts": {
+    "mtime": 1791042098.0322278,
+    "ast_hash": "622f9d13804cb8e5422876c8490b3a0b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/r9-sem049-067-068-069-procurement-items-mysql-smoke.test.ts": {
+    "mtime": 1791042098.0322278,
+    "ast_hash": "af039f9edd9c9f63b5ec2e350f36acca",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem049-067-068-069-procurement-items.test.ts": {
+    "mtime": 1791042098.0322278,
+    "ast_hash": "ea705a73bf8fc1567d080d9614fdc692",
     "semantic_hash": ""
   }
 }
