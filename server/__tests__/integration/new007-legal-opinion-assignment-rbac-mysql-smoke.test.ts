@@ -77,15 +77,20 @@ describe.skipIf(!DB)("NEW-007 — legalOpinionWorkspace: autoridade por ATRIBUI�
     return request.id;
   }
 
-  /** Estado COMPLETO das tabelas do domínio no tenant + contadores globais (notifications/audit_logs). */
+  /** Estado COMPLETO das tabelas do domínio no tenant + contadores de notifications/audit_logs ESCOPADOS aos atores do teste (NEW-031). */
   async function snapshot(org: number): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
     for (const [t, col] of ORG_TABLES) {
       const [rows] = await conn.query<mysql.RowDataPacket[]>(`SELECT * FROM \`${t}\` WHERE \`${col}\` = ? ORDER BY 1`, [org]);
       out[t] = JSON.stringify(rows);
     }
-    for (const t of ["notifications", "audit_logs"]) {
-      const [rows] = await conn.query<mysql.RowDataPacket[]>(`SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS m FROM \`${t}\``);
+    // NEW-031 (2º passe): contadores ESCOPADOS aos atores deste arquivo (antes eram globais: outro arquivo de teste
+    // gravando `notifications`/`audit_logs` em paralelo quebrava a comparação — flaky fora do `--no-file-parallelism`).
+    const actorIds = Object.values(U).filter((id) => Number.isFinite(id) && id > 0);
+    const ph = actorIds.map(() => "?").join(",") || "NULL";
+    for (const [t, col] of [["notifications", "userId"], ["audit_logs", "adminId"]] as const) {
+      const [rows] = await conn.query<mysql.RowDataPacket[]>(
+        `SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS m FROM \`${t}\` WHERE \`${col}\` IN (${ph})`, actorIds);
       out[t] = JSON.stringify(rows[0]);
     }
     return out;

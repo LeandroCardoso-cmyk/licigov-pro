@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// NEW-033 (2º passe): este arquivo valida o contrato "SEM banco" (fail-closed/degradação). O contrato não pode
+// depender do ambiente: com `DATABASE_URL` definido, `getDb()` abriria uma conexão real e os casos "sem DB" falhariam.
+// Por isso a conexão é fixada em "indisponível" para TODO o arquivo (os cenários COM banco ficam nos *-mysql-smoke).
+vi.mock("../../db/connection", () => ({ getDb: async () => null }));
 
 // Domain — Workspace
 import {
