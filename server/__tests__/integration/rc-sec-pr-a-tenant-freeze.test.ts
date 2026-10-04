@@ -113,6 +113,16 @@ describe("RC-SEC-PR-A — Congelamento de isolamento e autorização (Bloco A)",
     expect(src).toContain("listDirectContractsForOrganization");
   });
 
+  // NEW-034 (2º passe): as agregações de `direct_contracts` SEM filtro de órgão foram removidas (nenhum caller;
+  // somavam contratos de todos os órgãos). Só as variantes `*ForOrganization` podem existir.
+  it("db/directContracts não exporta agregações globais (sem filtro de órgão)", () => {
+    const src = read("server/db/directContracts.ts");
+    for (const name of ["getDirectContractsOverview", "getDirectContractsChartData", "getTopSuppliers", "getTopLegalArticles", "getRecentDirectContracts"]) {
+      expect(src, `${name} (global) não pode voltar`).not.toMatch(new RegExp(`export async function ${name}\\(`));
+      expect(src, `${name}ForOrganization deve existir`).toMatch(new RegExp(`export async function ${name}ForOrganization\\(`));
+    }
+  });
+
   // ── 6. Sem fallback org=1 no tenantService ─────────────────────────────────
   it("tenantService não associa usuário sem membership à organização 1", () => {
     const src = read("server/services/tenantService.ts");

@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, type SQL } from "drizzle-orm";
 import {
   directContractLegalArticles, directContracts, InsertDirectContract,
   directContractDocuments, InsertDirectContractDocument,
@@ -9,11 +9,14 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
 
+type DirectContractStatus = (typeof directContracts.$inferSelect)["status"];
+type DirectContractAuditAction = (typeof directContractAuditLogs.$inferSelect)["action"];
+
 export async function getLegalArticles(type?: "dispensa" | "inexigibilidade") {
   const db = await getDb();
   if (!db) return [];
   const conditions: ReturnType<typeof eq>[] = [eq(directContractLegalArticles.isActive, true)];
-  if (type) conditions.push(eq(directContractLegalArticles.type, type) as any);
+  if (type) conditions.push(eq(directContractLegalArticles.type, type));
   return await db.select().from(directContractLegalArticles).where(and(...conditions));
 }
 
@@ -75,9 +78,9 @@ export async function listDirectContracts(userId: number, filters?: {
 }) {
   const db = await getDb();
   if (!db) return [];
-  const conditions: any[] = [eq(directContracts.createdBy, userId)];
+  const conditions: SQL[] = [eq(directContracts.createdBy, userId)];
   if (filters?.type) conditions.push(eq(directContracts.type, filters.type));
-  if (filters?.status) conditions.push(eq(directContracts.status, filters.status as any));
+  if (filters?.status) conditions.push(eq(directContracts.status, filters.status as DirectContractStatus));
   if (filters?.year) conditions.push(eq(directContracts.year, filters.year));
   const results = await db
     .select({ directContract: directContracts, legalArticle: directContractLegalArticles, platform: platforms })
@@ -164,7 +167,7 @@ export async function createDirectContractAuditLog(log: InsertDirectContractAudi
   const db = await getDb();
   if (!db) return null;
   const result = await db.insert(directContractAuditLogs).values(log);
-  return (result as any)[0]?.insertId ?? result;
+  return (result as unknown as Array<{ insertId?: number }>)[0]?.insertId ?? result;
 }
 
 export async function getDirectContractAuditLogs(directContractId: number) {
@@ -183,7 +186,7 @@ export async function getDirectContractAuditLogsByAction(directContractId: numbe
   return await db
     .select()
     .from(directContractAuditLogs)
-    .where(and(eq(directContractAuditLogs.directContractId, directContractId), eq(directContractAuditLogs.action, action as any)))
+    .where(and(eq(directContractAuditLogs.directContractId, directContractId), eq(directContractAuditLogs.action, action as DirectContractAuditAction)))
     .orderBy(desc(directContractAuditLogs.createdAt));
 }
 
@@ -214,7 +217,7 @@ export async function saveChecklistProgress(progress: InsertDirectContractCheckl
       ...progress,
       completedAt: progress.isCompleted ? new Date() : undefined,
     });
-    return (result as any)[0]?.insertId ?? result;
+    return (result as unknown as Array<{ insertId?: number }>)[0]?.insertId ?? result;
   }
 }
 
@@ -240,74 +243,10 @@ export async function deleteChecklistProgress(directContractId: number, stepNumb
   return true;
 }
 
-export async function getDirectContractsOverview() {
-  const db = await getDb();
-  if (!db) return null;
-  const totalResult = await db.select({ count: sql<number>`COUNT(*)` }).from(directContracts);
-  const total = totalResult[0]?.count || 0;
-  const byTypeResult = await db.select({ type: directContracts.type, count: sql<number>`COUNT(*)` }).from(directContracts).groupBy(directContracts.type);
-  const byStatusResult = await db.select({ status: directContracts.status, count: sql<number>`COUNT(*)` }).from(directContracts).groupBy(directContracts.status);
-  const valueResult = await db.select({ total: sql<number>`SUM(value)` }).from(directContracts);
-  const totalValue = valueResult[0]?.total || 0;
-  const avgTimeResult = await db.select({ avgDays: sql<number>`AVG(DATEDIFF(updatedAt, createdAt))` }).from(directContracts).where(eq(directContracts.status, "completed"));
-  const avgCompletionTime = avgTimeResult[0]?.avgDays || 0;
-  const approvedResult = await db.select({ count: sql<number>`COUNT(*)` }).from(directContracts).where(eq(directContracts.status, "approved"));
-  const approvedCount = approvedResult[0]?.count || 0;
-  const approvalRate = total > 0 ? (approvedCount / total) * 100 : 0;
-  return { total, byType: byTypeResult, byStatus: byStatusResult, totalValue, avgCompletionTime: Math.round(avgCompletionTime), approvalRate: Math.round(approvalRate * 10) / 10 };
-}
-
-export async function getDirectContractsChartData() {
-  const db = await getDb();
-  if (!db) return null;
-  const monthlyResult = await db
-    .select({ month: sql<string>`DATE_FORMAT(createdAt, '%Y-%m')`, type: directContracts.type, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(value)` })
-    .from(directContracts)
-    .where(sql`createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`)
-    .groupBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`, directContracts.type)
-    .orderBy(sql`DATE_FORMAT(createdAt, '%Y-%m')`);
-  const byPlatformResult = await db
-    .select({ platformId: directContracts.platformId, platformName: platforms.name, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(${directContracts.value})` })
-    .from(directContracts)
-    .leftJoin(platforms, eq(directContracts.platformId, platforms.id))
-    .groupBy(directContracts.platformId, platforms.name);
-  const byStatusResult = await db
-    .select({ status: directContracts.status, count: sql<number>`COUNT(*)` })
-    .from(directContracts)
-    .groupBy(directContracts.status);
-  return { monthly: monthlyResult, byPlatform: byPlatformResult, byStatus: byStatusResult };
-}
-
-export async function getTopSuppliers() {
-  const db = await getDb();
-  if (!db) return [];
-  return await db
-    .select({ supplierName: directContracts.supplierName, supplierCNPJ: directContracts.supplierCNPJ, count: sql<number>`COUNT(*)`, totalValue: sql<number>`SUM(value)` })
-    .from(directContracts)
-    .where(sql`supplierName IS NOT NULL AND supplierName != ''`)
-    .groupBy(directContracts.supplierName, directContracts.supplierCNPJ)
-    .orderBy(sql`COUNT(*) DESC`)
-    .limit(5);
-}
-
-export async function getTopLegalArticles() {
-  const db = await getDb();
-  if (!db) return [];
-  return await db
-    .select({ articleId: directContracts.legalArticleId, articleNumber: directContractLegalArticles.article, articleDescription: directContractLegalArticles.description, count: sql<number>`COUNT(*)` })
-    .from(directContracts)
-    .leftJoin(directContractLegalArticles, eq(directContracts.legalArticleId, directContractLegalArticles.id))
-    .where(sql`${directContracts.legalArticleId} IS NOT NULL`)
-    .groupBy(directContracts.legalArticleId, directContractLegalArticles.article, directContractLegalArticles.description)
-    .orderBy(sql`COUNT(*) DESC`)
-    .limit(5);
-}
-
-export async function getRecentDirectContracts(limit: number = 10) {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(directContracts).orderBy(desc(directContracts.createdAt)).limit(limit);
-}
+// NEW-034 (2º passe): as variantes SEM filtro de órgão (`getDirectContractsOverview`, `getDirectContractsChartData`,
+// `getTopSuppliers`, `getTopLegalArticles`, `getRecentDirectContracts`) foram REMOVIDAS: não tinham nenhum caller e
+// agregavam contratos de TODOS os órgãos. Só as variantes `*ForOrganization` (abaixo) existem; o guard
+// `rc-sec-pr-a-tenant-freeze.test.ts` impede a reintrodução.
 
 // ─── RC-SEC-PR-A — Variantes tenant-scoped (TENANT-006) ─────────────────────
 // `direct_contracts` tem organizationId próprio → filtro direto. As tabelas-
@@ -321,9 +260,9 @@ export async function listDirectContractsForOrganization(
 ) {
   const db = await getDb();
   if (!db) return [];
-  const conditions: any[] = [eq(directContracts.organizationId, organizationId)];
+  const conditions: SQL[] = [eq(directContracts.organizationId, organizationId)];
   if (filters?.type) conditions.push(eq(directContracts.type, filters.type));
-  if (filters?.status) conditions.push(eq(directContracts.status, filters.status as any));
+  if (filters?.status) conditions.push(eq(directContracts.status, filters.status as DirectContractStatus));
   if (filters?.year) conditions.push(eq(directContracts.year, filters.year));
   const results = await db
     .select({ directContract: directContracts, legalArticle: directContractLegalArticles, platform: platforms })
