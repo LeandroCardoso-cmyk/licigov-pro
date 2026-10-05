@@ -18,8 +18,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { useSupervisedIngestion } from "@/hooks/ingestion/useSupervisedIngestion";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
-import { documentImportCapabilities, documentImportStep, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/lib/ingestion/documentImport";
+import {
+  documentImportCapabilities, documentImportStep, DOCUMENT_KIND_LABEL, currentDraftReplaceSummary, incomingDocumentSummary, canConfirmReplace,
+  type DocumentKind,
+} from "@/lib/ingestion/documentImport";
 import { FileDropzone } from "./FileDropzone";
+import DraftReplaceCompare from "./DraftReplaceCompare";
 
 interface DocumentImportPanelProps {
   kind: DocumentKind;
@@ -52,7 +56,7 @@ export function DocumentImportPanel({ kind, processId, defaultOpen = false, onPr
   }, [sessionStatus]);
 
   const staging = intake.data?.staging ?? null;
-  const draft = intake.data?.draft ?? { exists: false, contentHash: null, origin: null, title: null };
+  const draft = intake.data?.draft ?? { exists: false, contentHash: null, origin: null, title: null, contentLength: null, preview: null, previewTruncated: false, updatedAt: null, lastEdit: null };
   const [text, setText] = useState("");
   const syncedRev = useRef<string | null>(null);
   useEffect(() => {
@@ -205,16 +209,20 @@ export function DocumentImportPanel({ kind, processId, defaultOpen = false, onPr
                       <p className="text-sm text-amber-700 dark:text-amber-300">
                         Já existe um rascunho de {label} neste processo{draft.origin === "import" ? " (importado anteriormente)" : ""}. Ele NÃO será alterado sem sua confirmação.
                       </p>
+                      <p className="text-xs text-muted-foreground">
+                        {currentDraftReplaceSummary(draft, label).facts.map((f) => `${f.label}: ${f.value}`).join(" · ")}
+                      </p>
                       <Button variant="secondary" onClick={() => setConfirmReplace(true)}>Substituir rascunho…</Button>
                     </>
                   ) : (
                     <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
                       <p className="text-sm font-medium">Confirmar substituição do rascunho de {label}</p>
-                      <p className="text-xs">O rascunho atual fica preservado no histórico de edições. Documentos já emitidos não são alterados.</p>
+                      <p className="text-xs">O rascunho atual fica preservado no histórico de edições. Documentos já emitidos não são alterados. Confira abaixo o que será substituído.</p>
+                      <DraftReplaceCompare current={currentDraftReplaceSummary(draft, label)} incoming={incomingDocumentSummary(staging, label)} />
                       <Textarea value={replaceReason} onChange={(e) => setReplaceReason(e.target.value)} rows={2} placeholder="Motivo da substituição (obrigatório)" aria-label="Motivo da substituição" />
                       <div className="flex gap-2">
                         <Button
-                          size="sm" disabled={promote.isPending || replaceReason.trim().length < 5 || !draft.contentHash}
+                          size="sm" disabled={!canConfirmReplace({ draft, reason: replaceReason, pending: promote.isPending })}
                           onClick={() => promote.mutate({
                             procurementProcessId: processId, stagingId: staging.id, mode: "replace",
                             expectedDraftContentHash: draft.contentHash ?? undefined, reason: replaceReason.trim(), idempotencyKey: promoteKey,

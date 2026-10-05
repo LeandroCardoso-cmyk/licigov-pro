@@ -8,6 +8,7 @@ import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
 import { approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
 
 /**
  * ProcurementItemPanel — REAL (wired to tRPC).
@@ -88,6 +89,11 @@ export default function ProcurementItemPanel({
 
   const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
 
+  // SEM-061 — estado GOVERNADO do item (decisão vigente do ledger + limiar) que condiciona o "Confirmar".
+  const decisionsQuery = trpc.itemIntelligence.getCATMATDecisions.useQuery({ itemId }, { enabled: !!itemId, refetchOnWindowFocus: false });
+  const thresholdQuery = trpc.itemIntelligence.getCATMATThreshold.useQuery(undefined, { refetchOnWindowFocus: false });
+  const currentDecision = (decisionsQuery.data?.current ?? null) as CurrentCatmatDecisionUI | null;
+
   const decidirCATMAT = trpc.itemIntelligence.decidirCATMAT.useMutation({
     onSuccess: (res) => {
       keyStateRef.current = null; // sucesso rotaciona a tentativa lógica
@@ -101,6 +107,7 @@ export default function ProcurementItemPanel({
           : `Decisão registrada: ${d.decision}${d.catmatCode ? ` (${d.catmatCode})` : ""}.`,
       );
       invalidate();
+      void decisionsQuery.refetch();
     },
     onError: (err) => {
       // Outcome transitório (rede/INTERNAL/TIMEOUT) ou CONFLICT de "processing" (duplicata em voo) ⇒ o
@@ -293,7 +300,10 @@ export default function ProcurementItemPanel({
               />
             </div>
 
-            {/* Candidatos CATMAT com score/rank/decisão */}
+            <p data-testid="catmat-current-decision" className="mt-2 text-xs font-medium text-foreground">
+              {currentDecisionText(currentDecision, !decisionsQuery.isLoading)}
+            </p>
+            {/* Candidatos CATMAT com score/rank (a decisão vigente vem do ledger, acima) */}
             {data.catmat.length > 0 && (
               <ul className="mt-3 space-y-2">
                 {data.catmat.map((c) => (
@@ -310,7 +320,15 @@ export default function ProcurementItemPanel({
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
-                    <p className="mt-0.5 text-muted-foreground">decisão: {c.decision}</p>
+                    <p className="mt-0.5 text-muted-foreground">sugestão do sistema (ainda não é decisão)</p>
+                    {(() => {
+                      const gate = confirmGate({
+                        candidateCode: c.catmatCode, current: currentDecision, currentLoaded: !decisionsQuery.isLoading,
+                        thresholdConfigured: thresholdQuery.data?.configured, pending: decidirCATMAT.isPending,
+                      });
+                      return (<>
+                    {gate.note && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{gate.note}</p>}
+                    {gate.reason && <p role="status" className="mt-1 text-[11px] text-muted-foreground">{gate.reason}</p>}
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
@@ -322,10 +340,11 @@ export default function ProcurementItemPanel({
                             catmatDescription: c.catmatDescription,
                           })
                         }
-                        disabled={decidirCATMAT.isPending}
+                        disabled={!gate.enabled}
+                        title={gate.reason ?? undefined}
                         className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
-                        Confirmar
+                        {gate.label}
                       </button>
                       <button
                         type="button"
@@ -337,6 +356,8 @@ export default function ProcurementItemPanel({
                         Rejeitar
                       </button>
                     </div>
+                      </>);
+                    })()}
                   </li>
                 ))}
               </ul>

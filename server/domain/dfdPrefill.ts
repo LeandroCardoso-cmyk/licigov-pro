@@ -762,6 +762,23 @@ export function applyAIJustification(
   return { content: lines.join("\n"), sources: writeMarkers(sources, mk) };
 }
 
+/**
+ * SEM-058 — registra a justificativa ACEITA por um humano (sugestão de IA aceita como está ou editada antes do aceite).
+ * Texto sem edição ⇒ mantém o marcador `ai:` (linhagem: execução + digest do contexto); texto editado ⇒ remove o
+ * marcador (passa a ser texto humano) e não deixa marcador de pré-preenchimento para a seção.
+ */
+export function applyReviewedJustification(
+  content: string, sources: readonly string[], text: string,
+  ai: { executionId: string; contextDigest: string } | null,
+): { content: string; sources: string[] } {
+  if (ai) return applyAIJustification(content, sources, text, ai.executionId, ai.contextDigest);
+  const lines = replaceSectionBody(content.split("\n"), 2, text.trim().split("\n"));
+  const mk = readMarkers(sources);
+  delete mk.ai.justificativa;
+  delete mk.prefill.justificativa;
+  return { content: lines.join("\n"), sources: writeMarkers(sources, mk) };
+}
+
 // ─── Afirmações humanas extraídas do DFD salvo ─────────────────────────────────────────
 
 export interface DFDAssertionDraft {

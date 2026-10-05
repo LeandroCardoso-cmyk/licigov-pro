@@ -23,7 +23,10 @@ vi.mock("../../services/canonicalContextService", () => ({
   resolveProcurementContext: vi.fn(),
   recordContextAssertions: vi.fn(async () => 1),
 }));
-vi.mock("../../db/cognitiveProvenance", () => ({ linkProvenanceArtifact: vi.fn(async () => ({ linked: 1 })) }));
+vi.mock("../../db/cognitiveProvenance", () => ({
+  linkProvenanceArtifact: vi.fn(async () => ({ linked: 1 })),
+  listProvenanceByCorrelation: vi.fn(async () => [{ id: "p1" }]),
+}));
 vi.mock("../../services/aiExecutionEngine", () => ({ executeCognitiveTask: vi.fn() }));
 
 import * as procDb from "../../db/procurement";
@@ -32,13 +35,14 @@ import * as idem from "../../services/idempotencyService";
 import * as prov from "../../db/cognitiveProvenance";
 import * as engine from "../../services/aiExecutionEngine";
 import {
-  generateDFDDraft, saveDFDDraft, reconcileDFDFieldDraft, generateDFDJustificationDraft, getDFDAssistState,
+  generateDFDDraft, saveDFDDraft, reconcileDFDFieldDraft, generateDFDJustificationDraft, acceptDFDJustificationSuggestion, getDFDAssistState,
 } from "../../services/procurementProcessService";
 import {
   resolveCanonicalContext, canonicalItemKey, itemPath, factValueHash, type FactAssertion, type ContextPath, type FactValue, type ContextSourceType,
 } from "../../domain/canonicalProcurementContext";
 import { readMarkers, parseDFD } from "../../domain/dfdPrefill";
 import { buildDFDDraft, draftContentHash } from "../../domain/generatedDocument";
+import { suggestionTextHash, suggestionEventSummary, parseSuggestionEventHash } from "../../domain/dfdJustificationSuggestion";
 
 const ORG = 7;
 const PID = "proc-1";
@@ -77,6 +81,9 @@ beforeEach(() => {
   vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
   vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "new" } as any);
   vi.mocked(prov.linkProvenanceArtifact).mockResolvedValue({ linked: 1 });
+  vi.mocked(prov.listProvenanceByCorrelation).mockResolvedValue([{ id: "p1" }] as any);
+  vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue(null as any);
+  vi.mocked(procDb.listProcessEventsByRef).mockResolvedValue([]);
   vi.mocked(engine.executeCognitiveTask).mockResolvedValue({
     response: { content: "A Secretaria de Educação necessita do mobiliário para o funcionamento das salas de aula.", provider: "mock", model: "mock-1" },
     context: { id: "exec-abc" }, replayed: false,
@@ -232,37 +239,58 @@ describe("Responsável pela demanda — operador do Processo não é fonte (pilo
   });
 });
 
-describe("Rascunho SUPERVISIONADO de IA da justificativa", () => {
-  it("via AIExecutionEngine, contexto governado, rascunho marcado + proveniência + explicabilidade", async () => {
-    const row = await createdDFD();
+/** Fixture "já existente": a criação do DFD não conta — os testes afirmam o que ESTA operação escreve (ou não). */
+async function settledDFD() {
+  const row = await createdDFD();
+  vi.mocked(procDb.applyDraftContentMutationTx).mockClear();
+  vi.mocked(procDb.recordProcessEvent).mockClear();
+  vi.mocked(idem.checkIdempotency).mockClear();
+  return row;
+}
+
+describe("SEM-058 — SUGESTÃO supervisionada de IA da justificativa (nada é gravado sem aceite humano)", () => {
+  it("via AIExecutionEngine, contexto governado; devolve sugestão + texto atual + origem + explicabilidade e NÃO grava o DFD", async () => {
+    const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
-    const { document, explanation } = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-1" });
+    const r = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-1" });
     const call = vi.mocked(engine.executeCognitiveTask).mock.calls[0][0];
     expect(call).toMatchObject({ task: "GENERATE_DOCUMENT", tenantId: ORG, businessDomain: "processo_licitatorio", stage: "DFD", responseType: "text", actorUserId: 5 });
     expect(call.idempotencyKey).toBe("dfdj:ai-1");
     expect(call.query).not.toMatch(/R\$|450|Servidora/); // sem preços nem nome de pessoa
-    expect(document.content).toContain("necessita do mobiliário para o funcionamento das salas de aula");
-    expect(document.status).toBe("rascunho");
-    expect(readMarkers(document.sources).ai.justificativa).toMatchObject({ executionId: "exec-abc" });
-    expect(explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/1", actorUserId: 5, correlationId: "corr-1" });
-    expect(explanation.contextDigest).toBe(ctxWith().digest.slice(0, 16));
-    expect(vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)![1].operation).toBe("dfd_ai_draft");
-    expect(prov.linkProvenanceArtifact).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ organizationId: ORG, correlationId: "corr-1", artifactKind: "dfd" }));
+    expect(r.suggestion.text).toContain("necessita do mobiliário para o funcionamento das salas de aula");
+    expect(r.suggestion.textHash).toBe(suggestionTextHash(r.suggestion.text));
+    expect(r.current).toMatchObject({ origin: "empty", text: null, contentHash: draftContentHash(row.content) });
+    expect(r.explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/1", actorUserId: 5, correlationId: "corr-1" });
+    expect(r.explanation.contextDigest).toBe(ctxWith().digest.slice(0, 16));
+    // ZERO escrita no documento: nem mutação, nem ledger de edição, nem vínculo de proveniência a artefato.
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+    expect(prov.linkProvenanceArtifact).not.toHaveBeenCalled();
+    // Só a timeline "sugestão gerada, não aceita" (ator humano, âncora do aceite posterior).
+    const ev = vi.mocked(procDb.recordProcessEvent).mock.calls.map((c) => c[0]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ eventType: "recommendation", actor: "5", refId: "exec-abc", correlationId: "corr-1" });
+    expect(parseSuggestionEventHash(ev[0].summary)).toBe(r.suggestion.textHash);
+    expect(ev[0].summary).toContain("NÃO aceita");
+    expect(ev[0].summary).not.toContain("necessita do mobiliário"); // sem conteúdo na timeline
   });
 
-  it("justificativa escrita por humano: recusa SEM chamar a IA; com confirmação explícita substitui", async () => {
-    const row = await createdDFD();
+  it("texto escrito por humano / importado: a geração NÃO exige confirmação, NÃO altera o texto e mostra a origem", async () => {
+    const row = await settledDFD();
     const human = { ...row, content: row.content.replace(/Descrever a necessidade pública[\s\S]*?\[preencher\]/, "Texto escrito pelo servidor."), sources: ["edicao_manual", ...row.sources.slice(1)] };
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(human as any);
-    await expect(generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(human.content), idempotencyKey: "ai-2" }))
-      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("USER_MODIFIED_FIELD") });
-    expect(engine.executeCognitiveTask).not.toHaveBeenCalled();
-    const ok = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(human.content), confirmReplace: true, idempotencyKey: "ai-3" });
-    expect(ok.document.content).not.toContain("Texto escrito pelo servidor.");
+    const r = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(human.content), idempotencyKey: "ai-2" });
+    expect(r.current).toMatchObject({ origin: "human_edited", text: "Texto escrito pelo servidor." });
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+    // importado: último registro do ledger = import_promote com o hash do conteúdo vigente
+    vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue({ operation: "import_promote", actorUserId: 4, newContentHash: draftContentHash(human.content), createdAt: "" } as any);
+    const imp = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(human.content), idempotencyKey: "ai-2b" });
+    expect(imp.current.origin).toBe("imported");
+    expect(imp.current.originLabel).toContain("importado");
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 
   it("rascunho mudou (hash) → CONFLICT sem chamar a IA; DFD aprovado → recusa", async () => {
-    const row = await createdDFD();
+    const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
     await expect(generateDFDJustificationDraft({ ...base, expectedContentHash: "stale", idempotencyKey: "ai-4" })).rejects.toMatchObject({ code: "CONFLICT" });
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue({ ...row, status: "aprovado" } as any);
@@ -270,31 +298,121 @@ describe("Rascunho SUPERVISIONADO de IA da justificativa", () => {
     expect(engine.executeCognitiveTask).not.toHaveBeenCalled();
   });
 
-  it("cognição real sem proveniência vinculada → fail-closed (nada persistido)", async () => {
-    const row = await createdDFD();
+  it("cognição real sem proveniência registrada → fail-closed (nenhuma sugestão/evento persistido)", async () => {
+    const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
-    vi.mocked(prov.linkProvenanceArtifact).mockResolvedValue({ linked: 0 });
+    vi.mocked(prov.listProvenanceByCorrelation).mockResolvedValue([]);
     await expect(generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-6" }))
       .rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(procDb.recordProcessEvent).not.toHaveBeenCalled();
     expect(idem.saveIdempotencyResult).not.toHaveBeenCalledWith("ai-6", expect.anything(), expect.anything(), expect.anything(), expect.anything());
   });
 
-  it("replay (mesma chave concluída) devolve o resultado cacheado SEM nova chamada de IA", async () => {
-    const row = await createdDFD();
+  it("replay (mesma chave concluída) devolve a sugestão cacheada SEM nova chamada de IA", async () => {
+    const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
-    vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "completed", payloadMismatch: false, response: { document: row, explanation: { executionId: "exec-old" } } } as any);
+    vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "completed", payloadMismatch: false, response: { suggestion: { text: "T", textHash: "h" }, current: { origin: "empty" }, explanation: { executionId: "exec-old" } } } as any);
     const r = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-7" });
     expect(r.replayed).toBe(true);
     expect(r.explanation.executionId).toBe("exec-old");
     expect(engine.executeCognitiveTask).not.toHaveBeenCalled();
+    expect(procDb.recordProcessEvent).not.toHaveBeenCalled();
   });
 
   it("número não confirmado pelo processo vira [REVISAR: …] (IA não inventa quantidade/prazo/valor)", async () => {
-    const row = await createdDFD();
+    const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
     vi.mocked(engine.executeCognitiveTask).mockResolvedValue({ response: { content: "Serão adquiridas 75 cadeiras em 90 dias.", provider: "mock", model: "m" }, context: { id: "e2" } } as any);
-    const { document, explanation } = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-8" });
-    expect(document.content).toContain("Serão adquiridas [REVISAR: 75] cadeiras em [REVISAR: 90] dias.");
+    const { suggestion, explanation } = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-8" });
+    expect(suggestion.text).toContain("Serão adquiridas [REVISAR: 75] cadeiras em [REVISAR: 90] dias.");
     expect(explanation.unverifiedNumbers).toEqual(["75", "90"]);
+  });
+});
+
+describe("SEM-058 — ACEITE humano da sugestão (único caminho que grava o texto da IA)", () => {
+  const SUG = "A Secretaria de Educação necessita do mobiliário para o funcionamento das salas de aula.";
+  const anchorEvent = (over: Partial<{ actor: string; correlationId: string; summary: string }> = {}) => [{
+    id: "evt1", actor: "9", correlationId: "corr-gen", summary: suggestionEventSummary("exec-abc", suggestionTextHash(SUG)), ...over,
+  }];
+  const acceptArgs = (row: { content: string }, extra: Record<string, unknown> = {}) => ({
+    ...base, expectedContentHash: draftContentHash(row.content), text: SUG, suggestionExecutionId: "exec-abc", idempotencyKey: "acc-1", ...extra,
+  });
+  async function importedRow() {
+    const row = await settledDFD();
+    const content = row.content.replace(/Descrever a necessidade pública[\s\S]*?\[preencher\]/, "Texto importado do ofício da Secretaria.");
+    const imported = { ...row, content, sources: ["origem:import", ...row.sources.slice(1)] };
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(imported as any);
+    vi.mocked(procDb.getLatestDraftEdit).mockResolvedValue({ operation: "import_promote", actorUserId: 4, newContentHash: draftContentHash(content), createdAt: "" } as any);
+    vi.mocked(procDb.listProcessEventsByRef).mockResolvedValue(anchorEvent() as any);
+    return imported;
+  }
+
+  it("aceita como está: texto vigente SUBSTITUÍDO só aqui; ledger dfd_ai_accept com linhagem (origem anterior = importado, ator da sugestão); ator = o humano", async () => {
+    const row = await importedRow();
+    const r = await acceptDFDJustificationSuggestion(acceptArgs(row) as any);
+    expect(r).toMatchObject({ edited: false, previousOrigin: "imported", replayed: false });
+    expect(r.document.content).toContain(SUG);
+    expect(r.document.content).not.toContain("Texto importado do ofício");
+    expect(readMarkers(r.document.sources).ai.justificativa).toMatchObject({ executionId: "exec-abc" }); // linhagem da IA preservada
+    const write = vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)![1] as any;
+    expect(write.operation).toBe("dfd_ai_accept");
+    expect(write.actorUserId).toBe(5);
+    expect(write.expectedState).toEqual({ type: "present", contentHash: draftContentHash(row.content) });
+    expect(JSON.parse(write.reason)).toMatchObject({ kind: "ai_suggestion_accepted", source: "ai_suggestion", executionId: "exec-abc", edited: false, previousOrigin: "imported", suggestionActor: "9" });
+    // proveniência cognitiva (da correlação da GERAÇÃO) vinculada ao DFD na mesma transação
+    expect(prov.linkProvenanceArtifact).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ organizationId: ORG, correlationId: "corr-gen", artifactKind: "dfd" }));
+    // timeline: ator humano (nunca copiloto)
+    const ev = vi.mocked(procDb.recordProcessEvent).mock.calls.map((c) => c[0]);
+    expect(ev.at(-1)).toMatchObject({ eventType: "change", actor: "5" });
+    expect(ev.at(-1)!.summary).toContain("importado");
+    expect(engine.executeCognitiveTask).not.toHaveBeenCalled(); // aceite não chama IA
+  });
+
+  it("aceite com texto EDITADO: vira texto humano (sem marcador de IA) e registra edited=true", async () => {
+    const row = await importedRow();
+    const r = await acceptDFDJustificationSuggestion(acceptArgs(row, { text: `${SUG} Ajustado pelo servidor.` }) as any);
+    expect(r.edited).toBe(true);
+    expect(readMarkers(r.document.sources).ai.justificativa).toBeUndefined();
+    expect(JSON.parse((vi.mocked(procDb.applyDraftContentMutationTx).mock.calls.at(-1)![1] as any).reason).edited).toBe(true);
+  });
+
+  it("sugestão inexistente NESTE órgão/processo (inclusive de outro tenant) ⇒ NOT_FOUND, zero escrita; busca escopada por (processo, órgão)", async () => {
+    const row = await importedRow();
+    vi.mocked(procDb.listProcessEventsByRef).mockResolvedValue([]);
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row) as any)).rejects.toMatchObject({ code: "NOT_FOUND", message: expect.stringContaining("SUGGESTION_NOT_FOUND") });
+    expect(procDb.listProcessEventsByRef).toHaveBeenCalledWith(PID, ORG, "recommendation", "exec-abc");
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+    expect(prov.linkProvenanceArtifact).not.toHaveBeenCalled();
+    // evento sem a assinatura de sugestão (ex.: outra recomendação com o mesmo ref) também não vale
+    vi.mocked(procDb.listProcessEventsByRef).mockResolvedValue(anchorEvent({ summary: "outra recomendação" }) as any);
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row) as any)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("conteúdo mudou desde a comparação ⇒ CONFLICT; DFD aprovado ⇒ recusa; texto vazio ⇒ BAD_REQUEST — tudo sem escrita", async () => {
+    const row = await importedRow();
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row, { expectedContentHash: "stale" }) as any)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row, { text: "   " }) as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue({ ...row, status: "aprovado" } as any);
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row) as any)).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("DFD_APPROVED") });
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+  });
+
+  it("execução real sem proveniência registrada ⇒ fail-closed (SUGGESTION_PROVENANCE_MISSING), sem escrita", async () => {
+    const row = await importedRow();
+    vi.mocked(prov.listProvenanceByCorrelation).mockResolvedValue([]);
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row) as any)).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("SUGGESTION_PROVENANCE_MISSING") });
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+  });
+
+  it("replay idempotente (chave concluída): devolve o snapshot sem nova escrita nem novo vínculo", async () => {
+    const row = await importedRow();
+    vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "completed", payloadMismatch: false, response: { ...row, content: "snapshot" } } as any);
+    const r = await acceptDFDJustificationSuggestion(acceptArgs(row) as any);
+    expect(r.replayed).toBe(true);
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
+    expect(prov.linkProvenanceArtifact).not.toHaveBeenCalled();
+    // chave reutilizada com conteúdo diferente ⇒ CONFLICT
+    vi.mocked(idem.checkIdempotency).mockResolvedValue({ status: "completed", payloadMismatch: true } as any);
+    await expect(acceptDFDJustificationSuggestion(acceptArgs(row) as any)).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });

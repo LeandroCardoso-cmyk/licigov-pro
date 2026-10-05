@@ -32,6 +32,7 @@ vi.mock("../../lib/trpc", () => {
         importDFD: { useMutation: mutation },
         reconcileDFDField: { useMutation: mutation },
         generateDFDJustification: { useMutation: mutation },
+        acceptDFDJustification: { useMutation: mutation },
       },
     },
   };
@@ -188,9 +189,9 @@ describe("DFDWorkspace — regressão de UI (mesma página, mesmo fluxo)", () =>
     expect(html).toContain("DFD — Documento de Formalização da Demanda");
     expect(html).toContain("Art. 12, § 1º da Lei 14.133/2021");
     expect(html).toContain("Criar DFD do zero");
-    expect(html).toContain("Importar DFD existente");
+    expect(html).toContain("Registrar origem de um DFD existente (sem importar o conteúdo)");
     expect(html).not.toContain("Origem das informações");
-    expect(html).not.toContain("Gerar rascunho da justificativa");
+    expect(html).not.toContain("Sugerir justificativa");
   });
 
   it("com DFD e contexto: mesmo editor e 'Salvar rascunho' + origem discreta + IA supervisionada", () => {
@@ -202,7 +203,7 @@ describe("DFDWorkspace — regressão de UI (mesma página, mesmo fluxo)", () =>
     expect(html).toContain("Salvar rascunho");
     expect(html).toContain("Revisão obrigatória");
     expect(html).toContain("Origem das informações");
-    expect(html).toContain("Gerar rascunho da justificativa (IA)");
+    expect(html).toContain("Sugerir justificativa (IA)");
     expect(html).toContain("Rascunho");
   });
 
@@ -222,6 +223,6 @@ describe("DFDWorkspace — regressão de UI (mesma página, mesmo fluxo)", () =>
     const html = renderToStaticMarkup(createElement(DFDWorkspace, { processId: "p1" }));
     expect(html).toContain("Salvar rascunho");
     expect(html).not.toContain("Origem das informações");
-    expect(html).not.toContain("Gerar rascunho da justificativa");
+    expect(html).not.toContain("Sugerir justificativa");
   });
 });

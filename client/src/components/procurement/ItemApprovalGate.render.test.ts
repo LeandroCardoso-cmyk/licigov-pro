@@ -43,6 +43,8 @@ vi.mock("@/lib/trpc", () => ({
     itemIntelligence: {
       getItem: { useQuery: () => st.panel },
       decidirCATMAT: { useMutation: mutation },
+      getCATMATDecisions: { useQuery: () => ({ data: { current: null, history: [] }, isLoading: false, refetch: () => Promise.resolve() }) },
+      getCATMATThreshold: { useQuery: () => ({ data: { configured: true, minScore: 0.5, version: 1 } }) },
     },
   },
 }));

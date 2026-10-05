@@ -18,7 +18,7 @@ import {
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
   generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState,
-  getDFDAssistState, reconcileDFDFieldDraft, generateDFDJustificationDraft,
+  getDFDAssistState, reconcileDFDFieldDraft, generateDFDJustificationDraft, acceptDFDJustificationSuggestion,
 } from "../services/procurementProcessService";
 import { resolveProcurementContext, recordContextAssertions } from "../services/canonicalContextService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
@@ -394,25 +394,48 @@ export const procurementProcessRouter = router({
     }),
 
   /**
-   * Rascunho SUPERVISIONADO de IA da justificativa do DFD (AIExecutionEngine; contexto governado). Nunca
-   * aprova, nunca decide; substituir justificativa escrita pelo servidor exige `confirmReplace`.
+   * SEM-058 — SUGESTÃO supervisionada de IA para a justificativa do DFD (AIExecutionEngine; contexto governado).
+   * NÃO altera o DFD: devolve a sugestão com o texto atual e sua origem. Só `acceptDFDJustification` grava.
    */
   generateDFDJustification: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       expectedContentHash: z.string().trim().min(1),
-      confirmReplace: z.boolean().optional(),
       idempotencyKey: z.string().trim().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const { document, explanation } = await generateDFDJustificationDraft({
+      const { suggestion, explanation, current } = await generateDFDJustificationDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash, confirmReplace: input.confirmReplace,
+        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
       });
-      return { document, explanation };
+      return { suggestion, explanation, current };
+    }),
+
+  /**
+   * SEM-058 — ACEITE HUMANO da sugestão de IA (único caminho que grava o texto da IA na justificativa do DFD).
+   * `confirmAccept` literal true; o texto pode ser editado antes do aceite; o texto anterior fica no histórico.
+   */
+  acceptDFDJustification: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      expectedContentHash: z.string().trim().min(1),
+      suggestionExecutionId: z.string().trim().min(1).max(80),
+      text: z.string().max(20000),
+      confirmAccept: z.literal(true),
+      idempotencyKey: z.string().trim().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const { document, edited, previousOrigin } = await acceptDFDJustificationSuggestion({
+        organizationId: orgId, processId: input.processId, object: process.object, actorUserId: ctx.user!.id,
+        expectedContentHash: input.expectedContentHash, text: input.text, suggestionExecutionId: input.suggestionExecutionId,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+      });
+      return { document, edited, previousOrigin };
     }),
 
   generateETP: orgRoleProcedure("operator")

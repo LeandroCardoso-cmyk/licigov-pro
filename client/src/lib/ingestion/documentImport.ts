@@ -39,3 +39,72 @@ export function draftOriginLabel(origin: string | null | undefined): string | nu
   if (origin === "generated") return "gerado com IA supervisionada";
   return null;
 }
+
+// ─── SEM-061 — "Substituir rascunho" mostra o que será substituído ──────────────────────────────
+
+/** Rascunho vigente como o servidor o descreve (tamanho, data, origem, última edição e prévia). */
+export interface CurrentDraftSummary {
+  exists: boolean;
+  contentHash: string | null;
+  origin: "import" | "generated" | "manual" | null;
+  title: string | null;
+  contentLength: number | null;
+  preview: string | null;
+  previewTruncated: boolean;
+  updatedAt: string | null;
+  lastEdit: { operation: string; actorUserId: number; at: string } | null;
+}
+
+const LAST_EDIT_LABELS: Record<string, string> = {
+  import_promote: "importação de documento", import_replace: "substituição por documento importado",
+  dfd_manual_edit: "edição manual", human_edit: "edição manual", ai_regenerate: "regeneração por IA",
+  dfd_regenerate: "criação automática do DFD", dfd_context_reconcile: "atualização de campo a partir da origem",
+  dfd_ai_draft: "rascunho de IA", dfd_ai_accept: "sugestão de IA aceita por servidor",
+};
+
+export function formatCharCount(n: number | null | undefined): string {
+  return typeof n === "number" ? `${n.toLocaleString("pt-BR")} caracteres` : "tamanho desconhecido";
+}
+
+export function formatDateTimeBR(iso: string | null | undefined): string {
+  if (!iso) return "data desconhecida";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "data desconhecida" : d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+}
+
+export interface ReplaceSideSummary { title: string; facts: Array<{ label: string; value: string }>; preview: string | null; truncated: boolean }
+
+/** O que "Substituir rascunho" vai trocar: conteúdo atual (origem, última alteração, tamanho, prévia). Nunca vazio. */
+export function currentDraftReplaceSummary(draft: CurrentDraftSummary, label: string): ReplaceSideSummary {
+  const lastEdit = draft.lastEdit ? (LAST_EDIT_LABELS[draft.lastEdit.operation] ?? draft.lastEdit.operation) : null;
+  return {
+    title: `Rascunho atual do ${label} (será substituído)`,
+    facts: [
+      { label: "Origem", value: draftOriginLabel(draft.origin) ?? "origem não registrada" },
+      { label: "Última alteração", value: `${formatDateTimeBR(draft.lastEdit?.at ?? draft.updatedAt)}${lastEdit ? ` — ${lastEdit}` : ""}` },
+      { label: "Tamanho", value: formatCharCount(draft.contentLength) },
+    ],
+    preview: draft.preview,
+    truncated: draft.previewTruncated,
+  };
+}
+
+/** O documento importado (já aprovado) que entra no lugar. */
+export function incomingDocumentSummary(staging: { originalFileName: string; content: string; approvedAt: string | null }, label: string): ReplaceSideSummary {
+  const PREVIEW = 1200;
+  return {
+    title: `${label} importado (novo rascunho)`,
+    facts: [
+      { label: "Arquivo", value: staging.originalFileName },
+      { label: "Aprovado em", value: formatDateTimeBR(staging.approvedAt) },
+      { label: "Tamanho", value: formatCharCount(staging.content.length) },
+    ],
+    preview: staging.content.slice(0, PREVIEW),
+    truncated: staging.content.length > PREVIEW,
+  };
+}
+
+/** A substituição só pode ser confirmada com o conteúdo atual À VISTA (hash do instante em que foi exibido). */
+export function canConfirmReplace(p: { draft: Pick<CurrentDraftSummary, "contentHash" | "preview">; reason: string; pending: boolean }): boolean {
+  return !p.pending && !!p.draft.contentHash && p.draft.preview !== null && p.reason.trim().length >= 5;
+}
