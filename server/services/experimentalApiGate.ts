@@ -14,9 +14,11 @@
  * (mesmo contrato/observabilidade das demais superfícies R2 desativadas). Os routers continuam montados e com os
  * mesmos schemas — nada é apagado.
  */
+import { TRPCError } from "@trpc/server";
 import { middleware, protectedProcedure, publicProcedure, tenantProcedure } from "../_core/trpc";
 import { EXPERIMENTAL_API_CONFIG } from "../config/experimentalApis";
 import { throwLegacyEndpointDisabled } from "./legacyEndpointGuard";
+import { serviceLogger } from "./observabilityService";
 
 export const LEG028_SURFACE_ID = "LEG-028";
 
@@ -54,3 +56,35 @@ export const experimentalProtectedProcedure = publicProcedure.use(experimentalAp
 
 /** `tenantProcedure` precedido pelo gate LEG-028. */
 export const experimentalTenantProcedure = publicProcedure.use(experimentalApiGate).concat(tenantProcedure);
+
+/** Token estável da recusa de `organizationId` divergente do contexto (SEM-073). */
+export const ORGANIZATION_INPUT_MISMATCH = "ORGANIZATION_INPUT_MISMATCH";
+
+const gateLog = serviceLogger("experimentalApiGate");
+
+/**
+ * SEM-073 — a organização de uma procedure experimental vem SEMPRE do contexto autenticado (`tenantProcedure`).
+ * O schema de entrada continua aceitando `organizationId` (opcional) apenas por compatibilidade com o cliente
+ * congelado, mas ele NUNCA é fonte de autoridade: se vier e divergir da organização do contexto, a chamada é recusada
+ * (`FORBIDDEN` + `ORGANIZATION_INPUT_MISMATCH`) ANTES de qualquer leitura/escrita do estado em memória — sem revelar
+ * dado nem existência de outra organização. Coincidente ou ausente ⇒ usa a do contexto.
+ */
+export function organizationFromContext(
+  ctx: { organizationId: number; user?: { id: number } | null; correlationId?: string | null },
+  claimedOrganizationId: number | null | undefined,
+  procedure: string,
+): number {
+  if (claimedOrganizationId !== undefined && claimedOrganizationId !== null && claimedOrganizationId !== ctx.organizationId) {
+    gateLog.warn("organization_input_mismatch", {
+      procedure,
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.user?.id ?? null,
+      correlationId: ctx.correlationId ?? null,
+    });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `A organização informada não corresponde à organização da sessão (${ORGANIZATION_INPUT_MISMATCH}).`,
+    });
+  }
+  return ctx.organizationId;
+}

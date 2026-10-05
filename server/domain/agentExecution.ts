@@ -13,14 +13,21 @@ export type AgentExecutionStatus =
   | "running"
   | "paused"
   | "awaiting_approval"
+  | "simulated"
   | "completed"
   | "failed"
   | "rolled_back"
   | "cancelled";
 
+/**
+ * SEM-077 — `completed` significa EFEITO REAL concluído. Saída apenas simulada (sem efeito) é `simulated`, e etapa que
+ * aguarda aprovação humana é `awaiting_approval`: nenhuma das duas pode ser lida como concluída/aprovada.
+ */
 export type ExecutionStageStatus =
   | "pending"
   | "running"
+  | "awaiting_approval"
+  | "simulated"
   | "completed"
   | "failed"
   | "skipped";
@@ -187,19 +194,22 @@ export function advanceExecutionStage(
     errorMessage: status === "failed" ? "Stage failed" : null,
   };
 
-  const allCompleted = [...execution.stages, stage].every(
-    (s) => s.status === "completed" || s.status === "skipped"
-  );
-  const anyFailed = [...execution.stages, stage].some((s) => s.status === "failed");
+  const all = [...execution.stages, stage];
+  const anyFailed = all.some((s) => s.status === "failed");
+  const anyAwaitingApproval = all.some((s) => s.status === "awaiting_approval");
+  const allDone = all.every((s) => s.status === "completed" || s.status === "skipped");
+  const allDoneOrSimulated = all.every((s) => s.status === "completed" || s.status === "skipped" || s.status === "simulated");
 
-  const newStatus: AgentExecutionStatus =
-    status === "failed"
-      ? "failed"
-      : anyFailed
-      ? "failed"
-      : allCompleted
-      ? "completed"
-      : "running";
+  // Precedência: falha > aguardando aprovação humana > concluída (efeito real) > simulada > em andamento.
+  const newStatus: AgentExecutionStatus = anyFailed
+    ? "failed"
+    : anyAwaitingApproval
+    ? "awaiting_approval"
+    : allDone
+    ? "completed"
+    : allDoneOrSimulated
+    ? "simulated"
+    : "running";
 
   return {
     ...execution,
@@ -313,7 +323,7 @@ export function createExecutionReplay(
 
 export function isExecutionReplayable(execution: AgentExecution): boolean {
   return (
-    (execution.status === "completed" || execution.status === "failed") &&
+    (execution.status === "completed" || execution.status === "failed" || execution.status === "simulated") &&
     !!execution.replayKey
   );
 }

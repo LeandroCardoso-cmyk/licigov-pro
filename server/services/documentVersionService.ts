@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { documents, documentVersions } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
+import { assertDocumentContentMutable } from "../domain/documentImmutability";
 import type { TrpcAuditCtx } from "./activityLogService";
 import type {
   StructuredDocumentContent,
@@ -231,6 +232,7 @@ export async function restoreToVersion(
       throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
     }
     const doc = docRows[0];
+    assertDocumentContentMutable(doc, "restoreToVersion");
 
     const targetRows = await tx
       .select()

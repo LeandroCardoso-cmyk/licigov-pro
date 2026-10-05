@@ -4,16 +4,10 @@
  * Target: ~150 tests, 0 regressions
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { createHash } from "crypto";
+import { describe, it, expect } from "vitest";
 
 // ─── Domain imports ───────────────────────────────────────────────────────────
 import {
-  type SafetyLevel,
-  type ActionClassification,
-  type SafetyCheck,
-  type HallucinationRisk,
-  type RollbackPlan,
   classifyAction,
   performSafetyCheck,
   assessHallucinationRisk,
@@ -24,9 +18,6 @@ import {
 } from "../../domain/actionSafety";
 
 import {
-  type ApprovalStatus,
-  type ApprovalWorkflow,
-  type ApprovalDecision,
   createApprovalWorkflow,
   recordApprovalDecision,
   isWorkflowResolved,
@@ -34,16 +25,11 @@ import {
   escalateWorkflow,
   delegateWorkflow,
   overrideWorkflow,
-  isWorkflowExpired,
   getApprovalSummary,
 } from "../../domain/humanApproval";
 
 import {
   type AssistantRole,
-  type CapabilityType,
-  type AssistantProfile,
-  type AssistantCapability,
-  createAssistantProfile,
   getDefaultProfile,
   canAssistantPerform,
   getCapabilityConfidence,
@@ -52,11 +38,6 @@ import {
 } from "../../domain/assistantSpecialization";
 
 import {
-  type AgentExecutionStatus,
-  type ExecutionStage,
-  type AgentExecution,
-  type ExecutionCheckpoint,
-  type ExecutionDecision,
   createAgentExecution,
   advanceExecutionStage,
   addExecutionCheckpoint,
@@ -68,9 +49,7 @@ import {
 } from "../../domain/agentExecution";
 
 import {
-  type TaskPriority,
   type ExecutionTask,
-  type ExecutionPlan,
   createExecutionPlan,
   addTaskToPlan,
   addDependency,
@@ -82,40 +61,29 @@ import {
 } from "../../domain/agentPlanning";
 
 import {
-  type AutonomousStageType,
-  type AutonomousStageStatus,
-  type AutonomousStage,
   createAutonomousStage,
   addAutonomousStageToWorkflow,
 } from "../../domain/aiWorkflow";
 
 // ─── Service imports ──────────────────────────────────────────────────────────
 import {
-  type AgentExecutionEngineInput,
-  type AgentExecutionEngineOutput,
   runAgentExecution,
   getExecutionHistory,
   replayExecution,
 } from "../../services/agentExecutionEngine";
 
 import {
-  type AgentPlanningInput,
-  type AgentPlanningOutput,
   planExecution,
   getPlanHistory,
   replayPlan,
 } from "../../services/agentPlanningService";
 
 import {
-  type AutonomousWorkflowInput,
-  type AutonomousWorkflowOutput,
   runAutonomousWorkflow,
   getWorkflowHistory,
 } from "../../services/autonomousWorkflowService";
 
 import {
-  type ApprovalServiceInput,
-  type ApprovalServiceOutput,
   createApprovalRequest,
   recordDecision,
   escalateApproval,
@@ -125,25 +93,18 @@ import {
 } from "../../services/humanApprovalService";
 
 import {
-  type AgentSafetyInput,
-  type AgentSafetyOutput,
-  type SafetyReport,
   verifySafety,
   getSafetyHistory,
   buildSafetyReport,
 } from "../../services/agentSafetyService";
 
 import {
-  type CopilotContextInput,
-  type CopilotContextOutput,
   assembleCopilotContext,
   getCopilotHistory,
   getDefaultCopilot,
 } from "../../services/copilotContextService";
 
 import {
-  type ExecutionObservabilityTrace,
-  type ExecutionObservabilityMetric,
   recordExecutionTrace,
   recordExecutionMetric,
   executionLatency,
@@ -159,7 +120,6 @@ import {
 
 import {
   type TaskSimulationInput,
-  type TaskSimulationOutput,
   simulateTasks,
   getSimulationHistory,
 } from "../../services/taskSimulationService";
@@ -1253,12 +1213,14 @@ describe("humanApprovalService — createApprovalRequest", () => {
       approvalType: "contract_sign",
       requiredApprovers: ["approver1"],
     });
+    // SEM-077 — contrato novo: tenant obrigatório na escrita e aprovador = identidade autenticada (ref), não texto livre.
     const result = recordDecision(created.workflow.id, {
-      approver: "approver1",
+      approver: { ref: "user:7", aliases: ["approver1"] },
       decision: "approve",
       justification: "Aprovado após análise",
-    });
+    }, ORG);
     expect(result?.decisions.length).toBeGreaterThan(0);
+    expect(result?.decisions[0].approver).toBe("user:7");
   });
 
   it("getPendingApprovals retorna workflows pendentes da org", () => {
@@ -1285,8 +1247,9 @@ describe("humanApprovalService — createApprovalRequest", () => {
       approvalType: "urgent",
       requiredApprovers: ["u1"],
     });
-    const escalated = escalateApproval(created.workflow.id, "supervisor", "prazo urgente");
-    expect(escalated === null || escalated?.status === "escalated").toBe(true);
+    const escalated = escalateApproval(created.workflow.id, "supervisor", "prazo urgente", ORG, "user:7");
+    expect(escalated?.status).toBe("escalated");
+    expect(escalateApproval(created.workflow.id, "supervisor", "outra org", ORG + 1)).toBeNull();
   });
 
   it("delegateApproval retorna workflow atualizado ou null", () => {
@@ -1296,8 +1259,9 @@ describe("humanApprovalService — createApprovalRequest", () => {
       approvalType: "normal",
       requiredApprovers: ["u1"],
     });
-    const delegated = delegateApproval(created.workflow.id, "substitute", "férias");
-    expect(delegated === null || delegated?.status === "delegated").toBe(true);
+    const delegated = delegateApproval(created.workflow.id, "substitute", "férias", ORG, "user:7");
+    expect(delegated?.status).toBe("delegated");
+    expect(delegateApproval(created.workflow.id, "substitute", "outra org", ORG + 1)).toBeNull();
   });
 });
 

@@ -89,7 +89,7 @@ describe("Processes Router — Integração", () => {
     vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
     vi.mocked(db.getDocumentSettingsByOrg).mockResolvedValue(null as any);
     vi.mocked(db.searchProcessesForOrganization).mockResolvedValue([] as any);
-    vi.mocked(db.getActivityLogsByProcess).mockResolvedValue([] as any);
+    vi.mocked(db.getActivityReportForOrganization).mockResolvedValue([] as any);
     vi.mocked(db.createDocument).mockResolvedValue(undefined as any);
     vi.mocked(gemini.generateDFD).mockResolvedValue("# DFD gerado");
   });
@@ -216,19 +216,26 @@ describe("Processes Router — Integração", () => {
 
   // ── processes.getActivityLogs ────────────────────────────────────────────
   describe("getActivityLogs", () => {
-    it("retorna logs de atividade dos processos do usuário", async () => {
-      const mockLog = { id: 1, processId: 10, userId: 1, action: "criou o processo", createdAt: new Date() };
-      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([mockProcess] as any);
-      vi.mocked(db.getActivityLogsByProcess).mockResolvedValue([mockLog] as any);
+    // SEM-046 — o relatório vem de UMA consulta org-scoped (`getActivityReportForOrganization`) e é projetado com
+    // campos reais (`userName` ← actorName/users.name; `description` ← details), não mais por N+1 sem organização.
+    it("retorna logs de atividade da organização do contexto com ator e descrição reais", async () => {
+      const mockLog = {
+        id: 1, organizationId: 1, processId: 10, userId: 1, action: "criou o processo", details: JSON.stringify({ numero: "1/2025" }),
+        actorName: null, userDisplayName: "Usuário Teste", entityType: null, entityId: null, createdAt: new Date(),
+      };
+      vi.mocked(db.getActivityReportForOrganization).mockResolvedValue([mockLog] as any);
 
       const result = await processesRouter.createCaller(makeContext(mockUser)).getActivityLogs();
 
+      expect(db.getActivityReportForOrganization).toHaveBeenCalledWith(1);
       expect(result).toHaveLength(1);
       expect(result[0].action).toBe("criou o processo");
+      expect(result[0].userName).toBe("Usuário Teste");
+      expect(result[0].description).toBe("numero: 1/2025");
     });
 
     it("retorna lista vazia quando não há atividade", async () => {
-      vi.mocked(db.listProcessesForOrganization).mockResolvedValue([] as any);
+      vi.mocked(db.getActivityReportForOrganization).mockResolvedValue([] as any);
       const result = await processesRouter.createCaller(makeContext(mockUser)).getActivityLogs();
 
       expect(result).toHaveLength(0);

@@ -10,6 +10,7 @@ import { getDb } from "../db/connection";
 import { documents, documentDrafts } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
 import { assertVersion, nextVersion } from "../domain/locking";
+import { assertDocumentContentMutable } from "../domain/documentImmutability";
 import { createVersion } from "./documentVersionService";
 import type { TrpcAuditCtx } from "./activityLogService";
 import type { StructuredDocumentContent } from "../domain/documentTypes";
@@ -174,6 +175,7 @@ export async function publishDraft(
   if (docRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
 
   const doc = docRows[0];
+  assertDocumentContentMutable(doc, "publishDraft");
   assertVersion(expectedVersion, doc.version, "Document", documentId);
 
   // Cria versão a partir do draft

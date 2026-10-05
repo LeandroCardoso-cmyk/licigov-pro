@@ -9,7 +9,8 @@
 export interface ProcessContext {
   name: string;
   object: string;
-  estimatedValue: number;
+  /** Centavos; `null` = sem estimativa registrada (nunca presumir zero). */
+  estimatedValue: number | null;
   modality?: string | null;
   category?: string | null;
   dfdContent?: string | null;
@@ -40,7 +41,7 @@ export function processBlock(ctx: ProcessContext): string {
   return `**DADOS DO PROCESSO:**
 - Nome: ${ctx.name}
 - Objeto: ${ctx.object}
-- Valor estimado: ${fmtBrl(ctx.estimatedValue)}
+- Valor estimado: ${ctx.estimatedValue === null ? "(não informado — não presuma valor)" : fmtBrl(ctx.estimatedValue)}
 - Modalidade: ${ctx.modality || "(não definida)"}
 - Categoria: ${ctx.category || "(não definida)"}`;
 }

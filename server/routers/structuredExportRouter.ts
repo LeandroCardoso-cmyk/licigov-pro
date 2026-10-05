@@ -2,12 +2,14 @@
  * Sprint 3.3 — Structured Export Router.
  *
  * JSON/XML exports for TR items, audit trails, and interoperability contracts.
- * Multi-tenant: organizationId required.
+ * Multi-tenant: a organização vem do contexto autenticado (SEM-073).
  */
 
 import { router } from "../_core/trpc";
 // R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
-import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
+import { experimentalTenantProcedure } from "../services/experimentalApiGate";
+// SEM-073 — a organização vem do contexto autenticado; `organizationId` do input é só compatibilidade (divergente ⇒ recusa).
+import { organizationFromContext } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   exportItemTRsAsJson,
@@ -25,43 +27,45 @@ import type { ItemTR } from "../domain/itemTR";
 // Real integration would query the DB
 
 export const structuredExportRouter = router({
-  exportItemTRs: experimentalProtectedProcedure
+  exportItemTRs: experimentalTenantProcedure
     .input(
       z.object({
         processId: z.number(),
-        organizationId: z.number(),
+        organizationId: z.number().optional(),
         format: z.enum(["json", "xml"]),
       }),
     )
-    .mutation(({ input }) => {
+    .mutation(({ input, ctx }) => {
+      const organizationId = organizationFromContext(ctx, input.organizationId, "structuredExports.exportItemTRs");
       // In production: query items from DB by processId + organizationId
       // For now: empty array (integration tests use domain functions directly)
       const items: ItemTR[] = [];
       if (input.format === "xml") {
-        return exportItemTRsAsXml(items, input.organizationId);
+        return exportItemTRsAsXml(items, organizationId);
       }
-      return exportItemTRsAsJson(items, input.organizationId);
+      return exportItemTRsAsJson(items, organizationId);
     }),
 
-  exportAuditTrail: experimentalProtectedProcedure
+  exportAuditTrail: experimentalTenantProcedure
     .input(
       z.object({
-        organizationId: z.number(),
+        organizationId: z.number().optional(),
         from: z.string().optional(),
         to: z.string().optional(),
         format: z.enum(["json", "xml"]).default("json"),
       }),
     )
-    .mutation(({ input }) => {
+    .mutation(({ input, ctx }) => {
+      const organizationId = organizationFromContext(ctx, input.organizationId, "structuredExports.exportAuditTrail");
       const events = queryAuditEvents({
-        organizationId: input.organizationId,
+        organizationId,
         from: input.from,
         to: input.to,
       });
-      return exportAuditTrailAsJson(events, input.organizationId);
+      return exportAuditTrailAsJson(events, organizationId);
     }),
 
-  getContract: experimentalProtectedProcedure
+  getContract: experimentalTenantProcedure
     .input(
       z.object({
         schema: z.enum(["item_tr_v1", "tr_v1", "audit_v1", "workflow_v1"]),

@@ -41,7 +41,8 @@ function sha256(x: string): string {
 
 function simulateStageOutput(stageName: string, input: Record<string, unknown>): Record<string, unknown> {
   const hash = sha256(`${stageName}${JSON.stringify(input)}`).slice(0, 20);
-  return { result: hash, stageName, simulatedAt: new Date().toISOString() };
+  // SEM-077 — marca explícita: esta saída é SIMULADA (nenhum efeito real foi executado).
+  return { result: hash, stageName, simulated: true, simulatedAt: new Date().toISOString() };
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -75,12 +76,15 @@ export function runAgentExecution(input: AgentExecutionEngineInput): AgentExecut
         confidence: 0.9,
         decidedBy: "system",
       });
-      execution = advanceExecutionStage(execution, stage.name, { status: "awaiting_approval" }, "completed");
+      // SEM-077 — etapa que exige aprovação humana NUNCA fica "completed": aguarda a decisão.
+      execution = advanceExecutionStage(execution, stage.name, { status: "awaiting_approval" }, "awaiting_approval");
     } else {
       const output = simulateStageOutput(stage.name, stage.input);
       stageOutputs[stage.name] = output;
-      execution = advanceExecutionStage(execution, stage.name, output, "completed");
-      execution = addExecutionCheckpoint(execution, `after_${stage.name}`, output, true);
+      // SEM-077 — este motor só SIMULA a saída (hash determinístico, sem executar a etapa): "simulated", nunca "completed"
+      // nem ponto de rollback (não há estado real a restaurar).
+      execution = advanceExecutionStage(execution, stage.name, output, "simulated");
+      execution = addExecutionCheckpoint(execution, `after_${stage.name}`, output, false);
     }
   }
 
