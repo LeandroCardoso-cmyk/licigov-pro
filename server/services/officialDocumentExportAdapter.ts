@@ -15,6 +15,7 @@ import { TRPCError } from "@trpc/server";
 import { getOfficialDocument } from "./documentEngineService";
 import { exportDocument, formatBrazilianDateTime } from "./documentExportService";
 import { logActivity } from "./activityLogService";
+import { recordOfficialArtifact } from "./officialDocumentLifecycleService";
 import {
   institutionalIdentityFromMetadataOrLive,
   institutionalIdentityFingerprint,
@@ -111,7 +112,15 @@ export async function exportOfficialDocument(params: {
   /** "inline" para impressão (visualizar no navegador), "attachment" para baixar. */
   disposition?: "attachment" | "inline";
   correlationId?: string;
-}): Promise<{ url: string; format: OfficialFormat; fileName: string }> {
+}): Promise<{
+  url: string; format: OfficialFormat; fileName: string;
+  /** SEM-043 — sha256 dos bytes exportados (DOCX ≠ PDF; registrado no ledger `official_document_artifacts`). */
+  artifactHash: string;
+  /** Id da linha do ledger (null sem DB — desenvolvimento). */
+  artifactId: string | null;
+  /** true = bytes idênticos já registrados (no-op idempotente); false = artefato novo anexado ao ledger. */
+  artifactReused: boolean;
+}> {
   // Fail-closed + tenant-scoped: getOfficialDocument filtra por organização.
   const doc = await getOfficialDocument(params.documentId, params.organizationId);
   if (!doc || !doc.content.trim()) {
@@ -177,6 +186,16 @@ export async function exportOfficialDocument(params: {
     },
   });
 
+  // SEM-043 — lineage do artefato: registra no ledger append-only (+ evento `documento_exportado` com formato e hash)
+  // O upload ao S3 já ocorreu em `exportDocument`, FORA de qualquer transação; aqui só persistência determinística.
+  // Falha fechada: sem a prova registrada, o export não devolve a URL. NÃO escreve mais a linha da versão (a
+  // exportação segue sendo AÇÃO DE LEITURA sobre `official_documents`; DOCX e PDF não se sobrescrevem).
+  const recorded = await recordOfficialArtifact({
+    doc, format: params.format, artifactHash: exported.artifactHash, sizeBytes: exported.sizeBytes,
+    mimeType: exported.mimeType, storageKey: exported.key, identityFingerprint,
+    actorUserId: params.userId, correlationId: params.correlationId,
+  });
+
   // Auditoria (leitura) — sem conteúdo integral; sem nova versão/evento de lifecycle.
   await logActivity({
     organizationId: params.organizationId,
@@ -189,8 +208,16 @@ export async function exportOfficialDocument(params: {
       version: doc.version, status: doc.status, format: params.format,
       // Lineage: fingerprint da identidade institucional efetivamente aplicada ao artefato exportado.
       institutionalIdentityFingerprint: identityFingerprint,
+      // SEM-043 — "hash do artefato": sha256 dos bytes exportados + origem (conteúdo/replay) + id do ledger.
+      artifactHash: exported.artifactHash, artifactSizeBytes: exported.sizeBytes,
+      artifactId: recorded.artifact?.id ?? null, artifactReused: recorded.artifact ? !recorded.created : null,
+      sourceContentHash: recorded.artifact?.sourceContentHash ?? null, sourceReplayHash: doc.replayHash,
     },
   });
 
-  return { url: exported.url, format: params.format, fileName: exported.fileName };
+  return {
+    url: exported.url, format: params.format, fileName: exported.fileName,
+    artifactHash: exported.artifactHash, artifactId: recorded.artifact?.id ?? null,
+    artifactReused: recorded.artifact ? !recorded.created : false,
+  };
 }

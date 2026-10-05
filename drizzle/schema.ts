@@ -6279,6 +6279,40 @@ export const officialDocumentTimelineTable = mysqlTable("official_document_timel
 });
 
 /**
+ * R9 / SEM-043 — Ledger APPEND-ONLY dos ARTEFATOS renderizados (DOCX/PDF) de uma versão de `official_documents`.
+ * Cada linha prova QUAIS bytes foram exportados (`artifact_hash` = sha256 do binário) a partir de QUAL conteúdo/replay
+ * (`source_content_hash` = sha256 de `official_documents.content`, `source_replay_hash` = `replay_hash` da versão) e
+ * QUEM exportou (`created_by` = `user:<id>`, ator humano). Substitui as colunas legadas `official_documents.storage_key/
+ * mime_type/size_bytes/content_hash`, que eram SOBRESCRITAS a cada export (DOCX apagava o ponteiro/hash do PDF).
+ * UNIQUE(tenant, documento, formato, hash): reexportar bytes idênticos é idempotente (no-op que devolve a linha);
+ * bytes diferentes para o mesmo formato (ex.: rótulo de data da exportação) ANEXAM nova linha. DOCX e PDF nunca se
+ * sobrescrevem. A aplicação nunca faz UPDATE/DELETE nesta tabela. Sem backfill: versões exportadas antes da 0315 não
+ * têm linha (leitura tolera ausência). Tenant-scoped em toda consulta.
+ */
+export const officialDocumentArtifactsTable = mysqlTable("official_document_artifacts", {
+  id:                 varchar("id", { length: 24 }).notNull().primaryKey(),
+  tenantId:           int("tenant_id").notNull(),
+  documentId:         varchar("document_id", { length: 20 }).notNull(),
+  lineageId:          varchar("lineage_id", { length: 20 }).notNull().default(""),
+  version:            int("version").notNull().default(1),
+  format:             varchar("format", { length: 12 }).notNull(),
+  artifactHash:       varchar("artifact_hash", { length: 64 }).notNull(),
+  sizeBytes:          int("size_bytes").notNull().default(0),
+  mimeType:           varchar("mime_type", { length: 120 }).notNull().default(""),
+  storageKey:         varchar("storage_key", { length: 255 }).notNull().default(""),
+  sourceContentHash:  varchar("source_content_hash", { length: 64 }).notNull().default(""),
+  sourceReplayHash:   varchar("source_replay_hash", { length: 64 }).notNull().default(""),
+  identityFingerprint: varchar("identity_fingerprint", { length: 64 }).notNull().default(""),
+  correlationId:      varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdBy:          varchar("created_by", { length: 60 }).notNull(),
+  createdAt:          datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_oda_doc_format_hash").on(table.tenantId, table.documentId, table.format, table.artifactHash),
+  index("idx_oda_doc_format_created").on(table.tenantId, table.documentId, table.format, table.createdAt),
+  index("idx_oda_lineage").on(table.tenantId, table.lineageId, table.version),
+]);
+
+/**
  * C.4B.1 — Ledger IMUTÁVEL (append-only) das EMISSÕES OFICIAIS governadas do Processo Licitatório.
  * Prova institucional da decisão humana de promover um rascunho (`generated_documents`) a versão
  * oficial `emitido` em `official_documents`. NÃO reutiliza `document_review_decisions` (acoplado à
