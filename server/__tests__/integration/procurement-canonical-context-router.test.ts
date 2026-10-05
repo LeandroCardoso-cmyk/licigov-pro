@@ -28,7 +28,8 @@ vi.mock("../../services/procurementProcessService", async (orig) => ({
   ...(await orig<typeof import("../../services/procurementProcessService")>()),
   getDFDAssistState: vi.fn(async () => ({ available: true, fields: [] })),
   reconcileDFDFieldDraft: vi.fn(async () => ({ document: { id: "d" }, replayed: false })),
-  generateDFDJustificationDraft: vi.fn(async () => ({ document: { id: "d" }, explanation: { executionId: "e" }, replayed: false })),
+  generateDFDJustificationDraft: vi.fn(async () => ({ suggestion: { text: "t", textHash: "h" }, current: { origin: "empty" }, explanation: { executionId: "e" }, replayed: false })),
+  acceptDFDJustificationSuggestion: vi.fn(async () => ({ document: { id: "d" }, edited: false, previousOrigin: "empty", replayed: false })),
 }));
 
 import { procurementProcessRouter } from "../../routers/procurementProcessRouter";
@@ -55,16 +56,31 @@ describe("Contexto Canônico — RBAC e tenant", () => {
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller().generateDFDJustification({ processId: "p1", expectedContentHash: "h", idempotencyKey: "k" }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller().acceptDFDJustification({ processId: "p1", expectedContentHash: "h", suggestionExecutionId: "e", text: "Texto aceito", confirmAccept: true, idempotencyKey: "k" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(svc.reconcileDFDFieldDraft).not.toHaveBeenCalled();
     expect(svc.generateDFDJustificationDraft).not.toHaveBeenCalled();
+    expect(svc.acceptDFDJustificationSuggestion).not.toHaveBeenCalled();
   });
 
   it("operator executa; organizationId e ator vêm SEMPRE do ctx (nunca do cliente)", async () => {
     role.value = "operator";
     await caller().reconcileDFDField({ processId: "p1", fieldKey: "item:0123456789abcdef01234567", expectedContentHash: "h", idempotencyKey: "k" });
     expect(vi.mocked(svc.reconcileDFDFieldDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, fieldKey: "item:0123456789abcdef01234567" });
-    await caller().generateDFDJustification({ processId: "p1", expectedContentHash: "h", confirmReplace: true, idempotencyKey: "k2" });
-    expect(vi.mocked(svc.generateDFDJustificationDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, confirmReplace: true });
+    const sug = await caller().generateDFDJustification({ processId: "p1", expectedContentHash: "h", idempotencyKey: "k2" });
+    expect(vi.mocked(svc.generateDFDJustificationDraft).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id });
+    expect(sug).toHaveProperty("suggestion"); // sugestão, não documento
+    expect(sug).not.toHaveProperty("document");
+    await caller().acceptDFDJustification({ processId: "p1", expectedContentHash: "h", suggestionExecutionId: "e", text: "Texto aceito", confirmAccept: true, idempotencyKey: "k3", organizationId: 99 } as any);
+    expect(vi.mocked(svc.acceptDFDJustificationSuggestion).mock.calls[0][0]).toMatchObject({ organizationId: 1, actorUserId: mockUser.id, text: "Texto aceito", suggestionExecutionId: "e" });
+  });
+
+  it("aceite exige consentimento literal (confirmAccept: true): sem ele/false ⇒ BAD_REQUEST, sem efeito", async () => {
+    role.value = "operator";
+    const input = { processId: "p1", expectedContentHash: "h", suggestionExecutionId: "e", text: "Texto aceito", idempotencyKey: "k" };
+    await expect(caller().acceptDFDJustification(input as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller().acceptDFDJustification({ ...input, confirmAccept: false } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(svc.acceptDFDJustificationSuggestion).not.toHaveBeenCalled();
   });
 
   it("fieldKey fora do contrato é recusado na validação", async () => {
@@ -76,8 +92,10 @@ describe("Contexto Canônico — RBAC e tenant", () => {
     await expect(caller().canonicalContext({ processId: "p-outro" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(caller().dfdAssistState({ processId: "p-outro" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(caller().generateDFDJustification({ processId: "p-outro", expectedContentHash: "h", idempotencyKey: "k" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(caller().acceptDFDJustification({ processId: "p-outro", expectedContentHash: "h", suggestionExecutionId: "e", text: "Texto aceito", confirmAccept: true, idempotencyKey: "k" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(ctxSvc.resolveProcurementContext).not.toHaveBeenCalled();
     expect(svc.generateDFDJustificationDraft).not.toHaveBeenCalled();
+    expect(svc.acceptDFDJustificationSuggestion).not.toHaveBeenCalled();
   });
 });
 
