@@ -1765,8 +1765,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/AuthoringSourcesSummary.tsx": {
-    "mtime": 1791087146.8994722,
-    "ast_hash": "2f7b2e7b202138988f227f2f07760867",
+    "mtime": 1791205250.2200952,
+    "ast_hash": "f439757407ed881e5e8170d4a49d4eff",
     "semantic_hash": ""
   },
   "client/src/components/procurement/CatmatThresholdConfig.tsx": {
@@ -7175,8 +7175,8 @@
     "semantic_hash": ""
   },
   "server/domain/authoritativeItems.ts": {
-    "mtime": 1791203115.2864275,
-    "ast_hash": "da32a3d76bab18ed27e7fa011ac4c85c",
+    "mtime": 1791205269.22257,
+    "ast_hash": "ad4eb808a0d2999111e9d5c06d9cc534",
     "semantic_hash": ""
   },
   "server/domain/bootstrap/bootstrapDependencyGraph.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1791203115.2864275,
-    "ast_hash": "a21cac2514ce35dd496f59a448384818",
+    "mtime": 1791205250.218621,
+    "ast_hash": "2083f583ec274dec08718be04f340d07",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9255,8 +9255,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/editalContext.ts": {
-    "mtime": 1791203115.2864275,
-    "ast_hash": "5c7f3d40029f4066d13b34137df5da9b",
+    "mtime": 1791205250.2195141,
+    "ast_hash": "13bed7427c96fe6267b1bb2237ec2745",
     "semantic_hash": ""
   },
   "server/services/authoring/legalReferenceValidationService.ts": {
@@ -13632,6 +13632,16 @@
   "server/__tests__/unit/r11-semantic-authority-behavior-guards.test.ts": {
     "mtime": 1791205124.8983815,
     "ast_hash": "a2c7fd30965dee5c387cb7524adb8d4a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r9-sem081-partial-estimate-label.test.ts": {
+    "mtime": 1791205276.8611965,
+    "ast_hash": "5f6c4a44dae3e48a3896de0b656ad014",
+    "semantic_hash": ""
+  },
+  "shared/estimateLabel.ts": {
+    "mtime": 1791205250.2023787,
+    "ast_hash": "f6b44a790a2428d858fd822aeecc33ca",
     "semantic_hash": ""
   }
 }

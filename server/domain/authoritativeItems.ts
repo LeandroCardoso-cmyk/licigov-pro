@@ -14,6 +14,7 @@
  */
 import { formatBRL, multiplyQuantityCents, sumCents, type Cents } from "./money";
 import { normalizeDescription } from "./priceQuoteConsolidation";
+import { globalEstimateLabel } from "../../shared/estimateLabel";
 
 export const AUTHORITATIVE_ITEMS_CONTRACT_VERSION = "authoritative-items/1.0";
 /** Marcadores HTML (invisíveis no render) que delimitam o bloco — permitem verificar integridade. */
@@ -164,7 +165,10 @@ export function renderAuthoritativeItemsBlock(
   }
   lines.push("");
   lines.push(canonical
-    ? `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`
+    // SEM-081: total PARCIAL (itens sem preço ficam fora da soma) nunca aparece como "global".
+    ? (estimate.unpricedItemCount > 0
+      ? `**${globalEstimateLabel(estimate)}:** ${formatBRL(estimate.globalTotalCents)}`
+      : `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`)
     : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
   // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.

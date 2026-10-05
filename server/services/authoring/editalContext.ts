@@ -30,6 +30,7 @@ import {
   confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
 } from "./authoringContext";
 import { selectDocumentExcerpt, sha256Hex } from "../../domain/canonicalJson";
+import { globalEstimateLabel } from "../../../shared/estimateLabel";
 
 /**
  * Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage).
@@ -234,7 +235,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const lot = lotOf(it.id);
       lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
     }
-    lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
+    lines.push(`- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
   } else {
     missing.push("itens");

@@ -34,6 +34,7 @@ import { resolveProcurementContext } from "../canonicalContextService";
 import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
 import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
+import { globalEstimateLabel } from "../../../shared/estimateLabel";
 
 export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
 
@@ -255,7 +256,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     lines.push(undefinedQty.size > 0
       // Estimativa parcial NUNCA é apresentada como global (e a quantidade da Pesquisa nunca completa a lacuna).
       ? `- Valor estimado global: [REVISAR: ${undefinedQty.size} item(ns) sem quantidade prevista em "Itens da contratação" — estimativa não calculada; NÃO inferir quantidades]`
-      : `- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`, "");
+      : `- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`, "");
     if (undefinedQty.size > 0) missing.push("quantidade_prevista");
   } else {
     missing.push("itens");
