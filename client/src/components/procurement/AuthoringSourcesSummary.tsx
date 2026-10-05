@@ -9,6 +9,7 @@
 import { CheckCircle2, CircleDashed, AlertTriangle } from "lucide-react";
 import { trpc } from "../../lib/trpc";
 import { formatCentsBRL } from "@/lib/money";
+import { globalEstimateLabel } from "@shared/estimateLabel";
 
 export type AuthoringSourcesSummaryProps = { processId: string; kind: "etp" | "tr"; object: string };
 
@@ -57,7 +58,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
         {kind === "tr" && s.approvedItems > 0 && (
           <Row
             ok={s.unpricedItems === 0}
-            label={`Valor estimado global (calculado pelo sistema): ${formatCentsBRL(s.estimatedGlobalTotalCents)}`}
+            label={`${globalEstimateLabel({ unpricedItemCount: s.unpricedItems, itemCount: s.approvedItems })}: ${formatCentsBRL(s.estimatedGlobalTotalCents)}`}
             detail={s.unpricedItems > 0 ? `${s.unpricedItems} item(ns) sem preço de referência` : undefined}
           />
         )}
