@@ -80,17 +80,17 @@ const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 /** Nome de montagem → [arquivo do router, export, nº de procedures, builder]. */
 const GATED: Record<string, { file: string; exportName: string; procedures: number; builder: "protected" | "tenant" }> = {
   itemTr: { file: "itemTrRouter", exportName: "itemTrRouter", procedures: 9, builder: "protected" },
-  reviewWorkspace: { file: "reviewWorkspaceRouter", exportName: "reviewWorkspaceRouter", procedures: 3, builder: "protected" },
+  reviewWorkspace: { file: "reviewWorkspaceRouter", exportName: "reviewWorkspaceRouter", procedures: 3, builder: "tenant" },
   trComposition: { file: "trCompositionRouter", exportName: "trCompositionRouter", procedures: 2, builder: "protected" },
   approvalWorkflow: { file: "approvalWorkflowRouter", exportName: "approvalWorkflowRouter", procedures: 6, builder: "tenant" },
   collaborationComments: { file: "collaborationCommentsRouter", exportName: "collaborationCommentsRouter", procedures: 4, builder: "protected" },
-  exports: { file: "exportRouter", exportName: "exportRouter", procedures: 3, builder: "protected" },
-  structuredExports: { file: "structuredExportRouter", exportName: "structuredExportRouter", procedures: 3, builder: "protected" },
+  exports: { file: "exportRouter", exportName: "exportRouter", procedures: 3, builder: "tenant" },
+  structuredExports: { file: "structuredExportRouter", exportName: "structuredExportRouter", procedures: 3, builder: "tenant" },
   webhooks: { file: "webhookRouter", exportName: "webhookRouter", procedures: 4, builder: "protected" },
   clauses: { file: "clauseRouter", exportName: "clauseRouter", procedures: 3, builder: "protected" },
   pilotReadiness: { file: "pilotReadinessRouter", exportName: "pilotReadinessRouter", procedures: 5, builder: "protected" },
   productionReadiness: { file: "productionReadinessRouter", exportName: "productionReadinessRouter", procedures: 3, builder: "protected" },
-  itemAnalytics: { file: "itemAnalyticsRouter", exportName: "itemAnalyticsRouter", procedures: 1, builder: "protected" },
+  itemAnalytics: { file: "itemAnalyticsRouter", exportName: "itemAnalyticsRouter", procedures: 1, builder: "tenant" },
 };
 const MOUNT_NAMES = Object.keys(GATED);
 
@@ -340,7 +340,10 @@ describe("LEG-028 — development + opt-in explícito ⇒ comportamento existent
   it("itemAnalytics (mock) e productionReadiness respondem normalmente", async () => {
     const { routers } = await loadUnder("development", "true");
     const ctx = ctxFor({ id: 42, role: "user" });
-    await expect(routers.itemAnalytics.createCaller(ctx).getDashboard({ organizationId: 5 })).resolves.toBeDefined();
+    // SEM-073 — a organização vem do CONTEXTO (tenantSpy ⇒ 7): `organizationId` do input é só compatibilidade e, se divergir, é recusado.
+    await expect(routers.itemAnalytics.createCaller(ctx).getDashboard({ organizationId: 7 })).resolves.toBeDefined();
+    await expect(routers.itemAnalytics.createCaller(ctx).getDashboard({})).resolves.toBeDefined();
+    await expect(routers.itemAnalytics.createCaller(ctx).getDashboard({ organizationId: 5 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(routers.productionReadiness.createCaller(ctx).getSystemHealth({ organizationId: 5 })).resolves.toBeDefined();
   }, 120_000);
 });

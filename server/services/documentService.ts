@@ -14,6 +14,7 @@ import { logActivity } from "./activityLogService";
 import { addTimelineEvent } from "./documentTimelineService";
 import { createVersion } from "./documentVersionService";
 import { assertVersion, nextVersion } from "../domain/locking";
+import { assertDocumentContentMutable } from "../domain/documentImmutability";
 import {
   DOCUMENT_EVENT_TYPES,
   type DocumentoCriadoPayload,
@@ -229,6 +230,7 @@ export async function updateDocumento(
   if (rows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
 
   const doc = rows[0];
+  assertDocumentContentMutable(doc, "updateDocumento");
 
   // Verifica lock ativo
   if (doc.isLocked && doc.lockedBy !== ctx.user.id) {
@@ -390,7 +392,7 @@ import { buildExportFilename } from "../domain/documentTypes";
 export async function exportDocumentToHtml(
   documentId: number,
   orgId:      number,
-  options?:   Partial<ExportPipelineOptions>,
+  _options?:  Partial<ExportPipelineOptions>,
 ): Promise<ExportResult> {
   const doc = await getDocumentoById(documentId, orgId);
   if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });

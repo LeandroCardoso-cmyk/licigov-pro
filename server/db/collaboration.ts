@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, or, desc, isNull, inArray } from "drizzle-orm";
 import {
   activityLogs, documentSettings, processMembers, notifications, stageAssignments,
   processes, users, organizationMembers,
@@ -36,6 +36,28 @@ export async function getActivityLogsByProcessForOrganization(
   const process = await getProcessByIdForOrganization(processId, organizationId);
   if (!process) return [];
   return getActivityLogsByProcess(processId);
+}
+
+/**
+ * SEM-046 — relatório de atividades da ORGANIZAÇÃO em UMA consulta (antes: N+1 por processo, sem nome do ator).
+ * Inclui (a) logs com `organizationId` = a organização (inclusive os org-level, sem processo) e (b) logs LEGADOS sem
+ * `organizationId` cujo processo pertence à organização. Log com OUTRA organização nunca entra, mesmo que aponte para
+ * um processo desta. O nome do ator vem do snapshot `actorName` (imutável) ou, na falta dele, de `users.name`.
+ */
+export async function getActivityReportForOrganization(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const orgProcessIds = db.select({ id: processes.id }).from(processes).where(eq(processes.organizationId, organizationId));
+  const rows = await db
+    .select({ log: activityLogs, userName: users.name })
+    .from(activityLogs)
+    .leftJoin(users, eq(users.id, activityLogs.userId))
+    .where(or(
+      eq(activityLogs.organizationId, organizationId),
+      and(isNull(activityLogs.organizationId), inArray(activityLogs.processId, orgProcessIds)),
+    ))
+    .orderBy(desc(activityLogs.createdAt), desc(activityLogs.id));
+  return rows.map((r) => ({ ...r.log, userDisplayName: r.userName ?? null }));
 }
 
 export async function createActivityLogForOrganization(

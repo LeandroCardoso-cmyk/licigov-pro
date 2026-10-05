@@ -1,24 +1,25 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { generatePublicationZip } from "../services/zipService";
 import { generateProcessReport } from "../services/processReportService";
+import { requireOwnedProcessInTenant } from "../services/legacyProcessAccess";
 
 /**
  * Router para downloads de pacotes e documentos
+ *
+ * SEM-086 — `tenantProcedure` (membership ATIVA vigente) + processo buscado na organização do contexto + autoria
+ * (`requireOwnedProcessInTenant`); o log de atividade leva o `organizationId` do contexto (SEM-046).
  */
 export const downloadRouter = router({
   /**
    * Baixar pacote completo de publicação (ZIP)
    */
-  publicationPackage: protectedProcedure
+  publicationPackage: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      const process = await requireOwnedProcessInTenant(ctx, input.processId);
 
       try {
         // Gerar ZIP
@@ -31,12 +32,12 @@ export const downloadRouter = router({
         const base64 = buffer.toString("base64");
 
         // Registrar atividade
-        await db.createActivityLog({
+        await db.createActivityLogForOrganization({
           processId: input.processId,
           userId: ctx.user.id,
           action: "baixou pacote de publicação",
           details: JSON.stringify({ filename }),
-        });
+        }, ctx.organizationId);
 
         return {
           success: true,
@@ -53,14 +54,11 @@ export const downloadRouter = router({
   /**
    * Baixar planilha de itens (XLSX)
    */
-  itemsSpreadsheet: protectedProcedure
+  itemsSpreadsheet: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      const process = await requireOwnedProcessInTenant(ctx, input.processId);
 
       try {
         const { generateItemsSpreadsheet, getSpreadsheetFileName } = await import("../services/excelService");
@@ -84,12 +82,12 @@ export const downloadRouter = router({
         const base64 = buffer.toString("base64");
 
         // Registrar atividade
-        await db.createActivityLog({
+        await db.createActivityLogForOrganization({
           processId: input.processId,
           userId: ctx.user.id,
           action: "baixou planilha de itens",
           details: JSON.stringify({ filename }),
-        });
+        }, ctx.organizationId);
 
         return {
           success: true,
@@ -106,14 +104,11 @@ export const downloadRouter = router({
   /**
    * Baixar checklist em PDF
    */
-  checklistPDF: protectedProcedure
+  checklistPDF: tenantProcedure
     .input(z.object({ processId: z.number(), platformId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      const process = await requireOwnedProcessInTenant(ctx, input.processId);
 
       try {
         const { generateChecklistPDF, getChecklistFileName } = await import("../services/pdfChecklistService");
@@ -134,12 +129,12 @@ export const downloadRouter = router({
         const base64 = buffer.toString("base64");
 
         // Registrar atividade
-        await db.createActivityLog({
+        await db.createActivityLogForOrganization({
           processId: input.processId,
           userId: ctx.user.id,
           action: "baixou checklist em PDF",
           details: JSON.stringify({ filename }),
-        });
+        }, ctx.organizationId);
 
         return {
           success: true,
@@ -156,14 +151,11 @@ export const downloadRouter = router({
   /**
    * Baixar relatório completo do processo em PDF
    */
-  processReport: protectedProcedure
+  processReport: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      const process = await requireOwnedProcessInTenant(ctx, input.processId);
 
       try {
         // Gerar PDF do relatório
@@ -175,12 +167,12 @@ export const downloadRouter = router({
         const base64 = buffer.toString("base64");
 
         // Registrar atividade
-        await db.createActivityLog({
+        await db.createActivityLogForOrganization({
           processId: input.processId,
           userId: ctx.user.id,
           action: "baixou relatório do processo",
           details: JSON.stringify({ filename }),
-        });
+        }, ctx.organizationId);
 
         return {
           success: true,

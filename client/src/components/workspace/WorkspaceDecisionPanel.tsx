@@ -12,29 +12,12 @@ interface WorkspaceDecisionPanelProps {
   decisions?: WorkspaceDecision[];
 }
 
-const DEFAULT_DECISIONS: WorkspaceDecision[] = [
-  {
-    id: "d1",
-    title: "Escolha da modalidade de licitação",
-    outcome: "Pregão eletrônico",
-    status: "aprovada",
-    responsibleUser: "Ana Souza",
-  },
-  {
-    id: "d2",
-    title: "Definição do critério de julgamento",
-    outcome: "Menor preço",
-    status: "pendente",
-    responsibleUser: "Carlos Lima",
-  },
-  {
-    id: "d3",
-    title: "Aprovação do Termo de Referência",
-    outcome: "Aguardando revisão jurídica",
-    status: "em_revisao",
-    responsibleUser: "Marina Alves",
-  },
-];
+/**
+ * SEM-092 — SEM decisões padrão: o painel só mostra decisões REAIS recebidas por `decisions`. Antes havia decisões
+ * e responsáveis fictícios como default — se o componente fosse reutilizado sem dados,
+ * o usuário veria decisões e responsáveis inexistentes como se fossem do processo. Sem dados ⇒ estado vazio.
+ */
+const NO_DECISIONS: WorkspaceDecision[] = [];
 
 const STATUS_STYLES: Record<string, string> = {
   aprovada: "bg-green-100 text-green-700",
@@ -44,7 +27,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function WorkspaceDecisionPanel({
-  decisions = DEFAULT_DECISIONS,
+  decisions = NO_DECISIONS,
 }: WorkspaceDecisionPanelProps) {
   return (
     <div className="p-6">

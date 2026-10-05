@@ -6,7 +6,9 @@
 
 import { router } from "../_core/trpc";
 // R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
-import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
+import { experimentalTenantProcedure } from "../services/experimentalApiGate";
+// SEM-073 — a organização vem do contexto autenticado; `organizationId` do input é só compatibilidade (divergente ⇒ recusa).
+import { organizationFromContext } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   generateDocx,
@@ -22,14 +24,15 @@ import { createSection, createClause } from "../domain/trComposition";
 const exportHistory: ExportAuditEntry[] = [];
 
 export const exportRouter = router({
-  generate: experimentalProtectedProcedure
+  generate: experimentalTenantProcedure
     .input(z.object({
       processId:      z.number(),
-      organizationId: z.number(),
+      organizationId: z.number().optional(),
       format:         z.enum(["docx", "pdf"]),
       watermark:      z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const organizationId = organizationFromContext(ctx, input.organizationId, "exports.generate");
       const requestId = `exp_${Date.now()}_${input.processId}`;
 
       // Build a default section set for the export
@@ -47,7 +50,7 @@ export const exportRouter = router({
 
       const request: ExportRequest = {
         id: requestId,
-        organizationId: input.organizationId,
+        organizationId,
         processId: input.processId,
         format: input.format,
         sections: defaultSections,
@@ -80,15 +83,16 @@ export const exportRouter = router({
       };
     }),
 
-  getHistory: experimentalProtectedProcedure
+  getHistory: experimentalTenantProcedure
     .input(z.object({
-      organizationId: z.number(),
+      organizationId: z.number().optional(),
       processId:      z.number().optional(),
       limit:          z.number().optional(),
     }))
-    .query(({ input }) => {
+    .query(({ input, ctx }) => {
+      const organizationId = organizationFromContext(ctx, input.organizationId, "exports.getHistory");
       let filtered = exportHistory.filter(
-        e => e.organizationId === input.organizationId,
+        e => e.organizationId === organizationId,
       );
       if (input.processId) {
         filtered = filtered.filter(e => e.processId === input.processId);
@@ -99,12 +103,13 @@ export const exportRouter = router({
       return filtered;
     }),
 
-  getPreview: experimentalProtectedProcedure
+  getPreview: experimentalTenantProcedure
     .input(z.object({
       processId:      z.number(),
-      organizationId: z.number(),
+      organizationId: z.number().optional(),
     }))
-    .query(({ input }) => {
+    .query(({ input, ctx }) => {
+      organizationFromContext(ctx, input.organizationId, "exports.getPreview");
       const sections = [
         createSection("Objeto", [
           createClause("body", `Contratacao referente ao Processo ${input.processId}.`, { isRequired: true }),
