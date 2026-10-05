@@ -19,3 +19,15 @@ export function centsToLegacyReaisInput(cents: number | null | undefined): strin
 export function parseLegacyReaisInput(text: string): number {
   return parseFloat(text.replace(/[^\d,]/g, "").replace(",", "."));
 }
+
+/**
+ * NEW-038 (2º passe) — `contract_workspaces.value` é DECIMAL(15,2) em REAIS (o editor do contrato lê/grava reais e o
+ * rótulo usa `formatCurrency` sem dividir). Texto digitado ("1.234,56") ⇒ reais com 2 casas (1234.56), ou `undefined`
+ * quando vazio/ilegível. NUNCA centavos: o wizard de contrato avulso mandava `Math.round(x * 100)` e o contrato nascia
+ * com o valor ×100.
+ */
+export function parseReaisInputToDecimal(text: string): number | undefined {
+  if (!text.trim()) return undefined;
+  const n = parseFloat(text.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : undefined;
+}
