@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1791087148.0074723,
-    "ast_hash": "072e6bb80fafcd382b9aa78e51045379",
+    "mtime": 1791204997.5862641,
+    "ast_hash": "d502c764f57b0b5462136617932297f3",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -7055,7 +7055,7 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1791203558.4864173,
+    "mtime": 1791205140.7296765,
     "ast_hash": "624446d8fb65a0582c9aff28d8239588",
     "semantic_hash": ""
   },
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791087146.7114723,
-    "ast_hash": "4cd9b170b127e67383d1f22cc10fc38b",
+    "mtime": 1791204997.5870988,
+    "ast_hash": "976b01f83f62ca463132ce4149e1ef22",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13627,6 +13627,11 @@
   "client/src/lib/money.test.ts": {
     "mtime": 1791204106.7864048,
     "ast_hash": "8d122657f0d620bca5e211ca8e2f81c5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r11-semantic-authority-behavior-guards.test.ts": {
+    "mtime": 1791205124.8983815,
+    "ast_hash": "a2c7fd30965dee5c387cb7524adb8d4a",
     "semantic_hash": ""
   }
 }
