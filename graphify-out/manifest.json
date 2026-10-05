@@ -695,8 +695,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractEditor.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "64dca99105449e1ec7b00b3b60b80e8c",
+    "mtime": 1791234101.181748,
+    "ast_hash": "2a2431a95ab246ce4cacfffceb30d364",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractOverview.tsx": {
@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "b330571dbb707f2d4c5abf150658fd77",
+    "mtime": 1791234101.0819,
+    "ast_hash": "2b838a48303887f014157da5d6060ec8",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -975,13 +975,13 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ContractJustificationWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "d59436e6cdc4b1bfb4bd3dbf220b5aa5",
+    "mtime": 1791234101.883269,
+    "ast_hash": "018cae3bf46832a84012c392d3f66d62",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementHome.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "6f10e6256065cd8acddd06b34176a132",
+    "mtime": 1791234100.799947,
+    "ast_hash": "ae857832724e92c1fef6855e476ac778",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementOverview.tsx": {
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NeedCharacterizationWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "46f09836a4606bc9b1cb7ad2fb3e726f",
+    "mtime": 1791234100.799947,
+    "ast_hash": "3c650b963db47db4a300513773079328",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NewDirectProcurementWizard.tsx": {
@@ -1005,13 +1005,13 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PriceJustificationWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "9223d833d239c51f5eaae646a263ac73",
+    "mtime": 1791234101.8857477,
+    "ast_hash": "04aa67c00836b6effd010f3eddb03b87",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "1a66f319017887a01384241f39bbe5ba",
+    "mtime": 1791234100.8017478,
+    "ast_hash": "59bfd2911f2812ec16af513ccba3631b",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PublicationWorkspace.tsx": {
@@ -1020,13 +1020,13 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RatificationWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "5faeb607c88d13ee8ddd24e5ac6d92f6",
+    "mtime": 1791234101.5377479,
+    "ast_hash": "d6abacb3d6847a106277963bba0c34c0",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RequiredDocumentsWorkspace.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "f8a2d76655f7700b17395173ee698ab4",
+    "mtime": 1791234102.2392228,
+    "ast_hash": "15326417389861076d00c914a1c31c56",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/TimelinePanel.tsx": {
@@ -1525,8 +1525,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/InstitutionalInbox.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "805fd97b2b869823eb532d46957cb098",
+    "mtime": 1791234100.9817479,
+    "ast_hash": "d8e0943be5477f66f3a6f698937a8677",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LawyerDashboard.tsx": {
@@ -1535,13 +1535,13 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionEditor.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "92579763ceac3ea1f0e88df9684a67d9",
+    "mtime": 1791234101.7837288,
+    "ast_hash": "9ba1f14cced23e748bb77cfc461a5c02",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionHome.tsx": {
-    "mtime": 1791234019.8297496,
-    "ast_hash": "2d3a3dceecf4867186c5e8a8cce5af21",
+    "mtime": 1791234101.7857478,
+    "ast_hash": "243c4369e982beeac600346c34ae3716",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionViewer.tsx": {
@@ -1555,8 +1555,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/PendingRequests.tsx": {
-    "mtime": 1791234019.8337498,
-    "ast_hash": "fae17d1cc9a0177290bc2866941356c1",
+    "mtime": 1791234100.9817479,
+    "ast_hash": "fb7bd625f9f89c3875d7b620c1451c6e",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/RequestContextPanel.tsx": {
@@ -1800,13 +1800,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1791234019.8337498,
-    "ast_hash": "86e3c65c5e5b87f6266e8c3ad09078c2",
+    "mtime": 1791234101.4297478,
+    "ast_hash": "b1a080e70b97cd7f30f0f998bb4f1f2b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791234019.8337498,
-    "ast_hash": "5fa52bcb21042b6f6eb1758395616135",
+    "mtime": 1791234101.4297478,
+    "ast_hash": "76c79eee89aae6a57cfd8d49d252747a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1865,8 +1865,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1791234019.8337498,
-    "ast_hash": "91f3700544205933230b2caf905625ae",
+    "mtime": 1791234101.4337478,
+    "ast_hash": "1a119fce7c5b47f0f2a0c508e2f84f3a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1791234019.8337498,
-    "ast_hash": "90ab9a54b1aa6d0c278a0c304b1b7784",
+    "mtime": 1791234102.1337478,
+    "ast_hash": "62241e6d961dd2dc8e674e7db849507b",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1791234019.8377497,
-    "ast_hash": "ff897089f022c926c89ec68a47d07cf5",
+    "mtime": 1791234102.1337478,
+    "ast_hash": "cd7286c42877a733f9dabe49fcc12833",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "ad967c9c173605530b993e9e1f5b172f",
+    "mtime": 1791234102.1377478,
+    "ast_hash": "14f3392051ef8bd10a4f26323d326798",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5385,8 +5385,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "a4760f86764d9ef94eb9616708fe59e8",
+    "mtime": 1791234101.4337478,
+    "ast_hash": "9827b5a51d6240e23995e0603d5ca73f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-export-gate.test.ts": {
@@ -5395,8 +5395,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "27f44317837dfd13353087d6bfb30347",
+    "mtime": 1791234101.4377477,
+    "ast_hash": "9d08ae910b5bdce1ea7dcd1bcc3b2b3d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
@@ -5445,8 +5445,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "001b7376c55268f543c6c35416394702",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "3415cd150d4d213e6d907d978ff0cacd",
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-decision.test.ts": {
@@ -5500,7 +5500,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/contrato-avulso-mysql-smoke.test.ts": {
-    "mtime": 1791231610.2258048,
+    "mtime": 1791234101.2969475,
     "ast_hash": "dceac990b7e022e2624789790116a16d",
     "semantic_hash": ""
   },
@@ -5550,8 +5550,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-datetime-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "d0d39951aa28fe62f7598da0b4e4c8cb",
+    "mtime": 1791234101.5417478,
+    "ast_hash": "2f54759478f929f8b9c5d4e6b153855d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-engine-export-institutional.test.ts": {
@@ -5910,8 +5910,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-context.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "ee99b194dfd9ae8ea8492c138aeb9c96",
+    "mtime": 1791234102.2392228,
+    "ast_hash": "65af9f2bd2eb9cf94fd258ceecb8e015",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation-mysql-smoke.test.ts": {
@@ -5920,18 +5920,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "7d9a9dfce637b323e75aeeb62de159f1",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "05457319fd46239f716e0bfd56abe399",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-foundation-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "50e7dc3a11c06d2c79e1d2378ad0e3ce",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "f614d14263917bfb36107f6238da33c6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "517f8f57e2f53152103f21fba9656ddc",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "64972149eef1a6e3d7e306ee8ed1eb99",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-rbac-router.test.ts": {
@@ -6490,8 +6490,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "c34dfc51fa3316a8bb1dc4c3be6d6fe0",
+    "mtime": 1791234101.181748,
+    "ast_hash": "8389dcebb4c61f44100d022cb03d30e8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
@@ -6510,8 +6510,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5z-direct-procurement.test.ts": {
-    "mtime": 1791234019.9097497,
-    "ast_hash": "475a7d22e5ed7aa5702ed7438f008270",
+    "mtime": 1791234101.5417478,
+    "ast_hash": "7498b8dffd2749654e63c88b3549efff",
     "semantic_hash": ""
   },
   "server/__tests__/integration/task-attachment-policy.test.ts": {
@@ -6540,8 +6540,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/tr-canonical-quantity-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "c30f0ed74da4f35bcf20bce6ae481fde",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "47ec970e6fe1dd15d98c34afb9468228",
     "semantic_hash": ""
   },
   "server/__tests__/integration/user-management-rbac.test.ts": {
@@ -6555,8 +6555,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "a47f5ecd74abc853530fde5c451b7865",
+    "mtime": 1791234101.8857477,
+    "ast_hash": "5da7bfcd66874983e32c3c1e4f0e9370",
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
@@ -6590,8 +6590,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/canonical-document-quantity.test.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "05b291219199be7f89bc28c4296e0ef8",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "8c0fb4657d911630de5e93a95a70aa42",
     "semantic_hash": ""
   },
   "server/__tests__/unit/canonical-procurement-context.test.ts": {
@@ -6670,8 +6670,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/p0-pilot-foundation.test.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "dee3f64b9eff79f5323bc1978682e9ad",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "f3a90bfb998c6ec74fd1b42401b03774",
     "semantic_hash": ""
   },
   "server/__tests__/unit/p0-pilot-hardening.test.ts": {
@@ -6810,8 +6810,8 @@
     "semantic_hash": ""
   },
   "server/_core/trpc.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "5cffc4ad64f521ce4ef0e53c83fb4cc7",
+    "mtime": 1791234100.8903792,
+    "ast_hash": "b6b270655267b0376c8fe0b194092f54",
     "semantic_hash": ""
   },
   "server/_core/types/cookie.d.ts": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "5de2bcd38e6dd25519c5eaef7b4a4d94",
+    "mtime": 1791234101.2977479,
+    "ast_hash": "0d957d01c1dc99447f1824d1ae5ae8a3",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -6970,8 +6970,8 @@
     "semantic_hash": ""
   },
   "server/db/directProcurement.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "304d2fe7dc15aac74c5121dd69467ca6",
+    "mtime": 1791234102.1377478,
+    "ast_hash": "0377033b8f2215d2400dcf5b6a1b4bc0",
     "semantic_hash": ""
   },
   "server/db/documentRepository.ts": {
@@ -7005,8 +7005,8 @@
     "semantic_hash": ""
   },
   "server/db/legalOpinionWorkspace.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "1b34102dbf24a2692195fe0cb4723dee",
+    "mtime": 1791234101.0857477,
+    "ast_hash": "6dbf0b4f4cf0cfd1c4b7024577b2a47a",
     "semantic_hash": ""
   },
   "server/db/legalOpinions.ts": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "ad5f92ad586e0e49ce6fd60431edafce",
+    "mtime": 1791234101.6617477,
+    "ast_hash": "e6ccda9bfa885ff556cb9277488d40bf",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -7175,8 +7175,8 @@
     "semantic_hash": ""
   },
   "server/domain/authoritativeItems.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "b91a0e37b4ada03fdb8732bd945546f1",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "300b0705560aebdb91061acc268d79e2",
     "semantic_hash": ""
   },
   "server/domain/bootstrap/bootstrapDependencyGraph.ts": {
@@ -7335,8 +7335,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "14186701318590cdda4a9835d8a556ff",
+    "mtime": 1791234101.181748,
+    "ast_hash": "4d7bab099308c60f35877b759bde7a27",
     "semantic_hash": ""
   },
   "server/domain/copilotCapability.ts": {
@@ -7495,8 +7495,8 @@
     "semantic_hash": ""
   },
   "server/domain/directProcurementJustifications.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "b7bf4aba35b30ddb3f38cfdb7a12118f",
+    "mtime": 1791234101.5417478,
+    "ast_hash": "1c8fde57e024d8dbf5ffe9fb0c737818",
     "semantic_hash": ""
   },
   "server/domain/directProcurementProcedure.ts": {
@@ -7645,8 +7645,8 @@
     "semantic_hash": ""
   },
   "server/domain/generatedDocument.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "7569f9be471c6075bac0eba07a225366",
+    "mtime": 1791234101.4377477,
+    "ast_hash": "370fa6014e565686736918e94e4f72fe",
     "semantic_hash": ""
   },
   "server/domain/governedLawCorpus.ts": {
@@ -8140,8 +8140,8 @@
     "semantic_hash": ""
   },
   "server/domain/legalOpinionDraft.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "44b23992d9faa28ef7cd4307298e154d",
+    "mtime": 1791234101.7857478,
+    "ast_hash": "f807820e1494de55dfed3d78afde1ea0",
     "semantic_hash": ""
   },
   "server/domain/legalOpinionWorkspace.ts": {
@@ -8620,8 +8620,8 @@
     "semantic_hash": ""
   },
   "server/routers.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "857f9d48294c9ef1f4005c0926a73405",
+    "mtime": 1791234101.6617477,
+    "ast_hash": "42e41cd86773afe7f6f9fb0cf36121ae",
     "semantic_hash": ""
   },
   "server/routers/activitiesRouter.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "a8db8ad5ec108f2f7e2c2ee4ad31d27b",
+    "mtime": 1791234101.181748,
+    "ast_hash": "2b6141bea050a76d205a62d1ce20ee3f",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -8765,8 +8765,8 @@
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "85802d3c0211a2c94848f599d616da26",
+    "mtime": 1791234102.1377478,
+    "ast_hash": "b9b79bb6dc59f00a4882e1acc55ed9e6",
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
@@ -8860,8 +8860,8 @@
     "semantic_hash": ""
   },
   "server/routers/legalOpinionWorkspaceRouter.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "a31220071ec54cbf70af25e0e2078ee0",
+    "mtime": 1791234101.7857478,
+    "ast_hash": "6a022cabaf2502a25c0b5f4e50935614",
     "semantic_hash": ""
   },
   "server/routers/legalOpinionsRouter.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "86acbe05ce8424ac52c48bcd62f5ca4a",
+    "mtime": 1791234101.4377477,
+    "ast_hash": "49f2c7076ad15d77738b32448bb1a65b",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "aaf674b71220528ab520ab1dc0e17f11",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "05f4bc809ed82aae8edbfea3356a7d88",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9255,8 +9255,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/editalContext.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "96b3faabf7cfecb5a32740fe2590361d",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "b2e21fe11475cb94e7281cde00c8a139",
     "semantic_hash": ""
   },
   "server/services/authoring/legalReferenceValidationService.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "f08d8e17bfdb8affdc2168182073a7a8",
+    "mtime": 1791234101.2977479,
+    "ast_hash": "73a02ef2ac1b2fa8df95150c7580e1b5",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "4250b12dcea4adf1e0297d8fed51f02b",
+    "mtime": 1791234102.2392228,
+    "ast_hash": "a7c0c5d991d24147ce26a0a24ce6f9fb",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -9750,8 +9750,8 @@
     "semantic_hash": ""
   },
   "server/services/fileIngestionService.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "d2f6327e73ed10c78de0885a97f0a389",
+    "mtime": 1791234101.665748,
+    "ast_hash": "a245de9e0abe1b9e2c06f0ece01d8de6",
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "31785e032973d8703e8a50aaf4bc6162",
+    "mtime": 1791234101.7857478,
+    "ast_hash": "9ce78ee01350cb20d39b7d0cc7a6e250",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -10170,8 +10170,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1791234019.9177496,
-    "ast_hash": "ef4c9c7caebcec9c17a8ad7f4cab5b70",
+    "mtime": 1791234102.0137477,
+    "ast_hash": "3d3aa05672d772740c946d9f76ff263c",
     "semantic_hash": ""
   },
   "server/services/productionMonitoringService.ts": {
@@ -12575,8 +12575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/process-create-contract.test.ts": {
-    "mtime": 1791234019.9137497,
-    "ast_hash": "b7ea47edc2af89130d7e3ddcbdcc0003",
+    "mtime": 1791234100.8017478,
+    "ast_hash": "e698707ff0d9a55594c9c04a6b2ee9a2",
     "semantic_hash": ""
   },
   "server/domain/processCreateContract.ts": {
@@ -12632,6 +12632,331 @@
   "docs/audits/FAST_TRACK_OWNER_DECISIONS.md": {
     "mtime": 1791234019.9298704,
     "ast_hash": "5827e76a7f7600c1911d17b0c11b79ea",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/RegenerationBlockedNotice.tsx": {
+    "mtime": 1791234101.4297478,
+    "ast_hash": "4e1898dd48f9cfc70c6a2403eaeb60c3",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/RegenerationConfirmDialog.tsx": {
+    "mtime": 1791234101.4297478,
+    "ast_hash": "6ccbdc94239db748f256dba17cc586fd",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/regenerationGuard.test.ts": {
+    "mtime": 1791234101.4337478,
+    "ast_hash": "0b596cf0c1ba8817ee307c1f5aa35e19",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/regenerationGuard.ts": {
+    "mtime": 1791234101.4337478,
+    "ast_hash": "0292302ba95fd7cd8d2ea5e03d333e74",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/regenerationR5.test.ts": {
+    "mtime": 1791234101.4337478,
+    "ast_hash": "f71ba71a784b368278ac3a774c02e68d",
+    "semantic_hash": ""
+  },
+  "client/src/lib/formHydration.test.ts": {
+    "mtime": 1791234101.7857478,
+    "ast_hash": "0e2080cacd20be08507b1f74a768ae81",
+    "semantic_hash": ""
+  },
+  "client/src/lib/formHydration.ts": {
+    "mtime": 1791234101.7857478,
+    "ast_hash": "a38ab469db4684376dd2d839363d0a47",
+    "semantic_hash": ""
+  },
+  "drizzle/0310_contract_number_normalized_index.sql": {
+    "mtime": 1791234101.2874694,
+    "ast_hash": "39d88615a602dbc72824c276d922963d",
+    "semantic_hash": ""
+  },
+  "drizzle/0311_edital_institutional_parameters.sql": {
+    "mtime": 1791234101.4337478,
+    "ast_hash": "2722ba93a50940e6f43a2c8510cc91a4",
+    "semantic_hash": ""
+  },
+  "drizzle/0312_institutional_decision_ledger.sql": {
+    "mtime": 1791234101.5377479,
+    "ast_hash": "d2d0d256433fc093abf08a0669ea8e5a",
+    "semantic_hash": ""
+  },
+  "drizzle/0313_procurement_process_lifecycle.sql": {
+    "mtime": 1791234101.6577477,
+    "ast_hash": "635b51dd87f21d901efc930fa8005b57",
+    "semantic_hash": ""
+  },
+  "drizzle/0314_required_document_evidence.sql": {
+    "mtime": 1791234102.1337478,
+    "ast_hash": "6192d4a7f9391934d1275aadb496930e",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0310_snapshot.json": {
+    "mtime": 1791234101.293748,
+    "ast_hash": "c2e640bbba0fa7b3bd93569bc82804fd",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0311_snapshot.json": {
+    "mtime": 1791234102.9497478,
+    "ast_hash": "1ff4f80627e4ecd7b8b404e5707b35ab",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0312_snapshot.json": {
+    "mtime": 1791234102.9497478,
+    "ast_hash": "2869527bdcec9ec7feba59986a603b06",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0313_snapshot.json": {
+    "mtime": 1791234102.9537477,
+    "ast_hash": "f5b3004adaaec11c8ba80ebd91ba8cbb",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0314_snapshot.json": {
+    "mtime": 1791234102.9537477,
+    "ast_hash": "fde258b25354d2e886b28849c71a02b2",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/contract_number_scope_A_unique_per_org.sql": {
+    "mtime": 1791234101.2969475,
+    "ast_hash": "037b39e55a3cde6445955849b85a8ab8",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/preflight_contract_number_scope_A.sql": {
+    "mtime": 1791234101.2969475,
+    "ast_hash": "ebff8f4887ae1f1d131485a8b45ce233",
+    "semantic_hash": ""
+  },
+  "scripts/inventory-r6-1-quoted-quantity-without-items.sql": {
+    "mtime": 1791234102.011757,
+    "ast_hash": "bb69f5d35748826311642e171ea958b5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/canonicalItems.ts": {
+    "mtime": 1791234102.011757,
+    "ast_hash": "2bff5f48663089dc05facfd5290f94e9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/contract-number-scope-0310-mysql-smoke.test.ts": {
+    "mtime": 1791234101.2969475,
+    "ast_hash": "97b53a97fcfb988a8d4e34a780526420",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/create-not-reset-legal-contract-mysql-smoke.test.ts": {
+    "mtime": 1791234101.2969475,
+    "ast_hash": "8392f579bf036a48a22ad535ca4ad43b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/create-not-reset-legal-contract.test.ts": {
+    "mtime": 1791234101.2969475,
+    "ast_hash": "baed705095d65241c20a717e6ccb1ec1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-procurement-rbac-contract.test.ts": {
+    "mtime": 1791234102.1377478,
+    "ast_hash": "32d7148d694978a528c96b003492ec06",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
+    "mtime": 1791234102.1377478,
+    "ast_hash": "0d0736524b2008696051d7f89d94a7b5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/institutional-decision-ledger-mysql-smoke.test.ts": {
+    "mtime": 1791234101.5417478,
+    "ast_hash": "34672abbc1cc76dc02dc443fe7bacb69",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
+    "mtime": 1791234100.8903792,
+    "ast_hash": "746b8123ed28c725707ed18d61b90dad",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new006-contract-workspace-rbac.test.ts": {
+    "mtime": 1791234100.8903792,
+    "ast_hash": "168ec2c7c14fbac6df89140525790da3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-assignment-authority.test.ts": {
+    "mtime": 1791234100.9817479,
+    "ast_hash": "99e0bdaee92497b0ce36b6fd2552e7c0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts": {
+    "mtime": 1791234100.9817479,
+    "ast_hash": "8ea6f1045bccc35c8d26e998b0f706eb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/new007-legal-opinion-receive-claim.test.ts": {
+    "mtime": 1791234100.9817479,
+    "ast_hash": "96e8b47850965b3a82b5e854fd25b84c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pilot-reset-lifecycle-mysql-smoke.test.ts": {
+    "mtime": 1791234101.6617477,
+    "ast_hash": "b77da5864eee74a399b5e7c6fa52860c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr09-regeneration-human-state-mysql-smoke.test.ts": {
+    "mtime": 1791234101.4377477,
+    "ast_hash": "a1a61766b8e8240877f8bf7c7cc57812",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr09-regeneration-human-state.test.ts": {
+    "mtime": 1791234101.4377477,
+    "ast_hash": "a800ddede806f9dd8d4458df3191bc88",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr10-pr11-human-authority-mysql-smoke.test.ts": {
+    "mtime": 1791234101.8857477,
+    "ast_hash": "a24006b5c5cf650af5fbbcd4e0f5c76e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr12-contract-governed-change-mysql-smoke.test.ts": {
+    "mtime": 1791234101.181748,
+    "ast_hash": "7db81efab6933ca06549ead6d389044d",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr12-contract-governed-change.test.ts": {
+    "mtime": 1791234101.181748,
+    "ast_hash": "dc091af4d13e0e7330b90bd886a94819",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/pr16-required-document-evidence-mysql-smoke.test.ts": {
+    "mtime": 1791234102.1377478,
+    "ast_hash": "e7c872284b32e9702022e559ed167821",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/process-lifecycle-0313-migration-mysql-smoke.test.ts": {
+    "mtime": 1791234101.6617477,
+    "ast_hash": "3ca98fbd7cfc8d4232764147f57712b7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-decision-domain.test.ts": {
+    "mtime": 1791234101.5417478,
+    "ast_hash": "1dbab5f7a1c761ef65a9743c910a6702",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/pr09-draft-regeneration-domain.test.ts": {
+    "mtime": 1791234101.4377477,
+    "ast_hash": "a1a6e1aa01a87900c291017b586e71de",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/pr09-r5-edital-institutional-parameters-domain.test.ts": {
+    "mtime": 1791234101.4377477,
+    "ast_hash": "3fcae211f294075285126a68715bc216",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/process-lifecycle-domain.test.ts": {
+    "mtime": 1791234101.6617477,
+    "ast_hash": "321dfb836733df6074f5e558527b732a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/r5-hydration-human-authority-guard.test.ts": {
+    "mtime": 1791234101.8857477,
+    "ast_hash": "0cc8ac4f7d2f66365cf62069e83268f9",
+    "semantic_hash": ""
+  },
+  "server/db/institutionalDecisions.ts": {
+    "mtime": 1791234101.5417478,
+    "ast_hash": "f218a6cb10e9f2a09e248a0ca29ddfc8",
+    "semantic_hash": ""
+  },
+  "server/db/legalOpinionAssignment.ts": {
+    "mtime": 1791234100.9817479,
+    "ast_hash": "3464989dbafad41b661770142a171931",
+    "semantic_hash": ""
+  },
+  "server/db/processLifecycle.ts": {
+    "mtime": 1791234101.6617477,
+    "ast_hash": "8b8f28ddeea719e118a4921d9e3fec3a",
+    "semantic_hash": ""
+  },
+  "server/domain/contractCreation.ts": {
+    "mtime": 1791234101.2977479,
+    "ast_hash": "86d2fb97afee2c0c3a93f843cb6660a2",
+    "semantic_hash": ""
+  },
+  "server/domain/draftRegeneration.ts": {
+    "mtime": 1791234101.4377477,
+    "ast_hash": "a90ba96c309aefc7d8bb61471bd4b19d",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalDecision.ts": {
+    "mtime": 1791234101.5417478,
+    "ast_hash": "516198face937b815564492166681344",
+    "semantic_hash": ""
+  },
+  "server/domain/processLifecycle.ts": {
+    "mtime": 1791234101.6617477,
+    "ast_hash": "2077c0d764ba956014a9ecf205b3a3b9",
+    "semantic_hash": ""
+  },
+  "server/domain/requiredDocumentEvidence.ts": {
+    "mtime": 1791234102.1377478,
+    "ast_hash": "8c8966b3a5b0b6ba6bf87143424d14b0",
+    "semantic_hash": ""
+  },
+  "server/routers/contractWorkspaceRbac.ts": {
+    "mtime": 1791234100.8903792,
+    "ast_hash": "d729a421d52d69ca289d6322068e7b05",
+    "semantic_hash": ""
+  },
+  "server/routers/directProcurementRbacMatrix.ts": {
+    "mtime": 1791234102.1377478,
+    "ast_hash": "bb98de3c89187d8c690efb0a9d93fe3f",
+    "semantic_hash": ""
+  },
+  "server/routers/processLifecycleRouter.ts": {
+    "mtime": 1791234101.665748,
+    "ast_hash": "657152898eebbb97b0fa45b8dca86a43",
+    "semantic_hash": ""
+  },
+  "server/services/contractEditService.ts": {
+    "mtime": 1791234101.181748,
+    "ast_hash": "c66ef4dafa7b69910be5c0373f8b3266",
+    "semantic_hash": ""
+  },
+  "server/services/evidenceStorageService.ts": {
+    "mtime": 1791234102.2392228,
+    "ast_hash": "ed2ef2eaa6383e982b273f59e567af59",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalDecisionService.ts": {
+    "mtime": 1791234101.5457478,
+    "ast_hash": "2225da25534e9f86c90507c8b97f73b1",
+    "semantic_hash": ""
+  },
+  "server/services/legalOpinionAuthorityService.ts": {
+    "mtime": 1791234100.9817479,
+    "ast_hash": "84c079b676a0f4200c9a9d9926eb938e",
+    "semantic_hash": ""
+  },
+  "server/services/processLifecycleService.ts": {
+    "mtime": 1791234101.665748,
+    "ast_hash": "d8e54c9a608738ff0707d24821b822ea",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_DECISION_CONTRACT.md": {
+    "mtime": 1791234101.5377479,
+    "ast_hash": "39e1232f4b54b744993c7586c4da26f2",
+    "semantic_hash": ""
+  },
+  "docs/architecture/PILOT_RESET_GOVERNED_LIFECYCLE.md": {
+    "mtime": 1791234101.6577477,
+    "ast_hash": "419225f0f79ef91f670991c6b0c6421e",
+    "semantic_hash": ""
+  },
+  "docs/architecture/QUANTITY_AUTHORITY_CONTRACT.md": {
+    "mtime": 1791234102.011757,
+    "ast_hash": "2b74ab237cb61ebc33d378dc9003f9bd",
+    "semantic_hash": ""
+  },
+  "drizzle/policy-pending/README.md": {
+    "mtime": 1791234101.293748,
+    "ast_hash": "7064d37f6f9c48f1e9087b0600940437",
     "semantic_hash": ""
   }
 }
