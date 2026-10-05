@@ -103,14 +103,15 @@ describe("R11.5 — IA nunca decide", () => {
 });
 
 describe("R11.6 — imutabilidade do emitido e dos ledgers", () => {
-  it("official_documents: o único UPDATE é de referências de storage", () => {
+  // SEM-043 (reescrito): antes o único UPDATE de `official_documents` era o de referências de storage (sobrescrito a
+  // cada export — DOCX apagava o ponteiro/hash do PDF). Agora os artefatos vão para o ledger append-only
+  // `official_document_artifacts` e a linha da versão oficial NÃO recebe mais nenhum UPDATE da aplicação.
+  it("official_documents: NENHUM UPDATE da aplicação (versão oficial imutável; artefatos no ledger append-only)", () => {
     const updates = SERVER.flatMap((f) => (code(f).match(/update\(officialDocumentsTable\)[\s\S]{0,200}/g) ?? []).map((m) => ({ f, m })));
-    expect(updates.map((u) => u.f)).toEqual(["server/db/officialDocuments.ts"]);
-    const set = updates[0]!.m.match(/\.set\(\{([^}]*)\}/)![1]!;
-    expect(set).not.toMatch(/\bcontent\b|\bstatus\b|\bversion\b|\bmetadata\b/);
+    expect(updates.map((u) => u.f)).toEqual([]);
   });
   it("ledgers append-only: sem UPDATE/DELETE de decisões e eventos de lifecycle", () => {
-    for (const t of ["institutionalDecisionsTable", "procurementProcessLifecycleEventsTable"]) {
+    for (const t of ["institutionalDecisionsTable", "procurementProcessLifecycleEventsTable", "officialDocumentArtifactsTable"]) {
       expect(SERVER.filter((f) => new RegExp(`(update|delete)\\(${t}\\)`).test(code(f))), t).toEqual([]);
     }
   });
