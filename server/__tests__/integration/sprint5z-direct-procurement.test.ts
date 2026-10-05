@@ -95,12 +95,15 @@ describe("FASE 5 — Business Domain: Contratação Direta", () => {
       expect(nextDirectStage(inex)).toBe("PROCEDURE");
     });
 
-    it("advanceDirectStage caminha e configura status", () => {
+    // R9 / SEM-064 — reescrito: este teste PROTEGIA o status derivado do ponteiro de etapa (RATIFICATION ⇒ "ratificado",
+    // PUBLICATION ⇒ "publicado" sem ato registrado). Agora o ponteiro só caminha as etapas; "ratificado"/"publicado"
+    // saem dos ATOS REGISTRADOS (ledger/publicações) — ver sem064-direct-status-from-acts.test.ts.
+    it("advanceDirectStage caminha as etapas SEM afirmar ratificação/publicação (status de ato vem dos atos registrados)", () => {
       let ws = setDirectStage(mk("dispensa"), "RATIFICATION");
-      expect(ws.status).toBe("ratificado");
+      expect(ws.status).toBe("em_andamento");
       ws = advanceDirectStage(ws); // PUBLICATION
       expect(ws.currentStage).toBe("PUBLICATION");
-      expect(ws.status).toBe("publicado");
+      expect(ws.status).toBe("em_andamento");
     });
 
     it("configureFlags permite desligar parecer obrigatório (nunca fluxo fixo)", () => {

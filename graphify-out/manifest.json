@@ -980,13 +980,13 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementHome.tsx": {
-    "mtime": 1791087146.8954723,
-    "ast_hash": "ae857832724e92c1fef6855e476ac778",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "a4d2a5d117d9f5c6d34daa6bd50dee88",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementOverview.tsx": {
-    "mtime": 1790253304.1379716,
-    "ast_hash": "d32fc10fbab7ed4dca9be2151bcf46c3",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "c6e81882f890664efd399613c7d76338",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/LegalBasisWorkspace.tsx": {
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NeedCharacterizationWorkspace.tsx": {
-    "mtime": 1791087146.8954723,
-    "ast_hash": "3c650b963db47db4a300513773079328",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "2ea635c8c7a4d213eeda48b7e0c0467d",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/NewDirectProcurementWizard.tsx": {
@@ -1005,8 +1005,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PriceJustificationWorkspace.tsx": {
-    "mtime": 1791087146.8954723,
-    "ast_hash": "41a6f0eb10f4d00b5bfe6520b220345b",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "302d2db7513e7488ac0dd67c500fd2ca",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/ProposalCollectionWorkspace.tsx": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/PublicationWorkspace.tsx": {
-    "mtime": 1790253304.1379716,
-    "ast_hash": "a872d165fa4b16354d3333dcc625525f",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "2f8bf14f81da4219d96d45355ecda073",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/RatificationWorkspace.tsx": {
@@ -1035,8 +1035,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/labels.ts": {
-    "mtime": 1790253304.1379716,
-    "ast_hash": "0433c90ae27077fdc8c32fdddb7d758a",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "9738b203aa29d133f03de6590c902508",
     "semantic_hash": ""
   },
   "client/src/components/disaster-recovery/RecoveryCheckpointPanel.tsx": {
@@ -6510,8 +6510,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5z-direct-procurement.test.ts": {
-    "mtime": 1791087476.4576297,
-    "ast_hash": "34ba4b953f7f02cd419389a1cf1ca1dc",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "d4aff41f35cbc11945aaabf8f0093059",
     "semantic_hash": ""
   },
   "server/__tests__/integration/task-attachment-policy.test.ts": {
@@ -6555,8 +6555,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1791087148.0274723,
-    "ast_hash": "bfb5abacee4457e96ab63e6302169d46",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "d10eb257f7128c7c0dcf8a44e50cc939",
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
@@ -6970,8 +6970,8 @@
     "semantic_hash": ""
   },
   "server/db/directProcurement.ts": {
-    "mtime": 1791087148.0314722,
-    "ast_hash": "0377033b8f2215d2400dcf5b6a1b4bc0",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "590677ca911e16e097b654ce1aabf481",
     "semantic_hash": ""
   },
   "server/db/documentRepository.ts": {
@@ -7505,8 +7505,8 @@
     "semantic_hash": ""
   },
   "server/domain/directProcurementWorkspace.ts": {
-    "mtime": 1790253304.5462584,
-    "ast_hash": "b2cd119a4e05f8c3d908be6ae57f3a9d",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "ec8028c0f9079cc0aedc884a4f16858b",
     "semantic_hash": ""
   },
   "server/domain/documentDiff.ts": {
@@ -8765,8 +8765,8 @@
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
-    "mtime": 1791087148.1514723,
-    "ast_hash": "9a0d695da2d7c9939095c9bed0ad360d",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "3c68672a435541bd05922ba7a4d43ba3",
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1791087148.1594722,
-    "ast_hash": "cf2791973551b712fcbb80cbb83f6f12",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "bc6d0bb1a1195e3c488a289032b52fda",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -12660,13 +12660,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791087148.0154722,
-    "ast_hash": "5e95420d21d9f1f1b45d4a5e99b44261",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "cd7dbc37fd2b74c046c15b0dc98fd4fe",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRbacMatrix.ts": {
-    "mtime": 1791087148.1514723,
-    "ast_hash": "bb98de3c89187d8c690efb0a9d93fe3f",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "f6ab2b8fbbf20963118844ac1184b0c3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
@@ -12720,8 +12720,8 @@
     "semantic_hash": ""
   },
   "server/db/directPriceImport.ts": {
-    "mtime": 1791087148.0314722,
-    "ast_hash": "4f685673dbe4ed1a35ca3df39f6bae01",
+    "mtime": 1791202363.7104447,
+    "ast_hash": "8d53ca1dc5369e4ac4269595f5867cbb",
     "semantic_hash": ""
   },
   "server/domain/directPriceImport.ts": {
@@ -13377,6 +13377,31 @@
   "server/domain/importCorrectionReview.ts": {
     "mtime": 1791087148.0354724,
     "ast_hash": "0bdc44c870f0d6935388bc4b143d2710",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sem042-direct-not-persisted-contract.test.ts": {
+    "mtime": 1791202363.7104447,
+    "ast_hash": "a7ba5b8b91d408d03de3e8a9da8799ab",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sem042-sem064-direct-mysql-smoke.test.ts": {
+    "mtime": 1791202363.7104447,
+    "ast_hash": "47b7717b3d2b20c174266415d46aa3db",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/sem042-price-reference.test.ts": {
+    "mtime": 1791202363.7104447,
+    "ast_hash": "c543e35e08c3c0e31e8e3de33023d178",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/sem064-direct-status-from-acts.test.ts": {
+    "mtime": 1791202363.7104447,
+    "ast_hash": "d7061d11d625dea57a692768f1630ff5",
+    "semantic_hash": ""
+  },
+  "server/domain/directPriceReference.ts": {
+    "mtime": 1791202363.7104447,
+    "ast_hash": "8b4e5527e060fdc0bc5a407043a7f0bc",
     "semantic_hash": ""
   }
 }

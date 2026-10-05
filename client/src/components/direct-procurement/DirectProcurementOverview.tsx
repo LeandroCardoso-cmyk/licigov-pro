@@ -1,6 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
-import { stageLabel, STAGE_CLASSES, PROCUREMENT_TYPE_LABELS, PROCEDURE_LABELS, formatDate } from "./labels";
+import { stageLabel, STAGE_CLASSES, STATUS_LABELS, STATUS_CLASSES, PROCUREMENT_TYPE_LABELS, PROCEDURE_LABELS, formatDate } from "./labels";
 
 /**
  * DirectProcurementOverview — REAL (tRPC).
@@ -18,7 +18,8 @@ export default function DirectProcurementOverview({ onOpen }: DirectProcurementO
 
   const dispensa = workspaces.filter((w) => w.procurementType === "dispensa").length;
   const inexigibilidade = workspaces.filter((w) => w.procurementType === "inexigibilidade").length;
-  const concluded = workspaces.filter((w) => ["PUBLICATION", "CONTRACT", "ARCHIVED"].includes(w.currentStage)).length;
+  // R9 / SEM-064 — "Concluídos" conta pelo status derivado dos ATOS REGISTRADOS, não pelo ponteiro de etapa.
+  const concluded = workspaces.filter((w) => ["publicado", "concluido", "arquivado"].includes(w.status)).length;
 
   const kpis = [
     { label: "Total", value: workspaces.length, className: "text-foreground" },
@@ -53,6 +54,7 @@ export default function DirectProcurementOverview({ onOpen }: DirectProcurementO
                   <th className="px-4 py-2 font-medium">Modalidade</th>
                   <th className="px-4 py-2 font-medium">Procedimento</th>
                   <th className="px-4 py-2 font-medium">Etapa</th>
+                  <th className="px-4 py-2 font-medium">Situação</th>
                   <th className="px-4 py-2 font-medium">Atualizado</th>
                 </tr>
               </thead>
@@ -63,6 +65,7 @@ export default function DirectProcurementOverview({ onOpen }: DirectProcurementO
                     <td className="px-4 py-3 text-xs text-muted-foreground">{PROCUREMENT_TYPE_LABELS[w.procurementType] ?? w.procurementType}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{PROCEDURE_LABELS[w.procedureType] ?? w.procedureType}</td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${STAGE_CLASSES[w.currentStage] ?? STAGE_CLASSES.NEW}`}>{stageLabel(w.currentStage)}</span></td>
+                    <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${STATUS_CLASSES[w.status] ?? STATUS_CLASSES.rascunho}`}>{STATUS_LABELS[w.status] ?? w.status}</span></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(w.updatedAt)}</td>
                   </tr>
                 ))}

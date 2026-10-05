@@ -74,7 +74,7 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
   importDFD: {
     rbacClass: "DRAFT_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
     rationale: "Importa o DFD de origem (instrução documental).",
-    sideEffects: "process_timeline(change). DFD em memória (não persistido). Sem IA/notificação.",
+    sideEffects: "NENHUM (SEM-042): recusa estável DIRECT_DFD_IMPORT_NOT_PERSISTED antes de qualquer escrita — não há repositório de DFD na contratação direta. Sem IA/notificação.",
   },
   selectLegalBasis: {
     rbacClass: "DRAFT_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
@@ -84,7 +84,7 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
   characterizeNeed: {
     rbacClass: "DRAFT_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
     rationale: "Caracterização da necessidade (instrução).",
-    sideEffects: "process_timeline(change). Caracterização em memória. Sem IA/notificação.",
+    sideEffects: "NENHUM (SEM-042): recusa estável DIRECT_NEED_NOT_PERSISTED antes de qualquer escrita — não há repositório da caracterização. Sem IA/notificação.",
   },
   importPriceResearch: {
     rbacClass: "EVIDENCE_WRITE", oldBuilder: "tenantProcedure", minRole: "operator", newBuilder: 'orgRoleProcedure("operator")',
@@ -153,13 +153,13 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
   },
   publish: {
     rbacClass: "PUBLICATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
-    rationale: "Materializa publicações oficiais (aviso, termo de ratificação, extrato); exige ratificação 'ratificado' (fail-closed no service).",
-    sideEffects: "generated_publications + official_documents (Document Engine) + process_timeline(decision) + etapa PUBLICATION. Sem IA.",
+    rationale: "Materializa publicações oficiais (aviso, termo de ratificação; extrato só de contrato registrado); exige ratificação 'ratificado' (fail-closed no service).",
+    sideEffects: "generated_publications + official_documents (Document Engine) + process_timeline(decision, evento singleton por conteúdo) + etapa/status PUBLICATION/publicado só após gravar. Extrato de contrato só com includeContractExtract e contrato registrado (SEM-064). Sem IA.",
   },
   configureFlags: {
     rbacClass: "WORKFLOW_CONFIGURATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
     rationale: "Altera exigências do fluxo adaptativo (ex.: requiresLegalOpinion, requiresPriceResearch).",
-    sideEffects: "direct_procurement_workspaces.flags (upsert). Sem timeline/IA/notificação.",
+    sideEffects: "direct_procurement_workspaces.flags (UPDATE só das flags) + process_timeline(change|decision, antes→depois, ator humano) na mesma transação; sem mudança ⇒ sem escrita (SEM-064). Sem IA/notificação.",
   },
 } as const satisfies Record<string, DirectProcurementRbacEntry>;
 
