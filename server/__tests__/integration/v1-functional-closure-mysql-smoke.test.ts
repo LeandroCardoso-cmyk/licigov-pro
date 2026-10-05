@@ -26,7 +26,7 @@ import { createDirectProcurementWorkspace } from "../../domain/directProcurement
 import { createRatification } from "../../domain/directProcurementJustifications";
 import { insertDirectProcurementWorkspace, insertRatification } from "../../db/directProcurement";
 import { recordDirectProcurementRatification } from "../../services/institutionalDecisionService";
-import { generatePriceJustification, generatePublications, seedRequiredDocuments } from "../../services/directProcurementService";
+import { generatePriceJustification, generatePublications, seedRequiredDocuments, importDirectPriceResearch } from "../../services/directProcurementService";
 import { createManualContract, generateContractDocument, createAddendum } from "../../services/contractService";
 import { listOfficialDocuments, getOfficialDocument } from "../../db/officialDocuments";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
@@ -261,17 +261,27 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     return ws;
   }
 
-  it("B1) justificativa de PREÇO é projetada no Document Engine (fiel aos dados persistidos)", async () => {
+  // R9 / SEM-042 — reescrito: este teste PROTEGIA o valor do CLIENTE (15000) com uma pesquisa inexistente ("res-1").
+  // Agora a justificativa por pesquisa exige pesquisa governada real; o valor vem do SERVIDOR (3 cotações, mediana
+  // 15000) e o documento oficial traz a LINHAGEM (sem "confiança" fixa).
+  it("B1) justificativa de PREÇO é projetada no Document Engine (fiel aos dados persistidos, com linhagem)", async () => {
     const ws = await seedDirect(ORG, "DIR-B1");
+    const imp = await importDirectPriceResearch({
+      workspaceId: ws.id, organizationId: ORG, source: "colar", idempotencyKey: "v1-b1-import-key",
+      text: "Notebook;1;un;14000;Forn A\nNotebook;1;un;15000;Forn B\nNotebook;1;un;16500;Forn C", actorUserId: USER, correlationId: "v1-closure",
+    });
     await generatePriceJustification({
       workspaceId: ws.id, organizationId: ORG, source: "pesquisa", justification: "Preço fundamentado em 3 cotações.",
-      referenceValue: 15000, researchId: "res-1", correlationId: "v1-closure", confirmOfficial: true, actorUserId: USER,
+      referenceValue: 15000, researchId: imp.researchId, method: "mediana", correlationId: "v1-closure", confirmOfficial: true, actorUserId: USER,
     });
     const docs = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "justificativa_preco");
     expect(docs.length).toBe(1);
     const full = await getOfficialDocument(docs[0]!.id, ORG);
     expect(full!.content).toContain("Preço fundamentado em 3 cotações.");
     expect(full!.content).toContain("15000");
+    expect(full!.content).toContain(imp.researchId);
+    expect(full!.content).toContain(imp.contentHash.slice(0, 12));
+    expect(full!.content).not.toMatch(/confian[çc]a|Baseado na Pesquisa/i);
   }, 120_000);
 
   // R4 / PR-07 — a decisão vem do ledger append-only (0312), com autoridade DECLARADA, data e referência do ato.

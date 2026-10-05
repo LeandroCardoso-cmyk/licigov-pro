@@ -12,7 +12,7 @@ import RatificationWorkspace from "./RatificationWorkspace";
 import PublicationWorkspace from "./PublicationWorkspace";
 import TimelinePanel from "./TimelinePanel";
 import { Section } from "@/components/ui/Section";
-import { stageLabel, STAGE_CLASSES, PLATFORM_LABELS, RECEIPT_LABELS, PROCUREMENT_TYPE_LABELS } from "./labels";
+import { stageLabel, STAGE_CLASSES, STATUS_LABELS, STATUS_CLASSES, statusBasisNote, PLATFORM_LABELS, RECEIPT_LABELS, PROCUREMENT_TYPE_LABELS } from "./labels";
 
 /**
  * DirectProcurementHome — REAL (tRPC).
@@ -66,7 +66,11 @@ export default function DirectProcurementHome() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <button type="button" onClick={() => setWorkspaceId("")} className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200">← Voltar aos processos</button>
         {ws && (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STAGE_CLASSES[ws.currentStage] ?? STAGE_CLASSES.NEW}`}>{stageLabel(ws.currentStage)}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STAGE_CLASSES[ws.currentStage] ?? STAGE_CLASSES.NEW}`}>{stageLabel(ws.currentStage)}</span>
+            {/* R9 / SEM-064 — situação derivada dos ATOS REGISTRADOS (ledger/publicações), não do ponteiro de etapa. */}
+            <span title={statusBasisNote(data?.statusBasis) ?? undefined} className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_CLASSES[ws.status] ?? STATUS_CLASSES.rascunho}`}>{STATUS_LABELS[ws.status] ?? ws.status}</span>
+          </span>
         )}
       </header>
 
@@ -78,6 +82,7 @@ export default function DirectProcurementHome() {
             <h2 className="text-sm font-semibold text-foreground">{ws.processNumber} — {PROCUREMENT_TYPE_LABELS[ws.procurementType] ?? ws.procurementType}</h2>
             <p className="text-xs text-muted-foreground">{ws.object}</p>
             <p className="mt-1 text-xs text-muted-foreground">Fundamento: {ws.legalBasis || "a definir"}</p>
+            {statusBasisNote(data?.statusBasis) && <p className="mt-1 text-xs text-muted-foreground">{statusBasisNote(data?.statusBasis)}</p>}
           </div>
 
           {/* Fases institucionais do processo (agrupamento de NÍVEL 1) — reduz o efeito

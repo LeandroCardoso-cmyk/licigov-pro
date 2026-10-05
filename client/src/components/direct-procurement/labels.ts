@@ -80,6 +80,35 @@ export const DOC_STATUS_CLASSES: Record<string, string> = {
   validado: `${statusTone("success")} ring-green-500/20`,
 };
 
+/**
+ * R9 / SEM-064 — rótulos do STATUS (vocabulário inalterado, HD-09). O status exibido é o DERIVADO dos atos registrados
+ * (servidor); `ratificado`/`publicado` só aparecem com ato registrado.
+ */
+export const STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho", em_andamento: "Em andamento", aguardando_parecer: "Aguardando parecer",
+  ratificado: "Ratificado", publicado: "Publicado", concluido: "Concluído", arquivado: "Arquivado",
+};
+
+export const STATUS_CLASSES: Record<string, string> = {
+  rascunho: `${statusTone("neutral")} ring-gray-500/20`,
+  em_andamento: `${statusTone("info")} ring-blue-500/20`,
+  aguardando_parecer: `${statusTone("warning")} ring-amber-500/20`,
+  ratificado: `${statusTone("success")} ring-green-500/20`,
+  publicado: `${statusTone("success")} ring-green-500/20`,
+  concluido: `${statusTone("success")} ring-green-500/20`,
+  arquivado: `${statusTone("neutral")} ring-gray-500/20`,
+};
+
+/** Nota sobre o lastro do status nos atos registrados (null = nada a avisar). */
+export function statusBasisNote(basis: { ratification: string; publication: string; unsupportedPointerClaims: readonly string[] } | null | undefined): string | null {
+  if (!basis) return null;
+  if (basis.unsupportedPointerClaims.length > 0) return "O registro de etapa indicava ratificação/publicação, mas não há ato registrado que a sustente — status não afirmado.";
+  if (basis.ratification === "RECORDED_NOT_RATIFIED") return "Decisão registrada: não ratificado.";
+  if (basis.ratification === "NO_RECORDED_ACT") return "Ratificação: sem ato registrado.";
+  if (basis.publication === "NO_RECORDED_ACT") return "Publicação: sem ato registrado.";
+  return null;
+}
+
 export function stageLabel(code: string): string {
   return STAGE_LABELS[code] ?? code;
 }

@@ -59,6 +59,23 @@ export async function findDirectPriceImport(
   };
 }
 
+/**
+ * R9 / SEM-042 — pesquisas gravadas para o workspace (tenant-scoped), da mais antiga à mais recente. Inclui qualquer
+ * linha de `price_research` do workspace: o CHAMADOR só confia numa linha cujo id seja o derivado do contentHash
+ * recomputado das cotações (importação governada) — linhas legadas não passam nessa verificação.
+ */
+export async function listDirectPriceImports(
+  executor: ProcurementExecutor, organizationId: number, workspaceId: string,
+): Promise<PersistedDirectPriceImport[]> {
+  const rows = await executor.select().from(priceResearchTable)
+    .where(and(eq(priceResearchTable.organizationId, organizationId), eq(priceResearchTable.processId, workspaceId)))
+    .orderBy(asc(priceResearchTable.createdAt), asc(priceResearchTable.id));
+  return rows.map((r) => ({
+    importId: r.id, workspaceId: r.processId, organizationId: r.organizationId, source: r.source,
+    itemCount: r.itemCount, correlationId: r.correlationId, createdAt: fromDb(r.createdAt),
+  }));
+}
+
 /** Cotações de uma importação (ordem estável por id de inserção/criação), escopadas ao tenant. */
 export async function listDirectPriceImportItems(
   executor: ProcurementExecutor, importId: string, organizationId: number,
