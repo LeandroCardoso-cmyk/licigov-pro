@@ -6322,7 +6322,16 @@
           }
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_ctw_org_normalized_number": {
+          "name": "idx_ctw_org_normalized_number",
+          "columns": [
+            "organization_id",
+            "normalized_number"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "contract_workspaces_id": {
@@ -6332,15 +6341,7 @@
           ]
         }
       },
-      "uniqueConstraints": {
-        "uq_ctw_org_normalized_number": {
-          "name": "uq_ctw_org_normalized_number",
-          "columns": [
-            "organization_id",
-            "normalized_number"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "checkConstraint": {}
     },
     "contract_ws_apostilles": {
