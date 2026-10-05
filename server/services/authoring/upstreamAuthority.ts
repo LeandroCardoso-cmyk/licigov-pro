@@ -8,8 +8,10 @@
  * em vez do antigo marcador fixo `"tr_aprovado"` (que afirmava uma aprovação que nunca foi verificada).
  * Tenant-scoped: documento de outro órgão não é encontrado (ausente).
  */
-import { getGeneratedDocumentByKind } from "../../db/procurement";
+import { getGeneratedDocumentByKind, getLatestDraftEdit } from "../../db/procurement";
 import { getLatestEmittedByOrigin } from "../../db/officialDocuments";
+import { draftContentHash } from "../../domain/generatedDocument";
+import { resolveDraftOrigin, type DraftOrigin } from "../../domain/humanEditMarker";
 
 export type UpstreamAuthority = "emitido" | "aprovado" | "rascunho";
 export type UpstreamKind = "dfd" | "etp" | "tr";
@@ -25,6 +27,11 @@ export interface AuthoritativeUpstream {
   readonly authority: UpstreamAuthority;
   /** Versão emitida (null quando a fonte é o rascunho). */
   readonly version: number | null;
+  /**
+   * R10 / SEM-044 — origem do CONTEÚDO consumido: importado / editado por humano / gerado. `null` = desconhecida
+   * (versão emitida cujo conteúdo não coincide com o rascunho vigente nem com o ledger): nunca rotulada "gerado" por omissão.
+   */
+  readonly origin: DraftOrigin | null;
 }
 
 /** Rótulo de autoridade de um rascunho (sem versão emitida). */
@@ -47,13 +54,21 @@ export function authorityLabel(up: { authority?: UpstreamAuthority; version?: nu
 }
 
 export async function resolveAuthoritativeUpstream(organizationId: number, processId: string, kind: UpstreamKind): Promise<AuthoritativeUpstream | null> {
+  const draft = await getGeneratedDocumentByKind(processId, organizationId, kind);
+  // Origem do rascunho: marcadores de `sources` (edição humana/importação) e, para linhas antigas sem marcador, o ledger de edições.
+  const draftOriginOf = async (d: NonNullable<typeof draft>): Promise<DraftOrigin> =>
+    resolveDraftOrigin(d, await getLatestDraftEdit(processId, organizationId, kind));
   if (EMITTABLE.has(kind)) {
     const emitted = await getLatestEmittedByOrigin(organizationId, BUSINESS_DOMAIN, processId, kind);
     if (emitted && emitted.content.trim()) {
-      return { content: emitted.content, status: "emitido", sources: [], authority: "emitido", version: emitted.version };
+      // A versão emitida é o rascunho no momento da emissão: a origem vale se o rascunho vigente ainda tem o MESMO conteúdo.
+      const sameContent = !!draft && draftContentHash(draft.content ?? "") === draftContentHash(emitted.content);
+      return {
+        content: emitted.content, status: "emitido", sources: [], authority: "emitido", version: emitted.version,
+        origin: sameContent && draft ? await draftOriginOf(draft) : null,
+      };
     }
   }
-  const draft = await getGeneratedDocumentByKind(processId, organizationId, kind);
   if (!draft) return null;
-  return { content: draft.content ?? "", status: draft.status ?? null, sources: draft.sources ?? [], authority: draftAuthority(draft.status), version: null };
+  return { content: draft.content ?? "", status: draft.status ?? null, sources: draft.sources ?? [], authority: draftAuthority(draft.status), version: null, origin: await draftOriginOf(draft) };
 }

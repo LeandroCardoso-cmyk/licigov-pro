@@ -52,7 +52,9 @@ export type ContextPath = ScalarPath | ItemPath;
  *    demandante responsável pela necessidade; projetá-lo aqui gerava divergência falsa no DFD;
  *  - plannedQuantity: SOMENTE humano/documentos da necessidade — NUNCA price_research/intelligent_item
  *    (a quantidade da cotação é `sourceQuantity`, evidência) e NUNCA ai_draft;
- *  - descrição/unidade do item: também observáveis a partir do Item Inteligente (evidência consolidada).
+ *  - descrição/unidade do item: humano, DFD/ETP/TR e documento aprovado. R10 / SEM-038: `intelligent_item` NÃO é fonte
+ *    permitida — não existe escritor governado dele para esses caminhos (autoridade morta/ambígua); o Item Inteligente é
+ *    evidência/candidato (vínculo de fonte do Item da contratação), nunca afirmação de fato no ledger.
  */
 const NEED_SOURCES: readonly ContextSourceType[] = ["process", "user", "dfd", "etp", "tr", "approved_document"];
 const HUMAN_NEED_SOURCES: readonly ContextSourceType[] = ["user", "dfd", "etp", "tr", "approved_document"];
@@ -66,8 +68,8 @@ export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceTyp
   "planning.pcaAlignment":   ["user", "dfd", "etp", "approved_document"],
   "planning.priority":       ["user", "dfd", "etp", "approved_document"],
   "planning.desiredDate":    ["user", "dfd", "etp", "approved_document"],
-  "items.*.description":     ["user", "dfd", "etp", "tr", "approved_document", "intelligent_item"],
-  "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document", "intelligent_item"],
+  "items.*.description":     ["user", "dfd", "etp", "tr", "approved_document"],
+  "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document"],
   "items.*.plannedQuantity": ["user", "dfd", "etp", "tr", "approved_document"],
 };
 
@@ -244,6 +246,12 @@ export interface ContextInputs {
   procurementItems?: ReadonlyArray<{
     id: string; description: string; unit: string; lotId: string | null; ordinal: number;
     status: string; revision: number; fingerprint: string;
+    /** R10 / SEM-045 — proveniência persistida de descrição/unidade e quem criou o item (ausente ⇒ projeção legada). */
+    provenance?: {
+      description: { source: string; sourceId: string | null; overriddenBy: number | null; at: string | null };
+      unit: { source: string; sourceId: string | null; overriddenBy: number | null; at: string | null };
+    };
+    createdBy?: number | null;
   }>;
   /** Lotes (opcionais). */
   lots?: ReadonlyArray<{ id: string; code: string; name: string; ordinal: number; status: string }>;
@@ -318,12 +326,37 @@ export interface ProcurementCanonicalContext {
 
 function projection(
   path: ContextPath, value: string | null | undefined, sourceType: ContextSourceType, sourceId: string,
-  status: AssertionStatus, createdAt: string,
+  status: AssertionStatus, createdAt: string, actorUserId: number | null = null,
 ): FactAssertion | null {
   const v = value == null ? null : normalizeText(String(value));
   if (!v) return null;
   const valueHash = factValueHash(v);
-  return { id: 0, path, value: v, valueHash, sourceType, sourceId, sourceVersion: valueHash, status, actorUserId: null, basisValueHash: null, createdAt };
+  return { id: 0, path, value: v, valueHash, sourceType, sourceId, sourceVersion: valueHash, status, actorUserId, basisValueHash: null, createdAt };
+}
+
+/**
+ * R10 / SEM-045 — PROVENIÊNCIA REAL de descrição/unidade do Item Canônico (antes: sempre `user/confirmed`, achatada).
+ * Lida da proveniência persistida do item (origem do valor, quem o corrigiu, quem criou):
+ *  - digitado/corrigido por humano (item manual, ou valor da fonte sobrescrito): fonte `user`, autor = quem corrigiu/criou;
+ *  - aceito como veio do DFD: fonte `dfd` (autorizada para o caminho), id `pitem:<item>:dfd:<documento>`, autor = quem confirmou;
+ *  - aceito como veio da Pesquisa de Preços: a Pesquisa é EVIDÊNCIA, não pode afirmar o fato (política) ⇒ a afirmação é da
+ *    PESSOA que aceitou o candidato (`user`), com a origem preservada no id (`pitem:<item>:price_research:<fonte>`);
+ *  - `confirmed` SÓ quando há pessoa que confirmou (autor conhecido); sem autor ⇒ `observed` (nunca inventa confirmação).
+ */
+function itemFieldProjection(
+  path: ContextPath, value: string, it: NonNullable<ContextInputs["procurementItems"]>[number], field: "description" | "unit", fallbackAt: string,
+): FactAssertion | null {
+  const fp = it.provenance?.[field];
+  const base = `pitem:${it.id}`;
+  if (!fp) return projection(path, value, "user", base, "confirmed", fallbackAt); // item sem proveniência (legado/teste): comportamento anterior
+  const human = fp.overriddenBy ?? null;
+  const author = human ?? it.createdBy ?? null;
+  const at = fp.at && Number.isFinite(Date.parse(fp.at)) ? fp.at : fallbackAt;
+  const status: AssertionStatus = author !== null && author > 0 ? "confirmed" : "observed";
+  const humanOrigin = human !== null || fp.source === "user" || fp.source === "manual";
+  if (humanOrigin) return projection(path, value, "user", base, status, at, author);
+  if (fp.source === "dfd") return projection(path, value, "dfd", `${base}:dfd:${fp.sourceId ?? ""}`, status, at, author);
+  return projection(path, value, "user", `${base}:${fp.source}:${fp.sourceId ?? ""}`, status, at, author);
 }
 
 /** Resolve o contexto canônico completo. Mesmas entradas ⇒ mesmo contexto e mesmo digest. */
@@ -358,8 +391,8 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
     .sort((a, b) => a.ordinal - b.ordinal || (a.id < b.id ? -1 : 1));
   const lotOrder = new Map(lots.map((l, i) => [l.id, i]));
   for (const it of pItems) {
-    const d = projection(itemPath(it.id, "description"), it.description, "user", `pitem:${it.id}`, "confirmed", t0);
-    const u = projection(itemPath(it.id, "unit"), it.unit, "user", `pitem:${it.id}`, "confirmed", t0);
+    const d = itemFieldProjection(itemPath(it.id, "description"), it.description, it, "description", t0);
+    const u = itemFieldProjection(itemPath(it.id, "unit"), it.unit, it, "unit", t0);
     if (d) proj.push(d);
     if (u) proj.push(u);
   }

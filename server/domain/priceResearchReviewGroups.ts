@@ -309,7 +309,7 @@ export function buildPriceResearchReviewProjection(
     const description = clean(eff.description ?? row.rawDescription);
     if (!normalizeDescription(description)) { unassignedQuotes.push(quote); continue; }
     const qty = resolveEffectiveQuantity(row as unknown as Record<string, unknown>);
-    const logicalKey = intelligentItemLogicalKey({ description, unit: eff.unit ?? row.rawUnit, quantity: qty === null ? 0 : Number(qty) });
+    const logicalKey = intelligentItemLogicalKey({ description, unit: eff.unit ?? row.rawUnit, quantity: qty === null ? null : Number(qty) }); // R10 / SEM-090: null ≠ 0 (a chave mantém a codificação legada)
     const groupKey = keyOf(logicalKey);
     const owner = keyOwner.get(groupKey);
     if (owner !== undefined && owner !== logicalKey) throw new ReviewGroupKeyCollision(groupKey);

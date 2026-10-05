@@ -28,6 +28,7 @@ import {
 } from "../services/itemMaterializationService";
 import { findPriceOutliers } from "@shared/itemApprovalGate";
 import { reaisToCents } from "../domain/money";
+import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
@@ -744,8 +745,9 @@ export const procurementProcessRouter = router({
 
   /**
    * Hardening P0 (risco D) — "emitido" tem UM significado: emissão OFICIAL governada (OfficialDocumentLifecycle,
-   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando o
-   * Edital JÁ possui versão oficial emitida (ledger official_document_promotions). Sem ela → PRECONDITION_FAILED.
+   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando ETP, TR e
+   * Edital JÁ possuem versão oficial emitida (ledger official_document_promotions; R10 / SEM-087 B). Faltando
+   * qualquer uma → PRECONDITION_FAILED listando o que falta, sem nenhuma escrita.
    * Papel mínimo alinhado à emissão (manager).
    */
   issueProcess: orgRoleProcedure("manager")
@@ -753,13 +755,16 @@ export const procurementProcessRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const official = await getLatestOfficialPromotion(orgId, process.id, "edital");
-      if (!official) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "O processo só é marcado como emitido depois da emissão OFICIAL do Edital (revisão de terceiro/SoD).",
-        });
-      }
+      // R10 / SEM-087 (B) — ETP, TR e Edital precisam ter versão OFICIAL emitida (ledger). Erro de leitura propaga
+      // (fail-closed); a recusa é anterior a qualquer escrita e lista exatamente o que falta.
+      const officialByKind = {
+        etp: await getLatestOfficialPromotion(orgId, process.id, "etp"),
+        tr: await getLatestOfficialPromotion(orgId, process.id, "tr"),
+        edital: await getLatestOfficialPromotion(orgId, process.id, "edital"),
+      };
+      const refusal = processIssueRefusalMessage(missingOfficialKinds(officialByKind));
+      if (refusal) throw new TRPCError({ code: "PRECONDITION_FAILED", message: refusal });
+      const official = officialByKind.edital!;
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
       await recordProcessEvent({

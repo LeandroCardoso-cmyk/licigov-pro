@@ -1,7 +1,9 @@
 /**
- * R9 / SEM-050 — governança de Itens da contratação FAIL-CLOSED nas escritas.
+ * R9 / SEM-050 — governança de Itens da contratação FAIL-CLOSED (guarda ESTRUTURAL; o comportamento com leitura
+ * falhando está em r10-sem050-governance-read-unknown.test.ts).
  * Antes: `loadGovernance` engolia erros (`.catch(() => null)`) ⇒ "nada emitido/consumido" ⇒ mudança classificada como
- * "define". Agora só a leitura do workspace (`displayOnly`) degrada; escritas usam `ctxForWrite` (sem catch).
+ * "define". Agora `loadGovernance` nunca engole (nem para leitura): a leitura do workspace usa
+ * `readGovernanceForDisplay` (estado DESCONHECIDO ⇒ travado); escritas usam `ctxForWrite` (sem catch).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -18,19 +20,20 @@ const body = (name: string) => {
 };
 
 describe("R9 / SEM-050 — governança fail-closed", () => {
-  it("loadGovernance só tolera erro no modo displayOnly", () => {
+  it("loadGovernance NUNCA engole erro (nem no modo de leitura — não existe mais displayOnly)", () => {
     const b = body("loadGovernance");
-    expect(b).toMatch(/opts\.displayOnly \? p\.catch\(\(\) => null\) : p/);
-    expect(b.replace(/opts\.displayOnly \? p\.catch\(\(\) => null\) : p/, "")).not.toMatch(/\.catch\(/);
+    expect(b).not.toMatch(/\.catch\(/);
+    expect(b).not.toMatch(/displayOnly/);
+    expect(src).not.toMatch(/displayOnly/);
   });
 
   it("ctxForWrite não engole erro", () => {
     expect(body("ctxForWrite")).not.toMatch(/\.catch\(/);
   });
 
-  it("escritas governadas usam ctxForWrite; displayOnly só na leitura do workspace", () => {
+  it("escritas governadas usam ctxForWrite; só a leitura do workspace usa ctxOrNull + readGovernanceForDisplay", () => {
     expect(src.match(/ctxOrNull\(/g)?.length).toBe(2); // definição + leitura do workspace
-    expect(src.match(/displayOnly: true/g)?.length).toBe(1);
+    expect(src.match(/readGovernanceForDisplay\(/g)?.length).toBe(2); // definição + leitura do workspace
     expect(src.match(/ctxForWrite\(a, tx\)/g)?.length).toBe(3);
   });
 });

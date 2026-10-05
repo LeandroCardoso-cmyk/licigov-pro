@@ -18,7 +18,8 @@ export interface PriceQuote {
   readonly quoteId: string;
   readonly researchId: string;
   readonly description: string;
-  readonly quantity: number;
+  /** R10 / SEM-090 — `null` = quantidade NÃO INFORMADA (≠ 0). Ver `normalizeQuantity` / `storedQuantity`. */
+  readonly quantity: number | null;
   readonly unit: string;
   readonly supplier: string;
   readonly brand: string;
@@ -103,13 +104,37 @@ export function canonicalUnit(unit: string | null | undefined): string {
   return UNIT_SYNONYMS[u] ?? u;
 }
 
-/** Quantidade em milésimos exatos (DECIMAL(14,3)) — parte da chave lógica. */
-export function quantityMilli(quantity: number): number {
-  return Number.isFinite(quantity) ? Math.round(quantity * 1000) : 0;
+/**
+ * R10 / SEM-090 — NULO ≠ ZERO. Quantidade válida é finita e > 0; qualquer outra coisa (ausente, 0, negativa, NaN) é
+ * "quantidade NÃO INFORMADA" (`null`) — nunca um valor de quantidade.
+ */
+export function normalizeQuantity(quantity: number | string | null | undefined): number | null {
+  if (quantity === null || quantity === undefined || quantity === "") return null;
+  const n = typeof quantity === "number" ? quantity : Number(quantity);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Valor a PERSISTIR: as colunas `quantity` de `price_research_items`/`intelligent_items` são DECIMAL NOT NULL DEFAULT 0
+ * (sem migration), então "não informada" é gravada como `0` — ÚNICO ponto de coerção. Toda LEITURA volta por
+ * `normalizeQuantity` (0 ⇒ null): o `0` armazenado nunca é tratado como quantidade.
+ */
+export function storedQuantity(quantity: number | null | undefined): number {
+  return normalizeQuantity(quantity) ?? 0;
+}
+
+/**
+ * Quantidade em milésimos exatos (DECIMAL(14,3)) — parte da chave lógica. Quantidade não informada contribui com o
+ * token estável legado `0`: a chave (e, por ela, ids de Item Inteligente, aliases e vínculos de fonte JÁ persistidos)
+ * NÃO muda — mudar a codificação exige migração versionada de chaves (fora do escopo; sem reescrita de dados).
+ */
+export function quantityMilli(quantity: number | null | undefined): number {
+  const q = normalizeQuantity(quantity);
+  return q === null ? 0 : Math.round(q * 1000);
 }
 
 /** Chave lógica determinística do Item Inteligente. */
-export function intelligentItemLogicalKey(p: { description: string; unit: string | null | undefined; quantity: number }): string {
+export function intelligentItemLogicalKey(p: { description: string; unit: string | null | undefined; quantity: number | null }): string {
   return `${normalizeDescription(p.description)}|${canonicalUnit(p.unit)}|${quantityMilli(p.quantity)}`;
 }
 
@@ -124,7 +149,8 @@ export interface ConsolidatedItem {
   /** Descrição de exibição = a da PRIMEIRA cotação (não reescrita). */
   readonly description: string;
   readonly unit: string;
-  readonly quantity: number;
+  /** `null` = quantidade não informada (R10 / SEM-090). */
+  readonly quantity: number | null;
   /** Cotações ordenadas por quoteId (determinístico). */
   readonly quotes: readonly PriceQuote[];
   /** Média HALF-UP apenas das cotações com valor. 0 quando nenhuma tem preço. */
@@ -156,7 +182,7 @@ export function consolidateQuotes(quotes: readonly PriceQuote[]): ConsolidatedIt
       logicalKey: key,
       description: first.description.trim(),
       unit: first.unit.trim() || "un",
-      quantity: first.quantity,
+      quantity: normalizeQuantity(first.quantity),
       quotes: sorted,
       averageCents: averageCents(priced),
       pricedQuoteCount: priced.length,
