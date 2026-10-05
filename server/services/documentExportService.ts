@@ -11,6 +11,7 @@
  * `{content, baseName, meta}`. Reutiliza o Document Engine (renderização, fronteira
  * RC-3.5.2) e o Storage Service (ponto único de S3). Sem store paralelo.
  */
+import { createHash } from "crypto";
 import { renderContent, renderInstitutionalContent, type InstitutionalMeta } from "./documentEngineService";
 import { assertStorageUsable, storagePut, storageSignedUrl } from "../storage";
 
@@ -52,6 +53,10 @@ export interface ExportedDocument {
   format: ExportFormat;
   mimeType: string;
   fileName: string;
+  /** SEM-043 — sha256 dos bytes renderizados (o que o ledger de artefatos oficiais registra). */
+  artifactHash: string;
+  /** Tamanho em bytes do artefato renderizado. */
+  sizeBytes: number;
 }
 
 const MIME: Record<ExportFormat, string> = {
@@ -114,5 +119,8 @@ export async function exportDocument(params: ExportDocumentParams): Promise<Expo
   // URL assinada com o nome apresentado (Content-Disposition); inline p/ impressão.
   const { url } = await storageSignedUrl(key, params.expiresInSeconds ?? 3600, downloadFileName, params.disposition ?? "attachment");
 
-  return { key, url, format: params.format, mimeType: MIME[params.format], fileName: downloadFileName };
+  return {
+    key, url, format: params.format, mimeType: MIME[params.format], fileName: downloadFileName,
+    artifactHash: createHash("sha256").update(buffer).digest("hex"), sizeBytes: buffer.length,
+  };
 }

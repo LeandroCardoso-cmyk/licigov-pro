@@ -16,10 +16,15 @@ vi.mock("../../services/documentExportService", async (importOriginal) => {
     ...actual,
     exportDocument: vi.fn().mockResolvedValue({
       key: "k", url: "https://s3/signed", format: "pdf", mimeType: "application/pdf", fileName: "ETP_v2.pdf",
+      artifactHash: "a".repeat(64), sizeBytes: 10,
     }),
   };
 });
 vi.mock("../../db/organizations", () => ({ getOrganizationById: vi.fn().mockResolvedValue({ id: 1, nome: "Org" }) }));
+// SEM-043 — o registro do artefato no ledger é coberto em official-document-export-adapter.test.ts / sem043-*.
+vi.mock("../../services/officialDocumentLifecycleService", () => ({
+  recordOfficialArtifact: vi.fn().mockResolvedValue({ artifact: null, created: false }),
+}));
 vi.mock("../../services/activityLogService", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
 
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";

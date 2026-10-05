@@ -52,13 +52,16 @@ export interface OfficialDocument {
   /** Hash determinístico do conteúdo+metadados (replay-safe). */
   readonly replayHash: string;
   // ── RC-3.5 — Referências de storage (nunca armazenar binários no banco) ──────
-  /** Chave do objeto no Storage Service (S3) do último export. Vazio se ainda não exportado. */
+  // SEM-043 — LEGADO (histórico pré-0315): estes quatro campos eram sobrescritos a cada export e NÃO são mais
+  // escritos. Fonte autoritativa dos artefatos por formato/hash: ledger `official_document_artifacts`
+  // (`listOfficialDocumentArtifacts`). Vazio/0 = desconhecido (versão nunca exportada ou exportada antes da 0315).
+  /** LEGADO — chave do objeto no Storage Service (S3) do último export pré-0315. Vazio se desconhecido. */
   readonly storageKey: string;
-  /** MIME type do binário exportado (DOCX/PDF). Vazio se ainda não exportado. */
+  /** LEGADO — MIME type do binário exportado pré-0315 (DOCX/PDF). Vazio se desconhecido. */
   readonly mimeType: string;
-  /** Tamanho em bytes do binário exportado. 0 se ainda não exportado. */
+  /** LEGADO — tamanho em bytes do binário exportado pré-0315. 0 se desconhecido. */
   readonly size: number;
-  /** Hash sha256 do binário exportado (integridade do arquivo no storage). */
+  /** LEGADO — sha256 do binário exportado pré-0315. Vazio se desconhecido. */
   readonly hash: string;
   readonly createdAt: string;
   readonly updatedAt: string;

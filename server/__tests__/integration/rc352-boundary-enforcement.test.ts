@@ -104,8 +104,8 @@ describe("RC-3.5.2 — Kernel Boundary Enforcement", () => {
 
     it("somente o OfficialDocumentLifecycleService gerencia versionamento/timeline/persistência", () => {
       const writers = filesMatching(s =>
-        /insertOfficialDocument\(|insertDocumentTimelineEntry\(|updateOfficialDocumentStorageRefs\(|createOfficialDocument\(/.test(s)
-      ).filter(f => !f.endsWith("db/officialDocuments.ts") && !f.endsWith("domain/officialDocument.ts"));
+        /insertOfficialDocument\(|insertDocumentTimelineEntry\(|insertOfficialDocumentArtifact\(|createOfficialDocument\(/.test(s)
+      ).filter(f => !f.endsWith("db/officialDocuments.ts") && !f.endsWith("db/officialDocumentArtifacts.ts") && !f.endsWith("domain/officialDocument.ts"));
       expect(writers).toEqual(["server/services/officialDocumentLifecycleService.ts"]);
     });
   });

@@ -59,9 +59,10 @@ describe("RC-3.5.1 — Kernel Infrastructure Refinement", () => {
     it("storeRenderedArtifact devolve base64 em dev, com mimeType/hash/bytes (nunca binário no banco)", async () => {
       const doc = createOfficialDocument({ tenantId: ORG, businessDomain: "contratos", documentType: "contrato", origin: "ws-rc351", title: "X", content: "c", version: 1, author: "1", correlationId: CORR });
       const buffer = Buffer.from("PK-fake-docx-bytes");
-      const res = await storeRenderedArtifact({ doc, format: "docx", buffer });
+      const res = await storeRenderedArtifact({ doc, format: "docx", buffer, actorUserId: 7, correlationId: CORR });
       expect(res.mimeType).toContain("wordprocessingml");
       expect(res.contentHash).toHaveLength(64);
+      expect(res.artifactHash).toBe(res.contentHash); // SEM-043: hash do artefato exposto (sha256 dos bytes)
       expect(res.bytes).toBe(buffer.length);
       expect(res.base64).toBe(buffer.toString("base64"));
       expect(res.storageKey).toBeUndefined();
@@ -73,7 +74,9 @@ describe("RC-3.5.1 — Kernel Infrastructure Refinement", () => {
       expect(typeof storeRenderedArtifact).toBe("function");
       // Versão, timeline, hash e storage vivem AQUI.
       expect(src).toContain("insertDocumentTimelineEntry");
-      expect(src).toContain("updateOfficialDocumentStorageRefs");
+      // SEM-043 — o artefato vai para o ledger append-only (não mais sobrescrito na linha da versão).
+      expect(src).toContain("insertOfficialDocumentArtifact");
+      expect(src).not.toContain("updateOfficialDocumentStorageRefs");
       expect(src).toContain("../storage");
     });
   });
