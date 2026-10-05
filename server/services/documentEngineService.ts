@@ -39,6 +39,8 @@ export interface GenerateOfficialDocumentParams {
   businessDomain: DocumentBusinessDomain;
   documentType: OfficialDocumentType;
   origin: string;
+  /** R9 / SEM-040 — instrumento contratual (aditivo/apostilamento) formalizado pelo documento ⇒ linhagem própria. */
+  instrumentId?: string | null;
   title: string;
   /** Conteúdo em Markdown (representação intermediária). O engine exporta DOCX/PDF. */
   content: string;

@@ -73,11 +73,21 @@ export const OFFICIAL_MIME_TYPES: Record<OfficialFormat, string> = {
   pdf: "application/pdf",
 };
 
-/** Linhagem estável de um documento (mesma origem+tipo → mesma linhagem, versões acumulam). */
-export function computeLineageId(params: { tenantId: number; businessDomain: string; documentType: string; origin: string }): string {
-  return createHash("sha256")
-    .update(`odln:${params.tenantId}:${params.businessDomain}:${params.documentType}:${params.origin}`)
-    .digest("hex").slice(0, 20);
+/**
+ * Linhagem estável de um documento (mesma origem+tipo → mesma linhagem, versões acumulam).
+ *
+ * R9 / SEM-040 — `instrumentId` (opcional): instrumento contratual (aditivo/apostilamento) que o documento
+ * formaliza. Com ele, a linhagem é PRÓPRIA do instrumento (Aditivo nº 2 deixa de aparecer como "v2" do nº 1):
+ * a identidade inclui o id do instrumento num espaço de hash DISJUNTO (`odln-i:`) do da linhagem antiga, então
+ * nenhuma linhagem existente muda de id nem colide. Sem `instrumentId`, a fórmula é EXATAMENTE a anterior — as
+ * versões já gravadas (linhagem compartilhada por contrato+tipo) continuam legíveis; não há backfill.
+ */
+export function computeLineageId(params: { tenantId: number; businessDomain: string; documentType: string; origin: string; instrumentId?: string | null }): string {
+  const instrumentId = typeof params.instrumentId === "string" ? params.instrumentId.trim() : "";
+  const seed = instrumentId
+    ? `odln-i:${params.tenantId}:${params.businessDomain}:${params.documentType}:${params.origin}:${instrumentId}`
+    : `odln:${params.tenantId}:${params.businessDomain}:${params.documentType}:${params.origin}`;
+  return createHash("sha256").update(seed).digest("hex").slice(0, 20);
 }
 
 export function computeReplayHash(content: string, metadata: Record<string, unknown>): string {
@@ -90,6 +100,8 @@ export function createOfficialDocument(params: {
   businessDomain: DocumentBusinessDomain;
   documentType: OfficialDocumentType;
   origin: string;
+  /** SEM-040 — instrumento contratual que o documento formaliza (linhagem própria). Ausente ⇒ linhagem por origem+tipo. */
+  instrumentId?: string | null;
   title: string;
   content: string;
   version: number;

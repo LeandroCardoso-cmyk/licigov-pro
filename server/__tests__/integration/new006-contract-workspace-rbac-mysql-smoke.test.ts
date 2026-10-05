@@ -159,6 +159,7 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     registerOccurrence: { contractId, description: "atraso na entrega" },
     requestLegalOpinion: { contractId },
     getLegalOpinion: { requestId: "req-inexistente" },
+    proposeInheritance: { sourceType: "processo_licitatorio", sourceId: "proc-inexistente" },
   });
 
   /** Revisão ATUAL do contrato (a que o cliente carregaria de loadContract) — exigida pelo CAS da PR-12. */

@@ -254,6 +254,15 @@ describe.skipIf(!DB)("NEW-007 — legalOpinionWorkspace: autoridade por ATRIBUI�
     expect(r.draft).toMatchObject({ signed: true, signedBy: U.lawyer, signatureMethod: "manual" });
     expect(r.workspace.currentStage).toBe("SIGNED");
     expect(await emitidoCount(wsA)).toBe(1);
+    // SEM-083 ("assinante = designado"): pelo router real, quem assina É o procurador designado (assignedLawyer) e o
+    // snapshot da versão emitida registra exatamente esse signatário (id + autor do documento).
+    const [assigned] = await one<{ assigned_lawyer: number }>("SELECT assigned_lawyer FROM legal_opinion_workspaces WHERE id = ? AND organization_id = ?", [wsA, ORG_A]);
+    expect(assigned.assigned_lawyer).toBe(U.lawyer);
+    const [emitido] = await one<{ author: string; metadata: string }>("SELECT author, metadata FROM official_documents WHERE tenant_id = ? AND origin = ? AND status = 'emitido'", [ORG_A, wsA]);
+    const meta = JSON.parse(emitido.metadata);
+    expect(meta.signatureSnapshot).toMatchObject({ signed: true, signerUserId: assigned.assigned_lawyer });
+    expect(meta.signedBy).toBe(assigned.assigned_lawyer);
+    expect(emitido.author).toBe(String(assigned.assigned_lawyer));
     const hist = await one<{ event_type: string; actor: string }>("SELECT event_type, actor FROM legal_opinion_history WHERE workspace_id = ? AND event_type = 'signed'", [wsA]);
     expect(hist).toEqual([{ event_type: "signed", actor: String(U.lawyer) }]);
     const keys = await one<{ n: number }>("SELECT COUNT(*) AS n FROM idempotency_keys WHERE organizationId = ? AND userId = ? AND `key` = ?", [ORG_A, U.lawyer, signedKey]);
