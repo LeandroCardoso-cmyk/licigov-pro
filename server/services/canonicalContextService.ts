@@ -54,6 +54,7 @@ export async function resolveProcurementContext(p: {
     procurementItems: (pItems ?? []).map((i) => ({
       id: i.id, description: i.description, unit: i.unit, lotId: i.lotId, ordinal: i.ordinal,
       status: i.status, revision: i.revision, fingerprint: i.fingerprint,
+      provenance: i.provenance, createdBy: i.createdBy,
     })),
     lots: (lots ?? []).map((l) => ({ id: l.id, code: l.code, name: l.name, ordinal: l.ordinal, status: l.status })),
     // Evidência de preço = vínculo HUMANO item canônico → Item Inteligente (Pesquisa de Preços).

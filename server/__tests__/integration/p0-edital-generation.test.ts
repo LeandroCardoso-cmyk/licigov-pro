@@ -68,6 +68,8 @@ vi.mock("../../db/procurement", () => ({
   listIntelligentItems: vi.fn(async (_pid: string, orgId: number) => (orgId === ORG ? [{ id: "i1", description: "Papel A4", quantity: 100, unit: "resma", averagePrice: 25.5, suggestedCATMAT: "12345", status: "aprovado", averagePriceCents: 2550, suppliers: [], quoteCount: 0, enrichmentStatus: "done", sourceResearchId: "r1" }] : [])),
   applyDraftContentMutationTx: vi.fn(async (_tx: unknown, input: { doc: unknown }) => ({ created: true, changed: true, document: input.doc })),
   recordProcessEvent: vi.fn(async () => {}),
+  // R10 / SEM-044 — a origem do rascunho consulta o ledger de edições (sem edições ⇒ null).
+  getLatestDraftEdit: vi.fn(async () => null),
 }));
 
 // P0 piloto — classificação CONFIRMADA vem do ledger catmat_decisions (nova dependência do Context Builder).

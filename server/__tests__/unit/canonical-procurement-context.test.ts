@@ -78,7 +78,15 @@ describe("Contexto Canônico — domínio", () => {
     expect(isSourceAllowed(itemPath(KEY_CADEIRA, "plannedQuantity"), "price_research")).toBe(false);
     expect(isSourceAllowed(itemPath(KEY_CADEIRA, "plannedQuantity"), "intelligent_item")).toBe(false);
     expect(isSourceAllowed(itemPath(KEY_CADEIRA, "plannedQuantity"), "dfd")).toBe(true);
-    expect(isSourceAllowed(itemPath(KEY_CADEIRA, "description"), "intelligent_item")).toBe(true);
+    // R10 / SEM-038 — sem escritor governado: Item Inteligente NÃO afirma descrição/unidade (autoridade morta removida).
+    expect(isSourceAllowed(itemPath(KEY_CADEIRA, "description"), "intelligent_item")).toBe(false);
+    expect(isSourceAllowed(itemPath(KEY_CADEIRA, "unit"), "intelligent_item")).toBe(false);
+    for (const k of ["description", "unit", "plannedQuantity"] as const) {
+      expect(isSourceAllowed(itemPath(KEY_CADEIRA, k), "user"), k).toBe(true);
+    }
+    // legado/defesa: um fato descrição vindo de intelligent_item no ledger é ignorado na resolução.
+    const legacy = resolveField(itemPath(KEY_CADEIRA, "description"), [fact(itemPath(KEY_CADEIRA, "description"), "Descrição legada", "intelligent_item")]);
+    expect(legacy.status).toBe("unknown");
     // Defesa em profundidade: mesmo que exista no ledger, o resolvedor ignora.
     const f = resolveField(itemPath(KEY_CADEIRA, "plannedQuantity"), [fact(itemPath(KEY_CADEIRA, "plannedQuantity"), 999, "price_research")]);
     expect(f.status).toBe("unknown");

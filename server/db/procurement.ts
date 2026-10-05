@@ -25,6 +25,7 @@ import {
   generatedDocumentEditsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
+import { withHumanEditMarker } from "../domain/humanEditMarker";
 import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
@@ -676,9 +677,12 @@ export async function applyDraftContentMutationTx(
     }
     return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
   }
+  // R10 / SEM-044 — a edição humana deixa MARCADOR (origem humana + ator + hash) em `sources`, preservando a lineage de
+  // geração; sem isso um rascunho reescrito por pessoa continuava "gerado". Mesma transação do ledger abaixo.
+  const humanSources = contentOnly ? withHumanEditMarker(parseArr<string>(existing.sources), actorUserId, newHash) : [];
   await tx.update(generatedDocumentsTable).set(
     contentOnly
-      ? { content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
+      ? { content: doc.content, sources: JSON.stringify(humanSources), lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
       : {
           title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
           modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
@@ -702,7 +706,7 @@ export async function applyDraftContentMutationTx(
   //  - human_edit (content-only): tudo da LINHA existente, alterando só content/último ator/updatedAt;
   //  - demais: o `doc` da operação + originador/correlation/createdAt PERSISTIDOS (não os do `doc`).
   const document: GeneratedDocument = contentOnly
-    ? { ...rowToGeneratedDocument(existing), content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now, updatedAt: now }
+    ? { ...rowToGeneratedDocument(existing), content: doc.content, sources: humanSources, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now, updatedAt: now }
     : {
         ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
         lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,

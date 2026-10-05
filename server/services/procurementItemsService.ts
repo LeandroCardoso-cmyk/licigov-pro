@@ -15,8 +15,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { serviceLogger } from "./observabilityService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
-import { resolveProcurementContext } from "./canonicalContextService";
-import { appendContextFacts } from "../db/procurementContext";
+import { resolveProcurementContext, recordContextAssertions } from "./canonicalContextService";
 import {
   listIntelligentItems, getGeneratedDocumentByKind, recordProcessEvent, type ProcurementExecutor,
 } from "../db/procurement";
@@ -57,19 +56,21 @@ function domainError(err: unknown): never {
 // ─── Governança ────────────────────────────────────────────────────────────────────────
 
 /**
- * R9 / SEM-050 — a governança é FAIL-CLOSED nas escritas: erro ao ler emissões oficiais ou documentos aprovados
- * propaga (a escrita é recusada), nunca vira "nada emitido/consumido" ⇒ "define". Só a LEITURA do workspace
- * (`displayOnly`) degrada para exibir a tela.
+ * R9 / SEM-050 — a governança é FAIL-CLOSED: erro ao ler emissões oficiais ou documentos aprovados PROPAGA, nunca vira
+ * "nada emitido/consumido" ⇒ "define". Nas escritas a recusa é a própria exceção (zero escrita). Na leitura do
+ * workspace use `readGovernanceForDisplay`: a tela pode renderizar, mas a governança sai marcada DESCONHECIDA
+ * (bloqueada), nunca "sem restrição".
  */
-async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonicalContext | null, opts: { displayOnly?: boolean } = {}): Promise<GovernanceState> {
-  const soft = <T>(p: Promise<T>): Promise<T | null> => (opts.displayOnly ? p.catch(() => null) : p);
+async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonicalContext | null): Promise<GovernanceState> {
+  // As leituras da camada de dados devolvem null/vazio SEM banco ("nada emitido") — isso nunca pode virar "sem restrição".
+  if (!(await getDb())) throw new Error("GOVERNANCE_UNAVAILABLE: persistência indisponível — governança não verificável.");
   const officialEmittedKinds: string[] = [];
   for (const k of ["etp", "tr", "edital"] as const) {
-    if (await soft(getLatestOfficialPromotion(org, pid, k))) officialEmittedKinds.push(k);
+    if (await getLatestOfficialPromotion(org, pid, k)) officialEmittedKinds.push(k);
   }
   const consumed = new Set<string>();
   for (const k of ["dfd", "etp", "tr", "edital"] as const) {
-    const doc = await soft(getGeneratedDocumentByKind(pid, org, k));
+    const doc = await getGeneratedDocumentByKind(pid, org, k);
     if (!doc || doc.status !== "aprovado") continue;
     for (const key of Object.keys(readMarkers(doc.sources ?? []).prefill)) if (key.startsWith("item:")) consumed.add(key.slice(5));
     // ETP/TR/Edital APROVADO gerado no modo canônico (`qtd:prevista`) consumiu a quantidade PREVISTA de todos
@@ -79,6 +80,33 @@ async function loadGovernance(org: number, pid: string, ctx: ProcurementCanonica
   }
   return { officialEmittedKinds, itemsConsumedByApproved: consumed };
 }
+
+/** Estado de governança para a LEITURA: `known=false` quando qualquer leitura de governança falhou (ou o contexto canônico não pôde ser lido). */
+export type GovernanceRead =
+  | { known: true; state: GovernanceState }
+  | { known: false; state: GovernanceState; failure: "GOVERNANCE_READ_FAILED" | "CONTEXT_UNAVAILABLE" };
+
+const EMPTY_GOVERNANCE: GovernanceState = { officialEmittedKinds: [], itemsConsumedByApproved: new Set<string>() };
+
+/**
+ * R9 / SEM-050 (leitura) — NUNCA converte erro em "sem restrição": falha de leitura OU contexto canônico indisponível
+ * (ele define o que o ETP/TR/DFD aprovados consumiram) ⇒ `known: false` (o chamador bloqueia ações decisivas).
+ */
+export async function readGovernanceForDisplay(org: number, pid: string, ctx: ProcurementCanonicalContext | null, correlationId = ""): Promise<GovernanceRead> {
+  if (!ctx) {
+    log.warn("procurement_items_governance_unknown", { organizationId: org, processId: pid, correlationId, failure: "CONTEXT_UNAVAILABLE" });
+    return { known: false, state: EMPTY_GOVERNANCE, failure: "CONTEXT_UNAVAILABLE" };
+  }
+  try {
+    return { known: true, state: await loadGovernance(org, pid, ctx) };
+  } catch (err) {
+    log.warn("procurement_items_governance_unknown", { organizationId: org, processId: pid, correlationId, failure: "GOVERNANCE_READ_FAILED", error: err instanceof Error ? err.message : String(err) });
+    return { known: false, state: EMPTY_GOVERNANCE, failure: "GOVERNANCE_READ_FAILED" };
+  }
+}
+
+export const GOVERNANCE_UNKNOWN_REASON =
+  "Não foi possível verificar se esta necessidade já foi formalizada ou utilizada em documento aprovado (governança desconhecida). Alterações estão bloqueadas até a verificação — tente novamente.";
 
 function assertNotGoverned(state: GovernanceState, change: NeedChange, itemId: string | null): void {
   const reason = governedChangeReason(state, change, itemId);
@@ -153,11 +181,16 @@ async function writePlannedQuantity(tx: ProcurementExecutor, a: Actor, itemId: s
   const bases = current?.status === "conflict" && current.conflict?.length
     ? current.conflict.map((c) => stateHashOfFact(c.value))
     : [current?.valueHash ?? null];
-  await appendContextFacts(a.organizationId, a.processId, bases.map((basis, i) => ({
-    path: itemPath(itemId, "plannedQuantity"), value, sourceType: "user" as const,
-    sourceId: i === 0 ? ITEMS_AREA_SOURCE : `${ITEMS_AREA_SOURCE}#${i}`,
-    sourceVersion: `r${revision}:${mode}`, status: "confirmed" as const, actorUserId: a.actorUserId, basisValueHash: basis,
-  })), a.correlationId, tx);
+  // R10 / SEM-037 — pela porta ÚNICA de escrita do ledger (`recordContextAssertions`): a checagem de política de
+  // autoridade (fonte × caminho) vale também aqui; fonte não autorizada é recusada (CONTEXT_SOURCE_NOT_ALLOWED).
+  await recordContextAssertions({
+    organizationId: a.organizationId, processId: a.processId, correlationId: a.correlationId, executor: tx,
+    facts: bases.map((basis, i) => ({
+      path: itemPath(itemId, "plannedQuantity"), value, sourceType: "user" as const,
+      sourceId: i === 0 ? ITEMS_AREA_SOURCE : `${ITEMS_AREA_SOURCE}#${i}`,
+      sourceVersion: `r${revision}:${mode}`, status: "confirmed" as const, actorUserId: a.actorUserId, basisValueHash: basis,
+    })),
+  });
 }
 
 /** Hash de fato (mesma normalização do ledger) — base da superação consciente. */
@@ -203,7 +236,11 @@ export interface ItemsWorkspace {
   stats: { itemCount: number; lotCount: number; unassignedItemCount: number; unknownQuantityCount: number; conflictCount: number };
   estimatedTotalCents: number | null;
   contextVersion: number | null; contextDigest: string | null;
-  governance: { locked: boolean; reason: string | null; officialEmittedKinds: string[] };
+  /**
+   * R9 / SEM-050 — `state: "unknown"` ⇒ a leitura de governança falhou: `locked` é true (bloqueio decisivo),
+   * `officialEmittedKinds` NÃO é confiável (vazio ≠ "nada emitido") e `unknownReason` diz qual leitura falhou.
+   */
+  governance: { locked: boolean; reason: string | null; officialEmittedKinds: string[]; state: "known" | "unknown"; unknownReason: "GOVERNANCE_READ_FAILED" | "CONTEXT_UNAVAILABLE" | null };
   /**
    * `priceResearchItems` = Itens Inteligentes ELEGÍVEIS (lineage governado); `priceResearchSessionsPending` =
    * sessões de Pesquisa de Preços do processo ainda não promovidas (em revisão/aguardando promoção).
@@ -235,7 +272,8 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     priceResearchEvidence(a.organizationId, a.processId).catch(() => null),
     getGeneratedDocumentByKind(a.processId, a.organizationId, "dfd").catch(() => null),
   ]);
-  const gov = await loadGovernance(a.organizationId, a.processId, ctx, { displayOnly: true });
+  const govRead = await readGovernanceForDisplay(a.organizationId, a.processId, ctx, a.correlationId);
+  const gov = govRead.state;
   const byCtx = new Map((ctx?.items ?? []).map((i) => [i.key, i]));
   const currentQty = currentSourceQuantities({ links, items, lots, dfd: dfd ?? null, intelligent: research?.items ?? null });
   const active = items.filter((i) => i.status === "active");
@@ -275,7 +313,8 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
   });
   const totals = view.map((v) => v.estimatedTotalCents);
   const complete = view.length > 0 && totals.every((t) => t !== null);
-  const govReason = governedChangeReason(gov, "create", null);
+  // R9 / SEM-050 — governança DESCONHECIDA ⇒ travada (nunca "sem restrição"): a tela renderiza, as ações decisivas não.
+  const govReason = govRead.known ? governedChangeReason(gov, "create", null) : GOVERNANCE_UNKNOWN_REASON;
   const out: ItemsWorkspace = {
     items: view,
     withdrawn: items.filter((i) => i.status === "withdrawn").map((i) => ({ id: i.id, description: i.description, unit: i.unit })),
@@ -289,7 +328,10 @@ export async function getProcurementItemsWorkspace(a: Omit<Actor, "actorUserId">
     },
     estimatedTotalCents: complete ? sumCents(totals as number[]) : null,
     contextVersion: ctx?.version ?? null, contextDigest: ctx ? ctx.digest.slice(0, 16) : null,
-    governance: { locked: govReason !== null, reason: govReason, officialEmittedKinds: [...gov.officialEmittedKinds] },
+    governance: {
+      locked: govReason !== null, reason: govReason, officialEmittedKinds: [...gov.officialEmittedKinds],
+      state: govRead.known ? "known" : "unknown", unknownReason: govRead.known ? null : govRead.failure,
+    },
     sources: {
       priceResearchItems: research?.summary.eligibleCount ?? 0,
       priceResearchSessionsPending: research?.sessionsPending ?? 0,
