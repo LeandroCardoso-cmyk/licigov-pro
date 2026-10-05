@@ -179,16 +179,31 @@ describe.skipIf(!DB)("RC-SEC-PR-A — isolamento do núcleo (MySQL real)", () =>
   }, 30000);
 
   // ── Documentos ─────────────────────────────────────────────────────────────
-  it("documents.listByProcess cross-tenant → NOT_FOUND", async () => {
+  // R2 / LEG-009 — `documents.listByProcess` e `documents.getDownloadUrl` (router legado) foram desligados de
+  // forma governada: recusam TODA chamada com FORBIDDEN + LEGACY_ENDPOINT_DISABLED antes de qualquer leitura.
+  // A intenção de isolamento destes casos é preservada: a tentativa cross-tenant continua sem devolver nada de B
+  // e — como a recusa não depende do recurso — o erro é IDÊNTICO ao do próprio tenant (sem enumeração).
+  const errOfLegacy = async (p: Promise<unknown>) => {
+    try { await p; } catch (e) { const x = e as { code?: string; message?: string }; return { code: x.code, message: x.message }; }
+    return { code: "RESOLVED", message: "" };
+  };
+
+  it("documents.listByProcess (LEG-009, desativado): próprio e cross-tenant → MESMO erro governado, nada listado", async () => {
     const callerA = await makeCaller(userA);
-    const own = await callerA.documents.listByProcess({ processId: processA });
-    expect(own.some((d) => d.id === documentA)).toBe(true);
-    await expect(callerA.documents.listByProcess({ processId: processB })).rejects.toThrow(/não encontrado/i);
+    const own = await errOfLegacy(callerA.documents.listByProcess({ processId: processA }));
+    const cross = await errOfLegacy(callerA.documents.listByProcess({ processId: processB }));
+    expect(own.code).toBe("FORBIDDEN");
+    expect(own.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+    expect(cross).toEqual(own);
   });
 
-  it("documents.getDownloadUrl de documento de outro tenant → NOT_FOUND", async () => {
+  it("documents.getDownloadUrl (LEG-009, desativado): documento de outro tenant → MESMO erro do próprio", async () => {
     const callerA = await makeCaller(userA);
-    await expect(callerA.documents.getDownloadUrl({ documentId: documentB })).rejects.toThrow(/não encontrado/i);
+    const own = await errOfLegacy(callerA.documents.getDownloadUrl({ documentId: documentA }));
+    const cross = await errOfLegacy(callerA.documents.getDownloadUrl({ documentId: documentB }));
+    expect(cross.code).toBe("FORBIDDEN");
+    expect(cross.message).toMatch(/LEGACY_ENDPOINT_DISABLED/);
+    expect(cross).toEqual(own);
   });
 
   // ── Tarefas ────────────────────────────────────────────────────────────────

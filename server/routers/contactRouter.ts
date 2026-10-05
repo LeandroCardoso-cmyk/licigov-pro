@@ -1,8 +1,23 @@
 import { z } from "zod";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { publicProcedure, router } from "../_core/trpc";
-import { notifyOwner } from "../_core/notification";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 
+/**
+ * R2 / LEG-032 — formulário de contato público legado, DESATIVADO (decisão humana: DISABLE).
+ *
+ * `landing/ContactForm.tsx` não é alcançável por nenhuma página roteada; o canal comercial público canônico é
+ * `/solicitar-proposta` → `commercial.create` (rate limit dedicado, honeypot, CNPJ validado, observabilidade).
+ *
+ * A procedure continua registrada e com o MESMO schema de input (contrato da API não some silenciosamente), mas o
+ * handler recusa toda chamada com `FORBIDDEN` + `LEGACY_ENDPOINT_DISABLED` ANTES de qualquer efeito colateral
+ * (nenhuma notificação ao dono — `notifyOwner` não é mais chamado daqui).
+ *
+ * Ordem de execução (tRPC 11 roda middlewares/validação na ordem de declaração):
+ *  1. `rateLimitMiddleware("api")` — continua na frente (anti-abuso barato; só conta em memória por IP/usuário);
+ *  2. validação zod do input (input inválido ⇒ `BAD_REQUEST`, sem efeito colateral);
+ *  3. handler ⇒ `throwLegacyEndpointDisabled` (sempre `FORBIDDEN`).
+ */
 export const contactRouter = router({
   submitContactForm: publicProcedure
     .use(rateLimitMiddleware("api"))
@@ -15,28 +30,12 @@ export const contactRouter = router({
         message: z.string().max(2000).optional(),
       })
     )
-    .mutation(async ({ input }) => {
-      // Enviar notificação para o proprietário
-      const notificationSent = await notifyOwner({
-        title: `Novo Contato: ${input.name}`,
-        content: `
-**Nome:** ${input.name}
-**E-mail:** ${input.email}
-**Órgão:** ${input.organ}
-**Telefone:** ${input.phone}
-${input.message ? `\n**Mensagem:**\n${input.message}` : ""}
-
-Acesse o sistema para responder.
-        `.trim(),
-      });
-
-      if (!notificationSent) {
-        console.warn("[Contact] Failed to send notification to owner");
-      }
-
-      return {
-        success: true,
-        message: "Formulário enviado com sucesso! Entraremos em contato em breve.",
-      };
+    .mutation(async ({ ctx }): Promise<{ success: boolean; message: string }> => {
+      throwLegacyEndpointDisabled(
+        "contact.submitContactForm",
+        "LEG-032",
+        ctx,
+        "o formulário público /solicitar-proposta",
+      );
     }),
 });

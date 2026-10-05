@@ -5,7 +5,9 @@
  * Multi-tenant: organizationId required.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   exportItemTRsAsJson,
@@ -23,7 +25,7 @@ import type { ItemTR } from "../domain/itemTR";
 // Real integration would query the DB
 
 export const structuredExportRouter = router({
-  exportItemTRs: protectedProcedure
+  exportItemTRs: experimentalProtectedProcedure
     .input(
       z.object({
         processId: z.number(),
@@ -41,7 +43,7 @@ export const structuredExportRouter = router({
       return exportItemTRsAsJson(items, input.organizationId);
     }),
 
-  exportAuditTrail: protectedProcedure
+  exportAuditTrail: experimentalProtectedProcedure
     .input(
       z.object({
         organizationId: z.number(),
@@ -59,7 +61,7 @@ export const structuredExportRouter = router({
       return exportAuditTrailAsJson(events, input.organizationId);
     }),
 
-  getContract: protectedProcedure
+  getContract: experimentalProtectedProcedure
     .input(
       z.object({
         schema: z.enum(["item_tr_v1", "tr_v1", "audit_v1", "workflow_v1"]),

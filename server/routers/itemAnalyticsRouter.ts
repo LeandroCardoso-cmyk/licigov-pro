@@ -4,19 +4,13 @@
  * Procedimentos para KPIs e dashboard analítico de ItemTR.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 
 import {
   computeItemAnalytics,
-  candidateAcceptanceRate,
-  overrideRate,
-  manualCorrectionRate,
-  catalogAccuracy,
-  clauseUsageRate,
-  semanticConfidenceDrift,
-  matchingStability,
-  reviewLatency,
   type ItemLifecycleData,
   type ConfidenceWindow,
 } from "../services/itemAnalyticsService";
@@ -118,7 +112,7 @@ function getMockConfidenceWindows(): ConfidenceWindow[] {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const itemAnalyticsRouter = router({
-  getDashboard: protectedProcedure
+  getDashboard: experimentalProtectedProcedure
     .input(z.object({
       organizationId: z.number(),
       processId:      z.number().optional(),

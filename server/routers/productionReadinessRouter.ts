@@ -4,7 +4,9 @@
  * tRPC procedures for system health, cache metrics, ingestion status.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import type { CacheMetrics } from "../services/distributedCacheService";
 import type { IngestionJob } from "../services/realCatalogIngestionService";
@@ -14,9 +16,9 @@ import type { IngestionJob } from "../services/realCatalogIngestionService";
 const lastIngestionJobs = new Map<number, IngestionJob>();
 
 export const productionReadinessRouter = router({
-  getSystemHealth: protectedProcedure
+  getSystemHealth: experimentalProtectedProcedure
     .input(z.object({ organizationId: z.number() }))
-    .query(({ input }) => {
+    .query(({ input: _input }) => {
       const checks = [
         { name: "database",  status: "healthy" as const, details: "Connection pool active" },
         { name: "cache",     status: "healthy" as const, details: "In-memory cache operational" },
@@ -30,9 +32,9 @@ export const productionReadinessRouter = router({
       return { healthy, checks };
     }),
 
-  getCacheMetrics: protectedProcedure
+  getCacheMetrics: experimentalProtectedProcedure
     .input(z.object({ organizationId: z.number() }))
-    .query(({ input }): CacheMetrics => {
+    .query(({ input: _input }): CacheMetrics => {
       // In production, would pull from actual cache service
       return {
         hits:      0,
@@ -43,7 +45,7 @@ export const productionReadinessRouter = router({
       };
     }),
 
-  getIngestionStatus: protectedProcedure
+  getIngestionStatus: experimentalProtectedProcedure
     .input(z.object({ organizationId: z.number() }))
     .query(({ input }): IngestionJob | null => {
       return lastIngestionJobs.get(input.organizationId) ?? null;

@@ -31,7 +31,7 @@ export async function hasUserAcceptedConsent(userId: number, consentType: string
     .where(
       and(
         eq(userConsents.userId, userId),
-        eq(userConsents.consentType, consentType as any),
+        eq(userConsents.consentType, consentType as InsertUserConsent["consentType"]),
         eq(userConsents.version, version),
         eq(userConsents.accepted, true)
       )
@@ -40,6 +40,12 @@ export async function hasUserAcceptedConsent(userId: number, consentType: string
   return result.length > 0;
 }
 
+/**
+ * @deprecated NEW-002 — exclusão FÍSICA em cascata (inclui activity_logs, a trilha de auditoria).
+ * Não é mais alcançável: `lgpd.deleteMyAccount` recusa com ACCOUNT_HARD_DELETE_DISABLED
+ * (server/services/accountRemovalGuard.ts). NÃO religar a nenhuma rota; remoção de conta exige processo
+ * governado com revisão jurídica.
+ */
 export async function deleteUserData(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

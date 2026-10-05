@@ -84,7 +84,12 @@ describe("RC-SEC-PR-A — Congelamento de isolamento e autorização (Bloco A)",
     const src = read("server/routers/documentsRouter.ts");
     expect(src).not.toMatch(/db\.getDocumentById\(/);
     expect(src).not.toMatch(/db\.getProcessById\(/);
-    expect(src).toContain("getDocumentByIdForOrganization");
+    // PR-02 (LEG-008: submitForReview/approveDocument/rejectDocument) + LEG-009 (as 13 demais): TODAS as
+    // procedures do router legado estão desligadas de forma governada — não resta NENHUM acesso a banco em runtime
+    // (nem global nem *ForOrganization; `db` só aparece em tipos). Contrato mais forte que o anterior
+    // (`toContain("getDocumentByIdForOrganization")`, que dependia de procedures vivas).
+    expect(src).not.toMatch(/\bdb\.\w+\(/);
+    expect((src.match(/throwLegacyEndpointDisabled\("documents\.\w+", "LEG-00[89]"/g) ?? []).length).toBe(16);
   });
 
   it("aiAssistantRouter não carrega processo global (usa *ForOrganization)", () => {
@@ -106,6 +111,16 @@ describe("RC-SEC-PR-A — Congelamento de isolamento e autorização (Bloco A)",
     expect(src).not.toMatch(/\bgetDirectContractById\b(?!ForOrganization)/);
     expect(src).toContain("getDirectContractsOverviewForOrganization");
     expect(src).toContain("listDirectContractsForOrganization");
+  });
+
+  // NEW-034 (2º passe): as agregações de `direct_contracts` SEM filtro de órgão foram removidas (nenhum caller;
+  // somavam contratos de todos os órgãos). Só as variantes `*ForOrganization` podem existir.
+  it("db/directContracts não exporta agregações globais (sem filtro de órgão)", () => {
+    const src = read("server/db/directContracts.ts");
+    for (const name of ["getDirectContractsOverview", "getDirectContractsChartData", "getTopSuppliers", "getTopLegalArticles", "getRecentDirectContracts"]) {
+      expect(src, `${name} (global) não pode voltar`).not.toMatch(new RegExp(`export async function ${name}\\(`));
+      expect(src, `${name}ForOrganization deve existir`).toMatch(new RegExp(`export async function ${name}ForOrganization\\(`));
+    }
   });
 
   // ── 6. Sem fallback org=1 no tenantService ─────────────────────────────────

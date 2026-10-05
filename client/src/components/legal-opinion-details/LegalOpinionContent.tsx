@@ -1,16 +1,15 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Sparkles, FileText } from "lucide-react";
+import { FileText, Archive } from "lucide-react";
+import { Link } from "wouter";
 import { Streamdown } from "streamdown";
 import type { LegalOpinion } from "./types";
 
 interface Props {
   opinion: LegalOpinion;
-  isGenerating: boolean;
-  onGenerate: () => void;
 }
 
-export function LegalOpinionContent({ opinion, isGenerating, onGenerate }: Props) {
+/** R2 / PR-03 (LEG-012) — leitura histórica do parecer legado: nenhuma ação de geração/edição. */
+export function LegalOpinionContent({ opinion }: Props) {
   return (
     <div className="lg:col-span-2 space-y-6">
       <Card>
@@ -51,18 +50,12 @@ export function LegalOpinionContent({ opinion, isGenerating, onGenerate }: Props
       ) : (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium text-muted-foreground mb-2">Parecer ainda não gerado</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Clique em "Gerar com IA" para criar a análise jurídica
+            <Archive className="h-16 w-16 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium text-muted-foreground mb-2">Parecer legado sem conteúdo registrado</p>
+            <p className="text-sm text-muted-foreground text-center max-w-md">
+              Este registro do módulo antigo é somente leitura. Para elaborar um parecer, use o{" "}
+              <Link href="/parecer" className="underline">workspace do Parecer Jurídico</Link>.
             </p>
-            <Button onClick={onGenerate} disabled={isGenerating}>
-              {isGenerating ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando...</>
-              ) : (
-                <><Sparkles className="h-4 w-4 mr-2" />Gerar com IA</>
-              )}
-            </Button>
           </CardContent>
         </Card>
       )}

@@ -7,7 +7,9 @@
  * Multi-tenant: organizationId required on all inputs.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   createComment,
@@ -42,7 +44,7 @@ function saveThread(orgId: number, thread: DiscussionThread): void {
 const entityTypeSchema = z.enum(["item_tr", "clause", "document", "workflow"]);
 
 export const collaborationCommentsRouter = router({
-  getThreads: protectedProcedure
+  getThreads: experimentalProtectedProcedure
     .input(
       z.object({
         entityId: z.string(),
@@ -59,7 +61,7 @@ export const collaborationCommentsRouter = router({
       );
     }),
 
-  createComment: protectedProcedure
+  createComment: experimentalProtectedProcedure
     .input(
       z.object({
         entityId: z.string(),
@@ -109,7 +111,7 @@ export const collaborationCommentsRouter = router({
       return comment satisfies CollaborationComment;
     }),
 
-  resolveThread: protectedProcedure
+  resolveThread: experimentalProtectedProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -127,7 +129,7 @@ export const collaborationCommentsRouter = router({
       return resolved satisfies DiscussionThread;
     }),
 
-  getTimeline: protectedProcedure
+  getTimeline: experimentalProtectedProcedure
     .input(
       z.object({
         entityId: z.string(),

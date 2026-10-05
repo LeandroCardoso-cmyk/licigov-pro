@@ -4,7 +4,9 @@
  * Procedimentos para composição e status do Termo de Referência.
  */
 
-import { protectedProcedure, router } from "../_core/trpc";
+import { router } from "../_core/trpc";
+// R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
+import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
 import { z } from "zod";
 import {
   composeTR,
@@ -85,7 +87,7 @@ function statusKey(processId: number, organizationId: number): string {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const trCompositionRouter = router({
-  compose: protectedProcedure
+  compose: experimentalProtectedProcedure
     .input(z.object({
       processId:      z.number(),
       organizationId: z.number(),
@@ -111,7 +113,7 @@ export const trCompositionRouter = router({
       return result;
     }),
 
-  getStatus: protectedProcedure
+  getStatus: experimentalProtectedProcedure
     .input(z.object({
       processId:      z.number(),
       organizationId: z.number(),
@@ -122,7 +124,7 @@ export const trCompositionRouter = router({
 
       // Compute section count from mock approved items
       const items        = getMockApprovedItems(input.organizationId, input.processId);
-      const itemSection  = composeItemSection(items);
+      const _itemSection = composeItemSection(items);
       const sectionsCount = status === "completed" ? 2 : (status === "in_progress" ? 1 : 0);
 
       return {

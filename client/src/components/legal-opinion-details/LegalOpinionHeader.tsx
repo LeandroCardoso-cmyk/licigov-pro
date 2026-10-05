@@ -6,14 +6,11 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import {
   Scale,
   Loader2,
-  Sparkles,
   CheckCircle2,
   XCircle,
   AlertCircle,
   Download,
   Printer,
-  BookmarkPlus,
-  Shield,
   ShieldCheck,
 } from "lucide-react";
 import type { LegalOpinion } from "./types";
@@ -21,19 +18,12 @@ import type { LegalOpinion } from "./types";
 interface Props {
   opinion: LegalOpinion;
   signatureHistoryData: { id: number }[] | undefined;
-  isGenerating: boolean;
   exportPDFPending: boolean;
   exportDOCXPending: boolean;
-  updatePending: boolean;
-  signPending: boolean;
-  onGenerate: () => void;
-  onApprove: () => void;
-  onSignClick: () => void;
   onExportPDF: () => void;
   onExportDOCX: () => void;
   onPrint?: () => void;
   printPending?: boolean;
-  onSaveAsTemplate: () => void;
 }
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -58,19 +48,12 @@ const CONCLUSION_LABELS: Record<string, string> = {
 export function LegalOpinionHeader({
   opinion,
   signatureHistoryData,
-  isGenerating,
   exportPDFPending,
   exportDOCXPending,
-  updatePending,
-  signPending,
-  onGenerate,
-  onApprove,
-  onSignClick,
   onExportPDF,
   onExportDOCX,
   onPrint,
   printPending,
-  onSaveAsTemplate,
 }: Props) {
   const statusConfig = STATUS_LABELS[opinion.status] ?? { label: opinion.status, variant: "outline" as const };
   const sigCount = signatureHistoryData?.length ?? 0;
@@ -128,36 +111,10 @@ export function LegalOpinionHeader({
               </>
             )}
 
-            {!opinion.opinion && (
-              <Button onClick={onGenerate} disabled={isGenerating}>
-                {isGenerating ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando...</>
-                ) : (
-                  <><Sparkles className="h-4 w-4 mr-2" />Gerar com IA</>
-                )}
-              </Button>
-            )}
-
-            {opinion.status === "in_review" && (
-              <Button onClick={onApprove} disabled={updatePending}>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Aprovar
-              </Button>
-            )}
-
-            {opinion.status === "approved" && !opinion.isTemplate && (
-              <Button variant="outline" onClick={onSaveAsTemplate} disabled={updatePending}>
-                <BookmarkPlus className="h-4 w-4 mr-2" />
-                Salvar como Template
-              </Button>
-            )}
-
-            {opinion.status === "approved" && opinion.opinion && !fullySignd && (
-              <Button variant="default" onClick={onSignClick} disabled={signPending}>
-                {signPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Shield className="h-4 w-4 mr-2" />}
-                Assinar Digitalmente
-              </Button>
-            )}
+            {/* R2 / PR-03 (LEG-012): parecer LEGADO é somente leitura — gerar com IA, aprovar, salvar como
+                template e assinar foram desligados no servidor (LEGACY_ENDPOINT_DISABLED). Novos pareceres
+                e toda decisão jurídica seguem no workspace canônico (/parecer). */}
+            <Badge variant="outline">Somente leitura (legado)</Badge>
 
             {sigCount > 0 && (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">

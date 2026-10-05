@@ -2,6 +2,7 @@ import { throwLgpdExportDisabled } from "../services/lgpdExportGuard";
 import { protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
+import { throwAccountHardDeleteDisabled } from "../services/accountRemovalGuard";
 
 export const lgpdRouter = router({
   recordConsent: protectedProcedure
@@ -40,9 +41,11 @@ export const lgpdRouter = router({
       throwLgpdExportDisabled(ctx);
     }),
 
+  // NEW-002 — exclusão física de conta por autoatendimento DESATIVADA (ver services/accountRemovalGuard.ts).
+  // A procedure segue registrada, mas recusa antes de qualquer leitura/escrita; `db.deleteUserData` não é
+  // mais alcançável por nenhuma rota.
   deleteMyAccount: protectedProcedure
     .mutation(async ({ ctx }) => {
-      await db.deleteUserData(ctx.user.id);
-      return { success: true };
+      throwAccountHardDeleteDisabled(ctx);
     }),
 });
