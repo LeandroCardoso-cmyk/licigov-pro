@@ -13055,13 +13055,13 @@
     "semantic_hash": ""
   },
   "docs/audits/R10_P2_REMEDIATION_PLAN.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "365e96d468b6f8676882e3b6a946e9ff",
+    "mtime": 1791206881.1087027,
+    "ast_hash": "e7df22bbc583793d7ce141896d165c1d",
     "semantic_hash": ""
   },
   "docs/audits/R9_P1_REMEDIATION_PLAN.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "9976e821877570a676f3bc1e26bae210",
+    "mtime": 1791206881.108227,
+    "ast_hash": "dfd31411f6b32d74deb3ba83088e63f5",
     "semantic_hash": ""
   },
   "server/__tests__/unit/r11-semantic-authority-guards.test.ts": {
@@ -13075,28 +13075,28 @@
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_BLOCKERS.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "5188b1cd3a93dd2ed2fcef04b718bcd7",
+    "mtime": 1791206958.5045023,
+    "ast_hash": "dcf2fb4b54b62a39aa55f2ee213ca196",
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_COMMIT_MAP.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "4eb3e90980cd31cf78b3e7ebcd9912c0",
+    "mtime": 1791206970.433935,
+    "ast_hash": "397bc354edf18008b75e61f5024d14f5",
     "semantic_hash": ""
   },
   "docs/audits/HUMAN_DECISION_PACKET.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "d741290e168cfa498077f4e80fe2c386",
+    "mtime": 1791206958.5049708,
+    "ast_hash": "19e6f3d1d2723ea38fc36ca97f5cbdd6",
     "semantic_hash": ""
   },
   "docs/audits/AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "15a3f96232a1bf6947754537c060a703",
+    "mtime": 1791206958.4799547,
+    "ast_hash": "11e87df7dbd5d38bddcb3e5f888bd6da",
     "semantic_hash": ""
   },
   "docs/audits/SEMANTIC_AUTHORITY_CLOSURE_REAUDIT.md": {
-    "mtime": 1791087146.9074721,
-    "ast_hash": "67a8ec910d2e2376a73cb2fe822e6160",
+    "mtime": 1791206984.4141474,
+    "ast_hash": "d5fc45c53bd6242dbb99fb66c3d1ce22",
     "semantic_hash": ""
   },
   "docs/audits/SEMANTIC_AUTHORITY_CLOSURE_REPORT.md": {
@@ -13657,6 +13657,11 @@
   "client/src/components/procurement/itemIdentityView.ts": {
     "mtime": 1791205523.1858938,
     "ast_hash": "9c4bb67503d93f8d90da82b0a7fbd616",
+    "semantic_hash": ""
+  },
+  "docs/audits/AUTONOMOUS_REMEDIATION_SECOND_PASS_REPORT.md": {
+    "mtime": 1791207053.781939,
+    "ast_hash": "11a17a7fe2c6673afca1414d3e05f667",
     "semantic_hash": ""
   }
 }

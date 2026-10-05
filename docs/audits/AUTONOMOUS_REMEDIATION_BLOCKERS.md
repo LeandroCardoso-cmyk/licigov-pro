@@ -1,6 +1,6 @@
 # Bloqueios do lote autônomo — registro classificado
 
-> Branch `work/autonomous-semantic-remediation-r3-r11` · 2026-10-02. Protocolo: cada bloqueio isola só os nós
+> Branch `work/autonomous-semantic-remediation-r3-r11` · 2026-10-02 (atualizado no 2º passe, 2026-10-05: B-16…B-21). Protocolo: cada bloqueio isola só os nós
 > dependentes; o restante do trabalho técnico seguiu. Nenhuma parada global ocorreu (nenhum REPO_INTEGRITY_FAILURE,
 > SECRET_EXPOSURE, MIGRATION_CHAIN_CORRUPTION, UNRESOLVABLE_SCHEMA_COLLISION, TEST_ENVIRONMENT_CORRUPTION,
 > UNEXPECTED_PRODUCTION_MUTATION nem BASELINE_FILE_CHANGED_UNINTENTIONALLY).
@@ -22,6 +22,12 @@
 | B-13 | BLOCKED_HUMAN_DECISION | regularização de ratificações legadas e checklists `s3://anexo` | HD-07, HD-08 | HD-07, HD-08 |
 | B-14 | BLOCKED_HUMAN_DECISION | NEW-028 (status após "não ratificado") | HD-09 | HD-09 |
 | B-15 | BLOCKED_HUMAN_DECISION | CONTRACT_NUMBER_SCOPE: unicidade do número do contrato entre origens (a UNIQUE da 0310 original foi retirada da cadeia) | HD-15 | HD-15 |
+| B-16 | BLOCKED_HUMAN_DECISION | SEM-040 backfill das versões existentes · SEM-079 backfill + NOT NULL · SEM-083 rotação da chave HMAC e SoD "designado ≠ quem recebe" · SEM-087A escopo da SoD · SEM-069 política de reativação · SEM-062 itens do contrato a partir da contratação (nota de design NOT DECIDED) | decisões HD-16…HD-21 propostas em `HUMAN_DECISION_PACKET.md` | HD-16…21 |
+| B-17 | BLOCKED_HUMAN_DECISION | SEM-027 (método do valor de referência), SEM-051 (emissão do DFD) | HD-13, HD-14 | HD-13, HD-14 |
+| B-18 | BLOCKED_LEGAL_REVIEW | SEM-033, 059, 063, 082, 091; limites do art. 125 do SEM-084; SEM-010/011 (P0 abertos) | pareceres J-2…J-5 | LEGAL |
+| B-19 | OPEN dependente de R2.3 | SEM-032, 065, 066, 085, produção de NEW-036 (destino do legado) | R2.3 / acesso read-only autorizado | HD-04 |
+| B-20 | OPEN (técnico, depende de migration decidida) | SEM-090: o token "0" da chave lógica persistida exige migração versionada de chave; SEM-077: superfície só dev (persistência não implementada) | decisão de escopo + migration futura | — |
+| B-21 | PRE_EXISTING_MAIN_FAILURE | NEW-037 (`invitations-mysql-smoke` 8/10; reproduz na `main`) — apenas documentado, **não** corrigido por instrução | triagem de infra de teste | — |
 
 ## EXPECTED_SKIP × UNEXECUTED_REQUIRED_TEST
 

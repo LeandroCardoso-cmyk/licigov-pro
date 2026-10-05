@@ -1,6 +1,6 @@
 # Pacote de decisões humanas — lote autônomo R0 → R11
 
-> Estado: **AWAITING_OWNER_DECISIONS** · branch `work/autonomous-semantic-remediation-r3-r11` · 2026-10-02.
+> Estado: **AWAITING_OWNER_DECISIONS** · branch `work/autonomous-semantic-remediation-r3-r11` · 2026-10-02 (atualizado no 2º passe, 2026-10-05: HD-16…HD-21 propostos; **nenhuma** decisão HD foi tomada).
 > Cada item traz o que já está implementado localmente (sem merge, sem deploy), a pergunta objetiva e as opções.
 > **Nenhuma** destas decisões foi tomada por inferência. Decisões jurídicas estão em `LEGAL_REVIEW_DECISION_PACKET.md`.
 
@@ -20,6 +20,12 @@
 | HD-12 | **Fatiamento em PRs** | Aprovar a ordem de PRs proposta em `AUTONOMOUS_REMEDIATION_EXECUTION_REPORT.md` §8 (migrations 0310→0314 em ordem) | aprovar / ajustar | nenhuma PR é aberta por este lote |
 | HD-13 | **SEM-027** método do valor de referência | Qual método institucional (média, mediana, menor preço, com/sem exclusão de outliers) e quem decide por processo? | definir | P1 permanece aberto |
 | HD-15 | **CONTRACT_NUMBER_SCOPE** (2º passe) | O número oficial do contrato deve ser único por órgão independentemente da origem? | **A** único por órgão, qualquer origem (SQL pronto e testado em `drizzle/policy-pending/`, com preflight read-only; aborta se já houver duplicatas); **B** único por órgão **e** origem — comportamento atual (PK hash(org, origem, número)); **C** outro padrão (ex.: normalização de caixa — NEW-027) | B continua valendo; o SEM-007 já está resolvido sem depender da escolha (INSERT-only na PK). Impacto de A: o mesmo número em outra origem e o rename para número usado passam a ser CONFLICT; exige preflight sem duplicatas |
+| HD-16 | **SEM-040 backfill de lineage** (2º passe, proposta) | As versões de contrato/aditivo anteriores à lineage por instrumento devem ganhar lineage retroativa? | (a) não — só instrumentos novos (**implementado**); (b) backfill governado com preflight read-only | versões antigas seguem sem lineage própria |
+| HD-17 | **SEM-079 backfill + NOT NULL** (proposta) | Linhas legadas sem tenant/autor podem ser preenchidas e a coluna tornada NOT NULL? | (a) não; (b) backfill + migration | a coluna segue anulável; a escrita nova já é fail-closed |
+| HD-18 | **SEM-083 chave de assinatura** (proposta) | Qual a política de rotação da `SIGNATURE_HMAC_KEY` e a SoD "designado ≠ quem recebe o parecer"? | definir | fallback documentado para `JWT_SECRET` (log `signature_hmac_key_not_configured`) |
+| HD-19 | **SEM-087A escopo da SoD** (proposta) | A SoD cobre só o mesmo documento ou o processo inteiro? | documento / processo | só a parte B (emissão do processo) foi aplicada |
+| HD-20 | **SEM-069 política de reativação** (proposta) | Item cancelado/recusado pode ser reativado? Por quem? | permitir (com ledger) / nunca | recusa explícita sem reativação |
+| HD-21 | **SEM-062 itens do contrato** (proposta) | Os itens do contrato nascem dos Itens da contratação? | ver `docs/design/CONTRACT_ITEMS_FROM_PROCUREMENT.md` | herança só de valor/contratado da contratação direta com evidência canônica |
 | HD-14 | **SEM-051** emissão do DFD | O DFD passa a ter emissão oficial governada (como ETP/TR/Edital)? | sim / não | guardas de "aprovado" do DFD seguem inalcançáveis |
 
 ## Riscos que o owner precisa aceitar ou recusar explicitamente

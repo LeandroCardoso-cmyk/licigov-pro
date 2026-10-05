@@ -46,3 +46,28 @@
 - 13 depende de 12; 16 depende de 13 (fixups no smoke de PR-06); 18 depende de 6 (matriz RBAC) e 15.
 - 20 antes de 21 (o guard R5.1 e o smoke H/J estão no commit 21).
 - 22 depende de 17 (contexto do Edital); 29 depende de 21, 25, 26; 30 corrige 22 e 25 (cherry-pick junto).
+
+## 2º passe (2026-10-05) — commits sobre `5081ec7`
+
+> Mesma regra: cherry-pickáveis na ordem; **uma migration nova (0315)**, após a 0314. Estado: IMPLEMENTED_PENDING_REVIEW / LOCAL_CANDIDATE.
+> Os 3 primeiros commits do 2º passe já estavam no remoto antes do gate final; todos estão agora no remoto (push normal, sem force).
+
+| # | Commit | Pacote | Achados | Migration | Testes principais |
+|---:|---|---|---|---|---|
+| 32 | `23554f3` | agregações de contratação direta sem filtro de órgão removidas | NEW-034 | — | `rc-sec-pr-a-tenant-freeze` |
+| 33 | `446171e` | infra de teste: contrato sem DB determinístico; contadores escopados | NEW-033, NEW-031 | — | `sprint5w/5y/5z`, `new007-…-rbac-mysql-smoke` |
+| 34 | `5d97fec` | justificativa de preço com lineage do servidor; status derivado dos atos | SEM-042, SEM-064 | — | `sem042-sem064-direct-mysql-smoke`, `sem042-price-reference`, `sem064-direct-status-from-acts` |
+| 35 | `ac51bfd` | ledger append-only de artefatos por formato | SEM-043 | **0315** | `sem043-official-artifact-ledger(-mysql-smoke)`, `sem043-migration-0315-mysql-smoke` |
+| 36 | `27e9992` | sequência atômica de aditivos, lineage por instrumento, herança, chave HMAC própria | SEM-084, 040, 062, 083 | — | `sem084-sem062-sem040-contract-instruments(-mysql-smoke)`, `sem062-contract-inheritance-*`, `sem083-signature-hmac-key` |
+| 37 | `d6904da` | governança fail-closed, quantidade prevista, marcador de edição humana, emissão do processo, chave lógica | SEM-050 (leitura), 037, 038, 044, 045, 087B, 089, 090 | — | `r10-p2-items-authoring-(domain|mysql-smoke)`, `r10-sem037/050/061-*` |
+| 38 | `bc74f6f` | fechamento técnico das superfícies legadas e hardening de tenant | SEM-034, 036, 046, 073, 077, 078, 079, 086, 088, 092 | — | `sp2d-legacy-misc-mysql-smoke`, `sp2d-legacy-structural-guards`, `sp2d-sem073-077-experimental-tenant` |
+| 39 | `4037745` | sugestão da IA ≠ decisão; rótulos = efeito; confirmações governadas | SEM-058, 060, 061 | — | `dfdJustificationSuggestion.test`, `sem060-labels-match-effect` |
+| 40 | `abc2a69` | valor do contrato avulso em reais (não centavos) | NEW-038 | — | `client/src/lib/money.test.ts` |
+| 41 | `35a6c6d` | guardas comportamentais R11 + fiação dos smokes no CI e no `test:smoke:security` | R11 | — | `r11-semantic-authority-behavior-guards` |
+| 42 | `df1a717` | total global parcial rotulado como PARCIAL | SEM-081 | — | `r9-sem081-partial-estimate-label` |
+| 43 | `988e555` | UI de resolução humana da identidade do item | SEM-054 (UI) | — | `itemIdentityView.test` |
+| 44 | `22d0ed8` | smoke C.4B.3B alinhado ao marcador de edição humana; labels R11-B1…B7 | SEM-044 (teste), R11 | — | `c4b3b-governed-human-editing-mysql-smoke` (11/11) |
+| 45 | (docs do 2º passe) | relatório do 2º passe, matrizes, bloqueios, decisões, reauditoria | — | — | — |
+
+**Dependências novas:** 35 (0315) depende da 0314 (linear no journal); 36 e 37 dependem de 35 só pela ordem do journal, não por código;
+41 depende de 34–39 (os smokes novos); 44 corrige o teste afetado por 37 (cherry-pick junto).
