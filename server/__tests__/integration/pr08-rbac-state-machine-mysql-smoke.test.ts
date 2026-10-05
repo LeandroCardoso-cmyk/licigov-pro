@@ -12,7 +12,7 @@
  *     `CONTRACT_STATUS_TRANSITION_INVALID`; linha do contrato, aditivos, apostilamentos, minutas, documentos
  *     oficiais e timeline INALTERADOS (rev. 2: sem exceção para `minuta`). Instrumentos sucessivos em
  *     vigente/aditado/apostilado funcionam; parecer exigido pelo fluxo ⇒ status do contrato NÃO efetivado;
- *     mesma sequência concorrente ⇒ CONFLICT sem linha híbrida; cross-tenant ⇒ NOT_FOUND.
+ *     criações concorrentes ⇒ sequências distintas sob o lock (SEM-084); cross-tenant ⇒ NOT_FOUND.
  *  D. Corrida: contrato rescindido entre a avaliação e a escrita ⇒ o compare-and-set real não casa, a transação
  *     real faz ROLLBACK (nenhum aditivo gravado) e a recusa é a da máquina contra o status real.
  */
@@ -23,7 +23,7 @@ import mysql from "mysql2/promise";
 // contrato que antecede uma rescisão concorrente. Por padrão delega à implementação real.
 vi.mock("../../db/contractWorkspace", async (orig) => {
   const real = await orig<typeof import("../../db/contractWorkspace")>();
-  return { ...real, getContractWorkspace: vi.fn(real.getContractWorkspace), countContractAddenda: vi.fn(real.countContractAddenda) };
+  return { ...real, getContractWorkspace: vi.fn(real.getContractWorkspace) };
 });
 
 import { runMigrations, validateSchema } from "../../bootstrap";
@@ -31,7 +31,7 @@ import { createIntelligentItem } from "../../domain/intelligentItem";
 import { insertIntelligentItem, getIntelligentItem } from "../../db/procurement";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
 import { createManualContract, createAddendum } from "../../services/contractService";
-import { getContractWorkspace, compareAndSetContractWorkspaceStatus, countContractAddenda } from "../../db/contractWorkspace";
+import { getContractWorkspace, compareAndSetContractWorkspaceStatus } from "../../db/contractWorkspace";
 import { ContractStatusTransitionError, CONTRACT_STATUS_TRANSITION_INVALID } from "../../domain/contractWorkspace";
 import { LEGACY_ENDPOINT_DISABLED } from "../../services/legacyEndpointGuard";
 
@@ -283,19 +283,22 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     expect(await contractSnapshot(id)).toEqual(before);
   }, 60_000);
 
-  it("C5) aditivo concorrente com a MESMA sequência (contrato aditado): INSERT puro ⇒ ER_DUP_ENTRY real ⇒ ROLLBACK + CONFLICT; 1º aditivo intacto", async () => {
+  it("C5) (reescrito, SEM-084) aditivos concorrentes NÃO disputam mais o mesmo número: a sequência é alocada sob o lock; ambos persistem (2 e 3), nenhum CONFLICT, 1º intacto", async () => {
+    // Antes: `count+1` fora da transação ⇒ a 2ª criação lia a mesma contagem, derivava o mesmo id e era recusada
+    // (CONFLICT). Agora a trava da linha do contrato serializa a alocação.
     const id = await seedContract("c5", "vigente");
     const api = await caller(users.owner, ORG_A);
     await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Primeiro.", newTerm: "18 meses" });
-    const before = await contractSnapshot(id);
     const [firstRow] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ?", [id]);
-    // A 2ª solicitação contou os aditivos ANTES do commit da 1ª (mesma sequência ⇒ mesmo id determinístico).
-    vi.mocked(countContractAddenda).mockResolvedValueOnce(0);
-    const e = await err(api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Concorrente.", newValue: 999 }));
-    expect(e?.code).toBe("CONFLICT");
-    expect(await contractSnapshot(id)).toEqual(before);
-    const [afterRow] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ?", [id]);
-    expect(JSON.stringify(afterRow)).toBe(JSON.stringify(firstRow)); // nenhuma fusão silenciosa
+    const res = await Promise.allSettled([
+      api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Concorrente A.", newValue: 999 }),
+      api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Concorrente B.", newTerm: "24 meses" }),
+    ]);
+    expect(res.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT sequence FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
+    expect(rows.map((r) => r.sequence)).toEqual([1, 2, 3]);
+    const [again] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ? AND sequence = 1", [id]);
+    expect(JSON.stringify(again[0])).toBe(JSON.stringify(firstRow[0])); // nenhuma fusão/alteração do 1º
   }, 120_000);
 
   // ─── D. Corrida: compare-and-set + rollback reais ───────────────────────────

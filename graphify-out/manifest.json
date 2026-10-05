@@ -695,8 +695,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractEditor.tsx": {
-    "mtime": 1791087146.7714722,
-    "ast_hash": "2a2431a95ab246ce4cacfffceb30d364",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "0d3bf0aaa6ef99f3dc18175c3f92e3cb",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractOverview.tsx": {
@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1791087146.7714722,
-    "ast_hash": "2b838a48303887f014157da5d6060ec8",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "ddb649db71ee3ccf480c1d190af9e122",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1791087148.0314722,
-    "ast_hash": "0fadf9b6cd1bc007a0aef89ce68a3c56",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "29ff5c3be1b474635e1159a51a2eb2be",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -7335,8 +7335,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1791087148.0354724,
-    "ast_hash": "a6568129b3279614f47f9c7ddff8a68f",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "2a55cddd35ed5f86a4bcd89d5a9bb4a7",
     "semantic_hash": ""
   },
   "server/domain/copilotCapability.ts": {
@@ -8240,8 +8240,8 @@
     "semantic_hash": ""
   },
   "server/domain/officialDocument.ts": {
-    "mtime": 1791202584.9664397,
-    "ast_hash": "503b4bed864a2665b51a7ea62650a253",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "1c532b19210a8c75b603fe588505acfb",
     "semantic_hash": ""
   },
   "server/domain/operationRecord.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1791087148.1514723,
-    "ast_hash": "e227160d85c632664720dc0f5da78607",
+    "mtime": 1791202828.090434,
+    "ast_hash": "ae75e509aadb65678896d5cd329d8859",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -8770,8 +8770,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
-    "mtime": 1791202584.9664397,
-    "ast_hash": "604148f79ea8487cd32031761cb45313",
+    "mtime": 1791202828.090434,
+    "ast_hash": "0a3211ac07f21db8cc0bab1a29b4fd65",
     "semantic_hash": ""
   },
   "server/routers/documentReviewRouter.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1791087148.1594722,
-    "ast_hash": "4c363e0ca1999822e8aaf30fd92dc68a",
+    "mtime": 1791202828.090434,
+    "ast_hash": "50e5869aebe93248d99f39abd4f23783",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -9470,8 +9470,8 @@
     "semantic_hash": ""
   },
   "server/services/digitalSignatureService.ts": {
-    "mtime": 1790253304.5645761,
-    "ast_hash": "3d407bb3ade0de90253c7213086fdefc",
+    "mtime": 1791202828.090434,
+    "ast_hash": "0141534276cdbb8345b0df3f0e121c27",
     "semantic_hash": ""
   },
   "server/services/directContractAuditReport.ts": {
@@ -9555,8 +9555,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1791202584.9664397,
-    "ast_hash": "1b204d546eaa3616d0bb77c611773172",
+    "mtime": 1791202828.090434,
+    "ast_hash": "224425e52f5d0d92c9fdee5b138119aa",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
@@ -10055,8 +10055,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1791202584.9664397,
-    "ast_hash": "3a5e66720c97a3f453365a1848b8b309",
+    "mtime": 1791202828.094434,
+    "ast_hash": "7488455f4272f27534d862316c6fbc5f",
     "semantic_hash": ""
   },
   "server/services/officialExportEngine.ts": {
@@ -12670,18 +12670,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791087148.0154722,
-    "ast_hash": "746b8123ed28c725707ed18d61b90dad",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "c81c724f903ccae96f13e1967927971a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac.test.ts": {
-    "mtime": 1791087148.0154722,
-    "ast_hash": "168ec2c7c14fbac6df89140525790da3",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "a7769b8d8fdba55d07f58f7d9691054c",
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRbac.ts": {
-    "mtime": 1791087148.1514723,
-    "ast_hash": "d729a421d52d69ca289d6322068e7b05",
+    "mtime": 1791202828.090434,
+    "ast_hash": "25a1d891826a4124ee875668e304431e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-assignment-authority.test.ts": {
@@ -12690,8 +12690,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791087522.5843568,
-    "ast_hash": "7f36b5b83e276d77c87ca1f92ad59d5d",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "bcf4002c6953e8eb1e7d7ee5f40287e4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-receive-claim.test.ts": {
@@ -12765,13 +12765,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr08-rbac-state-machine-mysql-smoke.test.ts": {
-    "mtime": 1791087148.0194724,
-    "ast_hash": "f7b3d1058e15f0ce253dd1f026af1ea0",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "5d36aa770474c4adb328277f9c6253bc",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr08-rbac-state-machine.test.ts": {
-    "mtime": 1791087148.0194724,
-    "ast_hash": "51e3fb094fabed02d20203390cc04607",
+    "mtime": 1791202828.0864341,
+    "ast_hash": "85929171a567e4d45f171946d1568aa9",
     "semantic_hash": ""
   },
   "docs/design/CONTRACT_ACTIVATION_TRANSITION.md": {
@@ -13432,6 +13432,51 @@
   "server/db/officialDocumentArtifacts.ts": {
     "mtime": 1791202584.9624395,
     "ast_hash": "1fd967f536976c3d38714b64a39726ff",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sem062-contract-inheritance-mysql-smoke.test.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "d03376daf3e7867f6ea0860556db9a80",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sem084-sem062-sem040-contract-instruments-mysql-smoke.test.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "3bcf0aa0cbeb270b1cef548b623a1366",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sem084-sem062-sem040-contract-instruments.test.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "85637cb38148b8426db5127a05ac2e6e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/sem062-contract-inheritance-domain.test.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "5769b5fae5d52381648e77861456306c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/sem083-signature-hmac-key.test.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "0e8170a99412b2b675ee216dda616f27",
+    "semantic_hash": ""
+  },
+  "server/config/signature.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "e18672e6bb18db9b9558343fa9fe5685",
+    "semantic_hash": ""
+  },
+  "server/domain/contractInheritance.ts": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "8e293c247a851769b91690313bcecab7",
+    "semantic_hash": ""
+  },
+  "server/services/contractInheritanceService.ts": {
+    "mtime": 1791202828.090434,
+    "ast_hash": "7be59aceeb66466f766aa0f78d1dda91",
+    "semantic_hash": ""
+  },
+  "docs/design/CONTRACT_ITEMS_FROM_PROCUREMENT.md": {
+    "mtime": 1791202828.0864341,
+    "ast_hash": "9477873a3faf934162a6a581a79681e4",
     "semantic_hash": ""
   }
 }

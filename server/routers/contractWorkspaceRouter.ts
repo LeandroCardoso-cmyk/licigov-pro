@@ -39,6 +39,10 @@ import {
   type ContractWorkspace,
 } from "../domain/contractWorkspace";
 import { assertExpectedContractRevision, saveGovernedContractEdit } from "../services/contractEditService";
+// SEM-062 (SW-C1) — gestor/fiscal por apostilamento: recusa governada do instrumento (import isolado).
+import { ContractApostilleAssignmentInvalidError } from "../domain/contractWorkspace";
+// SEM-062 (SW-C1) — proposta de herança (contratado/valor) com procedência (import isolado).
+import { proposeContractInheritance } from "../services/contractInheritanceService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
@@ -83,6 +87,10 @@ function mapInstrumentStatusError(e: unknown): never {
   if (e instanceof ContractStatusConflictError) {
     throw new TRPCError({ code: "CONFLICT", message: e.message });
   }
+  // SEM-062 — revisão do contrato divergente da que o cliente viu (CAS opcional do apostilamento) ⇒ CONFLICT; nada gravado.
+  if (e instanceof ContractRevisionConflictError) throw new TRPCError({ code: "CONFLICT", message: e.message, cause: e });
+  // SEM-062 — apostilamento gestor/fiscal sem o novo nome (ou com campo alheio) ⇒ BAD_REQUEST antes de qualquer efeito.
+  if (e instanceof ContractApostilleAssignmentInvalidError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
   throw e;
 }
 
@@ -96,11 +104,27 @@ export const contractWorkspaceRouter = router({
     }),
 
   createFromDirectProcurement: orgRoleProcedure("operator")
-    .input(z.object({ directWorkspaceId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional() }))
+    .input(z.object({
+      directWorkspaceId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional(),
+      // SEM-062 — proposta registrada que o humano selecionou no assistente (proveniência do contratado/valor).
+      sourceProposalId: z.string().min(1).optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, createdBy: ctx.user.id, correlationId: ctx.correlationId });
+      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, sourceProposalId: input.sourceProposalId, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return { workspace };
+    }),
+
+  /**
+   * SEM-062 — PROPOSTA de contratado/valor para o assistente "Novo contrato", com a procedência de cada candidata.
+   * Somente leitura (tenant). Nunca preenche nada sozinha: o humano seleciona e confirma. Sem evidência canônica
+   * (licitação sem registro de adjudicação; direta sem ratificação vigente/proposta) ⇒ `no_canonical_evidence`.
+   */
+  proposeInheritance: tenantProcedure
+    .input(z.object({ sourceType: z.enum(["processo_licitatorio", "contratacao_direta"]), sourceId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      return proposeContractInheritance({ organizationId: orgId, sourceType: input.sourceType, sourceId: input.sourceId, correlationId: ctx.correlationId });
     }),
 
   createManual: orgRoleProcedure("operator")
@@ -242,11 +266,17 @@ export const contractWorkspaceRouter = router({
     }),
 
   createApostille: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
-    .input(z.object({ contractId: z.string().min(1), kind: z.enum(APOSTILLE_KINDS), description: z.string().optional(), newValue: z.number().optional(), newManager: z.string().optional(), newInspector: z.string().optional() }))
+    .input(z.object({
+      contractId: z.string().min(1), kind: z.enum(APOSTILLE_KINDS), description: z.string().optional(), newValue: z.number().optional(),
+      // SEM-062 — `gestor` exige `newManager`; `fiscal` exige `newInspector` (o instrumento APLICA a designação ao contrato).
+      newManager: z.string().optional(), newInspector: z.string().optional(),
+      // SEM-062 — revisão do contrato que o cliente viu (opcional): divergente ⇒ CONFLICT, nada gravado.
+      expectedUpdatedAt: z.string().datetime().optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
+      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
         .catch(mapInstrumentStatusError);
       return { apostille };
     }),

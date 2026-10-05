@@ -81,6 +81,10 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     classes: ["READ"], oldBuilder: "tenantProcedure", minRole: null,
     rationale: "Leitura escopada por organização.", sideEffects: [],
   },
+  proposeInheritance: {
+    classes: ["READ"], oldBuilder: "tenantProcedure", minRole: null,
+    rationale: "SEM-062: leitura escopada por organização (proposta de contratado/valor com procedência; nunca grava nem decide).", sideEffects: [],
+  },
   updateContract: {
     classes: ["DRAFT_EDIT", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "operator",
     conditionalMinRole: { when: "input.status presente e diferente do status atual", minRole: "manager" },
@@ -99,8 +103,8 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
   },
   createApostille: {
     classes: ["INSTRUMENT_CREATION", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "manager",
-    rationale: "Além da minuta, MUDA o status institucional do contrato para 'apostilado'. Piso manager até draft e decisão serem separados.",
-    sideEffects: ["contract_ws_apostilles", "AI (minuta do apostilamento)", "contract_ws_documents", "official_documents", "contract_workspaces.status → apostilado", "process_timeline"],
+    rationale: "Além da minuta, MUDA o status institucional do contrato para 'apostilado' e, nos apostilamentos de gestor/fiscal (SEM-062), APLICA a designação em manager/inspector. Piso manager até draft e decisão serem separados.",
+    sideEffects: ["contract_ws_apostilles", "AI (minuta do apostilamento)", "contract_ws_documents", "official_documents", "contract_workspaces.status → apostilado", "contract_workspaces.manager/inspector (apostilamento gestor/fiscal)", "process_timeline"],
   },
   registerOccurrence: {
     classes: ["OCCURRENCE"], oldBuilder: "tenantProcedure", minRole: "operator",

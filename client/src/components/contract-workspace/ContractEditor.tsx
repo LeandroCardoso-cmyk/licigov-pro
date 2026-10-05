@@ -10,7 +10,7 @@ import { formatCurrency, statusLabel } from "./labels";
  *
  * SEM-023 (PR-12): o save envia a revisão carregada (`expectedUpdatedAt`, CAS). Fora da MINUTA
  * nenhum campo é editável aqui: valor/contratado/objeto/vigência só mudam por Termo Aditivo ou
- * Apostilamento, e a troca de gestor/fiscal exige ação própria de designação (ainda não disponível).
+ * Apostilamento, e a troca de gestor/fiscal pelo Apostilamento de gestor/fiscal (SEM-062).
  * Por isso o formulário inteiro fica desabilitado fora da minuta. Recusas do servidor aparecem sem
  * ambiguidade.
  */
@@ -88,8 +88,8 @@ export default function ContractEditor({ contract, onSaved }: ContractEditorProp
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
           Contrato em status “{statusLabel(contract.status)}”: a edição direta só é permitida na minuta.
           Valor, contratado, objeto e vigência só mudam por Termo Aditivo ou Apostilamento (abas ao lado).
-          A designação ou substituição de gestor e fiscal após a minuta exige uma ação própria e auditada,
-          ainda não disponível.
+          A designação ou substituição de gestor e fiscal após a minuta é feita pelo Apostilamento de
+          gestor/fiscal, que registra o ato e atualiza o contrato.
         </p>
       )}
       <fieldset disabled={locked} className="space-y-3">

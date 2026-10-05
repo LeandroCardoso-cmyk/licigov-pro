@@ -57,22 +57,26 @@ export const documentEngineRouter = router({
       return { documents, total: documents.length };
     }),
 
-  /** Versões de uma linhagem (informe origin+domain+tipo OU o lineageId). */
+  /**
+   * Versões de uma linhagem (informe origin+domain+tipo). SEM-040: `instrumentId` (aditivo/apostilamento) seleciona a
+   * linhagem PRÓPRIA do instrumento; ausente ⇒ a linhagem por origem+tipo (documentos anteriores à SEM-040, que
+   * compartilhavam uma linhagem por contrato, continuam legíveis por aqui).
+   */
   versions: tenantProcedure
-    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1) }))
+    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1), instrumentId: z.string().min(1).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin });
+      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin, instrumentId: input.instrumentId });
       const versions = await listVersions(lineageId, orgId);
       return { lineageId, versions, total: versions.length };
     }),
 
   /** Timeline documental (append-only) de uma linhagem. */
   timeline: tenantProcedure
-    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1) }))
+    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1), instrumentId: z.string().min(1).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin });
+      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin, instrumentId: input.instrumentId });
       const timeline = await listDocumentTimeline(lineageId, orgId);
       return { timeline };
     }),

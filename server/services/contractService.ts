@@ -22,8 +22,10 @@ import { timelineActor } from "../domain/timelineActor";
 import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
 import {
-  createContractWorkspace, CONTRACT_DOMAIN_COPILOTS, planInstrumentStatusChange,
+  createContractWorkspace, CONTRACT_DOMAIN_COPILOTS, planInstrumentStatusChange, planApostilleAssignment,
+  ContractRevisionConflictError, isSameContractRevision, nextContractRevision,
   type ContractWorkspace, type ContractOriginType, type ContractInstrumentKind, type InstrumentStatusChangePlan,
+  type ApostilleAssignmentChange,
 } from "../domain/contractWorkspace";
 import {
   createContractAddendum, advanceAddendum, createContractApostille, createContractOccurrence,
@@ -37,10 +39,13 @@ import {
   type AddendumData, type ApostilleData,
 } from "../domain/instrumentTerms";
 import { legalPolicyMarker } from "../domain/legalReviewPolicy";
+import { inheritanceDiverges } from "../domain/contractInheritance";
+import { resolveSelectedDirectProposal } from "./contractInheritanceService";
 import {
-  getContractWorkspace, compareAndSetContractWorkspaceStatus, type ContractWsExecutor,
-  insertContractWsDocument, insertContractAddendum, countContractAddenda, listContractAddenda, listContractApostilles,
-  insertContractApostille, countContractApostilles, insertContractOccurrence, insertImportedContract,
+  getContractWorkspace, compareAndSetContractWorkspaceStatus, lockContractWorkspaceForInstrument, type ContractWsExecutor,
+  nextAddendumSequenceUnderLock, nextApostilleSequenceUnderLock,
+  insertContractWsDocument, insertContractAddendum, listContractAddenda, listContractApostilles,
+  insertContractApostille, insertContractOccurrence, insertImportedContract,
   findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
 } from "../db/contractWorkspace";
 import {
@@ -167,21 +172,42 @@ export async function createFromProcurement(params: {
   return ws;
 }
 
-/** FLUXO 2 — a partir da Contratação Direta (ratificada). */
+/**
+ * FLUXO 2 — a partir da Contratação Direta (ratificada).
+ *
+ * R9 / SEM-062 — `sourceProposalId` (opcional): a proposta registrada que o HUMANO selecionou/confirmou no assistente
+ * (ver `contractInheritanceService`). Só vale com decisão de ratificação VIGENTE no ledger; contratado/valor omitidos
+ * assumem os do REGISTRO da proposta (confirmação explícita pela seleção) e valores informados prevalecem (correção
+ * humana). A procedência (id da proposta e da decisão, e se houve divergência) fica na timeline do contrato.
+ * Refusa ANTES de qualquer escrita. Sem `sourceProposalId` o comportamento é o anterior (contratado/valor só se
+ * informados; nada é inferido).
+ */
 export async function createFromDirectProcurement(params: {
   organizationId: number; directWorkspaceId: string; contractNumber: string; contractor?: string; value?: number; term?: string; correlationId: string;
   /** Ator autenticado (R3/PR-06: retry idempotente só converge para o MESMO ator). */
   createdBy?: number | null;
+  /** SEM-062 — id da proposta registrada selecionada pelo humano (proveniência do contratado/valor). */
+  sourceProposalId?: string;
 }): Promise<ContractWorkspace> {
+  const selected = params.sourceProposalId
+    ? await resolveSelectedDirectProposal({
+      organizationId: params.organizationId, directWorkspaceId: params.directWorkspaceId, proposalId: params.sourceProposalId, correlationId: params.correlationId,
+    })
+    : null;
   const src = await getDirectProcurementWorkspace(params.directWorkspaceId, params.organizationId);
+  const contractor = params.contractor?.trim() ? params.contractor : selected?.candidate.supplierName;
+  const value = params.value ?? selected?.candidate.value;
   const candidate = createContractWorkspace({
     organizationId: params.organizationId, originType: "contratacao_direta", originProcess: params.directWorkspaceId,
-    contractNumber: requireContractNumber(params.contractNumber), contractor: params.contractor, object: src?.object ?? "",
-    value: params.value, term: params.term, correlationId: params.correlationId, createdBy: params.createdBy,
+    contractNumber: requireContractNumber(params.contractNumber), contractor, object: src?.object ?? "",
+    value, term: params.term, correlationId: params.correlationId, createdBy: params.createdBy,
   });
   const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
   if (!created) return ws;
-  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato ${ws.contractNumber} gerado a partir da Contratação Direta ${params.directWorkspaceId}.`, refId: ws.id, correlationId: params.correlationId });
+  const provenance = selected
+    ? ` Contratado e valor sugeridos pela proposta ${selected.candidate.proposalId} (decisão de ratificação ${selected.decisionId}, rev. ${selected.decisionRevision}) e confirmados por ${timelineActor(params.createdBy)}${inheritanceDiverges(selected.candidate, { contractor: ws.contractor, value: ws.value }) ? " com alteração dos valores sugeridos" : ""}.`
+    : "";
+  await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: "sistema", summary: `Contrato ${ws.contractNumber} gerado a partir da Contratação Direta ${params.directWorkspaceId}.${provenance}`, refId: ws.id, correlationId: params.correlationId });
   return ws;
 }
 
@@ -313,11 +339,16 @@ export async function generateContractDocument(params: {
         "> Minuta gerada com apoio dos copilotos. Revisão obrigatória — nunca automática.",
       ].join("\n");
   const author = params.actorUserId ? String(params.actorUserId) : "sistema";
+  // R9 / SEM-040 — o termo de um instrumento carrega o número do PRÓPRIO instrumento no título (cada instrumento é uma
+  // linhagem; sem o nº, "Termo Aditivo — CT-1" apareceria igual para todos os aditivos do contrato).
+  const title = instrument
+    ? `${titleForKind(params.kind)} nº ${instrument.data.sequence} — ${ws.contractNumber}`
+    : `${titleForKind(params.kind)} — ${ws.contractNumber}`;
 
   // SPRINT 5.3.1 — metadados institucionais auditáveis da minuta.
   const doc = createContractGeneratedDocument({
     organizationId: params.organizationId, contractId: ws.id, kind: params.kind,
-    title: `${titleForKind(params.kind)} — ${ws.contractNumber}`, content, refId: params.refId,
+    title, content, refId: params.refId,
     metadata: {
       clauseOrigin: instrument ? "instrumento_registrado" : "template_institucional",
       ...(instrument ? { instrumentId: instrument.data.id, instrumentKind: instrument.kind } : {}),
@@ -339,9 +370,16 @@ export async function generateContractDocument(params: {
     organizationId: params.organizationId, businessDomain: "contratos",
     documentType: params.kind === "rescisao" ? "rescisao" : params.kind === "aditivo" ? "aditivo" : params.kind === "apostilamento" ? "apostilamento" : "contrato",
     origin: ws.id, title: doc.title, content, author, correlationId: params.correlationId,
+    // R9 / SEM-040 — linhagem PRÓPRIA do instrumento (id do instrumento na identidade da linhagem). Documentos de
+    // contrato/rescisão/anexo seguem a linhagem por origem+tipo; versões ANTERIORES de aditivo/apostilamento (linhagem
+    // compartilhada por contrato, sem backfill) continuam legíveis — `lineageScope` as distingue nos leitores.
+    instrumentId: instrument?.data.id,
     metadata: {
       copilots: orchestration.selectedCopilots, legalBasis: orchestration.consolidated.legalBasis, confidence: orchestration.consolidated.confidence,
-      ...(instrument ? { instrumentId: instrument.data.id, instrumentKind: instrument.kind, contractNumber: ws.contractNumber } : {}),
+      ...(instrument ? {
+        instrumentId: instrument.data.id, instrumentKind: instrument.kind, sequence: instrument.data.sequence,
+        lineageScope: "instrument", contractNumber: ws.contractNumber,
+      } : {}),
       // R8 / PR-20 scaffolding (SEM-084): o sistema não valida limites legais do aditivo sem parecer registrado.
       ...(instrument?.kind === "aditivo" ? { addendumLimitPolicy: legalPolicyMarker("SEM-084_CANONICAL_ADDENDUM_LIMITS") } : {}),
     },
@@ -402,40 +440,106 @@ class InstrumentStatusCasMiss extends Error {
   constructor() { super("instrument_status_cas_miss"); this.name = "InstrumentStatusCasMiss"; }
 }
 
+/** Instrumento já CONSTRUÍDO com a sequência alocada sob o lock (ver `persistInstrumentWithGovernedStatus`). */
+interface InstrumentToPersist<T> {
+  readonly result: T;
+  readonly refId: string;
+  /** Resumo do evento de timeline (a designação de gestor/fiscal, quando houver, é acrescentada com antes → depois). */
+  readonly summary: string;
+  readonly write: (tx: ContractWsExecutor) => Promise<unknown>;
+}
+
+const ASSIGNMENT_LABEL = { manager: "gestor", inspector: "fiscal" } as const;
+const quoted = (v: string): string => (v.trim() ? `"${v.length > 80 ? `${v.slice(0, 77)}…` : v}"` : "(não designado)");
+
 /**
- * Persiste o instrumento (aditivo/apostilamento), o status do contrato e o evento de timeline numa ÚNICA
- * transação, APÓS a máquina de estados ter aprovado a mudança (`planInstrumentStatusChange`, avaliada
- * pelo caller antes de qualquer efeito). O status só muda por compare-and-set a partir do status que a
- * máquina avaliou (`plan.from`). Se o contrato mudou em paralelo (ex.: rescindido durante a operação), o
- * CAS não casa ⇒ ROLLBACK (nenhuma linha do instrumento, nenhum status, nenhum evento) e a máquina é
- * reavaliada contra o status REAL: recusa ⇒ `ContractStatusTransitionError`; ainda admissível ⇒
- * `ContractStatusConflictError`. Nunca grava instrumento pela metade.
- * Instrumentos sucessivos concorrentes (mesma sequência ⇒ mesmo id determinístico): o INSERT é puro
- * (`failOnDuplicate`), o segundo recebe ER_DUP_ENTRY ⇒ ROLLBACK ⇒ `ContractStatusConflictError("sequence")`
- * — nunca funde duas solicitações numa linha híbrida.
+ * Persiste o instrumento (aditivo/apostilamento), o status do contrato, a designação de gestor/fiscal (apostilamento
+ * `gestor`/`fiscal`) e o evento de timeline numa ÚNICA transação — SEM nenhuma chamada remota (IA, S3, e-mail) sob o
+ * lock; a minuta é gerada depois, a partir do instrumento persistido.
+ *
+ * R9 / SEM-084 — alocação ATÔMICA da sequência. A transação começa TRAVANDO a linha do contrato
+ * (`SELECT … FOR UPDATE`, `lockContractWorkspaceForInstrument`); só então lê o status REAL, avalia a máquina de
+ * estados, aloca `MAX(sequence)+1` e grava. Instrumentos concorrentes do mesmo contrato se serializam na linha: o
+ * segundo espera o commit do primeiro e recebe o número seguinte — nenhum se perde e nenhum vira CONFLICT por
+ * disputar o mesmo número. (Antes, `count+1` era calculado FORA da transação: duas criações liam a mesma contagem,
+ * derivavam o mesmo id e uma delas era recusada.) O id continua determinístico por (org, contrato, sequência) e o
+ * INSERT continua puro (`failOnDuplicate`): qualquer colisão residual vira recusa, nunca fusão de duas solicitações.
+ *
+ * SEM-025 — a máquina de estados (`planInstrumentStatusChange`) é reavaliada contra o status lido SOB O LOCK
+ * (recusa ⇒ ROLLBACK, `ContractStatusTransitionError`). O status só muda por compare-and-set a partir do status
+ * avaliado (+ a revisão lida sob o lock): se não casar (impossível sob o lock; defesa), ROLLBACK e a máquina é
+ * reavaliada contra o status REAL (`ContractStatusConflictError` se ainda admite). Nunca grava instrumento pela metade.
+ *
+ * SEM-062 — quando o apostilamento designa gestor/fiscal, o novo nome é gravado em `manager`/`inspector` NA MESMA
+ * sentença do CAS e o evento de timeline registra "campo: antes → depois" (o `before` é o lido sob o lock).
+ *
+ * `expectedUpdatedAt` (opcional): revisão do contrato que o cliente viu; divergente ⇒ `ContractRevisionConflictError`
+ * (ROLLBACK, nada gravado). A revisão nova é sempre ESTRITAMENTE posterior à lida sob o lock.
  */
-async function persistInstrumentWithGovernedStatus(params: {
+async function persistInstrumentWithGovernedStatus<T>(params: {
   ws: ContractWorkspace;
-  plan: InstrumentStatusChangePlan;
   instrument: ContractInstrumentKind;
-  at: string;
-  write: (tx: ContractWsExecutor) => Promise<unknown>;
-  event: { summary: string; refId: string; correlationId: string };
-}): Promise<void> {
-  const { ws, plan } = params;
+  requiresLegalOpinion?: boolean;
+  allocateSequence: (tx: ContractWsExecutor) => Promise<number>;
+  build: (c: { sequence: number; plan: InstrumentStatusChangePlan; locked: ContractWorkspace; at: string }) => InstrumentToPersist<T>;
+  /** Mudança de designação (gestor/fiscal) avaliada contra o contrato LIDO SOB O LOCK. */
+  assignment?: (locked: ContractWorkspace) => ApostilleAssignmentChange | null;
+  expectedUpdatedAt?: string;
+  actorUserId?: number;
+  correlationId: string;
+}): Promise<{ result: T; plan: InstrumentStatusChangePlan; sequence: number; assignment: ApostilleAssignmentChange | null }> {
+  const { ws } = params;
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — instrumento contratual não persistido (fail-closed).");
+  const opts = { requiresLegalOpinion: params.requiresLegalOpinion };
   try {
-    await db.transaction(async (tx) => {
-      await params.write(tx);
+    return await db.transaction(async (tx) => {
+      // 1. TRAVA da linha do contrato — primeira instrução da transação (a leitura corrente enxerga o commit anterior).
+      const locked = await lockContractWorkspaceForInstrument(ws.id, ws.organizationId, tx);
+      if (!locked) throw new Error("Contrato não encontrado.");
+      if (params.expectedUpdatedAt && !isSameContractRevision(locked.updatedAt, params.expectedUpdatedAt)) throw new ContractRevisionConflictError();
+      // 2. máquina de estados contra o status REAL (sob o lock) — recusa ⇒ rollback sem escrita.
+      const plan = planInstrumentStatusChange(locked.status, params.instrument, opts);
+      const assignment = params.assignment ? params.assignment(locked) : null;
+      // 3. sequência atômica + construção + escrita do instrumento.
+      const sequence = await params.allocateSequence(tx);
+      const at = nextContractRevision(locked.updatedAt);
+      const built = params.build({ sequence, plan, locked, at });
+      await built.write(tx);
+      // 4. status (+ designação) por compare-and-set a partir do estado lido sob o lock.
       const ok = await compareAndSetContractWorkspaceStatus({
-        id: ws.id, orgId: ws.organizationId, fromStatus: plan.from, toStatus: plan.to, updatedAt: params.at,
+        id: ws.id, orgId: ws.organizationId, fromStatus: plan.from, toStatus: plan.to, updatedAt: at,
+        expectedUpdatedAt: locked.updatedAt,
+        ...(assignment ? { assignment: { [assignment.field]: assignment.after } } : {}),
       }, tx);
       if (!ok) throw new InstrumentStatusCasMiss();
+      // 5. evento de auditoria (um id por evento; ator = o humano que registrou).
       await recordProcessEvent({
-        organizationId: ws.organizationId, processId: ws.id, eventType: "change", actor: "sistema",
-        summary: params.event.summary, refId: params.event.refId, correlationId: params.event.correlationId,
+        organizationId: ws.organizationId, processId: ws.id, eventType: "change", actor: timelineActor(params.actorUserId),
+        summary: assignment
+          ? `${built.summary} Designação aplicada ao contrato — ${ASSIGNMENT_LABEL[assignment.field]}: ${quoted(assignment.before)} → ${quoted(assignment.after)}.`
+          : built.summary,
+        refId: built.refId, correlationId: params.correlationId,
       }, tx);
+      return { result: built.result, plan, sequence, assignment };
+    }).then((out) => {
+      log.info("contract_instrument_sequence_allocated", {
+        contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, sequence: out.sequence, correlationId: params.correlationId,
+      });
+      if (out.assignment) {
+        log.info("contract_assignment_applied_by_apostille", {
+          contractId: ws.id, organizationId: ws.organizationId, field: out.assignment.field, apostilleId: (out.result as { id?: string }).id,
+          actorUserId: params.actorUserId ?? null, correlationId: params.correlationId,
+        });
+      }
+      if (out.plan.mode === "deferred_pending_legal_opinion") {
+        // Fail-closed observável: instrumento registrado aguardando parecer; status do contrato NÃO efetivado.
+        log.info("contract_instrument_status_deferred_pending_legal_opinion", {
+          contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, status: out.plan.from,
+          instrumentStatus: out.plan.instrumentStatus, refId: (out.result as { id?: string }).id, correlationId: params.correlationId,
+        });
+      }
+      return out;
     });
   } catch (e) {
     const duplicate = isDuplicateKeyError(e);
@@ -443,13 +547,6 @@ async function persistInstrumentWithGovernedStatus(params: {
     const fresh = await requireContract(ws.id, ws.organizationId);
     planInstrumentStatusChange(fresh.status, params.instrument); // lança ContractStatusTransitionError se recusado
     throw new ContractStatusConflictError(ws.id, duplicate ? "sequence" : "status");
-  }
-  if (plan.mode === "deferred_pending_legal_opinion") {
-    // Fail-closed observável: instrumento registrado aguardando parecer; status do contrato NÃO efetivado.
-    log.info("contract_instrument_status_deferred_pending_legal_opinion", {
-      contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, status: plan.from,
-      instrumentStatus: plan.instrumentStatus, refId: params.event.refId, correlationId: params.event.correlationId,
-    });
   }
 }
 
@@ -479,19 +576,27 @@ export async function createAddendum(params: {
   const requiresLegalOpinion = params.addendumType === "valor" || params.addendumType === "quantitativo";
   // Máquina de estados PRIMEIRO — recusa antes de qualquer leitura adicional, escrita, IA ou evento. Parecer
   // exigido e ausente ⇒ o status do contrato não é efetivado (fail-closed; `deferred_pending_legal_opinion`).
-  const plan = planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion });
-  const sequence = (await countContractAddenda(ws.id, params.organizationId)) + 1;
-  let addendum = createContractAddendum({
-    organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence,
-    justification: params.justification, newValue: params.newValue, newTerm: params.newTerm,
-    requestOrigin: params.requestOrigin, correlationId: params.correlationId,
-  });
-  addendum = advanceAddendum(addendum, "minuta");
-  const updated = advanceAddendum(addendum, requiresLegalOpinion ? "aguardando_parecer" : "finalizado");
-  await persistInstrumentWithGovernedStatus({
-    ws, plan, instrument: "aditivo", at: updated.updatedAt,
-    write: (tx) => insertContractAddendum(updated, tx, { failOnDuplicate: true }),
-    event: { summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? `requer parecer; status do contrato mantido (${plan.to}) até o parecer` : "finalizado"}.`, refId: updated.id, correlationId: params.correlationId },
+  // (Pré-checagem barata sobre o contrato lido; a avaliação que vale é a refeita SOB O LOCK da transação.)
+  planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion });
+  // R9 / SEM-084 — a sequência NÃO é calculada aqui: é alocada dentro da transação, sob o lock do contrato.
+  // Os limites legais de valor/prazo do art. 125 seguem NÃO verificados (J-4, BLOCKED_LEGAL_REVIEW): nada é imposto.
+  const { result: updated } = await persistInstrumentWithGovernedStatus({
+    ws, instrument: "aditivo", requiresLegalOpinion, actorUserId: params.actorUserId, correlationId: params.correlationId,
+    allocateSequence: (tx) => nextAddendumSequenceUnderLock(ws.id, params.organizationId, tx),
+    build: ({ sequence, plan, at }) => {
+      let addendum = createContractAddendum({
+        organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence,
+        justification: params.justification, newValue: params.newValue, newTerm: params.newTerm,
+        requestOrigin: params.requestOrigin, correlationId: params.correlationId, createdAt: at,
+      });
+      addendum = advanceAddendum(addendum, "minuta", at);
+      const final = advanceAddendum(addendum, requiresLegalOpinion ? "aguardando_parecer" : "finalizado", at);
+      return {
+        result: final, refId: final.id,
+        summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? `requer parecer; status do contrato mantido (${plan.to}) até o parecer` : "finalizado"}.`,
+        write: (tx) => insertContractAddendum(final, tx, { failOnDuplicate: true }),
+      };
+    },
   });
   await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "aditivo", refId: updated.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
   return { addendum: updated, requiresLegalOpinion };
@@ -503,22 +608,37 @@ export async function createAddendum(params: {
  * Cria um apostilamento e gera automaticamente a minuta.
  * SEM-025 — mesma governança do aditivo: máquina de estados antes de qualquer efeito; apostilamento +
  * status + evento atômicos; minuta gerada depois, a partir do apostilamento persistido.
+ * R9 / SEM-084 — sequência alocada sob o lock do contrato, na mesma transação (ver `persistInstrumentWithGovernedStatus`).
+ * R9 / SEM-062 — apostilamento `gestor`/`fiscal` APLICA a designação em `manager`/`inspector` do contrato, atomicamente
+ * com o instrumento, o status, o CAS e o evento (antes → depois); o nome é obrigatório e só no campo do seu tipo.
+ * `reajuste`/`legal` NÃO alteram valor/prazo do contrato (limites legais do art. 125: J-4, BLOCKED_LEGAL_REVIEW).
  */
 export async function createApostille(params: {
   organizationId: number; contractId: string; kind: ApostilleKind; description?: string;
   newValue?: number; newManager?: string; newInspector?: string; correlationId: string; actorUserId?: number;
+  /** Revisão do contrato que o cliente viu (opcional); divergente ⇒ `ContractRevisionConflictError`, nada gravado. */
+  expectedUpdatedAt?: string;
 }): Promise<Awaited<ReturnType<typeof insertContractApostille>>> {
   const ws = await requireContract(params.contractId, params.organizationId);
-  const plan = planInstrumentStatusChange(ws.status, "apostilamento");
-  const sequence = (await countContractApostilles(ws.id, params.organizationId)) + 1;
-  const apostille = createContractApostille({
-    organizationId: params.organizationId, contractId: ws.id, kind: params.kind, sequence, description: params.description,
-    newValue: params.newValue, newManager: params.newManager, newInspector: params.newInspector, correlationId: params.correlationId,
-  });
-  await persistInstrumentWithGovernedStatus({
-    ws, plan, instrument: "apostilamento", at: apostille.createdAt,
-    write: (tx) => insertContractApostille(apostille, tx, { failOnDuplicate: true }),
-    event: { summary: `Apostilamento ${sequence} (${params.kind}).`, refId: apostille.id, correlationId: params.correlationId },
+  planInstrumentStatusChange(ws.status, "apostilamento"); // recusa antes de qualquer efeito (reavaliada sob o lock)
+  const planned = planApostilleAssignment(ws, params.kind, params); // recusa antes de qualquer efeito (nome ausente/campo alheio)
+  const newManager = params.kind === "gestor" && planned ? planned.after : "";
+  const newInspector = params.kind === "fiscal" && planned ? planned.after : "";
+  const { result: apostille } = await persistInstrumentWithGovernedStatus({
+    ws, instrument: "apostilamento", actorUserId: params.actorUserId, correlationId: params.correlationId,
+    expectedUpdatedAt: params.expectedUpdatedAt,
+    allocateSequence: (tx) => nextApostilleSequenceUnderLock(ws.id, params.organizationId, tx),
+    assignment: (locked) => planApostilleAssignment(locked, params.kind, params),
+    build: ({ sequence, at }) => {
+      const created = createContractApostille({
+        organizationId: params.organizationId, contractId: ws.id, kind: params.kind, sequence, description: params.description,
+        newValue: params.newValue, newManager, newInspector, correlationId: params.correlationId, createdAt: at,
+      });
+      return {
+        result: created, refId: created.id, summary: `Apostilamento ${sequence} (${params.kind}).`,
+        write: (tx) => insertContractApostille(created, tx, { failOnDuplicate: true }),
+      };
+    },
   });
   await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "apostilamento", refId: apostille.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
   return apostille;

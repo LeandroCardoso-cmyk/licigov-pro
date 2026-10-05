@@ -7,7 +7,7 @@
  * Nomes namespaced para não colidir com o repo legado `server/db/contracts.ts`.
  */
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { CONTRACT_ALREADY_EXISTS } from "../domain/contractCreation";
@@ -136,13 +136,7 @@ export async function findContractByNormalizedNumber(orgId: number, normalizedNu
   return rows.length > 0 ? getContractWorkspace(rows[0].id, orgId) : null;
 }
 
-export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
-  const db = await getDb();
-  if (!db) return null;
-  const rows = await db.select().from(contractWorkspacesTable)
-    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId))).limit(1);
-  if (rows.length === 0) return null;
-  const r = rows[0];
+function rowToWorkspace(r: typeof contractWorkspacesTable.$inferSelect): ContractWorkspace {
   return {
     id: r.id, organizationId: r.organizationId, originType: r.originType as ContractOriginType, originProcess: r.originProcess,
     contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), term: r.term,
@@ -150,6 +144,28 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
     activeCopilots: ["juridico", "contratos", "agente_contratacao"], correlationId: r.correlationId,
     createdBy: r.createdBy ?? null, createdAt: fromDbDatetime(r.createdAt), updatedAt: fromDbDatetime(r.updatedAt),
   };
+}
+
+export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractWorkspacesTable)
+    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId))).limit(1);
+  return rows.length === 0 ? null : rowToWorkspace(rows[0]);
+}
+
+/**
+ * R9 / SEM-084 — TRAVA a linha do contrato (`SELECT … FOR UPDATE`, tenant-scoped) DENTRO da transação do instrumento
+ * e devolve o estado do contrato SOB o lock. Todo criador de aditivo/apostilamento passa por aqui antes de alocar a
+ * sequência e de avaliar a máquina de estados: instrumentos concorrentes do mesmo contrato se SERIALIZAM nesta linha
+ * (o segundo espera o commit do primeiro e então lê o status e a sequência já atualizados). Exige executor
+ * transacional; contrato inexistente no tenant ⇒ null (a trava não pega nada). Sem chamada remota sob o lock.
+ */
+export async function lockContractWorkspaceForInstrument(id: string, orgId: number, tx: ContractWsExecutor): Promise<ContractWorkspace | null> {
+  const rows = await tx.select().from(contractWorkspacesTable)
+    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId)))
+    .limit(1).for("update");
+  return rows.length === 0 ? null : rowToWorkspace(rows[0]);
 }
 
 /**
@@ -240,15 +256,27 @@ export async function listImportedContractWorkspaces(orgId: number, limit = 50):
  */
 export async function compareAndSetContractWorkspaceStatus(params: {
   id: string; orgId: number; fromStatus: ContractStatus; toStatus: ContractStatus; updatedAt: string;
+  /**
+   * R9 / SEM-062 — designação de gestor/fiscal APLICADA pelo instrumento (apostilamento `gestor`/`fiscal`), na MESMA
+   * sentença do CAS de status. Só as chaves presentes são gravadas; ausente ⇒ comportamento anterior (só status).
+   */
+  assignment?: { manager?: string; inspector?: string };
+  /** Quando informado, o CAS também exige que a revisão (`updated_at`) persistida seja esta (lida sob o lock). */
+  expectedUpdatedAt?: string;
 }, executor?: ContractWsExecutor): Promise<boolean> {
   const db = executor ?? await getDb();
   if (!db) return false;
   const result = await db.update(contractWorkspacesTable)
-    .set({ status: params.toStatus, updatedAt: toDbDatetime(params.updatedAt) })
+    .set({
+      status: params.toStatus, updatedAt: toDbDatetime(params.updatedAt),
+      ...(params.assignment?.manager !== undefined ? { manager: params.assignment.manager } : {}),
+      ...(params.assignment?.inspector !== undefined ? { inspector: params.assignment.inspector } : {}),
+    })
     .where(and(
       eq(contractWorkspacesTable.id, params.id),
       eq(contractWorkspacesTable.organizationId, params.orgId),
       eq(contractWorkspacesTable.status, params.fromStatus),
+      ...(params.expectedUpdatedAt ? [eq(contractWorkspacesTable.updatedAt, toDbDatetime(params.expectedUpdatedAt))] : []),
     ));
   const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
   return affected > 0;
@@ -287,6 +315,18 @@ export async function countContractAddenda(contractId: string, orgId: number): P
   const rows = await db.select({ id: contractAddendaTable.id }).from(contractAddendaTable)
     .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)));
   return rows.length;
+}
+
+/**
+ * R9 / SEM-084 — próxima sequência de aditivo do contrato = MAX(sequence)+1 (não `count+1`: tolera lacunas). Só é
+ * ATÔMICA quando chamada DENTRO da transação do instrumento, depois de `lockContractWorkspaceForInstrument` (a trava
+ * da linha do contrato serializa os alocadores). Fora do lock é apenas uma leitura — nunca decide número.
+ */
+export async function nextAddendumSequenceUnderLock(contractId: string, orgId: number, tx: ContractWsExecutor): Promise<number> {
+  const rows = await tx.select({ v: sql<number | string | null>`COALESCE(MAX(${contractAddendaTable.sequence}), 0)` }).from(contractAddendaTable)
+    .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
+    .for("update"); // leitura corrente (nunca o snapshot REPEATABLE READ): vê o commit do alocador anterior
+  return Number(rows[0]?.v ?? 0) + 1;
 }
 
 /**
@@ -341,6 +381,14 @@ export async function countContractApostilles(contractId: string, orgId: number)
   const rows = await db.select({ id: contractWsApostillesTable.id }).from(contractWsApostillesTable)
     .where(and(eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)));
   return rows.length;
+}
+
+/** R9 / SEM-084 — análogo a `nextAddendumSequenceUnderLock` para apostilamentos (mesmo contrato de uso: sob o lock). */
+export async function nextApostilleSequenceUnderLock(contractId: string, orgId: number, tx: ContractWsExecutor): Promise<number> {
+  const rows = await tx.select({ v: sql<number | string | null>`COALESCE(MAX(${contractWsApostillesTable.sequence}), 0)` }).from(contractWsApostillesTable)
+    .where(and(eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
+    .for("update");
+  return Number(rows[0]?.v ?? 0) + 1;
 }
 
 export async function insertContractApostille(a: ContractApostille, executor?: ContractWsExecutor, opts: InstrumentInsertOptions = {}): Promise<ContractApostille | null> {
