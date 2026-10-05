@@ -27,7 +27,7 @@ import { toDbDatetime } from "../db/institutionalConsultations";
 import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
 import { centsToReais, centsToDecimalString } from "../domain/money";
-import type { PriceQuote } from "../domain/priceQuoteConsolidation";
+import { normalizeQuantity, storedQuantity, type PriceQuote } from "../domain/priceQuoteConsolidation";
 import {
   materializeIntelligentItemsTx, enrichMaterializedItems, recoverStaleEnrichment, recordMaterializationSignals,
   type MaterializationResult,
@@ -293,7 +293,9 @@ function buildPromotionQuotes(p: {
     if (!description) continue; // não fabrica linha sem descrição
     // Contrato monetário TIPADO: correção → canônico; célula numérica nativa → canônico; texto → pt-BR.
     const qty = resolveEffectiveQuantity(it as unknown as Record<string, unknown>);
-    const quantity = qty === null ? 0 : Number(qty);
+    // R10 / SEM-090 — quantidade ausente/≤0 é "NÃO INFORMADA" (null), nunca 0: o domínio (cotação, chave, consolidação) carrega
+    // null; só a coluna NOT NULL do banco guarda 0 (coerção única em `storedQuantity`).
+    const quantity = normalizeQuantity(qty === null ? null : Number(qty));
     const price = resolveEffectiveMoney(it as unknown as Record<string, unknown>, "unitPrice");
     if (price.reason === "ambiguous") {
       // Fail-closed: nunca "adivinhar" 1,234 (mil? um vírgula dois?). O revisor corrige no staging.
@@ -305,7 +307,7 @@ function buildPromotionQuotes(p: {
     const notes = text(eff.notes, 1500);
     const dom = createPriceResearchItem({
       researchId: p.researchId, processId: p.processId, organizationId: p.organizationId, description,
-      quantity, unit: (eff.unit ?? "un").toString() || "un", value: unitCents !== null ? centsToReais(unitCents) : 0,
+      quantity: storedQuantity(quantity), unit: (eff.unit ?? "un").toString() || "un", value: unitCents !== null ? centsToReais(unitCents) : 0,
       supplier, brand: text(eff.brand, 255), model: text(eff.model, 255),
       // Lineage no próprio item de domínio (sem conteúdo sensível): sessão/item/revisão de correção.
       observations: `${notes ? `${notes} — ` : ""}origem: ingestão sessão ${p.sessionId}, item ${it.id}, correção rev ${it.correctionRevision}`,
@@ -314,7 +316,7 @@ function buildPromotionQuotes(p: {
     out.push({
       dom, unitCents,
       quote: {
-        quoteId: dom.id, researchId: p.researchId, description: dom.description, quantity: dom.quantity, unit: dom.unit,
+        quoteId: dom.id, researchId: p.researchId, description: dom.description, quantity, unit: dom.unit,
         supplier: dom.supplier, brand: dom.brand, model: dom.model, source: dom.source, valueCents: unitCents,
       },
     });

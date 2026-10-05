@@ -34,7 +34,7 @@ import { getDb } from "../db/connection";
 import { toDbDatetime } from "../db/institutionalConsultations";
 import {
   consolidateQuotes, mergeQuotes, intelligentItemIdForKey, intelligentItemLogicalKey, normalizeDescription,
-  canonicalUnit, quantityMilli, quoteSetSignature, validQuotes, withContentHash, type PriceQuote, type ConsolidatedItem,
+  canonicalUnit, quantityMilli, normalizeQuantity, storedQuantity, quoteSetSignature, validQuotes, withContentHash, type PriceQuote, type ConsolidatedItem,
 } from "../domain/priceQuoteConsolidation";
 import { averageCents, centsToDecimalString, centsToReais, formatBRL, reaisToCents, type Cents } from "../domain/money";
 import {
@@ -133,7 +133,7 @@ function quoteToSupplier(q: PriceQuote): IntelligentItemSupplier {
 }
 
 /** Fornecedor persistido → cotação. Entradas legadas sem quoteId ganham id estável (posição + conteúdo). */
-function supplierToQuote(s: IntelligentItemSupplier, idx: number, base: { description: string; quantity: number; unit: string }): PriceQuote {
+function supplierToQuote(s: IntelligentItemSupplier, idx: number, base: { description: string; quantity: number | null; unit: string }): PriceQuote {
   const q: PriceQuote = {
     quoteId: s.quoteId ?? `legacy:${idx}:${s.name}:${s.value}`,
     researchId: s.researchId ?? "",
@@ -145,7 +145,7 @@ function supplierToQuote(s: IntelligentItemSupplier, idx: number, base: { descri
 }
 
 function quotesOf(raw: string | null, row: { description: string | null; quantity: string; unit: string }): PriceQuote[] {
-  const base = { description: row.description ?? "", quantity: Number(row.quantity), unit: row.unit };
+  const base = { description: row.description ?? "", quantity: normalizeQuantity(row.quantity), unit: row.unit }; // R10 / SEM-090: 0 armazenado = não informada
   return parseSuppliers(raw).map((s, i) => supplierToQuote(s, i, base));
 }
 
@@ -283,7 +283,7 @@ export async function materializeIntelligentItemsTx(
       }
       await tx.insert(intelligentItemsTable).values({
         id, organizationId: org, processId, sourceResearchId: params.researchId,
-        description: g.description, quantity: String(g.quantity), unit: g.unit,
+        description: g.description, quantity: String(storedQuantity(g.quantity)), unit: g.unit,
         averagePrice: centsToDecimalString(g.averageCents),
         suppliers: JSON.stringify(g.quotes.map(quoteToSupplier)),
         suggestedCatmat: null, alternativeCatmat: "[]", specifications: "[]", risks: "[]", recommendations: "[]",
@@ -461,7 +461,7 @@ async function quotesForKeyHash(tx: ProcurementExecutor, org: number, processId:
   const rows = await tx.select().from(priceResearchItemsTable)
     .where(and(eq(priceResearchItemsTable.organizationId, org), eq(priceResearchItemsTable.processId, processId)));
   return rows.map((q) => ({
-    quoteId: q.id, researchId: q.researchId, description: q.description ?? "", quantity: Number(q.quantity), unit: q.unit,
+    quoteId: q.id, researchId: q.researchId, description: q.description ?? "", quantity: normalizeQuantity(q.quantity), unit: q.unit,
     supplier: q.supplier ?? "", brand: q.brand ?? "", model: q.model ?? "", source: q.source ?? "",
     valueCents: reaisToCents(q.value) > 0 ? reaisToCents(q.value) : null,
   })).filter((q) => logicalKeyHash(intelligentItemLogicalKey(q)) === keyHash);

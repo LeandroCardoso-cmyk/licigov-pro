@@ -23,7 +23,7 @@
 import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
-  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
+  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
   type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
 import { formatBRL, reaisToCents } from "../../domain/money";
@@ -320,9 +320,10 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
 /** Texto da quantidade de um item no prompt: PREVISTA no modo canônico ("[a definir]" se ausente); legado = cotação. */
 function canonicalQuantityText(r: { id: string; quantity: number; unit: string }, canonical: boolean, undefinedQty: ReadonlySet<string>): string {
   // R6 / PR-13 (SEM-008): no modo legado a quantidade é a da COTAÇÃO — dita como tal, nunca como necessidade.
-  if (!canonical) return `${formatQuantity(r.quantity)} ${r.unit} (quantidade da cotação — não confirmada como necessidade)`;
+  // R10 / SEM-090 — quantidade ausente (0 armazenado) nunca é dita como "0".
+  if (!canonical) return `${formatQuantityOrReview(r.quantity)} ${r.unit} (quantidade da cotação — não confirmada como necessidade)`;
   if (undefinedQty.has(r.id)) return `quantidade prevista: [a definir] (${r.unit}) — NÃO inferir nem usar a quantidade da Pesquisa`;
-  return `${formatQuantity(r.quantity)} ${r.unit} (quantidade prevista)`;
+  return `${formatQuantityOrReview(r.quantity)} ${r.unit} (quantidade prevista)`;
 }
 
 /**
@@ -389,19 +390,13 @@ export async function resolveCanonicalDocumentItems(
   return canonicalDocumentItems(ctx, approved);
 }
 
-function draftOrigin(sources: readonly string[]): "import" | "generated" | "manual" {
-  if (sources.includes("origem:import")) return "import";
-  if (sources.some((s) => s === "edicao_manual" || s === "edicao_humana")) return "manual";
-  return "generated";
-}
-
 function toUpstream(doc: AuthoritativeUpstream | null): UpstreamDoc | null {
   if (!doc) return null;
   const present = !!doc.content && doc.content.trim().length > 0;
   return {
     present, status: doc.status ?? null,
     contentHash: present ? draftContentHash(doc.content) : null,
-    content: doc.content ?? "", origin: draftOrigin(doc.sources ?? []),
+    content: doc.content ?? "", origin: doc.origin,
     authority: doc.authority, version: doc.version,
   };
 }

@@ -24,7 +24,7 @@ import { draftContentHash } from "../../domain/generatedDocument";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import { formatBRL, reaisToCents } from "../../domain/money";
 import {
-  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
+  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
 } from "../../domain/authoritativeItems";
 import {
   confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
@@ -232,7 +232,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const changed = stateOf(it.id);
       const flag = changed && changed !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
       const lot = lotOf(it.id);
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantity(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
     }
     lines.push(`- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
