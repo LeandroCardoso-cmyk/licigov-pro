@@ -1,41 +1,28 @@
 import React from "react";
-import { trpc } from "../../lib/trpc";
 
 /**
- * NeedCharacterizationWorkspace — REAL (tRPC).
+ * NeedCharacterizationWorkspace — SEM registro persistido (R9 / SEM-042).
  *
- * Caracterização da necessidade: descrição, justificativa e valor estimado.
- * Tudo editável — base para as justificativas e o parecer jurídico.
+ * A Contratação Direta não possui repositório da caracterização da necessidade (nem tabela, nem migration neste
+ * ciclo). O formulário anterior chamava `characterizeNeed`, que só devolvia o objeto em memória e a tela mostrava
+ * "Necessidade registrada." — sucesso falso: o texto e o valor estimado se perdiam. Por isso o formulário foi retirado
+ * (a procedure recusa de forma estável, sem gravar nada). A necessidade institucional é registrada — e persistida, com
+ * aceite humano — na Justificativa da Contratação.
  */
 
 export interface NeedCharacterizationWorkspaceProps {
   workspaceId: string;
-  onSaved?: () => void;
 }
 
-export default function NeedCharacterizationWorkspace({ workspaceId, onSaved }: NeedCharacterizationWorkspaceProps) {
-  const [description, setDescription] = React.useState("");
-  const [justification, setJustification] = React.useState("");
-  const [estimatedValue, setEstimatedValue] = React.useState("");
-  const save = trpc.directProcurement.characterizeNeed.useMutation({ onSuccess: () => onSaved?.() });
-
+export default function NeedCharacterizationWorkspace(_props: NeedCharacterizationWorkspaceProps) {
   return (
-    <form onSubmit={(e) => { e.preventDefault(); save.mutate({ workspaceId, description, justification, estimatedValue: estimatedValue ? Number(estimatedValue) : undefined }); }}
-      className="space-y-3 rounded-lg border border-border bg-card p-4">
+    <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">Caracterização da Necessidade</h3>
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Descrição da necessidade…"
-        className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-      <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} placeholder="Justificativa da necessidade…"
-        className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-      <label className="block text-xs font-medium text-foreground">Valor estimado (R$)
-        <input type="number" step="0.01" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)}
-          className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
-      </label>
-      {save.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Necessidade registrada.</p>}
-      {save.isError && <p className="text-xs text-red-600 dark:text-red-400">{save.error.message}</p>}
-      <button type="submit" disabled={save.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
-        {save.isPending ? "Salvando…" : "Salvar caracterização"}
-      </button>
-    </form>
+      <p className="text-xs text-muted-foreground">
+        Esta etapa ainda não possui registro próprio persistido, por isso não há campo para salvar aqui (nada seria gravado).
+        Registre a necessidade, a motivação e o fundamento na <span className="font-medium text-foreground">Justificativa da Contratação</span>,
+        que é persistida com o seu aceite.
+      </p>
+    </div>
   );
 }
