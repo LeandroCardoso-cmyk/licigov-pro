@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
-    "mtime": 1791087146.9034722,
-    "ast_hash": "3b490280a19c41787d6ccd049a33a1c5",
+    "mtime": 1791205537.2843797,
+    "ast_hash": "559afa1ecc287a02f5e7c55d39deb350",
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
@@ -13642,6 +13642,21 @@
   "shared/estimateLabel.ts": {
     "mtime": 1791205250.2023787,
     "ast_hash": "f6b44a790a2428d858fd822aeecc33ca",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/ItemIdentityResolve.tsx": {
+    "mtime": 1791205523.1863725,
+    "ast_hash": "ad6e92cfc2ca58c60a9c2572e557c3b2",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/itemIdentityView.test.ts": {
+    "mtime": 1791205537.2895598,
+    "ast_hash": "5f3b8bbcb7c5274738d795402f2d6a86",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/itemIdentityView.ts": {
+    "mtime": 1791205523.1858938,
+    "ast_hash": "9c4bb67503d93f8d90da82b0a7fbd616",
     "semantic_hash": ""
   }
 }

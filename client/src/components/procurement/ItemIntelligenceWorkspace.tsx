@@ -4,6 +4,8 @@ import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import CatmatThresholdConfig from "./CatmatThresholdConfig";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
+import ItemIdentityResolve from "./ItemIdentityResolve";
+import { canResolveIdentity } from "./itemIdentityView";
 import { ITEM_STATUS_LABELS, approveButtonState, outlierSummary } from "./itemSourceUpdateView";
 
 /**
@@ -52,6 +54,8 @@ export default function ItemIntelligenceWorkspace({
   // R9 / SEM-052 — e nunca num clique: o botão só ABRE a confirmação (comparativo atual × proposto +
   // revogação declarada); a aplicação acontece em ItemSourceUpdateConfirm, com o token da prévia vista.
   const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
+  // R9 / SEM-054 — "Identidade a revisar" agora tem saída humana explícita (vincular a item existente ou item novo).
+  const [resolvingId, setResolvingId] = React.useState<string | null>(null);
 
   const items = data?.items ?? [];
 
@@ -195,6 +199,16 @@ export default function ItemIntelligenceWorkspace({
                               Aplicar cotações atualizadas{it.pendingQuoteCount != null ? ` (${it.pendingQuoteCount})` : ""}
                             </button>
                           )}
+                          {canResolveIdentity(it) && (
+                            <button
+                              type="button"
+                              onClick={() => setResolvingId(resolvingId === it.id ? null : it.id)}
+                              aria-expanded={resolvingId === it.id}
+                              className="rounded-md border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950"
+                            >
+                              Resolver identidade
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => approveItem.mutate({ itemId: it.id })}
@@ -220,6 +234,19 @@ export default function ItemIntelligenceWorkspace({
                         )}
                       </td>
                     </tr>
+                    {resolvingId === it.id && canResolveIdentity(it) && (
+                      <tr id={`identity-resolve-${it.id}`}>
+                        <td colSpan={7} className="px-4 pb-4">
+                          <ItemIdentityResolve
+                            processId={processId}
+                            item={it}
+                            candidates={items}
+                            onClose={() => setResolvingId(null)}
+                            onResolved={invalidate}
+                          />
+                        </td>
+                      </tr>
+                    )}
                     {confirming && (
                       <tr id={`source-update-${it.id}`}>
                         <td colSpan={7} className="px-4 pb-4">
