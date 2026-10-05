@@ -5,6 +5,9 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
 
+type ProcessStatus = (typeof processes.$inferSelect)["status"];
+type DocumentType = (typeof documents.$inferSelect)["type"];
+
 /**
  * RC-SEC-PR-A — Retorna o insertId numérico do processo criado.
  * O retorno de `db.insert().values()` é um array `[ResultSetHeader, ...]`;
@@ -106,7 +109,7 @@ export async function getProcessByIdForOrganization(id: number, organizationId: 
 export async function updateProcessStatus(id: number, status: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(processes).set({ status: status as any }).where(eq(processes.id, id));
+  await db.update(processes).set({ status: status as ProcessStatus }).where(eq(processes.id, id));
 }
 
 // ─── RC-SEC-PR-A — Variantes tenant-scoped de processos e documentos ─────────
@@ -161,7 +164,7 @@ export async function updateProcessStatusForOrganization(
   if (!db) throw new Error("Database not available");
   const result = await db
     .update(processes)
-    .set({ status: status as any })
+    .set({ status: status as ProcessStatus })
     .where(and(eq(processes.id, id), eq(processes.organizationId, organizationId)));
   return (result[0]?.affectedRows ?? 0) > 0;
 }
@@ -199,7 +202,7 @@ export async function getDocumentByProcessAndTypeForOrganization(
     .from(documents)
     .where(and(
       eq(documents.processId, processId),
-      eq(documents.type, type as any),
+      eq(documents.type, type as DocumentType),
       eq(documents.organizationId, organizationId),
     ))
     .orderBy(desc(documents.version))
@@ -226,7 +229,7 @@ export async function getDocumentVersionsForOrganization(
     .leftJoin(users, eq(documents.createdBy, users.id))
     .where(and(
       eq(documents.processId, processId),
-      eq(documents.type, type as any),
+      eq(documents.type, type as DocumentType),
       eq(documents.organizationId, organizationId),
     ))
     .orderBy(desc(documents.version));
@@ -246,9 +249,27 @@ export async function updateDocumentStatusForOrganization(
   return (result[0]?.affectedRows ?? 0) > 0;
 }
 
-export async function createDocument(document: InsertDocument) {
+/**
+ * SEM-079 — FAIL-CLOSED: a linha legada de `documents` só é inserida com `organizationId` explícito E se o processo
+ * pertencer a essa organização (antes: `InsertDocument` aceitava `organizationId` ausente/NULL — foi assim que o
+ * `restoreVersion` legado gravou linhas sem organização, e copiava conteúdo entre processos). Sem organização válida
+ * ou com processo de outra organização ⇒ erro, ZERO escrita. Nenhum caller de router hoje (LEG-009).
+ */
+export async function createDocument(document: InsertDocument & { organizationId: number }) {
+  const organizationId = document.organizationId as number | null | undefined;
+  if (!Number.isInteger(organizationId) || (organizationId as number) <= 0) {
+    throw new Error("createDocument: organizationId obrigatório (LEGACY_DOCUMENT_ORGANIZATION_REQUIRED)");
+  }
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const owner = await db
+    .select({ id: processes.id })
+    .from(processes)
+    .where(and(eq(processes.id, document.processId), eq(processes.organizationId, organizationId as number)))
+    .limit(1);
+  if (owner.length === 0) {
+    throw new Error("createDocument: processo não pertence à organização (LEGACY_DOCUMENT_PROCESS_ORGANIZATION_MISMATCH)");
+  }
   return await db.insert(documents).values(document);
 }
 
@@ -271,7 +292,7 @@ export async function getDocumentByProcessAndType(processId: number, type: strin
   const result = await db
     .select()
     .from(documents)
-    .where(and(eq(documents.processId, processId), eq(documents.type, type as any)))
+    .where(and(eq(documents.processId, processId), eq(documents.type, type as DocumentType)))
     .orderBy(desc(documents.version))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
@@ -298,18 +319,12 @@ export async function getDocumentVersions(processId: number, type: string) {
     })
     .from(documents)
     .leftJoin(users, eq(documents.createdBy, users.id))
-    .where(and(eq(documents.processId, processId), eq(documents.type, type as any)))
+    .where(and(eq(documents.processId, processId), eq(documents.type, type as DocumentType)))
     .orderBy(desc(documents.version));
 }
 
-export async function updateDocumentStatus(
-  documentId: number,
-  status: "draft" | "in_review" | "approved" | "rejected"
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.update(documents).set({ documentStatus: status }).where(eq(documents.id, documentId));
-}
+// SEM-078 — `updateDocumentStatus(documentId, status)` (escrita SEM organização, que podia marcar "approved" por id) foi
+// REMOVIDA: sem callers; o caminho vigente é `updateDocumentStatusForOrganization` (tenant-scoped).
 
 export async function upsertEditalParameters(params: InsertEditalParameter) {
   const db = await getDb();

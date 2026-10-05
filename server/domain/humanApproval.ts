@@ -99,6 +99,22 @@ export function createApprovalWorkflow(params: {
   };
 }
 
+/** Token estável: workflow já resolvido (aprovado/rejeitado/substituído/expirado) não aceita novas decisões. */
+export const APPROVAL_WORKFLOW_ALREADY_RESOLVED = "APPROVAL_WORKFLOW_ALREADY_RESOLVED";
+/** Token estável: o mesmo aprovador não pode registrar uma decisão DIFERENTE da que já registrou. */
+export const APPROVER_ALREADY_DECIDED = "APPROVER_ALREADY_DECIDED";
+
+const TERMINAL_STATUSES: readonly ApprovalStatus[] = ["approved", "rejected", "overridden", "expired"];
+
+/**
+ * SEM-077 — regras da decisão de aprovação:
+ *  - cada aprovador conta UMA vez: a mesma pessoa aprovando N vezes NUNCA fecha um workflow de N aprovadores
+ *    (repetir a MESMA decisão é idempotente — devolve o workflow como está; decisão DIFERENTE do mesmo aprovador é
+ *    recusada com `APPROVER_ALREADY_DECIDED`);
+ *  - workflow já resolvido não aceita decisão (antes, uma rejeição tardia revertia um workflow aprovado);
+ *  - o limiar é `max(1, requiredApprovers.length)` aprovadores DISTINTOS (antes, sem aprovadores exigidos, qualquer
+ *    decisão — inclusive delegar/escalar — resolvia o workflow como "approved").
+ */
 export function recordApprovalDecision(
   workflow: ApprovalWorkflow,
   decision: {
@@ -108,6 +124,17 @@ export function recordApprovalDecision(
     conditions?: string[];
   },
 ): ApprovalWorkflow {
+  if (TERMINAL_STATUSES.includes(workflow.status)) {
+    throw new Error(`${APPROVAL_WORKFLOW_ALREADY_RESOLVED}: workflow ${workflow.id} está ${workflow.status}.`);
+  }
+  const previous = workflow.decisions.find(
+    (d) => d.approver === decision.approver && (d.decision === "approve" || d.decision === "reject"),
+  );
+  if (previous) {
+    if (previous.decision === decision.decision) return workflow;
+    throw new Error(`${APPROVER_ALREADY_DECIDED}: ${decision.approver} já registrou "${previous.decision}".`);
+  }
+
   const now = new Date().toISOString();
   const decisionId = sha256(
     `approvaldec:${workflow.id}:${decision.approver}:${workflow.decisions.length}`
@@ -125,14 +152,14 @@ export function recordApprovalDecision(
   const newDecisions = [...workflow.decisions, newDecision];
   const newCurrentApprovers = [...new Set([...workflow.currentApprovers, decision.approver])];
 
-  // Determine new status
-  const approvalCount = newDecisions.filter(d => d.decision === "approve").length;
+  // Determine new status — aprovadores DISTINTOS
+  const approvers = new Set(newDecisions.filter(d => d.decision === "approve").map(d => d.approver));
   const rejectCount = newDecisions.filter(d => d.decision === "reject").length;
   let newStatus: ApprovalStatus = workflow.status;
 
   if (rejectCount > 0) {
     newStatus = "rejected";
-  } else if (approvalCount >= workflow.requiredApprovers.length) {
+  } else if (approvers.size >= Math.max(1, workflow.requiredApprovers.length)) {
     newStatus = "approved";
   }
 
@@ -154,18 +181,23 @@ export function isApproved(workflow: ApprovalWorkflow): boolean {
   return workflow.status === "approved" || workflow.status === "overridden";
 }
 
+/** SEM-077 — `actor` = quem escalou (usuário autenticado; default "system" para uso interno). Workflow resolvido não aceita a operação. */
 export function escalateWorkflow(
   workflow: ApprovalWorkflow,
   escalateTo: string,
   reason: string,
+  actor: string = "system",
 ): ApprovalWorkflow {
+  if (TERMINAL_STATUSES.includes(workflow.status)) {
+    throw new Error(`${APPROVAL_WORKFLOW_ALREADY_RESOLVED}: workflow ${workflow.id} está ${workflow.status}.`);
+  }
   const now = new Date().toISOString();
   const decisionId = sha256(`escalate:${workflow.id}:${escalateTo}:${now}`).slice(0, 20);
   const escalationDecision: ApprovalDecision = {
     id: decisionId,
     workflowId: workflow.id,
     organizationId: workflow.organizationId,
-    approver: "system",
+    approver: actor,
     decision: "escalate",
     justification: reason,
     conditions: [],
@@ -180,18 +212,23 @@ export function escalateWorkflow(
   };
 }
 
+/** SEM-077 — `actor` = quem delegou (usuário autenticado; default "system" para uso interno). Workflow resolvido não aceita a operação. */
 export function delegateWorkflow(
   workflow: ApprovalWorkflow,
   delegateTo: string,
   reason: string,
+  actor: string = "system",
 ): ApprovalWorkflow {
+  if (TERMINAL_STATUSES.includes(workflow.status)) {
+    throw new Error(`${APPROVAL_WORKFLOW_ALREADY_RESOLVED}: workflow ${workflow.id} está ${workflow.status}.`);
+  }
   const now = new Date().toISOString();
   const decisionId = sha256(`delegate:${workflow.id}:${delegateTo}:${now}`).slice(0, 20);
   const delegateDecision: ApprovalDecision = {
     id: decisionId,
     workflowId: workflow.id,
     organizationId: workflow.organizationId,
-    approver: "system",
+    approver: actor,
     decision: "delegate",
     justification: reason,
     conditions: [],
@@ -244,8 +281,8 @@ export function getApprovalSummary(workflow: ApprovalWorkflow): {
   pending: number;
   isExpired: boolean;
 } {
-  const approved = workflow.decisions.filter(d => d.decision === "approve").length;
-  const rejected = workflow.decisions.filter(d => d.decision === "reject").length;
+  const approved = new Set(workflow.decisions.filter(d => d.decision === "approve").map(d => d.approver)).size;
+  const rejected = new Set(workflow.decisions.filter(d => d.decision === "reject").map(d => d.approver)).size;
   const total = workflow.requiredApprovers.length;
   const pending = Math.max(0, total - workflow.currentApprovers.length);
   return { total, approved, rejected, pending, isExpired: isWorkflowExpired(workflow) };

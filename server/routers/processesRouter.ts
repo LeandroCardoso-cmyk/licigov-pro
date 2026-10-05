@@ -23,6 +23,7 @@ import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { z } from "zod";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
+import { toActivityReportEntry } from "../services/activityReport";
 import { throwLegacyProcessPipelineDisabled } from "../domain/legacyPipeline";
 import type { CatmatMatch } from "../services/catmatMatcher";
 
@@ -86,17 +87,9 @@ export const processesRouter = router({
     }),
 
   getActivityLogs: tenantProcedure.query(async ({ ctx }) => {
-    const userProcesses = await db.listProcessesForOrganization(ctx.organizationId);
-    const allActivities = [];
-
-    for (const process of userProcesses) {
-      const activities = await db.getActivityLogsByProcess(process.id);
-      allActivities.push(...activities);
-    }
-
-    return allActivities.sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    // SEM-046 — relatório da organização do CONTEXTO, com os campos reais de `activity_logs` (ator e detalhes).
+    const rows = await db.getActivityReportForOrganization(ctx.organizationId);
+    return rows.map(toActivityReportEntry);
   }),
 
   create: tenantProcedure

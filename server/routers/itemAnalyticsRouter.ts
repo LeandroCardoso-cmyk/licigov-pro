@@ -6,7 +6,9 @@
 
 import { router } from "../_core/trpc";
 // R2 / LEG-028 — API experimental em memória: gate governado (desligada em production/staging; dev só com opt-in).
-import { experimentalProtectedProcedure } from "../services/experimentalApiGate";
+import { experimentalTenantProcedure } from "../services/experimentalApiGate";
+// SEM-073 — a organização vem do contexto autenticado; `organizationId` do input é só compatibilidade (divergente ⇒ recusa).
+import { organizationFromContext } from "../services/experimentalApiGate";
 import { z } from "zod";
 
 import {
@@ -112,16 +114,17 @@ function getMockConfidenceWindows(): ConfidenceWindow[] {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const itemAnalyticsRouter = router({
-  getDashboard: experimentalProtectedProcedure
+  getDashboard: experimentalTenantProcedure
     .input(z.object({
-      organizationId: z.number(),
+      organizationId: z.number().optional(),
       processId:      z.number().optional(),
     }))
-    .query(({ input }) => {
-      const lifecycleData = getMockLifecycleData(input.organizationId);
+    .query(({ input, ctx }) => {
+      const organizationId = organizationFromContext(ctx, input.organizationId, "itemAnalytics.getDashboard");
+      const lifecycleData = getMockLifecycleData(organizationId);
       const confidenceWindows = getMockConfidenceWindows();
 
-      const snapshot = computeItemAnalytics(input.organizationId, lifecycleData, {
+      const snapshot = computeItemAnalytics(organizationId, lifecycleData, {
         clauseUsage:       { recommendedCount: 8, usedCount: 6 },
         confidenceWindows,
         matchingRuns:      [

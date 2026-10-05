@@ -5,6 +5,12 @@
  * cache contamination, permission anomalies.
  *
  * All operations: structured logging, no DB writes, deterministic.
+ *
+ * SEM-088 — ATENÇÃO À COBERTURA: as funções DESTE arquivo são VERIFICADORES DE AMOSTRA — avaliam SOMENTE os registros
+ * que o chamador fornece (`EntityScanInput.records`); NÃO consultam o banco. `healthy: true` aqui significa "a amostra
+ * fornecida está limpa", NUNCA "o banco está íntegro". Todo resultado carrega `coverage: "caller_supplied_sample"`.
+ * A varredura REAL do banco (agregados somente-leitura sobre as tabelas tenant-scoped) é
+ * `tenantIsolationSweepService.sweepTenantScopedTables` (`coverage: "database_sweep"`).
  */
 
 import type { CacheService } from "./distributedCacheService";
@@ -27,8 +33,13 @@ export interface TenantFinding {
   evidence:       string;
 }
 
+/** Cobertura de um resultado: amostra fornecida pelo chamador × varredura do banco. */
+export type AuditCoverage = "caller_supplied_sample" | "database_sweep";
+
 export interface TenantAuditResult {
   organizationId: number;
+  /** SEM-088 — o que este resultado realmente cobre. */
+  coverage:       AuditCoverage;
   scanType:       ScanType;
   findings:       TenantFinding[];
   scannedAt:      string;
@@ -65,6 +76,7 @@ export function scanCrossTenantAccess(
 
   const result: TenantAuditResult = {
     organizationId: orgId,
+    coverage: "caller_supplied_sample",
     scanType: "cross_tenant",
     findings,
     scannedAt: new Date().toISOString(),
@@ -159,6 +171,7 @@ export function runFullTenantAudit(
 
   return {
     organizationId: orgId,
+    coverage: "caller_supplied_sample",
     scanType: "cross_tenant",
     findings: allFindings,
     scannedAt: new Date().toISOString(),

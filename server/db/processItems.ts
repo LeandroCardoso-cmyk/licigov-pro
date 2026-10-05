@@ -2,6 +2,14 @@ import { eq, and, desc, ne } from "drizzle-orm";
 import { processItems, catmatSuggestions, processes } from "../../drizzle/schema";
 import { getDb } from "./connection";
 
+type CatmatSuggestionStatus = (typeof catmatSuggestions.$inferSelect)["status"];
+
+// SEM-034 — os ESCRITORES não-escopados (`saveProcessItems`, `updateProcessItem`, `deleteProcessItem`,
+// `createCatmatSuggestion`, `updateCatmatSuggestion`, `rejectOtherSuggestions`) são PRIVADOS deste módulo: só as
+// variantes `…ForOrganization` (que validam a cadeia item→processo→organização) são exportadas. Assim um caller
+// futuro não consegue aplicar sugestão/código CATMAT por id sem tenant. Os callers legados (processes.*) estão
+// desativados por LEG-005 e não alcançam estas funções.
+//
 // ─── RC-SEC-PR-A — Variantes tenant-scoped ──────────────────────────────────
 // process_items, catmat_suggestions NÃO possuem organizationId próprio: o
 // isolamento é feito validando a entidade-pai (processo) pela organização.
@@ -123,7 +131,7 @@ export async function rejectOtherSuggestionsForOrganization(
   return true;
 }
 
-export async function saveProcessItems(
+async function saveProcessItems(
   processId: number,
   items: Array<{
     itemType: "material" | "service";
@@ -164,19 +172,19 @@ export async function getProcessItems(processId: number) {
   return await db.select().from(processItems).where(eq(processItems.processId, processId));
 }
 
-export async function updateProcessItem(id: number, data: Partial<typeof processItems.$inferInsert>) {
+async function updateProcessItem(id: number, data: Partial<typeof processItems.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(processItems).set(data).where(eq(processItems.id, id));
 }
 
-export async function deleteProcessItem(id: number) {
+async function deleteProcessItem(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(processItems).where(eq(processItems.id, id));
 }
 
-export async function createCatmatSuggestion(data: {
+async function createCatmatSuggestion(data: {
   processItemId: number;
   catmatCode: string;
   description: string;
@@ -188,7 +196,7 @@ export async function createCatmatSuggestion(data: {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(catmatSuggestions).values({
     ...data,
-    status: (data.status as any) || "pending",
+    status: (data.status as CatmatSuggestionStatus) || "pending",
   });
   return result[0].insertId;
 }
@@ -210,23 +218,23 @@ export async function getCatmatSuggestionById(id: number) {
   return result[0];
 }
 
-export async function updateCatmatSuggestion(id: number, data: { status: string }) {
+async function updateCatmatSuggestion(id: number, data: { status: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(catmatSuggestions).set({ status: data.status as any }).where(eq(catmatSuggestions.id, id));
+  await db.update(catmatSuggestions).set({ status: data.status as CatmatSuggestionStatus }).where(eq(catmatSuggestions.id, id));
 }
 
-export async function rejectOtherSuggestions(processItemId: number, approvedId: number) {
+async function rejectOtherSuggestions(processItemId: number, approvedId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
     .update(catmatSuggestions)
-    .set({ status: "rejected" as any })
+    .set({ status: "rejected" as CatmatSuggestionStatus })
     .where(
       and(
         eq(catmatSuggestions.processItemId, processItemId),
         ne(catmatSuggestions.id, approvedId),
-        eq(catmatSuggestions.status, "pending" as any)
+        eq(catmatSuggestions.status, "pending" as CatmatSuggestionStatus)
       )
     );
 }
