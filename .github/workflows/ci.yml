@@ -369,7 +369,7 @@ jobs:
       # (órfãos): idempotência (SEM-075), identidade da timeline (SEM-076), autoridade da fonte a montante (SEM-039),
       # CATMAT governado (SEM-035/061), itens/fonte (SEM-049/052/054/067-069), ingestão (SEM-048/053), pacotes e
       # analytics canônicos (SEM-072/074), indicadores operacionais (SEM-070/071), P2 de itens/autoria (R10) e a
-      # migration 0315. Serial: compartilham o banco do job. O meta-guard R11.7 impede novos smokes órfãos.
+      # migration 0315. Serial: compartilham o banco do job. O meta-guard R11-B1 impede novos smokes órfãos.
       - name: Smoke — autoridade semântica R9/R10 (2º passe)
         run: |
           pnpm exec vitest run --no-file-parallelism \

@@ -5,13 +5,13 @@
  * (funções puras, executor de banco falso e propriedades com PRNG semeado), então uma regressão de comportamento
  * quebra o teste mesmo que o texto do código continue "parecendo certo".
  *
- *  R11.7  os guards comportamentais RODAM de verdade (nenhum `*-mysql-smoke` órfão fora da cadeia da CI / do smoke de segurança);
- *  R11.8  identidade da timeline — um id por evento, sem reescrita do resumo, ator humano;
- *  R11.9  autoridade numérica da IA — valor fora do quadro do sistema sempre marcado; estimativa nunca inferida;
- *  R11.10 objeto canônico — `process.object` vence o objeto digitado;
- *  R11.11 preço de fonte desatualizada — só fonte vigente gera preço/total, em qualquer estado desconhecido também;
- *  R11.12 semântica da auditoria de tenant — amostra ≠ varredura; sem banco ⇒ não saudável;
- *  R11.13 formatação monetária — centavos ⇄ texto sem erro de unidade (×100).
+ *  R11-B1  os guards comportamentais RODAM de verdade (nenhum `*-mysql-smoke` órfão fora da cadeia da CI / do smoke de segurança);
+ *  R11-B2  identidade da timeline — um id por evento, sem reescrita do resumo, ator humano;
+ *  R11-B3  autoridade numérica da IA — valor fora do quadro do sistema sempre marcado; estimativa nunca inferida;
+ *  R11-B4 objeto canônico — `process.object` vence o objeto digitado;
+ *  R11-B5 preço de fonte desatualizada — só fonte vigente gera preço/total, em qualquer estado desconhecido também;
+ *  R11-B6 semântica da auditoria de tenant — amostra ≠ varredura; sem banco ⇒ não saudável;
+ *  R11-B7 formatação monetária — centavos ⇄ texto sem erro de unidade (×100).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -36,8 +36,8 @@ function prng(seed: number) {
   return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 2 ** 32);
 }
 
-// ─── R11.7 — os guards comportamentais rodam de verdade ──────────────────────────────────────────────────────────
-describe("R11.7 — nenhum smoke MySQL órfão (fora da cadeia da CI e do smoke de segurança)", () => {
+// ─── R11-B1 — os guards comportamentais rodam de verdade ──────────────────────────────────────────────────────────
+describe("R11-B1 — nenhum smoke MySQL órfão (fora da cadeia da CI e do smoke de segurança)", () => {
   /** Órfãos PRÉ-EXISTENTES, conhecidos e fora do escopo desta remediação (cada um com o motivo). */
   const PRE_EXISTING_ORPHANS: Readonly<Record<string, string>> = {
     "a3-failure-provenance-mysql-smoke.test.ts": "pré-existente (A3), fora da cadeia desde a origem",
@@ -73,8 +73,8 @@ describe("R11.7 — nenhum smoke MySQL órfão (fora da cadeia da CI e do smoke 
   });
 });
 
-// ─── R11.8 — identidade da timeline ───────────────────────────────────────────────────────────────────────────────
-describe("R11.8 — timeline: um id por evento, sem reescrever o resumo; ator humano", () => {
+// ─── R11-B2 — identidade da timeline ───────────────────────────────────────────────────────────────────────────────
+describe("R11-B2 — timeline: um id por evento, sem reescrever o resumo; ator humano", () => {
   type Rec = { row: Record<string, unknown>; upsert?: { set?: Record<string, unknown> } };
   function fakeExecutor(existingRows = 0) {
     const inserts: Rec[] = [];
@@ -131,8 +131,8 @@ describe("R11.8 — timeline: um id por evento, sem reescrever o resumo; ator hu
   });
 });
 
-// ─── R11.9 — autoridade numérica da IA ────────────────────────────────────────────────────────────────────────────
-describe("R11.9 — a IA não cria autoridade numérica (propriedades com PRNG semeado)", () => {
+// ─── R11-B3 — autoridade numérica da IA ────────────────────────────────────────────────────────────────────────────
+describe("R11-B3 — a IA não cria autoridade numérica (propriedades com PRNG semeado)", () => {
   const table = { itemCount: 2, pricedItemCount: 2, unpricedItemCount: 0, globalTotalCents: 345_600, rows: [
     { averagePriceCents: 1_000, estimatedTotalCents: 100_000 }, { averagePriceCents: 2_456, estimatedTotalCents: 245_600 },
   ], missingPlannedQuantity: 0, hasAuthoritativeBlock: true };
@@ -160,8 +160,8 @@ describe("R11.9 — a IA não cria autoridade numérica (propriedades com PRNG s
   });
 });
 
-// ─── R11.10 / R11.11 — objeto canônico e preço de fonte desatualizada ─────────────────────────────────────────────
-describe("R11.10 — o objeto do documento é process.object (o digitado é só proposta)", () => {
+// ─── R11-B4 / R11-B5 — objeto canônico e preço de fonte desatualizada ─────────────────────────────────────────────
+describe("R11-B4 — o objeto do documento é process.object (o digitado é só proposta)", () => {
   it("para qualquer objeto digitado diferente, o prompt traz o do processo e a divergência vira proposta", () => {
     const rnd = prng(7);
     for (let i = 0; i < 40; i++) {
@@ -189,7 +189,7 @@ describe("R11.10 — o objeto do documento é process.object (o digitado é só 
   });
 });
 
-describe("R11.11 — preço só de Item Inteligente com fonte VIGENTE (qualquer outro estado suspende)", () => {
+describe("R11-B5 — preço só de Item Inteligente com fonte VIGENTE (qualquer outro estado suspende)", () => {
   const A = "a1a1a1a1a1a1a1a1a1a1a1a1";
   const planned: FactAssertion = {
     id: 1, path: itemPath(A, "plannedQuantity"), value: 10, valueHash: factValueHash(10), sourceType: "user", sourceId: "items-area",
@@ -231,8 +231,8 @@ describe("R11.11 — preço só de Item Inteligente com fonte VIGENTE (qualquer 
   });
 });
 
-// ─── R11.12 — semântica da auditoria de tenant ────────────────────────────────────────────────────────────────────
-describe("R11.12 — auditoria de tenant: amostra do chamador ≠ varredura do banco", () => {
+// ─── R11-B6 — semântica da auditoria de tenant ────────────────────────────────────────────────────────────────────
+describe("R11-B6 — auditoria de tenant: amostra do chamador ≠ varredura do banco", () => {
   it("toda auditoria baseada em registros fornecidos se declara `caller_supplied_sample` (nunca 'banco íntegro')", () => {
     const quiet = console.info; console.info = () => {};
     try {
@@ -253,8 +253,8 @@ describe("R11.12 — auditoria de tenant: amostra do chamador ≠ varredura do b
   });
 });
 
-// ─── R11.13 — formatação monetária ────────────────────────────────────────────────────────────────────────────────
-describe("R11.13 — centavos ⇄ texto sem erro de unidade", () => {
+// ─── R11-B7 — formatação monetária ────────────────────────────────────────────────────────────────────────────────
+describe("R11-B7 — centavos ⇄ texto sem erro de unidade", () => {
   it("formatador único: cliente/servidor idênticos e determinísticos", () => {
     const cases: Array<[number, string]> = [[0, "R$ 0,00"], [5, "R$ 0,05"], [100, "R$ 1,00"], [123_456, "R$ 1.234,56"], [100_000_000, "R$ 1.000.000,00"], [-250, "-R$ 2,50"]];
     for (const [c, s] of cases) {
