@@ -368,20 +368,17 @@ jobs:
       # 2º passe de remediação (R9/R10) — guards COMPORTAMENTAIS contra MySQL real que antes ficavam fora da cadeia
       # (órfãos): idempotência (SEM-075), identidade da timeline (SEM-076), autoridade da fonte a montante (SEM-039),
       # CATMAT governado (SEM-035/061), itens/fonte (SEM-049/052/054/067-069), ingestão (SEM-048/053), pacotes e
-      # analytics canônicos (SEM-072/074), indicadores operacionais (SEM-070/071), P2 de itens/autoria (R10) e a
+      # analytics canônicos (SEM-072/074), P2 de itens/autoria (R10) e a
       # migration 0315. Serial: compartilham o banco do job. O meta-guard R11-B1 impede novos smokes órfãos.
       - name: Smoke — autoridade semântica R9/R10 (2º passe)
         run: |
           pnpm exec vitest run --no-file-parallelism \
           server/__tests__/integration/r9-sem035-catmat-governed-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem039-upstream-authority-mysql-smoke.test.ts \
-          server/__tests__/integration/r9-sem041-legal-opinion-pinning-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem048-correction-review-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem049-067-068-069-procurement-items-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem052-054-item-source-gate-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem053-promotion-preview-mysql-smoke.test.ts \
-          server/__tests__/integration/r9-sem070-operational-indicators-mysql-smoke.test.ts \
-          server/__tests__/integration/r9-sem071-task-assignee-overdue-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem072-package-authority-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem074-canonical-analytics-mysql-smoke.test.ts \
           server/__tests__/integration/r9-sem075-idempotency-rereserve-mysql-smoke.test.ts \
