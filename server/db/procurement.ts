@@ -494,6 +494,22 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
   return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: fromDb(r.createdAt) }));
 }
 
+/**
+ * SEM-058 — eventos de timeline de um tipo e referência (ex.: a sugestão de IA gerada), SEMPRE escopados por
+ * (organização, processo). Devolve também a correlação do evento (liga o aceite à proveniência da execução).
+ */
+export async function listProcessEventsByRef(processId: string, orgId: number, eventType: string, refId: string): Promise<Array<{ id: string; actor: string; summary: string; correlationId: string }>> {
+  const db = await getDb();
+  if (!db || !refId) return [];
+  const rows = await db.select().from(processTimelineTable)
+    .where(and(
+      eq(processTimelineTable.processId, processId), eq(processTimelineTable.organizationId, orgId),
+      eq(processTimelineTable.eventType, eventType), eq(processTimelineTable.refId, refId),
+    ))
+    .orderBy(desc(processTimelineTable.eventOrder), desc(processTimelineTable.createdAt), desc(processTimelineTable.id));
+  return rows.map((r) => ({ id: r.id, actor: r.actor, summary: r.summary ?? "", correlationId: r.correlationId }));
+}
+
 // ─── Generated documents ─────────────────────────────────────────────────────
 
 export async function insertGeneratedDocument(d: GeneratedDocument, executor?: ProcurementExecutor): Promise<GeneratedDocument | null> {
@@ -524,10 +540,11 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   import_promote  = P0 piloto — documento IMPORTADO (DFD/ETP/TR) promovido a rascunho (criação);
 //   import_replace  = P0 piloto — substituição EXPLÍCITA e confirmada do rascunho por documento importado.
 //   dfd_context_reconcile = Contexto Canônico — "Atualizar no rascunho" (ação explícita, campo a campo);
-//   dfd_ai_draft    = Contexto Canônico — rascunho SUPERVISIONADO de IA da justificativa do DFD.
+//   dfd_ai_draft    = (legado, pré-SEM-058) rascunho de IA gravado direto na justificativa do DFD — não é mais emitido;
+//   dfd_ai_accept   = SEM-058 — ACEITE HUMANO explícito de sugestão de IA para a justificativa do DFD (conteúdo humano).
 export type DraftEditOperation =
   | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
-  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft";
+  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft" | "dfd_ai_accept";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):

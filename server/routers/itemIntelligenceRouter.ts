@@ -16,7 +16,7 @@ import { rankCATMAT } from "../domain/catmatMatching";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
 import { decideCatmat, type AvailableSuggestion } from "../services/catmatGovernanceService";
 import {
-  getActiveCatmatThreshold, setCatmatThresholdConfig, listCatmatDecisions, getLatestCatmatDecision,
+  getActiveCatmatThreshold, setCatmatThresholdConfig, listCatmatDecisions, getLatestCatmatDecision, summarizeCatmatThresholdImpact,
 } from "../db/catmatGovernance";
 import {
   getIntelligentItem, listItemHistory, listCatmatMatches, updateMatchDecision,
@@ -256,6 +256,24 @@ export const itemIntelligenceRouter = router({
       return active
         ? { configured: true as const, minScore: active.minScore, version: active.version }
         : { configured: false as const, minScore: null, version: null };
+    }),
+
+  /**
+   * SEM-061 — prévia do IMPACTO ORG-WIDE de trocar o limiar (somente leitura, manager+ como a própria troca). Devolve o
+   * limiar vigente, o proposto e a contagem das decisões vigentes do órgão; NÃO escolhe nem sugere valor.
+   */
+  previewCATMATThresholdChange: orgRoleProcedure("manager")
+    .input(z.object({ minScore: z.number().min(0).max(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const [active, impact] = await Promise.all([
+        getActiveCatmatThreshold(orgId), summarizeCatmatThresholdImpact(orgId, input.minScore),
+      ]);
+      return {
+        current: active ? { minScore: active.minScore, version: active.version } : null,
+        proposedMinScore: input.minScore,
+        impact,
+      };
     }),
 
   /**

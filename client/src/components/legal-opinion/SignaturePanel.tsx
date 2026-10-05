@@ -2,6 +2,11 @@ import React from "react";
 import { trpc } from "../../lib/trpc";
 import { shouldPreserveIdempotencyKey } from "../procurement/catmatKeyPolicy";
 import { invalidateAfterSign, invalidateAfterReturn, type OpinionQueryInvalidator } from "./opinionMutationSync";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { SIGN_CONFIRM_ACTION, SIGN_CONFIRM_CANCEL, SIGN_CONFIRM_PENDING, SIGN_CONFIRM_TITLE, signConfirmEffects } from "./signatureConfirm";
 
 /**
  * SignaturePanel — REAL (tRPC).
@@ -29,6 +34,8 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
   const enabled = workspaceId.trim().length > 0;
   const utils = trpc.useUtils();
   const [method, setMethod] = React.useState<"manual" | "icp_brasil" | "gov_br" | "certificado_a1">("manual");
+  // SEM-060 — o botão "Assinar parecer" só ABRE esta confirmação; a mutação irreversível exige a ação explícita do diálogo.
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   // idempotencyKey por TENTATIVA LÓGICA de assinatura: preservada em erro transitório/outcome
   // desconhecido (o retry reusa a mesma key → o serviço converge para a MESMA versão emitida, sem
@@ -49,6 +56,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
 
   const sign = trpc.legalOpinionWorkspace.signOpinion.useMutation({
     onSuccess: () => {
+      setConfirmOpen(false);
       signKeyRef.current = ""; // sucesso rotaciona
       // Converge card "Assinado", stage/versões, Documentos Oficiais (v emitido + DOCX/PDF/
       // Imprimir), Caixa e Painel — SEM F5. (Bug de sincronização da homologação V1.)
@@ -56,6 +64,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
       onSigned?.(workspaceId);
     },
     onError: (err) => {
+      setConfirmOpen(false); // o motivo da recusa aparece no painel; assinar de novo exige nova confirmação
       // Preserva a key em outcome desconhecido/transitório E no CONFLICT de "processing" (duplicata em
       // voo); rotaciona em payload mismatch / conflito determinístico (nova tentativa lógica).
       // NÃO invalida nada em erro: o estado permanece o do servidor (sem estado falso na UI).
@@ -104,7 +113,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
         <button
           type="button"
           disabled={sign.isPending || signed}
-          onClick={() => sign.mutate({ workspaceId, method, idempotencyKey: ensureSignKey() })}
+          onClick={() => setConfirmOpen(true)}
           className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {signed ? "Parecer assinado" : sign.isPending ? "Assinando…" : "Assinar parecer"}
@@ -119,6 +128,28 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
         </button>
       </div>
       <p className="text-[11px] text-muted-foreground">A devolução retorna o parecer automaticamente ao domínio solicitante via Institutional Request Engine.</p>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{SIGN_CONFIRM_TITLE}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                {signConfirmEffects(method).map((e) => <li key={e}>{e}</li>)}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{SIGN_CONFIRM_CANCEL}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={sign.isPending}
+              onClick={(e) => { e.preventDefault(); sign.mutate({ workspaceId, method, idempotencyKey: ensureSignKey() }); }}
+            >
+              {sign.isPending ? SIGN_CONFIRM_PENDING : SIGN_CONFIRM_ACTION}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -6,8 +6,8 @@
  *   Criar Processo (unidade requisitante) → contexto inicializado → 3 itens da Pesquisa (quantidade da
  *   cotação = 1) + quantidade PREVISTA informada → DFD abre PRÉ-PREENCHIDO → editar → salvar (fatos dfd no
  *   ledger, mesma transação) → recarregar (estado estável) → contexto muda → DESATUALIZADO → reconciliar
- *   (ação explícita) → rascunho de IA da justificativa (proveniência vinculada; retry = replay sem nova
- *   chamada) → DFD aprovado intocável; isolamento multi-tenant; RBAC; migration 0305 replay-safe.
+ *   (ação explícita) → SUGESTÃO de IA da justificativa (não grava; aceite humano explícito grava com linhagem;
+ *   retry = replay sem nova chamada) → DFD aprovado intocável; isolamento multi-tenant; RBAC; migration 0305 replay-safe.
  *
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
@@ -89,6 +89,8 @@ async function cleanup() {
 
 /** Ids ESTÁVEIS dos Itens Canônicos (Armário, Cadeira, Mesa) — preenchidos no passo 2 pela Área de Itens. */
 let K: string[] = [];
+/** Sugestão de IA gerada no passo 7 (consumida pelos passos 7b e 8). */
+let sugg = { executionId: "", text: "", hash: "" };
 
 describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estrito)", () => {
   beforeAll(async () => {
@@ -230,38 +232,100 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     expect(await facts(ORG_B, processId)).toEqual([]);
   }, 60_000);
 
-  it("7) rascunho de IA da justificativa (AIExecutionEngine) marcado + proveniência; retry = replay sem nova execução", async () => {
+  it("7) SEM-058 — sugestão de IA (AIExecutionEngine) NÃO grava o DFD; retry = replay sem nova execução; descartar = zero efeito", async () => {
     const c = await caller(owner);
     const cur = (await c.procurementProcess.loadDFD({ processId })).document!;
     const key = `ai-${processId}`;
+    const [p00] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
     const r1 = await c.procurementProcess.generateDFDJustification({ processId, expectedContentHash: cur.contentHash, idempotencyKey: key });
     expect(r1.explanation.executionId).toBeTruthy();
     expect(r1.explanation.promptVersion).toBe("dfd-justificativa/1");
+    expect(r1.suggestion.text.length).toBeGreaterThan(10);
+    expect(r1.current).toMatchObject({ origin: "empty", contentHash: cur.contentHash });
+    expect(r1).not.toHaveProperty("document");
+    // Descartar/ignorar a sugestão: o DFD fica BYTE A BYTE idêntico (conteúdo, marcadores, hash) e o ledger não ganha linha.
     const after = (await c.procurementProcess.loadDFD({ processId })).document!;
-    expect(after.sources.some((s: string) => s.startsWith("ai:justificativa="))).toBe(true);
-    expect(after.content).toContain("| 2 | Cadeira giratória | UN | 45 |"); // só a seção 2 mudou
-    expect(after.status).toBe("rascunho");
-    const [prov] = await conn.execute<mysql.RowDataPacket[]>(
-      "SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ? AND artifact_kind = 'dfd' AND artifact_id = ?", [ORG, after.id],
-    );
-    expect(Number((prov[0] as any).n)).toBeGreaterThan(0);
-    const [p0] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
+    expect(after.content).toBe(cur.content);
+    expect(after.sources).toEqual(cur.sources);
+    expect(after.contentHash).toBe(cur.contentHash);
+    expect(after.sources.some((s: string) => s.startsWith("ai:justificativa="))).toBe(false);
+    expect((await ledger(processId)).map((l) => l.op)).toEqual(["dfd_manual_edit", "dfd_context_reconcile"]);
+    // Proveniência cognitiva da execução existe, mas NÃO está vinculada a nenhum artefato (nada foi aceito).
+    const [p1] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
+    expect(Number((p1[0] as any).n)).toBeGreaterThan(Number((p00[0] as any).n));
+    const [linked] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ? AND artifact_kind = 'dfd'", [ORG]);
+    expect(Number((linked[0] as any).n)).toBe(0);
+    // Timeline: só "sugestão gerada, NÃO aceita" (ator humano), sem conteúdo.
+    const [ev] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT actor, summary, ref_id FROM process_timeline WHERE organization_id = ? AND process_id = ? AND event_type = 'recommendation' AND ref_id = ?", [ORG, processId, r1.explanation.executionId]);
+    expect(ev).toHaveLength(1);
+    expect(String((ev[0] as any).actor)).toBe(String(owner));
+    expect(String((ev[0] as any).summary)).toContain("NÃO aceita");
+    expect(String((ev[0] as any).summary)).not.toContain(r1.suggestion.text.slice(0, 30));
+    // retry com a mesma chave = replay: mesma execução, nenhuma nova proveniência
     const r2 = await c.procurementProcess.generateDFDJustification({ processId, expectedContentHash: cur.contentHash, idempotencyKey: key });
     expect(r2.explanation.executionId).toBe(r1.explanation.executionId);
-    const [p1] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
-    expect(Number((p1[0] as any).n)).toBe(Number((p0[0] as any).n)); // nenhuma nova execução cognitiva
-    expect((await ledger(processId)).map((l) => l.op)).toEqual(["dfd_manual_edit", "dfd_context_reconcile", "dfd_ai_draft"]);
-    const st = await c.procurementProcess.dfdAssistState({ processId });
-    expect(st.fields.find((f: any) => f.key === "justificativa").state).toBe("ai_draft");
+    const [p2] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
+    expect(Number((p2[0] as any).n)).toBe(Number((p1[0] as any).n));
+    sugg = { executionId: r1.explanation.executionId, text: r1.suggestion.text, hash: cur.contentHash };
   }, 120_000);
 
-  it("8) DFD APROVADO nunca é alterado silenciosamente (save/reconcile/IA/regeneração recusados)", async () => {
+  it("7b) SEM-058 — aceite humano explícito: grava o texto, registra a linhagem, preserva o texto anterior; tenant, CAS e idempotência", async () => {
+    const c = await caller(owner);
+    const cur = (await c.procurementProcess.loadDFD({ processId })).document!;
+    expect(cur.contentHash).toBe(sugg.hash);
+    const accept = (cl: Awaited<ReturnType<typeof caller>>, over: Record<string, unknown> = {}) => cl.procurementProcess.acceptDFDJustification({
+      processId, expectedContentHash: cur.contentHash, suggestionExecutionId: sugg.executionId, text: sugg.text, confirmAccept: true, idempotencyKey: `acc-${processId}`, ...over,
+    } as any);
+    // viewer não aceita; outro tenant não enxerga o processo; sugestão inexistente / conteúdo desatualizado recusados — zero escrita
+    await expect(accept(await caller(viewer))).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(accept(await caller(ownerB))).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(accept(c, { suggestionExecutionId: "nao-existe", idempotencyKey: "acc-x1" })).rejects.toMatchObject({ code: "NOT_FOUND", message: expect.stringContaining("SUGGESTION_NOT_FOUND") });
+    await expect(accept(c, { expectedContentHash: "stale", idempotencyKey: "acc-x2" })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(accept(c, { text: "  ", idempotencyKey: "acc-x3" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect((await c.procurementProcess.loadDFD({ processId })).document!.content).toBe(cur.content);
+    expect((await ledger(processId)).map((l) => l.op)).toEqual(["dfd_manual_edit", "dfd_context_reconcile"]);
+
+    const r = await accept(await caller(owner)); // outra requisição/correlação: o vínculo usa a correlação da GERAÇÃO
+    expect(r).toMatchObject({ edited: false, previousOrigin: "empty" });
+    const doc = (await c.procurementProcess.loadDFD({ processId })).document!;
+    expect(doc.content).toContain(sugg.text);
+    expect(doc.content).toContain("| 2 | Cadeira giratória | UN | 45 |"); // só a seção 2 mudou
+    expect(doc.status).toBe("rascunho");
+    expect(doc.sources.some((s: string) => s.startsWith("ai:justificativa="))).toBe(true);
+    const lg = await ledger(processId);
+    expect(lg.map((l) => l.op)).toEqual(["dfd_manual_edit", "dfd_context_reconcile", "dfd_ai_accept"]);
+    expect(lg.at(-1)!.actor).toBe(owner); // humano, nunca copiloto
+    const [row] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT previous_content AS pc, previous_content_hash AS ph, reason FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND kind = 'dfd' AND operation = 'dfd_ai_accept'", [ORG, processId]);
+    expect(String((row[0] as any).pc)).toBe(cur.content); // texto anterior preservado
+    expect(String((row[0] as any).ph)).toBe(cur.contentHash);
+    expect(JSON.parse(String((row[0] as any).reason))).toMatchObject({ kind: "ai_suggestion_accepted", source: "ai_suggestion", executionId: sugg.executionId, edited: false, previousOrigin: "empty", suggestionActor: String(owner) });
+    const [prov] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ? AND artifact_kind = 'dfd' AND artifact_id = ?", [ORG, doc.id]);
+    expect(Number((prov[0] as any).n)).toBeGreaterThan(0);
+    const [chg] = await conn.execute<mysql.RowDataPacket[]>(
+      "SELECT actor, summary FROM process_timeline WHERE organization_id = ? AND process_id = ? AND event_type = 'change' ORDER BY event_order DESC, created_at DESC LIMIT 1", [ORG, processId]);
+    expect(String((chg[0] as any).actor)).toBe(String(owner));
+    expect(String((chg[0] as any).summary)).toContain("aceite explícito");
+    const st = await c.procurementProcess.dfdAssistState({ processId });
+    expect(st.fields.find((f: any) => f.key === "justificativa").state).toBe("ai_draft");
+    // retry da MESMA chave = replay idempotente (sem 2ª linha no ledger); outra chave com conteúdo desatualizado = CONFLICT
+    const again = await accept(await caller(owner));
+    expect(again.document.content).toBe(doc.content);
+    expect(again.previousOrigin).toBeNull(); // replay: a origem anterior só consta da execução original
+    expect((await ledger(processId)).length).toBe(3);
+    await expect(accept(c, { idempotencyKey: "acc-x4" })).rejects.toMatchObject({ code: "CONFLICT" });
+  }, 120_000);
+
+  it("8) DFD APROVADO nunca é alterado silenciosamente (save/reconcile/sugestão/aceite/regeneração recusados)", async () => {
     await conn.execute("UPDATE generated_documents SET status = 'aprovado' WHERE organization_id = ? AND process_id = ? AND kind = 'dfd'", [ORG, processId]);
     const c = await caller(owner);
     const cur = (await c.procurementProcess.loadDFD({ processId })).document!;
     await expect(c.procurementProcess.saveDFD({ processId, content: `${cur.content}\nx`, expectedContentHash: cur.contentHash, idempotencyKey: "ap-1" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await expect(c.procurementProcess.generateDFD({ processId, idempotencyKey: "ap-2" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-    await expect(c.procurementProcess.generateDFDJustification({ processId, expectedContentHash: cur.contentHash, confirmReplace: true, idempotencyKey: "ap-3" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(c.procurementProcess.generateDFDJustification({ processId, expectedContentHash: cur.contentHash, idempotencyKey: "ap-3" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(c.procurementProcess.acceptDFDJustification({ processId, expectedContentHash: cur.contentHash, suggestionExecutionId: sugg.executionId, text: sugg.text, confirmAccept: true, idempotencyKey: "ap-4" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect((await c.procurementProcess.loadDFD({ processId })).document!.content).toBe(cur.content);
     expect((await ledger(processId)).length).toBe(3);
   }, 60_000);

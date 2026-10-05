@@ -1,7 +1,10 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
-import { formatDate } from "./labels";
+import { formatDate, STAGE_LABELS } from "./labels";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
+import {
+  PUBLISH_BUTTON_LABEL, PUBLISH_BUTTON_PENDING, PUBLISH_EFFECT_NOTE, PUBLICATIONS_EMPTY_HINT, publishSuccessMessage,
+} from "./publicationCopy";
 
 /**
  * PublicationWorkspace — REAL (tRPC).
@@ -36,19 +39,21 @@ export default function PublicationWorkspace({ workspaceId, publications = [] }:
         <h3 className="text-sm font-semibold text-foreground">Publicação</h3>
         <button type="button" onClick={() => publish.mutate({ workspaceId, includeContractExtract: includeExtract })} disabled={publish.isPending}
           className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
-          {publish.isPending ? "Gerando…" : "Gerar publicações"}
+          {publish.isPending ? PUBLISH_BUTTON_PENDING : PUBLISH_BUTTON_LABEL}
         </button>
       </div>
 
+      <p className="text-xs text-muted-foreground">{PUBLISH_EFFECT_NOTE}</p>
       <label className="flex items-start gap-2 text-xs text-foreground">
         <input type="checkbox" checked={includeExtract} onChange={(e) => setIncludeExtract(e.target.checked)} className="mt-0.5" />
         Incluir o extrato do contrato (exige contrato registrado e vinculado a esta contratação; sem contrato nada é gerado).
       </label>
 
       {publish.isError && <p className="text-xs text-red-600 dark:text-red-400">{publish.error.message}</p>}
+      {publish.isSuccess && <p role="status" className="text-xs text-muted-foreground">{publishSuccessMessage(publish.data.publications.length, STAGE_LABELS[publish.data.stage] ?? publish.data.stage)}</p>}
 
       {publications.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Gere os documentos de publicação conforme a modalidade e o procedimento.</p>
+        <p className="text-xs text-muted-foreground">{PUBLICATIONS_EMPTY_HINT}</p>
       ) : (
         <ul className="space-y-2">
           {publications.map((p) => (

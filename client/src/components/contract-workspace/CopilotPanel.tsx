@@ -5,7 +5,10 @@ import React from "react";
  *
  * Exibe a recomendação dos copilotos (Jurídico, Contratos, Agente de Contratação)
  * com reasoning, explainability, provenance e confidence. Toda recomendação é
- * SUPERVISIONADA e pode ser REJEITADA — os copilotos nunca decidem.
+ * SUPERVISIONADA — os copilotos nunca decidem.
+ *
+ * SEM-060 — "Aceitar"/"Rejeitar" só existem quando o chamador fornece o handler REAL; sem handler a recomendação é
+ * apenas informativa (nenhum botão que finge registrar um aceite/rejeição que não acontece).
  */
 
 export interface CopilotRecommendation {
@@ -41,11 +44,15 @@ export default function CopilotPanel({ recommendation = null, onAccept, onReject
           <p className="text-foreground"><strong>Reasoning:</strong> {recommendation.reasoning}</p>
           <p className="text-muted-foreground"><strong>Explainability:</strong> {recommendation.explainability}</p>
           <p className="text-muted-foreground"><strong>Provenance:</strong> {recommendation.provenance}</p>
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onAccept} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">Aceitar (revisar)</button>
-            <button type="button" onClick={onReject} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">Rejeitar</button>
-          </div>
-          <p className="pt-1 text-[11px] italic text-indigo-700 dark:text-indigo-300">Sugestão revisável — nunca automática.</p>
+          {(onAccept || onReject) && (
+            <div className="flex gap-2 pt-1">
+              {onAccept && <button type="button" onClick={onAccept} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">Aceitar (revisar)</button>}
+              {onReject && <button type="button" onClick={onReject} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">Rejeitar</button>}
+            </div>
+          )}
+          <p className="pt-1 text-[11px] italic text-indigo-700 dark:text-indigo-300">
+            {onAccept || onReject ? "Sugestão revisável — nunca automática." : "Recomendação apenas informativa — esta tela não registra aceite nem rejeição; nunca é aplicada automaticamente."}
+          </p>
         </div>
       )}
     </div>

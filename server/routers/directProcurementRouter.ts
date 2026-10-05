@@ -491,6 +491,7 @@ export const directProcurementRouter = router({
     }),
 
   // NEW-005 — PUBLICATION: piso técnico manager+ (mesma ressalva do ratify: autoridade competente = PR-07).
+  // SEM-060 — EFEITO REAL (rótulo da UI = efeito): gera as publicações E move o processo para a etapa PUBLICATION.
   publish: orgRoleProcedure("manager")
     .input(z.object({
       workspaceId: z.string().min(1),
@@ -507,7 +508,8 @@ export const directProcurementRouter = router({
       // As publicações JÁ estão gravadas (ato registrado): só agora o ponteiro/status passa a `publicado`.
       const moved = markDirectPublished(ws);
       await updateDirectProcurementStage(ws.id, orgId, moved.currentStage, moved.status, moved.updatedAt);
-      return { publications, contractExtract };
+      // SEM-060 — a resposta declara a transição efetiva (a UI e os testes não presumem a etapa).
+      return { publications, contractExtract, stage: moved.currentStage };
     }),
 
   // NEW-005 — WORKFLOW_CONFIGURATION: muda exigências do fluxo (ex.: requiresLegalOpinion) ⇒ piso manager+.

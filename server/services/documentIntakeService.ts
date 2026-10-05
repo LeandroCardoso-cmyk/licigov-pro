@@ -30,7 +30,7 @@ import {
 } from "../domain/documentProjection";
 import { createGeneratedDocument, draftContentHash } from "../domain/generatedDocument";
 import {
-  applyDraftContentMutationTx, getGeneratedDocumentByKind, getProcess, recordProcessEvent,
+  applyDraftContentMutationTx, getGeneratedDocumentByKind, getLatestDraftEdit, getProcess, recordProcessEvent,
 } from "../db/procurement";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { logActivity } from "./activityLogService";
@@ -251,8 +251,26 @@ export interface DocumentIntakeView {
     approvedBy: number | null; approvedAt: string | null; approvedContentHash: string | null;
     promotedBy: number | null; promotedAt: string | null; promotionMode: string | null; targetDocumentId: string | null;
   } | null;
-  draft: { exists: boolean; contentHash: string | null; origin: "import" | "generated" | "manual" | null; title: string | null };
+  draft: DocumentIntakeDraftView;
 }
+
+/**
+ * Rascunho canônico VIGENTE. SEM-061: além de existir/hash, traz o que a UI precisa para mostrar o que "Substituir rascunho"
+ * vai substituir (tamanho, data, origem, última edição e uma PRÉVIA do texto) — o hash do mesmo instante é o `expectedDraftContentHash`
+ * da substituição, então o que se vê é exatamente o que será trocado (ou a troca é recusada por CONFLICT).
+ */
+export interface DocumentIntakeDraftView {
+  exists: boolean; contentHash: string | null; origin: "import" | "generated" | "manual" | null; title: string | null;
+  contentLength: number | null; preview: string | null; previewTruncated: boolean; updatedAt: string | null;
+  lastEdit: { operation: string; actorUserId: number; at: string } | null;
+}
+
+export const DRAFT_PREVIEW_CHARS = 1200;
+
+const NO_DRAFT: DocumentIntakeDraftView = {
+  exists: false, contentHash: null, origin: null, title: null, contentLength: null, preview: null, previewTruncated: false,
+  updatedAt: null, lastEdit: null,
+};
 
 function iso(d: Date | string | null | undefined): string | null {
   if (!d) return null;
@@ -305,9 +323,16 @@ export async function getDocumentIntake(params: {
 }): Promise<DocumentIntakeView> {
   const db = await getDb();
   const draftRow = await getGeneratedDocumentByKind(params.processId, params.organizationId, params.kind);
-  const draft: DocumentIntakeView["draft"] = draftRow && draftRow.content.trim()
-    ? { exists: true, contentHash: draftContentHash(draftRow.content), origin: draftOrigin(draftRow.sources), title: draftRow.title }
-    : { exists: false, contentHash: null, origin: null, title: null };
+  let draft: DocumentIntakeDraftView = NO_DRAFT;
+  if (draftRow && draftRow.content.trim()) {
+    const last = await getLatestDraftEdit(params.processId, params.organizationId, params.kind);
+    draft = {
+      exists: true, contentHash: draftContentHash(draftRow.content), origin: draftOrigin(draftRow.sources), title: draftRow.title,
+      contentLength: draftRow.content.length, preview: draftRow.content.slice(0, DRAFT_PREVIEW_CHARS),
+      previewTruncated: draftRow.content.length > DRAFT_PREVIEW_CHARS, updatedAt: iso(draftRow.updatedAt),
+      lastEdit: last ? { operation: last.operation, actorUserId: last.actorUserId, at: last.createdAt } : null,
+    };
+  }
   if (!db) return { staging: null, draft };
   const rows = await db.select().from(importDocumentStaging)
     .where(and(

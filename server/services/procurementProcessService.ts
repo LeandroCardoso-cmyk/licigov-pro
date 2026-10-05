@@ -31,7 +31,7 @@ import {
 import { computeLineageId } from "../domain/officialDocument";
 import { getDb } from "../db/connection";
 import {
-  recordProcessEvent, listIntelligentItems, applyDraftContentMutationTx,
+  recordProcessEvent, listProcessEventsByRef, listIntelligentItems, applyDraftContentMutationTx,
   getGeneratedDocumentByKind, getLatestDraftEdit, type ProcurementExecutor, type DraftEditOperation,
   type DraftExpectedState,
 } from "../db/procurement";
@@ -46,7 +46,7 @@ import {
 // R5 (decisão do owner) — autoridade oficial EXISTENTE (ledger imutável da emissão governada C.4B.1).
 import { getLatestOfficialPromotion, type PromotionExecutor } from "../db/officialDocumentPromotions";
 // V1 PRE-PILOT CLOSURE — Fase A1: linkage de proveniência cognitiva → artefato (transacional).
-import { linkProvenanceArtifact, type ProvenanceExecutor } from "../db/cognitiveProvenance";
+import { linkProvenanceArtifact, listProvenanceByCorrelation, type ProvenanceExecutor } from "../db/cognitiveProvenance";
 // Contexto Canônico da Contratação — DFD como 1º consumidor (prefill, estado por campo, reconciliação, IA).
 import { serviceLogger } from "./observabilityService";
 import { resolveProcurementContext, recordContextAssertions } from "./canonicalContextService";
@@ -56,10 +56,15 @@ import type { ProcurementCanonicalContext } from "../domain/canonicalProcurement
 import { canonicalDigest } from "../domain/canonicalJson";
 import {
   buildDFDPrefill, renderDFDContent, prefillMarkers, writeMarkers, readMarkers, isAssistMarker,
-  computeDFDFieldStates, reconcileDFDField, applyAIJustification, extractDFDAssertions, summarizeFieldStates,
+  computeDFDFieldStates, reconcileDFDField, applyReviewedJustification, extractDFDAssertions, summarizeFieldStates,
   parseDFD, fieldHash, linkDFDRows, unlinkedDFDRows, refreshRowLineage, DFD_FIELD_LABELS, DFD_PREFILL_VERSION,
   type DFDFieldView, type DFDFieldState, type DFDPrefill,
 } from "../domain/dfdPrefill";
+
+import {
+  classifyJustificationOrigin, JUSTIFICATION_ORIGIN_LABELS, normalizeSuggestionExecutionId, suggestionTextHash,
+  suggestionEventSummary, parseSuggestionEventHash, acceptanceLedgerReason, type JustificationOrigin,
+} from "../domain/dfdJustificationSuggestion";
 
 const DOMAIN = "processo_licitatorio" as const;
 const log = serviceLogger("ProcurementProcessService");
@@ -349,6 +354,8 @@ async function runGovernedDraftEdit(p: {
   actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
   /** Efeitos adicionais na MESMA transação, só quando houve mudança material (ex.: fatos do DFD). */
   afterPersist?: (tx: ProcurementExecutor, document: GeneratedDocument) => Promise<void>;
+  /** Linhagem da edição gravada no ledger (`generated_document_edits.reason`) — ex.: aceite de sugestão de IA. */
+  reason?: string;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   const payloadHash = createHash("sha256").update(JSON.stringify({
     op: p.op, o: p.organizationId, pr: p.processId, k: p.kind,
@@ -386,7 +393,7 @@ async function runGovernedDraftEdit(p: {
       const { changed, document } = await applyDraftContentMutationTx(tx, {
         organizationId: p.organizationId, processId: p.processId, kind: p.kind,
         actorUserId: p.actorUserId, doc, operation: p.operation,
-        expectedState, idempotencyKey: p.idempotencyKey, correlationId: p.correlationId,
+        expectedState, idempotencyKey: p.idempotencyKey, correlationId: p.correlationId, reason: p.reason ?? null,
       });
       persisted = document;
       // NO-OP (changed=false): sem ledger/último-ator (garantido pelo primitive) E sem timeline de
@@ -609,47 +616,67 @@ export interface DFDAIDraftExplanation {
   generatedAt: string;
 }
 
+/** SEM-058 — o que está HOJE na seção 2, com a origem, para ser exibido ao lado da sugestão. */
+export interface DFDJustificationCurrent {
+  text: string | null;
+  origin: JustificationOrigin;
+  originLabel: string;
+  /** Hash do conteúdo do DFD a que o aceite fica vinculado (CAS). */
+  contentHash: string;
+}
+
+export interface DFDJustificationSuggestion {
+  /** Texto SUGERIDO (já com as marcas [REVISAR: …]). Nada disto foi gravado no DFD. */
+  suggestion: { text: string; textHash: string };
+  explanation: DFDAIDraftExplanation;
+  current: DFDJustificationCurrent;
+}
+
+async function describeCurrentJustification(
+  scope: { organizationId: number; processId: string }, doc: NonNullable<CanonicalDraftRow>, ctx: ProcurementCanonicalContext,
+): Promise<DFDJustificationCurrent> {
+  const view = computeDFDFieldStates(doc.content, doc.sources ?? [], buildDFDPrefill(ctx)).find((f) => f.key === "justificativa");
+  const contentHash = draftContentHash(doc.content);
+  const lastEdit = await getLatestDraftEdit(scope.processId, scope.organizationId, "dfd");
+  const origin = classifyJustificationOrigin({
+    documentValue: view?.documentValue ?? null, state: view?.state ?? "unknown", sources: doc.sources ?? [], lastEdit, contentHash,
+  });
+  return { text: view?.documentValue ?? null, origin, originLabel: JUSTIFICATION_ORIGIN_LABELS[origin], contentHash };
+}
+
 /**
- * Rascunho SUPERVISIONADO de IA da "Justificativa da necessidade" (seção 2) — ação EXPLÍCITA do servidor.
- * IA exclusivamente via AIExecutionEngine (dfdJustificationAuthoring), com contexto GOVERNADO (só fatos
- * canônicos; sem preços/pessoas). Saída = rascunho editável marcado (`ai:`), nunca decisão/aprovação.
- * Replay-safe: idempotência da geração + idempotência do Engine (retry não duplica chamada de IA).
- * Nunca sobrescreve justificativa escrita por humano sem confirmação explícita (`confirmReplace`).
+ * SEM-058 — SUGESTÃO supervisionada de IA para a "Justificativa da necessidade" (seção 2). A IA é só uma sugestão:
+ * esta operação NÃO altera o DFD (nenhum documento, ledger de edição ou marcador é escrito); devolve a sugestão
+ * junto do texto ATUAL e da sua origem. O texto só entra no DFD por `acceptDFDJustificationSuggestion` (aceite humano
+ * explícito). IA exclusivamente via AIExecutionEngine (dfdJustificationAuthoring), contexto GOVERNADO, FORA de
+ * transação. Replay-safe (idempotência da geração + do Engine). A timeline registra só que uma sugestão foi gerada
+ * (com o hash do texto, que ancora o aceite posterior).
  */
 export async function generateDFDJustificationDraft(params: {
   organizationId: number; processId: string; object: string;
-  actorUserId: number; expectedContentHash: string; confirmReplace?: boolean;
+  actorUserId: number; expectedContentHash: string;
   idempotencyKey: string; correlationId: string;
   /** Seam determinístico (testes) — substitui a chamada ao Engine; proveniência deixa de ser obrigatória. */
   invoke?: (prompt: string) => Promise<string>;
-}): Promise<{ document: GeneratedDocument; explanation: DFDAIDraftExplanation; replayed: boolean }> {
+}): Promise<DFDJustificationSuggestion & { replayed: boolean }> {
   const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
-  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "DFD inexistente — crie o DFD antes de gerar o rascunho da justificativa." });
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "DFD inexistente — crie o DFD antes de gerar a sugestão da justificativa." });
   assertDFDMutable(existing);
   const ctx = await resolveProcurementContext(params);
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: "dfd", object: params.object,
     sourcesDigest: canonicalDigest({
-      op: "dfd_ai_justification", pv: DFD_JUSTIFICATION_PROMPT_VERSION, ctx: ctx.digest,
-      exp: params.expectedContentHash, rep: params.confirmReplace === true,
+      op: "dfd_ai_justification_suggestion", pv: DFD_JUSTIFICATION_PROMPT_VERSION, ctx: ctx.digest, exp: params.expectedContentHash,
     }),
   });
 
-  type Out = { document: GeneratedDocument; explanation: DFDAIDraftExplanation };
-  const { result, replayed } = await runReplaySafeGeneration<Out>(
+  const { result, replayed } = await runReplaySafeGeneration<DFDJustificationSuggestion>(
     { organizationId: params.organizationId, actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, payloadHash },
     reviveIdempotent,
     async () => {
-      // Pré-condições ANTES da cognição (nenhuma chamada de IA desperdiçada / nenhuma sobrescrita).
+      // Pré-condição ANTES da cognição: a sugestão é comparada com o texto que o servidor está vendo.
       if (draftContentHash(existing.content) !== params.expectedContentHash) {
         throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue antes de gerar." });
-      }
-      const view = computeDFDFieldStates(existing.content, existing.sources ?? [], buildDFDPrefill(ctx)).find((f) => f.key === "justificativa");
-      if (view?.state === "user_modified" && params.confirmReplace !== true) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "USER_MODIFIED_FIELD: a justificativa foi escrita por você — confirme para substituí-la pelo rascunho da IA.",
-        });
       }
       // Cognição FORA da transação, via AIExecutionEngine (ou seam).
       const draft = await generateDFDJustificationText({
@@ -658,60 +685,121 @@ export async function generateDFDJustificationDraft(params: {
         idempotencyKey: params.idempotencyKey, invoke: params.invoke,
       });
       if (!draft.text.trim()) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu rascunho utilizável — nada foi alterado." });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu uma sugestão utilizável — nada foi alterado." });
       }
-      const applied = applyAIJustification(existing.content, existing.sources ?? [], draft.text, draft.executionId, ctx.digest);
-      const doc = createGeneratedDocument({
-        processId: params.processId, organizationId: params.organizationId, kind: "dfd",
-        title: existing.title || `DFD — ${params.object}`, content: applied.content,
-        sources: withContextMarkers(applied.sources, ctx), correlationId: params.correlationId,
-      });
-      const explanation: DFDAIDraftExplanation = {
-        field: "justificativa", executionId: draft.executionId, provider: draft.provider, model: draft.model,
-        promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
-        inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers,
-        actorUserId: params.actorUserId, correlationId: params.correlationId, generatedAt: new Date().toISOString(),
+      // Cognição real ⇒ proveniência obrigatória (fail-closed: sem rastro da execução não há sugestão aceitável).
+      if (params.invoke === undefined && (await listProvenanceByCorrelation(params.organizationId, params.correlationId)).length === 0) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Proveniência cognitiva obrigatória ausente para esta geração — operação abortada (fail-closed)." });
+      }
+      const current = await describeCurrentJustification(params, existing, ctx);
+      const executionId = normalizeSuggestionExecutionId(draft.executionId) || "exec";
+      const textHash = suggestionTextHash(draft.text);
+      const out: DFDJustificationSuggestion = {
+        suggestion: { text: draft.text, textHash },
+        explanation: {
+          field: "justificativa", executionId, provider: draft.provider, model: draft.model,
+          promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
+          inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers,
+          actorUserId: params.actorUserId, correlationId: params.correlationId, generatedAt: new Date().toISOString(),
+        },
+        current,
       };
       return {
-        response: { document: doc, explanation },
+        response: out,
         persist: async (tx) => {
-          const { document } = await applyDraftContentMutationTx(tx, {
-            organizationId: params.organizationId, processId: params.processId, kind: "dfd",
-            actorUserId: params.actorUserId, doc, operation: "dfd_ai_draft",
-            expectedState: { type: "present", contentHash: params.expectedContentHash },
-            idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
-          });
-          // A1 — proveniência cognitiva → artefato (MESMA transação). Cognição real ⇒ obrigatória.
-          const { linked } = await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
-            organizationId: params.organizationId, correlationId: params.correlationId,
-            artifactKind: "dfd", artifactId: document.id,
-          });
-          if (params.invoke === undefined && linked === 0) {
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: "Proveniência cognitiva obrigatória ausente para esta geração — operação abortada (fail-closed).",
-            });
-          }
           await recordProcessEvent({
             organizationId: params.organizationId, processId: params.processId, eventType: "recommendation",
-            actor: String(params.actorUserId),
-            summary: `DFD: rascunho da justificativa gerado por IA a pedido do servidor (revisão obrigatória; execução ${draft.executionId.slice(0, 24)}).`,
-            refId: document.id, correlationId: params.correlationId,
+            actor: String(params.actorUserId), summary: suggestionEventSummary(executionId, textHash),
+            refId: executionId, correlationId: params.correlationId,
           }, tx);
-          log.info("dfd_ai_draft_generated", {
+          log.info("dfd_ai_suggestion_generated", {
             organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
-            actorUserId: params.actorUserId, documentId: document.id, field: "justificativa",
-            executionId: draft.executionId, provider: draft.provider, model: draft.model,
+            actorUserId: params.actorUserId, field: "justificativa", executionId, provider: draft.provider, model: draft.model,
             promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
             inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers.length,
-            replaced: view?.state === "user_modified", engineReplayed: draft.replayed,
+            currentOrigin: current.origin, engineReplayed: draft.replayed, persisted: false,
           });
-          return { document, explanation };
+          return out;
         },
       };
     },
   );
   return { ...result, replayed };
+}
+
+const DFD_AI_ACCEPT_OP = "procurement.dfd.ai_accept";
+const MIN_ACCEPTED_JUSTIFICATION_CHARS = 10;
+
+/**
+ * SEM-058 — ACEITE HUMANO da sugestão de IA para a justificativa do DFD: o único caminho que grava o texto da IA.
+ *   - exige uma sugestão realmente gerada neste processo/órgão (evento de timeline do servidor ancorado pelo id da
+ *     execução; outro órgão/processo ⇒ NOT_FOUND) e vincula o aceite ao conteúdo que o servidor viu (CAS por hash);
+ *   - o texto aceito pode ser editado antes do aceite (`edited` quando o hash difere do da sugestão): sem edição mantém
+ *     o marcador `ai:` (linhagem), com edição vira texto humano — sem inventar proveniência;
+ *   - governado como qualquer edição do DFD (runner comum): lock + concorrência otimista, ledger com o TEXTO ANTERIOR
+ *     (`previous_content`) e a linhagem (`reason`: execução, origem anterior, ator da sugestão), ator = o humano
+ *     (`user:<id>`, nunca copiloto), idempotência, timeline; vínculo da proveniência cognitiva ao DFD na mesma transação;
+ *   - NÃO chama IA (a cognição ocorreu na geração). Nunca em DFD aprovado.
+ */
+export async function acceptDFDJustificationSuggestion(params: {
+  organizationId: number; processId: string; object: string;
+  actorUserId: number; expectedContentHash: string; text: string; suggestionExecutionId: string;
+  idempotencyKey: string; correlationId: string;
+}): Promise<{ document: GeneratedDocument; replayed: boolean; edited: boolean; previousOrigin: JustificationOrigin | null }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd");
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "DFD inexistente — não há o que aceitar." });
+  assertDFDMutable(existing);
+  const text = params.text.trim();
+  if (text.length < MIN_ACCEPTED_JUSTIFICATION_CHARS) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe a justificativa (mín. ${MIN_ACCEPTED_JUSTIFICATION_CHARS} caracteres) — nada foi gravado (JUSTIFICATION_TEXT_REQUIRED).` });
+  }
+  // A sugestão precisa existir NESTE órgão e processo (o evento é escrito pelo servidor na geração).
+  const executionId = normalizeSuggestionExecutionId(params.suggestionExecutionId);
+  const event = (await listProcessEventsByRef(params.processId, params.organizationId, "recommendation", executionId))
+    .find((e) => parseSuggestionEventHash(e.summary) !== null);
+  if (!executionId || !event) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "SUGGESTION_NOT_FOUND: a sugestão informada não existe neste processo — gere uma nova sugestão." });
+  }
+  const eventHash = parseSuggestionEventHash(event.summary)!;
+  const edited = suggestionTextHash(text) !== eventHash;
+  const ctx = await resolveProcurementContext(params);
+  const corr = event.correlationId;
+  const hasProvenance = corr ? (await listProvenanceByCorrelation(params.organizationId, corr)).length > 0 : false;
+  if (!hasProvenance && !executionId.startsWith("seam-")) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SUGGESTION_PROVENANCE_MISSING: a execução de IA desta sugestão não tem proveniência registrada — gere uma nova sugestão." });
+  }
+  const previous = await describeCurrentJustification(params, existing, ctx);
+  const applied = applyReviewedJustification(existing.content, existing.sources ?? [], text, edited ? null : { executionId, contextDigest: ctx.digest });
+  // CAS: o aceite só vale para o conteúdo que o servidor comparou. Exceção: conteúdo JÁ igual ao resultado do aceite
+  // (retry/replay da mesma operação) segue para o runner, que devolve o snapshot idempotente; com chave nova o CAS
+  // sob lock do runner recusa (CONFLICT) — nunca uma segunda gravação.
+  const currentHash = draftContentHash(existing.content);
+  if (currentHash !== params.expectedContentHash && currentHash !== draftContentHash(applied.content)) {
+    throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde que a sugestão foi comparada — gere/compare novamente antes de aceitar." });
+  }
+  const result = await runGovernedDraftEdit({
+    op: DFD_AI_ACCEPT_OP, operation: "dfd_ai_accept",
+    timelineSummary: `DFD: justificativa da necessidade registrada pelo servidor a partir de sugestão de IA${edited ? " editada" : ""} (aceite explícito; texto anterior — ${previous.originLabel} — preservado no histórico; execução ${executionId.slice(0, 24)}).`,
+    organizationId: params.organizationId, processId: params.processId, kind: "dfd",
+    title: existing.title || `DFD — ${params.object}`, sources: withContextMarkers(applied.sources, ctx), content: applied.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+    reason: acceptanceLedgerReason({ executionId, edited, previousOrigin: previous.origin, suggestionTextHash: eventHash, suggestionActor: event.actor }),
+    afterPersist: async (tx, document) => {
+      if (corr) {
+        await linkProvenanceArtifact(tx as unknown as ProvenanceExecutor, {
+          organizationId: params.organizationId, correlationId: corr, artifactKind: "dfd", artifactId: document.id,
+        });
+      }
+      log.info("dfd_ai_suggestion_accepted", {
+        organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+        actorUserId: params.actorUserId, documentId: document.id, field: "justificativa", executionId, edited,
+        previousOrigin: previous.origin, suggestionActor: event.actor, suggestionCorrelationId: corr,
+      });
+    },
+  });
+  // Em replay o texto anterior já não é o vigente: a origem anterior só é informada na execução original (ledger).
+  return { ...result, edited, previousOrigin: result.replayed ? null : previous.origin };
 }
 
 /**

@@ -1,7 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { useOrgRole } from "../../_core/hooks/useOrgRole";
-import { parseThresholdInput } from "./catmatThresholdPolicy";
+import { parseThresholdInput, thresholdImpactLines, canSubmitThresholdChange, type CatmatThresholdPreviewUI, type CatmatThresholdInput } from "./catmatThresholdPolicy";
 
 /**
  * CatmatThresholdConfig — REAL (tRPC).
@@ -30,6 +30,10 @@ export default function CatmatThresholdConfig() {
   const [reason, setReason] = React.useState<string>("");
   const [okMsg, setOkMsg] = React.useState<string>("");
   const [validationMsg, setValidationMsg] = React.useState<string>("");
+  // SEM-061 — a troca passa por uma PRÉVIA do impacto org-wide + confirmação explícita; o 1º clique não grava nada.
+  const [pending, setPending] = React.useState<{ input: CatmatThresholdInput; preview: CatmatThresholdPreviewUI } | null>(null);
+  const [previewing, setPreviewing] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState("");
 
   const setThreshold = trpc.itemIntelligence.setCATMATThreshold.useMutation({
     onSuccess: (res) => {
@@ -39,6 +43,7 @@ export default function CatmatThresholdConfig() {
           : "Limiar registrado.",
       );
       setReason("");
+      setPending(null);
       void utils.itemIntelligence.getCATMATThreshold.invalidate();
     },
     onError: () => setOkMsg(""),
@@ -47,16 +52,30 @@ export default function CatmatThresholdConfig() {
   const configured = thresholdQuery.data?.configured === true;
   const currentPct = configured ? Math.round((thresholdQuery.data!.minScore ?? 0) * 100) : null;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setOkMsg("");
     setValidationMsg("");
+    setPreviewError("");
     const parsed = parseThresholdInput(minScorePct, reason);
     if (!parsed.ok) {
       setValidationMsg(parsed.error);
       return;
     }
-    setThreshold.mutate(parsed.value);
+    setPreviewing(true);
+    try {
+      const preview = await utils.itemIntelligence.previewCATMATThresholdChange.fetch({ minScore: parsed.value.minScore });
+      setPending({ input: parsed.value, preview: preview as CatmatThresholdPreviewUI });
+    } catch (err) {
+      setPending(null);
+      setPreviewError(err instanceof Error ? err.message : "Não foi possível calcular o impacto da mudança.");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+  const confirmChange = () => {
+    if (!pending || !canSubmitThresholdChange({ previewShownFor: pending.preview.proposedMinScore, proposed: pending.input.minScore, confirmed: true, pending: setThreshold.isPending })) return;
+    setThreshold.mutate(pending.input);
   };
 
   return (
@@ -118,17 +137,34 @@ export default function CatmatThresholdConfig() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={setThreshold.isPending}
+              disabled={setThreshold.isPending || previewing || pending !== null}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
-              {setThreshold.isPending ? "Salvando…" : configured ? "Atualizar limiar" : "Configurar limiar"}
+              {previewing ? "Calculando impacto…" : configured ? "Revisar impacto e atualizar limiar" : "Revisar impacto e configurar limiar"}
             </button>
             {okMsg && <span className="text-xs text-green-700 dark:text-green-300">{okMsg}</span>}
+            {previewError && <span className="text-xs text-red-600 dark:text-red-300">{previewError}</span>}
             {validationMsg && <span className="text-xs text-orange-700 dark:text-orange-300">{validationMsg}</span>}
             {setThreshold.isError && (
               <span className="text-xs text-red-600 dark:text-red-300">{setThreshold.error.message}</span>
             )}
           </div>
+          {pending && (
+            <div role="alertdialog" aria-label="Confirmar alteração do limiar" className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+              <p className="font-medium">Confirme o impacto antes de alterar o limiar</p>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {thresholdImpactLines(pending.preview).map((l) => <li key={l}>{l}</li>)}
+              </ul>
+              <div className="flex gap-2">
+                <button type="button" onClick={confirmChange} disabled={setThreshold.isPending}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
+                  {setThreshold.isPending ? "Salvando…" : "Confirmar alteração do limiar"}
+                </button>
+                <button type="button" onClick={() => setPending(null)} disabled={setThreshold.isPending}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">Cancelar</button>
+              </div>
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground">
             A versão anterior é preservada (inativa) — a mudança é auditável. Após configurar, as decisões
             governadas de CATMAT/CATSER voltam a funcionar normalmente.
