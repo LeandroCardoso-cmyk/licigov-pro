@@ -1,6 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { friendlyContractError, isRawValidationLeak } from "./contractErrorPolicy";
+import { parseReaisInputToDecimal } from "../../lib/money";
 
 /**
  * NewContractWizard — REAL (tRPC).
@@ -106,25 +107,23 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       fromProc.mutate({ processId: originId, contractNumber });
     } else if (origin === "contratacao_direta") {
       // SEM-062 — com proposta selecionada, envia a proposta (procedência) e os valores CONFIRMADOS (reais).
-      const confirmed = parseFloat(inheritValueReais.replace(/\./g, "").replace(",", "."));
       fromDirect.mutate({
         directWorkspaceId: originId, contractNumber,
         ...(proposalId ? {
           sourceProposalId: proposalId,
           contractor: inheritContractor.trim() || undefined,
-          value: inheritValueReais.trim() && !Number.isNaN(confirmed) ? Math.round(confirmed * 100) / 100 : undefined,
+          value: parseReaisInputToDecimal(inheritValueReais),
         } : {}),
       });
     } else if (origin === "avulso") {
-      // Valor: usuário digita em reais; o sistema armazena em centavos.
-      const parsed = parseFloat(valueReais.replace(/\./g, "").replace(",", "."));
-      const valueCents = valueReais.trim() && !Number.isNaN(parsed) ? Math.round(parsed * 100) : undefined;
+      // NEW-038: o valor do contrato é guardado em REAIS (DECIMAL 15,2), como no editor — nunca centavos.
+      const valueReaisDecimal = parseReaisInputToDecimal(valueReais);
       createManual.mutate({
         idempotencyKey,
         contractNumber,
         contractor: contractor.trim() || undefined,
         object: object.trim() || undefined,
-        value: valueCents,
+        value: valueReaisDecimal,
         term: term.trim() || undefined,
       });
     } else {
