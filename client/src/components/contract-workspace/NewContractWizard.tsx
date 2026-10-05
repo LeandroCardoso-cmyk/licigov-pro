@@ -10,6 +10,12 @@ import { friendlyContractError, isRawValidationLeak } from "./contractErrorPolic
  *  - Contratação Direta    (deriva de uma dispensa/inexigibilidade)
  *  - Novo (do zero)        (AVULSO — não vinculado a nenhum processo; dados digitados)
  *  - Externo (reconstrução) (PDF/DOCX → texto → extração assistida)
+ *
+ * SEM-062: nas origens Processo/Contratação Direta o contrato NÃO herda nada em silêncio. O servidor devolve uma
+ * PROPOSTA (`contractWorkspace.proposeInheritance`) com a procedência de cada candidata (id da proposta e da decisão
+ * de ratificação); o servidor escolhe nada — o usuário seleciona, confere e CONFIRMA contratado/valor (editáveis).
+ * Sem evidência canônica (ex.: processo licitatório não tem registro de adjudicação) o assistente diz isso e deixa
+ * os campos em branco.
  */
 
 export interface NewContractWizardProps {
@@ -42,6 +48,10 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   const [object, setObject] = React.useState("");
   const [valueReais, setValueReais] = React.useState("");
   const [term, setTerm] = React.useState("");
+  // SEM-062 — proposta selecionada (id do registro da proposta) + campos CONFIRMADOS pelo usuário (reais).
+  const [proposalId, setProposalId] = React.useState("");
+  const [inheritContractor, setInheritContractor] = React.useState("");
+  const [inheritValueReais, setInheritValueReais] = React.useState("");
   // Uma chave por tentativa de submissão — reenviada em retries (evita duplicidade em
   // reenvio de rede/duplo clique); reset após sucesso ou ao trocar de origem/forma.
   const [idempotencyKey, setIdempotencyKey] = React.useState(() => crypto.randomUUID());
@@ -53,6 +63,19 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
     { enabled: origin === "processo_licitatorio", refetchOnWindowFocus: false },
   );
   const processes = processesQuery.data?.processes ?? [];
+
+  // SEM-062 — proposta de herança (somente leitura; nunca preenche sozinha).
+  const inheritanceQuery = trpc.contractWorkspace.proposeInheritance.useQuery(
+    { sourceType: origin === "contratacao_direta" ? "contratacao_direta" : "processo_licitatorio", sourceId: originId },
+    { enabled: (origin === "processo_licitatorio" || origin === "contratacao_direta") && originId.trim().length > 0, retry: false, refetchOnWindowFocus: false },
+  );
+  const inheritance = (origin === "processo_licitatorio" || origin === "contratacao_direta") && originId.trim() ? inheritanceQuery.data : undefined;
+  const selectProposal = (id: string, c: { supplierName: string; value: number }) => {
+    setProposalId(id);
+    setInheritContractor(c.supplierName);
+    setInheritValueReais(String(c.value).replace(".", ","));
+  };
+  const resetInheritance = () => { setProposalId(""); setInheritContractor(""); setInheritValueReais(""); };
 
   const onOk = (contractId: string) => {
     void utils.contractWorkspace.listContracts.invalidate();
@@ -82,7 +105,16 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
     if (origin === "processo_licitatorio") {
       fromProc.mutate({ processId: originId, contractNumber });
     } else if (origin === "contratacao_direta") {
-      fromDirect.mutate({ directWorkspaceId: originId, contractNumber });
+      // SEM-062 — com proposta selecionada, envia a proposta (procedência) e os valores CONFIRMADOS (reais).
+      const confirmed = parseFloat(inheritValueReais.replace(/\./g, "").replace(",", "."));
+      fromDirect.mutate({
+        directWorkspaceId: originId, contractNumber,
+        ...(proposalId ? {
+          sourceProposalId: proposalId,
+          contractor: inheritContractor.trim() || undefined,
+          value: inheritValueReais.trim() && !Number.isNaN(confirmed) ? Math.round(confirmed * 100) / 100 : undefined,
+        } : {}),
+      });
     } else if (origin === "avulso") {
       // Valor: usuário digita em reais; o sistema armazena em centavos.
       const parsed = parseFloat(valueReais.replace(/\./g, "").replace(",", "."));
@@ -108,7 +140,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {ORIGINS.map(([v, label]) => (
-          <button key={v} type="button" onClick={() => { setOrigin(v); setOriginId(""); }}
+          <button key={v} type="button" onClick={() => { setOrigin(v); setOriginId(""); resetInheritance(); }}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${origin === v ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{label}</button>
         ))}
       </div>
@@ -120,7 +152,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       {origin === "processo_licitatorio" && (
         <label className="block text-xs font-medium text-foreground">
           Processo Licitatório
-          <select value={originId} onChange={(e) => setOriginId(e.target.value)} className={inputCls} disabled={processesQuery.isLoading}>
+          <select value={originId} onChange={(e) => { setOriginId(e.target.value); resetInheritance(); }} className={inputCls} disabled={processesQuery.isLoading}>
             <option value="">{processesQuery.isLoading ? "Carregando processos…" : "Selecione o processo…"}</option>
             {processes.map((p) => (
               <option key={p.id} value={p.id}>
@@ -141,8 +173,40 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       {origin === "contratacao_direta" && (
         <label className="block text-xs font-medium text-foreground">
           ID da Contratação Direta
-          <input value={originId} onChange={(e) => setOriginId(e.target.value)} placeholder="id de origem" className={inputCls} />
+          <input value={originId} onChange={(e) => { setOriginId(e.target.value); resetInheritance(); }} placeholder="id de origem" className={inputCls} />
         </label>
+      )}
+
+      {/* SEM-062 — proposta de contratado/valor (procedência explícita; o usuário seleciona e confirma). */}
+      {inheritance?.kind === "no_canonical_evidence" && (
+        <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">{inheritance.message}</p>
+      )}
+      {origin === "contratacao_direta" && inheritance?.kind === "proposal" && (
+        <fieldset className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <legend className="px-1 font-medium">Propostas registradas nesta contratação</legend>
+          <p>{inheritance.notice}</p>
+          <p className="text-[11px]">Decisão de ratificação vigente: rev. {inheritance.decision.revision} ({inheritance.decision.decidedAt}, {inheritance.decision.decidedByRole}).</p>
+          {inheritance.candidates.map((c) => (
+            <label key={c.proposalId} className="flex cursor-pointer items-start gap-2">
+              <input type="radio" name="inherit-proposal" checked={proposalId === c.proposalId} onChange={() => selectProposal(c.proposalId, c)} className="mt-0.5" />
+              <span>
+                <strong>{c.supplierName || "(sem nome)"}</strong>{c.supplierDocument ? ` · ${c.supplierDocument}` : ""} · {c.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                <span className="block text-[11px] opacity-80">Proposta {c.proposalId}{c.protocol ? ` · protocolo ${c.protocol}` : ""}</span>
+              </span>
+            </label>
+          ))}
+          {proposalId && (
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <label className="block text-xs font-medium">Contratado (confirme)
+                <input value={inheritContractor} onChange={(e) => setInheritContractor(e.target.value)} className={inputCls} />
+              </label>
+              <label className="block text-xs font-medium">Valor (R$) (confirme)
+                <input value={inheritValueReais} onChange={(e) => setInheritValueReais(e.target.value)} inputMode="decimal" className={inputCls} />
+              </label>
+            </div>
+          )}
+          {!proposalId && <p className="text-[11px]">Sem seleção, o contrato nasce com contratado e valor em branco (editáveis na minuta).</p>}
+        </fieldset>
       )}
 
       {origin === "avulso" && (

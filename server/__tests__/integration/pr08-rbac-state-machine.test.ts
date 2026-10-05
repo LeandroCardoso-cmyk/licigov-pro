@@ -15,7 +15,7 @@
  *     apostilamento em contrato não formalizado é recusado (BAD_REQUEST `CONTRACT_STATUS_TRANSITION_INVALID`,
  *     zero efeitos); estados encerrado/rescindido/arquivado nunca reabrem; instrumentos sucessivos são admitidos
  *     em vigente/aditado/apostilado; parecer exigido pelo próprio fluxo e ausente ⇒ status NÃO efetivado.
- *   - `createAddendum`/`createApostille` recusam ANTES de qualquer efeito (sem contagem, escrita, IA, evento);
+ *   - `createAddendum`/`createApostille` recusam ANTES de qualquer efeito (sem lock, alocação, escrita, IA, evento);
  *     corrida perdida no compare-and-set ⇒ ROLLBACK e recusa estável; router mapeia BAD_REQUEST/CONFLICT.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -56,10 +56,14 @@ vi.mock("../../services/catmatGovernanceService", () => ({ decideCatmat: item.de
 const cw = vi.hoisted(() => ({
   status: "vigente" as string,
   freshStatus: null as string | null,
+  /** Status devolvido pelo lock (SEM-084): permite simular mudança entre a pré-checagem e a trava. */
+  lockStatus: null as string | null,
   casResult: true,
   getContractWorkspace: vi.fn(),
-  countContractAddenda: vi.fn(async () => 0),
-  countContractApostilles: vi.fn(async () => 0),
+  // R9 / SEM-084 — a sequência é alocada DENTRO da transação, sob o lock da linha do contrato (não mais `count+1` fora dela).
+  lockContractWorkspaceForInstrument: vi.fn(),
+  nextAddendumSequenceUnderLock: vi.fn(async () => 1),
+  nextApostilleSequenceUnderLock: vi.fn(async () => 1),
   insertContractAddendum: vi.fn(async (a: unknown) => a),
   insertContractApostille: vi.fn(async (a: unknown) => a),
   compareAndSetContractWorkspaceStatus: vi.fn(),
@@ -71,8 +75,9 @@ const cw = vi.hoisted(() => ({
 vi.mock("../../db/contractWorkspace", async (orig) => ({
   ...(await orig<typeof import("../../db/contractWorkspace")>()),
   getContractWorkspace: cw.getContractWorkspace,
-  countContractAddenda: cw.countContractAddenda,
-  countContractApostilles: cw.countContractApostilles,
+  lockContractWorkspaceForInstrument: cw.lockContractWorkspaceForInstrument,
+  nextAddendumSequenceUnderLock: cw.nextAddendumSequenceUnderLock,
+  nextApostilleSequenceUnderLock: cw.nextApostilleSequenceUnderLock,
   insertContractAddendum: cw.insertContractAddendum,
   insertContractApostille: cw.insertContractApostille,
   compareAndSetContractWorkspaceStatus: cw.compareAndSetContractWorkspaceStatus,
@@ -121,6 +126,9 @@ beforeEach(() => {
     reads += 1;
     return contractWith(reads > 1 && cw.freshStatus ? cw.freshStatus : cw.status);
   });
+  // O lock devolve o status REAL sob a trava (default = o status corrente do cenário).
+  cw.lockContractWorkspaceForInstrument.mockImplementation(async () => contractWith(cw.lockStatus ?? cw.status));
+  cw.lockStatus = null;
   cw.compareAndSetContractWorkspaceStatus.mockImplementation(async () => cw.casResult);
   // Transação simulada: o callback roda com um "tx" sentinela; exceção ⇒ rollback (propaga).
   cw.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({ __tx: true }));
@@ -267,13 +275,13 @@ describe("SEM-025 — planInstrumentStatusChange só admite o que a máquina def
 });
 
 describe("SEM-025 — createAddendum/createApostille recusam minuta e estados encerrados SEM nenhum efeito", () => {
-  it.each(REFUSING)("contrato %s: aditivo e apostilamento recusados antes de contar/gravar/gerar/registrar", async (status) => {
+  it.each(REFUSING)("contrato %s: aditivo e apostilamento recusados antes de travar/alocar/gravar/gerar/registrar", async (status) => {
     cw.status = status;
     await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusTransitionError);
     await expect(createApostille({ organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Maria", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusTransitionError);
-    for (const fn of [cw.countContractAddenda, cw.countContractApostilles, cw.insertContractAddendum, cw.insertContractApostille,
+    for (const fn of [cw.lockContractWorkspaceForInstrument, cw.nextAddendumSequenceUnderLock, cw.nextApostilleSequenceUnderLock, cw.insertContractAddendum, cw.insertContractApostille,
       cw.compareAndSetContractWorkspaceStatus, cw.transaction, cw.orchestrateMultiCopilot, cw.generateOfficialDocument,
       cw.insertContractWsDocument, item.recordProcessEvent]) {
       expect(fn).not.toHaveBeenCalled();
@@ -304,7 +312,7 @@ describe("SEM-025 — createAddendum/createApostille recusam minuta e estados en
     expect(p?.code).toBe("BAD_REQUEST");
     expect(p?.message).toContain("minuta → apostilado");
     expect(p?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
-    for (const fn of [cw.countContractAddenda, cw.countContractApostilles, cw.insertContractAddendum, cw.insertContractApostille,
+    for (const fn of [cw.lockContractWorkspaceForInstrument, cw.nextAddendumSequenceUnderLock, cw.nextApostilleSequenceUnderLock, cw.insertContractAddendum, cw.insertContractApostille,
       cw.compareAndSetContractWorkspaceStatus, cw.transaction, cw.orchestrateMultiCopilot, cw.generateOfficialDocument,
       cw.insertContractWsDocument, item.recordProcessEvent]) {
       expect(fn).not.toHaveBeenCalled();

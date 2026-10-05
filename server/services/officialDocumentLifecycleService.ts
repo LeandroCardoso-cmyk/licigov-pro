@@ -67,6 +67,8 @@ export interface CreateDocumentParams {
   businessDomain: DocumentBusinessDomain;
   documentType: OfficialDocumentType;
   origin: string;
+  /** R9 / SEM-040 — instrumento contratual formalizado pelo documento ⇒ linhagem PRÓPRIA (ver `computeLineageId`). */
+  instrumentId?: string | null;
   title: string;
   content: string;
   metadata?: Record<string, unknown>;
@@ -81,11 +83,11 @@ export interface CreateDocumentParams {
  * registra a timeline. Não gera binário nem toca no Storage.
  */
 export async function createDocument(params: CreateDocumentParams, executor?: OfficialDocsExecutor): Promise<OfficialDocument> {
-  const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType, origin: params.origin });
+  const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType, origin: params.origin, instrumentId: params.instrumentId });
 
   const makeDoc = (version: number): OfficialDocument => createOfficialDocument({
     tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType,
-    origin: params.origin, title: params.title, content: params.content, version, metadata: params.metadata,
+    origin: params.origin, instrumentId: params.instrumentId, title: params.title, content: params.content, version, metadata: params.metadata,
     author: params.author, status: params.status, correlationId: params.correlationId,
   });
   // C.4B.1 — evento sensível ao status: uma versão "emitido" é uma EMISSÃO oficial governada,
