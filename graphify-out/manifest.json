@@ -5915,8 +5915,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation-mysql-smoke.test.ts": {
-    "mtime": 1790881396.2848766,
-    "ast_hash": "c154a83f8dcd0f05124f58bd2855d87f",
+    "mtime": 1791296575.2320528,
+    "ast_hash": "9aa3940dde5cffe5c109e32714edb07b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-edital-generation.test.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1791290307.2120743,
-    "ast_hash": "c870641e9dcbd4a6227fb1fd01544182",
+    "mtime": 1791296554.8057718,
+    "ast_hash": "cf491df44973ead198769e8d18b38803",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -13195,8 +13195,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sem084-concurrency-replay-mysql-smoke.test.ts": {
-    "mtime": 1791290646.683284,
-    "ast_hash": "ab8383120df0b2729d2bb7a44943109e",
+    "mtime": 1791296504.2087297,
+    "ast_hash": "01faf2d1185537d85be449d657d943f2",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sem084-sem062-sem040-contract-instruments-mysql-smoke.test.ts": {
@@ -13365,8 +13365,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/transactionDeadlockRetry.test.ts": {
-    "mtime": 1791290373.0680714,
-    "ast_hash": "b2cbad1e62acd15896028c4eb5df1278",
+    "mtime": 1791296343.7003734,
+    "ast_hash": "a27cff4f63d36ea63fdd1f51f51834f6",
     "semantic_hash": ""
   },
   "server/config/signature.ts": {
@@ -13500,8 +13500,8 @@
     "semantic_hash": ""
   },
   "server/services/transactionDeadlockRetry.ts": {
-    "mtime": 1791289481.900111,
-    "ast_hash": "49d2dbcab7d47891e51d623fe8167dda",
+    "mtime": 1791296343.507744,
+    "ast_hash": "3c99027a756311ba8681102f31b1a2e3",
     "semantic_hash": ""
   },
   "shared/estimateLabel.ts": {

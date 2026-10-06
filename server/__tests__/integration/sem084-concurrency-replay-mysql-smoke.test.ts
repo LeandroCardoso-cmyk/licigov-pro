@@ -289,6 +289,84 @@ describe.skipIf(!DB)("SEM-084 — retry de deadlock (SEM084-A) e replay do coman
     expect((await rows("SELECT justification FROM contract_addenda WHERE id = ?", [instrumentId]))[0].justification).toBe("Parcial");
   }, 120_000);
 
+  // ─── SEM084-B — apostilamento: `expectedUpdatedAt` é PRÉ-CONDIÇÃO (CAS) da 1ª gravação, NÃO payload idempotente ───
+  it("E2 — apostilamento CONCLUÍDO + mesma chave + mesmos dados semânticos + expectedUpdatedAt DIFERENTE ⇒ mesmo apostilamento, nenhuma escrita, sem CONFLICT", async () => {
+    const id = await seedContract("e2");
+    const api = await caller(U.manager, ORG_A);
+    const loaded = await api.contractWorkspace.loadContract({ contractId: id });
+    const key = newKey();
+    const semantic = { contractId: id, kind: "gestor" as const, description: "Designação E2", newManager: "Gestora E2" };
+    const first = (await api.contractWorkspace.createApostille({ idempotencyKey: key, ...semantic, expectedUpdatedAt: loaded.workspace!.updatedAt })).apostille;
+    const snap = await snapshot(id);
+    // A revisão que o cliente viu mudou (o próprio apostilamento avançou o contrato) — ou o cliente mandou outra/nenhuma:
+    for (const expectedUpdatedAt of ["2020-01-01T00:00:00.000Z", (await api.contractWorkspace.loadContract({ contractId: id })).workspace!.updatedAt, undefined]) {
+      const again = (await api.contractWorkspace.createApostille({ idempotencyKey: key, ...semantic, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) })).apostille;
+      expect(again.id).toBe(first.id);
+    }
+    expect(await snapshot(id)).toBe(snap); // nenhuma escrita: contrato, instrumentos, termos e timeline intactos
+    expect(await n("SELECT COUNT(*) n FROM contract_ws_apostilles WHERE contract_id = ?", [id])).toBe(1);
+  }, 120_000);
+
+  it("E3 — apostilamento GRAVADO + termo FALHOU + mesma chave + mesmos dados semânticos + expectedUpdatedAt DIFERENTE ⇒ mesmo apostilamento; só o termo faltante é gerado", async () => {
+    const { instrumentIdForCommand } = await import("../../domain/contractInstruments");
+    const id = await seedContract("e3");
+    const api = await caller(U.manager, ORG_A);
+    const loaded = await api.contractWorkspace.loadContract({ contractId: id });
+    const key = newKey();
+    const semantic = { contractId: id, kind: "fiscal" as const, description: "Designação E3", newInspector: "Fiscal E3" };
+    const instrumentId = instrumentIdForCommand("apostilamento", { organizationId: ORG_A, contractId: id, actorUserId: U.manager, idempotencyKey: key });
+    const lineage = await instrumentLineage(ORG_A, id, "apostilamento", instrumentId);
+    const holder = await mysql.createConnection(DB!);
+    try {
+      await holder.query("SELECT GET_LOCK(?, 5)", [`odoc:${ORG_A}:${lineage}`.slice(0, 60)]);
+      const first = await err(api.contractWorkspace.createApostille({ idempotencyKey: key, ...semantic, expectedUpdatedAt: loaded.workspace!.updatedAt }));
+      expect(first?.message).toContain("OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE");
+    } finally {
+      await holder.query("SELECT RELEASE_LOCK(?)", [`odoc:${ORG_A}:${lineage}`.slice(0, 60)]).catch(() => {});
+      await holder.end().catch(() => {});
+    }
+    // Estado parcial: apostilamento + designação + status gravados; termo ausente.
+    expect((await rows("SELECT id FROM contract_ws_apostilles WHERE contract_id = ?", [id])).map((r) => r.id)).toEqual([instrumentId]);
+    expect(await n("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND lineage_id = ?", [ORG_A, lineage])).toBe(0);
+    const contractBefore = await rows("SELECT * FROM contract_workspaces WHERE id = ?", [id]);
+    const apostilleBefore = await rows("SELECT * FROM contract_ws_apostilles WHERE id = ?", [instrumentId]);
+    const changeEventsBefore = await n("SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND event_type = 'change'", [id]);
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND event_type = 'recommendation'", [id])).toBe(0);
+    // A revisão original ficou VELHA (a 1ª tentativa avançou o contrato): a retomada não reaplica o CAS.
+    const again = (await api.contractWorkspace.createApostille({ idempotencyKey: key, ...semantic, expectedUpdatedAt: "2020-01-01T00:00:00.000Z" })).apostille;
+    expect(again.id).toBe(instrumentId);
+    expect(await n("SELECT COUNT(*) n FROM contract_ws_apostilles WHERE contract_id = ?", [id])).toBe(1);
+    expect(await rows("SELECT * FROM contract_ws_apostilles WHERE id = ?", [instrumentId])).toEqual(apostilleBefore);
+    expect(await rows("SELECT * FROM contract_workspaces WHERE id = ?", [id])).toEqual(contractBefore); // contrato NÃO regravado
+    // Nenhum novo evento do INSTRUMENTO; exatamente um evento da geração do termo que faltava.
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND event_type = 'change'", [id])).toBe(changeEventsBefore);
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND event_type = 'recommendation'", [id])).toBe(1);
+    expect((await rows("SELECT version FROM official_documents WHERE tenant_id = ? AND lineage_id = ?", [ORG_A, lineage])).map((r) => r.version)).toEqual([1]);
+    expect(await n("SELECT COUNT(*) n FROM contract_ws_documents WHERE contract_id = ? AND kind = 'apostilamento'", [id])).toBe(1);
+  }, 120_000);
+
+  it("E4 — apostilamento: mesma chave mudando QUALQUER campo semântico (kind, description, newValue, newManager, newInspector) ⇒ CONFLICT; nada alterado", async () => {
+    const api = await caller(U.manager, ORG_A);
+    const cases: Array<{ tag: string; base: Record<string, unknown>; changed: Record<string, unknown>[] }> = [
+      { tag: "e4r", base: { kind: "reajuste", description: "Reajuste E4", newValue: 1100 },
+        changed: [{ kind: "reajuste", description: "Outra descrição", newValue: 1100 }, { kind: "reajuste", description: "Reajuste E4", newValue: 1200 }, { kind: "legal", description: "Reajuste E4", newValue: 1100 }] },
+      { tag: "e4g", base: { kind: "gestor", description: "G", newManager: "Gestora A" }, changed: [{ kind: "gestor", description: "G", newManager: "Gestora B" }] },
+      { tag: "e4f", base: { kind: "fiscal", description: "F", newInspector: "Fiscal A" }, changed: [{ kind: "fiscal", description: "F", newInspector: "Fiscal B" }] },
+    ];
+    for (const c of cases) {
+      const id = await seedContract(c.tag);
+      const key = newKey();
+      await api.contractWorkspace.createApostille({ idempotencyKey: key, contractId: id, ...(c.base as any) });
+      const snap = await snapshot(id);
+      for (const changed of c.changed) {
+        const e = await err(api.contractWorkspace.createApostille({ idempotencyKey: key, contractId: id, ...(changed as any) }));
+        expect(e?.code, JSON.stringify(changed)).toBe("CONFLICT");
+        expect(e?.message).toContain("INSTRUMENT_COMMAND_PAYLOAD_MISMATCH");
+      }
+      expect(await snapshot(id)).toBe(snap);
+    }
+  }, 180_000);
+
   it("F — 6 requisições CONCORRENTES com a MESMA chave ⇒ um aditivo, um termo v1, um evento; as demais devolvem o mesmo aditivo ou CONFLICT 'em andamento'", async () => {
     const id = await seedContract("f");
     const api = await caller(U.manager, ORG_A);

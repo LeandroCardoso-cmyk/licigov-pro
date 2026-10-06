@@ -782,7 +782,9 @@ async function createApostilleInstrument(params: {
 
 /**
  * Cria um apostilamento e gera o termo. SEM084-B — comando replay-safe pela chave de idempotência (ver `runInstrumentCommand`);
- * a revisão esperada do contrato (`expectedUpdatedAt`) vale só para a 1ª gravação (a retomada não regrava nada).
+ * a revisão esperada do contrato (`expectedUpdatedAt`) é PRÉ-CONDIÇÃO (CAS) da 1ª gravação, NÃO dado semântico do comando:
+ * fica fora do payload idempotente — a identidade do comando é a mesma qualquer que seja o ponto em que a tentativa
+ * anterior falhou — e a retomada de um apostilamento já gravado não regrava o contrato nem reaplica o CAS.
  */
 export async function createApostille(params: {
   organizationId: number; contractId: string; kind: ApostilleKind; description?: string;
@@ -798,7 +800,7 @@ export async function createApostille(params: {
   return runInstrumentCommand({
     op: "contract.createApostille", kind: "apostilamento", organizationId: params.organizationId, contractId: params.contractId,
     actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
-    payload: { ...normalized, expectedUpdatedAt: params.expectedUpdatedAt ?? null },
+    payload: normalized,
     findExisting: (id) => getContractApostilleById(id, params.contractId, params.organizationId),
     samePayload: (a) => a.kind === normalized.kind && a.description === normalized.description && Number(a.newValue) === Number(normalized.newValue)
       && a.newManager === normalized.newManager && a.newInspector === normalized.newInspector,
