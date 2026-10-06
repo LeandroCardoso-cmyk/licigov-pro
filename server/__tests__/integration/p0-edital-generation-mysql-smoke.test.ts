@@ -19,6 +19,7 @@ import { runMigrations } from "../../bootstrap";
 import { generateDFDDraft, generateDocument, generateNotice, getEditalSourceState } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { getGeneratedDocumentByKind } from "../../db/procurement";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -31,6 +32,9 @@ let conn: mysql.Connection;
 async function seedUpstream(org: number, pid: string, object: string) {
   await generateDFDDraft({ organizationId: org, processId: pid, object, correlationId: "p0-seed", idempotencyKey: `dfd-${org}-${pid}`, actorUserId: AUTHOR });
   await generateDocument({ organizationId: org, processId: pid, kind: "etp", object, correlationId: "p0-seed", idempotencyKey: `etp-${org}-${pid}`, actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("etp") });
+  // HD-01 (F4): TR/Edital NOVOS exigem "Itens da contratação" com quantidade prevista (decisão humana) — a fixture
+  // cadastra o item canônico; a recusa CANONICAL_ITEMS_REQUIRED continua valendo para quem não o cadastra.
+  await createCanonicalManualItem({ organizationId: org, processId: pid, actorUserId: AUTHOR, ensureProcess: true });
   await generateDocument({ organizationId: org, processId: pid, kind: "tr", object, correlationId: "p0-seed", idempotencyKey: `tr-${org}-${pid}`, actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("tr") });
 }
 
@@ -56,6 +60,9 @@ async function cleanup() {
     await conn.execute("DELETE FROM process_timeline WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM generated_documents WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM idempotency_keys WHERE organizationId = ?", [org]).catch(() => {});
+    for (const t of ["procurement_item_events", "procurement_item_source_links", "procurement_items", "procurement_processes"]) {
+      await conn.execute(`DELETE FROM \`${t}\` WHERE organization_id = ?`, [org]).catch(() => {});
+    }
   }
 }
 
