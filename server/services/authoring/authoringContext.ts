@@ -20,10 +20,10 @@
  * Contexto Canônico: processo com Itens da contratação ⇒ ETP/TR (e o Edital, em `editalContext`) consomem a
  * MESMA projeção (`canonicalDocumentItems`): quantidade = PREVISTA, nunca a da cotação.
  */
-import { getProcess, listIntelligentItems, getGeneratedDocumentByKind } from "../../db/procurement";
+import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
-  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantity,
+  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
   type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
 import { formatBRL, reaisToCents } from "../../domain/money";
@@ -31,7 +31,10 @@ import { draftContentHash } from "../../domain/generatedDocument";
 import { canonicalDigest, selectDocumentExcerpt, sha256Hex, type CanonicalValue } from "../../domain/canonicalJson";
 import { listProcurementItems } from "../../db/procurementItems";
 import { resolveProcurementContext } from "../canonicalContextService";
+import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
+import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
+import { globalEstimateLabel } from "../../../shared/estimateLabel";
 
 export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
 
@@ -48,6 +51,9 @@ export interface UpstreamDoc {
   readonly content: string;
   /** "import" quando o rascunho veio de um documento importado (informativo; não muda o tratamento). */
   readonly origin: "import" | "generated" | "manual" | null;
+  /** R9 / SEM-039 — autoridade da fonte consumida (emitido > aprovado > rascunho); ausente em chamadores legados. */
+  readonly authority?: UpstreamAuthority;
+  readonly version?: number | null;
 }
 
 /** Cotação consumida pela autoria (apenas campos renderizados). */
@@ -126,6 +132,10 @@ export interface DocumentAuthoringContext {
    * sem Itens da contratação). > 0 ⇒ TR/Edital fail-closed: quantidade cotada nunca vira necessidade.
    */
   readonly legacyQuotedItemCount: number;
+  /** R9 / SEM-029 — objeto digitado que DIVERGE de `process.object` (ignorado; mudar o objeto é ação explícita no processo). */
+  readonly objectProposal: { current: string; proposed: string; source: "client_input" } | null;
+  /** R9 / SEM-047 — hash POR FONTE (conteúdo integral da fonte autoritativa); gravado como `srcd:` na geração. */
+  readonly sourceDigests: Partial<Record<SourceKey, string>>;
 }
 
 function short(hash: string | null): string {
@@ -156,7 +166,12 @@ const sortQuotes = (qs: readonly ContextQuote[]) => [...qs].sort((a, b) => (quot
  * Builder PURO (sem IO, determinístico): snapshot canônico → prompt + quadro + digest.
  */
 export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): DocumentAuthoringContext {
-  const objeto = input.object?.trim() || input.processObject?.trim() || "";
+  // R9 / SEM-029 — o objeto AUTORITATIVO é `process.object`. O objeto digitado no navegador só é usado quando o processo
+  // não tem objeto (legado); se diverge, é uma PROPOSTA ignorada (exposta em `objectProposal`), nunca 2ª autoridade.
+  const objeto = input.processObject?.trim() || input.object?.trim() || "";
+  const proposedObject = input.object?.trim() ?? "";
+  const objectProposal = input.processObject?.trim() && proposedObject && proposedObject !== input.processObject.trim()
+    ? { current: input.processObject.trim(), proposed: proposedObject, source: "client_input" as const } : null;
   const dfd = docSnapshot(input.dfd);
   const etp = input.kind === "tr" ? docSnapshot(input.etp) : { snap: null, excerpt: null };
   const canonical = input.canonical ?? null;
@@ -208,7 +223,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       const cov = ex.coverage === "full"
         ? "cobertura: integral"
         : `cobertura: PARCIAL — ${ex.usedChars} de ${ex.totalChars} caracteres; todas as ${ex.sections.length} seção(ões) representadas`;
-      lines.push(`## Base — ${label} (estado: ${doc.status ?? "?"}${doc.origin === "import" ? ", importado e revisado" : ""}; ${cov})`);
+      const state = doc.authority ? authorityLabel(doc) : (doc.status ?? "?");
+      lines.push(`## Base — ${label} (estado: ${state}${doc.origin === "import" ? ", importado e revisado" : ""}; ${cov})`);
       lines.push(ex.text, "");
     } else {
       missing.push(key);
@@ -240,7 +256,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     lines.push(undefinedQty.size > 0
       // Estimativa parcial NUNCA é apresentada como global (e a quantidade da Pesquisa nunca completa a lacuna).
       ? `- Valor estimado global: [REVISAR: ${undefinedQty.size} item(ns) sem quantidade prevista em "Itens da contratação" — estimativa não calculada; NÃO inferir quantidades]`
-      : `- Valor estimado global (calculado pelo sistema): ${formatBRL(estimate.globalTotalCents)}`, "");
+      : `- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`, "");
     if (undefinedQty.size > 0) missing.push("quantidade_prevista");
   } else {
     missing.push("itens");
@@ -261,8 +277,20 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     dfd: versionOf(input.dfd, dfd.excerpt?.coverage ?? null),
     etp: versionOf(input.kind === "tr" ? input.etp : null, etp.excerpt?.coverage ?? null),
   };
+  // R9 / SEM-047 — hash POR FONTE: conteúdo INTEGRAL (não o recorte), sem contagem de pendentes nem status/origem.
+  const docHash = (d: UpstreamDoc | null) => (d?.present && d.contentHash ? d.contentHash.slice(0, 12) : "ausente");
+  const itemsSnap = snapshot as { items?: unknown; qs?: unknown; missingPlanned?: unknown; unlinked?: unknown };
+  const sourceDigests: Partial<Record<SourceKey, string>> = {
+    processo: sourceHash({ obj: objeto, pn: input.processNumber ?? null }),
+    dfd: docHash(input.dfd),
+    ...(input.kind === "tr" ? { etp: docHash(input.etp) } : {}),
+    itens: sourceHash({ items: itemsSnap.items ?? [], qs: itemsSnap.qs ?? null, mp: itemsSnap.missingPlanned ?? null, un: itemsSnap.unlinked ?? null }),
+  };
   const lineageMarkers = [
     `srcdigest:${sourcesDigest.slice(0, 16)}`,
+    ...sourceDigestMarkers(sourceDigests),
+    authorityMarker("dfd", input.dfd),
+    ...(input.kind === "tr" ? [authorityMarker("etp", input.etp)] : []),
     `ctx:${AUTHORING_CONTEXT_VERSION}`,
     `base:dfd@${short(sourceVersions.dfd.contentHash)}`,
     ...(sourceVersions.dfd.coverage ? [`coverage:dfd=${sourceVersions.dfd.coverage}`] : []),
@@ -277,21 +305,26 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     contractVersion: AUTHORING_CONTEXT_VERSION, kind: input.kind,
     promptContext: lines.join("\n"),
     usedSources, missing, sourcesDigest, snapshot, sourceVersions, lineageMarkers,
-    authoritativeBlock: input.kind === "tr"
+    // R9 / SEM-080 — o ETP também traz o quadro autoritativo quando há Itens da contratação (quantidade PREVISTA);
+    // no modo legado o ETP não recebe quadro (a quantidade seria a cotada — SEM-008).
+    authoritativeBlock: input.kind === "tr" || canonical
       ? renderAuthoritativeItemsBlock(estimate, canonical ? { quantitySource: "canonical_planned" } : {})
       : null,
     estimate, pendingItemCount: input.pendingItemCount,
     quantitySource: canonical ? "canonical_planned" : "legacy", canonical,
     legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
+    objectProposal,
+    sourceDigests,
   };
 }
 
 /** Texto da quantidade de um item no prompt: PREVISTA no modo canônico ("[a definir]" se ausente); legado = cotação. */
 function canonicalQuantityText(r: { id: string; quantity: number; unit: string }, canonical: boolean, undefinedQty: ReadonlySet<string>): string {
   // R6 / PR-13 (SEM-008): no modo legado a quantidade é a da COTAÇÃO — dita como tal, nunca como necessidade.
-  if (!canonical) return `${formatQuantity(r.quantity)} ${r.unit} (quantidade da cotação — não confirmada como necessidade)`;
+  // R10 / SEM-090 — quantidade ausente (0 armazenado) nunca é dita como "0".
+  if (!canonical) return `${formatQuantityOrReview(r.quantity)} ${r.unit} (quantidade da cotação — não confirmada como necessidade)`;
   if (undefinedQty.has(r.id)) return `quantidade prevista: [a definir] (${r.unit}) — NÃO inferir nem usar a quantidade da Pesquisa`;
-  return `${formatQuantity(r.quantity)} ${r.unit} (quantidade prevista)`;
+  return `${formatQuantityOrReview(r.quantity)} ${r.unit} (quantidade prevista)`;
 }
 
 /**
@@ -324,6 +357,7 @@ export function canonicalDocumentItems(
       id: it.key, description, unit: String(it.unit.value ?? ""),
       quantity: planned !== null && planned > 0 ? planned : 0,
       averagePriceCents: it.priceContext.unitReferencePriceCents ?? 0,
+      priceBlockedReason: it.priceContext.priceBlockedReason,
       quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
       confirmedCatalogCode: catalogs.length === 1 ? catalogs[0] : null,
       suggestedCatalogCode: evid.find((e) => e.suggestedCatalogCode)?.suggestedCatalogCode ?? null,
@@ -357,19 +391,14 @@ export async function resolveCanonicalDocumentItems(
   return canonicalDocumentItems(ctx, approved);
 }
 
-function draftOrigin(sources: readonly string[]): "import" | "generated" | "manual" {
-  if (sources.includes("origem:import")) return "import";
-  if (sources.some((s) => s === "edicao_manual" || s === "edicao_humana")) return "manual";
-  return "generated";
-}
-
-function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>): UpstreamDoc | null {
+function toUpstream(doc: AuthoritativeUpstream | null): UpstreamDoc | null {
   if (!doc) return null;
   const present = !!doc.content && doc.content.trim().length > 0;
   return {
     present, status: doc.status ?? null,
     contentHash: present ? draftContentHash(doc.content) : null,
-    content: doc.content ?? "", origin: draftOrigin(doc.sources ?? []),
+    content: doc.content ?? "", origin: doc.origin,
+    authority: doc.authority, version: doc.version,
   };
 }
 
@@ -388,8 +417,9 @@ export async function resolveDocumentAuthoringContext(params: {
 }): Promise<DocumentAuthoringContext> {
   const [process, dfd, etp, items] = await Promise.all([
     getProcess(params.processId, params.organizationId),
-    getGeneratedDocumentByKind(params.processId, params.organizationId, "dfd"),
-    params.kind === "tr" ? getGeneratedDocumentByKind(params.processId, params.organizationId, "etp") : Promise.resolve(null),
+    // R9 / SEM-039 — fonte AUTORITATIVA a montante (versão emitida quando existir; senão o rascunho, rotulado).
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "dfd"),
+    params.kind === "tr" ? resolveAuthoritativeUpstream(params.organizationId, params.processId, "etp") : Promise.resolve(null),
     listIntelligentItems(params.processId, params.organizationId),
   ]);
   const approved = items.filter((i) => i.status === "aprovado");

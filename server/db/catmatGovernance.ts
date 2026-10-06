@@ -211,3 +211,37 @@ export async function getLatestCatmatDecisionsForItems(
   for (const r of rows) if (!out.has(r.itemId)) out.set(r.itemId, mapRow(r));
   return out;
 }
+
+/**
+ * SEM-061 — IMPACTO ORG-WIDE de trocar o limiar (somente leitura, tenant-scoped). O limiar é registrado em cada decisão
+ * futura e é pré-condição (fail-closed) delas; NÃO reavalia as decisões já gravadas (ledger imutável). O resumo conta, entre
+ * as decisões VIGENTES (última linha de cada item), quantas foram tomadas sob outro limiar — para o gestor confirmar a
+ * mudança sabendo o alcance. Não decide política: só informa números.
+ */
+export interface CatmatThresholdImpact {
+  readonly itemsWithCurrentDecision: number;
+  readonly byDecision: Readonly<Record<CATMATGovernanceDecision, number>>;
+  readonly currentDecisionsUnderOtherThreshold: number;
+  readonly currentDecisionsWithoutRecordedThreshold: number;
+  readonly totalLedgerEntries: number;
+}
+
+export async function summarizeCatmatThresholdImpact(orgId: number, proposedMinScore: number): Promise<CatmatThresholdImpact> {
+  const byDecision: Record<CATMATGovernanceDecision, number> = { confirmado: 0, rejeitado: 0, substituido: 0, sem_correspondencia_segura: 0 };
+  const empty: CatmatThresholdImpact = { itemsWithCurrentDecision: 0, byDecision, currentDecisionsUnderOtherThreshold: 0, currentDecisionsWithoutRecordedThreshold: 0, totalLedgerEntries: 0 };
+  const db = await getDb();
+  if (!db) return empty;
+  const rows = await db.select().from(catmatDecisionsTable)
+    .where(eq(catmatDecisionsTable.organizationId, orgId))
+    .orderBy(desc(catmatDecisionsTable.id));
+  const seen = new Set<string>();
+  let other = 0; let unrecorded = 0;
+  for (const r of rows) {
+    if (seen.has(r.itemId)) continue;
+    seen.add(r.itemId);
+    byDecision[r.decision as CATMATGovernanceDecision] = (byDecision[r.decision as CATMATGovernanceDecision] ?? 0) + 1;
+    if (r.thresholdMinScore === null || r.thresholdMinScore === undefined) unrecorded++;
+    else if (Math.abs(Number(r.thresholdMinScore) - proposedMinScore) > 0.000005) other++;
+  }
+  return { itemsWithCurrentDecision: seen.size, byDecision, currentDecisionsUnderOtherThreshold: other, currentDecisionsWithoutRecordedThreshold: unrecorded, totalLedgerEntries: rows.length };
+}

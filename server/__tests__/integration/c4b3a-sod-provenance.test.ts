@@ -21,6 +21,11 @@ vi.mock("../../services/officialDocumentLifecycleService", () => ({
 const getGeneratedDocumentByKind = vi.fn();
 vi.mock("../../db/procurement", () => ({
   getGeneratedDocumentByKind: (...a: unknown[]) => getGeneratedDocumentByKind(...a),
+  // R7 / PR-15 (SEM-013) — a emissão congela nº do processo/objeto e a identidade institucional da época.
+  getProcess: vi.fn(async () => ({ processNumber: "SINT/0001", object: "Objeto sintético" })),
+}));
+vi.mock("../../services/institutionalIdentityService", () => ({
+  snapshotInstitutionalIdentity: vi.fn(async () => ({ snapshot: { organizationName: "Órgão Sintético" }, fingerprint: "fp-sint" })),
 }));
 
 const insertOfficialPromotion = vi.fn(async () => undefined);
@@ -39,6 +44,15 @@ vi.mock("../../services/idempotencyService", () => ({
   failIdempotencyKey: (...a: unknown[]) => failIdempotencyKey(...a),
 }));
 
+// R9 / SEM-057 — pré-condições semânticas da emissão: fontes atuais e nenhuma versão emitida anterior (fixture).
+vi.mock("../../services/procurementProcessService", () => ({
+  getAuthoringSourceState: vi.fn(async () => ({ state: "current", changedSources: [] })),
+  getEditalSourceState: vi.fn(async () => ({ state: "current", changedSources: [] })),
+}));
+vi.mock("../../db/officialDocuments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
+  getLatestEmittedByOrigin: vi.fn(async () => null),
+}));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));

@@ -220,9 +220,23 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
     await expectDeniedWithoutEffect("viewer publish (ratificado)", async () => publishCall(await caller(viewer, ORG_A)), { code: "FORBIDDEN", message: ROLE_DENIED("manager") });
     await expectDeniedWithoutEffect("operator publish (ratificado)", async () => publishCall(await caller(operator, ORG_A)), { code: "FORBIDDEN", message: ROLE_DENIED("manager") });
 
+    // NEW-029: ratificado, mas com checklist obrigatório sem validação ⇒ publicação recusada sem efeito.
+    const before = Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n);
+    await expect(publishCall(await caller(manager, ORG_A))).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/CHECKLIST_(PENDING|NOT_CONFIGURED)/) });
+    expect(Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n)).toBe(before);
+    // fixture: checklist configurado e validado com evidência real (upload do servidor + hash).
+    await (await caller(manager, ORG_A)).directProcurement.validateDocuments({ workspaceId: wsId });
+    await conn.execute(
+      "UPDATE required_documents SET status = 'validado', content_hash = REPEAT('a', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-doc.pdf') WHERE workspace_id = ? AND organization_id = ?",
+      [wsId, ORG_A],
+    );
+
     const out = await publishCall(await caller(manager, ORG_A));
-    expect(out.publications.map(p => p.kind)).toEqual(expect.arrayContaining(["aviso", "ratificacao", "extrato_contrato"]));
-    expect(Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n)).toBeGreaterThanOrEqual(3);
+    // R9 / SEM-064 — reescrito: antes esperava "extrato_contrato" sempre (extrato de contrato inexistente). Agora o
+    // extrato só sai sob pedido e com contrato registrado vinculado (coberto em sem042-sem064-direct-mysql-smoke.test.ts).
+    expect(out.publications.map(p => p.kind).sort()).toEqual(["aviso", "ratificacao"]);
+    expect(out.contractExtract).toBe("not_requested");
+    expect(Number((await one(`SELECT COUNT(*) n FROM generated_publications WHERE workspace_id = ? AND organization_id = ?`, [wsId, ORG_A])).n)).toBe(2);
     expect((await one(`SELECT current_stage FROM direct_procurement_workspaces WHERE id = ?`, [wsId])).current_stage).toBe("PUBLICATION");
   }, 120_000);
 

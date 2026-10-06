@@ -33,7 +33,8 @@ export function PackageDocumentsTab({ documents, items, platformName, downloadPe
     <Card>
       <CardHeader>
         <CardTitle>Documentos Gerados</CardTitle>
-        <CardDescription>Baixe os documentos individualmente ou todos de uma vez</CardDescription>
+        {/* R9 / SEM-072 — a lista e o ZIP contêm só a versão APROVADA vigente de cada documento. */}
+        <CardDescription>Somente a versão aprovada vigente de cada documento entra no pacote</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <Button onClick={onDownloadAll} className="w-full" size="lg" disabled={downloadPending}>
@@ -42,6 +43,11 @@ export function PackageDocumentsTab({ documents, items, platformName, downloadPe
         </Button>
 
         <div className="space-y-2">
+          {documents.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nenhum documento aprovado ainda — aprove os documentos para incluí-los no pacote.
+            </p>
+          )}
           {documents.map((doc) => (
             <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
               <div className="flex items-center gap-3">

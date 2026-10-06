@@ -14,6 +14,8 @@ import {
 } from "../services/directContractPackage";
 import { validateCNPJ, consultCNPJ } from "../services/cnpjValidator";
 import { generateAuditReport } from "../services/directContractAuditReport";
+import { getEstimatedActiveValueCents } from "../db/directContractsValueKpi";
+import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import { runDirectContractShadow } from "../services/directContractShadowService";
 import type { DirectContractDocType } from "../domain/directContractShadow";
 import { tenantProcedure, router } from "../_core/trpc";
@@ -287,6 +289,9 @@ export const directContractsRouter = router({
         };
         auditDetails = {
           referenceMode: "legacy",
+          // R8 / PR-19 scaffolding (SEM-010): o catálogo legado e o mapeamento por substring seguem SOB REVISÃO
+          // JURÍDICA — registrado na auditoria; nenhuma regra é corrigida por inferência.
+          legalCatalogPolicy: legalPolicyMarker("SEM-010_DIRECT_CONTRACT_LEGAL_CATALOG"),
           legalArticleId: input.legalArticleId,
           type: input.type, number: input.number, year: input.year,
         };
@@ -1200,7 +1205,12 @@ export const directContractsRouter = router({
   analytics: router({
     // Buscar estatísticas gerais (RC-SEC-PR-A: agregação isolada por organização)
     getOverview: tenantProcedure.query(async ({ ctx }) => {
-      return await getDirectContractsOverviewForOrganization(ctx.organizationId);
+      // R6 / PR-14 (SEM-012): KPI rotulado como valor ESTIMADO, sem rascunho/cancelada (centavos).
+      const [overview, estimatedValueActiveCents] = await Promise.all([
+        getDirectContractsOverviewForOrganization(ctx.organizationId),
+        getEstimatedActiveValueCents(ctx.organizationId),
+      ]);
+      return overview ? { ...overview, estimatedValueActiveCents } : null;
     }),
 
     // Buscar dados para gráficos

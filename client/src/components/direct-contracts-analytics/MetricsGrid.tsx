@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, DollarSign, Clock, CheckCircle } from "lucide-react";
+import { formatCentsBRL, MONEY_MEANING } from "@/lib/money";
 
 interface Overview {
   total?: number;
   totalValue?: number;
+  /** R6 / PR-14 — valor ESTIMADO (centavos) das contratações em curso/concluídas (sem rascunho/cancelada). */
+  estimatedValueActiveCents?: number;
   avgCompletionTime?: number;
   approvalRate?: number;
   byType?: { type: string; count: number }[];
@@ -34,14 +37,14 @@ export function MetricsGrid({ overview }: Props) {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Valor Total Contratado</CardTitle>
+          <CardTitle className="text-sm font-medium">{MONEY_MEANING.estimated} (em curso e concluídas)</CardTitle>
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">
-            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(overview?.totalValue ?? 0)}
+            {formatCentsBRL(overview?.estimatedValueActiveCents ?? 0)}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Soma de todas as contratações</p>
+          <p className="text-xs text-muted-foreground mt-1">Soma dos valores estimados; exclui rascunhos e canceladas (não é valor contratado)</p>
         </CardContent>
       </Card>
 

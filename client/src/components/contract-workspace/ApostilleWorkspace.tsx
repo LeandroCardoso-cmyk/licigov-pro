@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { APOSTILLE_KIND_LABELS } from "./labels";
 
 /**
@@ -24,15 +25,18 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
   const [newManager, setNewManager] = React.useState("");
   const [newInspector, setNewInspector] = React.useState("");
 
+  // SEM084-B — uma chave por tentativa lógica: o retry (inclusive após erro) reusa a MESMA chave e converge para o
+  // mesmo apostilamento; só um novo registro, depois do sucesso, recebe chave nova.
+  const { key: idempotencyKey, rotate } = useIdempotencyKey();
   const create = trpc.contractWorkspace.createApostille.useMutation({
-    onSuccess: () => { void utils.contractWorkspace.loadContract.invalidate({ contractId }); setDescription(""); setNewValue(""); setNewManager(""); setNewInspector(""); },
+    onSuccess: () => { rotate(); void utils.contractWorkspace.loadContract.invalidate({ contractId }); setDescription(""); setNewValue(""); setNewManager(""); setNewInspector(""); },
   });
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">Apostilamentos</h3>
 
-      <form onSubmit={(e) => { e.preventDefault(); create.mutate({ contractId, kind, description: description || undefined, newValue: newValue ? Number(newValue) : undefined, newManager: newManager || undefined, newInspector: newInspector || undefined }); }} className="space-y-2">
+      <form onSubmit={(e) => { e.preventDefault(); create.mutate({ contractId, kind, description: description || undefined, newValue: newValue ? Number(newValue) : undefined, newManager: newManager || undefined, newInspector: newInspector || undefined, idempotencyKey }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {KINDS.map((k) => (
             <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${kind === k ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{APOSTILLE_KIND_LABELS[k]}</button>
@@ -45,6 +49,8 @@ export default function ApostilleWorkspace({ contractId, apostilles = [] }: Apos
         <button type="submit" disabled={create.isPending} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Registrar apostilamento + minuta"}
         </button>
+        {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
+        {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
       </form>
 
       {apostilles.length > 0 && (

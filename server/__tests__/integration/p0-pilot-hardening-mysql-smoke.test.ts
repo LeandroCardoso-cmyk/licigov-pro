@@ -51,7 +51,8 @@ import { getImportSession, updateSessionStatus } from "../../services/fileIngest
 import { getStagingItems, bulkReviewStagingItems } from "../../services/importStagingService";
 import { promoteApprovedSessionToDomain } from "../../services/importPromotionService";
 import {
-  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity, recoverStaleEnrichment,
+  importManualPriceResearch, applyItemSourceUpdate as applyItemSourceUpdateWithToken, previewItemSourceUpdate,
+  resolveItemIdentity, recoverStaleEnrichment,
 } from "../../services/itemMaterializationService";
 import {
   getDocumentIntake, saveDocumentReview, approveDocumentStaging, promoteDocumentToDraft, rejectDocumentStaging, getDocumentReviewHistory,
@@ -117,6 +118,12 @@ async function approveAllItems(org: number, processId: string) {
   for (const it of await listIntelligentItems(processId, org)) {
     await transitionItemStatusCAS({ id: it.id, orgId: org, fromStatuses: ["pendente", "em_analise"], toStatus: "aprovado", approvedBy: U2, updatedAt: new Date().toISOString() });
   }
+}
+
+// R9 / SEM-052 (reescrito) — aplicar exige o token da PRÉVIA confirmada; o fluxo humano real é prévia → confirmação.
+async function applyItemSourceUpdate(p: { organizationId: number; itemId: string; actorUserId: number; correlationId: string }) {
+  const preview = await previewItemSourceUpdate({ organizationId: p.organizationId, itemId: p.itemId });
+  return applyItemSourceUpdateWithToken({ ...p, expectedStateToken: preview.expectedStateToken });
 }
 
 const manual = (org: number, processId: string, text: string) =>
@@ -402,7 +409,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     await conn.execute("DELETE FROM users WHERE id=?", [userId]).catch(() => {});
   }, 60_000);
 
-  it("18b) issueProcess (risco D) NÃO emite: operator ⇒ FORBIDDEN; manager sem Edital OFICIAL ⇒ PRECONDITION_FAILED; com emissão oficial ⇒ só projeta a etapa", async () => {
+  it("18b) issueProcess (risco D) NÃO emite: operator ⇒ FORBIDDEN; manager sem Edital OFICIAL ⇒ PRECONDITION_FAILED; sem ETP/TR oficiais ⇒ recusa precisa (R10/SEM-087 B); com os três ⇒ só projeta a etapa", async () => {
     const mk = async (role: string) => {
       const [u] = await conn.execute<mysql.ResultSetHeader>("INSERT INTO users (openId, name, email) VALUES (?, 'Hard', ?)", [`hard-${role}-${Date.now()}`, `hard-${role}-${Date.now()}@teste.local`]);
       await conn.execute("INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, 1)", [ORG, u.insertId, role]);
@@ -417,11 +424,22 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     await expect(as(opId).procurementProcess.issueProcess({ processId: pid })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(as(mgrId).procurementProcess.issueProcess({ processId: pid })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(await stage()).toEqual(before);
-    // Emissão OFICIAL do Edital (fluxo governado coberto pelo smoke C.4B.1) representada pelo seu ledger.
-    await conn.execute(
-      "INSERT INTO official_document_promotions (organization_id, process_id, official_document_id, lineage_id, document_kind, version, content_hash, actor_user_id, idempotency_key) VALUES (?, ?, 'off-ed-1', 'lin-ed-1', 'edital', 1, ?, ?, ?)",
-      [ORG, pid, "e".repeat(64), mgrId, `issue-${pid}`],
+    // Emissão OFICIAL representada pelo ledger (fluxo governado coberto pelo smoke C.4B.1).
+    const promote = (kind: string, n: number) => conn.execute(
+      "INSERT INTO official_document_promotions (organization_id, process_id, official_document_id, lineage_id, document_kind, version, content_hash, actor_user_id, idempotency_key) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)",
+      [ORG, pid, `off-${kind}-1`, `lin-${kind}-1`, kind, `${n}`.repeat(64), mgrId, `issue-${kind}-${pid}`],
     );
+    // R10 / SEM-087 (B) — só o Edital oficial NÃO basta: ETP e TR também precisam estar emitidos (recusa precisa, zero escrita).
+    await promote("edital", 1);
+    const noEtpTr = as(mgrId).procurementProcess.issueProcess({ processId: pid });
+    await expect(noEtpTr).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/PROCESS_ISSUE_REQUIRES_EMITTED_DOCUMENTS.*ETP sem versão OFICIAL emitida; TR sem versão OFICIAL emitida/) });
+    expect(await stage()).toEqual(before);
+    const timelineBefore = (await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM process_timeline WHERE process_id=?", [pid]))[0][0] as any;
+    await promote("etp", 2);
+    await expect(as(mgrId).procurementProcess.issueProcess({ processId: pid })).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/TR sem versão OFICIAL emitida/) });
+    expect(await stage()).toEqual(before);
+    expect(((await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM process_timeline WHERE process_id=?", [pid]))[0][0] as any).n).toBe(timelineBefore.n);
+    await promote("tr", 3);
     const r = await as(mgrId).procurementProcess.issueProcess({ processId: pid });
     expect(r).toMatchObject({ status: "emitido", officialEditalVersion: 1 });
     expect(await stage()).toEqual(["ISSUED", "emitido"]);

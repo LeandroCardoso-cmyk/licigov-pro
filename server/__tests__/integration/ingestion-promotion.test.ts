@@ -38,6 +38,7 @@ vi.mock("../../services/importStagingService", () => ({
 vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn() }));
 vi.mock("../../services/importPromotionService", () => ({
   promoteApprovedSessionToDomain: vi.fn(),
+  previewSessionPromotion: vi.fn(),
 }));
 
 import { ingestionRouter } from "../../routers/ingestionRouter";
@@ -100,5 +101,34 @@ describe("ingestion.promoteSession — contrato", () => {
     } as any);
     await expect(caller().promoteSession(input())).rejects.toBeInstanceOf(TRPCError);
     await expect(caller().promoteSession(input())).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+// R9 / SEM-053 — prévia SOMENTE LEITURA do impacto (mesmo escopo/RBAC da promoção).
+describe("ingestion.previewPromotion — contrato (R9 / SEM-053)", () => {
+  const preview = {
+    sessionId: 100, quotesToPromote: 3,
+    intelligentItems: { create: 1, merge: 1, unchanged: 0, preserved: 0, sourceChanged: 1, sourceChangedApproved: 1, reviewRequired: 0, reconciled: 0 },
+    merges: [], sourceChanges: [], detailLimit: 50,
+  };
+
+  it("manager: delega ao serviço com tenant do contexto e processo validado; não promove", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(session() as any);
+    vi.mocked(promo.previewSessionPromotion).mockResolvedValue(preview);
+    const r = await caller().previewPromotion({ sessionId: 100, procurementProcessId: "P-1" });
+    expect(r).toEqual(preview);
+    expect(promo.previewSessionPromotion).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 100, organizationId: 1, procurementProcessId: "P-1" }));
+    expect(promo.promoteApprovedSessionToDomain).not.toHaveBeenCalled();
+  });
+
+  it("processo divergente → NOT_FOUND; operador → FORBIDDEN", async () => {
+    vi.mocked(ingestion.getImportSession).mockResolvedValue(session({ procurementProcessId: "P-1" }) as any);
+    await expect(caller().previewPromotion({ sessionId: 100, procurementProcessId: "P-2" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    vi.mocked(tenant.resolveTenantForUser).mockResolvedValue({
+      organizationId: 1,
+      membership: { id: 1, organizationId: 1, userId: 1, role: "operator", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+    } as any);
+    await expect(caller().previewPromotion({ sessionId: 100, procurementProcessId: "P-1" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(promo.previewSessionPromotion).not.toHaveBeenCalled();
   });
 });

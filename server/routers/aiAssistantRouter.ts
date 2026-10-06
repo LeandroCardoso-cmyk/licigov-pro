@@ -27,7 +27,8 @@ async function buildContext(processId: number, organizationId: number): Promise<
   return {
     name: process.name,
     object: process.object || "",
-    estimatedValue: process.estimatedValue || 0,
+    // SEM-036 — nunca fabricar valor: sem estimativa registrada o contexto leva `null` ("não informado"), não R$ 0,00.
+    estimatedValue: process.estimatedValue && process.estimatedValue > 0 ? process.estimatedValue : null,
     modality: process.modality,
     category: process.category,
     dfdContent: get("dfd"),
@@ -44,11 +45,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestModality(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: "solicitou sugestão de modalidade ao assistente de IA",
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 
@@ -57,11 +58,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestRisks(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: "solicitou análise de riscos ao assistente de IA",
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 
@@ -70,11 +71,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestClauses(context, input.clauseType, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: `solicitou sugestão de cláusula "${input.clauseType}" ao assistente de IA`,
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 
@@ -83,11 +84,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestTechnicalRequirements(context, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: "solicitou sugestão de exigências técnicas ao assistente de IA",
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 
@@ -96,11 +97,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await suggestLegalBasis(context, input.question, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: "solicitou fundamentação jurídica ao assistente de IA",
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 
@@ -113,11 +114,11 @@ export const aiAssistantRouter = router({
     .mutation(async ({ ctx, input }) => {
       const context = await buildContext(input.processId, ctx.organizationId);
       const suggestion = await improveText(context, input.docType, input.textSnippet, { organizationId: ctx.organizationId, correlationId: ctx.correlationId, userId: ctx.user.id });
-      await db.createActivityLog({
+      await db.createActivityLogForOrganization({
         processId: input.processId,
         userId: ctx.user.id,
         action: `solicitou melhoria de texto (${input.docType.toUpperCase()}) ao assistente de IA`,
-      });
+      }, ctx.organizationId);
       return { suggestion };
     }),
 });

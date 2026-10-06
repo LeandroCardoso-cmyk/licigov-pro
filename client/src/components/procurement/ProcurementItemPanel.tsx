@@ -4,6 +4,11 @@ import {
   catmatPayloadFingerprint, isRetryableCatmatError, selectCatmatKey,
   type CatmatDecisionPayload, type CatmatKeyState,
 } from "./catmatKeyPolicy";
+import { formatCentsBRL } from "@/lib/money";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
+import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
+import { approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
 
 /**
  * ProcurementItemPanel — REAL (wired to tRPC).
@@ -84,6 +89,11 @@ export default function ProcurementItemPanel({
 
   const genKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/-/g, "").slice(0, 48);
 
+  // SEM-061 — estado GOVERNADO do item (decisão vigente do ledger + limiar) que condiciona o "Confirmar".
+  const decisionsQuery = trpc.itemIntelligence.getCATMATDecisions.useQuery({ itemId }, { enabled: !!itemId, refetchOnWindowFocus: false });
+  const thresholdQuery = trpc.itemIntelligence.getCATMATThreshold.useQuery(undefined, { refetchOnWindowFocus: false });
+  const currentDecision = (decisionsQuery.data?.current ?? null) as CurrentCatmatDecisionUI | null;
+
   const decidirCATMAT = trpc.itemIntelligence.decidirCATMAT.useMutation({
     onSuccess: (res) => {
       keyStateRef.current = null; // sucesso rotaciona a tentativa lógica
@@ -97,6 +107,7 @@ export default function ProcurementItemPanel({
           : `Decisão registrada: ${d.decision}${d.catmatCode ? ` (${d.catmatCode})` : ""}.`,
       );
       invalidate();
+      void decisionsQuery.refetch();
     },
     onError: (err) => {
       // Outcome transitório (rede/INTERNAL/TIMEOUT) ou CONFLICT de "processing" (duplicata em voo) ⇒ o
@@ -148,11 +159,20 @@ export default function ProcurementItemPanel({
   };
   const justificationMissing = justification.trim().length === 0;
 
-  const approveItem = trpc.procurementProcess.approveItem.useMutation({
-    onSuccess: invalidate,
-  });
-
   const item = data?.item ?? null;
+  // R9 / SEM-052 — invalida também a lista do processo (status/fonte mudam após aprovar/aplicar).
+  const invalidateAll = () => {
+    invalidate();
+    if (item?.processId) utils.procurementProcess.listItems.invalidate({ processId: item.processId });
+  };
+  const approveItem = trpc.procurementProcess.approveItem.useMutation({
+    onSuccess: invalidateAll,
+  });
+  const [confirmingSourceUpdate, setConfirmingSourceUpdate] = React.useState<boolean>(false);
+  // R9 / SEM-054 — o que a aprovação confirmaria (servidor): bloqueio da fonte, referência canônica e outliers.
+  const governance = data?.governance ?? null;
+  const approve = approveButtonState(governance?.sourceState, approveItem.isPending);
+  const outliers = outlierSummary(governance?.priceOutliers);
 
   return (
     <aside className="flex h-full w-full max-w-md flex-col border-l border-border bg-card">
@@ -280,7 +300,10 @@ export default function ProcurementItemPanel({
               />
             </div>
 
-            {/* Candidatos CATMAT com score/rank/decisão */}
+            <p data-testid="catmat-current-decision" className="mt-2 text-xs font-medium text-foreground">
+              {currentDecisionText(currentDecision, !decisionsQuery.isLoading)}
+            </p>
+            {/* Candidatos CATMAT com score/rank (a decisão vigente vem do ledger, acima) */}
             {data.catmat.length > 0 && (
               <ul className="mt-3 space-y-2">
                 {data.catmat.map((c) => (
@@ -297,7 +320,15 @@ export default function ProcurementItemPanel({
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
-                    <p className="mt-0.5 text-muted-foreground">decisão: {c.decision}</p>
+                    <p className="mt-0.5 text-muted-foreground">sugestão do sistema (ainda não é decisão)</p>
+                    {(() => {
+                      const gate = confirmGate({
+                        candidateCode: c.catmatCode, current: currentDecision, currentLoaded: !decisionsQuery.isLoading,
+                        thresholdConfigured: thresholdQuery.data?.configured, pending: decidirCATMAT.isPending,
+                      });
+                      return (<>
+                    {gate.note && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{gate.note}</p>}
+                    {gate.reason && <p role="status" className="mt-1 text-[11px] text-muted-foreground">{gate.reason}</p>}
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
@@ -309,10 +340,11 @@ export default function ProcurementItemPanel({
                             catmatDescription: c.catmatDescription,
                           })
                         }
-                        disabled={decidirCATMAT.isPending}
+                        disabled={!gate.enabled}
+                        title={gate.reason ?? undefined}
                         className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                       >
-                        Confirmar
+                        {gate.label}
                       </button>
                       <button
                         type="button"
@@ -324,6 +356,8 @@ export default function ProcurementItemPanel({
                         Rejeitar
                       </button>
                     </div>
+                      </>);
+                    })()}
                   </li>
                 ))}
               </ul>
@@ -504,12 +538,67 @@ export default function ProcurementItemPanel({
             )}
           </Block>
 
-          {/* Ação final: aprovar item */}
-          <div className="px-5 py-4">
+          {/* Ação final: aprovar item — R9 / SEM-054: o servidor recusa fonte não vigente; a UI mostra o
+              motivo, a referência canônica que a aprovação confirmaria e as cotações fora da curva. */}
+          <div className="space-y-3 px-5 py-4">
+            {governance && (
+              <div className="rounded-md border border-border p-3 text-xs" data-testid="approval-impact">
+                <p className="text-muted-foreground">
+                  {item.status === "aprovado" ? "Preço de referência canônico vigente" : "Ao aprovar, o preço de referência canônico será"}
+                </p>
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {formatCentsBRL(governance.referencePriceCents)}
+                </p>
+                <p className="text-muted-foreground">
+                  Média de {governance.validQuoteCount} cotação(ões) válida(s).
+                </p>
+                {outliers.length > 0 ? (
+                  <div className="mt-2 text-orange-700 dark:text-orange-300">
+                    <p className="font-medium">{outliers.length} cotação(ões) fora da curva (&gt;50% da média) — compõem esta média:</p>
+                    <ul className="list-disc pl-4">
+                      {outliers.map((o) => <li key={o}>{o}</li>)}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-muted-foreground">Nenhuma cotação fora da curva.</p>
+                )}
+              </div>
+            )}
+            {approve.block && (
+              <div role="status" className="rounded-md border border-amber-400 p-3 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-300">
+                <p className="font-medium">Aprovação bloqueada</p>
+                <p>{approve.block.reason}</p>
+                {governance?.sourceStateReason && governance.sourceState === "source_changed" && (
+                  <p className="mt-1 text-muted-foreground">{governance.sourceStateReason}</p>
+                )}
+                {governance?.sourceState === "source_changed" && !confirmingSourceUpdate && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingSourceUpdate(true)}
+                    className="mt-2 rounded-md border border-amber-400 px-3 py-1 font-medium hover:bg-amber-50 dark:hover:bg-amber-950"
+                  >
+                    Revisar cotações atualizadas
+                  </button>
+                )}
+              </div>
+            )}
+            {confirmingSourceUpdate && governance?.sourceState === "source_changed" && (
+              <ItemSourceUpdateConfirm
+                itemId={item.id}
+                onClose={() => setConfirmingSourceUpdate(false)}
+                onApplied={invalidateAll}
+              />
+            )}
+            {approveItem.error && (
+              <p role="alert" className="text-xs text-destructive">
+                {domainErrorMessage(approveItem.error.message, "Não foi possível aprovar o item.")}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => approveItem.mutate({ itemId: item.id })}
-              disabled={approveItem.isPending}
+              disabled={approve.disabled}
+              title={approve.block?.reason}
               className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
               {approveItem.isPending ? "Aprovando..." : "Aprovar item"}

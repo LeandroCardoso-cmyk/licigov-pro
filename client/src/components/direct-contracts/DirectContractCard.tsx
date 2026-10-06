@@ -1,11 +1,13 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, CheckCircle, Clock } from "lucide-react";
+import { FileText, CheckCircle, Clock, type LucideIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatCentsBRL } from "@/lib/money";
 
-const STATUS_CONFIG: Record<string, { variant: any; label: string; icon: any }> = {
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
+const STATUS_CONFIG: Record<string, { variant: BadgeVariant; label: string; icon: LucideIcon }> = {
   draft: { variant: "secondary", label: "Rascunho", icon: Clock },
   approved: { variant: "default", label: "Aprovado", icon: CheckCircle },
   published: { variant: "outline", label: "Publicado", icon: FileText },
@@ -57,7 +59,7 @@ export function DirectContractCard({ contract, onClick }: Props) {
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-green-600">
-              R$ {(contract.value / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              {formatCentsBRL(contract.value)}
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {formatDistanceToNow(new Date(contract.createdAt), { addSuffix: true, locale: ptBR })}

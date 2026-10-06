@@ -8,6 +8,7 @@
  */
 import PDFDocument from "pdfkit";
 import { getDirectContractById, getDirectContractAuditLogs } from "../db";
+import { formatCentsBRL, MONEY_MEANING } from "@shared/money";
 
 interface AuditReportOptions {
   contractId: number;
@@ -59,7 +60,8 @@ export async function generateAuditReport(options: AuditReportOptions): Promise<
   doc.fontSize(11).font("Helvetica");
   doc.text(`Tipo: ${contract.type === "dispensa" ? "Dispensa" : "Inexigibilidade"}`);
   doc.text(`Objeto: ${contract.object}`);
-  doc.text(`Valor: R$ ${contract.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`);
+  // R6 / PR-14 (SEM-012): `value` é persistido em CENTAVOS e é o valor ESTIMADO (não o contratado).
+  doc.text(`${MONEY_MEANING.estimated}: ${formatCentsBRL(contract.value)}`);
   doc.text(`Status: ${getStatusLabel(contract.status)}`);
   doc.text(`Modo: ${contract.mode === "presencial" ? "Presencial" : "Eletrônico"}`);
   doc.moveDown(1);
@@ -144,7 +146,7 @@ export async function generateAuditReport(options: AuditReportOptions): Promise<
 /**
  * Calcula estatísticas dos logs de auditoria
  */
-function calculateStatistics(logs: any[]) {
+function calculateStatistics(logs: Awaited<ReturnType<typeof getDirectContractAuditLogs>>) {
   const byAction: Record<string, number> = {};
   const byUser: Record<string, number> = {};
   let firstAction = "";
@@ -222,12 +224,12 @@ function getStatusLabel(status: string): string {
 /**
  * Formata detalhes do log
  */
-function formatDetails(details: any): string {
+function formatDetails(details: unknown): string {
   if (typeof details === "string") {
     return details;
   }
 
-  if (typeof details === "object") {
+  if (typeof details === "object" && details !== null) {
     const entries = Object.entries(details);
     if (entries.length === 0) return "-";
 

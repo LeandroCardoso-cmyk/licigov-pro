@@ -88,6 +88,8 @@ export default function EditalWorkspace({
   processId = "",
 }: EditalWorkspaceProps) {
   const [object, setObject] = useState("");
+  // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
+  const [editorDirty, setEditorDirty] = useState(false);
   // PR-09 (SEM-009) — escolha EXPLÍCITA do usuário (null = não tocou). Sem padrão de useState: o valor
   // exibido é a escolha explícita OU o parâmetro PERSISTIDO (hidratação), nunca um default silencioso.
   const [proposed, setProposed] = useState<{ modality: Modality | null; form: Form | null; platform: Platform | null }>({
@@ -373,6 +375,10 @@ export default function EditalWorkspace({
             <div className="mb-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-800 dark:text-orange-300" role="alert">
               <strong>Documentos-base alterados.</strong> Os documentos-base deste Edital (DFD/ETP/TR/itens/parâmetros)
               foram alterados após a geração da minuta. Revise ou regenere antes da aprovação.
+              {/* R9 / SEM-047 — lista O QUE mudou (minutas antigas, sem marcador por fonte, mostram só o aviso). */}
+              {(sourceState.data.changedSources ?? []).length > 0 && (
+                <span className="mt-1 block">Mudou: {sourceState.data.changedSources.map((c) => c.label).join(", ")}.</span>
+              )}
             </div>
           )}
 
@@ -383,7 +389,7 @@ export default function EditalWorkspace({
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
             {/* C.4B.3B — edição humana governada do rascunho persistido. */}
-            <DraftEditor processId={processId} kind="edital" content={draft.content} contentHash={draft.contentHash} />
+            <DraftEditor processId={processId} kind="edital" content={draft.content} contentHash={draft.contentHash} onDirtyChange={setEditorDirty} />
           </div>
         </div>
       )}
@@ -396,7 +402,7 @@ export default function EditalWorkspace({
       />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
-      <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} />
+      <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} />
     </div>
   );
 }

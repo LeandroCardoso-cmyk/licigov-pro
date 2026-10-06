@@ -85,6 +85,13 @@ export async function lockLot(tx: ProcurementExecutor, org: number, pid: string,
   return rows[0] ? toLot(rows[0]) : null;
 }
 
+/** R9 / SEM-067 — lotes (qualquer status) que detêm este `code_key` no processo, sob lock (FOR UPDATE). */
+export async function lockLotsByCodeKey(tx: ProcurementExecutor, org: number, pid: string, codeKey: string): Promise<ProcurementLot[]> {
+  const rows = await tx.select().from(procurementLotsTable)
+    .where(and(lotScope(org, pid), eq(procurementLotsTable.codeKey, codeKey))).for("update");
+  return rows.map(toLot);
+}
+
 export async function nextItemOrdinal(tx: ProcurementExecutor, org: number, pid: string): Promise<number> {
   const [r] = await tx.select({ m: sql<number>`COALESCE(MAX(${procurementItemsTable.ordinal}), 0)` }).from(procurementItemsTable).where(itemScope(org, pid));
   return Number(r?.m ?? 0) + 1;
@@ -108,6 +115,10 @@ export async function insertItemIfAbsent(tx: ProcurementExecutor, it: Omit<Procu
   return true;
 }
 
+/**
+ * Insere o lote se o `code_key` está livre no processo. R9 / SEM-067: o índice único cobre lotes arquivados — o
+ * serviço libera o código dos arquivados (`releaseArchivedLotCodes`) ANTES de chamar; aqui só a persistência.
+ */
 export async function insertLotIfAbsent(tx: ProcurementExecutor, lot: Omit<ProcurementLot, "createdAt" | "updatedAt">, correlationId: string): Promise<boolean> {
   const exists = await tx.select({ id: procurementLotsTable.id }).from(procurementLotsTable)
     .where(and(lotScope(lot.organizationId, lot.processId), eq(procurementLotsTable.codeKey, lot.codeKey))).limit(1);

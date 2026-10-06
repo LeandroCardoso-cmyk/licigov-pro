@@ -6,8 +6,8 @@
  * Padrão getDb(): degrada graciosamente sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { createHash } from "crypto";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
@@ -25,6 +25,7 @@ import {
   generatedDocumentEditsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
+import { withHumanEditMarker } from "../domain/humanEditMarker";
 import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
@@ -300,6 +301,21 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
   });
 }
 
+/**
+ * R9 / SEM-054 — estado da FONTE do item (`current` | `source_changed` | `review_required`), tenant-scoped.
+ * `null` ⇒ item inexistente neste tenant.
+ */
+export async function getIntelligentItemSourceState(
+  id: string, orgId: number, executor?: ProcurementExecutor,
+): Promise<{ sourceState: string; sourceStateReason: string | null } | null> {
+  const db = executor ?? await getDb();
+  if (!db) return null;
+  const rows = await db.select({ sourceState: intelligentItemsTable.sourceState, sourceStateReason: intelligentItemsTable.sourceStateReason })
+    .from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId))).limit(1);
+  return rows[0] ? { sourceState: rows[0].sourceState ?? "current", sourceStateReason: rows[0].sourceStateReason ?? null } : null;
+}
+
 export async function updateItemStatus(id: string, orgId: number, status: ItemStatus, approvedBy: number | null, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
@@ -319,6 +335,12 @@ export async function updateItemStatus(id: string, orgId: number, status: ItemSt
 export async function transitionItemStatusCAS(params: {
   id: string; orgId: number; fromStatuses: ItemStatus[]; toStatus: ItemStatus;
   approvedBy: number | null; updatedAt: string;
+  /**
+   * R9 / SEM-054 — condiciona a transição ao `source_state` (na MESMA sentença SQL): a aprovação só vence o
+   * CAS com a fonte vigente (`current`); uma materialização concorrente que sinalize `source_changed`/
+   * `review_required` faz o CAS perder (0 linhas) em vez de aprovar números desatualizados.
+   */
+  requireSourceState?: string;
 }, executor?: ProcurementExecutor): Promise<{ applied: boolean }> {
   const db = executor ?? await getDb();
   if (!db) return { applied: false };
@@ -329,6 +351,7 @@ export async function transitionItemStatusCAS(params: {
       eq(intelligentItemsTable.id, params.id),
       eq(intelligentItemsTable.organizationId, params.orgId),
       inArray(intelligentItemsTable.status, params.fromStatuses),
+      ...(params.requireSourceState !== undefined ? [eq(intelligentItemsTable.sourceState, params.requireSourceState)] : []),
     ));
   const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
   return { applied: affected > 0 };
@@ -439,16 +462,27 @@ export async function recordProcessEvent(params: {
   const existing = await db.select({ id: processTimelineTable.id }).from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, params.processId), eq(processTimelineTable.organizationId, params.organizationId)));
   const order = existing.length;
-  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id por ORDEM (append). Espaços de hash
-  // disjuntos por prefixo ("ptl-key:" × "ptl:") — nunca colidem entre si.
+  // id ESTÁVEL (idempotencyKey) para eventos singleton; senão, id ÚNICO POR EVENTO (aleatório). Espaços de hash
+  // disjuntos por prefixo ("ptl-key:" × "ptl-evt:") — nunca colidem entre si.
+  //
+  // R9 / SEM-076 — antes o id sem chave era `sha256(org:process:ORDEM:tipo)`: dois eventos concorrentes do mesmo
+  // tipo liam a mesma contagem, caíam no MESMO id e o upsert SOBRESCREVIA o `summary` do primeiro (histórico
+  // reescrito). Agora cada evento tem id próprio (append-only real; `eventOrder` pode empatar sob concorrência e a
+  // leitura desempata por createdAt/id) e o evento singleton com chave é "insert-or-ignore": o retry NUNCA reescreve
+  // o resumo original.
   const id = params.idempotencyKey
     ? createHash("sha256").update(`ptl-key:${params.organizationId}:${params.processId}:${params.eventType}:${params.idempotencyKey}`).digest("hex").slice(0, 20)
-    : createHash("sha256").update(`ptl:${params.organizationId}:${params.processId}:${order}:${params.eventType}`).digest("hex").slice(0, 20);
-  await db.insert(processTimelineTable).values({
+    : createHash("sha256").update(`ptl-evt:${params.organizationId}:${params.processId}:${randomUUID()}`).digest("hex").slice(0, 20);
+  const row = {
     id, organizationId: params.organizationId, processId: params.processId, eventOrder: order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, refId: params.refId ?? "",
     correlationId: params.correlationId,
-  }).onDuplicateKeyUpdate({ set: { summary: params.summary } });
+  };
+  if (params.idempotencyKey) {
+    await db.insert(processTimelineTable).values(row).onDuplicateKeyUpdate({ set: { id: sql`id` } });
+  } else {
+    await db.insert(processTimelineTable).values(row);
+  }
 }
 
 export async function listProcessTimeline(processId: string, orgId: number): Promise<Array<{ id: string; order: number; eventType: string; actor: string; summary: string; refId: string; createdAt: string }>> {
@@ -456,8 +490,24 @@ export async function listProcessTimeline(processId: string, orgId: number): Pro
   if (!db) return [];
   const rows = await db.select().from(processTimelineTable)
     .where(and(eq(processTimelineTable.processId, processId), eq(processTimelineTable.organizationId, orgId)))
-    .orderBy(asc(processTimelineTable.eventOrder));
+    .orderBy(asc(processTimelineTable.eventOrder), asc(processTimelineTable.createdAt), asc(processTimelineTable.id));
   return rows.map(r => ({ id: r.id, order: r.eventOrder, eventType: r.eventType, actor: r.actor, summary: r.summary ?? "", refId: r.refId, createdAt: fromDb(r.createdAt) }));
+}
+
+/**
+ * SEM-058 — eventos de timeline de um tipo e referência (ex.: a sugestão de IA gerada), SEMPRE escopados por
+ * (organização, processo). Devolve também a correlação do evento (liga o aceite à proveniência da execução).
+ */
+export async function listProcessEventsByRef(processId: string, orgId: number, eventType: string, refId: string): Promise<Array<{ id: string; actor: string; summary: string; correlationId: string }>> {
+  const db = await getDb();
+  if (!db || !refId) return [];
+  const rows = await db.select().from(processTimelineTable)
+    .where(and(
+      eq(processTimelineTable.processId, processId), eq(processTimelineTable.organizationId, orgId),
+      eq(processTimelineTable.eventType, eventType), eq(processTimelineTable.refId, refId),
+    ))
+    .orderBy(desc(processTimelineTable.eventOrder), desc(processTimelineTable.createdAt), desc(processTimelineTable.id));
+  return rows.map((r) => ({ id: r.id, actor: r.actor, summary: r.summary ?? "", correlationId: r.correlationId }));
 }
 
 // ─── Generated documents ─────────────────────────────────────────────────────
@@ -490,10 +540,11 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   import_promote  = P0 piloto — documento IMPORTADO (DFD/ETP/TR) promovido a rascunho (criação);
 //   import_replace  = P0 piloto — substituição EXPLÍCITA e confirmada do rascunho por documento importado.
 //   dfd_context_reconcile = Contexto Canônico — "Atualizar no rascunho" (ação explícita, campo a campo);
-//   dfd_ai_draft    = Contexto Canônico — rascunho SUPERVISIONADO de IA da justificativa do DFD.
+//   dfd_ai_draft    = (legado, pré-SEM-058) rascunho de IA gravado direto na justificativa do DFD — não é mais emitido;
+//   dfd_ai_accept   = SEM-058 — ACEITE HUMANO explícito de sugestão de IA para a justificativa do DFD (conteúdo humano).
 export type DraftEditOperation =
   | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
-  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft";
+  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft" | "dfd_ai_accept";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):
@@ -632,11 +683,23 @@ export async function applyDraftContentMutationTx(
   // No-op determinístico: mesmo conteúdo em bytes (e mesmos parâmetros) → não muda último ator nem cria
   // ledger. Snapshot = atual.
   if (newHash === currentHash && !parametersChanged) {
+    // R9 / SEM-047 — regeneração com texto IDÊNTICO ainda é uma leitura NOVA das fontes: os marcadores de lineage
+    // (`srcd:`/`srcdigest:`/`autoridade:`…) passam a refletir as fontes consumidas agora; sem isso o documento ficava
+    // "fonte alterada" para sempre. Não é alteração substantiva: sem ledger, sem mudar último ator nem updatedAt.
+    const freshSources = JSON.stringify(doc.sources);
+    if (!contentOnly && (existing.sources ?? "[]") !== freshSources) {
+      await tx.update(generatedDocumentsTable).set({ sources: freshSources })
+        .where(and(eq(generatedDocumentsTable.id, existing.id), eq(generatedDocumentsTable.organizationId, organizationId)));
+      return { created: false, changed: false, document: { ...rowToGeneratedDocument(existing), sources: [...doc.sources] } };
+    }
     return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
   }
+  // R10 / SEM-044 — a edição humana deixa MARCADOR (origem humana + ator + hash) em `sources`, preservando a lineage de
+  // geração; sem isso um rascunho reescrito por pessoa continuava "gerado". Mesma transação do ledger abaixo.
+  const humanSources = contentOnly ? withHumanEditMarker(parseArr<string>(existing.sources), actorUserId, newHash) : [];
   await tx.update(generatedDocumentsTable).set(
     contentOnly
-      ? { content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
+      ? { content: doc.content, sources: JSON.stringify(humanSources), lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
       : {
           title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
           modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
@@ -660,7 +723,7 @@ export async function applyDraftContentMutationTx(
   //  - human_edit (content-only): tudo da LINHA existente, alterando só content/último ator/updatedAt;
   //  - demais: o `doc` da operação + originador/correlation/createdAt PERSISTIDOS (não os do `doc`).
   const document: GeneratedDocument = contentOnly
-    ? { ...rowToGeneratedDocument(existing), content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now, updatedAt: now }
+    ? { ...rowToGeneratedDocument(existing), content: doc.content, sources: humanSources, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now, updatedAt: now }
     : {
         ...doc, id: existing.id, authorUserId: existing.authorUserId ?? null,
         lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: now,

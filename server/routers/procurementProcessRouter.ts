@@ -18,14 +18,17 @@ import {
 import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
   generateDocument, generateNotice, generateDFDDraft, saveDFDDraft, saveReviewableDraft, getEditalSourceState, getAuthoringSourceState,
-  getDFDAssistState, reconcileDFDFieldDraft, generateDFDJustificationDraft,
+  getDFDAssistState, reconcileDFDFieldDraft, generateDFDJustificationDraft, acceptDFDJustificationSuggestion,
 } from "../services/procurementProcessService";
 import { resolveProcurementContext, recordContextAssertions } from "../services/canonicalContextService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
-  importManualPriceResearch, applyItemSourceUpdate, resolveItemIdentity,
+  importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
+import { findPriceOutliers } from "@shared/itemApprovalGate";
+import { reaisToCents } from "../domain/money";
+import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
@@ -391,25 +394,48 @@ export const procurementProcessRouter = router({
     }),
 
   /**
-   * Rascunho SUPERVISIONADO de IA da justificativa do DFD (AIExecutionEngine; contexto governado). Nunca
-   * aprova, nunca decide; substituir justificativa escrita pelo servidor exige `confirmReplace`.
+   * SEM-058 — SUGESTÃO supervisionada de IA para a justificativa do DFD (AIExecutionEngine; contexto governado).
+   * NÃO altera o DFD: devolve a sugestão com o texto atual e sua origem. Só `acceptDFDJustification` grava.
    */
   generateDFDJustification: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       expectedContentHash: z.string().trim().min(1),
-      confirmReplace: z.boolean().optional(),
       idempotencyKey: z.string().trim().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const { document, explanation } = await generateDFDJustificationDraft({
+      const { suggestion, explanation, current } = await generateDFDJustificationDraft({
         organizationId: orgId, processId: input.processId, object: process.object,
-        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash, confirmReplace: input.confirmReplace,
+        actorUserId: ctx.user!.id, expectedContentHash: input.expectedContentHash,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
       });
-      return { document, explanation };
+      return { suggestion, explanation, current };
+    }),
+
+  /**
+   * SEM-058 — ACEITE HUMANO da sugestão de IA (único caminho que grava o texto da IA na justificativa do DFD).
+   * `confirmAccept` literal true; o texto pode ser editado antes do aceite; o texto anterior fica no histórico.
+   */
+  acceptDFDJustification: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1),
+      expectedContentHash: z.string().trim().min(1),
+      suggestionExecutionId: z.string().trim().min(1).max(80),
+      text: z.string().max(20000),
+      confirmAccept: z.literal(true),
+      idempotencyKey: z.string().trim().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const process = await requireProcess(input.processId, orgId);
+      const { document, edited, previousOrigin } = await acceptDFDJustificationSuggestion({
+        organizationId: orgId, processId: input.processId, object: process.object, actorUserId: ctx.user!.id,
+        expectedContentHash: input.expectedContentHash, text: input.text, suggestionExecutionId: input.suggestionExecutionId,
+        idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
+      });
+      return { document, edited, previousOrigin };
     }),
 
   generateETP: orgRoleProcedure("operator")
@@ -475,17 +501,35 @@ export const procurementProcessRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const items = await listIntelligentItems(input.processId, orgId);
-      return { items, total: items.length };
+      // R9 / SEM-054 — cotações fora da curva (mesma regra de detectPriceOutlier), em CENTAVOS: os
+      // fornecedores persistidos guardam o valor em REAIS e são convertidos explicitamente aqui.
+      return {
+        items: items.map((it) => ({
+          ...it,
+          priceOutliers: findPriceOutliers(it.suppliers.map((s) => ({ name: s.name, valueCents: reaisToCents(s.value) }))),
+        })),
+        total: items.length,
+      };
     }),
 
   /**
    * Hardening P0 — aplica as cotações ATUALIZADAS a um item cuja fonte mudou após a decisão. Item aprovado/
    * rejeitado volta a `em_analise` (decisão anterior invalidada de forma EXPLÍCITA, com timeline).
    */
-  applyItemSourceUpdate: orgRoleProcedure("operator")
+  /**
+   * R9 / SEM-052 — PRÉVIA obrigatória antes de aplicar: comparativo atual × proposto por item (nº de cotações,
+   * média em centavos), decisão que será revogada e o `expectedStateToken` que a confirmação devolve.
+   */
+  previewItemSourceUpdate: orgRoleProcedure("operator")
     .input(z.object({ itemId: z.string().min(1).max(20) }))
+    .query(async ({ input, ctx }) => previewItemSourceUpdate({ organizationId: ctx.organizationId!, itemId: input.itemId })),
+
+  applyItemSourceUpdate: orgRoleProcedure("operator")
+    // R9 / SEM-052 — só aplica com o token da prévia confirmada; estado diferente ⇒ CONFLICT (nada aplicado).
+    .input(z.object({ itemId: z.string().min(1).max(20), expectedStateToken: z.string().min(1).max(100) }))
     .mutation(async ({ input, ctx }) => applyItemSourceUpdate({
-      organizationId: ctx.organizationId!, itemId: input.itemId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+      organizationId: ctx.organizationId!, itemId: input.itemId, expectedStateToken: input.expectedStateToken,
+      actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
     })),
 
   /**
@@ -724,8 +768,9 @@ export const procurementProcessRouter = router({
 
   /**
    * Hardening P0 (risco D) — "emitido" tem UM significado: emissão OFICIAL governada (OfficialDocumentLifecycle,
-   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando o
-   * Edital JÁ possui versão oficial emitida (ledger official_document_promotions). Sem ela → PRECONDITION_FAILED.
+   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando ETP, TR e
+   * Edital JÁ possuem versão oficial emitida (ledger official_document_promotions; R10 / SEM-087 B). Faltando
+   * qualquer uma → PRECONDITION_FAILED listando o que falta, sem nenhuma escrita.
    * Papel mínimo alinhado à emissão (manager).
    */
   issueProcess: orgRoleProcedure("manager")
@@ -733,13 +778,16 @@ export const procurementProcessRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await requireProcess(input.processId, orgId);
-      const official = await getLatestOfficialPromotion(orgId, process.id, "edital");
-      if (!official) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "O processo só é marcado como emitido depois da emissão OFICIAL do Edital (revisão de terceiro/SoD).",
-        });
-      }
+      // R10 / SEM-087 (B) — ETP, TR e Edital precisam ter versão OFICIAL emitida (ledger). Erro de leitura propaga
+      // (fail-closed); a recusa é anterior a qualquer escrita e lista exatamente o que falta.
+      const officialByKind = {
+        etp: await getLatestOfficialPromotion(orgId, process.id, "etp"),
+        tr: await getLatestOfficialPromotion(orgId, process.id, "tr"),
+        edital: await getLatestOfficialPromotion(orgId, process.id, "edital"),
+      };
+      const refusal = processIssueRefusalMessage(missingOfficialKinds(officialByKind));
+      if (refusal) throw new TRPCError({ code: "PRECONDITION_FAILED", message: refusal });
+      const official = officialByKind.edital!;
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
       await recordProcessEvent({

@@ -7,7 +7,7 @@
  * Nomes namespaced para não colidir com o repo legado `server/db/contracts.ts`.
  */
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
 import { CONTRACT_ALREADY_EXISTS } from "../domain/contractCreation";
@@ -21,6 +21,11 @@ import type {
   ContractOccurrence, ContractGeneratedDocument, MinutaMetadata,
 } from "../domain/contractInstruments";
 import type { ImportedContract, ImportedContractSource, ReconstructedContractFields } from "../domain/contractReconstruction";
+
+// Executor: a conexão (db) ou uma transação (tx) — permite compor instrumento + status + timeline
+// atomicamente (SEM-025). Ausente ⇒ getDb(), assinatura compatível com os callers existentes.
+type ContractWsDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type ContractWsExecutor = ContractWsDb | Parameters<Parameters<ContractWsDb["transaction"]>[0]>[0];
 
 function parseArr(raw: string | null): string[] {
   if (!raw) return [];
@@ -131,13 +136,7 @@ export async function findContractByNormalizedNumber(orgId: number, normalizedNu
   return rows.length > 0 ? getContractWorkspace(rows[0].id, orgId) : null;
 }
 
-export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
-  const db = await getDb();
-  if (!db) return null;
-  const rows = await db.select().from(contractWorkspacesTable)
-    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId))).limit(1);
-  if (rows.length === 0) return null;
-  const r = rows[0];
+function rowToWorkspace(r: typeof contractWorkspacesTable.$inferSelect): ContractWorkspace {
   return {
     id: r.id, organizationId: r.organizationId, originType: r.originType as ContractOriginType, originProcess: r.originProcess,
     contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), term: r.term,
@@ -145,6 +144,28 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
     activeCopilots: ["juridico", "contratos", "agente_contratacao"], correlationId: r.correlationId,
     createdBy: r.createdBy ?? null, createdAt: fromDbDatetime(r.createdAt), updatedAt: fromDbDatetime(r.updatedAt),
   };
+}
+
+export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractWorkspacesTable)
+    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId))).limit(1);
+  return rows.length === 0 ? null : rowToWorkspace(rows[0]);
+}
+
+/**
+ * R9 / SEM-084 — TRAVA a linha do contrato (`SELECT … FOR UPDATE`, tenant-scoped) DENTRO da transação do instrumento
+ * e devolve o estado do contrato SOB o lock. Todo criador de aditivo/apostilamento passa por aqui antes de alocar a
+ * sequência e de avaliar a máquina de estados: instrumentos concorrentes do mesmo contrato se SERIALIZAM nesta linha
+ * (o segundo espera o commit do primeiro e então lê o status e a sequência já atualizados). Exige executor
+ * transacional; contrato inexistente no tenant ⇒ null (a trava não pega nada). Sem chamada remota sob o lock.
+ */
+export async function lockContractWorkspaceForInstrument(id: string, orgId: number, tx: ContractWsExecutor): Promise<ContractWorkspace | null> {
+  const rows = await tx.select().from(contractWorkspacesTable)
+    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId)))
+    .limit(1).for("update");
+  return rows.length === 0 ? null : rowToWorkspace(rows[0]);
 }
 
 /**
@@ -222,12 +243,43 @@ export async function listImportedContractWorkspaces(orgId: number, limit = 50):
   return rows.map(r => ({ id: r.id, contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), status: r.status, updatedAt: r.updatedAt }));
 }
 
-export async function updateContractWorkspaceStatus(id: string, orgId: number, status: string, updatedAt: string): Promise<boolean> {
-  const db = await getDb();
+/**
+ * SEM-025 — mudança de status do contrato por COMPARE-AND-SET (substitui o antigo
+ * `updateContractWorkspaceStatus`, que gravava qualquer status sem conferir o atual e permitia a um
+ * aditivo/apostilamento "ressuscitar" contrato rescindido). Grava `toStatus` somente se o status
+ * persistido ainda for `fromStatus` — na MESMA sentença SQL:
+ *   UPDATE contract_workspaces SET status = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status = ?
+ * A decisão de SE a transição é permitida é da máquina de estados (`planInstrumentStatusChange` /
+ * `canContractTransition`); aqui só se garante que ela vale para o estado REAL no instante da escrita.
+ * Retorna `false` quando 0 linhas casam (status mudou em paralelo ou contrato inexistente no tenant).
+ * O driver reporta linhas CASADAS (CLIENT_FOUND_ROWS), então `fromStatus === toStatus` também confirma.
+ */
+export async function compareAndSetContractWorkspaceStatus(params: {
+  id: string; orgId: number; fromStatus: ContractStatus; toStatus: ContractStatus; updatedAt: string;
+  /**
+   * R9 / SEM-062 — designação de gestor/fiscal APLICADA pelo instrumento (apostilamento `gestor`/`fiscal`), na MESMA
+   * sentença do CAS de status. Só as chaves presentes são gravadas; ausente ⇒ comportamento anterior (só status).
+   */
+  assignment?: { manager?: string; inspector?: string };
+  /** Quando informado, o CAS também exige que a revisão (`updated_at`) persistida seja esta (lida sob o lock). */
+  expectedUpdatedAt?: string;
+}, executor?: ContractWsExecutor): Promise<boolean> {
+  const db = executor ?? await getDb();
   if (!db) return false;
-  await db.update(contractWorkspacesTable).set({ status, updatedAt: toDbDatetime(updatedAt) })
-    .where(and(eq(contractWorkspacesTable.id, id), eq(contractWorkspacesTable.organizationId, orgId)));
-  return true;
+  const result = await db.update(contractWorkspacesTable)
+    .set({
+      status: params.toStatus, updatedAt: toDbDatetime(params.updatedAt),
+      ...(params.assignment?.manager !== undefined ? { manager: params.assignment.manager } : {}),
+      ...(params.assignment?.inspector !== undefined ? { inspector: params.assignment.inspector } : {}),
+    })
+    .where(and(
+      eq(contractWorkspacesTable.id, params.id),
+      eq(contractWorkspacesTable.organizationId, params.orgId),
+      eq(contractWorkspacesTable.status, params.fromStatus),
+      ...(params.expectedUpdatedAt ? [eq(contractWorkspacesTable.updatedAt, toDbDatetime(params.expectedUpdatedAt))] : []),
+    ));
+  const affected = (result[0] as { affectedRows?: number })?.affectedRows ?? 0;
+  return affected > 0;
 }
 
 // ─── Generated documents (minutas) ────────────────────────────────────────────
@@ -266,6 +318,18 @@ export async function countContractAddenda(contractId: string, orgId: number): P
 }
 
 /**
+ * R9 / SEM-084 — próxima sequência de aditivo do contrato = MAX(sequence)+1 (não `count+1`: tolera lacunas). Só é
+ * ATÔMICA quando chamada DENTRO da transação do instrumento, depois de `lockContractWorkspaceForInstrument` (a trava
+ * da linha do contrato serializa os alocadores). Fora do lock é apenas uma leitura — nunca decide número.
+ */
+export async function nextAddendumSequenceUnderLock(contractId: string, orgId: number, tx: ContractWsExecutor): Promise<number> {
+  const rows = await tx.select({ v: sql<number | string | null>`COALESCE(MAX(${contractAddendaTable.sequence}), 0)` }).from(contractAddendaTable)
+    .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
+    .for("update"); // leitura corrente (nunca o snapshot REPEATABLE READ): vê o commit do alocador anterior
+  return Number(rows[0]?.v ?? 0) + 1;
+}
+
+/**
  * Total de aditivos do tenant (todos os contratos da organização). Mesma fonte
  * canônica (`contract_addenda`) e mesmo escopo por `organization_id` de
  * `countContractAddenda` — apenas agregado no nível da organização, para KPIs
@@ -279,15 +343,24 @@ export async function countContractAddendaByOrg(orgId: number): Promise<number> 
   return rows.length;
 }
 
-export async function insertContractAddendum(a: ContractAddendum): Promise<ContractAddendum | null> {
-  const db = await getDb();
+/**
+ * Opções do writer de instrumento. `failOnDuplicate` (caminho governado SEM-025): INSERT puro — um id já
+ * existente (mesma sequência calculada por duas criações concorrentes) falha com ER_DUP_ENTRY em vez de
+ * fundir silenciosamente duas solicitações numa linha híbrida. Ausente ⇒ upsert legado (compatível).
+ */
+export interface InstrumentInsertOptions { readonly failOnDuplicate?: boolean }
+
+export async function insertContractAddendum(a: ContractAddendum, executor?: ContractWsExecutor, opts: InstrumentInsertOptions = {}): Promise<ContractAddendum | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
-  await db.insert(contractAddendaTable).values({
+  const insert = db.insert(contractAddendaTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, addendumType: a.addendumType, sequence: a.sequence,
     justification: a.justification, newValue: String(a.newValue), newTerm: a.newTerm, status: a.status, requestOrigin: a.requestOrigin,
     documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, correlationId: a.correlationId,
     createdAt: toDbDatetime(a.createdAt), updatedAt: toDbDatetime(a.updatedAt),
-  }).onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: toDbDatetime(a.updatedAt) } });
+  });
+  if (opts.failOnDuplicate) await insert;
+  else await insert.onDuplicateKeyUpdate({ set: { status: a.status, justification: a.justification, documentReference: a.documentReference, legalOpinionRequestId: a.legalOpinionRequestId, updatedAt: toDbDatetime(a.updatedAt) } });
   return a;
 }
 
@@ -300,6 +373,27 @@ export async function listContractAddenda(contractId: string, orgId: number): Pr
   return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin }));
 }
 
+/**
+ * SEM084-B — um aditivo pelo id, escopado por órgão E contrato (outro órgão/contrato ⇒ null). Usado para
+ * reconhecer o instrumento já criado por uma tentativa anterior do MESMO comando (id derivado da chave de idempotência).
+ */
+export async function getContractAddendumById(id: string, contractId: string, orgId: number): Promise<ContractAddendum | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractAddendaTable)
+    .where(and(eq(contractAddendaTable.id, id), eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id, organizationId: r.organizationId, contractId: r.contractId, addendumType: r.addendumType as ContractAddendum["addendumType"],
+    sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm,
+    status: r.status as ContractAddendum["status"], requestOrigin: r.requestOrigin as ContractAddendum["requestOrigin"],
+    documentReference: r.documentReference, legalOpinionRequestId: r.legalOpinionRequestId, correlationId: r.correlationId,
+    createdAt: fromDbDatetime(String(r.createdAt)), updatedAt: fromDbDatetime(String(r.updatedAt)),
+  };
+}
+
 // ─── Apostilles ──────────────────────────────────────────────────────────────
 
 export async function countContractApostilles(contractId: string, orgId: number): Promise<number> {
@@ -310,14 +404,24 @@ export async function countContractApostilles(contractId: string, orgId: number)
   return rows.length;
 }
 
-export async function insertContractApostille(a: ContractApostille): Promise<ContractApostille | null> {
-  const db = await getDb();
+/** R9 / SEM-084 — análogo a `nextAddendumSequenceUnderLock` para apostilamentos (mesmo contrato de uso: sob o lock). */
+export async function nextApostilleSequenceUnderLock(contractId: string, orgId: number, tx: ContractWsExecutor): Promise<number> {
+  const rows = await tx.select({ v: sql<number | string | null>`COALESCE(MAX(${contractWsApostillesTable.sequence}), 0)` }).from(contractWsApostillesTable)
+    .where(and(eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
+    .for("update");
+  return Number(rows[0]?.v ?? 0) + 1;
+}
+
+export async function insertContractApostille(a: ContractApostille, executor?: ContractWsExecutor, opts: InstrumentInsertOptions = {}): Promise<ContractApostille | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
-  await db.insert(contractWsApostillesTable).values({
+  const insert = db.insert(contractWsApostillesTable).values({
     id: a.id, organizationId: a.organizationId, contractId: a.contractId, kind: a.kind, sequence: a.sequence,
     description: a.description, newValue: String(a.newValue), newManager: a.newManager, newInspector: a.newInspector,
     documentReference: a.documentReference, correlationId: a.correlationId, createdAt: toDbDatetime(a.createdAt),
-  }).onDuplicateKeyUpdate({ set: { description: a.description, documentReference: a.documentReference } });
+  });
+  if (opts.failOnDuplicate) await insert;
+  else await insert.onDuplicateKeyUpdate({ set: { description: a.description, documentReference: a.documentReference } });
   return a;
 }
 
@@ -328,6 +432,22 @@ export async function listContractApostilles(contractId: string, orgId: number):
     .where(and(eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
     .orderBy(asc(contractWsApostillesTable.sequence));
   return rows.map(r => ({ id: r.id, kind: r.kind, sequence: r.sequence, description: r.description ?? "", newValue: Number(r.newValue), newManager: r.newManager, newInspector: r.newInspector }));
+}
+
+/** SEM084-B — um apostilamento pelo id, escopado por órgão E contrato (outro órgão/contrato ⇒ null). */
+export async function getContractApostilleById(id: string, contractId: string, orgId: number): Promise<ContractApostille | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractWsApostillesTable)
+    .where(and(eq(contractWsApostillesTable.id, id), eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id, organizationId: r.organizationId, contractId: r.contractId, kind: r.kind as ContractApostille["kind"], sequence: r.sequence,
+    description: r.description ?? "", newValue: Number(r.newValue), newManager: r.newManager, newInspector: r.newInspector,
+    documentReference: r.documentReference, correlationId: r.correlationId, createdAt: fromDbDatetime(String(r.createdAt)),
+  };
 }
 
 // ─── Occurrences ─────────────────────────────────────────────────────────────

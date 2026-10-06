@@ -37,6 +37,11 @@ vi.mock("../../services/canonicalContextService", () => ({
 
 // R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
 vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
+// R9 / SEM-039 — as fontes a montante preferem a versão EMITIDA; neste teste não há emissão (vale o rascunho).
+vi.mock("../../db/officialDocuments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
+  getLatestEmittedByOrigin: vi.fn(async () => null),
+}));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));
@@ -63,6 +68,8 @@ vi.mock("../../db/procurement", () => ({
   listIntelligentItems: vi.fn(async (_pid: string, orgId: number) => (orgId === ORG ? [{ id: "i1", description: "Papel A4", quantity: 100, unit: "resma", averagePrice: 25.5, suggestedCATMAT: "12345", status: "aprovado", averagePriceCents: 2550, suppliers: [], quoteCount: 0, enrichmentStatus: "done", sourceResearchId: "r1" }] : [])),
   applyDraftContentMutationTx: vi.fn(async (_tx: unknown, input: { doc: unknown }) => ({ created: true, changed: true, document: input.doc })),
   recordProcessEvent: vi.fn(async () => {}),
+  // R10 / SEM-044 — a origem do rascunho consulta o ledger de edições (sem edições ⇒ null).
+  getLatestDraftEdit: vi.fn(async () => null),
 }));
 
 // P0 piloto — classificação CONFIRMADA vem do ledger catmat_decisions (nova dependência do Context Builder).

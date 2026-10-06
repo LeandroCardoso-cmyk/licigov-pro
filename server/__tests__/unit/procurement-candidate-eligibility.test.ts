@@ -13,8 +13,9 @@ const PROMOTED_B: PriceResearchRecord = { researchId: "rs-b", provenance: "promo
 const MANUAL: PriceResearchRecord = { researchId: "rs-m", provenance: "manual_import", importSessionId: null };
 const map = (...r: PriceResearchRecord[]) => new Map(r.map((x) => [x.researchId, x]));
 
+// R9 / SEM-030: por padrão o Item Inteligente está APROVADO por humano; os casos de item pendente são explícitos.
 const item = (over: Partial<IntelligentItemSource> = {}): IntelligentItemSource => ({
-  id: "ii1", description: "Concentrado ativado", unit: "Tambor", quantity: 1, status: "pendente", approvedBy: null,
+  id: "ii1", description: "Concentrado ativado", unit: "Tambor", quantity: 1, status: "aprovado", approvedBy: 5,
   sourceResearchId: "rs-a", evidenceResearchIds: ["rs-a"], ...over,
 });
 
@@ -22,15 +23,18 @@ const item = (over: Partial<IntelligentItemSource> = {}): IntelligentItemSource 
 const FIVE = ["Concentrado ativado", "Esfregão Master 30 cm", "Concentrado alcalino R-15", "Pano costurado tipo retalho", "Detergente automotivo"]
   .map((d, n) => item({ id: `ii${n + 1}`, description: d, quantity: [1, 20, 0, 35, 1][n], evidenceResearchIds: Array(6).fill("rs-a") }));
 /** Item LEGADO tipo incidente: importação manual de texto, sem revisão, qtd 0 / R$ 0 / 0 cotações. */
-const LEGACY = item({ id: "legacy", description: "Fornecedor Exemplo Ltda", unit: "un", quantity: 0, sourceResearchId: "rs-m", evidenceResearchIds: ["rs-m"] });
+const LEGACY = item({ id: "legacy", description: "Fornecedor Exemplo Ltda", unit: "un", quantity: 0, status: "pendente", approvedBy: null, sourceResearchId: "rs-m", evidenceResearchIds: ["rs-m"] });
 
 describe("Elegibilidade — lineage + workflow (nunca conteúdo)", () => {
   it("1) Pesquisa em revisão (nada promovido): não existe Item Inteligente ⇒ 0 candidatos", () => {
     expect(priceResearchCandidateSources([], map())).toEqual([]);
   });
 
-  it("2) item de sessão PROMOVIDA (revisão aprovada + promoção) ⇒ elegível, mesmo com decisão do Item pendente", () => {
+  // R9 / SEM-030 (reescrito): antes "elegível, mesmo com decisão do Item pendente" — o teste CODIFICAVA o achado.
+  it("2) sessão PROMOVIDA: elegível só com o Item APROVADO por humano; aprovar a extração não aprova o item", () => {
     expect(priceResearchCandidateEligibility(item(), map(PROMOTED))).toEqual({ eligible: true, via: "promoted_session", importSessionIds: [11] });
+    expect(priceResearchCandidateEligibility(item({ status: "pendente", approvedBy: null }), map(PROMOTED))).toEqual({ eligible: false, reason: "item_not_approved" });
+    expect(priceResearchCandidateEligibility(item({ status: "aprovado", approvedBy: null }), map(PROMOTED))).toEqual({ eligible: false, reason: "item_not_approved" });
   });
 
   it("3) item REJEITADO ⇒ inelegível, mesmo com lineage governado", () => {
@@ -77,7 +81,7 @@ describe("Elegibilidade — lineage + workflow (nunca conteúdo)", () => {
     expect(after.map((c) => c.description)).toEqual(FIVE.map((f) => f.description));
     expect(after.some((c) => c.sourceId === "legacy")).toBe(false);
     expect(summarizePriceResearchEligibility([LEGACY, ...FIVE], map(MANUAL, PROMOTED)))
-      .toEqual({ intelligentItemCount: 6, eligibleCount: 5, ineligibleCount: 1, rejectedCount: 0, legacyOrUnlinkedCount: 0, manualUnreviewedCount: 1, promotedSessionCount: 1 });
+      .toEqual({ intelligentItemCount: 6, eligibleCount: 5, ineligibleCount: 1, rejectedCount: 0, legacyOrUnlinkedCount: 0, manualUnreviewedCount: 1, promotedSessionCount: 1, itemNotApprovedCount: 0 });
   });
 
   it("10/11) sourceQuantity preservada como EVIDÊNCIA; nenhuma quantidade prevista é criada", () => {

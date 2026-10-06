@@ -12,6 +12,8 @@ import {
   generateOfficialDocument, renderOfficialDocument, previewOfficialDocument,
   getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId,
 } from "../services/documentEngineService";
+import { listOfficialDocumentArtifacts } from "../db/officialDocumentArtifacts";
+import { logActivity } from "../services/activityLogService";
 import { exportOfficialDocument } from "../services/officialDocumentExportAdapter";
 
 const DOMAINS = ["processo_licitatorio", "contratacao_direta", "parecer_juridico", "contratos"] as const;
@@ -55,22 +57,26 @@ export const documentEngineRouter = router({
       return { documents, total: documents.length };
     }),
 
-  /** Versões de uma linhagem (informe origin+domain+tipo OU o lineageId). */
+  /**
+   * Versões de uma linhagem (informe origin+domain+tipo). SEM-040: `instrumentId` (aditivo/apostilamento) seleciona a
+   * linhagem PRÓPRIA do instrumento; ausente ⇒ a linhagem por origem+tipo (documentos anteriores à SEM-040, que
+   * compartilhavam uma linhagem por contrato, continuam legíveis por aqui).
+   */
   versions: tenantProcedure
-    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1) }))
+    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1), instrumentId: z.string().min(1).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin });
+      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin, instrumentId: input.instrumentId });
       const versions = await listVersions(lineageId, orgId);
       return { lineageId, versions, total: versions.length };
     }),
 
   /** Timeline documental (append-only) de uma linhagem. */
   timeline: tenantProcedure
-    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1) }))
+    .input(z.object({ businessDomain: z.enum(DOMAINS), documentType: z.enum(DOC_TYPES), origin: z.string().min(1), instrumentId: z.string().min(1).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin });
+      const lineageId = computeLineageId({ tenantId: orgId, businessDomain: input.businessDomain, documentType: input.documentType, origin: input.origin, instrumentId: input.instrumentId });
       const timeline = await listDocumentTimeline(lineageId, orgId);
       return { timeline };
     }),
@@ -83,14 +89,45 @@ export const documentEngineRouter = router({
       return previewOfficialDocument({ organizationId: orgId, documentId: input.documentId });
     }),
 
+  /**
+   * Artefatos (DOCX/PDF) já exportados de um documento oficial — ledger append-only SEM-043 (hash dos bytes,
+   * hashes de origem, ator humano). Leitura tenant-scoped; versões exportadas antes da 0315 retornam lista vazia
+   * (desconhecido, nunca inventado).
+   */
+  artifacts: tenantProcedure
+    .input(z.object({ documentId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      // Fail-closed: o documento precisa pertencer ao tenant autenticado (NOT_FOUND idêntico para inexistente/alheio).
+      const doc = await getOfficialDocument(input.documentId, orgId);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+      const artifacts = await listOfficialDocumentArtifacts(orgId, input.documentId);
+      return { documentId: input.documentId, artifacts };
+    }),
+
   /** Exporta o documento em DOCX ou PDF (base64 do binário real). Caminho legado. */
   download: tenantProcedure
     .input(z.object({ documentId: z.string().min(1), format: z.enum(FORMATS) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       try {
-        return await renderOfficialDocument({ organizationId: orgId, documentId: input.documentId, format: input.format });
+        const rendered = await renderOfficialDocument({
+          organizationId: orgId, documentId: input.documentId, format: input.format,
+          actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+        });
+        // SEM-043 — auditoria da exportação com o hash do artefato (o caminho legado não tinha log de atividade).
+        await logActivity({
+          organizationId: orgId, userId: ctx.user.id, action: "exportou documento oficial",
+          entityType: "official_document", correlationId: ctx.correlationId,
+          details: {
+            documentId: input.documentId, format: input.format, artifactHash: rendered.artifactHash,
+            artifactId: rendered.artifactId ?? null, artifactSizeBytes: rendered.bytes, artifactRecorded: rendered.artifactRecorded ?? null,
+            path: "document_engine_download",
+          },
+        });
+        return rendered;
       } catch (e) {
+        if (e instanceof TRPCError) throw e;
         throw new TRPCError({ code: "NOT_FOUND", message: e instanceof Error ? e.message : "Falha ao exportar." });
       }
     }),

@@ -61,13 +61,15 @@ describe("view-model", () => {
   it("quantidade: 'Não definida' ≠ quantidade no documento; proveniência por campo; adoção só onde prevista está vazia", () => {
     const it0 = item({});
     expect(plannedQuantityLabel(it0.plannedQuantity)).toBe("Não definida");
-    expect(sourceQuantityLabel(it0.sources[0])).toBe("Quantidade no documento: 1");
+    // R9 / SEM-055 (reescrito): quantidade da Pesquisa é rotulada como COTADA, não como necessidade.
+    expect(sourceQuantityLabel(it0.sources[0])).toBe("Quantidade cotada (não é a necessidade): 1");
     const it1 = item({ plannedQuantity: { value: 35, status: "confirmed", sourceType: "user", mode: "informed", actorUserId: 7 }, provenance: { ...it0.provenance, description: { source: "user", overriddenBy: 7, sourceValue: "Concentrado" } } });
     expect(provenanceLines(it1)).toEqual([
       'Descrição: alterada pelo usuário #7 (na fonte: "Concentrado")', "Unidade: Pesquisa de Preços",
-      "Quantidade prevista: Informada pelo usuário #7", "Quantidade no documento: 1 (Pesquisa de Preços)",
+      "Quantidade prevista: Informada pelo usuário #7", "Quantidade cotada (não é a necessidade): 1 (Pesquisa de Preços)", // R9 / SEM-055 (reescrito): rótulo "cotada"
     ]);
     expect(adoptableQuantities([it0, it1]).map((r) => r.item.id)).toEqual([it0.id]);
+    expect(adoptableQuantities([it0])[0].sources.map((s) => s.sourceId)).toEqual(["ii1"]); // R9 / SEM-055: fontes listadas, nenhuma escolhida
     expect(quantityInputError("1.200,5")).toBeNull();
     expect(quantityInputError("0")).toMatch(/maior que zero/);
   });
@@ -116,7 +118,7 @@ describe("ProcurementItemsWorkspace — estados", () => {
     expect(html).not.toContain("LOTE ");
     expect(html).toContain("Quantidade prevista");
     expect(html).toContain("Não definida");
-    expect(html).toContain("Quantidade no documento: 1");
+    expect(html).toContain("Quantidade cotada (não é a necessidade): 1"); // R9 / SEM-055 (reescrito): rótulo "cotada"
     expect(html).toContain("Usar 1");
     expect(html).toContain("Origem: Pesquisa de Preços");
     expect(html).toContain("Não encontrou um item?");
@@ -167,15 +169,23 @@ describe("Preparar itens — candidatos", () => {
     };
     const html = renderToStaticMarkup(createElement(CandidatesPanel, { processId: "p1", source: "price_research", lots: [], items: [item({})], onClose: () => {}, onDone: () => {}, onError: () => {} }));
     expect(html).toContain("4 item(ns) identificado(s)");
-    expect(html).toContain('value="Concentrado ativado"');
-    expect(html).toContain('value="Tambor"');
-    expect(html).toContain('placeholder="Não definida"');
-    expect(html).toContain("Usar 1 como quantidade prevista");
     expect(html).toContain("Possível item já cadastrado");
     expect(html).toContain("Mais de um item cadastrado corresponde");
     expect(html).toContain("Já está nos itens da contratação");
-    expect(html).toMatch(/data-status="new"[\s\S]*checked=""/); // novo vem marcado; nada é gravado sem confirmar
+    // R9 / SEM-055 (reescrito): NADA vem pré-marcado — o formulário do item só abre quando a pessoa o inclui.
+    expect(html).not.toMatch(/data-status="new"[^>]*>[\s\S]{0,200}checked=""/);
+    expect(html).not.toContain('value="Concentrado ativado"');
+    expect(html).toContain("Confirmar 0 item(ns)");
     expect(html).toContain("Nada é gravado até a confirmação");
+  });
+
+  it("R9 / SEM-030, SEM-055 — painel mostra o estado governado do Item Inteligente e rotula a quantidade como cotada", () => {
+    state.cands = {
+      sourceDigest: "0".repeat(32), counts: { sourceItemCount: 1 },
+      candidates: [cand({ evidence: { status: "pendente", sourceState: "source_changed", averagePriceCents: 4500, quoteCount: 3 } })],
+    };
+    const html = renderToStaticMarkup(createElement(CandidatesPanel, { processId: "p1", source: "price_research", lots: [], items: [], onClose: () => {}, onDone: () => {}, onError: () => {} }));
+    expect(html).toContain("Item Inteligente: aguardando decisão humana · fonte alterada — revisar · preço médio R$ 45,00 (3 cotação(ões))");
   });
 });
 

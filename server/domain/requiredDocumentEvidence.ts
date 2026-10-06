@@ -48,3 +48,29 @@ export const REQUIRED_DOCUMENT_MESSAGES = {
   [REQUIRED_DOCUMENT_UPLOAD_REQUIRED]: "Para anexar, envie o arquivo — a referência é gerada pelo servidor após o upload; nada foi gravado.",
   [REQUIRED_DOCUMENT_ATTACHMENT_REQUIRED]: "Só é possível validar um documento com arquivo anexado (upload real com hash); nada foi gravado.",
 } as const;
+
+/**
+ * NEW-029 — gate de PUBLICAÇÃO da Contratação Direta: o checklist configurado precisa existir e todo documento
+ * OBRIGATÓRIO precisa estar "validado" COM evidência real (upload do servidor + hash). "anexado" não basta; linha
+ * legada `s3://anexo` (sem hash) não conta como validada (regularização = HD-08). O `pending` deixa de ser só
+ * informativo.
+ */
+export const CHECKLIST_NOT_CONFIGURED = "CHECKLIST_NOT_CONFIGURED";
+export const CHECKLIST_PENDING = "CHECKLIST_PENDING";
+
+export type ChecklistPublicationGate =
+  | { ok: true }
+  | { ok: false; code: typeof CHECKLIST_NOT_CONFIGURED }
+  | { ok: false; code: typeof CHECKLIST_PENDING; pending: string[] };
+
+export function checklistPublicationGate(
+  docs: ReadonlyArray<RequiredDocumentEvidence & { readonly name: string; readonly required: boolean | number }>,
+  workspaceId: string,
+): ChecklistPublicationGate {
+  if (docs.length === 0) return { ok: false, code: CHECKLIST_NOT_CONFIGURED };
+  const pending = docs
+    .filter((d) => Boolean(d.required))
+    .filter((d) => !(d.status === "validado" && hasRealEvidence(d, workspaceId)))
+    .map((d) => d.name);
+  return pending.length ? { ok: false, code: CHECKLIST_PENDING, pending } : { ok: true };
+}

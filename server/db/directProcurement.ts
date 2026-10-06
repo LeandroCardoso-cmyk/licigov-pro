@@ -8,24 +8,26 @@
  * Nomes namespaced para não colidir com o repo legado `server/db/directContracts.ts`.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
 import { getDb } from "./connection";
 import {
   directProcurementWorkspacesTable, directProcurementProceduresTable,
   proposalCollectionsTable, proposalDocumentsTable, contractJustificationsTable,
   priceJustificationsTable, requiredDocumentsTable, ratificationsTable, generatedPublicationsTable,
+  institutionalDecisionsTable, contractWorkspacesTable,
 } from "../../drizzle/schema";
 import type {
   DirectProcurementWorkspace, DirectProcurementType, DirectProcedureType,
   DirectProcurementStage, DirectProcurementStatus, DirectStartOption, AdaptiveFlags,
 } from "../domain/directProcurementWorkspace";
-import { DIRECT_DOMAIN_COPILOTS, defaultFlags } from "../domain/directProcurementWorkspace";
+import { DIRECT_DOMAIN_COPILOTS, defaultFlags, type DirectRecordedActs } from "../domain/directProcurementWorkspace";
 import type { DirectProcurementProcedure, ProposalCollection, ProposalDocument } from "../domain/directProcurementProcedure";
 import type { ContractJustification, PriceJustification, RequiredDocument, Ratification, GeneratedPublication } from "../domain/directProcurementJustifications";
 import type { CopilotType } from "../domain/institutionalCopilot";
 import { toDbDatetime, fromDbDatetime } from "./institutionalConsultations";
 import { recordProcessEvent, isDuplicateKeyError } from "./procurement";
 import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
+import { splitLineage, type PriceLineage } from "../domain/directPriceReference";
 
 function parseArr<T>(raw: string | null): T[] {
   if (!raw) return [];
@@ -117,6 +119,43 @@ export async function getDirectProcurementWorkspace(id: string, orgId: number): 
   };
 }
 
+/**
+ * R9 / SEM-064 — ATOS REGISTRADOS que sustentam o status exibido, em LOTE e tenant-scoped (organization_id do
+ * contexto): decisão corrente (maior revisão) do ledger `institutional_decisions` e contagem de `generated_publications`
+ * por processo. Processo sem ato ⇒ `{ ratification: null, publicationCount: 0 }` (nunca inventado). Sem banco ⇒ vazio.
+ */
+export async function getRecordedActsForWorkspaces(orgId: number, workspaceIds: readonly string[]): Promise<Map<string, DirectRecordedActs>> {
+  const out = new Map<string, DirectRecordedActs>();
+  for (const id of workspaceIds) out.set(id, { ratification: null, publicationCount: 0 });
+  if (workspaceIds.length === 0) return out;
+  const db = await getDb();
+  if (!db) return out;
+  const ids = [...new Set(workspaceIds)];
+  const decisions = await db.select({
+    subjectId: institutionalDecisionsTable.subjectId, outcome: institutionalDecisionsTable.outcome,
+    revision: institutionalDecisionsTable.revision, decidedAt: institutionalDecisionsTable.decidedAt,
+  }).from(institutionalDecisionsTable).where(and(
+    eq(institutionalDecisionsTable.organizationId, orgId),
+    eq(institutionalDecisionsTable.subjectType, "direct_procurement.ratification"),
+    inArray(institutionalDecisionsTable.subjectId, ids),
+  )).orderBy(desc(institutionalDecisionsTable.revision));
+  const seen = new Set<string>();
+  for (const d of decisions) {
+    if (seen.has(d.subjectId)) continue; // 1ª linha por assunto = maior revisão = decisão corrente
+    seen.add(d.subjectId);
+    const prev = out.get(d.subjectId);
+    if (prev) out.set(d.subjectId, { ...prev, ratification: { outcome: d.outcome, revision: d.revision, decidedAt: d.decidedAt } });
+  }
+  const pubs = await db.select({ workspaceId: generatedPublicationsTable.workspaceId, n: count() }).from(generatedPublicationsTable)
+    .where(and(eq(generatedPublicationsTable.organizationId, orgId), inArray(generatedPublicationsTable.workspaceId, ids)))
+    .groupBy(generatedPublicationsTable.workspaceId);
+  for (const p of pubs) {
+    const prev = out.get(p.workspaceId);
+    if (prev) out.set(p.workspaceId, { ...prev, publicationCount: Number(p.n) });
+  }
+  return out;
+}
+
 export async function listDirectProcurementWorkspaces(orgId: number, limit = 50): Promise<Array<{ id: string; processNumber: string; object: string; procurementType: string; procedureType: string; currentStage: string; status: string; updatedAt: string }>> {
   const db = await getDb();
   if (!db) return [];
@@ -132,6 +171,61 @@ export async function updateDirectProcurementStage(id: string, orgId: number, st
   await db.update(directProcurementWorkspacesTable).set({ currentStage: stage, status, updatedAt: toDb(updatedAt) })
     .where(and(eq(directProcurementWorkspacesTable.id, id), eq(directProcurementWorkspacesTable.organizationId, orgId)));
   return true;
+}
+
+/**
+ * R9 / SEM-064 — reconfigura as flags do fluxo (Adaptive Process Engine) COM evento de timeline, ATOMICAMENTE:
+ * lock da linha (tenant-scoped) → relê as flags sob lock (antes/depois verdadeiros) → UPDATE só das flags + evento
+ * (id único, ator humano, correlationId) na mesma transação. Nada mudou (replay/no-op) ⇒ nenhuma escrita, nenhum evento.
+ * Não regrava etapa/status (o upsert de `insertDirectProcurementWorkspace` sobrescrevia o ponteiro com um valor lido
+ * antes). Sem banco ⇒ lança (fail-closed). Workspace ausente neste órgão ⇒ `null` (o router responde NOT_FOUND neutro).
+ */
+export async function updateDirectWorkspaceFlagsWithEvent(p: {
+  workspaceId: string; organizationId: number; patch: Partial<AdaptiveFlags>;
+  actor: string; correlationId: string; describe: (before: AdaptiveFlags, after: AdaptiveFlags) => { summary: string; eventType: string } | null;
+}): Promise<{ changed: boolean; before: AdaptiveFlags; after: AdaptiveFlags } | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados indisponível — configuração do fluxo não persistida (fail-closed).");
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(directProcurementWorkspacesTable)
+      .where(and(eq(directProcurementWorkspacesTable.id, p.workspaceId), eq(directProcurementWorkspacesTable.organizationId, p.organizationId)))
+      .for("update").limit(1);
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    const before: AdaptiveFlags = (() => {
+      try { return r.flags ? JSON.parse(r.flags) as AdaptiveFlags : defaultFlags(r.procurementType as DirectProcurementType, r.startOption as DirectStartOption); }
+      catch { return defaultFlags(r.procurementType as DirectProcurementType, r.startOption as DirectStartOption); }
+    })();
+    const after: AdaptiveFlags = { ...before, ...p.patch };
+    const change = p.describe(before, after);
+    if (!change) return { changed: false, before, after: before };
+    await tx.update(directProcurementWorkspacesTable)
+      .set({ flags: JSON.stringify(after), updatedAt: toDb(new Date().toISOString()) })
+      .where(and(eq(directProcurementWorkspacesTable.id, p.workspaceId), eq(directProcurementWorkspacesTable.organizationId, p.organizationId)));
+    await recordProcessEvent({
+      organizationId: p.organizationId, processId: p.workspaceId, eventType: change.eventType, actor: p.actor,
+      summary: change.summary, refId: p.workspaceId, correlationId: p.correlationId,
+    }, tx);
+    return { changed: true, before, after };
+  });
+}
+
+/**
+ * R9 / SEM-064 — contratos REGISTRADOS vinculados a esta contratação direta (origem `contratacao_direta`), tenant-scoped.
+ * Base para decidir se um extrato de contrato pode existir. Só o essencial (sem PII além do contratado informado).
+ */
+export async function listLinkedContractsForDirect(orgId: number, directWorkspaceId: string): Promise<Array<{
+  id: string; contractNumber: string; contractor: string; object: string; value: number; term: string; status: string;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(contractWorkspacesTable).where(and(
+    eq(contractWorkspacesTable.organizationId, orgId),
+    eq(contractWorkspacesTable.originType, "contratacao_direta"),
+    eq(contractWorkspacesTable.originProcess, directWorkspaceId),
+    ne(contractWorkspacesTable.status, "arquivado"),
+  )).orderBy(desc(contractWorkspacesTable.createdAt));
+  return rows.map((r) => ({ id: r.id, contractNumber: r.contractNumber, contractor: r.contractor, object: r.object ?? "", value: Number(r.value), term: r.term, status: r.status }));
 }
 
 // ─── Procedure ───────────────────────────────────────────────────────────────
@@ -234,14 +328,16 @@ export async function upsertPriceJustification(j: PriceJustification): Promise<P
   return j;
 }
 
-export async function getPriceJustification(workspaceId: string, orgId: number): Promise<{ id: string; source: string; justification: string; referenceValue: number; researchId: string; documentReferences: string[] } | null> {
+export async function getPriceJustification(workspaceId: string, orgId: number): Promise<{ id: string; source: string; justification: string; referenceValue: number; researchId: string; documentReferences: string[]; lineage: PriceLineage | null } | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(priceJustificationsTable)
     .where(and(eq(priceJustificationsTable.workspaceId, workspaceId), eq(priceJustificationsTable.organizationId, orgId))).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, source: r.source, justification: r.justification ?? "", referenceValue: Number(r.referenceValue), researchId: r.researchId, documentReferences: parseArr<string>(r.documentReferences) };
+  // R9 / SEM-042 — a linhagem (emitida só pelo servidor) vem num token reservado das referências; aqui é separada.
+  const { lineage, references } = splitLineage(parseArr<string>(r.documentReferences));
+  return { id: r.id, source: r.source, justification: r.justification ?? "", referenceValue: Number(r.referenceValue), researchId: r.researchId, documentReferences: references, lineage };
 }
 
 // ─── Required documents (checklist) ──────────────────────────────────────────

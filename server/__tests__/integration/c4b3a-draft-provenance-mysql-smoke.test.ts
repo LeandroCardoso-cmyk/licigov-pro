@@ -214,6 +214,9 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
     const pid = "c4b3a-sod";
     await seedEtp(ORG, pid, "Objeto SoD", A);          // author=A, lastSubst=A
     await seedEtp(ORG, pid, "Objeto SoD v2 (B)", B);   // author=A, lastSubst=B
+    // R9 / SEM-080 (reescrito): sem Itens aprovados a estimativa sai com [REVISAR] e a emissão exige conteúdo sem
+    // marcadores (SEM-057) — fixture da revisão do rascunho (não muda autoria nem último ator substantivo).
+    await conn.execute("UPDATE generated_documents SET content = REPLACE(content, '[REVISAR', '[REVISADO') WHERE organization_id = ? AND process_id = ? AND kind = 'etp'", [ORG, pid]);
     const row = await draftRow(ORG, pid);
     const h = draftContentHash(row!.content);
 

@@ -94,7 +94,13 @@ async function reviewAndPromote(pid: string, sid: number, reject: number[] = [])
   if (reject.length) await op.ingestion.reviewPriceResearchGroups({ sessionId: sid, procurementProcessId: pid, action: "rejected", groups: toGroups(reject) });
   await op.ingestion.reviewPriceResearchGroups({ sessionId: sid, procurementProcessId: pid, action: "approved", groups: toGroups(approveIdx) });
   await op.ingestion.approveSession({ sessionId: sid, procurementProcessId: pid });
-  return (await asUser(users.manager)).ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `elg-promo-${sid}` });
+  const promo = await (await asUser(users.manager)).ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `elg-promo-${sid}` });
+  // R9 / SEM-030 (reescrito): aprovar a EXTRAÇÃO ≠ aprovar o Item Inteligente — a decisão humana por item, pela
+  // aprovação canônica, é o que torna o item promovido elegível (o legado sem cotação continua pendente).
+  for (const it of await listIntelligentItems(pid, ORG)) {
+    if (it.status === "pendente" && it.quoteCount > 0) await op.procurementProcess.approveItem({ itemId: it.id });
+  }
+  return promo;
 }
 
 async function cleanup() {

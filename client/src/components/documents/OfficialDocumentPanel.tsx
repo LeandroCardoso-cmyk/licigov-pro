@@ -43,6 +43,8 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
 
   const exportDoc = trpc.documentEngine.exportInstitutional.useMutation({
     onSuccess: (res, vars) => {
+      // SEM-043 — prova do artefato: hash sha256 dos bytes exportados (DOCX e PDF têm hashes distintos).
+      toast.success(`Documento exportado. Hash do artefato: ${res.artifactHash.slice(0, 12)}…`, { description: `sha256:${res.artifactHash}` });
       if (vars.inline) {
         // Impressão / visualização: abre o PDF institucional numa nova aba (sem chrome da app).
         window.open(res.url, "_blank", "noopener,noreferrer");

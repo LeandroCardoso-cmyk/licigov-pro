@@ -14,6 +14,7 @@
  */
 import { formatBRL, multiplyQuantityCents, sumCents, type Cents } from "./money";
 import { normalizeDescription } from "./priceQuoteConsolidation";
+import { globalEstimateLabel } from "../../shared/estimateLabel";
 
 export const AUTHORITATIVE_ITEMS_CONTRACT_VERSION = "authoritative-items/1.0";
 /** Marcadores HTML (invisíveis no render) que delimitam o bloco — permitem verificar integridade. */
@@ -33,11 +34,28 @@ export interface AuthoritativeItemInput {
   readonly confirmedCatalogCode: string | null;
   /** Sugestão existente (não confirmada) — só sinaliza "a revisar". */
   readonly suggestedCatalogCode: string | null;
+  /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (`SOURCE_NOT_CURRENT` | `UNIT_MISMATCH`); null/ausente = sem bloqueio. */
+  readonly priceBlockedReason?: string | null;
 }
 
 export interface AuthoritativeItemRow extends AuthoritativeItemInput {
   readonly index: number;
   readonly estimatedTotalCents: Cents;
+}
+
+/**
+ * R10 / SEM-090 — quantidade NÃO INFORMADA ≠ 0. `0`/ausente/negativa/NaN não é quantidade (as colunas do banco são NOT NULL
+ * e guardam 0 para "não informada"): nunca é exibida como "0" nem entra em valor estimado.
+ */
+export function isQuantityInformed(quantity: number | null | undefined): quantity is number {
+  return typeof quantity === "number" && Number.isFinite(quantity) && quantity > 0;
+}
+
+export const QUANTITY_NOT_INFORMED_TEXT = "[REVISAR: quantidade não informada]";
+
+/** Quantidade para exibição em documento/prompt: número pt-BR, ou o marcador de revisão quando não informada. */
+export function formatQuantityOrReview(quantity: number | null | undefined): string {
+  return isQuantityInformed(quantity) ? formatQuantity(quantity) : QUANTITY_NOT_INFORMED_TEXT;
 }
 
 export interface AuthoritativeItemsEstimate {
@@ -46,6 +64,8 @@ export interface AuthoritativeItemsEstimate {
   readonly itemCount: number;
   readonly pricedItemCount: number;
   readonly unpricedItemCount: number;
+  /** R10 / SEM-090 — itens sem quantidade informada (excluídos do total estimado; sinalizados [REVISAR]). */
+  readonly unknownQuantityItemCount: number;
   readonly quoteCount: number;
   readonly confirmedClassificationCount: number;
   readonly pendingClassificationCount: number;
@@ -68,7 +88,7 @@ export function computeItemEstimates(items: readonly AuthoritativeItemInput[], o
   const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
     index: i + 1,
-    estimatedTotalCents: it.averagePriceCents > 0 ? multiplyQuantityCents(it.quantity, it.averagePriceCents) : 0,
+    estimatedTotalCents: it.averagePriceCents > 0 && isQuantityInformed(it.quantity) ? multiplyQuantityCents(it.quantity, it.averagePriceCents) : 0,
   }));
   const priced = rows.filter((r) => r.averagePriceCents > 0);
   return {
@@ -77,6 +97,7 @@ export function computeItemEstimates(items: readonly AuthoritativeItemInput[], o
     itemCount: rows.length,
     pricedItemCount: priced.length,
     unpricedItemCount: rows.length - priced.length,
+    unknownQuantityItemCount: rows.filter((r) => !isQuantityInformed(r.quantity)).length,
     quoteCount: rows.reduce((a, r) => a + r.quoteCount, 0),
     confirmedClassificationCount: rows.filter((r) => r.confirmedCatalogCode).length,
     pendingClassificationCount: rows.filter((r) => !r.confirmedCatalogCode).length,
@@ -135,19 +156,28 @@ export function renderAuthoritativeItemsBlock(
     const catalog = r.confirmedCatalogCode
       ? cell(r.confirmedCatalogCode)
       : r.suggestedCatalogCode ? "a revisar (sugestão não confirmada)" : "a revisar";
-    const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "") : "[REVISAR: sem preço]";
-    const total = r.averagePriceCents > 0 ? formatBRL(r.estimatedTotalCents).replace(/^R\$ /, "") : "—";
-    lines.push(`| ${r.index} | ${cell(r.description) || "[item sem descrição]"} | ${formatQuantity(r.quantity)} | ${cell(r.unit)} | ${avg} | ${total} | ${catalog} | ${r.quoteCount} |`);
+    const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "")
+      : r.priceBlockedReason === "SOURCE_NOT_CURRENT" ? "[REVISAR: preço suspenso — fonte da pesquisa alterada]"
+        : r.priceBlockedReason === "UNIT_MISMATCH" ? "[REVISAR: unidade da cotação incompatível com o item]"
+          : "[REVISAR: sem preço]";
+    const total = r.averagePriceCents > 0 && isQuantityInformed(r.quantity) ? formatBRL(r.estimatedTotalCents).replace(/^R\$ /, "") : "—";
+    lines.push(`| ${r.index} | ${cell(r.description) || "[item sem descrição]"} | ${formatQuantityOrReview(r.quantity)} | ${cell(r.unit)} | ${avg} | ${total} | ${catalog} | ${r.quoteCount} |`);
   }
   lines.push("");
   lines.push(canonical
-    ? `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`
+    // SEM-081: total PARCIAL (itens sem preço ficam fora da soma) nunca aparece como "global".
+    ? (estimate.unpricedItemCount > 0
+      ? `**${globalEstimateLabel(estimate)}:** ${formatBRL(estimate.globalTotalCents)}`
+      : `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`)
     : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
   // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
   lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
   if (estimate.unpricedItemCount > 0) {
     lines.push(`- [REVISAR: ${estimate.unpricedItemCount} item(ns) sem preço de referência — excluído(s) do total.]`);
+  }
+  if (estimate.unknownQuantityItemCount > 0) {
+    lines.push(`- [REVISAR: ${estimate.unknownQuantityItemCount} item(ns) sem quantidade informada — valor estimado não calculado e excluído(s) do total.]`);
   }
   if (estimate.pendingClassificationCount > 0) {
     lines.push(`- Classificação de catálogo: ${estimate.confirmedClassificationCount} confirmada(s) · ${estimate.pendingClassificationCount} a revisar (sugestão automática não equivale a decisão).`);

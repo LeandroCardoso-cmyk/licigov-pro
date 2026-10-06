@@ -18,8 +18,23 @@ import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
-import { createPriceResearchWorkspace, extractItemsFromText } from "../domain/priceResearch";
-import { insertResearch, insertResearchItem, recordProcessEvent } from "../db/procurement";
+import type { PriceResearchSource } from "../domain/priceResearch";
+import {
+  planDirectPriceImport, computeDirectPriceImportPayloadHash, computeDirectPriceImportContentHash, deriveDirectPriceImportId,
+} from "../domain/directPriceImport";
+import {
+  PRICE_REFERENCE_METHODS, PRICE_METHOD_LABELS, PRICE_RESEARCH_REQUIRED, PRICE_RESEARCH_AMBIGUOUS, PRICE_RESEARCH_NOT_FOUND,
+  PRICE_RESEARCH_INTEGRITY, PRICE_RESEARCH_INCONSISTENT, PRICE_METHOD_REQUIRED, PRICE_REFERENCE_DIVERGES, PRICE_LINEAGE_NOT_ALLOWED,
+  summarizePriceResearch, proposalMatchesServerValue, buildResearchLineage, encodeLineage, isLineageToken, describeLineage,
+  type PriceReferenceMethod, type PriceResearchSummary, type PriceLineage,
+} from "../domain/directPriceReference";
+import { recordProcessEvent } from "../db/procurement";
+import { timelineActor } from "../domain/timelineActor";
+import { getDb } from "../db/connection";
+import {
+  lockDirectWorkspaceForImport, findDirectPriceImport, insertDirectPriceImportTx, listDirectPriceImports, listDirectPriceImportItems,
+} from "../db/directPriceImport";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   DIRECT_DOMAIN_COPILOTS,
   type DirectProcurementWorkspace,
@@ -32,14 +47,15 @@ import {
 import {
   getDirectProcurementWorkspace, upsertContractJustification, upsertPriceJustification,
   insertGeneratedPublication, insertRequiredDocument, listRequiredDocuments, getDirectProcedure,
-  getContractJustification, getPriceJustification,
+  getContractJustification, getPriceJustification, listLinkedContractsForDirect,
   getRequiredDocument, updateRequiredDocumentStatus, recordRequiredDocumentAttachment, type RequiredDocumentRow,
 } from "../db/directProcurement";
 import { createHash } from "crypto";
 import { discardEvidenceFile, storeEvidenceFile } from "./evidenceStorageService";
 import { isAllowedTaskAttachmentMime, sanitizeAttachmentFileName, validateTaskAttachment } from "../domain/taskAttachmentPolicy";
 import {
-  REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey,
+  REQUIRED_DOCUMENT_MESSAGES, planRequiredDocumentStatusChange, requiredDocumentStorageKey, checklistPublicationGate,
+  CHECKLIST_NOT_CONFIGURED,
   type RequiredDocumentStatus,
 } from "../domain/requiredDocumentEvidence";
 
@@ -61,25 +77,138 @@ async function requireWorkspace(id: string, orgId: number): Promise<DirectProcur
 
 // ─── Pesquisa de Preços (REUTILIZA o Price Research Workspace) ─────────────────
 
-/** Importa pesquisa de preços reutilizando integralmente o Price Research Workspace. */
+/** Operação registrada na idempotência (escopo do hash de payload). */
+export const DIRECT_PRICE_IMPORT_OP = "directProcurement.importPriceResearch";
+
+export interface DirectPriceImportResult {
+  /** Mantido por compatibilidade com o cliente (= importId). */
+  readonly researchId: string;
+  readonly importId: string;
+  readonly itemCount: number;
+  readonly contentHash: string;
+  readonly source: string;
+  /** true ⇒ o MESMO conteúdo já havia sido importado neste workspace: convergiu, nada foi escrito. */
+  readonly deduplicated: boolean;
+  /** true ⇒ resposta da idempotência (mesma chave + mesmo payload), sem reexecução. */
+  readonly replayed: boolean;
+}
+
+function isDuplicateEntry(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && typeof e === "object" && i < 4; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: string }).code === "ER_DUP_ENTRY") return true;
+  }
+  return false;
+}
+
+function reviveImport(raw: unknown): Omit<DirectPriceImportResult, "replayed"> {
+  const v = (typeof raw === "string" ? JSON.parse(raw) : raw) as Omit<DirectPriceImportResult, "replayed">;
+  return { researchId: v.researchId, importId: v.importId, itemCount: v.itemCount, contentHash: v.contentHash, source: v.source, deduplicated: v.deduplicated };
+}
+
+/**
+ * R2 / PR-04A — LEG-014 / FCC-01 — Importação GOVERNADA de pesquisa de preços na Contratação Direta.
+ *
+ * Contrato:
+ *   - identidade EXPLÍCITA por importação (importId = f(org, workspace, contentHash)); cotações com ids
+ *     escopados à importação — nunca reaproveita/sobrescreve a pesquisa ou as cotações de outra importação;
+ *   - idempotência (reuso de checkIdempotency/saveIdempotencyResult/failIdempotencyKey): mesma chave +
+ *     mesmo payload ⇒ converge (mesmo resultado persistido, `replayed`); mesma chave + payload diferente ⇒
+ *     CONFLICT; chave em processamento ⇒ CONFLICT;
+ *   - dedup governada: mesmo conteúdo (contentHash) sob NOVA chave ⇒ converge para a importação existente
+ *     (`deduplicated: true`), sem escrita nem evento; conteúdo diferente ⇒ coexiste;
+ *   - transação LOCAL e determinística (lock do workspace + pesquisa + cotações + evento de timeline +
+ *     conclusão da chave). Nada de IA, rede, storage, e-mail ou webhook;
+ *   - linhagem: fonte, importId, contentHash, correlationId e ator (evento `process_timeline` com
+ *     actor = usuário autenticado, refId = importId; chave de idempotência por (org, usuário));
+ *   - tenant fail-closed: workspace revalidado por (id, org) sob lock; ausente ⇒ NOT_FOUND neutro;
+ *   - FAIL-CLOSED sem DB (escrita autoritativa — nunca sucesso simulado).
+ */
 export async function importDirectPriceResearch(params: {
   workspaceId: string;
   organizationId: number;
-  source: "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
+  source: PriceResearchSource;
   text: string;
+  idempotencyKey: string;
+  actorUserId: number;
   correlationId: string;
-}): Promise<{ researchId: string; itemCount: number }> {
-  const research = createPriceResearchWorkspace({
-    processId: params.workspaceId, organizationId: params.organizationId, source: params.source, correlationId: params.correlationId,
+}): Promise<DirectPriceImportResult> {
+  const plan = planDirectPriceImport({
+    workspaceId: params.workspaceId, organizationId: params.organizationId, source: params.source,
+    text: params.text, correlationId: params.correlationId,
   });
-  const items = extractItemsFromText(params.text, { researchId: research.id, processId: params.workspaceId, organizationId: params.organizationId });
-  await insertResearch({ ...research, itemCount: items.length });
-  for (const it of items) await insertResearchItem(it);
-  await recordProcessEvent({
-    organizationId: params.organizationId, processId: params.workspaceId, eventType: "change",
-    actor: "sistema", summary: `Pesquisa de preços importada (${params.source}): ${items.length} item(ns).`, refId: research.id, correlationId: params.correlationId,
+  if (plan.items.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Nenhuma cotação reconhecida no conteúdo informado (use: descrição;qtd;un;valor[;fornecedor])." });
+  }
+  const payloadHash = computeDirectPriceImportPayloadHash({
+    operation: DIRECT_PRICE_IMPORT_OP, organizationId: params.organizationId, workspaceId: params.workspaceId,
+    source: params.source, contentHash: plan.contentHash,
   });
-  return { researchId: research.id, itemCount: items.length };
+
+  const db = await getDb();
+  if (!db) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — importação recusada (nada salvo)." });
+  }
+
+  const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, DIRECT_PRICE_IMPORT_OP, payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({ code: "CONFLICT", message: "Idempotency-Key reutilizada com conteúdo diferente — importação recusada." });
+    }
+    return { ...reviveImport(check.response), replayed: true };
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: "Uma importação idêntica já está em processamento para esta chave — aguarde a conclusão." });
+  }
+
+  const key = { key: params.idempotencyKey, user: params.actorUserId, org: params.organizationId };
+  const dedupResult = (existing: { importId: string; itemCount: number; source: string }): Omit<DirectPriceImportResult, "replayed"> => ({
+    researchId: existing.importId, importId: existing.importId, itemCount: existing.itemCount,
+    contentHash: plan.contentHash, source: existing.source, deduplicated: true,
+  });
+
+  const runTx = async (): Promise<Omit<DirectPriceImportResult, "replayed">> => {
+    let result!: Omit<DirectPriceImportResult, "replayed">;
+    await db.transaction(async (tx) => {
+      if (!(await lockDirectWorkspaceForImport(tx, params.workspaceId, params.organizationId))) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Processo de contratação direta não encontrado nesta organização." });
+      }
+      const existing = await findDirectPriceImport(tx, plan.importId, params.organizationId, params.workspaceId);
+      if (existing) {
+        // Dedup governada: mesmo conteúdo já importado — converge, sem escrita/evento (nada mudou).
+        result = dedupResult(existing);
+      } else {
+        await insertDirectPriceImportTx(tx, plan.research, plan.items);
+        await recordProcessEvent({
+          organizationId: params.organizationId, processId: params.workspaceId, eventType: "change",
+          actor: String(params.actorUserId),
+          summary: `Pesquisa de preços importada (${params.source}): ${plan.items.length} cotação(ões). importId=${plan.importId} contentHash=${plan.contentHash}`,
+          refId: plan.importId, correlationId: params.correlationId.slice(0, 64),
+          // evento SINGLETON por importação (id derivado do importId — nunca duplica)
+          idempotencyKey: `direct_price_import:${plan.importId}`,
+        }, tx);
+        result = {
+          researchId: plan.importId, importId: plan.importId, itemCount: plan.items.length,
+          contentHash: plan.contentHash, source: params.source, deduplicated: false,
+        };
+      }
+      await saveIdempotencyResult(key.key, key.user, key.org, result, tx);
+    });
+    return result;
+  };
+
+  try {
+    try {
+      return { ...(await runTx()), replayed: false };
+    } catch (err) {
+      // Corrida estrutural (mesmo conteúdo, outra chave, commit simultâneo): a PK recusou o 2º INSERT e a
+      // transação fez rollback. Reexecuta UMA vez: agora a importação existe ⇒ converge (dedup).
+      if (!isDuplicateEntry(err)) throw err;
+      return { ...(await runTx()), replayed: false };
+    }
+  } catch (err) {
+    await failIdempotencyKey(key.key, key.user, key.org).catch(() => {});
+    throw err;
+  }
 }
 
 // ─── Justificativa da Contratação (copilotos = SUGESTÃO; registro = aceite humano) ─────
@@ -103,6 +232,8 @@ export async function generateContractJustification(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
+  /** R9 / SEM-076 — quem pediu a sugestão (ator da timeline). */
+  actorUserId?: number;
   invoke?: (prompt: string) => Promise<string>;
 }): Promise<{ suggestion: ContractJustificationSuggestion; justification: Awaited<ReturnType<typeof getContractJustification>>; recommendation: Recommendation }> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
@@ -128,7 +259,7 @@ export async function generateContractJustification(params: {
   };
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "recommendation",
-    actor: "multi_copilot", summary: "Sugestão de justificativa gerada pelos copilotos (não aceita; nada foi registrado).", refId: ws.id, correlationId: params.correlationId,
+    actor: timelineActor(params.actorUserId), summary: "Sugestão de justificativa gerada pelos copilotos (não aceita; nada foi registrado).", refId: ws.id, correlationId: params.correlationId,
   });
   return {
     suggestion,
@@ -182,63 +313,171 @@ export async function acceptContractJustification(params: {
 
 // ─── Justificativa do Preço ───────────────────────────────────────────────────
 
+/** Pesquisa governada (PR-04A) verificada e resumida pelo servidor — fonte do valor de referência. */
+export interface GovernedPriceResearch {
+  readonly researchId: string;
+  readonly contentHash: string;
+  readonly importedAt: string;
+  readonly importSource: string;
+  readonly quoteCount: number;
+  readonly summary: ReturnType<typeof summarizePriceResearch>;
+}
+
+/**
+ * R9 / SEM-042 — pesquisas de preço GOVERNADAS do workspace (tenant-scoped), cada uma VERIFICADA: o contentHash é
+ * recomputado das cotações persistidas e o id tem de ser o derivado dele (`deriveDirectPriceImportId`) — linhas
+ * legadas ou alteradas não passam. `integrityFailed` lista ids que existem mas não verificam (recusa explícita).
+ */
+async function loadGovernedPriceResearches(workspaceId: string, organizationId: number): Promise<{ verified: GovernedPriceResearch[]; integrityFailed: string[] }> {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Persistência indisponível — pesquisa de preços não verificada (nada salvo)." });
+  const imports = await listDirectPriceImports(db, organizationId, workspaceId);
+  const verified: GovernedPriceResearch[] = [];
+  const integrityFailed: string[] = [];
+  for (const imp of imports) {
+    const items = await listDirectPriceImportItems(db, imp.importId, organizationId);
+    const contentHash = computeDirectPriceImportContentHash(items);
+    const governed = deriveDirectPriceImportId(organizationId, workspaceId, contentHash) === imp.importId && items.length === imp.itemCount;
+    if (!governed) { integrityFailed.push(imp.importId); continue; }
+    verified.push({ researchId: imp.importId, contentHash, importedAt: imp.createdAt, importSource: imp.source, quoteCount: items.length, summary: summarizePriceResearch(items) });
+  }
+  return { verified, integrityFailed };
+}
+
+/** Leitura para o formulário: pesquisas verificadas + estatísticas CALCULADAS PELO SERVIDOR (nada vem do cliente). */
+export async function listPriceResearchesForJustification(workspaceId: string, organizationId: number): Promise<Array<{
+  researchId: string; contentHash: string; importedAt: string; importSource: string; quoteCount: number;
+  consistent: boolean; inconsistencyDetail: string | null; itemCount: number; minQuotesPerItem: number;
+  values: PriceResearchSummary["values"] | null;
+}>> {
+  const { verified } = await loadGovernedPriceResearches(workspaceId, organizationId);
+  return verified.map((r) => r.summary.ok
+    ? { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: true, inconsistencyDetail: null, itemCount: r.summary.summary.itemCount, minQuotesPerItem: r.summary.summary.minQuotesPerItem, values: r.summary.summary.values }
+    : { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: false, inconsistencyDetail: r.summary.detail, itemCount: 0, minQuotesPerItem: 0, values: null });
+}
+
+const refuse = (code: "BAD_REQUEST" | "PRECONDITION_FAILED" | "NOT_FOUND", message: string, token: string): never => {
+  throw new TRPCError({ code, message: `${message} Nada foi gravado (${token}).` });
+};
+
+/**
+ * R9 / SEM-042 — justificativa do PREÇO com LINHAGEM. Contrato:
+ *   - source "pesquisa": o valor de referência é CALCULADO PELO SERVIDOR a partir das cotações da importação governada
+ *     (PR-04A) pelo método ESCOLHIDO pela pessoa (sem método padrão); o valor do cliente é só uma PROPOSTA — se divergir
+ *     do valor do servidor ⇒ recusa. Registra a linhagem (id da pesquisa, contentHash, versão do hash, nº de cotações,
+ *     método, valor calculado). Sem pesquisa / ambígua / adulterada / inconsistente ⇒ recusa (zero escritas);
+ *   - source "manual"/"documento": o valor é DECLARADO pela pessoa e registrado como tal (sem pesquisa vinculada; o
+ *     sistema não o verifica). `researchId`/`method` não se aplicam;
+ *   - nenhuma "confiança"/"Baseado na Pesquisa…" fixa: só fatos verificáveis. Sem IA neste caminho.
+ * Toda recusa ocorre ANTES de qualquer escrita; escrita = justificativa + documento oficial + evento (ator humano).
+ */
 export async function generatePriceJustification(params: {
   workspaceId: string;
   organizationId: number;
   source: "pesquisa" | "manual" | "documento";
   justification?: string;
+  /** Proposta do cliente. Para "pesquisa" é só comparada com o valor do servidor; para os demais é o valor DECLARADO. */
   referenceValue?: number;
   researchId?: string;
+  /** Método escolhido pela pessoa (obrigatório para "pesquisa"). */
+  method?: PriceReferenceMethod;
   documentReferences?: string[];
   correlationId: string;
   /** R5 / PR-11 — aceite humano explícito do registro oficial. */
   confirmOfficial?: boolean;
   actorUserId?: number;
-}): Promise<{ priceJustification: Awaited<ReturnType<typeof upsertPriceJustification>>; recommendation: Recommendation }> {
+}): Promise<{ priceJustification: Awaited<ReturnType<typeof upsertPriceJustification>>; lineage: PriceLineage }> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
   assertKernelAccess(DOMAIN, "institutional_rag");
   // R5 / PR-11 (SEM-022) — formulário vazio nunca sobrescreve nem emite documento oficial.
-  if ((params.justification ?? "").trim().length < MIN_JUSTIFICATION_CHARS || !(Number(params.referenceValue) > 0)) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe a fundamentação (mín. ${MIN_JUSTIFICATION_CHARS} caracteres) e um valor de referência maior que zero; nada foi gravado (${JUSTIFICATION_FIELDS_REQUIRED}).` });
+  if ((params.justification ?? "").trim().length < MIN_JUSTIFICATION_CHARS) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe a fundamentação (mín. ${MIN_JUSTIFICATION_CHARS} caracteres); nada foi gravado (${JUSTIFICATION_FIELDS_REQUIRED}).` });
+  }
+  if (params.source !== "pesquisa" && !(Number(params.referenceValue) > 0)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe um valor de referência maior que zero; nada foi gravado (${JUSTIFICATION_FIELDS_REQUIRED}).` });
   }
   if (params.confirmOfficial !== true) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Confirme explicitamente que esta é a justificativa de preço institucional antes de registrá-la; nada foi gravado (${HUMAN_ACCEPTANCE_REQUIRED}).` });
   }
+  // A linhagem só é emitida pelo servidor: o cliente não pode forjar o token reservado nas referências documentais.
+  if ((params.documentReferences ?? []).some(isLineageToken)) {
+    return refuse("BAD_REQUEST", "Referência documental inválida (prefixo reservado ao sistema).", PRICE_LINEAGE_NOT_ALLOWED);
+  }
+  if (params.source !== "pesquisa" && (params.researchId || params.method)) {
+    return refuse("BAD_REQUEST", "Pesquisa e método só se aplicam à justificativa baseada em pesquisa de preços.", PRICE_LINEAGE_NOT_ALLOWED);
+  }
+
+  let lineage: PriceLineage;
+  let referenceValue: number;
+  let researchId = "";
+  if (params.source === "pesquisa") {
+    if (!params.method || !PRICE_REFERENCE_METHODS.includes(params.method)) {
+      return refuse("BAD_REQUEST", `Escolha o método de cálculo do valor de referência (${PRICE_REFERENCE_METHODS.map((m) => PRICE_METHOD_LABELS[m]).join(", ")}); o sistema não define um método padrão.`, PRICE_METHOD_REQUIRED);
+    }
+    const { verified, integrityFailed } = await loadGovernedPriceResearches(ws.id, params.organizationId);
+    let research: GovernedPriceResearch | undefined;
+    if (params.researchId) {
+      research = verified.find((r) => r.researchId === params.researchId);
+      if (!research) {
+        if (integrityFailed.includes(params.researchId)) return refuse("PRECONDITION_FAILED", "A pesquisa de preços informada não confere com as cotações persistidas (integridade).", PRICE_RESEARCH_INTEGRITY);
+        return refuse("NOT_FOUND", "Pesquisa de preços não encontrada neste processo.", PRICE_RESEARCH_NOT_FOUND);
+      }
+    } else if (verified.length === 0) {
+      return refuse("PRECONDITION_FAILED", "Importe a pesquisa de preços deste processo antes de justificar o preço por pesquisa.", PRICE_RESEARCH_REQUIRED);
+    } else if (verified.length > 1) {
+      return refuse("PRECONDITION_FAILED", "Há mais de uma pesquisa de preços neste processo; informe qual delas fundamenta o preço.", PRICE_RESEARCH_AMBIGUOUS);
+    } else {
+      research = verified[0];
+    }
+    if (!research.summary.ok) {
+      return refuse("PRECONDITION_FAILED", `A pesquisa de preços não permite calcular um valor (${research.summary.detail}).`, PRICE_RESEARCH_INCONSISTENT);
+    }
+    const serverValue = research.summary.summary.values[params.method];
+    const proposed = params.referenceValue === undefined || params.referenceValue === null ? null : Number(params.referenceValue);
+    if (proposed !== null && !proposalMatchesServerValue(proposed, serverValue)) {
+      return refuse("PRECONDITION_FAILED", `O valor informado (R$ ${proposed.toFixed(2)}) difere do valor calculado pelo sistema a partir da pesquisa (${PRICE_METHOD_LABELS[params.method]}: R$ ${serverValue.toFixed(2)}). Para um valor diferente, registre-o como justificativa manual.`, PRICE_REFERENCE_DIVERGES);
+    }
+    lineage = buildResearchLineage({
+      researchId: research.researchId, contentHash: research.contentHash, importedAt: research.importedAt, importSource: research.importSource,
+      summary: research.summary.summary, method: params.method, proposedValue: proposed,
+    });
+    referenceValue = serverValue;
+    researchId = research.researchId;
+  } else {
+    referenceValue = Number(params.referenceValue);
+    lineage = { kind: "declarado", declaredValue: referenceValue, declaredByUserId: params.actorUserId ?? null };
+  }
 
   const draft = createPriceJustification({
     organizationId: params.organizationId, workspaceId: ws.id, source: params.source,
-    justification: params.justification, referenceValue: params.referenceValue, researchId: params.researchId,
-    documentReferences: params.documentReferences, correlationId: params.correlationId,
+    justification: params.justification, referenceValue, researchId,
+    documentReferences: [encodeLineage(lineage), ...(params.documentReferences ?? [])], correlationId: params.correlationId,
   });
   const priceJustification = await upsertPriceJustification(draft);
 
   // V1 — projeta a justificativa de PREÇO no Document Engine (pipeline ÚNICO), fiel aos dados
-  // EFETIVAMENTE persistidos (fonte, valor de referência, texto). Não cria decisão jurídica autônoma
-  // nem inventa informação ausente — apenas materializa o que o servidor registrou.
+  // EFETIVAMENTE persistidos (fonte, valor de referência, linhagem, texto). Não cria decisão jurídica autônoma
+  // nem inventa informação ausente — apenas materializa o que foi registrado.
   const sourceLabel = draft.source === "pesquisa" ? "Pesquisa de Preços"
     : draft.source === "documento" ? "Documento de referência" : "Registro do servidor";
   await generateOfficialDocument({
     organizationId: params.organizationId, businessDomain: DOMAIN, documentType: "justificativa_preco",
     origin: ws.id, title: `Justificativa de Preço — ${ws.processNumber}`,
-    content: `# Justificativa de Preço\nProcesso: ${ws.processNumber} · Objeto: ${ws.object}\nFonte: ${sourceLabel}\nValor de referência: R$ ${draft.referenceValue.toFixed(2)}\n\n## Fundamentação\n${draft.justification || "—"}\n\n> Documento gerado a partir dos dados persistidos. Revisão obrigatória pelo servidor competente.`,
+    content: `# Justificativa de Preço\nProcesso: ${ws.processNumber} · Objeto: ${ws.object}\nFonte: ${sourceLabel}\nValor de referência: R$ ${draft.referenceValue.toFixed(2)}\n\n## Origem do valor\n${describeLineage(lineage)}\n\n## Fundamentação\n${draft.justification || "—"}\n\n> Documento gerado a partir dos dados persistidos. Revisão obrigatória pelo servidor competente.`,
     author: params.actorUserId ? String(params.actorUserId) : "sistema", correlationId: params.correlationId,
-    metadata: { source: draft.source, referenceValue: draft.referenceValue, researchId: draft.researchId || null, acceptedBy: params.actorUserId ?? null },
+    metadata: {
+      source: draft.source, referenceValue: draft.referenceValue, researchId: researchId || null, acceptedBy: params.actorUserId ?? null,
+      lineage: lineage.kind === "pesquisa"
+        ? { kind: lineage.kind, contentHash: lineage.contentHash, hashVersion: lineage.hashVersion, quoteCount: lineage.quoteCount, method: lineage.method, computedValue: lineage.computedValue }
+        : { kind: lineage.kind },
+    },
   });
 
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "change",
-    actor: params.actorUserId ? String(params.actorUserId) : "sistema", summary: `Justificativa do preço registrada (${params.source}).`, refId: draft.id, correlationId: params.correlationId,
+    actor: timelineActor(params.actorUserId), summary: `Justificativa do preço registrada (${params.source}). ${describeLineage(lineage)}`, refId: draft.id, correlationId: params.correlationId,
   });
-  return {
-    priceJustification,
-    recommendation: {
-      reasoning: `Preço fundamentado por ${params.source}.`,
-      explainability: params.source === "pesquisa" ? "Baseado na Pesquisa de Preços do processo." : "Justificativa registrada pelo servidor.",
-      provenance: params.source === "pesquisa" ? `price_research:${params.researchId ?? ""}` : "manual",
-      confidence: params.source === "pesquisa" ? 0.85 : 0.6,
-      rejectable: true,
-    },
-  };
+  return { priceJustification, lineage };
 }
 
 // ─── Documentação Obrigatória (checklist dinâmico) ────────────────────────────
@@ -368,12 +607,33 @@ export async function getLegalOpinionResult(requestId: string, orgId: number): P
 
 // ─── Publicação (Document Engine) ─────────────────────────────────────────────
 
-/** Gera as publicações conforme modalidade e procedimento. Reutiliza Document Engine. */
+export const CONTRACT_EXTRACT_NO_CONTRACT = "CONTRACT_EXTRACT_NO_CONTRACT";
+export const CONTRACT_EXTRACT_AMBIGUOUS = "CONTRACT_EXTRACT_AMBIGUOUS";
+
+export interface GeneratedPublicationsResult {
+  readonly publications: Array<{ id: string; kind: string; title: string }>;
+  /** "generated" = extrato gerado a partir de contrato REGISTRADO; "not_requested" = nenhum extrato foi gerado nem afirmado. */
+  readonly contractExtract: "generated" | "not_requested";
+}
+
+/**
+ * Gera as publicações conforme modalidade e procedimento. Reutiliza Document Engine.
+ *
+ * R9 / SEM-064 — o EXTRATO DE CONTRATO não é mais gerado por padrão: antes saía sempre, com texto genérico, mesmo sem
+ * contrato (extrato de um contrato que não existe). Agora só com `includeContractExtract` E exatamente um contrato
+ * REGISTRADO vinculado a esta contratação direta (origem `contratacao_direta`, fora de "minuta"/"arquivado", com número);
+ * o conteúdo vem dos dados do contrato. Sem contrato ⇒ PRECONDITION_FAILED `CONTRACT_EXTRACT_NO_CONTRACT`; mais de um ⇒
+ * `CONTRACT_EXTRACT_AMBIGUOUS` — antes de QUALQUER escrita. A publicação do aviso/ratificação não depende do contrato.
+ */
 export async function generatePublications(params: {
   workspaceId: string;
   organizationId: number;
   correlationId: string;
-}): Promise<Array<{ id: string; kind: string; title: string }>> {
+  /** Pede o extrato do contrato vinculado (opt-in; nunca implícito). */
+  includeContractExtract?: boolean;
+  /** Humano que publica (ator da timeline). */
+  actorUserId?: number;
+}): Promise<GeneratedPublicationsResult> {
   const ws = await requireWorkspace(params.workspaceId, params.organizationId);
   assertKernelAccess(DOMAIN, "document_engine");
   const procedure = await getDirectProcedure(ws.id, params.organizationId);
@@ -399,7 +659,33 @@ export async function generatePublications(params: {
     });
   }
 
-  const kinds: PublicationKind[] = ["aviso", "ratificacao", "extrato_contrato"];
+  // NEW-029 — FAIL-CLOSED: o checklist configurado de documentos obrigatórios precisa estar VALIDADO (com evidência
+  // real) antes de publicar. O `pending` do workspace deixou de ser só informativo.
+  const checklist = checklistPublicationGate(await listRequiredDocuments(ws.id, params.organizationId), ws.id);
+  if (!checklist.ok) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: checklist.code === CHECKLIST_NOT_CONFIGURED
+        ? `Publicação bloqueada: o checklist de documentos obrigatórios ainda não foi configurado para este processo (${CHECKLIST_NOT_CONFIGURED}).`
+        : `Publicação bloqueada: documentos obrigatórios sem validação — ${checklist.pending.join("; ")} (${checklist.code}).`,
+    });
+  }
+
+  // R9 / SEM-064 — extrato só de contrato REGISTRADO (decidido ANTES de qualquer escrita).
+  let contract: Awaited<ReturnType<typeof listLinkedContractsForDirect>>[number] | null = null;
+  if (params.includeContractExtract) {
+    const eligible = (await listLinkedContractsForDirect(params.organizationId, ws.id)).filter((c) => c.status !== "minuta" && c.contractNumber.trim() !== "");
+    if (eligible.length === 0) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Extrato bloqueado: não há contrato registrado (fora de minuta) vinculado a esta contratação direta; nada foi gerado (${CONTRACT_EXTRACT_NO_CONTRACT}).` });
+    }
+    if (eligible.length > 1) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Extrato bloqueado: há mais de um contrato vinculado a esta contratação direta; nada foi gerado (${CONTRACT_EXTRACT_AMBIGUOUS}).` });
+    }
+    contract = eligible[0];
+  }
+
+  const kinds: PublicationKind[] = ["aviso", "ratificacao"];
+  if (contract) kinds.push("extrato_contrato");
   if (procedure?.procedureType === "presencial") kinds.push("instrucoes", "cronograma");
 
   // A Ratificação materializa a DECISÃO REAL persistida (autoridade responsável, decisão, justificativa
@@ -408,11 +694,14 @@ export async function generatePublications(params: {
   const priceJustification = await getPriceJustification(ws.id, params.organizationId);
 
   const out: Array<{ id: string; kind: string; title: string }> = [];
+  const contents: string[] = [];
   for (const kind of kinds) {
     const genericContent = `# ${titleForKind(kind)}\nProcesso: ${ws.processNumber} · Modalidade: ${ws.procurementType} · Fundamento: ${ws.legalBasis || "—"}\nProcedimento: ${procedure?.procedureType ?? "indefinido"}${procedure?.platform ? ` · Plataforma: ${procedure.platform}` : ""}\n\n> Documento gerado a partir do fluxo. Revisão obrigatória pelo servidor competente.`;
     const content = kind === "ratificacao"
       ? buildRatificationContent(ws, ratification, contractJustification, priceJustification)
-      : genericContent;
+      : kind === "extrato_contrato" && contract
+        ? buildContractExtractContent(ws, contract)
+        : genericContent;
     const pub = createGeneratedPublication({
       organizationId: params.organizationId, workspaceId: ws.id, kind,
       title: `${titleForKind(kind)} — ${ws.processNumber}`,
@@ -425,15 +714,36 @@ export async function generatePublications(params: {
     await generateOfficialDocument({
       organizationId: params.organizationId, businessDomain: DOMAIN, documentType: officialType,
       origin: ws.id, title: pub.title, content: pub.content, author: "sistema", correlationId: params.correlationId,
-      metadata: { kind, modality: ws.procurementType },
+      metadata: { kind, modality: ws.procurementType, ...(kind === "extrato_contrato" && contract ? { contractId: contract.id } : {}) },
     });
     out.push({ id: pub.id, kind, title: pub.title });
+    contents.push(`${kind}:${content}`);
   }
+  // Evento SINGLETON por (decisão corrente + conteúdo publicado): o replay idêntico não duplica o evento; conteúdo
+  // novo (ex.: nova revisão da ratificação) gera outro. Ator = o humano que publicou (nunca "sistema" quando há ator).
+  const publishKey = createHash("sha256").update(`${ratification.id}\n${contents.join("\n")}`).digest("hex").slice(0, 32);
   await recordProcessEvent({
     organizationId: params.organizationId, processId: ws.id, eventType: "decision",
-    actor: "sistema", summary: `Publicações geradas: ${out.map(o => o.kind).join(", ")}.`, refId: ws.id, correlationId: params.correlationId,
+    actor: timelineActor(params.actorUserId), summary: `Publicações geradas: ${out.map(o => o.kind).join(", ")}.${contract ? " Extrato de contrato gerado a partir do contrato registrado." : " Extrato de contrato não gerado (não solicitado)."}`,
+    refId: ws.id, correlationId: params.correlationId, idempotencyKey: `publish:${publishKey}`,
   });
-  return out;
+  return { publications: out, contractExtract: contract ? "generated" : "not_requested" };
+}
+
+/** Extrato a partir dos dados do contrato REGISTRADO (nunca texto genérico; ausências aparecem como "—"). */
+function buildContractExtractContent(
+  ws: { processNumber: string; procurementType: string; legalBasis: string | null },
+  c: { id: string; contractNumber: string; contractor: string; object: string; value: number; term: string; status: string },
+): string {
+  return [
+    `# Extrato de Contrato`,
+    `Contrato nº ${c.contractNumber} · Origem: Contratação Direta ${ws.processNumber} (${ws.procurementType}) · Fundamento: ${ws.legalBasis || "—"}`,
+    `Contratado: ${c.contractor || "—"}`,
+    `Objeto: ${c.object || "—"}`,
+    `Valor: R$ ${c.value.toFixed(2)} · Prazo/vigência: ${c.term || "—"} · Situação no sistema: ${c.status}`,
+    ``,
+    `> Gerado a partir do contrato registrado (id ${c.id}). Revisão obrigatória pelo servidor competente.`,
+  ].join("\n");
 }
 
 /**

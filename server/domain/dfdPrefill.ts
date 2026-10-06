@@ -362,7 +362,7 @@ export function dfdRowKey(fingerprint: string, lotCode: string | null): string {
  */
 export function linkDFDRows(
   parsed: ParsedDFD, items: readonly DFDPrefillItem[], sources: readonly string[],
-  sourceLinks: ReadonlyArray<{ fingerprint: string; lotKey: string | null; itemId: string }> = [],
+  sourceLinks: ReadonlyArray<{ fingerprint: string; lotKey: string | null; itemId: string; rowOrdinal?: number | null }> = [],
 ): LinkedDFDRow[] {
   const active = new Set(items.map((i) => i.key));
   const lineage = Object.entries(readMarkers(sources).rows).filter(([id]) => active.has(id));
@@ -380,9 +380,17 @@ export function linkDFDRows(
   pass((r, m) => r.itemNo !== null && r.itemNo === m.itemNo && rk(r) === m.rowKey);
   pass((r, m) => rk(r) === m.rowKey);
   pass((r, m) => r.itemNo !== null && r.itemNo === m.itemNo);
+  const sameRow = (l: (typeof sourceLinks)[number], row: ParsedDFDItem) => l.fingerprint === row.fingerprint && (l.lotKey ?? null) === lotKey(row.lotCode);
+  // R9 / SEM-068 — vínculo com ORDINAL da linha (linhas idênticas são evidências distintas): primeiro o ordinal exato…
   out.forEach((o, i) => {
     if (o.itemId) return;
-    const hits = sourceLinks.filter((l) => active.has(l.itemId) && !used.has(l.itemId) && l.fingerprint === o.row.fingerprint && (l.lotKey ?? null) === lotKey(o.row.lotCode));
+    const hit = sourceLinks.find((l) => l.rowOrdinal != null && l.rowOrdinal === i + 1 && active.has(l.itemId) && !used.has(l.itemId) && sameRow(l, o.row));
+    if (hit) assign(i, hit.itemId, "source_link");
+  });
+  // …depois a regra anterior (vínculo legado sem ordinal, ou linha que mudou de posição): só se houver UM candidato.
+  out.forEach((o, i) => {
+    if (o.itemId) return;
+    const hits = sourceLinks.filter((l) => active.has(l.itemId) && !used.has(l.itemId) && sameRow(l, o.row));
     if (hits.length === 1) assign(i, hits[0].itemId, "source_link");
   });
   out.forEach((o, i) => {
@@ -750,6 +758,23 @@ export function applyAIJustification(
   const lines = replaceSectionBody(content.split("\n"), 2, body);
   const mk = readMarkers(sources);
   mk.ai.justificativa = { hash: fieldHash(normalizeText(body.join("\n"))), executionId: executionId.replace(/[^A-Za-z0-9_-]/g, "") || "exec", contextDigest: contextDigest.slice(0, 16) };
+  delete mk.prefill.justificativa;
+  return { content: lines.join("\n"), sources: writeMarkers(sources, mk) };
+}
+
+/**
+ * SEM-058 — registra a justificativa ACEITA por um humano (sugestão de IA aceita como está ou editada antes do aceite).
+ * Texto sem edição ⇒ mantém o marcador `ai:` (linhagem: execução + digest do contexto); texto editado ⇒ remove o
+ * marcador (passa a ser texto humano) e não deixa marcador de pré-preenchimento para a seção.
+ */
+export function applyReviewedJustification(
+  content: string, sources: readonly string[], text: string,
+  ai: { executionId: string; contextDigest: string } | null,
+): { content: string; sources: string[] } {
+  if (ai) return applyAIJustification(content, sources, text, ai.executionId, ai.contextDigest);
+  const lines = replaceSectionBody(content.split("\n"), 2, text.trim().split("\n"));
+  const mk = readMarkers(sources);
+  delete mk.ai.justificativa;
   delete mk.prefill.justificativa;
   return { content: lines.join("\n"), sources: writeMarkers(sources, mk) };
 }

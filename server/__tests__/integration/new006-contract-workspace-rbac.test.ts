@@ -59,6 +59,12 @@ vi.mock("../../services/contractService", () => {
   };
 });
 
+// SW-C1 / SEM-062 — `proposeInheritance` (leitura) delega a este serviço; mockado: aqui só importa o piso de papel.
+vi.mock("../../services/contractInheritanceService", () => ({
+  proposeContractInheritance: vi.fn(async () => ({ kind: "no_canonical_evidence", sourceType: "processo_licitatorio", sourceId: "p-1", reason: "PROCUREMENT_NO_AWARD_RECORD", message: "m", candidates: [] })),
+  resolveSelectedDirectProposal: vi.fn(),
+}));
+
 vi.mock("../../db/contractWorkspace", () => ({
   getContractWorkspace: vi.fn(async (id: string, orgId: number) => {
     if (orgId !== h.ORG) return null;
@@ -112,11 +118,12 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   listImported: undefined,
   updateContract: { contractId: DRAFT, contractor: "Novo Fornecedor", expectedUpdatedAt: REV },
   generateDocuments: { contractId: CID, kind: "contrato" },
-  createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação" },
-  createApostille: { contractId: CID, kind: "reajuste" },
+  createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação", idempotencyKey: "new006-cmd-add" },
+  createApostille: { contractId: CID, kind: "reajuste", idempotencyKey: "new006-cmd-apo" },
   registerOccurrence: { contractId: CID, description: "atraso na entrega" },
   requestLegalOpinion: { contractId: CID },
   getLegalOpinion: { requestId: "req-1" },
+  proposeInheritance: { sourceType: "processo_licitatorio", sourceId: "p-1" },
 };
 
 /** Todo efeito (serviço/escrita) que uma procedure pode disparar — tem de ficar em ZERO numa recusa. */
@@ -170,7 +177,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
 
   it("a matriz cobre EXATAMENTE as procedures do router (nova procedure ⇒ atualizar a matriz deliberadamente)", () => {
     expect(Object.keys(CONTRACT_WORKSPACE_RBAC_MATRIX).sort()).toEqual(procedures);
-    expect(procedures).toHaveLength(14);
+    expect(procedures).toHaveLength(15);
   });
 
   it("o builder declarado no código-fonte confere com a matriz, procedure a procedure", () => {
@@ -180,7 +187,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
     }
     // Nenhuma mutation ficou em tenantProcedure.
     const tenantDecls = [...src.matchAll(/\n  (\w+): tenantProcedure\b/g)].map(m => m[1]).sort();
-    expect(tenantDecls).toEqual(["getLegalOpinion", "listContracts", "listImported", "loadContract"]);
+    expect(tenantDecls).toEqual(["getLegalOpinion", "listContracts", "listImported", "loadContract", "proposeInheritance"]);
   });
 
   it("todas as mutations exigem pelo menos operator; as leituras seguem tenantProcedure", () => {
@@ -238,7 +245,7 @@ describe("NEW-006 — comportamento por papel (router real, serviços mockados)"
     }
   }
 
-  it("viewer é recusado em TODAS as 10 mutations e aceito nas 4 leituras", () => {
+  it("viewer é recusado em TODAS as 10 mutations e aceito nas 5 leituras", () => {
     const denied = names.filter(n => !allowed("viewer", n));
     expect(denied.sort()).toEqual([
       "createAddendum", "createApostille", "createFromDirectProcurement", "createFromProcurement", "createManual",
@@ -287,7 +294,7 @@ describe("NEW-006 — updateContract: campos = operator; mudança de status = ma
 
   it("contrato de outra organização ⇒ NOT_FOUND (inalterado), mesmo para operator pedindo mudança de status", async () => {
     await expect(call("operator", "updateContract", { contractId: "ctw-outra-org", status: "rescindido", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j", idempotencyKey: "new006-cmd-xorg" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(contractWrites()).toBe(0);
     expect(vi.mocked(contractService.createAddendum)).not.toHaveBeenCalled();
   });

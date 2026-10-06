@@ -90,12 +90,15 @@ describe("FASE 5 — Business Domain: Contratação Direta", () => {
       expect(nextDirectStage(inex)).toBe("PROCEDURE");
     });
 
-    it("advanceDirectStage caminha e configura status", () => {
+    // R9 / SEM-064 — reescrito: este teste PROTEGIA o status derivado do ponteiro de etapa (RATIFICATION ⇒ "ratificado",
+    // PUBLICATION ⇒ "publicado" sem ato registrado). Agora o ponteiro só caminha as etapas; "ratificado"/"publicado"
+    // saem dos ATOS REGISTRADOS (ledger/publicações) — ver sem064-direct-status-from-acts.test.ts.
+    it("advanceDirectStage caminha as etapas SEM afirmar ratificação/publicação (status de ato vem dos atos registrados)", () => {
       let ws = setDirectStage(mk("dispensa"), "RATIFICATION");
-      expect(ws.status).toBe("ratificado");
+      expect(ws.status).toBe("em_andamento");
       ws = advanceDirectStage(ws); // PUBLICATION
       expect(ws.currentStage).toBe("PUBLICATION");
-      expect(ws.status).toBe("publicado");
+      expect(ws.status).toBe("em_andamento");
     });
 
     it("configureFlags permite desligar parecer obrigatório (nunca fluxo fixo)", () => {
@@ -240,10 +243,16 @@ describe("FASE 5 — Business Domain: Contratação Direta", () => {
   // ─── Serviço: reuso do Engine e degradação sem DB ───────────────────────────
 
   describe("directProcurementService (sem DB)", () => {
-    it("importDirectPriceResearch reutiliza Price Research e degrada (0 persistência)", async () => {
-      const res = await importDirectPriceResearch({ workspaceId: "ws-1", organizationId: ORG_ID, source: "colar", text: "Caneta;100;un;1,50", correlationId: CORR });
-      expect(res.itemCount).toBeGreaterThanOrEqual(1);
-      expect(typeof res.researchId).toBe("string");
+    // R2 / PR-04A — contrato GOVERNADO: a importação é escrita AUTORITATIVA (identidade por importação,
+    // idempotência, transação). Sem DB ela é FAIL-CLOSED (antes "degradava" devolvendo sucesso simulado sem
+    // persistir nada — exatamente o tipo de sucesso falso que a remediação proíbe). Conteúdo sem cotação
+    // reconhecível é recusado ANTES de qualquer efeito. Persistência real coberta em
+    // direct-price-import-governed-mysql-smoke.test.ts.
+    it("importDirectPriceResearch é fail-closed sem DB e recusa conteúdo sem cotações", async () => {
+      await expect(importDirectPriceResearch({ workspaceId: "ws-1", organizationId: ORG_ID, source: "colar", text: "Caneta;100;un;1,50", idempotencyKey: "k-5z-0001", actorUserId: 7, correlationId: CORR }))
+        .rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+      await expect(importDirectPriceResearch({ workspaceId: "ws-1", organizationId: ORG_ID, source: "colar", text: " \n \n", idempotencyKey: "k-5z-0002", actorUserId: 7, correlationId: CORR }))
+        .rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
     it("operações que exigem workspace lançam sem DB", async () => {

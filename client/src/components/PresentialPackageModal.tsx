@@ -64,8 +64,8 @@ export function PresentialPackageModal({
       window.URL.revokeObjectURL(url);
 
       toast.success("Pacote baixado com sucesso!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao gerar pacote");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error && error.message ? error.message : "Erro ao gerar pacote");
     }
   };
 
@@ -93,7 +93,7 @@ export function PresentialPackageModal({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
+        <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v === "email" ? "email" : "package")}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="package">
               <Download className="w-4 h-4 mr-2" />
@@ -110,7 +110,8 @@ export function PresentialPackageModal({
             <Alert>
               <Package className="w-4 h-4" />
               <AlertDescription>
-                O pacote ZIP contém todos os documentos necessários para a contratação presencial.
+                {/* R9 / SEM-072 — o pacote contém só a versão vigente de cada documento (nunca todas as versões). */}
+                O pacote ZIP contém a versão vigente de cada documento da contratação presencial.
               </AlertDescription>
             </Alert>
 
@@ -123,7 +124,17 @@ export function PresentialPackageModal({
                   <div>
                     <p className="font-medium">📁 Pasta "documentos/"</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Termo de Dispensa/Inexigibilidade, Minuta de Contrato, Planilha de Cotação, Mapa Comparativo
+                      Versão FINAL de cada documento (Termo, Minuta, Planilha de Cotação, Mapa Comparativo), em Markdown (.md)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium">📁 Pasta "rascunhos_NAO_OFICIAIS/"</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Último rascunho dos documentos que ainda não têm versão final — não oficiais, revise antes de usar
                     </p>
                   </div>
                 </div>
@@ -143,7 +154,7 @@ export function PresentialPackageModal({
                   <div>
                     <p className="font-medium">📄 LEIA-ME.txt</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Instruções completas de uso, documentos obrigatórios e observações legais
+                      Instruções de uso, lista dos arquivos incluídos (com versão e sha256) e dos não incluídos
                     </p>
                   </div>
                 </div>
@@ -152,7 +163,7 @@ export function PresentialPackageModal({
 
             <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950">
               <AlertDescription>
-                <strong>Importante:</strong> Certifique-se de que todos os documentos foram gerados antes de baixar o pacote.
+                <strong>Importante:</strong> Certifique-se de que todos os documentos foram gerados e finalizados antes de baixar o pacote — rascunhos vão para a pasta não oficial.
               </AlertDescription>
             </Alert>
 

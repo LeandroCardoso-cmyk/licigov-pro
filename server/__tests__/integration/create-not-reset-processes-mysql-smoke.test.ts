@@ -214,6 +214,26 @@ describe.skipIf(!DB)("R3 / PR-05 — Create ≠ Reset: processos (MySQL real, ro
     expect(snap2.timeline).toHaveLength(1);
   }, 30000);
 
+  // R3.5 — contrato PERMANENTE do replay tardio (docs/architecture/CREATE_REPLAY_CONTRACT.md): a convergência compara
+  // com o estado PERSISTIDO ATUAL dos campos do payload semântico de criação. Se um desses campos mudou legitimamente
+  // depois (aqui: a modalidade definida pelo fluxo do Edital), o replay do request ORIGINAL não é mais distinguível de
+  // uma criação conflitante ⇒ CONFLICT, ZERO escrita (fail-closed). Mudança fora do payload (etapa/status) converge (P2).
+  it("P9 (R3.5) — replay tardio do request original após mudança LEGÍTIMA de campo do payload ⇒ CONFLICT, zero escrita", async () => {
+    const n = num("pp9");
+    const c = await caller(opA, ORG_A);
+    const original = ppInput(n);
+    const first = await c.procurementProcess.createProcess(original);
+    expect((await c.procurementProcess.createProcess(original)).created).toBe(false); // replay imediato converge
+    await conn.execute(`UPDATE procurement_processes SET modality = 'pregao' WHERE organization_id = ? AND id = ?`, [ORG_A, first.process.id]);
+    const before = await ppSnapshot(ORG_A, n);
+    const err = await errOf(() => c.procurementProcess.createProcess(original));
+    expect(err.code).toBe("CONFLICT");
+    expect(err.message).toMatch(TOKEN);
+    expect(await ppSnapshot(ORG_A, n)).toEqual(before);
+    // o cliente recupera o registro pela leitura canônica — o replay nunca é o caminho de leitura
+    expect((await c.procurementProcess.loadProcess({ processId: first.process.id })).process).toMatchObject({ id: first.process.id, modality: "pregao" });
+  }, 30000);
+
   it("P8 — filhos existentes (rascunho, pesquisa, item inteligente, item da contratação) ficam intactos no CONFLICT e em N retries idênticos", async () => {
     const n = num("pp8");
     const c = await caller(opA, ORG_A);
@@ -371,6 +391,21 @@ describe.skipIf(!DB)("R3 / PR-05 — Create ≠ Reset: processos (MySQL real, ro
     expect(snap2.rows).toHaveLength(1);
     expect(snap2.rows[0].procurement_type).toBe(a.status === "fulfilled" ? "dispensa" : "inexigibilidade");
     expect(snap2.timeline).toHaveLength(1);
+  }, 30000);
+
+  it("D7 (R3.5) — replay tardio após troca LEGÍTIMA do fundamento legal (selectLegalBasis) ⇒ CONFLICT, zero escrita", async () => {
+    const n = num("dp7");
+    const c = await caller(opA, ORG_A);
+    const original = dpInput(n, { legalBasis: "Art. 75, II" });
+    const first = await c.directProcurement.createProcess(original);
+    expect((await c.directProcurement.createProcess(original)).created).toBe(false); // replay imediato converge
+    await c.directProcurement.selectLegalBasis({ workspaceId: first.workspace.id, legalBasis: "Art. 75, I" });
+    const before = await dpSnapshot(ORG_A, n);
+    const err = await errOf(() => c.directProcurement.createProcess(original));
+    expect(err.code).toBe("CONFLICT");
+    expect(err.message).toMatch(TOKEN);
+    expect(await dpSnapshot(ORG_A, n)).toEqual(before);
+    expect(before.rows[0].legal_basis).toBe("Art. 75, I");
   }, 30000);
 
   it("D6 — cross-tenant: o mesmo número em dois órgãos ⇒ ambos criados e isolados", async () => {

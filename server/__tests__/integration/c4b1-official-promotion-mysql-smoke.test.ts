@@ -41,11 +41,15 @@ let conn: mysql.Connection;
 
 /** Semeia/atualiza o rascunho ETP (author_user_id = AUTHOR) via o pipeline C.4A. */
 async function seedDraft(org: number, processId: string, object: string) {
-  return generateDocument({
+  const generated = await generateDocument({
     organizationId: org, processId, kind: "etp", object,
     correlationId: "c4b1-smoke", idempotencyKey: `gen-${org}-${processId}-${object}`,
     actorUserId: AUTHOR, invoke: async () => buildMockProviderAuthoring("etp"),
   });
+  // R9 / SEM-080 (reescrito): sem Itens aprovados a estimativa sai com [REVISAR] (redigida pelo sistema) e a emissão
+  // exige conteúdo sem marcadores (SEM-057) — fixture da revisão humana do rascunho.
+  await conn.execute("UPDATE generated_documents SET content = REPLACE(content, '[REVISAR', '[REVISADO') WHERE organization_id = ? AND process_id = ? AND kind = 'etp'", [org, processId]);
+  return generated;
 }
 
 /**

@@ -9,10 +9,15 @@ import { eq, and, inArray, lt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { addDays } from "date-fns";
 import { getDb } from "../db/connection";
-import { importStagingItems, importItemCorrections } from "../../drizzle/schema";
+import { importStagingItems, importItemCorrections, importSessions, activityLogs } from "../../drizzle/schema";
 import { serviceLogger } from "./observabilityService";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import type { RawExtractedItem } from "../domain/importExtraction";
 import { validateCorrections } from "../domain/importCorrectionFields";
+import {
+  planCorrectionReview, correctionPayloadHash, isSameCorrection,
+  CORRECTION_REFUSAL_MESSAGE, CORRECTION_IDEMPOTENCY_OPERATION,
+} from "../domain/importCorrectionReview";
 
 const log = serviceLogger("ImportStagingService");
 
@@ -208,7 +213,10 @@ export async function reviewStagingItem(
   log.debug("staging_item_reviewed", { itemId, action, organizationId });
 }
 
-// ─── Human correction (auditável, optimistic lock, idempotente) ─────────────────
+// ─── Human correction (auditável, transacional, idempotente, re-revisão) ────────
+// R9 / SEM-048 — antes: correção aceita após aprovação/promoção sem re-revisão; update do item e histórico em
+// escritas separadas (fora de transação); idempotência só por chave (payload diferente sob a mesma chave virava
+// "replay"). Agora: governança de revisão (planCorrectionReview), UMA transação e idempotência por chave+payload.
 
 export interface CorrectStagingItemParams {
   itemId:               number;
@@ -222,20 +230,54 @@ export interface CorrectStagingItemParams {
   expectedRevision:     number;          // concorrência otimista
   idempotencyKey:       string;
   correlationId?:       string | null;
+  requestId?:           string | null;
 }
 
 export interface CorrectStagingItemResult {
   item:       typeof importStagingItems.$inferSelect;
   revision:   number;
   idempotent: boolean;
+  /** R9 / SEM-048 — o item tinha decisão humana e voltou a `pending` (nova revisão exigida). */
+  reviewReopened:  boolean;
+  /** R9 / SEM-048 — a sessão estava aprovada e voltou a `awaiting_review` (nova aprovação exigida). */
+  sessionReopened: boolean;
+}
+
+/** Resposta persistida na chave idempotente (sem conteúdo do item — apenas o desfecho). */
+interface CorrectionOutcome { revision: number; reviewReopened: boolean; sessionReopened: boolean }
+
+const CORRECTION_CONFLICT = "Este item foi alterado por outro revisor. Atualize os dados antes de continuar.";
+const IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT: esta chave de correção já foi usada com outro conteúdo. Gere uma nova correção.";
+
+function isDuplicateEntry(err: unknown): boolean {
+  let e: unknown = err;
+  for (let i = 0; i < 4 && e; i++) {
+    const x = e as { code?: string; errno?: number; cause?: unknown };
+    if (x.code === "ER_DUP_ENTRY" || x.errno === 1062) return true;
+    e = x.cause;
+  }
+  return false;
+}
+
+function affectedRows(res: unknown): number {
+  const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+  return header?.affectedRows ?? 0;
 }
 
 /**
- * Correção humana de um item de staging. Preserva os `raw*` (imutáveis); grava um OVERLAY validado
- * em `correctedPayload` e o histórico imutável em `import_item_corrections`, na MESMA transação.
- * Concorrência otimista: o UPDATE exige `correctionRevision = expectedRevision`; se nada mudar,
- * distingue replay idempotente (mesma idempotencyKey já aplicada) de CONFLITO real (outro revisor).
- * NÃO altera o reviewStatus (correção não aprova o item) e NÃO promove ao domínio.
+ * Correção humana de um item de staging. Preserva os `raw*` (imutáveis); grava um OVERLAY validado em
+ * `correctedPayload` e o histórico imutável em `import_item_corrections`.
+ *
+ * R9 / SEM-048:
+ *  - Governança: sessão PROMOVIDA ⇒ PRECONDITION_FAILED `SESSION_ALREADY_PROMOTED` (o domínio não diverge em
+ *    silêncio); item já decidido ⇒ volta a `pending`; sessão APROVADA ⇒ volta a `awaiting_review` (a aprovação
+ *    anterior valia para o conteúdo anterior — nova aprovação humana antes da promoção).
+ *  - Atomicidade: lock da sessão e do item (FOR UPDATE, mesma ordem da promoção/revisão por grupo), update do
+ *    item, histórico, reabertura (item + sessão), auditoria e conclusão da chave idempotente em UMA transação.
+ *  - Concorrência otimista: `correctionRevision` precisa bater com `expectedRevision` (CONFLICT acionável).
+ *  - Idempotência (idempotencyService, chave vinculada à operação `ingestion.correctItem`): mesma chave + mesmo
+ *    payload ⇒ replay sem segunda escrita; mesma chave + payload diferente ⇒ CONFLICT.
+ * NÃO aprova o item e NÃO promove ao domínio.
  */
 export async function correctStagingItem(params: CorrectStagingItemParams): Promise<CorrectStagingItemResult> {
   const db = await getDb();
@@ -246,99 +288,186 @@ export async function correctStagingItem(params: CorrectStagingItemParams): Prom
   if (!params.justification || params.justification.trim().length === 0) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Justificativa obrigatória." });
   }
-
-  const item = await getStagingItem(itemId, organizationId);
-  if (!item || item.importSessionId !== importSessionId) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Item de staging não encontrado nesta sessão." });
-  }
-
-  // Idempotência (replay sequencial): mesma chave já aplicada → no-op de sucesso.
-  const priorByKey = await db.select().from(importItemCorrections)
-    .where(and(
-      eq(importItemCorrections.organizationId, organizationId),
-      eq(importItemCorrections.idempotencyKey, params.idempotencyKey),
-    )).limit(1);
-  if (priorByKey.length > 0) {
-    return { item, revision: item.correctionRevision, idempotent: true };
-  }
-
   const validated = validateCorrections(params.importType, params.corrections);
   if (!validated.ok) {
     const code = validated.code === "CAPABILITY_UNAVAILABLE" ? "FORBIDDEN" : "BAD_REQUEST";
     throw new TRPCError({ code, message: validated.message });
   }
+  const justification = params.justification.trim();
 
-  const before = (item.correctedPayload && typeof item.correctedPayload === "object"
-    ? item.correctedPayload as Record<string, unknown> : {});
-  const after = { ...before, ...validated.overlay };
-  const fromRevision = item.correctionRevision;
-  const toRevision   = params.expectedRevision + 1;
-
-  // Optimistic lock: só avança se a revisão observada bater com a esperada.
-  const [res] = await db.update(importStagingItems).set({
-    correctedPayload:   after as unknown as object,
-    correctionRevision: toRevision,
-    correctedAt:        new Date(),
-    correctedByUserId:  params.actorUserId,
-  }).where(and(
-    eq(importStagingItems.id,                 itemId),
-    eq(importStagingItems.organizationId,     organizationId),
-    eq(importStagingItems.correctionRevision, params.expectedRevision),
-  ));
-
-  const affected = (res as unknown as { affectedRows?: number }).affectedRows ?? 0;
-  if (affected === 0) {
-    // Nada mudou: pode ser replay idempotente concorrente (chave já aplicada) ou CONFLITO real.
-    const raced = await db.select().from(importItemCorrections)
-      .where(and(
-        eq(importItemCorrections.organizationId, organizationId),
-        eq(importItemCorrections.idempotencyKey, params.idempotencyKey),
-      )).limit(1);
-    if (raced.length > 0) {
-      const fresh = await getStagingItem(itemId, organizationId);
-      return { item: fresh ?? item, revision: fresh?.correctionRevision ?? item.correctionRevision, idempotent: true };
+  // Idempotência por chave + payload (a chave fica vinculada à operação; payload diferente ⇒ CONFLICT).
+  const idem = {
+    key: params.idempotencyKey, userId: params.actorUserId,
+    payloadHash: correctionPayloadHash({
+      organizationId, importSessionId, itemId, expectedRevision: params.expectedRevision,
+      corrections: params.corrections, justification,
+    }),
+  };
+  const check = await checkIdempotency(idem.key, idem.userId, organizationId, CORRECTION_IDEMPOTENCY_OPERATION, idem.payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) throw new TRPCError({ code: "CONFLICT", message: IDEMPOTENCY_CONFLICT });
+    const cached = check.response as Partial<CorrectionOutcome> | null;
+    const item = await getStagingItem(itemId, organizationId);
+    if (!item || item.importSessionId !== importSessionId) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Item de staging não encontrado nesta sessão." });
     }
-    throw new TRPCError({
-      code: "CONFLICT",
-      message: "Este item foi alterado por outro revisor. Atualize os dados antes de continuar.",
-    });
+    return {
+      item, revision: cached?.revision ?? item.correctionRevision, idempotent: true,
+      reviewReopened: cached?.reviewReopened ?? false, sessionReopened: cached?.sessionReopened ?? false,
+    };
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: "Esta correção já está em processamento — aguarde e atualize os dados." });
   }
 
-  // Histórico imutável (após a projeção avançar). A unicidade (org,item,toRevision) e
-  // (org,idempotencyKey) blinda contra dupla escrita; violação = já aplicado → idempotente.
+  let outcome: CorrectionOutcome & { idempotent: boolean };
   try {
-    await db.insert(importItemCorrections).values({
-      organizationId,
-      procurementProcessId: params.procurementProcessId,
-      importSessionId,
-      stagingItemId:        itemId,
-      fromRevision,
-      toRevision,
-      beforePayload:        before as unknown as object,
-      afterPayload:         after as unknown as object,
-      changedFields:        validated.changedFields as unknown as object,
-      justification:        params.justification.trim(),
-      actorUserId:          params.actorUserId,
-      idempotencyKey:       params.idempotencyKey,
-      correlationId:        params.correlationId ?? null,
+    outcome = await db.transaction(async (tx) => {
+      // 1) Lock da SESSÃO (mesma ordem de locks da promoção e da revisão por grupo ⇒ sem deadlock).
+      const [session] = await tx.select({
+        id: importSessions.id, status: importSessions.status, promotionStatus: importSessions.promotionStatus,
+      }).from(importSessions)
+        .where(and(eq(importSessions.id, importSessionId), eq(importSessions.organizationId, organizationId)))
+        .for("update");
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+
+      // 2) Lock do ITEM (tenant + sessão).
+      const [item] = await tx.select().from(importStagingItems)
+        .where(and(
+          eq(importStagingItems.id,              itemId),
+          eq(importStagingItems.organizationId,  organizationId),
+          eq(importStagingItems.importSessionId, importSessionId),
+        ))
+        .for("update");
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item de staging não encontrado nesta sessão." });
+
+      // 3) Compatibilidade: chave já aplicada no histórico (pré-R9 ou outro usuário do tenant) — replay só se for
+      //    a MESMA correção; caso contrário CONFLICT (a chave nunca "absorve" outro conteúdo).
+      const [priorByKey] = await tx.select().from(importItemCorrections)
+        .where(and(
+          eq(importItemCorrections.organizationId, organizationId),
+          eq(importItemCorrections.idempotencyKey, params.idempotencyKey),
+        )).limit(1);
+      if (priorByKey) {
+        if (!isSameCorrection(priorByKey, { itemId, overlay: validated.overlay, justification })) {
+          throw new TRPCError({ code: "CONFLICT", message: IDEMPOTENCY_CONFLICT });
+        }
+        const replay: CorrectionOutcome = { revision: priorByKey.toRevision, reviewReopened: false, sessionReopened: false };
+        await saveIdempotencyResult(idem.key, idem.userId, organizationId, replay, tx);
+        return { ...replay, idempotent: true };
+      }
+
+      // 4) Governança de revisão (fonte única: domínio puro).
+      const plan = planCorrectionReview({
+        sessionStatus: session.status, promotionStatus: session.promotionStatus, itemReviewStatus: item.reviewStatus,
+      });
+      if (!plan.ok) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: CORRECTION_REFUSAL_MESSAGE[plan.refusal] });
+      }
+
+      // 5) Concorrência otimista (sob lock: a revisão observada precisa ser a esperada).
+      if (item.correctionRevision !== params.expectedRevision) {
+        throw new TRPCError({ code: "CONFLICT", message: CORRECTION_CONFLICT });
+      }
+
+      const before = (item.correctedPayload && typeof item.correctedPayload === "object"
+        ? item.correctedPayload as Record<string, unknown> : {});
+      const after = { ...before, ...validated.overlay };
+      const fromRevision = item.correctionRevision;
+      const toRevision   = params.expectedRevision + 1;
+
+      // 6) Projeção do item: overlay + revisão; decisão anterior REABERTA (volta a pendente) se havia.
+      const res = await tx.update(importStagingItems).set({
+        correctedPayload:   after as unknown as object,
+        correctionRevision: toRevision,
+        correctedAt:        new Date(),
+        correctedByUserId:  params.actorUserId,
+        ...(plan.reopenItem ? { reviewStatus: "pending" as const, reviewedBy: null, reviewedAt: null, reviewNote: null } : {}),
+      }).where(and(
+        eq(importStagingItems.id,                 itemId),
+        eq(importStagingItems.organizationId,     organizationId),
+        eq(importStagingItems.correctionRevision, params.expectedRevision),
+      ));
+      if (affectedRows(res) !== 1) throw new TRPCError({ code: "CONFLICT", message: CORRECTION_CONFLICT });
+
+      // 7) Histórico imutável NA MESMA transação. Violação de unicidade (revisão/chave) ⇒ CONFLICT e rollback
+      //    TOTAL (o item nunca fica corrigido sem histórico).
+      try {
+        await tx.insert(importItemCorrections).values({
+          organizationId,
+          procurementProcessId: params.procurementProcessId,
+          importSessionId,
+          stagingItemId:        itemId,
+          fromRevision,
+          toRevision,
+          beforePayload:        before as unknown as object,
+          afterPayload:         after as unknown as object,
+          changedFields:        validated.changedFields as unknown as object,
+          justification,
+          actorUserId:          params.actorUserId,
+          idempotencyKey:       params.idempotencyKey,
+          correlationId:        params.correlationId ?? null,
+        });
+      } catch (err) {
+        if (isDuplicateEntry(err)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Esta revisão do item já foi registrada por outra correção. Atualize os dados antes de continuar." });
+        }
+        throw err;
+      }
+
+      // 8) Aprovação da sessão INVALIDADA (nova aprovação humana antes da promoção). Compare-and-set sob o lock.
+      if (plan.reopenSession) {
+        const sres = await tx.update(importSessions)
+          .set({ status: "awaiting_review", stage: "awaiting_review", progress: 90 })
+          .where(and(
+            eq(importSessions.id, importSessionId),
+            eq(importSessions.organizationId, organizationId),
+            eq(importSessions.status, "approved"),
+            eq(importSessions.promotionStatus, "none"),
+          ));
+        if (affectedRows(sres) !== 1) {
+          throw new TRPCError({ code: "CONFLICT", message: "A sessão mudou durante a correção (aprovação/promoção concorrente). Atualize os dados." });
+        }
+      }
+
+      // 9) Auditoria da reabertura NA MESMA transação (sem conteúdo: só identificadores e estados).
+      if (plan.reopenItem || plan.reopenSession) {
+        await tx.insert(activityLogs).values({
+          organizationId, userId: params.actorUserId, action: "import_review_reopened_by_correction", sourceContext: "api",
+          entityType: "import_staging_item", entityId: itemId,
+          correlationId: params.correlationId ?? null, requestId: params.requestId ?? null,
+          details: JSON.stringify({
+            sessionId: importSessionId, procurementProcessId: params.procurementProcessId, toRevision,
+            item: plan.reopenItem ? { from: plan.previousItemStatus, to: "pending" } : null,
+            session: plan.reopenSession ? { from: "approved", to: "awaiting_review" } : null,
+          }),
+        });
+      }
+
+      const done: CorrectionOutcome = { revision: toRevision, reviewReopened: plan.reopenItem, sessionReopened: plan.reopenSession };
+      // 10) Conclusão da chave idempotente NA MESMA transação (commit ⇒ replay garantido).
+      await saveIdempotencyResult(idem.key, idem.userId, organizationId, done, tx);
+      return { ...done, idempotent: false };
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "";
-    if (/duplicate/i.test(msg)) {
-      const fresh = await getStagingItem(itemId, organizationId);
-      return { item: fresh ?? item, revision: fresh?.correctionRevision ?? toRevision, idempotent: true };
-    }
+    // Nada foi gravado (rollback): a chave não fica como sucesso — retry permitido.
+    await failIdempotencyKey(idem.key, idem.userId, organizationId).catch(() => {});
     throw err;
   }
 
   const updated = await getStagingItem(itemId, organizationId);
+  if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Item de staging não encontrado nesta sessão." });
   // OBS: sem conteúdo/overlay em log — apenas identificadores seguros.
-  log.info("staging_item_corrected", {
+  log.info(outcome.idempotent ? "staging_item_correction_replayed" : "staging_item_corrected", {
     itemId, organizationId, importSessionId,
-    procurementProcessId: params.procurementProcessId, toRevision,
+    procurementProcessId: params.procurementProcessId, toRevision: outcome.revision,
     changedFields: validated.changedFields.length, correlationId: params.correlationId ?? null,
+    reviewReopened: outcome.reviewReopened, sessionReopened: outcome.sessionReopened,
   });
-  return { item: updated ?? item, revision: toRevision, idempotent: false };
+  return {
+    item: updated, revision: outcome.revision, idempotent: outcome.idempotent,
+    reviewReopened: outcome.reviewReopened, sessionReopened: outcome.sessionReopened,
+  };
 }
 
 /** Lista o histórico de correções de um item (auditoria consultável, tenant-safe). */

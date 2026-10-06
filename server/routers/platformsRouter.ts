@@ -1,11 +1,17 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
+import { requireOwnedProcessInTenant } from "../services/legacyProcessAccess";
+import { LEGACY_PUBLICATION_POLICY, selectAuthoritativeDocuments } from "../services/packageAuthority";
 
 /**
  * Router para gerenciamento de plataformas de pregão eletrônico
  * Suporta Nível 1, 2 e preparação para Nível 3
+ *
+ * SEM-086 — as procedures POR PROCESSO (`updateProcessPlatform`, `generatePublicationPackage`, `publish`,
+ * `getPublications`) usam `tenantProcedure` (membership ATIVA vigente) e `requireOwnedProcessInTenant` (processo na
+ * organização do contexto + autoria). O catálogo de plataformas (`list`, `getById`, …) é global e segue `protectedProcedure`.
  */
 export const platformsRouter = router({
   /**
@@ -57,17 +63,14 @@ export const platformsRouter = router({
   /**
    * Vincular plataforma a um processo
    */
-  updateProcessPlatform: protectedProcedure
+  updateProcessPlatform: tenantProcedure
     .input(z.object({
       processId: z.number(),
       platformId: z.number().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      await requireOwnedProcessInTenant(ctx, input.processId);
 
       // Atualizar plataforma do processo
       const updated = await db.updateProcessPlatform(input.processId, input.platformId);
@@ -75,7 +78,7 @@ export const platformsRouter = router({
       // Registrar atividade
       if (input.platformId) {
         const platform = await db.getPlatformById(input.platformId);
-        await db.createActivityLog({
+        await db.createActivityLogForOrganization({
           processId: input.processId,
           userId: ctx.user.id,
           action: "selecionou plataforma",
@@ -83,7 +86,7 @@ export const platformsRouter = router({
             platformName: platform?.name,
             platformSlug: platform?.slug
           }),
-        });
+        }, ctx.organizationId);
       }
 
       return updated;
@@ -93,14 +96,11 @@ export const platformsRouter = router({
    * Gerar pacote de publicação (Nível 2)
    * Retorna dados formatados para checklist e exportação
    */
-  generatePublicationPackage: protectedProcedure
+  generatePublicationPackage: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
       // Buscar processo completo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      const process = await requireOwnedProcessInTenant(ctx, input.processId);
 
       // Buscar plataforma
       const platform = process.platformId 
@@ -111,7 +111,7 @@ export const platformsRouter = router({
       const documents = await db.getDocumentsByProcess(input.processId);
 
       // Buscar itens CATMAT/CATSER
-      const items = await db.getProcessItems(input.processId);
+      const items = await db.getProcessItemsForOrganization(input.processId, ctx.organizationId);
 
       // Buscar checklist da plataforma
       const checklist = platform 
@@ -120,14 +120,19 @@ export const platformsRouter = router({
 
       // Identidade institucional TENANT-SCOPED COMPOSTA (canônica `organizations` + extensão), via a
       // fonte única — nunca lendo tabelas de identidade de forma independente.
-      const orgId = await db.getProcessOrganizationId(input.processId);
-      const settings = orgId ? await resolveInstitutionalIdentity(orgId) : undefined;
+      // SEM-086 — a organização vem do CONTEXTO (o processo já foi validado dentro dela), não de uma releitura por id.
+      const settings = await resolveInstitutionalIdentity(ctx.organizationId);
 
       // Montar pacote de publicação
       return {
         process,
         platform,
-        documents: documents.map(doc => ({
+        // R9 / SEM-072 — a prévia lista o MESMO conjunto que o ZIP (`downloads.publicationPackage`): só a versão
+        // aprovada vigente por tipo — nunca todas as versões/rascunhos do processo.
+        documents: selectAuthoritativeDocuments(
+          documents.map(doc => ({ ...doc, status: doc.documentStatus })),
+          LEGACY_PUBLICATION_POLICY,
+        ).official.map(doc => ({
           id: doc.id,
           type: doc.type,
           version: doc.version,
@@ -167,7 +172,7 @@ export const platformsRouter = router({
    * Criar publicação em plataforma (Nível 3 - Futuro)
    * Preparado mas não implementado ainda
    */
-  publish: protectedProcedure
+  publish: tenantProcedure
     .input(z.object({
       processId: z.number(),
       platformId: z.number(),
@@ -175,10 +180,7 @@ export const platformsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      await requireOwnedProcessInTenant(ctx, input.processId);
 
       // Verificar se a plataforma tem integração API ativa
       const platform = await db.getPlatformById(input.platformId);
@@ -209,14 +211,11 @@ export const platformsRouter = router({
   /**
    * Listar publicações de um processo
    */
-  getPublications: protectedProcedure
+  getPublications: tenantProcedure
     .input(z.object({ processId: z.number() }))
     .query(async ({ ctx, input }) => {
       // Verificar se o usuário é dono do processo
-      const process = await db.getProcessById(input.processId);
-      if (!process || process.ownerId !== ctx.user.id) {
-        throw new Error("Processo não encontrado ou sem permissão");
-      }
+      await requireOwnedProcessInTenant(ctx, input.processId);
 
       return await db.getProcessPublications(input.processId);
     }),

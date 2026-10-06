@@ -249,7 +249,11 @@ describe.skipIf(!DB)("C.4B.3B — edição humana governada (MySQL estrito)", ()
     // Metadata NÃO editada permanece EXATA.
     expect(meta1.title).toBe(meta0.title);
     expect(meta1.status).toBe(meta0.status);
-    expect(String(meta1.s)).toBe(String(meta0.s));           // sources
+    // sources: lineage de geração preservada na ORDEM + marcador de edição humana (SEM-044: ator = quem editou, hash do conteúdo)
+    const src0: string[] = JSON.parse(String(meta0.s));
+    const src1: string[] = JSON.parse(String(meta1.s));
+    expect(src1.slice(0, src0.length)).toEqual(src0);
+    expect(src1.slice(src0.length)).toEqual(["edicao_humana", `edicao_humana:ator=${B}`, `edicao_humana:hash=${draftContentHash(edited).slice(0, 16)}`]);
     expect(meta1.modality).toBe(meta0.modality);
     expect(meta1.form).toBe(meta0.form);
     expect(meta1.platform).toBe(meta0.platform);
@@ -285,7 +289,10 @@ describe.skipIf(!DB)("C.4B.3B — edição humana governada (MySQL estrito)", ()
       const [s1] = await conn.execute<mysql.RowDataPacket[]>(
         "SELECT CAST(sources AS CHAR) AS s FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = ? LIMIT 1", [ORG, pid, kind],
       );
-      expect(String((s1[0] as any).s)).toBe(String((s0[0] as any).s)); // sources preservadas
+      const src0: string[] = JSON.parse(String((s0[0] as any).s));
+      const src1: string[] = JSON.parse(String((s1[0] as any).s));
+      expect(src1.slice(0, src0.length)).toEqual(src0); // lineage de geração preservada (SEM-044 só acrescenta o marcador humano)
+      expect(src1.slice(src0.length)).toEqual(["edicao_humana", `edicao_humana:ator=${B}`, `edicao_humana:hash=${draftContentHash(`# ${kind} editado\nx`).slice(0, 16)}`]);
     }
   }, 120_000);
 

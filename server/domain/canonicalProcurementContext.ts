@@ -52,7 +52,9 @@ export type ContextPath = ScalarPath | ItemPath;
  *    demandante responsável pela necessidade; projetá-lo aqui gerava divergência falsa no DFD;
  *  - plannedQuantity: SOMENTE humano/documentos da necessidade — NUNCA price_research/intelligent_item
  *    (a quantidade da cotação é `sourceQuantity`, evidência) e NUNCA ai_draft;
- *  - descrição/unidade do item: também observáveis a partir do Item Inteligente (evidência consolidada).
+ *  - descrição/unidade do item: humano, DFD/ETP/TR e documento aprovado. R10 / SEM-038: `intelligent_item` NÃO é fonte
+ *    permitida — não existe escritor governado dele para esses caminhos (autoridade morta/ambígua); o Item Inteligente é
+ *    evidência/candidato (vínculo de fonte do Item da contratação), nunca afirmação de fato no ledger.
  */
 const NEED_SOURCES: readonly ContextSourceType[] = ["process", "user", "dfd", "etp", "tr", "approved_document"];
 const HUMAN_NEED_SOURCES: readonly ContextSourceType[] = ["user", "dfd", "etp", "tr", "approved_document"];
@@ -66,8 +68,8 @@ export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceTyp
   "planning.pcaAlignment":   ["user", "dfd", "etp", "approved_document"],
   "planning.priority":       ["user", "dfd", "etp", "approved_document"],
   "planning.desiredDate":    ["user", "dfd", "etp", "approved_document"],
-  "items.*.description":     ["user", "dfd", "etp", "tr", "approved_document", "intelligent_item"],
-  "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document", "intelligent_item"],
+  "items.*.description":     ["user", "dfd", "etp", "tr", "approved_document"],
+  "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document"],
   "items.*.plannedQuantity": ["user", "dfd", "etp", "tr", "approved_document"],
 };
 
@@ -219,6 +221,8 @@ export interface PriceEvidence {
   unitAmountCents: number | null;
   quoteCount: number;
   approved: boolean;
+  /** R9 / SEM-028 — fonte do Item Inteligente vigente (`sourceState === "current"`). */
+  current: boolean;
 }
 
 // ─── Entradas e contexto resolvido ─────────────────────────────────────────────────────
@@ -235,16 +239,31 @@ export interface ContextInputs {
   intelligentItems: ReadonlyArray<{
     id: string; description: string; unit: string; quantity: number; status: string;
     averagePriceCents: number; quoteCount: number;
+    /** R9 / SEM-028 — estado da FONTE do Item Inteligente (`current` | `source_changed` | `review_required` …). */
+    sourceState?: string;
   }>;
   /** Itens Canônicos da Contratação (entidade persistente com id estável). */
   procurementItems?: ReadonlyArray<{
     id: string; description: string; unit: string; lotId: string | null; ordinal: number;
     status: string; revision: number; fingerprint: string;
+    /** R10 / SEM-045 — proveniência persistida de descrição/unidade e quem criou o item (ausente ⇒ projeção legada). */
+    provenance?: {
+      description: { source: string; sourceId: string | null; overriddenBy: number | null; at: string | null };
+      unit: { source: string; sourceId: string | null; overriddenBy: number | null; at: string | null };
+    };
+    createdBy?: number | null;
   }>;
   /** Lotes (opcionais). */
   lots?: ReadonlyArray<{ id: string; code: string; name: string; ordinal: number; status: string }>;
   /** Vínculos Item Canônico → Item Inteligente (evidência de preço), decididos por humano. */
   priceLinks?: ReadonlyArray<{ itemId: string; intelligentItemId: string }>;
+}
+
+export type PriceBlockedReason = "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH";
+
+/** R9 / SEM-031 — unidade da cotação compatível com a do item: mesma unidade CANÔNICA (sem fator de conversão). */
+export function unitsCompatible(evidenceUnit: string, itemUnit: string | null | undefined): boolean {
+  return canonicalUnit(evidenceUnit) === canonicalUnit(itemUnit);
 }
 
 export interface CanonicalItem {
@@ -266,6 +285,12 @@ export interface CanonicalItem {
      */
     unitReferencePriceCents: number | null;
     priceAmbiguous: boolean;
+    /**
+     * R9 / SEM-028, SEM-031 — por que um preço VINCULADO deixou de ser autoritativo (null = nenhum bloqueio):
+     * `SOURCE_NOT_CURRENT` (a fonte do Item Inteligente mudou/exige revisão) · `UNIT_MISMATCH` (unidade da cotação ≠
+     * unidade do item da contratação, sem conversão — nenhuma é inventada).
+     */
+    priceBlockedReason: PriceBlockedReason | null;
     evidenceCount: number;
     /** Quantidades vistas nos documentos da pesquisa (distintas; null = documento sem quantidade). */
     sourceQuantities: Array<number | null>;
@@ -301,12 +326,37 @@ export interface ProcurementCanonicalContext {
 
 function projection(
   path: ContextPath, value: string | null | undefined, sourceType: ContextSourceType, sourceId: string,
-  status: AssertionStatus, createdAt: string,
+  status: AssertionStatus, createdAt: string, actorUserId: number | null = null,
 ): FactAssertion | null {
   const v = value == null ? null : normalizeText(String(value));
   if (!v) return null;
   const valueHash = factValueHash(v);
-  return { id: 0, path, value: v, valueHash, sourceType, sourceId, sourceVersion: valueHash, status, actorUserId: null, basisValueHash: null, createdAt };
+  return { id: 0, path, value: v, valueHash, sourceType, sourceId, sourceVersion: valueHash, status, actorUserId, basisValueHash: null, createdAt };
+}
+
+/**
+ * R10 / SEM-045 — PROVENIÊNCIA REAL de descrição/unidade do Item Canônico (antes: sempre `user/confirmed`, achatada).
+ * Lida da proveniência persistida do item (origem do valor, quem o corrigiu, quem criou):
+ *  - digitado/corrigido por humano (item manual, ou valor da fonte sobrescrito): fonte `user`, autor = quem corrigiu/criou;
+ *  - aceito como veio do DFD: fonte `dfd` (autorizada para o caminho), id `pitem:<item>:dfd:<documento>`, autor = quem confirmou;
+ *  - aceito como veio da Pesquisa de Preços: a Pesquisa é EVIDÊNCIA, não pode afirmar o fato (política) ⇒ a afirmação é da
+ *    PESSOA que aceitou o candidato (`user`), com a origem preservada no id (`pitem:<item>:price_research:<fonte>`);
+ *  - `confirmed` SÓ quando há pessoa que confirmou (autor conhecido); sem autor ⇒ `observed` (nunca inventa confirmação).
+ */
+function itemFieldProjection(
+  path: ContextPath, value: string, it: NonNullable<ContextInputs["procurementItems"]>[number], field: "description" | "unit", fallbackAt: string,
+): FactAssertion | null {
+  const fp = it.provenance?.[field];
+  const base = `pitem:${it.id}`;
+  if (!fp) return projection(path, value, "user", base, "confirmed", fallbackAt); // item sem proveniência (legado/teste): comportamento anterior
+  const human = fp.overriddenBy ?? null;
+  const author = human ?? it.createdBy ?? null;
+  const at = fp.at && Number.isFinite(Date.parse(fp.at)) ? fp.at : fallbackAt;
+  const status: AssertionStatus = author !== null && author > 0 ? "confirmed" : "observed";
+  const humanOrigin = human !== null || fp.source === "user" || fp.source === "manual";
+  if (humanOrigin) return projection(path, value, "user", base, status, at, author);
+  if (fp.source === "dfd") return projection(path, value, "dfd", `${base}:dfd:${fp.sourceId ?? ""}`, status, at, author);
+  return projection(path, value, "user", `${base}:${fp.source}:${fp.sourceId ?? ""}`, status, at, author);
 }
 
 /** Resolve o contexto canônico completo. Mesmas entradas ⇒ mesmo contexto e mesmo digest. */
@@ -330,6 +380,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       sourceQuantity: Number.isFinite(i.quantity) && i.quantity > 0 ? i.quantity : null,
       unitAmountCents: i.averagePriceCents > 0 ? i.averagePriceCents : null,
       quoteCount: i.quoteCount, approved: i.status === "aprovado",
+      current: (i.sourceState ?? "current") === "current",
     }));
   const evidenceById = new Map(evidence.map((e) => [e.intelligentItemId, e]));
 
@@ -340,8 +391,8 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
     .sort((a, b) => a.ordinal - b.ordinal || (a.id < b.id ? -1 : 1));
   const lotOrder = new Map(lots.map((l, i) => [l.id, i]));
   for (const it of pItems) {
-    const d = projection(itemPath(it.id, "description"), it.description, "user", `pitem:${it.id}`, "confirmed", t0);
-    const u = projection(itemPath(it.id, "unit"), it.unit, "user", `pitem:${it.id}`, "confirmed", t0);
+    const d = itemFieldProjection(itemPath(it.id, "description"), it.description, it, "description", t0);
+    const u = itemFieldProjection(itemPath(it.id, "unit"), it.unit, it, "unit", t0);
     if (d) proj.push(d);
     if (u) proj.push(u);
   }
@@ -352,9 +403,16 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
   const items: CanonicalItem[] = pItems.map((it) => {
     const ev = (input.priceLinks ?? []).filter((l) => l.itemId === it.id)
       .map((l) => evidenceById.get(l.intelligentItemId)).filter((e): e is PriceEvidence => !!e);
-    const priced = ev.filter((e) => e.approved && e.unitAmountCents !== null && e.quoteCount > 0);
+    const candidates = ev.filter((e) => e.approved && e.unitAmountCents !== null && e.quoteCount > 0);
+    // SEM-028: preço só de fonte VIGENTE; SEM-031: só de cotação na MESMA unidade canônica do item. Nada é convertido.
+    const notCurrent = candidates.filter((e) => !e.current);
+    const unitMismatch = candidates.filter((e) => e.current && !unitsCompatible(e.unit, it.unit));
+    const priced = candidates.filter((e) => e.current && unitsCompatible(e.unit, it.unit));
     const distinct = [...new Set(priced.map((e) => e.unitAmountCents as number))];
-    const unitReferencePriceCents = distinct.length === 1 ? distinct[0] : null;
+    const blocked = notCurrent.length > 0 || unitMismatch.length > 0;
+    // Fail-closed: QUALQUER evidência vinculada bloqueada torna o preço não autoritativo (não se escolhe "a que sobrou").
+    const unitReferencePriceCents = !blocked && distinct.length === 1 ? distinct[0] : null;
+    const priceBlockedReason: PriceBlockedReason | null = notCurrent.length > 0 ? "SOURCE_NOT_CURRENT" : unitMismatch.length > 0 ? "UNIT_MISMATCH" : null;
     const sourceQuantities = [...new Set(ev.map((e) => e.sourceQuantity))].sort((a, b) => (a ?? -1) - (b ?? -1));
     const plannedQuantity = asNumberField(f(itemPath(it.id, "plannedQuantity")));
     const pq = plannedQuantity.value;
@@ -365,7 +423,7 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
       unit: f(itemPath(it.id, "unit")) as CanonicalField<string>,
       plannedQuantity,
       priceContext: {
-        unitReferencePriceCents, priceAmbiguous: distinct.length > 1,
+        unitReferencePriceCents, priceAmbiguous: !blocked && distinct.length > 1, priceBlockedReason,
         evidenceCount: ev.reduce((s, e) => s + e.quoteCount, 0),
         sourceQuantities, intelligentItemIds: ev.map((e) => e.intelligentItemId).sort(),
       },
@@ -454,6 +512,7 @@ function digestSnapshot(
     items: ctx.items.map((i) => ({
       k: i.key, l: i.lotId, d: fieldSnap(i.description), u: fieldSnap(i.unit), q: fieldSnap(i.plannedQuantity),
       ref: i.priceContext.unitReferencePriceCents, amb: i.priceContext.priceAmbiguous,
+      ...(i.priceContext.priceBlockedReason ? { blk: i.priceContext.priceBlockedReason } : {}),
       sq: i.priceContext.sourceQuantities, n: i.priceContext.evidenceCount,
     })),
     total: price.estimatedTotalCents,

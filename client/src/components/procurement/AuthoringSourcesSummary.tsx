@@ -9,6 +9,7 @@
 import { CheckCircle2, CircleDashed, AlertTriangle } from "lucide-react";
 import { trpc } from "../../lib/trpc";
 import { formatCentsBRL } from "@/lib/money";
+import { globalEstimateLabel } from "@shared/estimateLabel";
 
 export type AuthoringSourcesSummaryProps = { processId: string; kind: "etp" | "tr"; object: string };
 
@@ -57,7 +58,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
         {kind === "tr" && s.approvedItems > 0 && (
           <Row
             ok={s.unpricedItems === 0}
-            label={`Valor estimado global (calculado pelo sistema): ${formatCentsBRL(s.estimatedGlobalTotalCents)}`}
+            label={`${globalEstimateLabel({ unpricedItemCount: s.unpricedItems, itemCount: s.approvedItems })}: ${formatCentsBRL(s.estimatedGlobalTotalCents)}`}
             detail={s.unpricedItems > 0 ? `${s.unpricedItems} item(ns) sem preço de referência` : undefined}
           />
         )}
@@ -70,7 +71,13 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
       {state === "source_changed" && (
         <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
+          <span>
+            As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
+            {/* R9 / SEM-047 — lista O QUE mudou (documentos antigos, sem marcador por fonte, mostram só o aviso). */}
+            {(q.data.changedSources ?? []).length > 0 && (
+              <span className="mt-1 block">Mudou: {q.data.changedSources.map((c) => c.label).join(", ")}.</span>
+            )}
+          </span>
         </p>
       )}
       {state === "imported" && (

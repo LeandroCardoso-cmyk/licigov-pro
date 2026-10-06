@@ -109,18 +109,12 @@ export async function lockLatestVersionForUpdate(lineageId: string, tenantId: nu
 }
 
 /**
- * RC-3.5 — Atualiza as referências de storage de um documento oficial após o export
- * (Document Engine → Storage Service → S3). Nunca grava binário; apenas a referência.
+ * SEM-043 — `updateOfficialDocumentStorageRefs` REMOVIDA. Ela sobrescrevia `storage_key/mime_type/size_bytes/
+ * content_hash` da linha da versão a cada export (DOCX apagava o ponteiro/hash do PDF da mesma versão). Os artefatos
+ * agora são registrados no ledger append-only `official_document_artifacts` (ver `db/officialDocumentArtifacts.ts` e
+ * `recordOfficialArtifact`). As colunas legadas permanecem na linha apenas como HISTÓRICO das versões exportadas antes
+ * da 0315 (leitura via `rowToDoc` inalterada; nada mais as escreve — a linha da versão oficial é imutável).
  */
-export async function updateOfficialDocumentStorageRefs(params: {
-  id: string; tenantId: number; storageKey: string; mimeType: string; size: number; hash: string;
-}): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(officialDocumentsTable)
-    .set({ storageKey: params.storageKey, mimeType: params.mimeType, size: params.size, hash: params.hash })
-    .where(and(eq(officialDocumentsTable.id, params.id), eq(officialDocumentsTable.tenantId, params.tenantId)));
-}
 
 export async function getOfficialDocument(id: string, tenantId: number): Promise<OfficialDocument | null> {
   const db = await getDb();
@@ -136,6 +130,23 @@ export async function getLatestByLineage(lineageId: string, tenantId: number, ex
   if (!db) return null;
   const rows = await db.select().from(officialDocumentsTable)
     .where(and(eq(officialDocumentsTable.lineageId, lineageId), eq(officialDocumentsTable.tenantId, tenantId)))
+    .orderBy(desc(officialDocumentsTable.version)).limit(1);
+  return rows.length ? rowToDoc(rows[0]) : null;
+}
+
+/**
+ * R9 / SEM-039 — a ÚLTIMA versão `emitido` de um tipo documental de uma origem (processo), tenant-scoped. É a fonte
+ * AUTORITATIVA que os documentos a jusante consomem (o snapshot `gerado` e o rascunho não são oficiais).
+ */
+export async function getLatestEmittedByOrigin(tenantId: number, businessDomain: string, origin: string, documentType: string): Promise<OfficialDocument | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(officialDocumentsTable)
+    .where(and(
+      eq(officialDocumentsTable.tenantId, tenantId), eq(officialDocumentsTable.businessDomain, businessDomain),
+      eq(officialDocumentsTable.origin, origin), eq(officialDocumentsTable.documentType, documentType),
+      eq(officialDocumentsTable.status, "emitido"),
+    ))
     .orderBy(desc(officialDocumentsTable.version)).limit(1);
   return rows.length ? rowToDoc(rows[0]) : null;
 }
@@ -188,8 +199,8 @@ export async function countDocumentTimeline(lineageId: string, tenantId: number,
  * Registra um evento na timeline documental. `opts.insertOnly` (NEW-016) = INSERT PURO: colisão de id
  * ⇒ `OfficialDocumentVersionConflictError`, nunca reescrita do `summary` de um evento já registrado
  * (a timeline não pode falsificar um overwrite). Sem a opção, preserva o comportamento anterior
- * (upsert de `summary`) — usado apenas pelo evento de exportação fora da transação de versão
- * (NEW-004 #8, follow-up próprio).
+ * (upsert de `summary`). SEM-043: o evento de exportação (`documento_exportado`) agora também é `insertOnly` (na
+ * transação do ledger de artefatos) — nenhum chamador usa mais o ramo de upsert (remoção: follow-up, NEW-004 #8).
  */
 export async function insertDocumentTimelineEntry(params: { tenantId: number; lineageId: string; documentId: string; order: number; eventType: string; actor: string; summary: string; correlationId: string }, executor?: OfficialDocsExecutor, opts: { insertOnly?: boolean } = {}): Promise<void> {
   const db = executor ?? await getDb();

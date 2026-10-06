@@ -39,6 +39,8 @@ export interface GenerateOfficialDocumentParams {
   businessDomain: DocumentBusinessDomain;
   documentType: OfficialDocumentType;
   origin: string;
+  /** R9 / SEM-040 — instrumento contratual (aditivo/apostilamento) formalizado pelo documento ⇒ linhagem própria. */
+  instrumentId?: string | null;
   title: string;
   /** Conteúdo em Markdown (representação intermediária). O engine exporta DOCX/PDF. */
   content: string;
@@ -77,7 +79,11 @@ export type RenderedOfficialDocument = StoredArtifact;
  * que cuida de hash + Storage Service + Signed URL + persistência. O Document Engine
  * jamais toca no Storage/S3.
  */
-export async function renderOfficialDocument(params: { organizationId: number; documentId: string; format: OfficialFormat }): Promise<RenderedOfficialDocument> {
+export async function renderOfficialDocument(params: {
+  organizationId: number; documentId: string; format: OfficialFormat;
+  /** SEM-043 — usuário humano autenticado que exporta (ator do ledger de artefatos; nunca um agente). */
+  actorUserId: number; correlationId?: string;
+}): Promise<RenderedOfficialDocument> {
   const doc = await getOfficialDocument(params.documentId, params.organizationId);
   if (!doc) throw new Error("Documento oficial não encontrado.");
   assertKernelAccess(doc.businessDomain, "document_engine");
@@ -89,7 +95,7 @@ export async function renderOfficialDocument(params: { organizationId: number; d
     : await convertToPDF(doc.content, filename);
 
   // Ciclo de vida (hash, Storage, Signed URL, persistência) é do Lifecycle Service.
-  return storeRenderedArtifact({ doc, format: params.format, buffer });
+  return storeRenderedArtifact({ doc, format: params.format, buffer, actorUserId: params.actorUserId, correlationId: params.correlationId });
 }
 
 /**

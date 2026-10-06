@@ -42,6 +42,7 @@ import { TimelineStep } from "@/components/document-flow/TimelineStep";
 import { DocTabContent } from "@/components/document-flow/DocTabContent";
 import { useProcessDocuments } from "@/hooks/documents/useProcessDocuments";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
+import { centsToLegacyReaisInput } from "@/lib/money";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,8 @@ export default function ProcessDetails() {
                     source: "process",
                     processId: process.id.toString(),
                     object: process.name,
-                    value: String(process.estimatedValue ?? 0),
+                    // NEW-036: `estimatedValue` é CENTAVOS; o cadastro legado de contrato recebe REAIS.
+                    value: centsToLegacyReaisInput(process.estimatedValue),
                   });
                   navigate(`/contracts/new?${p}`);
                 }}
@@ -363,7 +365,7 @@ export default function ProcessDetails() {
               </CardHeader>
               <CardContent>
                 <ol className="relative border-l border-border space-y-4 ml-2">
-                  {activities.map((activity: any) => (
+                  {activities.map((activity) => (
                     <li key={activity.id} className="ml-4">
                       <div className="absolute -left-1.5 w-3 h-3 rounded-full bg-primary/60 border-2 border-background" />
                       <p className="text-sm text-foreground">{activity.action}</p>

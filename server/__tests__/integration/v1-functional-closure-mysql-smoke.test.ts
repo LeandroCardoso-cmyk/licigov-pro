@@ -26,10 +26,14 @@ import { createDirectProcurementWorkspace } from "../../domain/directProcurement
 import { createRatification } from "../../domain/directProcurementJustifications";
 import { insertDirectProcurementWorkspace, insertRatification } from "../../db/directProcurement";
 import { recordDirectProcurementRatification } from "../../services/institutionalDecisionService";
-import { generatePriceJustification, generatePublications } from "../../services/directProcurementService";
+import { generatePriceJustification, generatePublications, seedRequiredDocuments, importDirectPriceResearch } from "../../services/directProcurementService";
 import { createManualContract, generateContractDocument, createAddendum } from "../../services/contractService";
 import { listOfficialDocuments, getOfficialDocument } from "../../db/officialDocuments";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
+
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
@@ -261,17 +265,27 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     return ws;
   }
 
-  it("B1) justificativa de PREÇO é projetada no Document Engine (fiel aos dados persistidos)", async () => {
+  // R9 / SEM-042 — reescrito: este teste PROTEGIA o valor do CLIENTE (15000) com uma pesquisa inexistente ("res-1").
+  // Agora a justificativa por pesquisa exige pesquisa governada real; o valor vem do SERVIDOR (3 cotações, mediana
+  // 15000) e o documento oficial traz a LINHAGEM (sem "confiança" fixa).
+  it("B1) justificativa de PREÇO é projetada no Document Engine (fiel aos dados persistidos, com linhagem)", async () => {
     const ws = await seedDirect(ORG, "DIR-B1");
+    const imp = await importDirectPriceResearch({
+      workspaceId: ws.id, organizationId: ORG, source: "colar", idempotencyKey: "v1-b1-import-key",
+      text: "Notebook;1;un;14000;Forn A\nNotebook;1;un;15000;Forn B\nNotebook;1;un;16500;Forn C", actorUserId: USER, correlationId: "v1-closure",
+    });
     await generatePriceJustification({
       workspaceId: ws.id, organizationId: ORG, source: "pesquisa", justification: "Preço fundamentado em 3 cotações.",
-      referenceValue: 15000, researchId: "res-1", correlationId: "v1-closure", confirmOfficial: true, actorUserId: USER,
+      referenceValue: 15000, researchId: imp.researchId, method: "mediana", correlationId: "v1-closure", confirmOfficial: true, actorUserId: USER,
     });
     const docs = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "justificativa_preco");
     expect(docs.length).toBe(1);
     const full = await getOfficialDocument(docs[0]!.id, ORG);
     expect(full!.content).toContain("Preço fundamentado em 3 cotações.");
     expect(full!.content).toContain("15000");
+    expect(full!.content).toContain(imp.researchId);
+    expect(full!.content).toContain(imp.contentHash.slice(0, 12));
+    expect(full!.content).not.toMatch(/confian[çc]a|Baseado na Pesquisa/i);
   }, 120_000);
 
   // R4 / PR-07 — a decisão vem do ledger append-only (0312), com autoridade DECLARADA, data e referência do ato.
@@ -286,6 +300,12 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
   it("B2) RATIFICAÇÃO materializa a decisão REAL do ledger (autoridade declarada ≠ registrador; não texto genérico)", async () => {
     const ws = await seedDirect(ORG, "DIR-B2");
     await ledgerRatify(ws.id, "ratificado", "Ratifico a contratação direta por dispensa, art. 75.", "v1-b2-key-0001");
+    // NEW-029: checklist obrigatório configurado e validado com evidência (fixture do upload do servidor + hash).
+    await seedRequiredDocuments({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await conn.execute(
+      "UPDATE required_documents SET status = 'validado', content_hash = REPEAT('a', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-doc.pdf') WHERE workspace_id = ? AND organization_id = ?",
+      [ws.id, ORG],
+    );
     await generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
     const ratDoc = (await docsByOrigin(ORG, "contratacao_direta", ws.id)).find(d => d.documentType === "ratificacao");
     expect(ratDoc).toBeTruthy();
@@ -315,6 +335,21 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
     expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).filter(d => d.documentType === "ratificacao").length).toBe(0);
   }, 120_000);
 
+  it("B2c) NEW-029: ratificado + checklist ausente/pendente/só anexado ⇒ publicação bloqueada, nenhum doc", async () => {
+    const ws = await seedDirect(ORG, "DIR-B2C");
+    await ledgerRatify(ws.id, "ratificado", "Ratifico a contratação direta por dispensa, art. 75.", "v1-b2c-key-0001");
+    const publish = () => generatePublications({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await expect(publish()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CHECKLIST_NOT_CONFIGURED") });
+    await seedRequiredDocuments({ workspaceId: ws.id, organizationId: ORG, correlationId: "v1-closure" });
+    await expect(publish()).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CHECKLIST_PENDING") });
+    // "anexado" com evidência não basta; "validado" legado `s3://anexo` sem hash também não.
+    await conn.execute("UPDATE required_documents SET status = 'anexado', content_hash = REPEAT('b', 64), document_reference = CONCAT('contratacao_direta/', workspace_id, '/1-a.pdf') WHERE workspace_id = ?", [ws.id]);
+    await expect(publish()).rejects.toMatchObject({ message: expect.stringContaining("CHECKLIST_PENDING") });
+    await conn.execute("UPDATE required_documents SET status = 'validado', content_hash = '', document_reference = 's3://anexo' WHERE workspace_id = ?", [ws.id]);
+    await expect(publish()).rejects.toMatchObject({ message: expect.stringContaining("CHECKLIST_PENDING") });
+    expect((await docsByOrigin(ORG, "contratacao_direta", ws.id)).length).toBe(0);
+  }, 120_000);
+
   it("B4) FAIL-CLOSED: decisão 'nao_ratificado' → bloqueado, nenhum doc ratificacao", async () => {
     const ws = await seedDirect(ORG, "DIR-B4");
     await ledgerRatify(ws.id, "nao_ratificado", "Contratação não ratificada.", "v1-b4-key-0001");
@@ -342,7 +377,17 @@ describe.skipIf(!DB)("V1 — Functional Closure (MySQL estrito)", () => {
       organizationId: ORG, contractNumber: "CT-D2/2026", contractor: "Fornecedor Y", object: "Objeto D2",
       value: 80000, term: "12 meses", correlationId: "v1-closure", createdBy: USER,
     });
-    await createAddendum({
+    // PR-08 rev. 2 (decisão do responsável pelo produto): aditivo só existe sobre contrato FORMALIZADO — em
+    // `minuta` é recusado (CONTRACT_STATUS_TRANSITION_INVALID), sem documento. A ativação minuta → vigente é
+    // uma transição institucional explícita ainda não implementada (docs/design/CONTRACT_ACTIVATION_TRANSITION.md),
+    // então o fixture posiciona o contrato em `vigente` diretamente no banco. O objetivo do D2 (aditivo
+    // materializa documento oficial exportável) é o mesmo.
+    await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: USER,
+      organizationId: ORG, contractId: contract.id, addendumType: "prazo", justification: "Em minuta.", correlationId: "v1-closure",
+    })).rejects.toMatchObject({ code: "CONTRACT_STATUS_TRANSITION_INVALID" });
+    expect((await docsByOrigin(ORG, "contratos", contract.id)).filter(d => d.documentType === "aditivo").length).toBe(0);
+    await conn.execute("UPDATE contract_workspaces SET status = 'vigente' WHERE id = ? AND organization_id = ?", [contract.id, ORG]);
+    await createAddendum({ idempotencyKey: cmdKey(), actorUserId: USER,
       organizationId: ORG, contractId: contract.id, addendumType: "prazo", justification: "Prorrogação de 6 meses.",
       newTerm: "18 meses", correlationId: "v1-closure",
     });

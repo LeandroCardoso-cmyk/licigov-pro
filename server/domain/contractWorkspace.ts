@@ -104,14 +104,133 @@ export function createContractWorkspace(params: {
 }
 
 export function canContractTransition(from: ContractStatus, to: ContractStatus): boolean {
-  return STATUS_TRANSITIONS[from].includes(to);
+  // Fail-closed: status desconhecido (linha legada/corrompida) não tem transição alguma.
+  return STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/** Token estável da recusa de transição de status do contrato (não traduzir; usado por testes/cliente). */
+export const CONTRACT_STATUS_TRANSITION_INVALID = "CONTRACT_STATUS_TRANSITION_INVALID";
+
+/**
+ * Transição de status recusada pela máquina de estados do contrato. A mensagem é a MESMA que a máquina
+ * sempre emitiu ("Transição de contrato inválida: de → para"), então callers que já tratavam `Error`
+ * (ex.: `contractWorkspace.updateContract` → BAD_REQUEST) mantêm o comportamento.
+ */
+export class ContractStatusTransitionError extends Error {
+  readonly code = CONTRACT_STATUS_TRANSITION_INVALID;
+  constructor(public readonly from: ContractStatus, public readonly to: ContractStatus) {
+    super(`Transição de contrato inválida: ${from} → ${to}`);
+    this.name = "ContractStatusTransitionError";
+  }
 }
 
 export function transitionContractStatus(ws: ContractWorkspace, to: ContractStatus, at?: string): ContractWorkspace {
   if (!canContractTransition(ws.status, to)) {
-    throw new Error(`Transição de contrato inválida: ${ws.status} → ${to}`);
+    throw new ContractStatusTransitionError(ws.status, to);
   }
   return { ...ws, status: to, updatedAt: at ?? new Date().toISOString() };
+}
+
+// ─── SEM-025 — status do contrato imprimido por instrumento (aditivo/apostilamento) ──────────────
+
+/** Instrumentos que imprimem status no contrato e o status que cada um imprime (comportamento existente). */
+export const INSTRUMENT_CONTRACT_STATUS = { aditivo: "aditado", apostilamento: "apostilado" } as const satisfies Record<string, ContractStatus>;
+export type ContractInstrumentKind = keyof typeof INSTRUMENT_CONTRACT_STATUS;
+
+/**
+ * Como o status do contrato muda ao registrar um instrumento (decisão do responsável pelo produto, PR-08 rev. 2):
+ *  - `machine`   — transição DEFINIDA em `STATUS_TRANSITIONS` (ex.: vigente → aditado; apostilado → aditado);
+ *  - `unchanged` — o contrato já está no status do instrumento (ex.: 2º aditivo em contrato `aditado`).
+ *                  Não é transição: mesma convenção de `contractWorkspace.updateContract` (status igual ⇒
+ *                  a máquina não é consultada). Instrumentos SUCESSIVOS são histórico/filhos do contrato:
+ *                  `aditado`/`apostilado` nunca bloqueiam um novo aditivo/apostilamento;
+ *  - `deferred_pending_legal_opinion` — o instrumento é ADMISSÍVEL no status atual (um dos dois casos acima),
+ *                  mas o próprio fluxo declarou que ele exige parecer jurídico (`requiresLegalOpinion`) e o
+ *                  parecer ainda não existe. Fail-closed: o instrumento é registrado aguardando parecer e o
+ *                  status do contrato NÃO muda (`to === from`). A efetivação posterior depende do comando de
+ *                  finalização do instrumento, que ainda não existe (PR-18/PR-20 — ver
+ *                  docs/design/CONTRACT_ACTIVATION_TRANSITION.md).
+ * Qualquer outro caso é RECUSADO com `ContractStatusTransitionError`, antes de qualquer efeito:
+ *  - `minuta` — contrato ainda não formalizado. A máquina NÃO lista minuta → aditado/apostilado e não há exceção:
+ *               aditivo/apostilamento só existem sobre contrato formalizado (a ativação minuta → vigente é uma
+ *               transição institucional explícita, proposta em docs/design/CONTRACT_ACTIVATION_TRANSITION.md);
+ *  - encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina; nunca reabrem.
+ */
+export type InstrumentStatusChangeMode = "machine" | "unchanged" | "deferred_pending_legal_opinion";
+
+export interface InstrumentStatusChangePlan {
+  readonly from: ContractStatus;
+  /** Status que o contrato terá ao final da operação (igual a `from` em `unchanged` e `deferred_pending_legal_opinion`). */
+  readonly to: ContractStatus;
+  /** Status que o instrumento imprime no contrato quando efetivado (`aditado`/`apostilado`). */
+  readonly instrumentStatus: ContractStatus;
+  readonly mode: InstrumentStatusChangeMode;
+}
+
+export function planInstrumentStatusChange(
+  from: ContractStatus,
+  instrument: ContractInstrumentKind,
+  opts: { readonly requiresLegalOpinion?: boolean } = {},
+): InstrumentStatusChangePlan {
+  const instrumentStatus: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
+  const admissible = from === instrumentStatus || canContractTransition(from, instrumentStatus);
+  if (!admissible) throw new ContractStatusTransitionError(from, instrumentStatus);
+  if (opts.requiresLegalOpinion === true) return { from, to: from, instrumentStatus, mode: "deferred_pending_legal_opinion" };
+  if (from === instrumentStatus) return { from, to: from, instrumentStatus, mode: "unchanged" };
+  return { from, to: instrumentStatus, instrumentStatus, mode: "machine" };
+}
+
+// ─── SEM-062 — gestor/fiscal designados POR INSTRUMENTO (apostilamento `gestor`/`fiscal`) ───────────────────────
+
+/** Token estável (não traduzir): o apostilamento de gestor/fiscal não traz exatamente o campo que o seu tipo designa. */
+export const CONTRACT_APOSTILLE_ASSIGNMENT_INVALID = "CONTRACT_APOSTILLE_ASSIGNMENT_INVALID";
+
+/** Mudança de designação que o apostilamento aplica ao contrato (antes → depois, para a trilha de auditoria). */
+export interface ApostilleAssignmentChange {
+  readonly field: ContractAssignmentField;
+  readonly before: string;
+  readonly after: string;
+}
+
+/** Recusa (antes de qualquer efeito): apostilamento `gestor`/`fiscal` sem o novo nome, ou com campo que não é do seu tipo. */
+export class ContractApostilleAssignmentInvalidError extends Error {
+  readonly code = CONTRACT_APOSTILLE_ASSIGNMENT_INVALID;
+  constructor(public readonly kind: string, public readonly reason: "value_required" | "field_mismatch") {
+    super(reason === "value_required"
+      ? `O apostilamento de ${kind} precisa informar o novo ${kind === "gestor" ? "gestor" : "fiscal"} do contrato; nada foi gravado (${CONTRACT_APOSTILLE_ASSIGNMENT_INVALID}).`
+      : `Gestor/fiscal só podem ser informados no apostilamento do respectivo tipo (gestor ⇒ novo gestor; fiscal ⇒ novo fiscal); o tipo "${kind}" não designa o campo informado. Nada foi gravado (${CONTRACT_APOSTILLE_ASSIGNMENT_INVALID}).`);
+    this.name = "ContractApostilleAssignmentInvalidError";
+  }
+}
+
+/**
+ * SEM-062 — o que um apostilamento muda em `manager`/`inspector` do contrato. Puro e determinístico:
+ *  - `gestor` ⇒ `manager` recebe `newManager` (trim); `fiscal` ⇒ `inspector` recebe `newInspector` (trim);
+ *  - o nome é OBRIGATÓRIO (vazio ⇒ `ContractApostilleAssignmentInvalidError`); nunca se "limpa" um cargo por omissão;
+ *  - `newManager`/`newInspector` informados em outro tipo de apostilamento (ou o campo do OUTRO tipo) são recusados:
+ *    o termo gerado diria que houve troca que o contrato não sofreu;
+ *  - `reajuste`/`legal` sem esses campos ⇒ `null` (o apostilamento não designa ninguém).
+ * `before` vem do contrato lido SOB O LOCK da transação do instrumento.
+ */
+export function planApostilleAssignment(
+  current: Pick<ContractWorkspace, "manager" | "inspector">,
+  kind: string,
+  input: { readonly newManager?: string | null; readonly newInspector?: string | null },
+): ApostilleAssignmentChange | null {
+  const manager = (input.newManager ?? "").trim();
+  const inspector = (input.newInspector ?? "").trim();
+  if (kind === "gestor") {
+    if (inspector) throw new ContractApostilleAssignmentInvalidError(kind, "field_mismatch");
+    if (!manager) throw new ContractApostilleAssignmentInvalidError(kind, "value_required");
+    return { field: "manager", before: current.manager, after: manager };
+  }
+  if (kind === "fiscal") {
+    if (manager) throw new ContractApostilleAssignmentInvalidError(kind, "field_mismatch");
+    if (!inspector) throw new ContractApostilleAssignmentInvalidError(kind, "value_required");
+    return { field: "inspector", before: current.inspector, after: inspector };
+  }
+  if (manager || inspector) throw new ContractApostilleAssignmentInvalidError(kind, "field_mismatch");
+  return null;
 }
 
 /** Atualiza campos editáveis do contrato (sempre supervisionado). */
@@ -153,13 +272,12 @@ export const CONTRACT_INSTRUMENT_GOVERNED_FIELDS = ["contractNumber", "contracto
  * responsável pelo produto, PR-12 rev. 2). Fora dela a recusa é fail-closed com token próprio
  * (`CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION`), e não o token de instrumento, porque:
  *  - gestor/fiscal não são termo econômico do contrato — apontar "Termo Aditivo" seria orientação errada;
- *  - o apostilamento `gestor`/`fiscal` existente (`createApostille`) só registra o instrumento e a minuta;
- *    ele NÃO aplica o novo nome em `manager`/`inspector`, logo não é (ainda) o caminho que efetiva a troca.
+ *  - R9 / SEM-062: a troca pós-formalização de gestor/fiscal é feita pelo APOSTILAMENTO `gestor`/`fiscal`
+ *    (`createApostille`), que aplica o novo nome em `manager`/`inspector` atomicamente com o instrumento, a máquina
+ *    de estados, o CAS e o evento de auditoria (antes → depois) — `planApostilleAssignment`. Nunca pelo editor
+ *    genérico `updateContract`.
  *
- * DÍVIDA / CAPACIDADE FUTURA (não implementada aqui, de propósito): a designação ou substituição de gestor
- * e fiscal após a formalização precisa de uma AÇÃO ESPECÍFICA, auditada e semanticamente nomeada (ex.:
- * "designar/substituir gestor" e "designar/substituir fiscal"), com ator, motivo, ato de referência e
- * evento de timeline próprios — nunca de volta pelo editor genérico `updateContract`.
+ * Ato de designação com motivo/ato de referência próprios (além do apostilamento) segue como capacidade futura.
  */
 export const CONTRACT_ASSIGNMENT_FIELDS = ["manager", "inspector"] as const;
 
@@ -194,8 +312,8 @@ export class ContractAssignmentRequiresGovernedActionError extends Error {
   constructor(public readonly status: ContractStatus, public readonly fields: readonly ContractAssignmentField[]) {
     super(
       `Contrato em status "${status}" não admite troca direta de gestor/fiscal (${fields.join(", ")}). ` +
-      "Após a minuta, a designação ou substituição de gestor e fiscal exige uma ação própria e auditada, " +
-      `que ainda não está disponível nesta tela — nada foi gravado (${CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION}).`,
+      "Após a minuta, a designação ou substituição de gestor e fiscal é feita pelo Apostilamento de gestor/fiscal, " +
+      `que registra o ato e atualiza o contrato — nada foi gravado (${CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION}).`,
     );
     this.name = "ContractAssignmentRequiresGovernedActionError";
   }

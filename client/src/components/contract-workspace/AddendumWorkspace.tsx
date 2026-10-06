@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { ADDENDUM_TYPE_LABELS } from "./labels";
 
 /**
@@ -33,15 +34,18 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
   const [newValue, setNewValue] = React.useState("");
   const [newTerm, setNewTerm] = React.useState("");
 
+  // SEM084-B — uma chave por tentativa lógica: o retry (inclusive após erro) reusa a MESMA chave e converge para o
+  // mesmo aditivo; só um novo aditivo, depois do sucesso, recebe chave nova.
+  const { key: idempotencyKey, rotate } = useIdempotencyKey();
   const create = trpc.contractWorkspace.createAddendum.useMutation({
-    onSuccess: () => { void utils.contractWorkspace.loadContract.invalidate({ contractId }); setJustification(""); setNewValue(""); setNewTerm(""); },
+    onSuccess: () => { rotate(); void utils.contractWorkspace.loadContract.invalidate({ contractId }); setJustification(""); setNewValue(""); setNewTerm(""); },
   });
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">Termos Aditivos</h3>
 
-      <form onSubmit={(e) => { e.preventDefault(); if (justification.trim()) create.mutate({ contractId, addendumType, justification, newValue: newValue ? Number(newValue) : undefined, newTerm: newTerm || undefined, requestOrigin }); }} className="space-y-2">
+      <form onSubmit={(e) => { e.preventDefault(); if (justification.trim()) create.mutate({ contractId, addendumType, justification, newValue: newValue ? Number(newValue) : undefined, newTerm: newTerm || undefined, requestOrigin, idempotencyKey }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {TYPES.map((t) => (
             <button key={t} type="button" onClick={() => setAddendumType(t)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${addendumType === t ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{ADDENDUM_TYPE_LABELS[t]}</button>
@@ -60,7 +64,9 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
         <button type="submit" disabled={create.isPending || !justification.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Criar aditivo + minuta"}
         </button>
-        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine).</p>}
+        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine). O status do contrato só muda após o parecer.</p>}
+        {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
+        {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
       </form>
 
       {addenda.length > 0 && (

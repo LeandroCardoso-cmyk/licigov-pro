@@ -48,6 +48,8 @@ const MIGRATED_FILES = [
   "client/src/components/procurement/DFDWorkspace.tsx",
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx",
+  // R9 / SEM-052 — confirmação de cotações atualizadas (aberta a partir do workspace e do painel do item)
+  "client/src/components/procurement/ItemSourceUpdateConfirm.tsx",
   "client/src/components/procurement/ETPWorkspace.tsx",
   "client/src/components/procurement/TRWorkspace.tsx",
   "client/src/components/procurement/EditalWorkspace.tsx",

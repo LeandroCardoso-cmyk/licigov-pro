@@ -49,8 +49,9 @@ async function seedItem(processId: string, id: string, description: string, quan
   await conn.execute(
     `INSERT INTO intelligent_items (id, organization_id, process_id, source_research_id, description, quantity, unit, average_price, suppliers,
        suggested_catmat, alternative_catmat, specifications, risks, recommendations, status, approved_by, enrichment_status, correlation_id)
-     VALUES (?, ?, ?, ?, ?, ?, 'UN', ?, ?, NULL, '[]', '[]', '[]', '[]', 'aprovado', NULL, 'done', 'cqd-smoke')`,
-    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, price.toFixed(2), JSON.stringify(suppliers)],
+     VALUES (?, ?, ?, ?, ?, ?, 'UN', ?, ?, NULL, '[]', '[]', '[]', '[]', 'aprovado', ?, 'done', 'cqd-smoke')`,
+    // R9 / SEM-030: item "aprovado" exige o aprovador humano (antes o fixture gravava aprovado sem ator).
+    [`${id}-${ORG}`, ORG, processId, rid, description, quantity, price.toFixed(2), JSON.stringify(suppliers), owner],
   );
 }
 async function row(processId: string, kind: string) {
@@ -182,7 +183,17 @@ describe.skipIf(!DB)("P0.3 — quantidade PREVISTA como fonte única em DFD/ETP/
     const etpBefore = (await row(pid, "etp"))!;
     await expect(setPlanned("Detergente neutro", "70", `cqd-q70-${pid}`))
       .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("GOVERNED_CHANGE_REQUIRED") });
+    // R9 / SEM-080 (reescrito): o ETP agora traz o quadro autoritativo (quantidade 60) ⇒ o Edital gerado sobre o ETP
+    // anterior tem fonte alterada (SEM-039/047); regera o Edital sobre o ETP vigente antes de emitir.
+    await genEdital(`cqd-ed3-${pid}`);
+    expect((await editalState()).state).toBe("current");
     const edBefore = (await row(pid, "edital"))!;
+    // R9 / SEM-057 (reescrito): o Edital só é emitido depois do TR EMITIDO — fixture da versão oficial do TR.
+    await conn.execute(
+      // emite o MESMO conteúdo do TR consumido pelo Edital (fonte inalterada — SEM-039/047).
+      "INSERT INTO official_documents (id, tenant_id, business_domain, document_type, origin, title, version, status, content) SELECT ?, ?, 'processo_licitatorio', 'tr', ?, 'TR', 1, 'emitido', content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'tr'",
+      [`tr-fx-${Date.now()}`.slice(0, 20), ORG, pid, ORG, pid],
+    );
     await promoteOfficialDocument({
       organizationId: ORG, processId: pid, kind: "edital", actorUserId: emitter, actorRole: "manager",
       idempotencyKey: `cqd-emit-${pid}`, correlationId: "cqd-emit", expectedContentHash: draftContentHash(edBefore.content),

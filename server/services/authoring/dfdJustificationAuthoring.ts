@@ -11,6 +11,7 @@
  *    (a IA não inventa quantidade, prazo, orçamento ou fundamento);
  *  - explicabilidade: executionId, provider/modelo, versão do prompt, digest do contexto e do input.
  */
+import { createHash } from "crypto";
 import { executeCognitiveTask } from "../aiExecutionEngine";
 import { canonicalDigest } from "../../domain/canonicalJson";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
@@ -108,6 +109,24 @@ export interface DFDJustificationDraft {
   replayed: boolean;
 }
 
+/** Limite da coluna de lineage da chave de idempotência cognitiva (`ai_executions.idempotencyKey`). */
+const AI_EXECUTION_KEY_MAX = 64;
+const HASHED_KEY_PREFIX = "dfdj:h1:";
+
+/**
+ * R10 / SEM-089 — chave de idempotência da execução cognitiva da justificativa do DFD, COLISION-RESISTANT.
+ * Antes: `dfdj:${key}`.slice(0, 64) — chaves longas com o mesmo prefixo colidiam (duas operações distintas viravam a mesma
+ * execução/replay). Agora:
+ *  - chave que CABE (`dfdj:` + chave ≤ 64) e não imita o formato hasheado ⇒ inalterada (compatível: as execuções já gravadas com
+ *    chaves curtas continuam encontráveis, nenhuma linha é reescrita);
+ *  - caso contrário ⇒ `dfdj:h1:` + SHA-256 COMPLETO (base64url, 43 chars) da chave inteira — sem truncar o conteúdo semântico.
+ */
+export function dfdJustificationExecutionKey(clientKey: string): string {
+  const plain = `dfdj:${clientKey}`;
+  if (plain.length <= AI_EXECUTION_KEY_MAX && !plain.startsWith(HASHED_KEY_PREFIX)) return plain;
+  return `${HASHED_KEY_PREFIX}${createHash("sha256").update(clientKey, "utf8").digest("base64url")}`;
+}
+
 export async function generateDFDJustificationText(p: {
   organizationId: number; processId: string; ctx: ProcurementCanonicalContext;
   correlationId: string; actorUserId: number; idempotencyKey: string;
@@ -129,7 +148,7 @@ export async function generateDFDJustificationText(p: {
       task: "GENERATE_DOCUMENT", tenantId: p.organizationId, userId: String(p.actorUserId),
       correlationId: p.correlationId, businessDomain: DOMAIN, processId: p.processId, stage: "DFD",
       query: prompt, responseType: "text", maxOutputTokens: 2048,
-      idempotencyKey: `dfdj:${p.idempotencyKey}`.slice(0, 64), actorUserId: p.actorUserId,
+      idempotencyKey: dfdJustificationExecutionKey(p.idempotencyKey), actorUserId: p.actorUserId,
     });
     raw = execution.response.content ?? "";
     executionId = execution.context.id;

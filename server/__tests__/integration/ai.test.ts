@@ -85,7 +85,7 @@ describe("AI Assistant Router — Integração", () => {
     vi.clearAllMocks();
     vi.mocked(db.getProcessByIdForOrganization).mockResolvedValue(mockProcess as any);
     vi.mocked(db.getDocumentsByProcessForOrganization).mockResolvedValue([mockDocument] as any);
-    vi.mocked(db.createActivityLog).mockResolvedValue(undefined as any);
+    vi.mocked(db.createActivityLogForOrganization).mockResolvedValue(undefined as any);
     vi.mocked(suggestions.suggestModality).mockResolvedValue("## Modalidade Recomendada\n\n**Pregão Eletrônico**");
     vi.mocked(suggestions.suggestRisks).mockResolvedValue("### Riscos\n- Risco A");
     vi.mocked(suggestions.suggestClauses).mockResolvedValue("## Cláusula 5ª\n\nTexto...");
@@ -122,12 +122,14 @@ describe("AI Assistant Router — Integração", () => {
       const caller = aiAssistantRouter.createCaller(makeContext(mockUser));
       await caller.suggestModality({ processId: 10 });
 
-      expect(db.createActivityLog).toHaveBeenCalledWith(
+      // SEM-046 — o log leva o organizationId do CONTEXTO (2º argumento), nunca NULL.
+      expect(db.createActivityLogForOrganization).toHaveBeenCalledWith(
         expect.objectContaining({
           processId: 10,
           userId: mockUser.id,
           action: expect.stringContaining("modalidade"),
         }),
+        1,
       );
     });
 
@@ -182,8 +184,9 @@ describe("AI Assistant Router — Integração", () => {
     it("registra log de atividade de análise de riscos", async () => {
       await aiAssistantRouter.createCaller(makeContext(mockUser)).suggestRisks({ processId: 10 });
 
-      expect(db.createActivityLog).toHaveBeenCalledWith(
+      expect(db.createActivityLogForOrganization).toHaveBeenCalledWith(
         expect.objectContaining({ action: expect.stringContaining("riscos") }),
+        1,
       );
     });
   });

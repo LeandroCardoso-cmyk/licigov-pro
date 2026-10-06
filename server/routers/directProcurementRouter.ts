@@ -24,14 +24,13 @@ import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
-  createDirectProcurementWorkspace, setDirectStage,
-  setProcedureType, setLegalBasis, configureFlags,
-  type DirectStartOption, type DirectProcurementType, type DirectProcurementWorkspace,
+  createDirectProcurementWorkspace, setDirectStage, markDirectPublished, deriveDirectProcurementStatus, describeFlagChange,
+  setProcedureType, setLegalBasis,
+  type DirectStartOption, type DirectProcurementType, type DirectProcurementWorkspace, type DirectProcurementStatus, type DirectProcurementStage,
 } from "../domain/directProcurementWorkspace";
-import { createDFDState, importDFD as importDFDDomain, type DFDSource } from "../domain/dfdState";
 import {
   createDirectProcurementProcedure, createProposalCollection, createProposalDocument,
-  createNeedCharacterization, suggestLegalBasis,
+  suggestLegalBasis,
   type ProcedureMode, type ElectronicPlatform, type PresentialReceiptMethod, type ProposalDocumentKind,
 } from "../domain/directProcurementProcedure";
 import {
@@ -46,10 +45,13 @@ import {
   updateDirectProcurementStage, insertDirectProcedure, getDirectProcedure,
   insertProposalCollection, listProposalCollections, insertProposalDocument,
   getRatification, getContractJustification, getPriceJustification, listRequiredDocuments, listGeneratedPublications,
+  getRecordedActsForWorkspaces, updateDirectWorkspaceFlagsWithEvent, listLinkedContractsForDirect,
 } from "../db/directProcurement";
+import { timelineActor } from "../domain/timelineActor";
+import { PRICE_REFERENCE_METHODS } from "../domain/directPriceReference";
 import { recordProcessEvent, listProcessTimeline } from "../db/procurement";
 import {
-  importDirectPriceResearch, generateContractJustification, generatePriceJustification, acceptContractJustification,
+  importDirectPriceResearch, generateContractJustification, generatePriceJustification, acceptContractJustification, listPriceResearchesForJustification,
   seedRequiredDocuments, requestLegalOpinion, getLegalOpinionResult, generatePublications,
   setRequiredDocumentStatus, attachRequiredDocument,
 } from "../services/directProcurementService";
@@ -72,6 +74,13 @@ async function requireWs(id: string, orgId: number) {
 }
 
 const log = serviceLogger("directProcurementRouter");
+
+type StatusBasis = Omit<ReturnType<typeof deriveDirectProcurementStatus>, "status"> & { storedStatus: DirectProcurementStatus };
+type PublicationRow = { id: string; kind: string; title: string; createdAt: string; unbacked: boolean };
+
+/** R9 / SEM-042 — tokens estáveis da recusa "sem registro persistido" (nunca um sucesso falso). */
+export const DIRECT_NEED_NOT_PERSISTED = "DIRECT_NEED_NOT_PERSISTED";
+export const DIRECT_DFD_IMPORT_NOT_PERSISTED = "DIRECT_DFD_IMPORT_NOT_PERSISTED";
 
 /**
  * R3 / PR-05 (SEM-003) — a criação colidiu com a chave natural (org + número). NADA foi escrito. Relê o
@@ -146,22 +155,43 @@ export const directProcurementRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const workspace = await getDirectProcurementWorkspace(input.workspaceId, orgId);
-      if (!workspace) return { workspace: null, procedure: null, proposals: [], requiredDocuments: [], publications: [], timeline: [] };
-      const [procedure, proposals, requiredDocuments, publications, timeline] = await Promise.all([
+      if (!workspace) return { workspace: null, statusBasis: null as StatusBasis | null, procedure: null, proposals: [], requiredDocuments: [], publications: [] as PublicationRow[], timeline: [] };
+      const [procedure, proposals, requiredDocuments, publications, timeline, acts, linkedContracts] = await Promise.all([
         getDirectProcedure(input.workspaceId, orgId),
         listProposalCollections(input.workspaceId, orgId),
         listRequiredDocuments(input.workspaceId, orgId),
         listGeneratedPublications(input.workspaceId, orgId),
         listProcessTimeline(input.workspaceId, orgId),
+        getRecordedActsForWorkspaces(orgId, [input.workspaceId]),
+        listLinkedContractsForDirect(orgId, input.workspaceId),
       ]);
-      return { workspace, procedure, proposals, requiredDocuments, publications, timeline };
+      // R9 / SEM-064 — o status exibido vem dos ATOS REGISTRADOS (ledger + publicações), não do ponteiro de etapa.
+      const { status, ...basis } = deriveDirectProcurementStatus(workspace, acts.get(input.workspaceId) ?? { ratification: null, publicationCount: 0 });
+      const hasContract = linkedContracts.some((c) => c.status !== "minuta" && c.contractNumber.trim() !== "");
+      return {
+        workspace: { ...workspace, status },
+        statusBasis: { ...basis, storedStatus: workspace.status } as StatusBasis | null,
+        procedure, proposals, requiredDocuments,
+        // Extrato gerado antes da correção (texto genérico, sem contrato) fica visível MAS marcado como sem lastro.
+        publications: publications.map((p): PublicationRow => ({ ...p, unbacked: p.kind === "extrato_contrato" && !hasContract })),
+        timeline,
+      };
     }),
 
   listProcesses: tenantProcedure
     .input(z.object({ limit: z.number().min(1).max(100).optional() }).optional())
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspaces = await listDirectProcurementWorkspaces(orgId, input?.limit ?? 50);
+      const rows = await listDirectProcurementWorkspaces(orgId, input?.limit ?? 50);
+      const acts = await getRecordedActsForWorkspaces(orgId, rows.map((r) => r.id));
+      // R9 / SEM-064 — status derivado dos atos registrados (a coluna gravada segue em `storedStatus`, para auditoria).
+      const workspaces = rows.map((r) => {
+        const d = deriveDirectProcurementStatus(
+          { status: r.status as DirectProcurementStatus, currentStage: r.currentStage as DirectProcurementStage },
+          acts.get(r.id) ?? { ratification: null, publicationCount: 0 },
+        );
+        return { ...r, status: d.status as string, storedStatus: r.status, ratificationBasis: d.ratification, publicationBasis: d.publication };
+      });
       return { workspaces, total: workspaces.length };
     }),
 
@@ -173,14 +203,20 @@ export const directProcurementRouter = router({
       throwLegacyEndpointDisabled("directProcurement.updateStage", "LEG-011", ctx, "as transições canônicas (ratify/publish)");
     }),
 
+  /**
+   * R9 / SEM-042 — SEM registro persistido: a Contratação Direta não tem repositório de DFD importado (nem tabela, nem
+   * migration neste ciclo). Antes, a chamada montava um DFD EM MEMÓRIA, gravava só um evento "DFD importado" e devolvia
+   * `{ dfd }` — sucesso falso (o conteúdo se perdia). Agora recusa de forma ESTÁVEL antes de qualquer escrita
+   * (zero linhas, zero evento). O RBAC (operator+) e o tenant (workspace do órgão ou NOT_FOUND) continuam valendo. O DFD do
+   * Processo Licitatório (`procurementProcess.importDFD`) é outro caminho, persistido, e não muda.
+   */
   importDFD: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), source: z.enum(["pdf", "docx", "oficio", "memorando"]), fields: z.record(z.string(), z.string()).optional() }))
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input, ctx }): Promise<{ dfd: { id: string } }> => {
       const orgId = ctx.organizationId!;
       const ws = await requireWs(input.workspaceId, orgId);
-      const dfd = importDFDDomain(createDFDState({ processId: ws.id, organizationId: orgId, correlationId: ctx.correlationId }), input.source as DFDSource, input.fields ?? {});
-      await recordProcessEvent({ organizationId: orgId, processId: ws.id, eventType: "change", actor: String(ctx.user.id), summary: `DFD importado (${input.source}).`, refId: dfd.id, correlationId: ctx.correlationId });
-      return { dfd };
+      log.warn("direct_dfd_import_not_persisted", { organizationId: orgId, workspaceId: ws.id, actorUserId: ctx.user.id, correlationId: ctx.correlationId, outcome: "REFUSED_NOT_PERSISTED" });
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: `A importação de DFD na contratação direta ainda não possui registro persistido; nada foi gravado (${DIRECT_DFD_IMPORT_NOT_PERSISTED}).` });
     }),
 
   selectLegalBasis: orgRoleProcedure("operator")
@@ -194,23 +230,53 @@ export const directProcurementRouter = router({
       return { workspace: updated, suggestions: suggestLegalBasis(ws.procurementType) };
     }),
 
+  /**
+   * R9 / SEM-042 — SEM registro persistido: não existe repositório da caracterização da necessidade (nem tabela, nem
+   * migration neste ciclo). Antes, a chamada construía o objeto em memória, gravava só um evento "Necessidade
+   * caracterizada." e a tela mostrava "Necessidade registrada." — sucesso falso (o texto e o valor estimado se perdiam).
+   * Agora recusa de forma ESTÁVEL antes de qualquer escrita; a UI deixou de oferecer o formulário. A necessidade
+   * institucional é registrada por `acceptJustification` (aceite humano, persistida).
+   */
   characterizeNeed: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), description: z.string().optional(), justification: z.string().optional(), estimatedValue: z.number().optional() }))
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input, ctx }): Promise<{ need: { workspaceId: string } }> => {
       const orgId = ctx.organizationId!;
       const ws = await requireWs(input.workspaceId, orgId);
-      const need = createNeedCharacterization({ workspaceId: ws.id, organizationId: orgId, description: input.description, justification: input.justification, estimatedValue: input.estimatedValue, correlationId: ctx.correlationId });
-      await recordProcessEvent({ organizationId: orgId, processId: ws.id, eventType: "change", actor: String(ctx.user.id), summary: "Necessidade caracterizada.", refId: ws.id, correlationId: ctx.correlationId });
-      return { need };
+      log.warn("direct_need_characterization_not_persisted", { organizationId: orgId, workspaceId: ws.id, actorUserId: ctx.user.id, correlationId: ctx.correlationId, outcome: "REFUSED_NOT_PERSISTED" });
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: `A caracterização da necessidade ainda não possui registro persistido; nada foi gravado (${DIRECT_NEED_NOT_PERSISTED}). Registre a necessidade na Justificativa da Contratação.` });
     }),
 
+  // R2 / PR-04A — LEG-014 / FCC-01: importação GOVERNADA (identidade explícita por importação, idempotência,
+  // contentHash + dedup, transação local, linhagem, evento persistido). Escrita ⇒ operator+ (viewer NÃO
+  // escreve — mesmo RBAC de procurementProcess.importPriceResearch). Workspace por (id, org do contexto):
+  // outro órgão ⇒ NOT_FOUND neutro, sem escrita.
   importPriceResearch: orgRoleProcedure("operator")
-    .input(z.object({ workspaceId: z.string().min(1), source: z.enum(PRICE_SOURCES), text: z.string().min(1) }))
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      source: z.enum(PRICE_SOURCES),
+      text: z.string().min(1),
+      idempotencyKey: z.string().trim().min(8).max(128),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      const result = await importDirectPriceResearch({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text, correlationId: ctx.correlationId });
-      return result;
+      try {
+        return await importDirectPriceResearch({
+          workspaceId: input.workspaceId, organizationId: orgId, source: input.source, text: input.text,
+          idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        });
+      } catch (err) {
+        if (err instanceof TRPCError) throw err; // NOT_FOUND / CONFLICT / BAD_REQUEST do contrato
+        log.error("direct_price_import_persist_failed", {
+          organizationId: orgId, userId: ctx.user!.id, workspaceId: input.workspaceId,
+          source: input.source, correlationId: ctx.correlationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível importar a pesquisa de preços. Tente novamente; se persistir, contate o suporte.",
+        });
+      }
     }),
 
   configureProcedure: orgRoleProcedure("operator")
@@ -267,7 +333,7 @@ export const directProcurementRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      return generateContractJustification({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId });
+      return generateContractJustification({ workspaceId: input.workspaceId, organizationId: orgId, correlationId: ctx.correlationId, actorUserId: ctx.user!.id });
     }),
 
   generatePriceJustification: orgRoleProcedure("operator")
@@ -275,8 +341,11 @@ export const directProcurementRouter = router({
       workspaceId: z.string().min(1),
       source: z.enum(["pesquisa", "manual", "documento"]),
       justification: z.string().max(20000).optional(),
+      /** R9 / SEM-042 — "pesquisa": só uma PROPOSTA comparada com o valor do servidor; demais fontes: valor DECLARADO. */
       referenceValue: z.number().optional(),
-      researchId: z.string().optional(),
+      researchId: z.string().max(20).optional(),
+      /** R9 / SEM-042 — método de cálculo escolhido pela pessoa (obrigatório com source "pesquisa"; sem padrão). */
+      method: z.enum(PRICE_REFERENCE_METHODS).optional(),
       documentReferences: z.array(z.string()).optional(),
       /** R5 / PR-11 (SEM-022) — aceite humano explícito do registro oficial. */
       confirmOfficial: z.boolean().optional(),
@@ -284,7 +353,7 @@ export const directProcurementRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      return generatePriceJustification({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, justification: input.justification, referenceValue: input.referenceValue, researchId: input.researchId, documentReferences: input.documentReferences, correlationId: ctx.correlationId, confirmOfficial: input.confirmOfficial, actorUserId: ctx.user.id });
+      return generatePriceJustification({ workspaceId: input.workspaceId, organizationId: orgId, source: input.source, justification: input.justification, referenceValue: input.referenceValue, researchId: input.researchId, method: input.method, documentReferences: input.documentReferences, correlationId: ctx.correlationId, confirmOfficial: input.confirmOfficial, actorUserId: ctx.user.id });
     }),
 
   /**
@@ -312,8 +381,12 @@ export const directProcurementRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireWs(input.workspaceId, orgId);
-      const [contract, price] = await Promise.all([getContractJustification(input.workspaceId, orgId), getPriceJustification(input.workspaceId, orgId)]);
-      return { contract, price };
+      const [contract, price, priceResearches] = await Promise.all([
+        getContractJustification(input.workspaceId, orgId), getPriceJustification(input.workspaceId, orgId),
+        // R9 / SEM-042 — pesquisas verificadas + valores CALCULADOS PELO SERVIDOR (o cliente só os exibe).
+        listPriceResearchesForJustification(input.workspaceId, orgId),
+      ]);
+      return { contract, price, priceResearches };
     }),
 
   /**
@@ -418,15 +491,25 @@ export const directProcurementRouter = router({
     }),
 
   // NEW-005 — PUBLICATION: piso técnico manager+ (mesma ressalva do ratify: autoridade competente = PR-07).
+  // SEM-060 — EFEITO REAL (rótulo da UI = efeito): gera as publicações E move o processo para a etapa PUBLICATION.
   publish: orgRoleProcedure("manager")
-    .input(z.object({ workspaceId: z.string().min(1) }))
+    .input(z.object({
+      workspaceId: z.string().min(1),
+      /** R9 / SEM-064 — opt-in: extrato do contrato REGISTRADO e vinculado (sem contrato ⇒ recusa estável, zero escritas). */
+      includeContractExtract: z.boolean().optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const ws = await requireWs(input.workspaceId, orgId);
-      const publications = await generatePublications({ workspaceId: ws.id, organizationId: orgId, correlationId: ctx.correlationId });
-      const moved = setDirectStage(ws, "PUBLICATION");
+      const { publications, contractExtract } = await generatePublications({
+        workspaceId: ws.id, organizationId: orgId, correlationId: ctx.correlationId,
+        includeContractExtract: input.includeContractExtract === true, actorUserId: ctx.user.id,
+      });
+      // As publicações JÁ estão gravadas (ato registrado): só agora o ponteiro/status passa a `publicado`.
+      const moved = markDirectPublished(ws);
       await updateDirectProcurementStage(ws.id, orgId, moved.currentStage, moved.status, moved.updatedAt);
-      return { publications };
+      // SEM-060 — a resposta declara a transição efetiva (a UI e os testes não presumem a etapa).
+      return { publications, contractExtract, stage: moved.currentStage };
     }),
 
   // NEW-005 — WORKFLOW_CONFIGURATION: muda exigências do fluxo (ex.: requiresLegalOpinion) ⇒ piso manager+.
@@ -434,10 +517,22 @@ export const directProcurementRouter = router({
     .input(z.object({ workspaceId: z.string().min(1), usesDFD: z.boolean().optional(), requiresPriceResearch: z.boolean().optional(), requiresProposalCollection: z.boolean().optional(), requiresLegalOpinion: z.boolean().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const ws = await requireWs(input.workspaceId, orgId);
+      await requireWs(input.workspaceId, orgId);
       const { workspaceId: _workspaceId, ...flags } = input;
-      const updated = configureFlags(ws, flags);
-      await insertDirectProcurementWorkspace(updated);
-      return { workspace: updated };
+      // R9 / SEM-064 — a mudança de flags deixa EVENTO de timeline (antes → depois, ator humano, correlationId), na
+      // mesma transação do UPDATE; desligar `requiresLegalOpinion` é destacado como decisão. Sem mudança ⇒ sem escrita.
+      const result = await updateDirectWorkspaceFlagsWithEvent({
+        workspaceId: input.workspaceId, organizationId: orgId, patch: flags,
+        actor: timelineActor(ctx.user.id), correlationId: ctx.correlationId, describe: describeFlagChange,
+      });
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Processo de contratação direta não encontrado nesta organização." });
+      if (result.changed) {
+        log.info("direct_flags_configured", {
+          organizationId: orgId, workspaceId: input.workspaceId, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+          legalOpinionRequiredBefore: result.before.requiresLegalOpinion, legalOpinionRequiredAfter: result.after.requiresLegalOpinion,
+        });
+      }
+      const workspace = await requireWs(input.workspaceId, orgId);
+      return { workspace, changed: result.changed };
     }),
 });
