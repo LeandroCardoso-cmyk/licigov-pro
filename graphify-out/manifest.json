@@ -13530,13 +13530,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-t1-domain.test.ts": {
-    "mtime": 1791249920.4456697,
-    "ast_hash": "f838a183523343c882e150951e2915e5",
+    "mtime": 1791251400.635927,
+    "ast_hash": "51798ce06aa3b53c9661e9e8f7ca2f14",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/ast.ts": {
-    "mtime": 1791249952.5641959,
-    "ast_hash": "0d9b9d08b0b2d630d7d5cfa619493735",
+    "mtime": 1791251400.6345682,
+    "ast_hash": "16fcd91b7936f3f822706906335adcb1",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/binding.ts": {
@@ -13560,13 +13560,13 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/manifest.ts": {
-    "mtime": 1791249663.6056755,
-    "ast_hash": "78e9c4d759c884d0c4915208598595d7",
+    "mtime": 1791251400.633908,
+    "ast_hash": "30febcc18f004da2670fc266948f076c",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revision.ts": {
-    "mtime": 1791249577.0976775,
-    "ast_hash": "de2bed201b43be6030d1f3aace34d5ce",
+    "mtime": 1791251400.6330018,
+    "ast_hash": "099b2ad6cf42c28e9b8b08a625dd8b7c",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/semanticHash.ts": {
@@ -13590,8 +13590,13 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_TEMPLATES_T1_DOMAIN.md": {
-    "mtime": 1791249978.9616683,
-    "ast_hash": "a6b6e401b4eff644ab2e83320429a2d1",
+    "mtime": 1791251420.1116164,
+    "ast_hash": "1e234cd8d3d07763cca219c85c1e34bb",
+    "semantic_hash": ""
+  },
+  "docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md": {
+    "mtime": 1791251450.2530646,
+    "ast_hash": "7a11544d9d093fb399ddcd98ba04acb5",
     "semantic_hash": ""
   }
 }
