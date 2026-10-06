@@ -117,6 +117,8 @@ R-1 a R-4 permanecem aprovadas. R-5: o lifecycle é `DRAFT → APPROVED → PUBL
 
 ### 5.5 HD-26 — `OPEN_PENDING_OWNER_DECISION`
 
+> **Atualização (2026-10-06): decidida pelo owner — `OPTION_A_APPROVED`.** Ver a seção 6 e `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`. O texto abaixo é o registro do momento da execução do G0 e fica preservado.
+
 **Fatos reais pós-Wave B**
 - 0 FKs em todo o repositório; `schema-audit` e `db-push-guard` não reconhecem FK, então a primeira FK é uma convenção nova.
 - Pais existentes sem índice `(id, tenant)`:
@@ -145,3 +147,33 @@ OWNER_DECISION_REQUIRED (para liberar a T2 conceitualmente) = FALSE
 HD26_STATUS = OPEN_PENDING_OWNER_DECISION   # decisão exigida antes da T2 (persistência), não antes do G0
 T2_RELEASED_CONCEPTUALLY = TRUE
 ```
+
+---
+
+## 6. Decisão do owner — HD-26 (2026-10-06)
+
+> Decisão registrada **depois** do G0 oficial. Não altera o resultado do G0 (`OFFICIAL_G0 = PASS`, 0 `DELTA_CONTRADICTORY`). Texto completo: `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`.
+
+```
+HD26_STATUS = DECIDED
+HD26_DECISION = OPTION_A
+HD26_NEW_TABLE_RELATIONS = COMPOSITE_TENANT_FK
+HD26_EXISTING_TABLE_RELATIONS = SAME_TRANSACTION_FAIL_CLOSED_VALIDATION
+HD26_EXISTING_PARENT_DDL = NOT_AUTHORIZED
+HD26_CASCADE_DELETE = FORBIDDEN
+HD26_SCHEMA_GUARD_EXTENSION = REQUIRED
+```
+
+Resumo das condições:
+
+1. **Tabelas novas entre si:** FK composta ciente do tenant, com `organization_id + entity_id`; `UNIQUE (organization_id, id)` no pai e índice no filho. FK nunca relaciona organizações diferentes.
+2. **Sem plataforma-global:** `organization_id NOT NULL`; `NULL = GLOBAL` proibido; sem `PLATFORM_GLOBAL`.
+3. **Delete/update:** sem `ON DELETE CASCADE` nem `ON UPDATE CASCADE` genéricos; `RESTRICT`/`NO ACTION`.
+4. **Tabelas existentes** (`official_documents`, `generated_documents`, `institutional_decisions`, `official_document_artifacts`): **sem DDL** na T2. Validação fail-closed na **mesma transação**, com lookup por `id` **e** tenant, lock quando necessário, e tenant vindo do contexto autoritativo ou da entidade persistida. Referência de outro tenant é inválida e nunca persistida.
+5. **Prova da T2:** novas↔novas = proteção estrutural no banco + validação de serviço/domínio; nova→existente = validação na mesma transação + lookup com escopo de tenant + testes adversariais em MySQL real. Validação só em frontend/router não vale.
+6. **Tooling:** estender (sem criar um segundo sistema) o `schema-audit`/`db-push-guard` para detectar FK ausente, coluna errada, tenant ausente da FK composta, índice/UNIQUE do pai incompatível, `ON DELETE` indevido e estado parcial de migration.
+7. **Migration 0316:** aditiva, replay-safe, multi-tenant, forward-compatible, sem alteração destrutiva; validada fresh, `0315 → 0316`, replay/no-op e estado parcial, em MySQL real. **Não autorizada nesta execução.**
+8. **Proibido** `ALTER official_documents/generated_documents/institutional_decisions` só para suportar FK estrutural. Se for indispensável: `STOP_FOR_OWNER_DECISION` com evidência.
+
+**Estado:** `T2_STARTED = FALSE`; nenhuma migration, tabela ou mudança de schema foi criada.
+

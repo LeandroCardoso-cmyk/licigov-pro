@@ -1,6 +1,6 @@
 # Institutional Document Templates — T1: domínio puro
 
-> **Estado:** T1 de domínio puro **reconciliado sobre a `main` real** (`c88c853`, Waves A e B integradas) pela branch `work/templates-t1-official-g0`. G0 oficial executado (delta-only): **PASS**, 0 `DELTA_CONTRADICTORY` (ver `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md`, seção 5). Nenhum código de persistência, router, UI, composer real ou integração com o Document Engine/Lifecycle existe aqui: a T2 não foi iniciada e depende da decisão do owner (inclusive HD-26). A branch anterior `work/templates-t1-pure-domain-shadow` (base `5827b7f`) fica como histórico.
+> **Estado:** T1 de domínio puro **reconciliado sobre a `main` real** (`c88c853`, Waves A e B integradas) pela branch `work/templates-t1-official-g0`. G0 oficial executado (delta-only): **PASS**, 0 `DELTA_CONTRADICTORY` (ver `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md`, seção 5). Nenhum código de persistência, router, UI, composer real ou integração com o Document Engine/Lifecycle existe aqui: a T2 **não foi iniciada**. A HD-26 está **decidida** (`OPTION_A`; ver `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`) e o planejamento da implementação da T2 depende dela. A branch anterior `work/templates-t1-pure-domain-shadow` (base `5827b7f`) fica como histórico.
 > **Autoridade:** `T1_DESIGN_PACKAGE.md` (branch `audit/fast-track-template-handoff`, sha256 `ecdedd29…563a8a`) e as 37 invariantes PRE-G0 congeladas (INV-TPL-01..37).
 
 ## O que existe
@@ -42,6 +42,10 @@ Não existe nesta fase. Se o G0 oficial revelar evidência autoritativa inequív
 ## G0 oficial
 
 O checklist delta-only fica em `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md`.
+
+## HD-26 (decidida)
+
+`HD26_STATUS = DECIDED` · `HD26_DECISION = OPTION_A`: FK composta de tenant entre as tabelas **novas** e validação fail-closed na mesma transação para as tabelas **existentes**, sem DDL nelas, sem `CASCADE` e com extensão do tooling de schema. O contrato de domínio deste T1 (`tenant.ts`) é a base da validação de serviço. Ver `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`.
 
 ## Fora de escopo nesta fase
 
