@@ -385,7 +385,9 @@ jobs:
           server/__tests__/integration/r9-sem076-timeline-identity-mysql-smoke.test.ts \
           server/__tests__/integration/r10-p2-items-authoring-mysql-smoke.test.ts \
           server/__tests__/integration/r10-sem061-catmat-threshold-impact-mysql-smoke.test.ts \
-          server/__tests__/integration/sem043-migration-0315-mysql-smoke.test.ts
+          server/__tests__/integration/sem043-migration-0315-mysql-smoke.test.ts \
+          server/__tests__/integration/templates-persistence-mysql-smoke.test.ts \
+          server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts
 
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:
