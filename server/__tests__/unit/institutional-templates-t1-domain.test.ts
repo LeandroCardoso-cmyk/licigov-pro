@@ -7,7 +7,7 @@ import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   computeManifestHash, computeRevalidationResultHash, createDraftRevision, deriveIssuanceManifest, evaluateCondition,
-  manifestRevisionIssues, resolveTemplateBinding, revisionDeletionIssues, revisionSemanticHash, revisionUpdateIssues,
+  manifestRevisionIssues, MAX_AST_DEPTH, REVISION_STATUSES, resolveTemplateBinding, revisionDeletionIssues, revisionSemanticHash, revisionUpdateIssues,
   sameOrganizationIssues, sealGenerationManifest, templateCanonicalJson, transitionRevision, validateCondition,
   validateManifest, validateTemplateAst, validateTemplateIdentity, validateVariableCatalog,
   type CanonicalRevalidationRecord, type Cond, type GenerationManifest, type TemplateAST, type TemplateBinding,
@@ -99,11 +99,11 @@ describe("revision state contracts", () => {
     expect(p.ok && p.value.status).toBe("PUBLISHED");
   });
 
-  it("PUBLISHED → RETIRED; RETIRED é terminal", () => {
-    const r = transitionRevision(published(), { to: "RETIRED" }, identity, catalog);
-    expect(r.ok && r.value.status).toBe("RETIRED");
+  it("PUBLISHED → DEPRECATED; DEPRECATED é terminal", () => {
+    const r = transitionRevision(published(), { to: "DEPRECATED" }, identity, catalog);
+    expect(r.ok && r.value.status).toBe("DEPRECATED");
     if (!r.ok) return;
-    for (const to of ["APPROVED", "PUBLISHED", "RETIRED"] as const) {
+    for (const to of ["APPROVED", "PUBLISHED", "DEPRECATED"] as const) {
       const t = to === "APPROVED" ? { to, approvalDecisionId: "x" } : to === "PUBLISHED" ? { to, publishDecisionId: "y" } : { to };
       expect(codes(transitionRevision(r.value, t, identity, catalog))).toEqual(["REVISION_TRANSITION_INVALID"]);
     }
@@ -111,8 +111,38 @@ describe("revision state contracts", () => {
 
   it("estado aprovado/publicado sem decisão registrada é inválido", () => {
     const forged = { ...draft(), status: "PUBLISHED" as const };
-    const r = transitionRevision(forged, { to: "RETIRED" }, identity, catalog);
+    const r = transitionRevision(forged, { to: "DEPRECATED" }, identity, catalog);
     expect(codes(r)).toEqual(expect.arrayContaining(["DECISION_REQUIRED"]));
+  });
+});
+
+describe("lifecycle canônico (decisão R-5)", () => {
+  it("o lifecycle é exatamente DRAFT → APPROVED → PUBLISHED → DEPRECATED", () => {
+    expect(REVISION_STATUSES).toEqual(["DRAFT", "APPROVED", "PUBLISHED", "DEPRECATED"]);
+  });
+
+  it("estado fora do lifecycle (ex.: sinônimo RETIRED ou IN_REVIEW) é recusado", () => {
+    for (const status of ["RETIRED", "IN_REVIEW"]) {
+      const forged = { ...published(), status } as unknown as TemplateRevision;
+      expect(codes(transitionRevision(forged, { to: "DEPRECATED" }, identity, catalog))).toContain("REVISION_TRANSITION_INVALID");
+      const viaApproval = { ...draft(), status } as unknown as TemplateRevision;
+      expect(codes(transitionRevision(viaApproval, { to: "APPROVED", approvalDecisionId: "d" }, identity, catalog))).toContain("REVISION_TRANSITION_INVALID");
+    }
+  });
+
+  it("DEPRECATED ≠ INVALID: revisão depreciada continua válida para manifests históricos", () => {
+    const dep = transitionRevision(published(), { to: "DEPRECATED" }, identity, catalog);
+    if (!dep.ok) throw new Error("fixture");
+    const m = sealGenerationManifest({
+      stage: "GENERATION", id: "man_h1", organizationId: ORG_A, generatedDocumentId: "gd_h1",
+      templateIdentityId: identity.id, templateRevisionId: dep.value.id, templateSemanticHash: dep.value.semanticHash,
+      hashVersion: "tpl-hash/1", catalogVersion: catalog.version, sources: [], officialDocRefs: [], conditionalDecisions: [],
+      aiNarratives: [], annexes: [], identityFingerprint: "ifp_h", composedOutputHash: H("4"), createdAt: "2026-10-01T00:00:00Z",
+    });
+    expect(m.ok).toBe(true);
+    if (!m.ok) return;
+    expect(manifestRevisionIssues(m.value, dep.value)).toEqual([]);
+    expect(revisionDeletionIssues(dep.value, 1).map((i) => i.code)).toEqual(["REVISION_IN_USE"]);
   });
 });
 
@@ -171,7 +201,8 @@ describe("AST whitelist", () => {
     expect(codes(validateTemplateAst(JSON.parse('{"schema":"tpl-ast/1","root":[],"__proto__":{"x":1}}'), catalog))).toEqual(["AST_INVALID"]);
   });
 
-  it("abuso de profundidade é rejeitado", () => {
+  it("abuso de profundidade é rejeitado (MAX_AST_DEPTH: guarda técnica, não regra jurídica)", () => {
+    expect(MAX_AST_DEPTH).toBe(32);
     let node: unknown = { t: "paragraph", inline: [{ t: "text", v: "x" }] };
     for (let i = 0; i < 40; i++) node = { t: "section", key: `s${i}`, children: [node] };
     expect(codes(validateTemplateAst(withRoot([node]), catalog))).toContain("AST_DEPTH_EXCEEDED");

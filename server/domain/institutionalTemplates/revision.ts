@@ -1,11 +1,12 @@
 /**
  * Identidade e revisão do modelo institucional (T1_DESIGN_PACKAGE; INV-TPL-02/06/26/32; HD-02).
  *
- * Ciclo do T1: DRAFT → APPROVED → PUBLISHED → RETIRED.
+ * Ciclo canônico congelado: DRAFT → APPROVED → PUBLISHED → DEPRECATED (sem IN_REVIEW nesta fase).
  *  - APPROVED ≠ PUBLISHED (HD-02): duas transições explícitas, cada uma com a sua decisão institucional; não existe
  *    atalho DRAFT → PUBLISHED.
  *  - Conteúdo (AST, catálogo, hash) só muda em DRAFT; PUBLISHED é imutável; mudança = nova revisão.
- *  - RETIRED ≠ INVALID: revisão aposentada continua válida para documentos que a usaram (HD-13, parte congelada).
+ *  - DEPRECATED ≠ INVALID: revisão depreciada continua válida para documentos e manifests históricos que já a
+ *    referenciam (HD-13, parte congelada).
  *  - Importação (Markdown/DOCX) sempre nasce DRAFT.
  *  - Revisão referenciada por manifest nunca é removida.
  */
@@ -27,7 +28,8 @@ export interface TemplateIdentity {
   readonly createdByUserId: number;
 }
 
-export type RevisionStatus = "DRAFT" | "APPROVED" | "PUBLISHED" | "RETIRED";
+export type RevisionStatus = "DRAFT" | "APPROVED" | "PUBLISHED" | "DEPRECATED";
+export const REVISION_STATUSES: readonly RevisionStatus[] = ["DRAFT", "APPROVED", "PUBLISHED", "DEPRECATED"];
 export type RevisionSourceFormat = "NATIVE" | "MARKDOWN_IMPORT" | "DOCX_IMPORT";
 
 export interface TemplateRevision {
@@ -85,10 +87,13 @@ export function validateTemplateRevision(
   if (!isSha256(revision.semanticHash) || revision.semanticHash !== revisionSemanticHash(revision)) {
     issues.push(issue("HASH_INVALID", "semanticHash", "semanticHash não corresponde ao AST canônico + catálogo"));
   }
-  if (revision.status === "APPROVED" || revision.status === "PUBLISHED" || revision.status === "RETIRED") {
+  if (!REVISION_STATUSES.includes(revision.status)) {
+    issues.push(issue("REVISION_INVALID", "status", `estado fora do lifecycle canônico: ${String(revision.status)}`));
+  }
+  if (revision.status === "APPROVED" || revision.status === "PUBLISHED" || revision.status === "DEPRECATED") {
     if (!revision.approvalDecisionId) issues.push(issue("DECISION_REQUIRED", "approvalDecisionId", "revisão aprovada exige decisão de aprovação"));
   }
-  if (revision.status === "PUBLISHED" || revision.status === "RETIRED") {
+  if (revision.status === "PUBLISHED" || revision.status === "DEPRECATED") {
     if (!revision.publishDecisionId) issues.push(issue("DECISION_REQUIRED", "publishDecisionId", "revisão publicada exige decisão de publicação"));
   }
   return issues.length ? fail(issues) : ok(revision);
@@ -128,10 +133,10 @@ export function createDraftRevision(input: NewRevisionInput): TemplateResult<Tem
 export type RevisionTransition =
   | { readonly to: "APPROVED"; readonly approvalDecisionId: string }
   | { readonly to: "PUBLISHED"; readonly publishDecisionId: string }
-  | { readonly to: "RETIRED" };
+  | { readonly to: "DEPRECATED" };
 
 const ALLOWED: Record<RevisionStatus, RevisionStatus | null> = {
-  DRAFT: "APPROVED", APPROVED: "PUBLISHED", PUBLISHED: "RETIRED", RETIRED: null,
+  DRAFT: "APPROVED", APPROVED: "PUBLISHED", PUBLISHED: "DEPRECATED", DEPRECATED: null,
 };
 
 /**
@@ -141,7 +146,7 @@ const ALLOWED: Record<RevisionStatus, RevisionStatus | null> = {
 export function transitionRevision(
   revision: TemplateRevision, transition: RevisionTransition, identity: TemplateIdentity, catalog: VariableCatalog,
 ): TemplateResult<TemplateRevision> {
-  if (ALLOWED[revision.status] !== transition.to) {
+  if (!Object.prototype.hasOwnProperty.call(ALLOWED, revision.status) || ALLOWED[revision.status] !== transition.to) {
     return fail([issue("REVISION_TRANSITION_INVALID", "status", `transição ${revision.status} → ${transition.to} não permitida`)]);
   }
   let next: TemplateRevision;
@@ -155,7 +160,7 @@ export function transitionRevision(
     }
     next = { ...revision, status: "PUBLISHED", publishDecisionId: transition.publishDecisionId };
   } else {
-    next = { ...revision, status: "RETIRED" };
+    next = { ...revision, status: "DEPRECATED" };
   }
   return validateTemplateRevision(next, identity, catalog);
 }
@@ -167,7 +172,7 @@ const CONTENT_FIELDS = ["ast", "variableCatalogVersion", "semanticHash", "hashVe
 
 /**
  * Regra de imutabilidade para uma atualização `before → after` que NÃO é transição de estado.
- * PUBLISHED (e APPROVED/RETIRED) recusam qualquer mudança de conteúdo: mudança = nova revisão.
+ * PUBLISHED (e APPROVED/DEPRECATED) recusam qualquer mudança de conteúdo: mudança = nova revisão.
  */
 export function revisionUpdateIssues(before: TemplateRevision, after: TemplateRevision): TemplateIssue[] {
   const issues: TemplateIssue[] = [];

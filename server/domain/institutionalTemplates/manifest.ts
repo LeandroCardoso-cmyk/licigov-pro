@@ -240,7 +240,7 @@ export function manifestRevisionIssues(m: CompositionManifest, revision: Templat
   if (m.templateIdentityId !== revision.identityId) out.push(issue("MANIFEST_INVALID", "templateIdentityId", "identidade divergente da revisão"));
   if (m.templateSemanticHash !== revision.semanticHash) out.push(issue("MANIFEST_HASH_MISMATCH", "templateSemanticHash", "hash semântico divergente da revisão"));
   if (m.catalogVersion !== revision.variableCatalogVersion) out.push(issue("CATALOG_VERSION_MISMATCH", "catalogVersion", "catálogo divergente da revisão"));
-  if (revision.status !== "PUBLISHED" && revision.status !== "RETIRED") out.push(issue("BINDING_REVISION_NOT_PUBLISHED", "templateRevisionId", `revisão ${revision.status} não compõe documento`));
+  if (revision.status !== "PUBLISHED" && revision.status !== "DEPRECATED") out.push(issue("BINDING_REVISION_NOT_PUBLISHED", "templateRevisionId", `revisão ${revision.status} não compõe documento`));
   return out;
 }
 
