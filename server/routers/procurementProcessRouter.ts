@@ -22,6 +22,7 @@ import {
 } from "../services/procurementProcessService";
 import { resolveProcurementContext, recordContextAssertions } from "../services/canonicalContextService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
+import { templateIssuanceHook } from "../services/institutionalTemplates/integration";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
   importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
@@ -763,6 +764,8 @@ export const procurementProcessRouter = router({
         actorUserId: ctx.user!.id, actorRole: (ctx.orgMembership?.role ?? null) as never,
         idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
         expectedContentHash: input.expectedContentHash, reason: input.reason ?? null,
+        // Institutional Templates — rascunho composto por modelo ⇒ revalidação canônica + M2 na transação da emissão.
+        templateIssuance: templateIssuanceHook(),
       });
     }),
 

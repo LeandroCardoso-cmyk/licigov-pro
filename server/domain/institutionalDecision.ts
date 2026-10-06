@@ -26,11 +26,29 @@ import { createHash } from "crypto";
 /** Catálogo fechado de tipos de decisão e seus resultados admissíveis (sem semântica jurídica além do rótulo). */
 export const DECISION_OUTCOMES = {
   ratification: ["ratificado", "nao_ratificado"],
+  // Modelos Institucionais (Lane C) — aprovação, publicação e depreciação são decisões DISTINTAS (APPROVED ≠ PUBLISHED);
+  // resultado único e EXPLÍCITO (a confirmação humana é o ato; não existe resultado padrão).
+  template_approval: ["aprovado"],
+  template_publication: ["publicado"],
+  template_deprecation: ["depreciado"],
+  // Revisão humana de um documento composto por modelo (M1): aceite EXATO de narrativa de IA e reconhecimento de desvio
+  // estrutural. A IA nunca registra nenhuma delas.
+  template_ai_acceptance: ["aceito"],
+  template_deviation_acknowledgment: ["reconhecido"],
 } as const satisfies Record<string, readonly string[]>;
 export type InstitutionalDecisionType = keyof typeof DECISION_OUTCOMES;
 
 /** Assuntos que admitem decisão registrada. */
-export const DECISION_SUBJECT_TYPES = ["direct_procurement.ratification"] as const;
+export const DECISION_SUBJECT_TYPES = [
+  "direct_procurement.ratification",
+  // O assunto é o id EXATO da revisão do modelo; um tipo por decisão (cada uma começa na revisão 1 do seu assunto).
+  "institutional_template.approval",
+  "institutional_template.publication",
+  "institutional_template.deprecation",
+  // O assunto é `<manifestId>:<sha256(chave)[0..16]>` (M1 + slot/bloco); o lock é do M1 (`document_composition_manifests`).
+  "institutional_template.ai_acceptance",
+  "institutional_template.deviation_acknowledgment",
+] as const;
 export type DecisionSubjectType = (typeof DECISION_SUBJECT_TYPES)[number];
 
 /** Estado de validação de autoridade. Só existe o valor "pendente de política" enquanto R4.2 não for respondida. */

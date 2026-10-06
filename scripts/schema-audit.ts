@@ -19,6 +19,7 @@ import { is } from "drizzle-orm";
 import { MySqlTable, getTableConfig } from "drizzle-orm/mysql-core";
 import * as schema from "../drizzle/schema";
 import { diffSchema } from "./schema-audit-util";
+import { checkForeignKeyContract } from "../server/db/schemaForeignKeyGuard";
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -34,6 +35,8 @@ async function main(): Promise<void> {
     "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ?",
     [dbName],
   );
+  // HD-26 — FKs críticas do bounded context Institutional Templates (a mesma checagem do validator do boot).
+  const fkProblems = await checkForeignKeyContract(conn);
   await conn.end();
 
   // Real: tabela → conjunto de colunas.
@@ -57,8 +60,14 @@ async function main(): Promise<void> {
   console.info(`\n=== Auditoria de schema — Drizzle × banco "${dbName}" ===`);
   console.info(`Tabelas Drizzle: ${expected.size} | Tabelas no banco: ${actual.size}\n`);
 
-  if (!missingTables.length && !absentColumns.length && !mismatchColumns.length) {
-    console.info("✅ Alinhado: todas as tabelas/colunas do Drizzle existem no banco com o mesmo nome.");
+  if (fkProblems.length) {
+    console.info(`❌ FKs críticas (HD-26) — ${fkProblems.length} problema(s):`);
+    for (const p of fkProblems) console.info(`   - [${p.code}] ${p.message}`);
+    console.info("");
+  }
+
+  if (!missingTables.length && !absentColumns.length && !mismatchColumns.length && !fkProblems.length) {
+    console.info("✅ Alinhado: todas as tabelas/colunas do Drizzle existem no banco com o mesmo nome e as FKs críticas estão íntegras.");
     process.exit(0);
   }
 
@@ -87,7 +96,7 @@ async function main(): Promise<void> {
 
   const absN = absentColumns.reduce((s, m) => s + m.columns.length, 0);
   const misN = mismatchColumns.reduce((s, m) => s + m.pairs.length, 0);
-  console.info(`Resumo: ${missingTables.length} tabela(s) ausente(s) · ${absN} coluna(s) ausente(s) · ${misN} coluna(s) com nome divergente.`);
+  console.info(`Resumo: ${missingTables.length} tabela(s) ausente(s) · ${absN} coluna(s) ausente(s) · ${misN} coluna(s) com nome divergente · ${fkProblems.length} problema(s) de FK.`);
   console.info("Ação: 'ausentes' → migration para criar/adicionar; 'nome divergente' → alinhar o Drizzle ao banco (snake_case). Revisar em staging antes de produção.");
   process.exit(1);
 }

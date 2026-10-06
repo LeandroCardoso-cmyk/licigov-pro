@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/mysql2/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
+import { collectForeignKeyContractProblems } from "./db/schemaForeignKeyGuard";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
 import { AI_CONFIG, validateAiRuntime, validateAiProviderConfig } from "./config/ai";
@@ -166,6 +167,10 @@ export async function collectSchemaProblems(connection: mysql.Connection): Promi
       problems.push(`coluna crítica ausente: ${t}.${c}`);
     }
   }
+
+  // 3) FKs críticas (HD-26) — o gate de schema estendido reconhece as FKs compostas de tenant do bounded context
+  //    Institutional Templates: FK ausente/errada, tenant fora da FK, pai sem UNIQUE exato, CASCADE, estado parcial.
+  problems.push(...(await collectForeignKeyContractProblems(connection)));
 
   return problems;
 }

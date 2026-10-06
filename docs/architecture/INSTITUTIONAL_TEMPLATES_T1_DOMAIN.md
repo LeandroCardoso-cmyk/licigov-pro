@@ -1,6 +1,6 @@
 # Institutional Document Templates — T1: domínio puro
 
-> **Estado:** T1 de domínio puro **reconciliado sobre a `main` real** (`c88c853`, Waves A e B integradas) pela branch `work/templates-t1-official-g0`. G0 oficial executado (delta-only): **PASS**, 0 `DELTA_CONTRADICTORY` (ver `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md`, seção 5). Nenhum código de persistência, router, UI, composer real ou integração com o Document Engine/Lifecycle existe aqui: a T2 **não foi iniciada**. A HD-26 está **decidida** (`OPTION_A`; ver `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`) e o planejamento da implementação da T2 depende dela. A branch anterior `work/templates-t1-pure-domain-shadow` (base `5827b7f`) fica como histórico.
+> **Estado:** T1 de domínio puro **reconciliado sobre a `main` real** (`c88c853`) e integrado na `main` (`dffa7ff`, PR #280). G0 oficial: **PASS** (ver `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md`, seção 5). HD-26 **decidida** (`OPTION_A`; `INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`). A persistência (T2), a composição, o workflow/API e a UX foram integrados em pacote único: ver `INSTITUTIONAL_TEMPLATES_INTEGRATION.md` (flag `FF_INSTITUTIONAL_TEMPLATES_V1` OFF). Este documento descreve só o domínio puro T1.
 > **Autoridade:** `T1_DESIGN_PACKAGE.md` (branch `audit/fast-track-template-handoff`, sha256 `ecdedd29…563a8a`) e as 37 invariantes PRE-G0 congeladas (INV-TPL-01..37).
 
 ## O que existe
@@ -47,8 +47,8 @@ O checklist delta-only fica em `docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST
 
 `HD26_STATUS = DECIDED` · `HD26_DECISION = OPTION_A`: FK composta de tenant entre as tabelas **novas** e validação fail-closed na mesma transação para as tabelas **existentes**, sem DDL nelas, sem `CASCADE` e com extensão do tooling de schema. O contrato de domínio deste T1 (`tenant.ts`) é a base da validação de serviço. Ver `docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md`.
 
-## Fora de escopo nesta fase
+## Fora de escopo do domínio puro
 
-- persistência, migrations, FKs, routers, UI, Document Engine, Lifecycle, composer, import DOCX/Markdown e catálogo de produção;
+- persistência, migrations, FKs, routers, UI, Document Engine, Lifecycle e import DOCX/Markdown (integrados fora deste módulo — ver `INSTITUTIONAL_TEMPLATES_INTEGRATION.md`); catálogo de produção completo (T4/T5);
 - publicação externa (PNCP, BLL, Diário, Portal): **fora do bounded context**;
 - `/templates` legado: inalterado, sem reuso; NULL nunca significa global.
