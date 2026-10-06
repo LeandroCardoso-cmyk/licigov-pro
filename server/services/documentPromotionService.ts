@@ -30,6 +30,7 @@ import type { OrgRole } from "../../drizzle/schema";
 import { getLatestEmittedByOrigin } from "../db/officialDocuments";
 import { getAuthoringSourceState, getEditalSourceState } from "./procurementProcessService";
 import { emissionBlockers, lineDiffStats, type EmissionBlocker } from "../domain/emissionPreconditions";
+import type { PromotionTemplateIssuanceHook } from "./institutionalTemplates/templateCompositionService";
 
 const PROMOTE_OP = "procurement.document.promote";
 const BUSINESS_DOMAIN = "processo_licitatorio" as const;
@@ -103,6 +104,12 @@ export async function promoteOfficialDocument(params: {
   reason?: string | null;
   /** C.4B.1 — OBRIGATÓRIO: hash do conteúdo que o humano revisou/confirmou (integridade da emissão). */
   expectedContentHash: string;
+  /**
+   * Institutional Templates (Lane B) — OPCIONAL. Ausente ⇒ comportamento idêntico ao anterior. Presente: rascunho
+   * composto por template passa pela REVALIDAÇÃO CANÔNICA antes da transação (SOURCE_CHANGED bloqueia; nada é
+   * regenerado) e o M2 derivado é gravado DENTRO da transação da promoção (repetida inteira pelo retry do SEM-084).
+   */
+  templateIssuance?: PromotionTemplateIssuanceHook;
 }): Promise<PromoteOfficialResult> {
   if (!PROMOTABLE_KINDS.includes(params.kind)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Emissão oficial não se aplica a "${params.kind}" nesta fase.` });
@@ -185,6 +192,14 @@ export async function promoteOfficialDocument(params: {
       });
     }
 
+    // Institutional Templates — revalidação canônica + M2 preparado (leituras FORA da transação; bloqueio sem efeito).
+    const templated = params.templateIssuance
+      ? await params.templateIssuance.prepare({
+        organizationId: params.organizationId, processId: params.processId, draftId: draft.id, content: draft.content,
+        contentHash, actorUserId: params.actorUserId, correlationId: params.correlationId,
+      })
+      : null;
+
     const db = await getDb();
     if (!db) {
       // GUARD (fail-closed) — a emissão CRIA autoridade institucional persistida e auditável. Sem
@@ -218,6 +233,11 @@ export async function promoteOfficialDocument(params: {
           institutionalIdentityFingerprint: identity.fingerprint,
           processNumber: process?.processNumber ?? null,
           object: process?.object ?? null,
+          ...(templated ? {
+            templateGenerationManifestId: templated.issuanceManifest.derivedFromManifestId,
+            templateIssuanceManifestId: templated.issuanceManifest.id,
+            templateManifestHash: templated.issuanceManifest.manifestHash,
+          } : {}),
         },
       }, tx);
 
@@ -229,6 +249,9 @@ export async function promoteOfficialDocument(params: {
         nextStatus: "emitido", reason: params.reason ?? null, correlationId: params.correlationId,
         idempotencyKey: params.idempotencyKey,
       }, tx);
+
+      // Institutional Templates — M2 derivado do M1, na MESMA transação da versão emitida e do ledger.
+      if (templated) await templated.persist({ officialDocumentId: official.id, officialVersion: official.version }, tx);
 
       result = {
         officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash },

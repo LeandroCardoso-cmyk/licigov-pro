@@ -544,7 +544,9 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
 //   dfd_ai_accept   = SEM-058 — ACEITE HUMANO explícito de sugestão de IA para a justificativa do DFD (conteúdo humano).
 export type DraftEditOperation =
   | "human_edit" | "ai_regenerate" | "dfd_regenerate" | "dfd_manual_edit"
-  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft" | "dfd_ai_accept";
+  | "import_promote" | "import_replace" | "dfd_context_reconcile" | "dfd_ai_draft" | "dfd_ai_accept"
+  // Institutional Templates — rascunho CRIADO por composição governada de modelo (M1); a criação entra no ledger.
+  | "template_compose";
 
 /**
  * C.4B.3A — Estado de PARTIDA esperado (concorrência), com AUSÊNCIA explícita (sem null ambíguo):

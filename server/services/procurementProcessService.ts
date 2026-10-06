@@ -1344,7 +1344,7 @@ export async function getEditalSourceState(params: {
   /** PR-09 / R5 — proposta de critério de julgamento / regime de execução (texto; opcional). */
   judgmentCriterion?: string; executionRegime?: string;
 }): Promise<{
-  state: "never_generated" | "current" | "source_changed";
+  state: "never_generated" | "current" | "source_changed" | "template_governed";
   storedDigest: string | null; currentDigest: string;
   usedSources: string[]; missing: string[];
   /** PR-09 (SEM-009) — parâmetros persistidos × proposta (a proposta NÃO altera o estado de staleness). */
@@ -1380,6 +1380,9 @@ export async function getEditalSourceState(params: {
   const stored = (existing.sources ?? []).find((s) => s.startsWith("srcdigest:"))?.slice("srcdigest:".length) ?? null;
   // R9 / SEM-047 — por FONTE quando o documento tem `srcd:` (diz o QUE mudou); senão o digest global legado
   // (prefixo de 16 chars) — documentos antigos não mudam de estado por causa desta versão.
+  if (stored === null && (existing.sources ?? []).includes("origem:template")) {
+    return { state: "template_governed", storedDigest: null, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters, changedSources: [] };
+  }
   const cmp = compareSources(existing.sources, { perSource: current.sourceDigests, globalDigest: current.sourcesDigest });
   return { state: cmp.state, storedDigest: stored, currentDigest: current.sourcesDigest, usedSources: current.usedSources, missing: current.missing, parameters, changedSources: describeChangedSources(cmp.changed) };
 }
@@ -1393,7 +1396,9 @@ export async function getEditalSourceState(params: {
 export async function getAuthoringSourceState(params: {
   organizationId: number; processId: string; kind: "etp" | "tr"; object: string;
 }): Promise<{
-  state: "never_generated" | "current" | "source_changed" | "imported";
+  /** `template_governed`: rascunho COMPOSTO por modelo institucional (marcador `origem:template`) — a staleness é decidida
+   *  pela REVALIDAÇÃO CANÔNICA do M1 na emissão (que compara cada fonte), não por este digest de autoria. */
+  state: "never_generated" | "current" | "source_changed" | "imported" | "template_governed";
   storedDigest: string | null; currentDigest: string;
   usedSources: string[]; missing: string[];
   summary: {
@@ -1420,7 +1425,8 @@ export async function getAuthoringSourceState(params: {
   if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };
   const stored = storedSourcesDigest(existing.sources);
   if (stored === null) {
-    return { state: existing.sources.includes("origem:import") ? "imported" : "source_changed", storedDigest: null, ...base, changedSources: [] };
+    const state = existing.sources.includes("origem:import") ? "imported" : existing.sources.includes("origem:template") ? "template_governed" : "source_changed";
+    return { state, storedDigest: null, ...base, changedSources: [] };
   }
   // R9 / SEM-047 — por FONTE quando há `srcd:`; senão o digest global legado.
   const cmp = compareSources(existing.sources, { perSource: ctx.sourceDigests, globalDigest: ctx.sourcesDigest });

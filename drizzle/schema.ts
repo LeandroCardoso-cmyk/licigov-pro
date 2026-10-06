@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, unique, index, tinyint, smallint, double, datetime, bigint } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, longtext, timestamp, varchar, boolean, json, decimal, primaryKey, foreignKey, unique, index, tinyint, smallint, double, datetime, bigint } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -6568,3 +6568,173 @@ export const legalReferenceSetEvents = mysqlTable("legal_reference_set_events", 
 });
 export type LegalReferenceSetEvent = typeof legalReferenceSetEvents.$inferSelect;
 export type InsertLegalReferenceSetEvent = typeof legalReferenceSetEvents.$inferInsert;
+
+// ─── Institutional Document Templates — persistência (migration 0316, T2) ─────────────────────────────────────
+// Bounded context ORGANIZATION-ONLY (V1): `organization_id NOT NULL` em TODAS as tabelas; NULL nunca significa global e
+// não existe PLATFORM_GLOBAL. HD-26 (Option A, decidida pelo owner): relações ENTRE estas tabelas novas usam FK COMPOSTA
+// DE TENANT — o pai expõe `UNIQUE (organization_id, id)` e o filho referencia `(organization_id, <pai>_id)` —, sempre
+// `RESTRICT` (nunca CASCADE: lineage, replay, manifest e auditoria são preservados; remoção/depreciação é do domínio).
+// Relações com tabelas EXISTENTES (`generated_documents`, `official_documents`, `institutional_decisions`) NÃO viram FK:
+// são validadas fail-closed, por id + tenant, na MESMA transação da escrita (server/db/institutionalTemplates).
+// Colação explícita utf8mb4_unicode_ci em todas (FK exige charset/colação idênticos entre pai e filho).
+
+/** Identidade do modelo (imutável após criada). */
+export const institutionalTemplateIdentitiesTable = mysqlTable("institutional_template_identities", {
+  id:              varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:  int("organization_id").notNull(),
+  documentKind:    varchar("document_kind", { length: 16 }).notNull(),
+  slug:            varchar("slug", { length: 120 }).notNull(),
+  /** ISO-8601 informado pelo domínio (tempo é input explícito); `recorded_at` é só metadado operacional. */
+  createdAtIso:    varchar("created_at_iso", { length: 40 }).notNull(),
+  createdByUserId: int("created_by_user_id").notNull(),
+  recordedAt:      datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_iti_org_id").on(table.organizationId, table.id),
+  unique("uq_iti_org_kind_slug").on(table.organizationId, table.documentKind, table.slug),
+]);
+
+/** Revisão do modelo: append-only; conteúdo (AST/catálogo/hash) só muda em DRAFT; PUBLISHED é imutável. */
+export const institutionalTemplateRevisionsTable = mysqlTable("institutional_template_revisions", {
+  id:                    varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull(),
+  identityId:            varchar("identity_id", { length: 24 }).notNull(),
+  revision:              int("revision").notNull(),
+  /** DRAFT → APPROVED → PUBLISHED → DEPRECATED (sem RETIRED/IN_REVIEW). */
+  status:                varchar("status", { length: 16 }).notNull().default("DRAFT"),
+  /** AST canônico (`tpl-ast/1`) em JSON canônico (texto, para preservar os bytes). */
+  astJson:               longtext("ast_json").notNull(),
+  variableCatalogVersion: varchar("variable_catalog_version", { length: 64 }).notNull(),
+  semanticHash:          varchar("semantic_hash", { length: 64 }).notNull(),
+  hashVersion:           varchar("hash_version", { length: 16 }).notNull(),
+  sourceFormat:          varchar("source_format", { length: 24 }).notNull(),
+  /** Referências a `institutional_decisions` (tabela existente: validadas na mesma transação, sem FK). */
+  approvalDecisionId:    varchar("approval_decision_id", { length: 24 }),
+  publishDecisionId:     varchar("publish_decision_id", { length: 24 }),
+  recordedAt:            datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_itr_org_id").on(table.organizationId, table.id),
+  // Chave-pai da FK de pin exato (binding/manifest): a revisão pertence à identidade informada.
+  unique("uq_itr_org_identity_id").on(table.organizationId, table.identityId, table.id),
+  unique("uq_itr_org_identity_rev").on(table.organizationId, table.identityId, table.revision),
+  index("idx_itr_org_status").on(table.organizationId, table.status),
+  foreignKey({ name: "fk_itr_identity", columns: [table.organizationId, table.identityId], foreignColumns: [institutionalTemplateIdentitiesTable.organizationId, institutionalTemplateIdentitiesTable.id] }).onDelete("restrict").onUpdate("restrict"),
+]);
+
+/** Binding determinístico: SEMPRE com o pin da revisão exata (sem pin ⇒ não há como armazenar). */
+export const institutionalTemplateBindingsTable = mysqlTable("institutional_template_bindings", {
+  id:               varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:   int("organization_id").notNull(),
+  documentKind:     varchar("document_kind", { length: 16 }).notNull(),
+  /** Escopo exato; '' = não especificado (o repositório recusa '' como valor de escopo, mapeamento bijetivo). */
+  scopeModality:    varchar("scope_modality", { length: 64 }).notNull().default(""),
+  scopeRegime:      varchar("scope_regime", { length: 64 }).notNull().default(""),
+  scopeCriterion:   varchar("scope_criterion", { length: 64 }).notNull().default(""),
+  identityId:       varchar("identity_id", { length: 24 }).notNull(),
+  pinnedRevisionId: varchar("pinned_revision_id", { length: 24 }).notNull(),
+  active:           tinyint("active").notNull().default(1),
+  effectiveFromIso: varchar("effective_from_iso", { length: 40 }).notNull(),
+  /** No máximo UM binding ATIVO por (organização, tipo, escopo): ambiguidade estrutural impossível. */
+  activeScopeKey:   varchar("active_scope_key", { length: 224 }).generatedAlwaysAs(sql`if((\`active\` = 1),concat_ws('|',\`document_kind\`,\`scope_modality\`,\`scope_regime\`,\`scope_criterion\`),NULL)`, { mode: "stored" }),
+  recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_itb_org_id").on(table.organizationId, table.id),
+  unique("uq_itb_active_scope").on(table.organizationId, table.activeScopeKey),
+  index("idx_itb_org_kind_active").on(table.organizationId, table.documentKind, table.active),
+  // Índice do FILHO das duas FKs (identidade e pin exato): `(org, identity)` é prefixo de `(org, identity, revisão)`.
+  index("idx_itb_org_identity_revision").on(table.organizationId, table.identityId, table.pinnedRevisionId),
+  foreignKey({ name: "fk_itb_identity", columns: [table.organizationId, table.identityId], foreignColumns: [institutionalTemplateIdentitiesTable.organizationId, institutionalTemplateIdentitiesTable.id] }).onDelete("restrict").onUpdate("restrict"),
+  foreignKey({ name: "fk_itb_revision", columns: [table.organizationId, table.identityId, table.pinnedRevisionId], foreignColumns: [institutionalTemplateRevisionsTable.organizationId, institutionalTemplateRevisionsTable.identityId, institutionalTemplateRevisionsTable.id] }).onDelete("restrict").onUpdate("restrict"),
+]);
+
+/** Ledger APPEND-ONLY dos eventos de ciclo de vida do modelo (revisão e binding). */
+export const institutionalTemplateEventsTable = mysqlTable("institutional_template_events", {
+  id:             varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  identityId:     varchar("identity_id", { length: 24 }).notNull(),
+  revisionId:     varchar("revision_id", { length: 24 }),
+  bindingId:      varchar("binding_id", { length: 24 }),
+  eventType:      varchar("event_type", { length: 32 }).notNull(),
+  fromStatus:     varchar("from_status", { length: 16 }).notNull().default(""),
+  toStatus:       varchar("to_status", { length: 16 }).notNull().default(""),
+  decisionId:     varchar("decision_id", { length: 24 }),
+  actorUserId:    int("actor_user_id").notNull(),
+  correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
+  recordedAt:     datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_ite_org_id").on(table.organizationId, table.id),
+  index("idx_ite_org_identity").on(table.organizationId, table.identityId),
+  index("idx_ite_org_revision").on(table.organizationId, table.revisionId),
+  index("idx_ite_org_binding").on(table.organizationId, table.bindingId),
+  foreignKey({ name: "fk_ite_identity", columns: [table.organizationId, table.identityId], foreignColumns: [institutionalTemplateIdentitiesTable.organizationId, institutionalTemplateIdentitiesTable.id] }).onDelete("restrict").onUpdate("restrict"),
+  foreignKey({ name: "fk_ite_revision", columns: [table.organizationId, table.revisionId], foreignColumns: [institutionalTemplateRevisionsTable.organizationId, institutionalTemplateRevisionsTable.id] }).onDelete("restrict").onUpdate("restrict"),
+  foreignKey({ name: "fk_ite_binding", columns: [table.organizationId, table.bindingId], foreignColumns: [institutionalTemplateBindingsTable.organizationId, institutionalTemplateBindingsTable.id] }).onDelete("restrict").onUpdate("restrict"),
+]);
+
+/**
+ * Composition Manifest (INSERT-ONLY). M1 (`GENERATION`) e M2 (`ISSUANCE`) são registros DISTINTOS; M2 deriva de M1 e
+ * nunca o reescreve. `body_json` guarda, em JSON canônico, as partes sem relação estrutural (fontes, decisões
+ * condicionais, narrativas de IA, anexos, edições humanas, revalidação canônica); as referências oficiais ficam em
+ * `document_composition_references`. A leitura reconstrói o manifest e RECALCULA o hash (fail-closed).
+ */
+export const documentCompositionManifestsTable = mysqlTable("document_composition_manifests", {
+  id:                    varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:        int("organization_id").notNull(),
+  stage:                 varchar("stage", { length: 16 }).notNull(),
+  /** `generated_documents.id` (tabela existente: validada id + tenant na mesma transação). */
+  generatedDocumentId:   varchar("generated_document_id", { length: 20 }).notNull(),
+  /** Só no estágio ISSUANCE: `official_documents.id` da versão emitida (validado id + tenant na mesma transação). */
+  officialDocumentId:    varchar("official_document_id", { length: 20 }),
+  templateIdentityId:    varchar("template_identity_id", { length: 24 }).notNull(),
+  templateRevisionId:    varchar("template_revision_id", { length: 24 }).notNull(),
+  templateSemanticHash:  varchar("template_semantic_hash", { length: 64 }).notNull(),
+  hashVersion:           varchar("hash_version", { length: 16 }).notNull(),
+  catalogVersion:        varchar("catalog_version", { length: 64 }).notNull(),
+  identityFingerprint:   varchar("identity_fingerprint", { length: 64 }).notNull(),
+  composedOutputHash:    varchar("composed_output_hash", { length: 64 }).notNull(),
+  documentContentHash:   varchar("document_content_hash", { length: 64 }),
+  derivedFromManifestId: varchar("derived_from_manifest_id", { length: 24 }),
+  manifestHash:          varchar("manifest_hash", { length: 64 }).notNull(),
+  manifestCreatedAtIso:  varchar("manifest_created_at_iso", { length: 40 }).notNull(),
+  bodyJson:              longtext("body_json").notNull(),
+  correlationId:         varchar("correlation_id", { length: 64 }).notNull().default(""),
+  /** Um manifest de emissão por versão oficial (INV-TPL-29). */
+  officialIssueKey:      varchar("official_issue_key", { length: 20 }).generatedAlwaysAs(sql`if((\`stage\` = 'ISSUANCE'),\`official_document_id\`,NULL)`, { mode: "stored" }),
+  recordedAt:            datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_dcm_org_id").on(table.organizationId, table.id),
+  // Mesmo conteúdo semântico ⇒ MESMO manifest (replay converge); mesmo id com outro conteúdo ⇒ conflito.
+  unique("uq_dcm_org_hash").on(table.organizationId, table.manifestHash),
+  unique("uq_dcm_org_issue").on(table.organizationId, table.officialIssueKey),
+  index("idx_dcm_org_generated").on(table.organizationId, table.generatedDocumentId),
+  // Índices do FILHO das FKs: pin exato da revisão `(org, identidade, revisão)` e derivação M1 → M2.
+  index("idx_dcm_org_revision").on(table.organizationId, table.templateIdentityId, table.templateRevisionId),
+  index("idx_dcm_org_derived").on(table.organizationId, table.derivedFromManifestId),
+  foreignKey({ name: "fk_dcm_revision", columns: [table.organizationId, table.templateIdentityId, table.templateRevisionId], foreignColumns: [institutionalTemplateRevisionsTable.organizationId, institutionalTemplateRevisionsTable.identityId, institutionalTemplateRevisionsTable.id] }).onDelete("restrict").onUpdate("restrict"),
+  foreignKey({ name: "fk_dcm_derived", columns: [table.organizationId, table.derivedFromManifestId], foreignColumns: [table.organizationId, table.id] }).onDelete("restrict").onUpdate("restrict"),
+]);
+
+/** Referências oficiais pinadas do manifest (documento + linhagem + versão + hash do conteúdo). INSERT-only. */
+export const documentCompositionReferencesTable = mysqlTable("document_composition_references", {
+  organizationId: int("organization_id").notNull(),
+  manifestId:     varchar("manifest_id", { length: 24 }).notNull(),
+  refOrder:       int("ref_order").notNull(),
+  role:           varchar("role", { length: 64 }).notNull(),
+  /** `official_documents.id` (tabela existente: validada id + tenant + pin exato na mesma transação). */
+  documentId:     varchar("document_id", { length: 20 }).notNull(),
+  lineageId:      varchar("lineage_id", { length: 20 }).notNull(),
+  version:        int("version").notNull(),
+  contentHash:    varchar("content_hash", { length: 64 }).notNull(),
+  title:          varchar("title", { length: 255 }).notNull(),
+  recordedAt:     datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  primaryKey({ name: "pk_dcr", columns: [table.organizationId, table.manifestId, table.refOrder] }),
+  index("idx_dcr_org_document").on(table.organizationId, table.documentId),
+  foreignKey({ name: "fk_dcr_manifest", columns: [table.organizationId, table.manifestId], foreignColumns: [documentCompositionManifestsTable.organizationId, documentCompositionManifestsTable.id] }).onDelete("restrict").onUpdate("restrict"),
+]);
+
+export type InstitutionalTemplateIdentityRow = typeof institutionalTemplateIdentitiesTable.$inferSelect;
+export type InstitutionalTemplateRevisionRow = typeof institutionalTemplateRevisionsTable.$inferSelect;
+export type InstitutionalTemplateBindingRow = typeof institutionalTemplateBindingsTable.$inferSelect;
+export type InstitutionalTemplateEventRow = typeof institutionalTemplateEventsTable.$inferSelect;
+export type DocumentCompositionManifestRow = typeof documentCompositionManifestsTable.$inferSelect;
+export type DocumentCompositionReferenceRow = typeof documentCompositionReferencesTable.$inferSelect;

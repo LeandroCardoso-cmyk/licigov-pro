@@ -2124,6 +2124,13 @@
       "when": 1791087452041,
       "tag": "0315_official_document_artifacts",
       "breakpoints": true
+    },
+    {
+      "idx": 316,
+      "version": "5",
+      "when": 1791311351240,
+      "tag": "0316_institutional_templates_persistence",
+      "breakpoints": true
     }
   ]
 }

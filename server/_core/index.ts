@@ -17,6 +17,7 @@ import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
 import { recoverStuckImportSessions } from "../services/importQueueService";
 import { recoverStaleEnrichment } from "../services/itemMaterializationService";
 import { EMAIL_CONFIG } from "../config/email";
+import { wireInstitutionalTemplates } from "../services/institutionalTemplates/integration";
 import { start as startEmailDispatcher, stop as stopEmailDispatcher } from "../services/email/emailDispatcher";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -67,6 +68,10 @@ async function startServer() {
   // PR B.2.1 — byte-upload da ingestão canônica (Express, binário cru, fora do tRPC).
   // Montado ANTES do tRPC; gated por feature flag tenant-aware (fail-closed).
   registerIngestionUploadRoute(app);
+
+  // Modelos Institucionais — liga os ports reais (persistência/composição). NÃO habilita nenhum tenant: a flag
+  // FF_INSTITUTIONAL_TEMPLATES_V1 é tenant-scoped e default OFF; sem flag, nada muta e nada é gerado/emitido por modelo.
+  wireInstitutionalTemplates();
 
   // tRPC API
   app.use(

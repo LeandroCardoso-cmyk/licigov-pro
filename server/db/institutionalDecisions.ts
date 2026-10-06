@@ -6,9 +6,11 @@
  * A transação, o lock do assunto e a decisão (replay/CAS/insert) ficam no serviço
  * `institutionalDecisionService`; aqui só há primitivas que recebem o executor.
  */
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, like } from "drizzle-orm";
 import { getDb } from "./connection";
-import { institutionalDecisionsTable, directProcurementWorkspacesTable } from "../../drizzle/schema";
+import {
+  institutionalDecisionsTable, directProcurementWorkspacesTable, institutionalTemplateRevisionsTable, documentCompositionManifestsTable,
+} from "../../drizzle/schema";
 import { isDuplicateKeyError, type ProcurementExecutor } from "./procurement";
 import type { DecisionSubjectType, InstitutionalDecision, InstitutionalDecisionType, AuthorityValidation } from "../domain/institutionalDecision";
 
@@ -46,6 +48,27 @@ export async function lockDecisionSubject(
   if (subjectType === "direct_procurement.ratification") {
     const rows = await tx.select({ id: directProcurementWorkspacesTable.id }).from(directProcurementWorkspacesTable)
       .where(and(eq(directProcurementWorkspacesTable.id, subjectId), eq(directProcurementWorkspacesTable.organizationId, organizationId)))
+      .for("update");
+    return rows.length === 1;
+  }
+  // Modelos Institucionais — o assunto é a REVISÃO EXATA (aprovação/publicação/depreciação). Lock da linha-pai da revisão,
+  // tenant-scoped; revisão de outro tenant é indistinguível de inexistente (anti-enumeração, fail-closed).
+  if (subjectType === "institutional_template.approval" || subjectType === "institutional_template.publication"
+    || subjectType === "institutional_template.deprecation") {
+    const rows = await tx.select({ id: institutionalTemplateRevisionsTable.id }).from(institutionalTemplateRevisionsTable)
+      .where(and(eq(institutionalTemplateRevisionsTable.id, subjectId), eq(institutionalTemplateRevisionsTable.organizationId, organizationId)))
+      .for("update");
+    return rows.length === 1;
+  }
+  // Revisão humana de um documento composto — o assunto é `<manifestId>:<chave>`; o lock é do M1 (INSERT-only; o lock
+  // serializa apenas as decisões sobre ele, nunca o altera).
+  if (subjectType === "institutional_template.ai_acceptance" || subjectType === "institutional_template.deviation_acknowledgment") {
+    const manifestId = subjectId.split(":")[0] ?? "";
+    if (!manifestId) return false;
+    const rows = await tx.select({ id: documentCompositionManifestsTable.id }).from(documentCompositionManifestsTable)
+      .where(and(
+        eq(documentCompositionManifestsTable.id, manifestId), eq(documentCompositionManifestsTable.organizationId, organizationId),
+        eq(documentCompositionManifestsTable.stage, "GENERATION")))
       .for("update");
     return rows.length === 1;
   }
@@ -108,4 +131,24 @@ export async function insertDecision(tx: ProcurementExecutor, d: InstitutionalDe
     if (isDuplicateKeyError(err)) throw new DecisionWriteRaceError();
     throw err;
   }
+}
+
+/**
+ * Decisões do tipo cujo assunto começa por `<prefixo>` (ex.: `<manifestId>:`) — tenant-scoped, ordem estável. O prefixo é
+ * escapado: só casa assuntos que realmente o iniciam (sem curinga vindo do chamador).
+ */
+export async function listDecisionsBySubjectPrefix(
+  organizationId: number, subjectType: DecisionSubjectType, prefix: string, exec?: ProcurementExecutor,
+): Promise<InstitutionalDecision[]> {
+  const db = exec ?? await getDb();
+  if (!db) return [];
+  const escaped = prefix.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = await db.select().from(institutionalDecisionsTable)
+    .where(and(
+      eq(institutionalDecisionsTable.organizationId, organizationId),
+      eq(institutionalDecisionsTable.subjectType, subjectType),
+      like(institutionalDecisionsTable.subjectId, `${escaped}%`),
+    ))
+    .orderBy(asc(institutionalDecisionsTable.subjectId), asc(institutionalDecisionsTable.revision));
+  return rows.map(fromRow).filter((d) => d.subjectId.startsWith(prefix));
 }

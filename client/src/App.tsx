@@ -33,6 +33,8 @@ import AdminDocuments from "./pages/AdminDocuments";
 // import AdminFinancialReports from "./pages/AdminFinancialReports";
 import DocumentSettings from "./pages/DocumentSettings";
 import Templates from "./pages/Templates";
+import InstitutionalTemplates from "./pages/InstitutionalTemplates";
+import InstitutionalTemplateDetail from "./pages/InstitutionalTemplateDetail";
 import ActivityReport from "./pages/ActivityReport";
 import DepartmentManagement from "./pages/DepartmentManagement";
 import AIUsageDashboard from "./pages/AIUsageDashboard";
@@ -127,6 +129,9 @@ const AdminDocumentsRoute = () => <AuthenticatedRoute component={AdminDocuments}
 // const AuditLogsRoute = () => <AuthenticatedRoute component={AuditLogs} />;
 // V1 UI/UX Stabilization — Templates é item do menu lateral: renderiza DENTRO do shell.
 const TemplatesRoute = withAuthenticatedShell(Templates);
+// Modelos Institucionais (Lane C) — módulo distinto do `/templates` legado; atrás de flag tenant-scoped (default OFF).
+const InstitutionalTemplatesRoute = withAuthenticatedShell(InstitutionalTemplates);
+const InstitutionalTemplateDetailRoute = withAuthenticatedShell(InstitutionalTemplateDetail);
 const ActivityReportRoute = () => <AuthenticatedRoute component={ActivityReport} />;
 const DepartmentManagementRoute = () => <AuthenticatedRoute component={DepartmentManagement} />;
 const AIUsageDashboardRoute = () => <AuthenticatedRoute component={AIUsageDashboard} />;
@@ -190,6 +195,8 @@ function Router() {
       <Route path={"/novo-processo"} component={() => <Redirect to="/processos" replace />} />
       <Route path={"/personalizacao-documentos"} component={DocumentSettingsRoute} />
       <Route path={"/templates"} component={TemplatesRoute} />
+      <Route path={"/modelos-institucionais"} component={InstitutionalTemplatesRoute} />
+      <Route path={"/modelos-institucionais/:identityId"} component={InstitutionalTemplateDetailRoute} />
       <Route path={"/auditoria"} component={ActivityReportRoute} />
       <Route path={"/gestao-departamento"} component={DepartmentManagementRoute} />      <Route path={"/admin/ai-costs"} component={AIUsageDashboardRoute} />
       <Route path={"/admin/platforms"} component={AdminPlatformsRoute} />
