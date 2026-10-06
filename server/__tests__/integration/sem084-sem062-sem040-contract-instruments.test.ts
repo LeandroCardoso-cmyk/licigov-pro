@@ -45,7 +45,15 @@ vi.mock("../../db/contractWorkspace", async (orig) => ({
   insertContractWsDocument: cw.insertDoc,
   listContractAddenda: vi.fn(async () => cw.insertAddendum.mock.calls.map((c) => c[0])),
   listContractApostilles: vi.fn(async () => cw.insertApostille.mock.calls.map((c) => c[0])),
+  // SEM084-B (reescrito): o comando procura o instrumento da MESMA tentativa lógica (id derivado da chave) — aqui, nenhum.
+  getContractAddendumById: vi.fn(async () => null),
+  getContractApostilleById: vi.fn(async () => null),
 }));
+// SEM084-B (reescrito): idempotência do comando e retomada do termo têm smokes MySQL próprios; aqui são neutras.
+vi.mock("../../services/idempotencyService", () => ({
+  checkIdempotency: vi.fn(async () => ({ status: "new" })), saveIdempotencyResult: vi.fn(async () => undefined), failIdempotencyKey: vi.fn(async () => undefined),
+}));
+vi.mock("../../db/officialDocuments", async (orig) => ({ ...(await orig<typeof import("../../db/officialDocuments")>()), getLatestByLineage: vi.fn(async () => null) }));
 vi.mock("../../services/workspaceOrchestratorService", () => ({ orchestrateMultiCopilot: cw.orchestrate }));
 vi.mock("../../services/documentEngineService", () => ({ generateOfficialDocument: cw.generateOfficial }));
 vi.mock("../../db/procurement", async (orig) => ({ ...(await orig<typeof import("../../db/procurement")>()), recordProcessEvent: cw.recordEvent }));
@@ -57,6 +65,10 @@ import {
 } from "../../domain/contractWorkspace";
 import { createAddendum, createApostille, generateContractDocument } from "../../services/contractService";
 import { computeLineageId } from "../../domain/officialDocument";
+
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const TX = { __tx: true };
 const ORG = 7;
@@ -82,7 +94,7 @@ beforeEach(() => {
 
 describe("SEM-084 — sequência alocada DENTRO da transação, sob o lock da linha do contrato", () => {
   it("ordem: lock → alocação → INSERT → CAS → evento, tudo no MESMO tx; IA/minuta só DEPOIS", async () => {
-    await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     expect(cw.lock).toHaveBeenCalledWith(CID, ORG, TX);
     expect(cw.nextAddendum).toHaveBeenCalledWith(CID, ORG, TX);
     expect(cw.insertAddendum).toHaveBeenCalledWith(expect.anything(), TX, { failOnDuplicate: true });
@@ -93,24 +105,25 @@ describe("SEM-084 — sequência alocada DENTRO da transação, sob o lock da li
     expect(cw.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it("a sequência do instrumento é a ALOCADA sob o lock (não `count+1` externo); id determinístico por sequência", async () => {
+  // SEM084-B (reescrito): o id do instrumento é derivado da chave do comando (uma por tentativa lógica), não da sequência.
+  it("a sequência do instrumento é a ALOCADA sob o lock (não `count+1` externo); id determinístico por comando (chave)", async () => {
     cw.nextSeq = 5;
-    const a = await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    const a = await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     expect(a.addendum?.sequence).toBe(5);
     cw.nextSeq = 6;
-    const b = await createAddendum({ ...base, addendumType: "prazo", justification: "j2" });
+    const b = await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j2" });
     expect(b.addendum?.sequence).toBe(6);
     expect(b.addendum?.id).not.toBe(a.addendum?.id);
     cw.nextSeq = 3;
-    const p = await createApostille({ ...base, kind: "reajuste", newValue: 10 });
+    const p = await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "reajuste", newValue: 10 });
     expect(p?.sequence).toBe(3);
     expect(cw.nextApostille).toHaveBeenCalledWith(CID, ORG, TX);
   });
 
   it("status REAL lido sob o lock é o que vale: pré-checagem 'vigente', lock 'rescindido' ⇒ recusa da máquina; nada gravado", async () => {
     cw.status = "vigente"; cw.lockStatus = "rescindido";
-    await expect(createAddendum({ ...base, addendumType: "prazo", justification: "j" })).rejects.toBeInstanceOf(ContractStatusTransitionError);
-    await expect(createApostille({ ...base, kind: "reajuste", newValue: 1 })).rejects.toBeInstanceOf(ContractStatusTransitionError);
+    await expect(createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" })).rejects.toBeInstanceOf(ContractStatusTransitionError);
+    await expect(createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "reajuste", newValue: 1 })).rejects.toBeInstanceOf(ContractStatusTransitionError);
     for (const fn of [cw.nextAddendum, cw.nextApostille, cw.insertAddendum, cw.insertApostille, cw.cas, cw.recordEvent, cw.orchestrate, cw.generateOfficial]) {
       expect(fn).not.toHaveBeenCalled();
     }
@@ -118,7 +131,7 @@ describe("SEM-084 — sequência alocada DENTRO da transação, sob o lock da li
 
   it("o CAS parte do status lido SOB o lock e da revisão lida sob o lock; revisão nova estritamente posterior", async () => {
     cw.status = "vigente"; cw.lockStatus = "apostilado";
-    await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     const arg = cw.cas.mock.calls[0][0];
     expect(arg).toMatchObject({ fromStatus: "apostilado", toStatus: "aditado", expectedUpdatedAt: cw.lockRevision });
     expect(Date.parse(arg.updatedAt)).toBeGreaterThan(Date.parse(cw.lockRevision));
@@ -126,33 +139,37 @@ describe("SEM-084 — sequência alocada DENTRO da transação, sob o lock da li
 
   it("contrato inexistente sob o lock (removido/outro tenant) ⇒ erro, sem alocar nem gravar", async () => {
     cw.lock.mockResolvedValueOnce(null);
-    await expect(createAddendum({ ...base, addendumType: "prazo", justification: "j" })).rejects.toThrow("Contrato não encontrado");
+    await expect(createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" })).rejects.toThrow("Contrato não encontrado");
     expect(cw.nextAddendum).not.toHaveBeenCalled();
     expect(cw.insertAddendum).not.toHaveBeenCalled();
     expect(cw.recordEvent).not.toHaveBeenCalled();
   });
 
   it("limites do art. 125 NÃO são impostos (J-4 bloqueado): aditivo de valor enorme segue registrado aguardando parecer", async () => {
-    const r = await createAddendum({ ...base, addendumType: "valor", justification: "acréscimo", newValue: 9_999_999_999 });
+    const r = await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "valor", justification: "acréscimo", newValue: 9_999_999_999 });
     expect(r.requiresLegalOpinion).toBe(true);
     expect(r.addendum?.status).toBe("aguardando_parecer");
   });
 
   it("evento do instrumento tem o ATOR HUMANO (user:<id>), nunca 'sistema'/multi_copilot, e o correlationId", async () => {
-    await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     expect(cw.recordEvent).toHaveBeenCalledWith(expect.objectContaining({ actor: "user:42", correlationId: "corr-swc1", refId: expect.any(String) }), TX);
     vi.clearAllMocks(); cw.status = "vigente";
     cw.getContractWorkspace.mockImplementation(async () => row(cw.status)); cw.lock.mockImplementation(async () => row(cw.status));
     cw.nextApostille.mockImplementation(async () => 1); cw.cas.mockImplementation(async () => true);
     cw.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(TX));
-    await createApostille({ ...base, actorUserId: undefined, kind: "reajuste", newValue: 1 });
-    expect(cw.recordEvent).toHaveBeenCalledWith(expect.objectContaining({ actor: "sistema" }), TX);
+    // SEM084-B (reescrito): o comando exige o ator humano (a chave de idempotência é escopada por usuário) — sem ele,
+    // recusa ANTES de qualquer efeito (nenhuma transação, nenhum evento "sistema").
+    await expect(createApostille({ idempotencyKey: cmdKey(),  ...base, actorUserId: undefined as unknown as number, kind: "reajuste", newValue: 1 }))
+      .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("INSTRUMENT_COMMAND_ACTOR_REQUIRED") });
+    expect(cw.transaction).not.toHaveBeenCalled();
+    expect(cw.recordEvent).not.toHaveBeenCalled();
   });
 });
 
 describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao contrato, atomicamente", () => {
   it("gestor: CAS (mesma sentença) grava manager; evento 'gestor: antes → depois'; fiscal/valor intactos", async () => {
-    const ap = await createApostille({ ...base, kind: "gestor", description: "Troca", newManager: "  Maria Nova  " });
+    const ap = await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "gestor", description: "Troca", newManager: "  Maria Nova  " });
     expect(cw.cas).toHaveBeenCalledWith(expect.objectContaining({
       fromStatus: "vigente", toStatus: "apostilado", assignment: { manager: "Maria Nova" }, expectedUpdatedAt: cw.lockRevision,
     }), TX);
@@ -167,7 +184,7 @@ describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao co
   });
 
   it("fiscal: grava inspector; manager intacto", async () => {
-    await createApostille({ ...base, kind: "fiscal", newInspector: "João Novo" });
+    await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "fiscal", newInspector: "João Novo" });
     const arg = cw.cas.mock.calls[0][0];
     expect(arg.assignment).toEqual({ inspector: "João Novo" });
     expect((cw.recordEvent.mock.calls[0][0] as { summary: string }).summary).toContain('fiscal: "Fiscal Atual" → "João Novo"');
@@ -175,7 +192,7 @@ describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao co
 
   it("'antes' é o valor lido SOB O LOCK (não o da pré-leitura) e 'não designado' quando vazio", async () => {
     cw.lock.mockImplementation(async () => ({ ...row("vigente"), manager: "" }));
-    await createApostille({ ...base, kind: "gestor", newManager: "Primeira Designação" });
+    await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "gestor", newManager: "Primeira Designação" });
     expect((cw.recordEvent.mock.calls[0][0] as { summary: string }).summary).toContain('gestor: (não designado) → "Primeira Designação"');
   });
 
@@ -184,7 +201,7 @@ describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao co
       vi.clearAllMocks(); cw.cas.mockImplementation(async () => true);
       cw.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(TX));
       cw.getContractWorkspace.mockImplementation(async () => row("vigente")); cw.lock.mockImplementation(async () => row("vigente")); cw.nextApostille.mockImplementation(async () => 1);
-      await createApostille({ ...base, kind, newValue: 5 });
+      await createApostille({ idempotencyKey: cmdKey(),  ...base, kind, newValue: 5 });
       expect(cw.cas.mock.calls[0][0]).not.toHaveProperty("assignment");
     }
   });
@@ -200,7 +217,7 @@ describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao co
       { ...base, kind: "legal", newInspector: "João" },
     ];
     for (const p of bad) {
-      await expect(createApostille(p), JSON.stringify(p)).rejects.toBeInstanceOf(ContractApostilleAssignmentInvalidError);
+      await expect(createApostille({ ...p, idempotencyKey: cmdKey() }), JSON.stringify(p)).rejects.toBeInstanceOf(ContractApostilleAssignmentInvalidError);
     }
     for (const fn of [cw.transaction, cw.lock, cw.nextApostille, cw.insertApostille, cw.cas, cw.recordEvent, cw.orchestrate, cw.generateOfficial]) {
       expect(fn).not.toHaveBeenCalled();
@@ -209,22 +226,22 @@ describe("SEM-062 — apostilamento de gestor/fiscal APLICA a designação ao co
 
   it("contrato recusante (minuta/encerrado) ⇒ recusa da MÁQUINA primeiro (mensagem preservada), mesmo com campos inválidos", async () => {
     cw.status = "minuta";
-    await expect(createApostille({ ...base, kind: "reajuste", newValue: 1, newManager: "Maria", newInspector: "João" })).rejects.toBeInstanceOf(ContractStatusTransitionError);
+    await expect(createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "reajuste", newValue: 1, newManager: "Maria", newInspector: "João" })).rejects.toBeInstanceOf(ContractStatusTransitionError);
     expect(cw.transaction).not.toHaveBeenCalled();
   });
 
   it("revisão do cliente divergente da lida sob o lock ⇒ ContractRevisionConflictError; nada gravado", async () => {
-    await expect(createApostille({ ...base, kind: "gestor", newManager: "Maria", expectedUpdatedAt: "2026-02-01T00:00:00.000Z" }))
+    await expect(createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "gestor", newManager: "Maria", expectedUpdatedAt: "2026-02-01T00:00:00.000Z" }))
       .rejects.toBeInstanceOf(ContractRevisionConflictError);
     for (const fn of [cw.nextApostille, cw.insertApostille, cw.cas, cw.recordEvent, cw.orchestrate]) expect(fn).not.toHaveBeenCalled();
     // revisão igual (mesmo instante) passa
-    await createApostille({ ...base, kind: "gestor", newManager: "Maria", expectedUpdatedAt: cw.lockRevision });
+    await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "gestor", newManager: "Maria", expectedUpdatedAt: cw.lockRevision });
     expect(cw.cas).toHaveBeenCalledTimes(1);
   });
 
   it("CAS não casa ⇒ rollback sem evento e sem minuta (designação nunca fica pela metade)", async () => {
     cw.casResult = false;
-    await expect(createApostille({ ...base, kind: "gestor", newManager: "Maria" })).rejects.toBeTruthy();
+    await expect(createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "gestor", newManager: "Maria" })).rejects.toBeTruthy();
     expect(cw.recordEvent).not.toHaveBeenCalled();
     expect(cw.orchestrate).not.toHaveBeenCalled();
     expect(cw.generateOfficial).not.toHaveBeenCalled();
@@ -249,7 +266,7 @@ describe("SEM-040 — o termo do instrumento nasce em linhagem PRÓPRIA, com met
 
   it("aditivo: instrumentId na identidade da linhagem; metadados instrumentId/instrumentKind/sequence/lineageScope; título com o nº", async () => {
     cw.nextSeq = 2;
-    const { addendum } = await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    const { addendum } = await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     const params = cw.generateOfficial.mock.calls[0]![0] as Record<string, any>;
     expect(params.instrumentId).toBe(addendum!.id);
     expect(params.metadata).toMatchObject({ instrumentId: addendum!.id, instrumentKind: "aditivo", sequence: 2, lineageScope: "instrument" });
@@ -260,7 +277,7 @@ describe("SEM-040 — o termo do instrumento nasce em linhagem PRÓPRIA, com met
 
   it("apostilamento: idem (kind apostilamento)", async () => {
     cw.nextSeq = 4;
-    const ap = await createApostille({ ...base, kind: "reajuste", newValue: 1 });
+    const ap = await createApostille({ idempotencyKey: cmdKey(),  ...base, kind: "reajuste", newValue: 1 });
     const params = cw.generateOfficial.mock.calls[0]![0] as Record<string, any>;
     expect(params.instrumentId).toBe(ap!.id);
     expect(params.metadata).toMatchObject({ instrumentKind: "apostilamento", sequence: 4, lineageScope: "instrument" });
@@ -268,7 +285,7 @@ describe("SEM-040 — o termo do instrumento nasce em linhagem PRÓPRIA, com met
   });
 
   it("re-gerar o MESMO instrumento mantém a MESMA linhagem (versões do próprio instrumento); contrato/rescisão não têm instrumentId", async () => {
-    const { addendum } = await createAddendum({ ...base, addendumType: "prazo", justification: "j" });
+    const { addendum } = await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     const again = await gen("aditivo", addendum!.id);
     expect(again.instrumentId).toBe(addendum!.id);
     await generateContractDocument({ organizationId: ORG, contractId: "c1", kind: "contrato", actorUserId: 42, correlationId: "c" });

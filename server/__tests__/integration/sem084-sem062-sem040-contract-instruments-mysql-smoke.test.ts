@@ -16,6 +16,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
+
 const DB = process.env.DATABASE_URL;
 const ORG_A = 995301;
 const ORG_B = 995302;
@@ -101,7 +105,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const id = await seedContract("k1");
     const api = await caller(U.manager, ORG_A);
     const results = await Promise.allSettled(Array.from({ length: 8 }, (_, i) =>
-      api.contractWorkspace.createAddendum({ contractId: id, addendumType: i % 2 ? "prazo" : "qualitativo", justification: `Aditivo concorrente ${i}`, newTerm: `${18 + i} meses` })));
+      api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: i % 2 ? "prazo" : "qualitativo", justification: `Aditivo concorrente ${i}`, newTerm: `${18 + i} meses` })));
     expect(results.map((r) => (r.status === "rejected" ? String((r.reason as Error).message) : "ok"))).toEqual(Array(8).fill("ok"));
     const a = await rows<{ id: string; sequence: number; status: string }>("SELECT id, sequence, status FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
     expect(a.map((r) => r.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
@@ -122,8 +126,8 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const api = await caller(U.owner, ORG_A);
     const calls: Array<Promise<unknown>> = [];
     for (let i = 0; i < 4; i++) {
-      calls.push(api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: `A${i}`, newTerm: `${12 + i} meses` }));
-      calls.push(api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", description: `P${i}`, newValue: 1000 + i }));
+      calls.push(api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: `A${i}`, newTerm: `${12 + i} meses` }));
+      calls.push(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", description: `P${i}`, newValue: 1000 + i }));
     }
     const settled = await Promise.allSettled(calls);
     expect(settled.filter((s) => s.status === "rejected").map((s) => String((s as PromiseRejectedResult).reason?.message))).toEqual([]);
@@ -140,7 +144,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
       await other.execute("SELECT id FROM contract_workspaces WHERE id = ? AND organization_id = ? FOR UPDATE", [id, ORG_A]);
       let done = false;
       const api = await caller(U.manager, ORG_A);
-      const p = api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "espera o lock", newTerm: "18 meses" }).then((r) => { done = true; return r; });
+      const p = api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "espera o lock", newTerm: "18 meses" }).then((r) => { done = true; return r; });
       await new Promise((r) => setTimeout(r, 1500));
       expect(done, "sem a trava da linha a criação concluiria imediatamente").toBe(false);
       expect(await n("SELECT COUNT(*) n FROM contract_addenda WHERE contract_id = ?", [id])).toBe(0);
@@ -156,14 +160,14 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
       `INSERT INTO contract_addenda (id, organization_id, contract_id, addendum_type, sequence, justification, new_value, new_term, status, request_origin, correlation_id)
        VALUES (?, ?, ?, 'prazo', 5, 'legado', 0, '', 'finalizado', 'contract_workspace', 'legado')`, [`legacy-${RUN}-k4`.slice(0, 20), ORG_A, id]);
     const api = await caller(U.manager, ORG_A);
-    const r = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "depois da lacuna", newTerm: "24 meses" });
+    const r = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "depois da lacuna", newTerm: "24 meses" });
     expect(r.addendum?.sequence).toBe(6);
   }, 120_000);
 
   it("K5 SEM-084/J-4 — limites do art. 125 NÃO são impostos: aditivo de valor sem teto segue registrado aguardando parecer; documento marca 'limites não verificados'", async () => {
     const id = await seedContract("k5");
     const api = await caller(U.manager, ORG_A);
-    const r = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "acréscimo grande", newValue: 99_999_999 });
+    const r = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "valor", justification: "acréscimo grande", newValue: 99_999_999 });
     expect(r.requiresLegalOpinion).toBe(true);
     expect(r.addendum?.status).toBe("aguardando_parecer");
     const [doc] = await rows<{ content: string; metadata: string }>("SELECT content, metadata FROM official_documents WHERE origin = ? AND document_type = 'aditivo'", [id]);
@@ -177,7 +181,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const before = await contractRow(id);
     const corr = `corr-g1-${RUN}`;
     const api = await caller(U.manager, ORG_A, corr);
-    const { apostille } = await api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", description: "Substituição do gestor", newManager: "  Maria Nova da Silva " });
+    const { apostille } = await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", description: "Substituição do gestor", newManager: "  Maria Nova da Silva " });
     const after = await contractRow(id);
     expect(after.manager).toBe("Maria Nova da Silva");
     expect(after.inspector).toBe(before.inspector);
@@ -200,14 +204,14 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
   it("G2 SEM-062 — apostilamento de FISCAL aplica inspector; reajuste/legal NÃO mudam gestor/fiscal; designação em contrato aditado funciona", async () => {
     const id = await seedContract("g2", "aditado");
     const api = await caller(U.manager, ORG_A);
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "fiscal", newInspector: "João Novo Fiscal" });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "fiscal", newInspector: "João Novo Fiscal" });
     let c = await contractRow(id);
     expect([c.manager, c.inspector, c.status]).toEqual(["Gestor Inicial", "João Novo Fiscal", "apostilado"]);
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", newValue: 1100 });
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "legal", description: "Alteração legal" });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", newValue: 1100 });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "legal", description: "Alteração legal" });
     c = await contractRow(id);
     expect([c.manager, c.inspector]).toEqual(["Gestor Inicial", "João Novo Fiscal"]);
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Segundo Gestor" });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Segundo Gestor" });
     c = await contractRow(id);
     expect([c.manager, c.inspector]).toEqual(["Segundo Gestor", "João Novo Fiscal"]);
     expect((await rows("SELECT sequence FROM contract_ws_apostilles WHERE contract_id = ? ORDER BY sequence", [id])).map((r) => r.sequence)).toEqual([1, 2, 3, 4]);
@@ -221,19 +225,19 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
       { kind: "gestor" as const }, { kind: "gestor" as const, newManager: "   " }, { kind: "fiscal" as const },
       { kind: "gestor" as const, newManager: "X", newInspector: "Y" }, { kind: "reajuste" as const, newValue: 1, newManager: "X" },
     ]) {
-      const e = await err(api.contractWorkspace.createApostille({ contractId: id, ...bad }));
+      const e = await err(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, ...bad }));
       expect(e?.code, JSON.stringify(bad)).toBe("BAD_REQUEST");
       expect(e?.message).toContain("CONTRACT_APOSTILLE_ASSIGNMENT_INVALID");
     }
-    const stale = await err(api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria", expectedUpdatedAt: "2020-01-01T00:00:00.000Z" }));
+    const stale = await err(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria", expectedUpdatedAt: "2020-01-01T00:00:00.000Z" }));
     expect(stale?.code).toBe("CONFLICT");
     expect(stale?.message).toContain("CONTRACT_REVISION_CONFLICT");
-    expect((await err((await caller(U.operator, ORG_A)).contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("FORBIDDEN");
-    expect((await err((await caller(U.viewer, ORG_A)).contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("FORBIDDEN");
-    expect((await err((await caller(U.ownerB, ORG_B)).contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("NOT_FOUND");
+    expect((await err((await caller(U.operator, ORG_A)).contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("FORBIDDEN");
+    expect((await err((await caller(U.viewer, ORG_A)).contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("FORBIDDEN");
+    expect((await err((await caller(U.ownerB, ORG_B)).contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" })))?.code).toBe("NOT_FOUND");
     const minuta = await seedContract("g3m", "minuta");
     const snapM = await snapshot(minuta);
-    const em = await err(api.contractWorkspace.createApostille({ contractId: minuta, kind: "gestor", newManager: "Maria" }));
+    const em = await err(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: minuta, kind: "gestor", newManager: "Maria" }));
     expect(em?.code).toBe("BAD_REQUEST");
     expect(em?.message).toContain("CONTRACT_STATUS_TRANSITION_INVALID");
     expect(await snapshot(minuta)).toBe(snapM);
@@ -244,7 +248,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const id = await seedContract("g4");
     const api = await caller(U.manager, ORG_A);
     const loaded = await api.contractWorkspace.loadContract({ contractId: id });
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "fiscal", newInspector: "Fiscal Atual", expectedUpdatedAt: loaded.workspace!.updatedAt });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "fiscal", newInspector: "Fiscal Atual", expectedUpdatedAt: loaded.workspace!.updatedAt });
     const reloaded = await api.contractWorkspace.loadContract({ contractId: id });
     expect(reloaded.workspace!.inspector).toBe("Fiscal Atual");
     const snap = await snapshot(id);
@@ -258,7 +262,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
   it("G5 SEM-062 — apostilamentos de gestor CONCORRENTES: ambos persistem em sequência; o gestor final é o do ÚLTIMO a commitar; sem perda", async () => {
     const id = await seedContract("g5");
     const api = await caller(U.manager, ORG_A);
-    const res = await Promise.allSettled(["Gestor X", "Gestor Y", "Gestor Z"].map((m) => api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: m })));
+    const res = await Promise.allSettled(["Gestor X", "Gestor Y", "Gestor Z"].map((m) => api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: m })));
     expect(res.every((r) => r.status === "fulfilled")).toBe(true);
     const aps = await rows<{ sequence: number; new_manager: string }>("SELECT sequence, new_manager FROM contract_ws_apostilles WHERE contract_id = ? ORDER BY sequence", [id]);
     expect(aps.map((a) => a.sequence)).toEqual([1, 2, 3]);
@@ -273,10 +277,10 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
   it("L1 SEM-040 — cada instrumento nasce em linhagem PRÓPRIA (v1) com metadados instrumentId/instrumentKind/sequence; título com o nº", async () => {
     const id = await seedContract("l1");
     const api = await caller(U.manager, ORG_A);
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "1º", newTerm: "18 meses" });
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "qualitativo", justification: "2º" });
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", newValue: 5 });
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", newValue: 6 });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "1º", newTerm: "18 meses" });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "qualitativo", justification: "2º" });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", newValue: 5 });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", newValue: 6 });
     const docs = await rows<{ id: string; document_type: string; version: number; lineage_id: string; title: string; metadata: string }>(
       "SELECT id, document_type, version, lineage_id, title, metadata FROM official_documents WHERE origin = ? AND tenant_id = ? ORDER BY document_type, created_at", [id, ORG_A]);
     expect(docs).toHaveLength(4);
@@ -303,8 +307,8 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
   it("L2 SEM-040 — regerar o MESMO instrumento versiona a SUA linhagem (v2); a do outro instrumento não muda; versions por instrumentId", async () => {
     const id = await seedContract("l2");
     const api = await caller(U.manager, ORG_A);
-    const a1 = (await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "1º", newTerm: "18 meses" })).addendum!;
-    const a2 = (await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "2º", newTerm: "24 meses" })).addendum!;
+    const a1 = (await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "1º", newTerm: "18 meses" })).addendum!;
+    const a2 = (await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "2º", newTerm: "24 meses" })).addendum!;
     await api.contractWorkspace.generateDocuments({ contractId: id, kind: "aditivo", refId: a1!.id });
     const de = (await caller(U.manager, ORG_A)).documentEngine;
     const v1 = await de.versions({ businessDomain: "contratos", documentType: "aditivo", origin: id, instrumentId: a1!.id });
@@ -328,7 +332,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     expect([v1.version, v2.version]).toEqual([1, 2]);
     expect(v1.lineageId).toBe(v2.lineageId);
     const api = await caller(U.manager, ORG_A);
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "novo", newTerm: "18 meses" });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "novo", newTerm: "18 meses" });
     const de = (await caller(U.viewer, ORG_A)).documentEngine;
     const legacy = await de.versions({ businessDomain: "contratos", documentType: "aditivo", origin: id });
     expect(legacy.lineageId).toBe(v1.lineageId);
@@ -345,7 +349,7 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
   it("L4 SEM-040 — cross-tenant: outro órgão não enxerga a linhagem do instrumento (versions vazio; get ⇒ sem documento)", async () => {
     const id = await seedContract("l4");
     const api = await caller(U.manager, ORG_A);
-    const a = (await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "x", newTerm: "18 meses" })).addendum!;
+    const a = (await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "x", newTerm: "18 meses" })).addendum!;
     const deB = (await caller(U.ownerB, ORG_B)).documentEngine;
     expect((await deB.versions({ businessDomain: "contratos", documentType: "aditivo", origin: id, instrumentId: a.id })).versions).toEqual([]);
     const [d] = await rows<{ id: string }>("SELECT id FROM official_documents WHERE origin = ? AND tenant_id = ?", [id, ORG_A]);

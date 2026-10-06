@@ -53,8 +53,10 @@ export function createContractAddendum(params: {
   requestOrigin?: AddendumRequestOrigin;
   correlationId: string;
   createdAt?: string;
+  /** SEM084-B — id derivado da chave de idempotência do comando (ver `instrumentIdForCommand`); ausente ⇒ id por sequência. */
+  id?: string;
 }): ContractAddendum {
-  const id = createHash("sha256")
+  const id = params.id ?? createHash("sha256")
     .update(`add:${params.organizationId}:${params.contractId}:${params.sequence}`)
     .digest("hex").slice(0, 20);
   const ts = params.createdAt ?? new Date().toISOString();
@@ -112,8 +114,10 @@ export function createContractApostille(params: {
   newInspector?: string;
   correlationId: string;
   createdAt?: string;
+  /** SEM084-B — id derivado da chave de idempotência do comando (ver `instrumentIdForCommand`); ausente ⇒ id por sequência. */
+  id?: string;
 }): ContractApostille {
-  const id = createHash("sha256")
+  const id = params.id ?? createHash("sha256")
     .update(`apo:${params.organizationId}:${params.contractId}:${params.sequence}`)
     .digest("hex").slice(0, 20);
   return {
@@ -122,6 +126,19 @@ export function createContractApostille(params: {
     newInspector: params.newInspector ?? "", documentReference: "", correlationId: params.correlationId,
     createdAt: params.createdAt ?? new Date().toISOString(),
   };
+}
+
+/**
+ * SEM084-B — IDENTIDADE do instrumento criado por um comando com chave de idempotência: derivada de (órgão, contrato,
+ * ator, chave), nunca do texto/número do instrumento. A mesma tentativa lógica (mesma chave) converge para o MESMO
+ * instrumento — a PRIMARY KEY impede um segundo, inclusive depois de esgotados os retries do documento. Prefixos
+ * disjuntos dos ids por sequência ("add:"/"apo:"), então os dois espaços nunca colidem. Outro órgão ⇒ outro id.
+ */
+export function instrumentIdForCommand(kind: "aditivo" | "apostilamento", p: { organizationId: number; contractId: string; actorUserId: number; idempotencyKey: string }): string {
+  const prefix = kind === "aditivo" ? "add-cmd" : "apo-cmd";
+  return createHash("sha256")
+    .update(`${prefix}:${p.organizationId}:${p.contractId}:${p.actorUserId}:${p.idempotencyKey}`)
+    .digest("hex").slice(0, 20);
 }
 
 // ─── Ocorrência (registro simples — sem workflow complexo) ────────────────────

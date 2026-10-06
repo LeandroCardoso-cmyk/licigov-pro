@@ -74,6 +74,8 @@ const cw = vi.hoisted(() => ({
 }));
 vi.mock("../../db/contractWorkspace", async (orig) => ({
   ...(await orig<typeof import("../../db/contractWorkspace")>()),
+  getContractAddendumById: vi.fn(async () => null),
+  getContractApostilleById: vi.fn(async () => null),
   getContractWorkspace: cw.getContractWorkspace,
   lockContractWorkspaceForInstrument: cw.lockContractWorkspaceForInstrument,
   nextAddendumSequenceUnderLock: cw.nextAddendumSequenceUnderLock,
@@ -89,6 +91,12 @@ vi.mock("../../db/contractWorkspace", async (orig) => ({
 vi.mock("../../services/workspaceOrchestratorService", () => ({ orchestrateMultiCopilot: cw.orchestrateMultiCopilot }));
 vi.mock("../../services/documentEngineService", () => ({ generateOfficialDocument: cw.generateOfficialDocument }));
 vi.mock("../../db/connection", () => ({ getDb: vi.fn(async () => ({ transaction: cw.transaction })) }));
+// SEM084-B (reescrito): o comando de instrumento usa idempotência + busca pelo id derivado da chave + retomada do termo;
+// aqui são neutros (cobertos pelos smokes MySQL r9-sem084b / sem084-…-mysql-smoke).
+vi.mock("../../services/idempotencyService", () => ({
+  checkIdempotency: vi.fn(async () => ({ status: "new" })), saveIdempotencyResult: vi.fn(async () => undefined), failIdempotencyKey: vi.fn(async () => undefined),
+}));
+vi.mock("../../db/officialDocuments", async (orig) => ({ ...(await orig<typeof import("../../db/officialDocuments")>()), getLatestByLineage: vi.fn(async () => null) }));
 
 import { itemIntelligenceRouter } from "../../routers/itemIntelligenceRouter";
 import { contractWorkspaceRouter } from "../../routers/contractWorkspaceRouter";
@@ -99,6 +107,10 @@ import {
 import { createAddendum, createApostille, ContractStatusConflictError } from "../../services/contractService";
 import { LEGACY_ENDPOINT_DISABLED } from "../../services/legacyEndpointGuard";
 import { makeContext, mockUser } from "../helpers/fixtures";
+
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const ii = () => itemIntelligenceRouter.createCaller(makeContext(mockUser) as any);
 const cwr = () => contractWorkspaceRouter.createCaller(makeContext(mockUser) as any);
@@ -277,9 +289,9 @@ describe("SEM-025 — planInstrumentStatusChange só admite o que a máquina def
 describe("SEM-025 — createAddendum/createApostille recusam minuta e estados encerrados SEM nenhum efeito", () => {
   it.each(REFUSING)("contrato %s: aditivo e apostilamento recusados antes de travar/alocar/gravar/gerar/registrar", async (status) => {
     cw.status = status;
-    await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
+    await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusTransitionError);
-    await expect(createApostille({ organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Maria", correlationId: "c" }))
+    await expect(createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Maria", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusTransitionError);
     for (const fn of [cw.lockContractWorkspaceForInstrument, cw.nextAddendumSequenceUnderLock, cw.nextApostilleSequenceUnderLock, cw.insertContractAddendum, cw.insertContractApostille,
       cw.compareAndSetContractWorkspaceStatus, cw.transaction, cw.orchestrateMultiCopilot, cw.generateOfficialDocument,
@@ -290,11 +302,11 @@ describe("SEM-025 — createAddendum/createApostille recusam minuta e estados en
 
   it("router: BAD_REQUEST com a mensagem da máquina + token estável; nada escrito", async () => {
     role.value = "owner"; cw.status = "rescindido";
-    const a = await err(cwr().createAddendum({ contractId: "c1", addendumType: "valor", justification: "j", newValue: 10 }));
+    const a = await err(cwr().createAddendum({ idempotencyKey: cmdKey(),  contractId: "c1", addendumType: "valor", justification: "j", newValue: 10 }));
     expect(a?.code).toBe("BAD_REQUEST");
     expect(a?.message).toContain("Transição de contrato inválida: rescindido → aditado");
     expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
-    const p = await err(cwr().createApostille({ contractId: "c1", kind: "reajuste", newValue: 10 }));
+    const p = await err(cwr().createApostille({ idempotencyKey: cmdKey(),  contractId: "c1", kind: "reajuste", newValue: 10 }));
     expect(p?.code).toBe("BAD_REQUEST");
     expect(p?.message).toContain("rescindido → apostilado");
     expect(cw.insertContractAddendum).not.toHaveBeenCalled();
@@ -304,11 +316,11 @@ describe("SEM-025 — createAddendum/createApostille recusam minuta e estados en
 
   it("router: contrato em minuta ⇒ BAD_REQUEST CONTRACT_STATUS_TRANSITION_INVALID; sem linha, IA, minuta, CAS ou timeline", async () => {
     role.value = "owner"; cw.status = "minuta";
-    const a = await err(cwr().createAddendum({ contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses" }));
+    const a = await err(cwr().createAddendum({ idempotencyKey: cmdKey(),  contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses" }));
     expect(a?.code).toBe("BAD_REQUEST");
     expect(a?.message).toContain("Transição de contrato inválida: minuta → aditado");
     expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
-    const p = await err(cwr().createApostille({ contractId: "c1", kind: "gestor", newManager: "Maria" }));
+    const p = await err(cwr().createApostille({ idempotencyKey: cmdKey(),  contractId: "c1", kind: "gestor", newManager: "Maria" }));
     expect(p?.code).toBe("BAD_REQUEST");
     expect(p?.message).toContain("minuta → apostilado");
     expect(p?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
@@ -323,7 +335,7 @@ describe("SEM-025 — createAddendum/createApostille recusam minuta e estados en
 describe("SEM-025 — transições válidas: instrumento + status + evento na MESMA transação, CAS a partir do status avaliado", () => {
   it("vigente → aditado: aditivo final e CAS vigente→aditado no tx; minuta gerada DEPOIS", async () => {
     cw.status = "vigente";
-    const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses", correlationId: "c" });
+    const res = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses", correlationId: "c" });
     expect(res.addendum?.status).toBe("finalizado");
     expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "finalizado" }), { __tx: true }, { failOnDuplicate: true });
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado", orgId: 1 }), { __tx: true });
@@ -335,7 +347,7 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
   it("aditivo que o fluxo marca como exigindo parecer ⇒ aguardando_parecer e status do contrato NÃO efetivado (CAS vigente→vigente)", async () => {
     for (const addendumType of ["valor", "quantitativo"] as const) {
       vi.clearAllMocks();
-      const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType, justification: "Acréscimo", newValue: 10, correlationId: "c" });
+      const res = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType, justification: "Acréscimo", newValue: 10, correlationId: "c" });
       expect(res.requiresLegalOpinion).toBe(true);
       expect(res.addendum?.status).toBe("aguardando_parecer");
       expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "aguardando_parecer" }), { __tx: true }, { failOnDuplicate: true });
@@ -347,7 +359,7 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
   it("aditivo que NÃO exige parecer (prazo/qualitativo) segue efetivando pela máquina", async () => {
     for (const addendumType of ["prazo", "qualitativo"] as const) {
       vi.clearAllMocks();
-      const res = await createAddendum({ organizationId: 1, contractId: "c1", addendumType, justification: "j", correlationId: "c" });
+      const res = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType, justification: "j", correlationId: "c" });
       expect(res.requiresLegalOpinion).toBe(false);
       expect(res.addendum?.status).toBe("finalizado");
       expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado" }), { __tx: true });
@@ -357,7 +369,7 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
   it("parecer exigido em contrato recusante ⇒ recusa continua (a flag nunca abre estado não admissível)", async () => {
     for (const status of REFUSING) {
       cw.status = status;
-      await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "valor", justification: "j", newValue: 1, correlationId: "c" }))
+      await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "valor", justification: "j", newValue: 1, correlationId: "c" }))
         .rejects.toBeInstanceOf(ContractStatusTransitionError);
     }
     expect(cw.insertContractAddendum).not.toHaveBeenCalled();
@@ -366,10 +378,10 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
 
   it("aditado + 2º aditivo ⇒ status inalterado (CAS aditado→aditado); apostilado → aditado pela máquina", async () => {
     cw.status = "aditado";
-    await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
+    await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "aditado", toStatus: "aditado" }), { __tx: true });
     cw.status = "apostilado";
-    await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
+    await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "apostilado", toStatus: "aditado" }), { __tx: true });
   });
 
@@ -381,13 +393,13 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
     });
     cw.status = "vigente";
     const steps: Array<[string, () => Promise<unknown>]> = [
-      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "1", correlationId: "c" })],
-      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "qualitativo", justification: "2", correlationId: "c" })],
-      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "reajuste", newValue: 5, correlationId: "c" })],
-      ["aditado",    () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "3", correlationId: "c" })],
-      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "fiscal", newInspector: "João", correlationId: "c" })],
-      ["apostilado", () => createApostille({ organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Ana", correlationId: "c" })],
-      ["apostilado", () => createAddendum({ organizationId: 1, contractId: "c1", addendumType: "valor", justification: "4", newValue: 9, correlationId: "c" })], // parecer ⇒ inalterado
+      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "1", correlationId: "c" })],
+      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "qualitativo", justification: "2", correlationId: "c" })],
+      ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "reajuste", newValue: 5, correlationId: "c" })],
+      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "3", correlationId: "c" })],
+      ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "fiscal", newInspector: "João", correlationId: "c" })],
+      ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Ana", correlationId: "c" })],
+      ["apostilado", () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "valor", justification: "4", newValue: 9, correlationId: "c" })], // parecer ⇒ inalterado
     ];
     for (const [expected, run] of steps) {
       await run();
@@ -401,7 +413,7 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
 describe("SEM-025 — corrida: contrato muda de status durante a operação", () => {
   it("rescindido em paralelo: CAS não casa ⇒ rollback, recusa da máquina contra o status REAL, sem minuta", async () => {
     cw.status = "vigente"; cw.freshStatus = "rescindido"; cw.casResult = false;
-    await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
+    await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
       .rejects.toThrow("Transição de contrato inválida: rescindido → aditado");
     expect(item.recordProcessEvent).not.toHaveBeenCalled(); // evento só após CAS vencedor
     expect(cw.orchestrateMultiCopilot).not.toHaveBeenCalled(); // nenhuma minuta de instrumento não persistido
@@ -412,7 +424,7 @@ describe("SEM-025 — corrida: contrato muda de status durante a operação", ()
     cw.status = "aditado";
     const dup = Object.assign(new Error("Failed query"), { cause: Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY", errno: 1062 }) });
     cw.insertContractAddendum.mockRejectedValueOnce(dup);
-    const e = await createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }).then(() => null, (x: unknown) => x);
+    const e = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }).then(() => null, (x: unknown) => x);
     expect(e).toBeInstanceOf(ContractStatusConflictError);
     expect((e as ContractStatusConflictError).reason).toBe("sequence");
     expect(cw.compareAndSetContractWorkspaceStatus).not.toHaveBeenCalled();
@@ -420,18 +432,18 @@ describe("SEM-025 — corrida: contrato muda de status durante a operação", ()
     expect(cw.orchestrateMultiCopilot).not.toHaveBeenCalled();
     role.value = "owner";
     cw.insertContractApostille.mockRejectedValueOnce(dup);
-    expect((await err(cwr().createApostille({ contractId: "c1", kind: "gestor", newManager: "Maria" })))?.code).toBe("CONFLICT");
+    expect((await err(cwr().createApostille({ idempotencyKey: cmdKey(),  contractId: "c1", kind: "gestor", newManager: "Maria" })))?.code).toBe("CONFLICT");
   });
 
   it("mudou para status que ainda admitiria ⇒ ContractStatusConflictError (router: CONFLICT)", async () => {
     cw.status = "vigente"; cw.freshStatus = "apostilado"; cw.casResult = false;
-    await expect(createAddendum({ organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
+    await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" }))
       .rejects.toBeInstanceOf(ContractStatusConflictError);
     role.value = "owner";
     // Router: requireContract (1ª leitura) + serviço (2ª) + releitura pós-CAS (3ª, fresca).
     let n = 0;
     cw.getContractWorkspace.mockImplementation(async () => contractWith(++n > 2 ? "apostilado" : "vigente"));
-    const e = await err(cwr().createApostille({ contractId: "c1", kind: "gestor", newManager: "Maria" }));
+    const e = await err(cwr().createApostille({ idempotencyKey: cmdKey(),  contractId: "c1", kind: "gestor", newManager: "Maria" }));
     expect(e?.code).toBe("CONFLICT");
   });
 });

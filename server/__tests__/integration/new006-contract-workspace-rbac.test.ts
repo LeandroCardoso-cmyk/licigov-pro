@@ -118,8 +118,8 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   listImported: undefined,
   updateContract: { contractId: DRAFT, contractor: "Novo Fornecedor", expectedUpdatedAt: REV },
   generateDocuments: { contractId: CID, kind: "contrato" },
-  createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação" },
-  createApostille: { contractId: CID, kind: "reajuste" },
+  createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação", idempotencyKey: "new006-cmd-add" },
+  createApostille: { contractId: CID, kind: "reajuste", idempotencyKey: "new006-cmd-apo" },
   registerOccurrence: { contractId: CID, description: "atraso na entrega" },
   requestLegalOpinion: { contractId: CID },
   getLegalOpinion: { requestId: "req-1" },
@@ -294,7 +294,7 @@ describe("NEW-006 — updateContract: campos = operator; mudança de status = ma
 
   it("contrato de outra organização ⇒ NOT_FOUND (inalterado), mesmo para operator pedindo mudança de status", async () => {
     await expect(call("operator", "updateContract", { contractId: "ctw-outra-org", status: "rescindido", expectedUpdatedAt: REV })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call("manager", "createAddendum", { contractId: "ctw-outra-org", addendumType: "prazo", justification: "j", idempotencyKey: "new006-cmd-xorg" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(contractWrites()).toBe(0);
     expect(vi.mocked(contractService.createAddendum)).not.toHaveBeenCalled();
   });

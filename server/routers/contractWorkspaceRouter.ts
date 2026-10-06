@@ -257,11 +257,12 @@ export const contractWorkspaceRouter = router({
     }),
 
   createAddendum: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
-    .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(), requestOrigin: z.enum(ADDENDUM_ORIGINS).optional() }))
+    // SEM084-B — chave de idempotência OBRIGATÓRIA (uma por tentativa lógica): repetir o comando converge para o MESMO aditivo.
+    .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(), requestOrigin: z.enum(ADDENDUM_ORIGINS).optional(), idempotencyKey: z.string().trim().min(8).max(128) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
+      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey })
         .catch(mapInstrumentStatusError);
     }),
 
@@ -272,11 +273,13 @@ export const contractWorkspaceRouter = router({
       newManager: z.string().optional(), newInspector: z.string().optional(),
       // SEM-062 — revisão do contrato que o cliente viu (opcional): divergente ⇒ CONFLICT, nada gravado.
       expectedUpdatedAt: z.string().datetime().optional(),
+      // SEM084-B — chave de idempotência OBRIGATÓRIA (uma por tentativa lógica).
+      idempotencyKey: z.string().trim().min(8).max(128),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId })
+      const apostille = await createApostille({ organizationId: orgId, contractId: input.contractId, kind: input.kind, description: input.description, newValue: input.newValue, newManager: input.newManager, newInspector: input.newInspector, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey })
         .catch(mapInstrumentStatusError);
       return { apostille };
     }),

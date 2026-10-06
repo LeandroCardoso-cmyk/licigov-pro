@@ -38,6 +38,10 @@ import { getBusinessDomainDefinition } from "../../domain/businessDomain";
 import { checkKernelAccess } from "../../services/kernelAccessService";
 import { contractWorkspaceRouter } from "../../routers/contractWorkspaceRouter";
 
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
+
 const ORG_ID = 10900;
 const CORR = "corr-5w00";
 
@@ -275,8 +279,8 @@ describe("FASE 5 — Business Domain: Contratos", () => {
 
     it("operações que exigem contrato existente lançam sem DB", async () => {
       await expect(generateContractDocument({ organizationId: ORG_ID, contractId: "x", kind: "contrato", correlationId: CORR })).rejects.toThrow("não encontrado");
-      await expect(createAddendum({ organizationId: ORG_ID, contractId: "x", addendumType: "prazo", justification: "j", correlationId: CORR })).rejects.toThrow("não encontrado");
-      await expect(createApostille({ organizationId: ORG_ID, contractId: "x", kind: "reajuste", correlationId: CORR })).rejects.toThrow("não encontrado");
+      await expect(createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: ORG_ID, contractId: "x", addendumType: "prazo", justification: "j", correlationId: CORR })).rejects.toThrow("não encontrado");
+      await expect(createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: ORG_ID, contractId: "x", kind: "reajuste", correlationId: CORR })).rejects.toThrow("não encontrado");
       await expect(registerOccurrence({ organizationId: ORG_ID, contractId: "x", description: "d", correlationId: CORR })).rejects.toThrow("não encontrado");
       await expect(requestContractLegalOpinion({ organizationId: ORG_ID, contractId: "x", requestType: "LEGAL_OPINION_INITIAL", requestedBy: 7, correlationId: CORR })).rejects.toThrow("não encontrado");
     });

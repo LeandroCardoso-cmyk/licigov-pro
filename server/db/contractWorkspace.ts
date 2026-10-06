@@ -373,6 +373,27 @@ export async function listContractAddenda(contractId: string, orgId: number): Pr
   return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin }));
 }
 
+/**
+ * SEM084-B — um aditivo pelo id, escopado por órgão E contrato (outro órgão/contrato ⇒ null). Usado para
+ * reconhecer o instrumento já criado por uma tentativa anterior do MESMO comando (id derivado da chave de idempotência).
+ */
+export async function getContractAddendumById(id: string, contractId: string, orgId: number): Promise<ContractAddendum | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractAddendaTable)
+    .where(and(eq(contractAddendaTable.id, id), eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id, organizationId: r.organizationId, contractId: r.contractId, addendumType: r.addendumType as ContractAddendum["addendumType"],
+    sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm,
+    status: r.status as ContractAddendum["status"], requestOrigin: r.requestOrigin as ContractAddendum["requestOrigin"],
+    documentReference: r.documentReference, legalOpinionRequestId: r.legalOpinionRequestId, correlationId: r.correlationId,
+    createdAt: fromDbDatetime(String(r.createdAt)), updatedAt: fromDbDatetime(String(r.updatedAt)),
+  };
+}
+
 // ─── Apostilles ──────────────────────────────────────────────────────────────
 
 export async function countContractApostilles(contractId: string, orgId: number): Promise<number> {
@@ -411,6 +432,22 @@ export async function listContractApostilles(contractId: string, orgId: number):
     .where(and(eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
     .orderBy(asc(contractWsApostillesTable.sequence));
   return rows.map(r => ({ id: r.id, kind: r.kind, sequence: r.sequence, description: r.description ?? "", newValue: Number(r.newValue), newManager: r.newManager, newInspector: r.newInspector }));
+}
+
+/** SEM084-B — um apostilamento pelo id, escopado por órgão E contrato (outro órgão/contrato ⇒ null). */
+export async function getContractApostilleById(id: string, contractId: string, orgId: number): Promise<ContractApostille | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(contractWsApostillesTable)
+    .where(and(eq(contractWsApostillesTable.id, id), eq(contractWsApostillesTable.contractId, contractId), eq(contractWsApostillesTable.organizationId, orgId)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id, organizationId: r.organizationId, contractId: r.contractId, kind: r.kind as ContractApostille["kind"], sequence: r.sequence,
+    description: r.description ?? "", newValue: Number(r.newValue), newManager: r.newManager, newInspector: r.newInspector,
+    documentReference: r.documentReference, correlationId: r.correlationId, createdAt: fromDbDatetime(String(r.createdAt)),
+  };
 }
 
 // ─── Occurrences ─────────────────────────────────────────────────────────────

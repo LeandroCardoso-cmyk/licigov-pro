@@ -29,11 +29,17 @@ import {
 } from "../domain/contractWorkspace";
 import {
   createContractAddendum, advanceAddendum, createContractApostille, createContractOccurrence,
-  createContractGeneratedDocument,
+  createContractGeneratedDocument, instrumentIdForCommand,
+  type ContractAddendum, type ContractApostille,
   type AddendumType, type AddendumRequestOrigin, type ApostilleKind, type ContractDocumentKind,
 } from "../domain/contractInstruments";
 import { createAssistedReconstruction, RECONSTRUCTION_DISCLAIMER, type ImportedContractSource } from "../domain/contractReconstruction";
 import { getDb } from "../db/connection";
+import { createHash } from "crypto";
+import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
+import { computeLineageId } from "../domain/officialDocument";
+import { getLatestByLineage } from "../db/officialDocuments";
 import {
   buildAddendumTermContent, buildApostilleTermContent, INSTRUMENT_NOT_FOUND, INSTRUMENT_REFERENCE_REQUIRED,
   type AddendumData, type ApostilleData,
@@ -45,7 +51,7 @@ import {
   getContractWorkspace, compareAndSetContractWorkspaceStatus, lockContractWorkspaceForInstrument, type ContractWsExecutor,
   nextAddendumSequenceUnderLock, nextApostilleSequenceUnderLock,
   insertContractWsDocument, insertContractAddendum, listContractAddenda, listContractApostilles,
-  insertContractApostille, insertContractOccurrence, insertImportedContract,
+  insertContractApostille, insertContractOccurrence, insertImportedContract, getContractAddendumById, getContractApostilleById,
   findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
 } from "../db/contractWorkspace";
 import {
@@ -493,7 +499,9 @@ async function persistInstrumentWithGovernedStatus<T>(params: {
   if (!db) throw new Error("Banco de dados indisponível — instrumento contratual não persistido (fail-closed).");
   const opts = { requiresLegalOpinion: params.requiresLegalOpinion };
   try {
-    return await db.transaction(async (tx) => {
+    // SEM084-A — esta é a fronteira DONA da transação: deadlock (1213) ⇒ a transação INTEIRA é repetida (trava,
+    // máquina de estados, sequência e revisão recalculadas sob o novo lock); qualquer outro erro segue o tratamento abaixo.
+    return await runTransactionWithDeadlockRetry({ label: `contract.${params.instrument}.persist`, organizationId: ws.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
       // 1. TRAVA da linha do contrato — primeira instrução da transação (a leitura corrente enxerga o commit anterior).
       const locked = await lockContractWorkspaceForInstrument(ws.id, ws.organizationId, tx);
       if (!locked) throw new Error("Contrato não encontrado.");
@@ -522,7 +530,7 @@ async function persistInstrumentWithGovernedStatus<T>(params: {
         refId: built.refId, correlationId: params.correlationId,
       }, tx);
       return { result: built.result, plan, sequence, assignment };
-    }).then((out) => {
+    })).then((out) => {
       log.info("contract_instrument_sequence_allocated", {
         contractId: ws.id, organizationId: ws.organizationId, instrument: params.instrument, sequence: out.sequence, correlationId: params.correlationId,
       });
@@ -566,11 +574,15 @@ async function persistInstrumentWithGovernedStatus<T>(params: {
  * registrado `aguardando_parecer` e o status do contrato NÃO é efetivado (fail-closed) — não há, ainda,
  * comando de finalização pós-parecer (dívida registrada em docs/design/CONTRACT_ACTIVATION_TRANSITION.md).
  */
-export async function createAddendum(params: {
+async function createAddendumInstrument(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
   newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId?: number;
-}): Promise<{ addendum: Awaited<ReturnType<typeof insertContractAddendum>>; requiresLegalOpinion: boolean }> {
-  const ws = await requireContract(params.contractId, params.organizationId);
+  /** SEM084-B — id derivado da chave do comando. */
+  id: string;
+  /** Contrato lido na pré-checagem do comando (a avaliação que vale é a refeita SOB O LOCK). */
+  ws: ContractWorkspace;
+}): Promise<ContractAddendum> {
+  const ws = params.ws;
   // Adaptive Process Engine (regra PRÉ-EXISTENTE, não definida juridicamente aqui — PR-18/PR-20 são donas do
   // insumo jurídico): valor/quantitativo exigem parecer; prazo/qualitativo não.
   const requiresLegalOpinion = params.addendumType === "valor" || params.addendumType === "quantitativo";
@@ -585,7 +597,7 @@ export async function createAddendum(params: {
     allocateSequence: (tx) => nextAddendumSequenceUnderLock(ws.id, params.organizationId, tx),
     build: ({ sequence, plan, at }) => {
       let addendum = createContractAddendum({
-        organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence,
+        organizationId: params.organizationId, contractId: ws.id, addendumType: params.addendumType, sequence, id: params.id,
         justification: params.justification, newValue: params.newValue, newTerm: params.newTerm,
         requestOrigin: params.requestOrigin, correlationId: params.correlationId, createdAt: at,
       });
@@ -598,8 +610,129 @@ export async function createAddendum(params: {
       };
     },
   });
-  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "aditivo", refId: updated.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
-  return { addendum: updated, requiresLegalOpinion };
+  return updated;
+}
+
+/** Adaptive Process Engine (regra PRÉ-EXISTENTE): valor/quantitativo exigem parecer; prazo/qualitativo não. */
+function addendumRequiresLegalOpinion(type: string): boolean {
+  return type === "valor" || type === "quantitativo";
+}
+
+// ─── SEM084-B — replay do COMANDO de criação de instrumento ───────────────────
+//
+// O instrumento (aditivo/apostilamento) é gravado numa transação e o termo é gerado DEPOIS. Se a geração do termo
+// falhar (inclusive depois dos retries de deadlock do SEM084-A), o instrumento já existe: repetir o comando NÃO pode
+// criar um segundo. Mecanismo (sem migration, infraestrutura existente):
+//   - o comando exige uma chave de idempotência (uma por tentativa lógica do usuário);
+//   - o idempotencyService cobre replay de comando CONCLUÍDO (mesma chave+payload ⇒ mesmo resultado; payload
+//     diferente ⇒ CONFLICT) e comando EM VOO (CONFLICT);
+//   - a IDENTIDADE do instrumento é derivada de (órgão, contrato, ator, chave) — a PRIMARY KEY garante um único
+//     instrumento por tentativa lógica, inclusive depois que a chave foi marcada `failed`;
+//   - uma nova tentativa com a mesma chave reconhece o instrumento já gravado (compara o payload com o REGISTRADO —
+//     divergência ⇒ CONFLICT) e só completa o que faltou: o termo é gerado apenas se a linhagem documental PRÓPRIA do
+//     instrumento ainda não tiver versão. Nada do instrumento já gravado é alterado.
+// Nunca deduplica por texto, número ou heurística.
+
+export const INSTRUMENT_COMMAND_IN_PROGRESS = "INSTRUMENT_COMMAND_IN_PROGRESS";
+export const INSTRUMENT_COMMAND_PAYLOAD_MISMATCH = "INSTRUMENT_COMMAND_PAYLOAD_MISMATCH";
+export const INSTRUMENT_COMMAND_ACTOR_REQUIRED = "INSTRUMENT_COMMAND_ACTOR_REQUIRED";
+
+function commandPayloadHash(op: string, organizationId: number, contractId: string, payload: Record<string, unknown>): string {
+  return createHash("sha256").update(JSON.stringify({ op, o: organizationId, c: contractId, p: payload })).digest("hex");
+}
+
+/** Gera o termo do instrumento SOMENTE se a sua linhagem documental ainda não tiver versão (retomada idempotente). */
+async function ensureInstrumentDocument(p: {
+  organizationId: number; contractId: string; kind: "aditivo" | "apostilamento"; instrumentId: string; actorUserId?: number; correlationId: string;
+}): Promise<{ generated: boolean }> {
+  const lineageId = computeLineageId({ tenantId: p.organizationId, businessDomain: "contratos", documentType: p.kind, origin: p.contractId, instrumentId: p.instrumentId });
+  if (await getLatestByLineage(lineageId, p.organizationId)) return { generated: false };
+  await generateContractDocument({ organizationId: p.organizationId, contractId: p.contractId, kind: p.kind, refId: p.instrumentId, actorUserId: p.actorUserId, correlationId: p.correlationId });
+  return { generated: true };
+}
+
+async function runInstrumentCommand<I extends { id: string }, R, P>(c: {
+  op: string; kind: "aditivo" | "apostilamento"; organizationId: number; contractId: string; actorUserId: number;
+  idempotencyKey: string; correlationId: string; payload: Record<string, unknown>;
+  findExisting: (id: string) => Promise<I | null>;
+  samePayload: (existing: I) => boolean;
+  /** Recusas da 1ª gravação (contrato, máquina de estados, designação) — rodam ANTES de qualquer efeito (inclusive a reserva
+   *  da chave); devolvem o contrato LIDO, reutilizado pela criação (uma única leitura prévia, como antes do SEM084-B). */
+  precheck: () => Promise<P>;
+  create: (id: string, pre: P) => Promise<I>;
+  result: (instrument: I, flags: { resumed: boolean; documentGenerated: boolean }) => R;
+}): Promise<R> {
+  // A chave é escopada por (órgão, usuário): sem ator humano identificado não há tentativa lógica rastreável — recusa
+  // ANTES de qualquer efeito (o router sempre fornece o usuário autenticado).
+  if (!Number.isInteger(c.actorUserId) || c.actorUserId <= 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `${INSTRUMENT_COMMAND_ACTOR_REQUIRED}: o registro de ${c.kind} exige o usuário que o solicita; nada foi gravado.` });
+  }
+  const key = c.idempotencyKey.trim();
+  const payloadHash = commandPayloadHash(c.op, c.organizationId, c.contractId, c.payload);
+  const id = instrumentIdForCommand(c.kind, { organizationId: c.organizationId, contractId: c.contractId, actorUserId: c.actorUserId, idempotencyKey: key });
+  // Leitura (sem efeito): esta tentativa lógica já gravou o instrumento? Se não, as recusas da 1ª gravação valem
+  // ANTES de reservar a chave (nada é escrito quando o comando é inválido).
+  const preexisting = await c.findExisting(id);
+  const pre = preexisting ? null : await c.precheck();
+  const check = await checkIdempotency(key, c.actorUserId, c.organizationId, c.op, payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) {
+      throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_PAYLOAD_MISMATCH}: esta chave já registrou outro ${c.kind}; nada foi gravado.` });
+    }
+    log.info("instrument_command_replayed", { op: c.op, organizationId: c.organizationId, contractId: c.contractId, correlationId: c.correlationId });
+    return (typeof check.response === "string" ? JSON.parse(check.response) : check.response) as R;
+  }
+  if (check.status === "processing") {
+    throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_IN_PROGRESS}: este ${c.kind} já está sendo registrado por outra requisição com a mesma chave — aguarde.` });
+  }
+  try {
+    // Releitura sob a chave reservada (outra requisição pode ter concluído entre a 1ª leitura e a reserva).
+    const existing = preexisting ?? await c.findExisting(id);
+    if (existing && !c.samePayload(existing)) {
+      throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_PAYLOAD_MISMATCH}: esta chave já registrou outro ${c.kind} com dados diferentes; nada foi gravado.` });
+    }
+    const instrument = existing ?? await c.create(id, pre ?? await c.precheck());
+    const { generated } = await ensureInstrumentDocument({
+      organizationId: c.organizationId, contractId: c.contractId, kind: c.kind, instrumentId: instrument.id, actorUserId: c.actorUserId, correlationId: c.correlationId,
+    });
+    if (existing) {
+      log.info("instrument_command_resumed", { op: c.op, organizationId: c.organizationId, contractId: c.contractId, instrumentId: instrument.id, documentGenerated: generated, correlationId: c.correlationId });
+    }
+    const out = c.result(instrument, { resumed: !!existing, documentGenerated: generated });
+    await saveIdempotencyResult(key, c.actorUserId, c.organizationId, out);
+    return out;
+  } catch (err) {
+    await failIdempotencyKey(key, c.actorUserId, c.organizationId).catch(() => {});
+    throw err;
+  }
+}
+
+/**
+ * Cria um aditivo e gera o termo. SEM084-B — comando replay-safe pela chave de idempotência (ver `runInstrumentCommand`).
+ */
+export async function createAddendum(params: {
+  organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
+  newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId: number;
+  idempotencyKey: string;
+}): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean }> {
+  const normalized = {
+    addendumType: params.addendumType, justification: params.justification ?? "", newValue: params.newValue ?? 0,
+    newTerm: params.newTerm ?? "", requestOrigin: params.requestOrigin ?? "contract_workspace",
+  };
+  return runInstrumentCommand({
+    op: "contract.createAddendum", kind: "aditivo", organizationId: params.organizationId, contractId: params.contractId,
+    actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId, payload: normalized,
+    findExisting: (id) => getContractAddendumById(id, params.contractId, params.organizationId),
+    samePayload: (a) => a.addendumType === normalized.addendumType && a.justification === normalized.justification
+      && Number(a.newValue) === Number(normalized.newValue) && a.newTerm === normalized.newTerm && a.requestOrigin === normalized.requestOrigin,
+    precheck: async () => {
+      const ws = await requireContract(params.contractId, params.organizationId);
+      planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion: addendumRequiresLegalOpinion(params.addendumType) });
+      return ws;
+    },
+    create: (id, ws) => createAddendumInstrument({ ...params, id, ws }),
+    result: (addendum, flags) => ({ addendum, requiresLegalOpinion: addendumRequiresLegalOpinion(addendum.addendumType), resumed: flags.resumed }),
+  });
 }
 
 // ─── Apostilamentos ───────────────────────────────────────────────────────────
@@ -613,13 +746,17 @@ export async function createAddendum(params: {
  * com o instrumento, o status, o CAS e o evento (antes → depois); o nome é obrigatório e só no campo do seu tipo.
  * `reajuste`/`legal` NÃO alteram valor/prazo do contrato (limites legais do art. 125: J-4, BLOCKED_LEGAL_REVIEW).
  */
-export async function createApostille(params: {
+async function createApostilleInstrument(params: {
   organizationId: number; contractId: string; kind: ApostilleKind; description?: string;
   newValue?: number; newManager?: string; newInspector?: string; correlationId: string; actorUserId?: number;
   /** Revisão do contrato que o cliente viu (opcional); divergente ⇒ `ContractRevisionConflictError`, nada gravado. */
   expectedUpdatedAt?: string;
-}): Promise<Awaited<ReturnType<typeof insertContractApostille>>> {
-  const ws = await requireContract(params.contractId, params.organizationId);
+  /** SEM084-B — id derivado da chave do comando. */
+  id: string;
+  /** Contrato lido na pré-checagem do comando (a avaliação que vale é a refeita SOB O LOCK). */
+  ws: ContractWorkspace;
+}): Promise<ContractApostille> {
+  const ws = params.ws;
   planInstrumentStatusChange(ws.status, "apostilamento"); // recusa antes de qualquer efeito (reavaliada sob o lock)
   const planned = planApostilleAssignment(ws, params.kind, params); // recusa antes de qualquer efeito (nome ausente/campo alheio)
   const newManager = params.kind === "gestor" && planned ? planned.after : "";
@@ -631,7 +768,7 @@ export async function createApostille(params: {
     assignment: (locked) => planApostilleAssignment(locked, params.kind, params),
     build: ({ sequence, at }) => {
       const created = createContractApostille({
-        organizationId: params.organizationId, contractId: ws.id, kind: params.kind, sequence, description: params.description,
+        organizationId: params.organizationId, contractId: ws.id, kind: params.kind, sequence, id: params.id, description: params.description,
         newValue: params.newValue, newManager, newInspector, correlationId: params.correlationId, createdAt: at,
       });
       return {
@@ -640,8 +777,40 @@ export async function createApostille(params: {
       };
     },
   });
-  await generateContractDocument({ organizationId: params.organizationId, contractId: ws.id, kind: "apostilamento", refId: apostille.id, actorUserId: params.actorUserId, correlationId: params.correlationId });
   return apostille;
+}
+
+/**
+ * Cria um apostilamento e gera o termo. SEM084-B — comando replay-safe pela chave de idempotência (ver `runInstrumentCommand`);
+ * a revisão esperada do contrato (`expectedUpdatedAt`) vale só para a 1ª gravação (a retomada não regrava nada).
+ */
+export async function createApostille(params: {
+  organizationId: number; contractId: string; kind: ApostilleKind; description?: string;
+  newValue?: number; newManager?: string; newInspector?: string; correlationId: string; actorUserId: number;
+  expectedUpdatedAt?: string;
+  idempotencyKey: string;
+}): Promise<ContractApostille> {
+  const normalized = {
+    kind: params.kind, description: params.description ?? "", newValue: params.newValue ?? 0,
+    newManager: params.kind === "gestor" ? (params.newManager ?? "").trim() : "",
+    newInspector: params.kind === "fiscal" ? (params.newInspector ?? "").trim() : "",
+  };
+  return runInstrumentCommand({
+    op: "contract.createApostille", kind: "apostilamento", organizationId: params.organizationId, contractId: params.contractId,
+    actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+    payload: { ...normalized, expectedUpdatedAt: params.expectedUpdatedAt ?? null },
+    findExisting: (id) => getContractApostilleById(id, params.contractId, params.organizationId),
+    samePayload: (a) => a.kind === normalized.kind && a.description === normalized.description && Number(a.newValue) === Number(normalized.newValue)
+      && a.newManager === normalized.newManager && a.newInspector === normalized.newInspector,
+    precheck: async () => {
+      const ws = await requireContract(params.contractId, params.organizationId);
+      planInstrumentStatusChange(ws.status, "apostilamento");
+      planApostilleAssignment(ws, params.kind, params);
+      return ws;
+    },
+    create: (id, ws) => createApostilleInstrument({ ...params, id, ws }),
+    result: (apostille) => apostille,
+  });
 }
 
 // ─── Ocorrências (registro simples) ───────────────────────────────────────────

@@ -154,8 +154,8 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     // `expectedUpdatedAt`: inócuo em main (zod descarta), obrigatório no CAS da PR-12 — já incluído.
     updateContract: { contractId, contractor: "Fornecedor Alterado", expectedUpdatedAt: ANY_REV },
     generateDocuments: { contractId, kind: "contrato" },
-    createAddendum: { contractId, addendumType: "prazo", justification: "prorrogação" },
-    createApostille: { contractId, kind: "reajuste", description: "reajuste anual" },
+    createAddendum: { contractId, addendumType: "prazo", justification: "prorrogação", idempotencyKey: `new006-add-${contractId}` },
+    createApostille: { contractId, kind: "reajuste", description: "reajuste anual", idempotencyKey: `new006-apo-${contractId}` },
     registerOccurrence: { contractId, description: "atraso na entrega" },
     requestLegalOpinion: { contractId },
     getLegalOpinion: { requestId: "req-inexistente" },
@@ -258,9 +258,9 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
   }, 60_000);
 
   it("manager: permitido em createAddendum, createApostille e mudança de status via updateContract", async () => {
-    const add = await call("managerA", "createAddendum", { contractId: CT_MGR, addendumType: "prazo", justification: "prorrogação" }) as { addendum: { contractId: string } };
+    const add = await call("managerA", "createAddendum", { contractId: CT_MGR, addendumType: "prazo", justification: "prorrogação", idempotencyKey: "new006-mgr-add" }) as { addendum: { contractId: string } };
     expect(add.addendum.contractId).toBe(CT_MGR);
-    const ap = await call("managerA", "createApostille", { contractId: CT_MGR, kind: "reajuste" }) as { apostille: { contractId: string } };
+    const ap = await call("managerA", "createApostille", { contractId: CT_MGR, kind: "reajuste", idempotencyKey: "new006-mgr-apo" }) as { apostille: { contractId: string } };
     expect(ap.apostille.contractId).toBe(CT_MGR);
     const [[ct]] = await conn.query<mysql.RowDataPacket[]>(`SELECT status FROM contract_workspaces WHERE id = ? AND organization_id = ?`, [CT_MGR, ORG_A]);
     expect(ct.status).toBe("apostilado");

@@ -35,6 +35,10 @@ import { getContractWorkspace, compareAndSetContractWorkspaceStatus } from "../.
 import { ContractStatusTransitionError, CONTRACT_STATUS_TRANSITION_INVALID } from "../../domain/contractWorkspace";
 import { LEGACY_ENDPOINT_DISABLED } from "../../services/legacyEndpointGuard";
 
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
+
 const DB = process.env.DATABASE_URL;
 const ORG_A = 990801;
 const ORG_B = 990802;
@@ -207,11 +211,11 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const id = await seedContract(`c1-${status}`, status);
     const before = await contractSnapshot(id);
     const api = await caller(users.owner, ORG_A);
-    const a = await err(api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Reabrir?", newValue: 1 }));
+    const a = await err(api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "valor", justification: "Reabrir?", newValue: 1 }));
     expect(a?.code).toBe("BAD_REQUEST");
     expect(a?.message).toContain(`Transição de contrato inválida: ${status} → aditado`);
     expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
-    const p = await err(api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" }));
+    const p = await err(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" }));
     expect(p?.code).toBe("BAD_REQUEST");
     expect(p?.message).toContain(`${status} → apostilado`);
     expect(await contractSnapshot(id)).toEqual(before);
@@ -223,18 +227,18 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const corr = `pr08-c2-${stamp}`;
     const api = await caller(users.owner, ORG_A, corr);
     const status = async () => (await getContractWorkspace(id, ORG_A))?.status;
-    const r1 = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Prorrogação.", newTerm: "18 meses" });
+    const r1 = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "Prorrogação.", newTerm: "18 meses" });
     expect(r1.addendum?.status).toBe("finalizado");
     expect(await status()).toBe("aditado");
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "qualitativo", justification: "Ajuste." });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "qualitativo", justification: "Ajuste." });
     expect(await status()).toBe("aditado"); // `aditado` não bloqueia novo aditivo
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "Maria" });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" });
     expect(await status()).toBe("apostilado");
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "2ª prorrogação.", newTerm: "24 meses" });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "2ª prorrogação.", newTerm: "24 meses" });
     expect(await status()).toBe("aditado");
-    await api.contractWorkspace.createApostille({ contractId: id, kind: "reajuste", newValue: 110000 });
+    await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", newValue: 110000 });
     expect(await status()).toBe("apostilado");
-    const r6 = await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Acréscimo.", newValue: 1000 });
+    const r6 = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "valor", justification: "Acréscimo.", newValue: 1000 });
     expect(r6.requiresLegalOpinion).toBe(true);
     expect(r6.addendum?.status).toBe("aguardando_parecer");
     expect(await status()).toBe("apostilado"); // parecer exigido e ausente ⇒ status NÃO efetivado (fail-closed)
@@ -257,13 +261,13 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const before = await contractSnapshot(id);
     const api = await caller(users.owner, ORG_A);
     for (const addendumType of ["prazo", "valor", "quantitativo", "qualitativo"] as const) {
-      const a = await err(api.contractWorkspace.createAddendum({ contractId: id, addendumType, justification: "Prorrogação.", newTerm: "18 meses", newValue: 1 }));
+      const a = await err(api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType, justification: "Prorrogação.", newTerm: "18 meses", newValue: 1 }));
       expect(a?.code, addendumType).toBe("BAD_REQUEST");
       expect(a?.message).toContain("Transição de contrato inválida: minuta → aditado");
       expect(a?.message).toContain(CONTRACT_STATUS_TRANSITION_INVALID);
     }
     for (const kind of ["reajuste", "gestor", "fiscal", "legal"] as const) {
-      const p = await err(api.contractWorkspace.createApostille({ contractId: id, kind, newManager: "Maria", newInspector: "João", newValue: 1 }));
+      const p = await err(api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind, newManager: "Maria", newInspector: "João", newValue: 1 }));
       expect(p?.code, kind).toBe("BAD_REQUEST");
       expect(p?.message).toContain("minuta → apostilado");
     }
@@ -278,8 +282,8 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const id = await seedContract("c4", "vigente");
     const before = await contractSnapshot(id);
     const apiB = await caller(ownerB, ORG_B);
-    expect((await err(apiB.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "x" })))?.code).toBe("NOT_FOUND");
-    expect((await err(apiB.contractWorkspace.createApostille({ contractId: id, kind: "gestor", newManager: "x" })))?.code).toBe("NOT_FOUND");
+    expect((await err(apiB.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "x" })))?.code).toBe("NOT_FOUND");
+    expect((await err(apiB.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "x" })))?.code).toBe("NOT_FOUND");
     expect(await contractSnapshot(id)).toEqual(before);
   }, 60_000);
 
@@ -288,11 +292,11 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     // (CONFLICT). Agora a trava da linha do contrato serializa a alocação.
     const id = await seedContract("c5", "vigente");
     const api = await caller(users.owner, ORG_A);
-    await api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Primeiro.", newTerm: "18 meses" });
+    await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "Primeiro.", newTerm: "18 meses" });
     const [firstRow] = await conn.execute<mysql.RowDataPacket[]>("SELECT * FROM contract_addenda WHERE contract_id = ?", [id]);
     const res = await Promise.allSettled([
-      api.contractWorkspace.createAddendum({ contractId: id, addendumType: "valor", justification: "Concorrente A.", newValue: 999 }),
-      api.contractWorkspace.createAddendum({ contractId: id, addendumType: "prazo", justification: "Concorrente B.", newTerm: "24 meses" }),
+      api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "valor", justification: "Concorrente A.", newValue: 999 }),
+      api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "Concorrente B.", newTerm: "24 meses" }),
     ]);
     expect(res.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
     const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT sequence FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
@@ -315,7 +319,7 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const before = await contractSnapshot(id);
     const stale = { ...(await getContractWorkspace(id, ORG_A))!, status: "vigente" as const };
     vi.mocked(getContractWorkspace).mockResolvedValueOnce(stale); // 1ª leitura do serviço (anterior à rescisão)
-    const e = await createAddendum({ organizationId: ORG_A, contractId: id, addendumType: "prazo", justification: "Prorrogação.", correlationId: "pr08-d2" })
+    const e = await createAddendum({ idempotencyKey: cmdKey(),  organizationId: ORG_A, contractId: id, addendumType: "prazo", justification: "Prorrogação.", correlationId: "pr08-d2", actorUserId: users.manager })
       .then(() => null, (x: unknown) => x);
     expect(e).toBeInstanceOf(ContractStatusTransitionError);
     expect((e as Error).message).toContain("rescindido → aditado");

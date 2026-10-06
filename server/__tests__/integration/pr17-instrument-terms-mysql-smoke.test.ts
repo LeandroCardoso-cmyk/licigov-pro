@@ -14,6 +14,10 @@ import { runMigrations, validateSchema } from "../../bootstrap";
 import { createManualContract, createAddendum, createApostille, generateContractDocument } from "../../services/contractService";
 import { listContractAddenda, listContractApostilles } from "../../db/contractWorkspace";
 
+// SEM084-B — o comando de criação de instrumento exige uma chave de idempotência (uma por tentativa lógica).
+let cmdKeySeq = 0;
+const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
+
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
 const ORG = 960861;
@@ -69,7 +73,7 @@ describe.skipIf(!DB)("PR-17 — termos a partir do instrumento (MySQL 8)", () =>
 
   it("T1) aditivo de valor ⇒ termo com justificativa, novo valor e prazo do registro; IA só como sugestão; autor humano", async () => {
     const c = await vigente(ORG, "T1");
-    await createAddendum({
+    await createAddendum({ idempotencyKey: cmdKey(), 
       organizationId: ORG, contractId: c.id, addendumType: "valor", justification: "Acréscimo de 10% por aumento de demanda comprovado.",
       newValue: 1234.56, newTerm: "18 meses", actorUserId: ACTOR, correlationId: CORR,
     });
@@ -91,7 +95,7 @@ describe.skipIf(!DB)("PR-17 — termos a partir do instrumento (MySQL 8)", () =>
 
   it("T2) apostilamento de gestor ⇒ termo com descrição e novo gestor do registro", async () => {
     const c = await vigente(ORG, "T2");
-    await createApostille({
+    await createApostille({ idempotencyKey: cmdKey(), 
       organizationId: ORG, contractId: c.id, kind: "gestor", description: "Substituição do gestor por remoção do titular.",
       newManager: "Servidora Sintética Gestora", actorUserId: ACTOR, correlationId: CORR,
     });
@@ -116,7 +120,7 @@ describe.skipIf(!DB)("PR-17 — termos a partir do instrumento (MySQL 8)", () =>
   it("T4) referência de outro contrato ⇒ INSTRUMENT_NOT_FOUND, nenhum documento", async () => {
     const a = await vigente(ORG, "T4a");
     const b = await vigente(ORG, "T4b");
-    await createAddendum({ organizationId: ORG, contractId: a.id, addendumType: "prazo", justification: "Prorrogação sintética.", newTerm: "24 meses", actorUserId: ACTOR, correlationId: CORR });
+    await createAddendum({ idempotencyKey: cmdKey(),  organizationId: ORG, contractId: a.id, addendumType: "prazo", justification: "Prorrogação sintética.", newTerm: "24 meses", actorUserId: ACTOR, correlationId: CORR });
     const [foreign] = await listContractAddenda(a.id, ORG);
     const e = await errOf(() => generateContractDocument({ organizationId: ORG, contractId: b.id, kind: "aditivo", refId: foreign.id, actorUserId: ACTOR, correlationId: CORR }));
     expect(e.code).toBe("NOT_FOUND");
