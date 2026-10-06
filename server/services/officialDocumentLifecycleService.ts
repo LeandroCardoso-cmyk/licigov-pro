@@ -16,6 +16,7 @@
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import {
   createOfficialDocument, computeLineageId, officialFilename, OFFICIAL_MIME_TYPES,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
@@ -145,8 +146,13 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
     }
   };
 
-  if (executor) return persist(executor);        // transação externa (commit atômico do chamador)
-  return db!.transaction(async (tx) => persist(tx)); // transação própria (comportamento anterior)
+  if (executor) return persist(executor);        // transação externa: o retry de deadlock é da FRONTEIRA do chamador
+  // SEM084-A — transação PRÓPRIA: se o InnoDB a desfizer por deadlock (alocação de versão concorrente entre
+  // linhagens do mesmo órgão), repete a transação INTEIRA (GET_LOCK + versão recalculada + INSERT + timeline).
+  return runTransactionWithDeadlockRetry(
+    { label: "official_document.create", organizationId: params.organizationId, correlationId: params.correlationId },
+    () => db!.transaction(async (tx) => persist(tx)),
+  );
 }
 
 // ─── Armazenamento do artefato renderizado ────────────────────────────────────

@@ -15,6 +15,7 @@ import { generateStructuredAuthoring, generateEditalAuthoring } from "./authorin
 import { resolveEditalSources } from "./authoring/editalContext";
 import { resolveDocumentAuthoringContext, storedSourcesDigest, type CanonicalItemsState } from "./authoring/authoringContext";
 import { compareSources, SOURCE_LABELS, type SourceKey } from "../domain/sourceDigests";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import {
   buildDFDDraft,
@@ -184,10 +185,15 @@ async function runReplaySafeGeneration<T>(
     const db = await getDb();
     if (!db) return { result: response, replayed: false }; // sem DB: degrada sem persistir (nem idempotência)
     let result: T = response;
-    await db.transaction(async (tx) => {
-      result = await persist(tx); // snapshot canônico persistido
-      await saveIdempotencyResult(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId, result, tx);
-    });
+    // SEM084-A — esta fronteira é DONA da transação (rascunho + documento oficial + idempotência): um deadlock do
+    // InnoDB desfaz tudo e a transação é repetida INTEIRA (a cognição, fora dela, não é refeita).
+    await runTransactionWithDeadlockRetry(
+      { label: "procurement.generation.persist", organizationId: ctx.organizationId },
+      () => db.transaction(async (tx) => {
+        result = await persist(tx); // snapshot canônico persistido
+        await saveIdempotencyResult(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId, result, tx);
+      }),
+    );
     return { result, replayed: false };
   } catch (err) {
     await failIdempotencyKey(ctx.idempotencyKey, ctx.actorUserId, ctx.organizationId);

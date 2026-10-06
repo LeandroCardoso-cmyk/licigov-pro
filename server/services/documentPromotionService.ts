@@ -18,6 +18,7 @@
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { getGeneratedDocumentByKind, getProcess } from "../db/procurement";
 import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
@@ -200,7 +201,8 @@ export async function promoteOfficialDocument(params: {
     ]);
 
     let result!: PromoteOfficialResult;
-    await db.transaction(async (tx) => {
+    // SEM084-A — fronteira DONA da transação (versão emitida + ledger + idempotência): deadlock ⇒ repete INTEIRA.
+    await runTransactionWithDeadlockRetry({ label: "official_document.promote", organizationId: params.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
       // Versão oficial IMUTÁVEL "emitido" (append-only; GET_LOCK por linhagem serializa a numeração).
       const official = await createDocument({
         organizationId: params.organizationId, businessDomain: BUSINESS_DOMAIN, documentType: params.kind,
@@ -234,7 +236,7 @@ export async function promoteOfficialDocument(params: {
       };
       // Marca a chave COMPLETED com a resposta cacheável — na MESMA transação (atomicidade).
       await saveIdempotencyResult(params.idempotencyKey, params.actorUserId, params.organizationId, result, tx);
-    });
+    }));
     return result;
   } catch (err) {
     await failIdempotencyKey(params.idempotencyKey, params.actorUserId, params.organizationId);
