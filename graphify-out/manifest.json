@@ -13615,13 +13615,18 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_TEMPLATES_T1_DOMAIN.md": {
-    "mtime": 1791307884.5737684,
-    "ast_hash": "75044ed52bec8dbb0046f2602c60c8a8",
+    "mtime": 1791309370.9654968,
+    "ast_hash": "3e2b51c8fccfa16e041fbc12906a04d9",
     "semantic_hash": ""
   },
   "docs/audits/TEMPLATE_G0_OFFICIAL_DELTA_CHECKLIST.md": {
-    "mtime": 1791307906.9856942,
-    "ast_hash": "3d70aff8f73f434314c25205c7cfcb57",
+    "mtime": 1791309370.964714,
+    "ast_hash": "692ac1858c579c17a6510217642edc07",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_TEMPLATES_HD26_DECISION.md": {
+    "mtime": 1791309359.829277,
+    "ast_hash": "68b78e715c302be729c977d67c335143",
     "semantic_hash": ""
   }
 }
