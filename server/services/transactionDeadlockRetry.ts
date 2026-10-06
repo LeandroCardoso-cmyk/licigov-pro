@@ -7,7 +7,7 @@
  * (ER_LOCK_DEADLOCK, errno 1213, SQLSTATE 40001) — nada dela fica gravado — e repetir a transação inteira é seguro.
  *
  * Regras:
- *  - só deadlock é repetido (errno 1213 / ER_LOCK_DEADLOCK); qualquer outro erro propaga na 1ª ocorrência;
+ *  - só deadlock é repetido (errno 1213 / ER_LOCK_DEADLOCK / SQLSTATE 40001); qualquer outro erro propaga na 1ª ocorrência;
  *  - a função repetida é a TRANSAÇÃO INTEIRA (quem chama é a fronteira dona da transação; nunca uma parte dela);
  *  - no máximo 3 tentativas, com esperas FIXAS e determinísticas (sem aleatoriedade) entre elas;
  *  - cada retry e o esgotamento são registrados estruturadamente (rótulo, tentativa, tenant, correlationId) — sem
@@ -21,12 +21,15 @@ export const DEADLOCK_MAX_ATTEMPTS = 3;
 /** Espera antes da 2ª e da 3ª tentativa (ms). Fixa: o comportamento é reprodutível. */
 export const DEADLOCK_RETRY_DELAYS_MS: readonly number[] = Object.freeze([10, 25]);
 
-/** ER_LOCK_DEADLOCK (errno 1213, SQLSTATE 40001), inclusive embrulhado pelo driver/ORM em `cause`. */
+/**
+ * ER_LOCK_DEADLOCK (errno 1213) ou SQLSTATE 40001 (serialization failure), inclusive embrulhado pelo driver/ORM em
+ * `cause`. Detecção ESTRUTURAL (code/errno/sqlState) — nunca pelo texto da mensagem.
+ */
 export function isDeadlockError(err: unknown): boolean {
   let x: unknown = err;
   for (let i = 0; i < 5 && x && typeof x === "object"; i++) {
-    const e = x as { code?: unknown; errno?: unknown; cause?: unknown };
-    if (e.code === "ER_LOCK_DEADLOCK" || e.errno === 1213) return true;
+    const e = x as { code?: unknown; errno?: unknown; sqlState?: unknown; cause?: unknown };
+    if (e.code === "ER_LOCK_DEADLOCK" || e.errno === 1213 || e.sqlState === "40001") return true;
     x = e.cause;
   }
   return false;

@@ -37,6 +37,25 @@ describe("SEM084-A — isDeadlockError", () => {
     expect(isDeadlockError(null)).toBe(false);
     expect(isDeadlockError("ER_LOCK_DEADLOCK")).toBe(false);
   });
+
+  it("reconhece SQLSTATE 40001 estruturalmente (inclusive em `cause`); outros SQLSTATE não", () => {
+    expect(isDeadlockError({ sqlState: "40001" })).toBe(true);
+    expect(isDeadlockError(new Error("wrap", { cause: { sqlState: "40001" } }))).toBe(true);
+    expect(isDeadlockError(new Error("outer", { cause: new Error("inner", { cause: Object.assign(new Error("x"), { sqlState: "40001" }) }) }))).toBe(true);
+    expect(isDeadlockError({ sqlState: "HY000" })).toBe(false); // ex.: lock wait timeout (1205)
+    expect(isDeadlockError({ sqlState: "23000" })).toBe(false); // ex.: duplicate entry (1062)
+    expect(isDeadlockError({ sqlState: 40001 })).toBe(false);   // só a string SQLSTATE do driver
+    expect(isDeadlockError(new Error("SQLSTATE 40001 serialization failure"))).toBe(false); // nunca por texto
+  });
+
+  it("SQLSTATE 40001 ⇒ retry com os MESMOS limites (3 tentativas, esperas [10, 25])", async () => {
+    const sleep = vi.fn(async () => {});
+    const fn = vi.fn(async () => { throw { sqlState: "40001" }; });
+    const caught = await runTransactionWithDeadlockRetry(CTX, fn, sleep).then(() => null, (e: unknown) => e);
+    expect(caught).toBeInstanceOf(DeadlockRetryExhaustedError);
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(sleep.mock.calls).toEqual([[10], [25]]);
+  });
 });
 
 describe("SEM084-A — runTransactionWithDeadlockRetry", () => {
