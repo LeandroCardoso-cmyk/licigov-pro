@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument } from "../../services/procurementProcessService";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 import { generateStructuredAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { AuthoringContractError } from "../../domain/authoring/authoringSchema";
 
@@ -35,6 +36,7 @@ async function provRows(org: number, correlationId: string): Promise<any[]> {
 }
 
 async function cleanup() {
+  for (const tb of ["procurement_item_events", "procurement_item_source_links", "procurement_items", "procurement_processes"]) await conn.execute(`DELETE FROM \`${tb}\` WHERE organization_id = ?`, [ORG]).catch(() => {});
   await conn.execute("DELETE FROM cognitive_provenance WHERE organization_id = ?", [ORG]).catch(() => {});
   await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [ORG]).catch(() => {});
   await conn.execute("DELETE FROM official_documents WHERE tenant_id = ?", [ORG]).catch(() => {});
@@ -113,6 +115,7 @@ describe.skipIf(!DB)("A2 — autoria estruturada × proveniência A1 (MySQL real
 
   it("TR: cognição real → proveniência aterrada e artefato vinculado", async () => {
     const corr = "a2-prov-tr";
+    await createCanonicalManualItem({ organizationId: ORG, processId: "a2-p-tr", actorUserId: USER, ensureProcess: true }); // HD-01
     const r = await generateDocument({
       organizationId: ORG, processId: "a2-p-tr", kind: "tr", object: "Serviço de limpeza predial",
       correlationId: corr, idempotencyKey: "a2-tr-key-1", actorUserId: USER,

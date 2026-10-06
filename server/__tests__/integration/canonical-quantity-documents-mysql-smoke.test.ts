@@ -15,6 +15,7 @@ import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { governedResearchId, GOVERNED_RESEARCH_TABLES, forgetGovernedResearch } from "../helpers/governedPriceResearch";
 import { generateDocument, generateNotice, getEditalSourceState, getAuthoringSourceState } from "../../services/procurementProcessService";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { resolveDocumentAuthoringContext } from "../../services/authoring/authoringContext";
 import { resolveEditalSources } from "../../services/authoring/editalContext";
@@ -193,15 +194,49 @@ describe.skipIf(!DB)("P0.3 — quantidade PREVISTA como fonte única em DFD/ETP/
     expect((await ws()).items.find((i: any) => i.description === "Detergente neutro").plannedQuantity.value).toBe(60);
   }, 180_000);
 
-  it("5) legado (sem Itens da contratação): ETP e Edital seguem com o comportamento anterior", async () => {
+  // R6 / PR-13 (SEM-008, INV-09): o teste antigo CODIFICAVA o legado (Edital com a quantidade da cotação). Agora o
+  // ETP rotula a quantidade como da COTAÇÃO e o Edital é fail-closed (CANONICAL_ITEMS_REQUIRED, nada gravado).
+  it("5) legado (sem Itens da contratação): ETP rotula a quantidade cotada; Edital fail-closed", async () => {
     const { process } = await (await caller(owner)).procurementProcess.createProcess({ processNumber: `CQDL-${Date.now()}`, object: OBJ, startOption: "iniciar_pesquisa" });
     await seedItem(process.id, "cqd-leg1", "Vassoura", 3, 25);
     const etpCtx = await resolveDocumentAuthoringContext({ organizationId: ORG, processId: process.id, kind: "etp", object: OBJ });
     expect(etpCtx.quantitySource).toBe("legacy");
-    expect(etpCtx.promptContext).toContain("Vassoura — 3 UN");
-    const ed = await genEdital(`cqd-ed-legacy-${process.id}`, process.id);
-    expect(ed.document.content).toMatch(/\| \d+ \| Vassoura \| 3 \| UN \| 25,00 \| 75,00 \|/);
-    expect((await row(process.id, "edital"))!.sources).not.toContain("qtd:prevista");
+    expect(etpCtx.legacyQuotedItemCount).toBe(1);
+    expect(etpCtx.promptContext).toContain("Vassoura — 3 UN (quantidade da cotação — não confirmada como necessidade)");
+    await expect(genEdital(`cqd-ed-legacy-${process.id}`, process.id))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CANONICAL_ITEMS_REQUIRED") });
+    expect(await row(process.id, "edital")).toBeFalsy();
+  }, 180_000);
+
+  // HD-01 (opção A) — a regra NÃO depende de haver cotação: ZERO itens/cotações e ZERO Itens da contratação ⇒ TR e Edital
+  // NOVOS são bloqueados (CANONICAL_ITEMS_REQUIRED) ANTES de idempotência, cognição, rascunho e documento oficial.
+  it("5b) HD-01: processo SEM itens e SEM cotações ⇒ TR e Edital bloqueados sem nenhum efeito; com 1 Item canônico ⇒ gera", async () => {
+    const { process } = await (await caller(owner)).procurementProcess.createProcess({ processNumber: `CQDZ-${Date.now()}`, object: OBJ, startOption: "iniciar_tr" });
+    const countRows = async (sql: string) => Number(((await conn.execute<mysql.RowDataPacket[]>(sql, [ORG, process.id]))[0] as any[])[0].n);
+    const effects = async () => ({
+      drafts: await countRows("SELECT COUNT(*) n FROM generated_documents WHERE organization_id = ? AND process_id = ?"),
+      official: await countRows("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND origin = ?"),
+      timeline: await countRows("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND process_id = ?"),
+      items: await countRows("SELECT COUNT(*) n FROM procurement_items WHERE organization_id = ? AND process_id = ?"),
+    });
+    const [idem0] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM idempotency_keys WHERE organizationId = ?", [ORG]);
+    const before = await effects();
+    let invoked = 0;
+    const spy = (kind: "tr" | "edital") => async () => { invoked++; return buildMockProviderAuthoring(kind); };
+    await expect(generateDocument({ organizationId: ORG, processId: process.id, kind: "tr", object: OBJ, correlationId: "cqdz-tr", idempotencyKey: `cqdz-tr-${process.id}`, actorUserId: owner, invoke: spy("tr") }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CANONICAL_ITEMS_REQUIRED") });
+    await expect(generateNotice({ organizationId: ORG, processId: process.id, object: OBJ, modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "cqdz-ed", idempotencyKey: `cqdz-ed-${process.id}`, actorUserId: owner, invoke: spy("edital") }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("CANONICAL_ITEMS_REQUIRED") });
+    expect(invoked).toBe(0);                                  // nenhuma cognição/provider
+    expect(await effects()).toEqual(before);                  // nenhum rascunho/oficial/evento/item
+    const [idem1] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM idempotency_keys WHERE organizationId = ?", [ORG]);
+    expect(Number(idem1[0].n)).toBe(Number(idem0[0].n));      // nenhuma reserva de idempotência
+
+    // Com UM Item da contratação (quantidade prevista = decisão humana) a geração é permitida.
+    await createCanonicalManualItem({ organizationId: ORG, processId: process.id, actorUserId: owner, description: "Vassoura", plannedQuantity: 5 });
+    const tr = await generateDocument({ organizationId: ORG, processId: process.id, kind: "tr", object: OBJ, correlationId: "cqdz-tr2", idempotencyKey: `cqdz-tr2-${process.id}`, actorUserId: owner, invoke: spy("tr") });
+    expect(tr.document.kind).toBe("tr");
+    expect(invoked).toBe(1);
   }, 180_000);
 
   it("6) tenant: outro órgão não usa Itens da contratação nem quantidades do processo no ETP/Edital", async () => {

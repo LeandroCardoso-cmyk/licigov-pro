@@ -68,12 +68,20 @@ export async function getRequest(id: string, orgId: number): Promise<Institution
   return rows.length > 0 ? rowToRequest(rows[0]) : null;
 }
 
-export async function updateRequestStatus(id: string, orgId: number, status: string, assignedTo: number | null, updatedAt: string): Promise<boolean> {
+export async function updateRequestStatus(
+  id: string, orgId: number, status: string, assignedTo: number | null, updatedAt: string,
+  /** F1 — CAS opcional: só transiciona se o status atual ainda for `expectedStatus` (retomada concorrente nunca regride). */
+  expectedStatus?: string,
+): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(institutionalRequestsTable).set({ status, assignedTo, updatedAt: toDb(updatedAt) })
-    .where(and(eq(institutionalRequestsTable.id, id), eq(institutionalRequestsTable.organizationId, orgId)));
-  return true;
+  const where = expectedStatus
+    ? and(eq(institutionalRequestsTable.id, id), eq(institutionalRequestsTable.organizationId, orgId), eq(institutionalRequestsTable.status, expectedStatus))
+    : and(eq(institutionalRequestsTable.id, id), eq(institutionalRequestsTable.organizationId, orgId));
+  const res = await db.update(institutionalRequestsTable).set({ status, assignedTo, updatedAt: toDb(updatedAt) }).where(where);
+  if (!expectedStatus) return true;
+  const affected = (res as unknown as Array<{ affectedRows?: number }>)[0]?.affectedRows;
+  return typeof affected === "number" ? affected > 0 : true;
 }
 
 /** Inbox: solicitações pendentes para um domínio (destino). */

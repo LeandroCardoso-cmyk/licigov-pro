@@ -98,6 +98,7 @@ export async function createImportSession(
       .where(and(
         eq(procurementProcessesTable.id, params.procurementProcessId),
         eq(procurementProcessesTable.organizationId, orgId),
+        eq(procurementProcessesTable.lifecycleState, "active"), // Pilot Reset: geração histórica não recebe ingestão
       ))
       .limit(1);
     if (proc.length === 0) {

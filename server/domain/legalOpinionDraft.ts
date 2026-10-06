@@ -128,6 +128,30 @@ export function updateLegalOpinionDraft(
   };
 }
 
+/** R5 / PR-10 — a versão vista pelo editor não é mais a atual. */
+export const LEGAL_OPINION_STALE_VERSION = "LEGAL_OPINION_STALE_VERSION";
+
+type OpinionPatch = Partial<Pick<LegalOpinionDraft,
+  "report" | "foundation" | "conclusion" | "conclusionType" | "recommendations" | "reservations" | "attachments">>;
+
+/**
+ * R5 / PR-10 (SEM-019) — patch EFETIVO: descarta texto em branco (salvar vazio nunca apaga o que existe), descarta
+ * campos iguais ao persistido e nunca transforma conclusão em null por omissão. Pura.
+ */
+export function effectiveOpinionPatch(current: LegalOpinionDraft, patch: OpinionPatch): OpinionPatch {
+  const out: { -readonly [K in keyof OpinionPatch]: OpinionPatch[K] } = {};
+  for (const k of ["report", "foundation", "conclusion"] as const) {
+    const v = patch[k];
+    if (typeof v === "string" && v.trim() !== "" && v !== current[k]) out[k] = v;
+  }
+  if (patch.conclusionType && patch.conclusionType !== current.conclusionType) out.conclusionType = patch.conclusionType;
+  for (const k of ["recommendations", "reservations", "attachments"] as const) {
+    const v = patch[k];
+    if (Array.isArray(v) && JSON.stringify(v) !== JSON.stringify(current[k])) out[k] = v;
+  }
+  return out;
+}
+
 /**
  * Assina o parecer. Apenas o método MANUAL é implementado nesta fase; os demais
  * lançam erro explícito (arquitetura preparada, comportamento não implementado).
@@ -151,6 +175,79 @@ export function signLegalOpinionDraft(
     status: "assinado",
     updatedAt: ts,
   };
+}
+
+// ─── R3 / PR-06 (SEM-006) — Create ≠ Reset ────────────────────────────────────
+//
+// REGRA (decisão do responsável, pós night-shift) — UM ÚNICO PARECER VIGENTE POR SOLICITAÇÃO/TRABALHO: cada workspace
+// de parecer (1:1 com a solicitação institucional — id = hash(org, requestId)) comporta EXATAMENTE UM parecer, de
+// qualquer tipo (inicial ou final). A evolução do parecer é rascunho → versões → histórico (updateOpinion gera v2, v3…;
+// a assinatura o torna imutável). Um NOVO parecer institucional exige NOVA solicitação (novo workspace) — nunca uma
+// segunda criação no mesmo trabalho. Criar sobre um workspace que já tem parecer NUNCA regrava o existente.
+// Chave natural do rascunho = o `id` determinístico hash(org, workspace, tipo); a unicidade POR WORKSPACE (qualquer tipo)
+// é garantida sob lock do workspace (`claimNewLegalOpinionDraft`). Tokens estáveis (não traduzir; usados por testes e
+// cliente) vão na mensagem pt-BR do CONFLICT.
+
+/** Nome estável da regra (documentação/testes). */
+export const LEGAL_OPINION_ONE_PER_REQUEST_RULE = "ONE_CURRENT_LEGAL_OPINION_PER_REQUEST";
+/** Já existe parecer (não assinado) neste workspace e a chamada não é retry da MESMA criação. */
+export const LEGAL_OPINION_ALREADY_EXISTS = "LEGAL_OPINION_ALREADY_EXISTS";
+/** O workspace já tem parecer ASSINADO — imutável; nenhuma criação/rascunho o altera. */
+export const LEGAL_OPINION_ALREADY_SIGNED = "LEGAL_OPINION_ALREADY_SIGNED";
+/** A etapa do workspace não admite iniciar rascunho (validada ANTES de qualquer escrita). */
+export const LEGAL_OPINION_STAGE_INVALID = "LEGAL_OPINION_STAGE_INVALID";
+
+export const LEGAL_OPINION_ALREADY_EXISTS_MESSAGE =
+  `Já existe um parecer neste trabalho — cada solicitação comporta um único parecer vigente. A criação não altera o ` +
+  `parecer existente: edite-o para gerar nova versão; um novo parecer institucional exige nova solicitação (${LEGAL_OPINION_ALREADY_EXISTS}).`;
+export const LEGAL_OPINION_ALREADY_SIGNED_MESSAGE =
+  `Este trabalho já tem parecer assinado, que é imutável — nenhuma criação ou rascunho pode alterá-lo. Cada solicitação ` +
+  `comporta um único parecer vigente; um novo parecer institucional exige nova solicitação (${LEGAL_OPINION_ALREADY_SIGNED}).`;
+export function legalOpinionStageInvalidMessage(stage: string): string {
+  return `A etapa atual do trabalho (${stage}) não permite iniciar o parecer; nada foi gravado (${LEGAL_OPINION_STAGE_INVALID}).`;
+}
+
+/**
+ * Retry idempotente da MESMA criação: mesmo ator, mesmo tipo e mesmo payload NORMALIZADO (omitidos ≡ vazios, como
+ * em `createLegalOpinionDraft`), e o parecer existente ainda no estado exato que a criação produz (rascunho v1, não
+ * assinado). Qualquer outra coisa (texto diferente, outro ator, parecer já editado/assinado) ⇒ CONFLICT.
+ */
+export function isSameLegalOpinionDraftCreate(existing: LegalOpinionDraft, candidate: LegalOpinionDraft): boolean {
+  const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  return existing.id === candidate.id
+    && existing.organizationId === candidate.organizationId
+    && existing.workspaceId === candidate.workspaceId
+    && existing.opinionType === candidate.opinionType
+    && !existing.signed
+    && existing.status === "rascunho"
+    && existing.version === 1
+    && existing.author === candidate.author
+    && existing.report === candidate.report
+    && existing.foundation === candidate.foundation
+    && existing.conclusion === candidate.conclusion
+    && (existing.conclusionType ?? null) === (candidate.conclusionType ?? null)
+    && sameList(existing.recommendations, candidate.recommendations)
+    && sameList(existing.reservations, candidate.reservations)
+    && sameList(existing.attachments, candidate.attachments);
+}
+
+export type LegalOpinionCreateDecision =
+  | { readonly kind: "create" }
+  | { readonly kind: "converge"; readonly draft: LegalOpinionDraft }
+  | { readonly kind: "conflict"; readonly reason: typeof LEGAL_OPINION_ALREADY_EXISTS | typeof LEGAL_OPINION_ALREADY_SIGNED };
+
+/**
+ * Decide a criação dado TODOS os pareceres já existentes no workspace (qualquer tipo). Pura e determinística.
+ * Assinado em qualquer tipo ⇒ ALREADY_SIGNED; retry exato ⇒ converge (sem escrita); outro existente ⇒ ALREADY_EXISTS.
+ */
+export function decideLegalOpinionDraftCreate(
+  existing: readonly LegalOpinionDraft[], candidate: LegalOpinionDraft,
+): LegalOpinionCreateDecision {
+  if (existing.length === 0) return { kind: "create" };
+  if (existing.some(d => d.signed || d.status === "assinado")) return { kind: "conflict", reason: LEGAL_OPINION_ALREADY_SIGNED };
+  const same = existing.length === 1 ? existing[0] : undefined;
+  if (same && isSameLegalOpinionDraftCreate(same, candidate)) return { kind: "converge", draft: same };
+  return { kind: "conflict", reason: LEGAL_OPINION_ALREADY_EXISTS };
 }
 
 /** Assinatura determinística do conteúdo (para rastreabilidade/versão). */

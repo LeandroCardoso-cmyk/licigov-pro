@@ -29,6 +29,8 @@ vi.mock("../../services/kernelAccessService", () => ({
 // (vazia ⇒ modo legado inalterado).
 vi.mock("../../db/procurementItems", () => ({ listProcurementItems: vi.fn(async () => []) }));
 
+// R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
+vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({
     transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx),
@@ -103,6 +105,8 @@ vi.mock("../../services/authoring/editalContext", () => ({
     sourcesDigest: "a".repeat(64),
     sourceVersions: { dfd: { present: false, status: null, contentHash: null }, etp: { present: false, status: null, contentHash: null }, tr: { present: true, status: "aprovado", contentHash: "trhash" } },
     lineageMarkers: ["srcdigest:aaaaaaaaaaaaaaaa", "base:tr@trhash", "itens:0"],
+    // HD-01 (opção A) — a geração NOVA de TR/Edital exige Itens da contratação: contexto canônico válido (sem pendências).
+    canonical: { contextDigest: "c".repeat(64), missingPlannedQuantity: [], unlinkedApprovedItemCount: 0 }, legacyQuotedItemCount: 0,
   })),
 }));
 

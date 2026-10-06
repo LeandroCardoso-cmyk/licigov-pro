@@ -120,6 +120,8 @@ export interface EditalSourceContext {
   /** "canonical_planned" = quantidade PREVISTA dos Itens da contratação; "legacy" = quantidade da cotação. */
   readonly quantitySource: "canonical_planned" | "legacy";
   readonly canonical: CanonicalItemsState | null;
+  /** R6 / PR-13 (SEM-008) — itens aprovados só com quantidade da COTAÇÃO (sem Itens da contratação). */
+  readonly legacyQuotedItemCount: number;
 }
 
 function short(hash: string | null): string {
@@ -280,6 +282,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     }),
     quantitySource: canonical ? "canonical_planned" : "legacy",
     canonical: canonical?.state ?? null,
+    legacyQuotedItemCount: canonical ? 0 : input.approvedItems.length,
   };
 }
 
@@ -305,7 +308,8 @@ function toUpstream(doc: Awaited<ReturnType<typeof getGeneratedDocumentByKind>>)
  * Resolve as fontes do Edital de forma TENANT-SCOPED e monta o contexto. Toda leitura é escopada por
  * `organizationId` (documento de outro tenant retorna null → tratado como ausente/[REVISAR], nunca vaza).
  * Os parâmetros modalidade/forma/plataforma vêm do próprio passo do Edital (não há reentrada de dados de
- * etapas anteriores); critério/regime ficam como [REVISAR] quando não disponíveis no espaço canônico.
+ * etapas anteriores). PR-09 / R5 (0311): critério de julgamento / regime de execução são os PERSISTIDOS no
+ * rascunho canônico do Edital (passados pelo chamador); NULL ⇒ ficam como [REVISAR] (nunca inferidos).
  */
 export async function resolveEditalSources(params: {
   organizationId: number;

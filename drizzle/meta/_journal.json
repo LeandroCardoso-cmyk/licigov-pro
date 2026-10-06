@@ -2082,6 +2082,41 @@
       "when": 1790760000000,
       "tag": "0309_operation_record_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "5",
+      "when": 1790891574520,
+      "tag": "0310_contract_number_normalized_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "5",
+      "when": 1790905567601,
+      "tag": "0311_edital_institutional_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "5",
+      "when": 1790906035270,
+      "tag": "0312_institutional_decision_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 313,
+      "version": "5",
+      "when": 1790906828094,
+      "tag": "0313_procurement_process_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 314,
+      "version": "5",
+      "when": 1790944633769,
+      "tag": "0314_required_document_evidence",
+      "breakpoints": true
     }
   ]
 }

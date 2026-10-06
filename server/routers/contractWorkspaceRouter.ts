@@ -3,12 +3,20 @@
  *
  * Engenharia documental contratual num Workspace próprio: nascimento (3 fluxos),
  * minutas inteligentes, aditivos, apostilamentos, ocorrências e parecer jurídico
- * (via Institutional Request Engine). tenantProcedure, multi-tenant. Foco exclusivo
- * em documentação — nunca ERP/financeiro.
+ * (via Institutional Request Engine). Multi-tenant. Foco exclusivo em documentação —
+ * nunca ERP/financeiro.
+ *
+ * NEW-006 — RBAC por procedure (matriz congelada em `./contractWorkspaceRbac.ts`): leituras →
+ * tenantProcedure; rascunho/edição/minuta/ocorrência/solicitação → operator; instrumento que muda o
+ * status institucional do contrato (aditivo/apostilamento) e mudança de status em `updateContract`
+ * → manager. "manager" é só um PISO TÉCNICO: regras de competência legal (quem pode celebrar
+ * aditivo, rescindir, dar vigência) estão fora do escopo (PR-07/PR-18/PR-20).
  */
 import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
+// NEW-006 — pisos de papel (import separado: não sobrepõe as linhas de import editadas por PR-08/PR-12).
+import { orgRoleProcedure, assertOrgRoleAtLeast } from "../_core/trpc";
 import { router, tenantProcedure } from "../_core/trpc";
 import { updateContractFields, transitionContractStatus, type ContractStatus } from "../domain/contractWorkspace";
 import {
@@ -18,13 +26,19 @@ import {
   requestContractLegalOpinion, getContractLegalOpinion,
 } from "../services/contractService";
 import {
-  getContractWorkspace, insertContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
+  getContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
 // NEW-022 — bloqueio da ativação genérica (import isolado: não sobrepõe as linhas de import editadas por NEW-006/PR-08/PR-12).
 import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
+// SEM-023 (PR-12) — edição governada do contrato (imports separados para não sobrepor PR-08 nas linhas acima).
+import {
+  ContractEconomicFieldsRequireInstrumentError, ContractAssignmentRequiresGovernedActionError, ContractRevisionConflictError,
+  type ContractWorkspace,
+} from "../domain/contractWorkspace";
+import { assertExpectedContractRevision, saveGovernedContractEdit } from "../services/contractEditService";
 
 const DOC_KINDS = ["contrato", "aditivo", "apostilamento", "rescisao", "anexo"] as const;
 const ADDENDUM_TYPES = ["prazo", "valor", "quantitativo", "qualitativo"] as const;
@@ -33,6 +47,21 @@ const APOSTILLE_KINDS = ["reajuste", "gestor", "fiscal", "legal"] as const;
 const OPINION_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"] as const;
 const CONTRACT_STATUSES = ["minuta", "vigente", "aditado", "apostilado", "encerrado", "rescindido", "arquivado"] as const;
 
+/**
+ * SEM-023 — recusas GOVERNADAS da edição direta do contrato, com token estável na mensagem (o projeto não
+ * tem errorFormatter customizado): revisão divergente ⇒ CONFLICT `CONTRACT_REVISION_CONFLICT`; campo
+ * econômico/de identidade fora da minuta ⇒ BAD_REQUEST `CONTRACT_ECONOMIC_FIELDS_REQUIRE_INSTRUMENT`
+ * (caminho: Termo Aditivo / Apostilamento); gestor/fiscal fora da minuta ⇒ BAD_REQUEST
+ * `CONTRACT_ASSIGNMENT_REQUIRES_GOVERNED_ACTION` (exige ação própria de designação — capacidade futura).
+ * Nada é gravado em todos os casos.
+ */
+function mapContractEditError(e: unknown): never {
+  if (e instanceof ContractRevisionConflictError) throw new TRPCError({ code: "CONFLICT", message: e.message, cause: e });
+  if (e instanceof ContractEconomicFieldsRequireInstrumentError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
+  if (e instanceof ContractAssignmentRequiresGovernedActionError) throw new TRPCError({ code: "BAD_REQUEST", message: e.message, cause: e });
+  throw e;
+}
+
 async function requireContract(id: string, orgId: number) {
   const ws = await getContractWorkspace(id, orgId);
   if (!ws) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado nesta organização." });
@@ -40,23 +69,23 @@ async function requireContract(id: string, orgId: number) {
 }
 
 export const contractWorkspaceRouter = router({
-  createFromProcurement: tenantProcedure
+  createFromProcurement: orgRoleProcedure("operator")
     .input(z.object({ processId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createFromProcurement({ organizationId: orgId, processId: input.processId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, correlationId: ctx.correlationId });
+      const workspace = await createFromProcurement({ organizationId: orgId, processId: input.processId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return { workspace };
     }),
 
-  createFromDirectProcurement: tenantProcedure
+  createFromDirectProcurement: orgRoleProcedure("operator")
     .input(z.object({ directWorkspaceId: z.string().min(1), contractNumber: z.string().min(1), contractor: z.string().optional(), value: z.number().optional(), term: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, correlationId: ctx.correlationId });
+      const workspace = await createFromDirectProcurement({ organizationId: orgId, directWorkspaceId: input.directWorkspaceId, contractNumber: input.contractNumber, contractor: input.contractor, value: input.value, term: input.term, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return { workspace };
     }),
 
-  createManual: tenantProcedure
+  createManual: orgRoleProcedure("operator")
     .input(z.object({
       // Gerada uma vez pelo cliente (ex.: crypto.randomUUID()) e reenviada em retries da
       // MESMA tentativa de submissão — nunca o número do contrato (ver revisão arquitetural:
@@ -101,11 +130,11 @@ export const contractWorkspaceRouter = router({
       }
     }),
 
-  importExternalContract: tenantProcedure
+  importExternalContract: orgRoleProcedure("operator")
     .input(z.object({ source: z.enum(["pdf", "docx"]), rawText: z.string().min(1), contractNumber: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const result = await importExternalContract({ organizationId: orgId, source: input.source, rawText: input.rawText, contractNumber: input.contractNumber, correlationId: ctx.correlationId });
+      const result = await importExternalContract({ organizationId: orgId, source: input.source, rawText: input.rawText, contractNumber: input.contractNumber, createdBy: ctx.user.id, correlationId: ctx.correlationId });
       return result;
     }),
 
@@ -141,12 +170,15 @@ export const contractWorkspaceRouter = router({
       return { contracts, total: contracts.length };
     }),
 
-  updateContract: tenantProcedure
+  updateContract: orgRoleProcedure("operator")
     .input(z.object({
       contractId: z.string().min(1),
       contractor: z.string().optional(), object: z.string().optional(), value: z.number().optional(),
       term: z.string().optional(), manager: z.string().optional(), inspector: z.string().optional(),
       contractNumber: z.string().optional(), status: z.enum(CONTRACT_STATUSES).optional(),
+      // SEM-023 — CAS: a revisão (`workspace.updatedAt` de loadContract) que o cliente carregou. OBRIGATÓRIA:
+      // sem ela não há como provar que o save não sobrescreve uma edição concorrente.
+      expectedUpdatedAt: z.string().datetime(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -154,16 +186,26 @@ export const contractWorkspaceRouter = router({
       const ws = await requireContract(input.contractId, orgId);
       const { contractId: _contractId, status, ...fields } = input; // lint-only (pré-existente): contractId já usado acima
       const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
-      let updated = updateContractFields(ws, patch);
+
+      // SEM-023 — recusas ANTES de qualquer escrita: revisão divergente; campo econômico ou gestor/fiscal
+      // alterado fora da minuta (a troca pós-formalização de gestor/fiscal exige ação própria — dívida registrada).
+      let updated: ContractWorkspace;
+      try {
+        assertExpectedContractRevision(ws, input.expectedUpdatedAt);
+        updated = updateContractFields(ws, patch);
+      } catch (e) { mapContractEditError(e); }
       if (status && status !== ws.status) {
+        assertOrgRoleAtLeast(ctx, "manager", "contractWorkspace.updateContract#status"); // NEW-006 — mudança de status: piso manager, antes de qualquer escrita
         try { updated = transitionContractStatus(updated, status as ContractStatus); }
         catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida." }); }
       }
-      await insertContractWorkspace(updated);
-      return { workspace: updated };
+      const workspace = await saveGovernedContractEdit({
+        before: ws, after: updated, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
+      }).catch(mapContractEditError);
+      return { workspace };
     }),
 
-  generateDocuments: tenantProcedure
+  generateDocuments: orgRoleProcedure("operator")
     .input(z.object({ contractId: z.string().min(1), kind: z.enum(DOC_KINDS) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -171,7 +213,7 @@ export const contractWorkspaceRouter = router({
       return generateContractDocument({ organizationId: orgId, contractId: input.contractId, kind: input.kind, correlationId: ctx.correlationId });
     }),
 
-  createAddendum: tenantProcedure
+  createAddendum: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
     .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(), requestOrigin: z.enum(ADDENDUM_ORIGINS).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -179,7 +221,7 @@ export const contractWorkspaceRouter = router({
       return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, correlationId: ctx.correlationId });
     }),
 
-  createApostille: tenantProcedure
+  createApostille: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
     .input(z.object({ contractId: z.string().min(1), kind: z.enum(APOSTILLE_KINDS), description: z.string().optional(), newValue: z.number().optional(), newManager: z.string().optional(), newInspector: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -188,7 +230,7 @@ export const contractWorkspaceRouter = router({
       return { apostille };
     }),
 
-  registerOccurrence: tenantProcedure
+  registerOccurrence: orgRoleProcedure("operator")
     .input(z.object({ contractId: z.string().min(1), description: z.string().min(1), occurredOn: z.string().optional(), attachments: z.array(z.string()).optional(), notes: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -197,7 +239,7 @@ export const contractWorkspaceRouter = router({
       return { occurrence };
     }),
 
-  requestLegalOpinion: tenantProcedure
+  requestLegalOpinion: orgRoleProcedure("operator")
     .input(z.object({ contractId: z.string().min(1), requestType: z.enum(OPINION_TYPES).optional(), documents: z.array(z.object({ documentId: z.string(), title: z.string().optional(), version: z.number().optional() })).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

@@ -6,6 +6,9 @@ import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
+import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
+import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -38,8 +41,13 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
     { processId, kind: "etp" }, { enabled: !!processId },
   );
+  // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const generateETP = trpc.procurementProcess.generateETP.useMutation({
+    // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
+    onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
     onSuccess: () => {
+      setConfirmOpen(false);
       rotateEtpKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "etp" });
@@ -49,9 +57,21 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   });
   const draft = reviewable.data?.draft ?? null;
 
-  const handleGenerate = () => {
+  // R5 — documento aprovado/oficial: sem regeneração direta (o botão fica indisponível e a tela explica).
+  const regenerationBlock = draft?.regenerationBlock ?? null;
+
+  const handleGenerate = (confirmReplace = false) => {
     if (!processId || !object.trim()) return;
-    generateETP.mutate({ processId, object: object.trim(), idempotencyKey: etpKey });
+    // Decisão PURA antes de qualquer chamada: bloqueado ⇒ nada; humano sem confirmação ⇒ diálogo (cancelar =
+    // zero efeito); só `mutate` chama o servidor. Sem justificativa textual obrigatória.
+    const plan = planRegeneration({ confirmed: confirmReplace, needsReplace: needsReplaceConfirmation(draft), block: regenerationBlock });
+    if (plan === "blocked") return;
+    if (plan === "confirm") { setConfirmOpen(true); return; }
+    generateETP.mutate({
+      processId, object: object.trim(), idempotencyKey: etpKey,
+      // Hash do rascunho que o humano VIU: a confirmação vale só para este conteúdo (divergente ⇒ CONFLICT).
+      expectedContentHash: draft?.contentHash, confirmReplace: confirmReplace || undefined,
+    });
   };
 
   return (
@@ -80,8 +100,8 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
         </label>
         <button
           type="button"
-          onClick={handleGenerate}
-          disabled={!processId || !object.trim() || generateETP.isPending}
+          onClick={() => handleGenerate()}
+          disabled={!processId || !object.trim() || generateETP.isPending || !!regenerationBlock}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {generateETP.isPending ? "Gerando..." : "Gerar ETP com base no processo"}
@@ -91,7 +111,8 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
             Selecione um processo para gerar o ETP.
           </p>
         )}
-        {generateETP.isError && (
+        <RegenerationBlockedNotice documentLabel="ETP" block={regenerationBlock} />
+        {generateETP.isError && !isHumanEditRefusal(generateETP.error?.message) && (
           <p className="mt-2 text-sm text-destructive">{generateETP.error?.message || "Falha ao gerar o ETP."}</p>
         )}
       </div>
@@ -121,6 +142,12 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
           </div>
         </div>
       )}
+
+      <RegenerationConfirmDialog
+        open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="ETP"
+        humanEdit={draft?.humanEdit ?? null} currentLength={draft?.content.length}
+        pending={generateETP.isPending} onConfirm={() => handleGenerate(true)}
+      />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="etp" reviewSnapshot={reviewable.data?.draft ?? null} />

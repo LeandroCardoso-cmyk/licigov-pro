@@ -141,8 +141,14 @@ export async function createProcessWithInitialEvent(
 export async function getProcess(id: string, orgId: number): Promise<ProcurementWorkspace | null> {
   const db = await getDb();
   if (!db) return null;
+  // Pilot Reset B2/B3 (0313): só a geração ATIVA é resolvida pelos caminhos de trabalho. Gerações superadas,
+  // descartadas, canceladas ou arquivadas são históricas e imutáveis — nenhuma mutação as alcança por aqui (o
+  // histórico é lido pelo router de lifecycle).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId))).limit(1);
+    .where(and(
+      eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId),
+      eq(procurementProcessesTable.lifecycleState, "active"),
+    )).limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];
   return {
@@ -160,7 +166,7 @@ export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ 
   // Ordenação determinística: updatedAt desc + id como desempate estável
   // (a Central depende de ordem previsível — Escopo 3 da PR B).
   const rows = await db.select().from(procurementProcessesTable)
-    .where(eq(procurementProcessesTable.organizationId, orgId))
+    .where(and(eq(procurementProcessesTable.organizationId, orgId), eq(procurementProcessesTable.lifecycleState, "active")))
     .orderBy(desc(procurementProcessesTable.updatedAt), asc(procurementProcessesTable.id)).limit(limit);
   return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
@@ -169,7 +175,7 @@ export async function updateProcessStage(id: string, orgId: number, stage: strin
   const db = await getDb();
   if (!db) return false;
   await db.update(procurementProcessesTable).set({ currentStage: stage, status, updatedAt: toDb(updatedAt) })
-    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId)));
+    .where(and(eq(procurementProcessesTable.id, id), eq(procurementProcessesTable.organizationId, orgId), eq(procurementProcessesTable.lifecycleState, "active")));
   return true;
 }
 
@@ -466,7 +472,10 @@ export async function insertGeneratedDocument(d: GeneratedDocument, executor?: P
   await db.insert(generatedDocumentsTable).values({
     id: d.id, organizationId: d.organizationId, processId: d.processId, kind: d.kind, title: d.title,
     content: d.content, status: d.status, sources: JSON.stringify(d.sources), modality: d.modality,
-    form: d.form, platform: d.platform, legalJustification: d.legalJustification, authorUserId: d.authorUserId,
+    form: d.form, platform: d.platform, legalJustification: d.legalJustification,
+    // PR-09 / R5 (0311) — critério de julgamento / regime de execução do Edital (null = requer revisão).
+    judgmentCriterion: d.judgmentCriterion ?? null, executionRegime: d.executionRegime ?? null,
+    authorUserId: d.authorUserId,
     lastSubstantiveActorUserId: d.lastSubstantiveActorUserId, lastSubstantiveAt: d.lastSubstantiveAt ? toDb(d.lastSubstantiveAt) : null,
     correlationId: d.correlationId, createdAt: toDb(d.createdAt), updatedAt: toDb(d.updatedAt),
   }).onDuplicateKeyUpdate({ set: { content: d.content, status: d.status, updatedAt: toDb(d.updatedAt) } });
@@ -530,7 +539,9 @@ function rowToGeneratedDocument(r: GeneratedDocRow): GeneratedDocument {
     title: r.title, content: r.content ?? "", status: r.status as GeneratedDocument["status"],
     sources: parseArr<string>(r.sources), modality: r.modality as GeneratedDocument["modality"],
     form: r.form as GeneratedDocument["form"], platform: r.platform as GeneratedDocument["platform"],
-    legalJustification: r.legalJustification ?? "", authorUserId: r.authorUserId ?? null,
+    legalJustification: r.legalJustification ?? "",
+    judgmentCriterion: r.judgmentCriterion ?? null, executionRegime: r.executionRegime ?? null,
+    authorUserId: r.authorUserId ?? null,
     lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
     lastSubstantiveAt: r.lastSubstantiveAt ? fromDb(r.lastSubstantiveAt) : null,
     correlationId: r.correlationId, createdAt: fromDb(r.createdAt), updatedAt: fromDb(r.updatedAt),
@@ -600,23 +611,36 @@ export async function applyDraftContentMutationTx(
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de salvar." });
   }
 
-  // No-op determinístico: mesmo conteúdo em bytes → não muda último ator nem cria ledger. Snapshot = atual.
-  if (newHash === currentHash) {
-    return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
-  }
-
   // C.4B.3B — EDIÇÃO HUMANA (human_edit) é CONTENT-ONLY: o usuário editou apenas o conteúdo, então
   // toda a demais metadata da LINHA BLOQUEADA (title/status/sources/modality/form/platform/
   // legalJustification/author/correlation/createdAt) é PRESERVADA; altera-se só content + último ator +
   // updatedAt. Regeneração/DFD-save (ai_regenerate/dfd_regenerate/dfd_manual_edit) mantêm a semântica
   // anterior (reconstroem o doc). Em ambos o originador é preservado.
   const contentOnly = input.operation === "human_edit";
+
+  // PR-09 (SEM-009) — parâmetros do Edital (modalidade/forma/plataforma/justificativa + critério de julgamento
+  // e regime de execução, 0311) são estado SUBSTANTIVO: uma troca explícita com conteúdo idêntico NÃO pode ser
+  // descartada como no-op.
+  const parametersChanged = !contentOnly && (
+    (existing.modality ?? null) !== (doc.modality ?? null) || (existing.form ?? null) !== (doc.form ?? null)
+    || (existing.platform ?? null) !== (doc.platform ?? null)
+    || (existing.legalJustification ?? "") !== (doc.legalJustification ?? "")
+    || (existing.judgmentCriterion ?? null) !== (doc.judgmentCriterion ?? null)
+    || (existing.executionRegime ?? null) !== (doc.executionRegime ?? null)
+  );
+
+  // No-op determinístico: mesmo conteúdo em bytes (e mesmos parâmetros) → não muda último ator nem cria
+  // ledger. Snapshot = atual.
+  if (newHash === currentHash && !parametersChanged) {
+    return { created: false, changed: false, document: rowToGeneratedDocument(existing) };
+  }
   await tx.update(generatedDocumentsTable).set(
     contentOnly
       ? { content: doc.content, lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now) }
       : {
           title: doc.title, content: doc.content, status: doc.status, sources: JSON.stringify(doc.sources),
           modality: doc.modality, form: doc.form, platform: doc.platform, legalJustification: doc.legalJustification,
+          judgmentCriterion: doc.judgmentCriterion ?? null, executionRegime: doc.executionRegime ?? null,
           lastSubstantiveActorUserId: actorUserId, lastSubstantiveAt: toDb(now), updatedAt: toDb(now),
         },
   ).where(and(
@@ -656,7 +680,14 @@ export async function listGeneratedDocuments(processId: string, orgId: number): 
 /** Carrega um documento gerado (com conteúdo) por processo + kind, tenant-scoped. */
 export async function getGeneratedDocumentByKind(
   processId: string, orgId: number, kind: string,
-): Promise<{ id: string; kind: string; title: string; content: string; status: string; sources: string[]; authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string } | null> {
+): Promise<{
+  id: string; kind: string; title: string; content: string; status: string; sources: string[];
+  authorUserId: number | null; lastSubstantiveActorUserId: number | null; updatedAt: string;
+  /** PR-09 (SEM-009) — parâmetros persistidos do Edital (null nos demais kinds / antes da decisão). */
+  modality: string | null; form: string | null; platform: string | null;
+  /** PR-09 / R5 (0311) — critério de julgamento / regime de execução persistidos (null = requer revisão). */
+  judgmentCriterion: string | null; executionRegime: string | null;
+} | null> {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(generatedDocumentsTable)
@@ -673,5 +704,35 @@ export async function getGeneratedDocumentByKind(
     sources: parseArr<string>(r.sources),
     authorUserId: r.authorUserId ?? null, lastSubstantiveActorUserId: r.lastSubstantiveActorUserId ?? null,
     updatedAt: fromDb(r.updatedAt),
+    modality: r.modality ?? null, form: r.form ?? null, platform: r.platform ?? null,
+    judgmentCriterion: r.judgmentCriterion ?? null, executionRegime: r.executionRegime ?? null,
   };
+}
+
+/**
+ * PR-09 (SEM-014) — ÚLTIMA linha do ledger append-only `generated_document_edits` do rascunho canônico
+ * (org + processo + kind; tenant-scoped). Descreve QUEM/COMO produziu o conteúdo vigente (operação + hash
+ * resultante) — base da recusa de regeneração sobre conteúdo humano. Read-only; sem DB ⇒ null.
+ */
+export async function getLatestDraftEdit(
+  processId: string, orgId: number, kind: string,
+): Promise<{ operation: string; actorUserId: number; newContentHash: string; createdAt: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({
+    operation: generatedDocumentEditsTable.operation,
+    actorUserId: generatedDocumentEditsTable.actorUserId,
+    newContentHash: generatedDocumentEditsTable.newContentHash,
+    createdAt: generatedDocumentEditsTable.createdAt,
+  }).from(generatedDocumentEditsTable)
+    .where(and(
+      eq(generatedDocumentEditsTable.organizationId, orgId),
+      eq(generatedDocumentEditsTable.processId, processId),
+      eq(generatedDocumentEditsTable.kind, kind),
+    ))
+    .orderBy(desc(generatedDocumentEditsTable.id))
+    .limit(1);
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { operation: r.operation, actorUserId: r.actorUserId, newContentHash: r.newContentHash, createdAt: fromDb(r.createdAt) };
 }

@@ -5167,7 +5167,56 @@ export const procurementProcessesTable = mysqlTable("procurement_processes", {
   correlationId:   varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:       datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:       datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-});
+  /**
+   * Pilot Reset B2/B3 (0313) — identidade de GERAÇÃO desacoplada do número administrativo.
+   * `lineage_id` (opaco) agrupa as gerações do mesmo processo; NULL = processo de geração única ainda não
+   * materializado (todas as linhas anteriores à 0313). `lifecycle_state`: active | superseded | discarded | cancelled
+   * | archived. Só a geração `active` é resolvida pelos caminhos de trabalho (getProcess/listProcesses); as demais são
+   * históricas e imutáveis. As colunas GERADAS garantem no banco: uma única geração ativa por linhagem e um único
+   * processo ATIVO por número (comparação binária) no órgão.
+   */
+  lineageId:          varchar("lineage_id", { length: 24 }),
+  generationNo:       int("generation_no").notNull().default(1),
+  lifecycleState:     varchar("lifecycle_state", { length: 20 }).notNull().default("active"),
+  lifecycleRevision:  int("lifecycle_revision").notNull().default(0),
+  supersedesProcessId: varchar("supersedes_process_id", { length: 20 }),
+  activeLineageKey:   varchar("active_lineage_key", { length: 24 }).generatedAlwaysAs(sql`if((\`lifecycle_state\` = 'active'),\`lineage_id\`,NULL)`, { mode: "stored" }),
+  activeNumberKey:    varchar("active_number_key", { length: 64 }).generatedAlwaysAs(sql`if((\`lifecycle_state\` = 'active'),nullif(\`process_number\`,''),NULL)`, { mode: "stored" }),
+}, (table) => [
+  unique("uq_pp_active_lineage").on(table.organizationId, table.activeLineageKey),
+  unique("uq_pp_active_number").on(table.organizationId, table.activeNumberKey),
+  index("idx_pp_lineage").on(table.organizationId, table.lineageId),
+]);
+
+/**
+ * Pilot Reset B2/B3 (0313) — ledger APPEND-ONLY do lifecycle do Processo Licitatório (correção de número, descarte,
+ * reset por nova geração, cancelamento, arquivamento). Nunca UPDATE/DELETE pela aplicação.
+ */
+export const procurementProcessLifecycleEventsTable = mysqlTable("procurement_process_lifecycle_events", {
+  id:                varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:    int("organization_id").notNull(),
+  lineageId:         varchar("lineage_id", { length: 24 }).notNull(),
+  processId:         varchar("process_id", { length: 20 }).notNull(),
+  action:            varchar("action", { length: 32 }).notNull(),
+  eventType:         varchar("event_type", { length: 32 }).notNull(),
+  fromState:         varchar("from_state", { length: 20 }).notNull(),
+  toState:           varchar("to_state", { length: 20 }).notNull(),
+  beforeJson:        text("before_json"),
+  afterJson:         text("after_json"),
+  reason:            text("reason").notNull(),
+  actorUserId:       int("actor_user_id").notNull(),
+  eligibilityDigest: varchar("eligibility_digest", { length: 64 }).notNull(),
+  revisionBefore:    int("revision_before").notNull(),
+  revisionAfter:     int("revision_after").notNull(),
+  idempotencyKey:    varchar("idempotency_key", { length: 128 }).notNull(),
+  requestHash:       varchar("request_hash", { length: 64 }).notNull(),
+  resultJson:        text("result_json"),
+  correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
+  createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_pple_org_idem_event").on(table.organizationId, table.idempotencyKey, table.eventType),
+  index("idx_pple_lineage").on(table.organizationId, table.lineageId),
+]);
 
 export const processStagesTable = mysqlTable("process_stages", {
   id:            varchar("id", { length: 20 }).notNull().primaryKey(),
@@ -5446,6 +5495,12 @@ export const generatedDocumentsTable = mysqlTable("generated_documents", {
   form:              varchar("form", { length: 20 }),
   platform:          varchar("platform", { length: 40 }),
   legalJustification: text("legal_justification"),
+  // PR-09 / R5 (0311) — parâmetros INSTITUCIONAIS complementares do Edital (critério de julgamento e regime
+  // de execução), persistidos junto de modality/form/platform no rascunho canônico (tenant-scoped pela linha).
+  // Texto livre bounded (o repositório não define lista fechada; espelha o legado edital_parameters
+  // varchar(100)). Nullable SEM default: NULL = "requer revisão" (nunca um valor inferido/backfill).
+  judgmentCriterion: varchar("judgment_criterion", { length: 100 }),
+  executionRegime:   varchar("execution_regime", { length: 100 }),
   // C.4B.1 — autor do rascunho (quem gerou/originou o conteúdo). Aditivo/nullable: rascunhos
   // anteriores à migração ficam sem autor conhecido. Base para a segregação de deveres na
   // promoção (revisor/emissor ≠ autor) e para a auditoria da emissão oficial.
@@ -5900,6 +5955,14 @@ export const requiredDocumentsTable = mysqlTable("required_documents", {
   documentReference: varchar("document_reference", { length: 500 }).notNull().default(""),
   correlationId:     varchar("correlation_id", { length: 64 }).notNull().default(""),
   createdAt:         datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+  // R7 / PR-16 (SEM-020, 0314) — evidência REAL do anexo (upload S3 pelo servidor) e de quem validou.
+  contentHash:       varchar("content_hash", { length: 64 }).notNull().default(""),
+  sizeBytes:         int("size_bytes").notNull().default(0),
+  mimeType:          varchar("mime_type", { length: 120 }).notNull().default(""),
+  attachedBy:        int("attached_by"),
+  attachedAt:        datetime("attached_at", { mode: "string", fsp: 3 }),
+  validatedBy:       int("validated_by"),
+  validatedAt:       datetime("validated_at", { mode: "string", fsp: 3 }),
 });
 
 export const ratificationsTable = mysqlTable("ratifications", {
@@ -5913,6 +5976,39 @@ export const ratificationsTable = mysqlTable("ratifications", {
   correlationId:  varchar("correlation_id", { length: 64 }).notNull().default(""),
   ratifiedAt:     datetime("ratified_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 });
+
+/**
+ * R4 / PR-07 (SEM-004) — ledger APPEND-ONLY de decisões institucionais (0312). Separa quem DECIDIU (autoridade
+ * declarada no ato) de quem REGISTROU (usuário autenticado). Revisão monotônica por assunto (UNIQUE) + superação
+ * explícita; idempotência por (órgão, chave). Nunca UPDATE/DELETE pela aplicação. Competência jurídica NÃO validada
+ * (`authority_validation` = NOT_VALIDATED_POLICY_PENDING até a política da R4.2).
+ */
+export const institutionalDecisionsTable = mysqlTable("institutional_decisions", {
+  id:                   varchar("id", { length: 24 }).notNull().primaryKey(),
+  organizationId:       int("organization_id").notNull(),
+  subjectType:          varchar("subject_type", { length: 48 }).notNull(),
+  subjectId:            varchar("subject_id", { length: 64 }).notNull(),
+  decisionType:         varchar("decision_type", { length: 48 }).notNull(),
+  outcome:              varchar("outcome", { length: 48 }).notNull(),
+  revision:             int("revision").notNull(),
+  supersedesDecisionId: varchar("supersedes_decision_id", { length: 24 }),
+  decidedByName:        varchar("decided_by_name", { length: 255 }).notNull(),
+  decidedByRole:        varchar("decided_by_role", { length: 255 }).notNull(),
+  decidedByUserId:      int("decided_by_user_id"),
+  decidedAt:            varchar("decided_at", { length: 10 }).notNull(),
+  basisReference:       varchar("basis_reference", { length: 500 }).notNull(),
+  reason:               text("reason").notNull(),
+  evidence:             text("evidence"),
+  recordedByUserId:     int("recorded_by_user_id").notNull(),
+  authorityValidation:  varchar("authority_validation", { length: 40 }).notNull().default("NOT_VALIDATED_POLICY_PENDING"),
+  correlationId:        varchar("correlation_id", { length: 64 }).notNull().default(""),
+  idempotencyKey:       varchar("idempotency_key", { length: 128 }).notNull(),
+  requestHash:          varchar("request_hash", { length: 64 }).notNull(),
+  recordedAt:           datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+}, (table) => [
+  unique("uq_idc_subject_revision").on(table.organizationId, table.subjectType, table.subjectId, table.revision),
+  unique("uq_idc_org_idempotency").on(table.organizationId, table.idempotencyKey),
+]);
 
 export const generatedPublicationsTable = mysqlTable("generated_publications", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),
@@ -5948,7 +6044,17 @@ export const contractWorkspacesTable = mysqlTable("contract_workspaces", {
   createdBy:      int("created_by"),
   createdAt:      datetime("created_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
   updatedAt:      datetime("updated_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
-});
+  /**
+   * R3 / PR-06 (0310) — número oficial NORMALIZADO (só trim das pontas), coluna GERADA pelo banco (STORED, colação
+   * binária utf8mb4_bin, NULL quando o número é vazio). Nunca gravada pela aplicação: acompanha `contract_number` em
+   * QUALQUER escrita (criação, edição, upsert legado). Índice NÃO único: a unicidade "por órgão, qualquer origem" é a
+   * decisão humana pendente CONTRACT_NUMBER_SCOPE (HD-15) — ver drizzle/policy-pending/. Hoje só alimenta a
+   * observabilidade de colisão entre origens.
+   */
+  normalizedNumber: varchar("normalized_number", { length: 80 }).generatedAlwaysAs(sql`nullif(trim(\`contract_number\`),'')`, { mode: "stored" }),
+}, (table) => [
+  index("idx_ctw_org_normalized_number").on(table.organizationId, table.normalizedNumber),
+]);
 
 export const contractWsDocumentsTable = mysqlTable("contract_ws_documents", {
   id:             varchar("id", { length: 20 }).notNull().primaryKey(),

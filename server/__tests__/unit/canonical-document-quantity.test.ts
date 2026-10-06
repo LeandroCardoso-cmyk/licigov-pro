@@ -93,11 +93,13 @@ describe("P0.3 — ETP consome a quantidade PREVISTA (projeção compartilhada)"
     expect(etp.promptContext).toContain("1 Item(ns) Inteligente(s) aprovado(s) da Pesquisa NÃO vinculado(s)");
   });
 
-  it("ETP legado (sem Itens da contratação): prompt e snapshot inalterados (quantidade da cotação, sem chaves novas)", () => {
+  // R6 / PR-13 (SEM-008): o ETP legado continua permitido, mas a quantidade é DITA como da cotação (não necessidade).
+  it("ETP legado (sem Itens da contratação): quantidade rotulada como da cotação; snapshot sem chaves novas", () => {
     const etp = doc("etp", null, [ii("ii1", "Detergente", 3, 10_000)]);
     expect(etp.quantitySource).toBe("legacy");
+    expect(etp.legacyQuotedItemCount).toBe(1);
     expect(etp.promptContext).toContain("## Itens Inteligentes aprovados (1)");
-    expect(etp.promptContext).toContain("Detergente — 3 UN · 3 cotação(ões)");
+    expect(etp.promptContext).toContain("Detergente — 3 UN (quantidade da cotação — não confirmada como necessidade) · 3 cotação(ões)");
     expect(JSON.stringify(etp.snapshot)).not.toMatch(/"qs"|"lot"/);
   });
 });
@@ -158,11 +160,17 @@ describe("P0.3 — Edital consome a quantidade PREVISTA (MESMA projeção)", () 
     expect(b.authoritativeBlock).toContain("| 1 | Detergente | 60 | UN | 100,00 | 6.000,00 |");
   });
 
-  it("EDITAL legado (sem Itens da contratação): mesma fórmula de digest e quadro (quantidade da cotação)", () => {
+  // R6 / PR-13 (SEM-008, INV-09): o legado já não "afirma" a quantidade da cotação — o contexto a expõe como
+  // `legacyQuotedItemCount` (o serviço bloqueia TR/Edital: CANONICAL_ITEMS_REQUIRED) e o quadro a rotula como cotada.
+  it("EDITAL legado (sem Itens da contratação): quantidade da cotação ROTULADA e sinalizada para o bloqueio", () => {
     const legacy = [{ id: "ii1", description: "Detergente", quantity: 3, unit: "UN", averagePrice: 100, suggestedCATMAT: null, quoteCount: 3, sourceState: "current" }];
     const ed = edital(null, legacy);
     expect(ed.quantitySource).toBe("legacy");
     expect(ed.canonical).toBeNull();
+    expect(ed.legacyQuotedItemCount).toBe(1);
+    expect(ed.authoritativeBlock).toContain("Qtd. cotada (não confirmada)");
+    expect(ed.authoritativeBlock).toContain("não é a quantidade da contratação");
+    expect(ed.authoritativeBlock).not.toContain("Valor estimado global");
     expect(ed.authoritativeBlock).toContain("| 1 | Detergente | 3 | UN | 100,00 | 300,00 |");
     expect(ed.lineageMarkers).not.toContain("qtd:prevista");
     expect(ed.promptContext).toContain("## Itens aprovados (1)");

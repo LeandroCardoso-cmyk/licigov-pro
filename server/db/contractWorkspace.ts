@@ -7,8 +7,10 @@
  * Nomes namespaced para não colidir com o repo legado `server/db/contracts.ts`.
  */
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
+import { CONTRACT_ALREADY_EXISTS } from "../domain/contractCreation";
 import {
   contractWorkspacesTable, contractWsDocumentsTable, contractAddendaTable,
   contractWsApostillesTable, contractOccurrencesTable, importedContractsTable,
@@ -48,20 +50,85 @@ function fromDbDatetime(v: string): string {
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
+/** ER_DUP_ENTRY (1062) do MySQL/MariaDB, inclusive encapsulado pelo driver/drizzle. */
+function isDuplicateKeyError(err: unknown): boolean {
+  let x: unknown = err;
+  for (let i = 0; i < 4 && x && typeof x === "object"; i++) {
+    const e = x as { code?: string; errno?: number; cause?: unknown };
+    if (e.code === "ER_DUP_ENTRY" || e.errno === 1062) return true;
+    x = e.cause;
+  }
+  return false;
+}
+
+/**
+ * Upsert legado — usado SÓ pela edição (`updateContract`, escopo da PR-12). R3 / PR-06 (0310): a coluna gerada
+ * `normalized_number` acompanha `contract_number`; renomear para um número que outro contrato da organização já usa
+ * viola UNIQUE(organization_id, normalized_number) — o statement falha INTEIRO (nada gravado) e vira CONFLICT governado
+ * `CONTRACT_ALREADY_EXISTS` em vez de 500.
+ */
 export async function insertContractWorkspace(ws: ContractWorkspace): Promise<ContractWorkspace | null> {
   const db = await getDb();
   if (!db) return null;
-  await db.insert(contractWorkspacesTable).values({
-    id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
-    contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
-    term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
-    correlationId: ws.correlationId, createdBy: ws.createdBy,
-    createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
-  }).onDuplicateKeyUpdate({ set: {
-    contractor: ws.contractor, object: ws.object, value: String(ws.value), term: ws.term, status: ws.status,
-    manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: toDbDatetime(ws.updatedAt),
-  } });
+  try {
+    await db.insert(contractWorkspacesTable).values({
+      id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
+      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
+      correlationId: ws.correlationId, createdBy: ws.createdBy,
+      createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
+    }).onDuplicateKeyUpdate({ set: {
+      contractor: ws.contractor, object: ws.object, value: String(ws.value), term: ws.term, status: ws.status,
+      manager: ws.manager, inspector: ws.inspector, contractNumber: ws.contractNumber, updatedAt: toDbDatetime(ws.updatedAt),
+    } });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Já existe outro contrato com o número "${ws.contractNumber}" nesta organização. O número do contrato é único na organização, qualquer que seja a origem; nada foi alterado (${CONTRACT_ALREADY_EXISTS}).`,
+    });
+  }
   return ws;
+}
+
+/**
+ * R3 / PR-06 (SEM-007) — CRIAÇÃO do contrato: INSERT puro, NUNCA upsert. Sobre a PRIMARY KEY existente
+ * hash(org, origem, número) devolve "duplicate" sem escrever nada; o serviço decide convergir ou CONFLICT.
+ * (`insertContractWorkspace`, o upsert, segue restrito à edição `updateContract` — escopo da PR-12.) Sem DB ⇒ null.
+ */
+export async function insertNewContractWorkspace(ws: ContractWorkspace): Promise<"inserted" | "duplicate" | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    await db.insert(contractWorkspacesTable).values({
+      id: ws.id, organizationId: ws.organizationId, originType: ws.originType, originProcess: ws.originProcess,
+      contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+      term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector,
+      correlationId: ws.correlationId, createdBy: ws.createdBy,
+      createdAt: toDbDatetime(ws.createdAt), updatedAt: toDbDatetime(ws.updatedAt),
+    });
+    return "inserted";
+  } catch (err) {
+    if (isDuplicateKeyError(err)) return "duplicate";
+    throw err;
+  }
+}
+
+/**
+ * R3 / PR-06 — OUTRO contrato da organização com o MESMO número oficial normalizado (qualquer origem). Só leitura de
+ * OBSERVABILIDADE enquanto CONTRACT_NUMBER_SCOPE (HD-15) estiver pendente — não decide criação. Coluna gerada
+ * `normalized_number` (utf8mb4_bin — exata, índice idx_ctw_org_normalized_number). Sem DB ⇒ null (degrada).
+ */
+export async function findContractByNormalizedNumber(orgId: number, normalizedNumber: string, excludeId?: string): Promise<ContractWorkspace | null> {
+  const db = await getDb();
+  if (!db || !normalizedNumber) return null;
+  const rows = await db.select({ id: contractWorkspacesTable.id }).from(contractWorkspacesTable)
+    .where(and(
+      eq(contractWorkspacesTable.organizationId, orgId),
+      eq(contractWorkspacesTable.normalizedNumber, normalizedNumber),
+      ...(excludeId ? [ne(contractWorkspacesTable.id, excludeId)] : []),
+    )).limit(1);
+  return rows.length > 0 ? getContractWorkspace(rows[0].id, orgId) : null;
 }
 
 export async function getContractWorkspace(id: string, orgId: number): Promise<ContractWorkspace | null> {
@@ -78,6 +145,46 @@ export async function getContractWorkspace(id: string, orgId: number): Promise<C
     activeCopilots: ["juridico", "contratos", "agente_contratacao"], correlationId: r.correlationId,
     createdBy: r.createdBy ?? null, createdAt: fromDbDatetime(r.createdAt), updatedAt: fromDbDatetime(r.updatedAt),
   };
+}
+
+/**
+ * SEM-023 — gravação da edição do contrato por COMPARE-AND-SET da revisão (`updated_at`, DATETIME(3)).
+ * Numa ÚNICA sentença SQL:
+ *   UPDATE contract_workspaces SET contract_number=?, contractor=?, object=?, value=?, term=?, status=?,
+ *          manager=?, inspector=?, updated_at=? WHERE id=? AND organization_id=? AND updated_at=?
+ * Grava somente se a revisão persistida ainda for `expectedUpdatedAt`; `ws.updatedAt` precisa ser
+ * estritamente posterior (ver `nextContractRevision`), então de dois salvamentos concorrentes com a
+ * mesma revisão exatamente um casa. Nunca insere (não é upsert) e nunca toca id/origem/tenant/createdBy.
+ * Retorna `false` quando 0 linhas casam (revisão mudou em paralelo, ou contrato inexistente no tenant):
+ * nesse caso NADA foi gravado. Degrada sem DB (`false`).
+ */
+export async function compareAndSetContractWorkspace(ws: ContractWorkspace, expectedUpdatedAt: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  let result: unknown;
+  try {
+    result = await db.update(contractWorkspacesTable)
+      .set({
+        contractNumber: ws.contractNumber, contractor: ws.contractor, object: ws.object, value: String(ws.value),
+        term: ws.term, status: ws.status, manager: ws.manager, inspector: ws.inspector, updatedAt: toDbDatetime(ws.updatedAt),
+      })
+      .where(and(
+        eq(contractWorkspacesTable.id, ws.id),
+        eq(contractWorkspacesTable.organizationId, ws.organizationId),
+        eq(contractWorkspacesTable.updatedAt, toDbDatetime(expectedUpdatedAt)),
+      ));
+  } catch (err) {
+    // Integração PR-06 × PR-12: renomear para um número já usado por outro contrato da organização viola
+    // UNIQUE(organization_id, normalized_number) (0310). O UPDATE falha INTEIRO (nada gravado) ⇒ CONFLICT
+    // governado `CONTRACT_ALREADY_EXISTS` (mesma recusa que o upsert legado emitia), nunca 500.
+    if (!isDuplicateKeyError(err)) throw err;
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Já existe outro contrato com o número "${ws.contractNumber}" nesta organização. O número do contrato é único na organização, qualquer que seja a origem; nada foi alterado (${CONTRACT_ALREADY_EXISTS}).`,
+    });
+  }
+  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+  return (header?.affectedRows ?? 0) > 0;
 }
 
 /**

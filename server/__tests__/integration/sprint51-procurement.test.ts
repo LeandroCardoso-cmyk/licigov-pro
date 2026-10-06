@@ -1,4 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// HD-01 (opção A) — a geração NOVA de TR/Edital exige Itens da contratação. Este arquivo roda SEM banco, então o contexto
+// do Edital recebe um estado canônico válido (sem pendências); o bloqueio sem Itens é provado em
+// `hd01-canonical-items-required.test.ts` e nos smokes MySQL.
+vi.mock("../../services/authoring/editalContext", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../../services/authoring/editalContext")>();
+  return {
+    ...real,
+    resolveEditalSources: async (...args: Parameters<typeof real.resolveEditalSources>) => ({
+      ...(await real.resolveEditalSources(...args)),
+      canonical: { contextDigest: "c".repeat(64), missingPlannedQuantity: [], unlinkedApprovedItemCount: 0 },
+      legacyQuotedItemCount: 0,
+    }),
+  };
+});
 
 // Domain
 import {

@@ -5,10 +5,14 @@
  * — nunca abre um Processo Licitatório diretamente. A Caixa lista o que o
  * Institutional Request Engine encaminhou para o domínio parecer_juridico; a
  * resposta retorna automaticamente à origem. tenantProcedure, multi-tenant.
+ *
+ * NEW-007 — autoridade CONTEXTUAL: leituras tenant-scoped; toda mutação exige operator+; e as ações próprias
+ * do procurador (elaborar, editar, assinar, devolver, arquivar) exigem ATRIBUIÇÃO válida do ator ao workspace
+ * (legalOpinionAuthorityService). Papel (owner/admin/manager) ou admin de plataforma não substitui a atribuição.
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { listPendingForDomain } from "../db/institutionalRequests";
 import {
   listLegalOpinionWorkspaces, getLegalOpinionWorkspace, listLawyerAssignments,
@@ -17,6 +21,9 @@ import {
   openWorkspaceFromRequest, loadWorkspaceContext, loadWorkspaceReasoning, createOpinionDraft,
   updateOpinionDraft, signOpinion, returnOpinion, archiveWorkspace,
 } from "../services/legalOpinionWorkspaceService";
+import {
+  assertLegalOpinionAssignee, assertLegalOpinionReceiver, type LegalOpinionLawyerAction,
+} from "../services/legalOpinionAuthorityService";
 
 const DOMAIN = "parecer_juridico" as const;
 const OPINION_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"] as const;
@@ -26,6 +33,24 @@ const SIGNATURE_METHODS = ["manual", "icp_brasil", "gov_br", "certificado_a1"] a
 async function requireWorkspace(id: string, orgId: number) {
   const ws = await getLegalOpinionWorkspace(id, orgId);
   if (!ws) throw new TRPCError({ code: "NOT_FOUND", message: "Workspace de parecer não encontrado nesta organização." });
+  return ws;
+}
+
+/**
+ * NEW-007 — piso de papel de TODA mutação do parecer (viewer nunca muta). Não confere autoridade jurídica:
+ * as ações próprias do procurador exigem, além disso, atribuição válida (`requireAssignedLawyer`).
+ */
+const legalMutationProcedure = orgRoleProcedure("operator");
+
+/**
+ * NEW-007 — workspace do TENANT (cross-tenant ⇒ NOT_FOUND idêntico ao inexistente) + ATRIBUIÇÃO VÁLIDA do ator
+ * (FORBIDDEN `LEGAL_OPINION_ASSIGNMENT_REQUIRED`). Roda ANTES de qualquer escrita/evento/IA/idempotência.
+ */
+async function requireAssignedLawyer(
+  workspaceId: string, orgId: number, actorUserId: number, correlationId: string, action: LegalOpinionLawyerAction,
+) {
+  const ws = await requireWorkspace(workspaceId, orgId);
+  await assertLegalOpinionAssignee({ workspace: ws, actorUserId, action, correlationId });
   return ws;
 }
 
@@ -51,13 +76,17 @@ export const legalOpinionWorkspaceRouter = router({
       return { workspaces, total: workspaces.length };
     }),
 
-  /** Recebe uma solicitação da caixa e abre o Workspace do Procurador. */
-  receiveRequest: tenantProcedure
+  /**
+   * Recebe uma solicitação da caixa e abre o Workspace do Procurador. NEW-007: operator+ com membership REAL
+   * no tenant; receber DESIGNA o ator como procurador (atribuição exclusiva, auditável — ver service).
+   */
+  receiveRequest: legalMutationProcedure
     .input(z.object({ requestId: z.string().min(1), sector: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      await assertLegalOpinionReceiver({ organizationId: orgId, actorUserId: ctx.user!.id, requestId: input.requestId, correlationId: ctx.correlationId });
       const workspace = await openWorkspaceFromRequest({
-        requestId: input.requestId, organizationId: orgId, lawyerId: ctx.user.id,
+        requestId: input.requestId, organizationId: orgId, lawyerId: ctx.user!.id,
         sector: input.sector, correlationId: ctx.correlationId,
       });
       return { workspace };
@@ -95,7 +124,7 @@ export const legalOpinionWorkspaceRouter = router({
     }),
 
   /** Cria o rascunho do parecer (editável, nunca automático). */
-  createDraft: tenantProcedure
+  createDraft: legalMutationProcedure
     .input(z.object({
       workspaceId: z.string().min(1),
       opinionType: z.enum(OPINION_TYPES),
@@ -109,9 +138,9 @@ export const legalOpinionWorkspaceRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireWorkspace(input.workspaceId, orgId);
+      await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "create_draft");
       const result = await createOpinionDraft({
-        workspaceId: input.workspaceId, organizationId: orgId, author: ctx.user.id,
+        workspaceId: input.workspaceId, organizationId: orgId, author: ctx.user!.id,
         opinionType: input.opinionType, report: input.report, foundation: input.foundation,
         conclusion: input.conclusion, conclusionType: input.conclusionType ?? null,
         recommendations: input.recommendations, reservations: input.reservations,
@@ -121,9 +150,11 @@ export const legalOpinionWorkspaceRouter = router({
     }),
 
   /** Atualiza o conteúdo do parecer, gerando nova versão. */
-  updateOpinion: tenantProcedure
+  updateOpinion: legalMutationProcedure
     .input(z.object({
       workspaceId: z.string().min(1),
+      /** R5 / PR-10 — versão que o editor carregou (CAS). Ausente = cliente antigo (o CAS de persistência continua). */
+      expectedVersion: z.number().int().min(1).optional(),
       report: z.string().optional(),
       foundation: z.string().optional(),
       conclusion: z.string().optional(),
@@ -134,24 +165,24 @@ export const legalOpinionWorkspaceRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireWorkspace(input.workspaceId, orgId);
-      const { workspaceId, ...rest } = input;
+      await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "update_opinion");
+      const { workspaceId, expectedVersion, ...rest } = input;
       const patch = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
-      const draft = await updateOpinionDraft({
-        workspaceId, organizationId: orgId, author: ctx.user.id, patch, correlationId: ctx.correlationId,
+      const result = await updateOpinionDraft({
+        workspaceId, organizationId: orgId, author: ctx.user!.id, patch, correlationId: ctx.correlationId, expectedVersion,
       });
-      return { draft };
+      return { draft: result.draft, changed: result.changed };
     }),
 
   /** Assina o parecer (apenas MANUAL implementado nesta fase). */
-  signOpinion: tenantProcedure
+  signOpinion: legalMutationProcedure
     .input(z.object({ workspaceId: z.string().min(1), method: z.enum(SIGNATURE_METHODS).optional(), idempotencyKey: z.string().min(8).max(64) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireWorkspace(input.workspaceId, orgId);
+      await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "sign_opinion");
       try {
         const result = await signOpinion({
-          workspaceId: input.workspaceId, organizationId: orgId, signedBy: ctx.user.id,
+          workspaceId: input.workspaceId, organizationId: orgId, signedBy: ctx.user!.id,
           method: input.method, idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
         });
         return result;
@@ -163,14 +194,14 @@ export const legalOpinionWorkspaceRouter = router({
     }),
 
   /** Devolve o parecer à origem via Institutional Request Engine. */
-  returnOpinion: tenantProcedure
+  returnOpinion: legalMutationProcedure
     .input(z.object({ workspaceId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireWorkspace(input.workspaceId, orgId);
+      await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "return_opinion");
       try {
         const result = await returnOpinion({
-          workspaceId: input.workspaceId, organizationId: orgId, responder: ctx.user.id, correlationId: ctx.correlationId,
+          workspaceId: input.workspaceId, organizationId: orgId, responder: ctx.user!.id, correlationId: ctx.correlationId,
         });
         return { success: true, workspaceId: result.workspace.id, responseId: result.responseId, status: "RETURNED" as const };
       } catch (e) {
@@ -179,12 +210,12 @@ export const legalOpinionWorkspaceRouter = router({
     }),
 
   /** Arquiva o parecer. */
-  archiveOpinion: tenantProcedure
+  archiveOpinion: legalMutationProcedure
     .input(z.object({ workspaceId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireWorkspace(input.workspaceId, orgId);
-      const workspace = await archiveWorkspace({ workspaceId: input.workspaceId, organizationId: orgId, userId: ctx.user.id });
+      await requireAssignedLawyer(input.workspaceId, orgId, ctx.user!.id, ctx.correlationId, "archive_opinion");
+      const workspace = await archiveWorkspace({ workspaceId: input.workspaceId, organizationId: orgId, userId: ctx.user!.id });
       return { success: true, workspaceId: workspace.id, status: "ARCHIVED" as const };
     }),
 

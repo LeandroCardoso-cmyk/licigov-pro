@@ -19,10 +19,24 @@ const fakeTx = { __tx: true };
 
 vi.mock("../../services/kernelAccessService", () => ({ assertKernelAccess: vi.fn() }));
 
-// Processo LEGADO (sem Itens da contratação): o gate canônico compartilhado de ETP/TR/Edital lê a lista
-// (vazia ⇒ modo legado inalterado).
-vi.mock("../../db/procurementItems", () => ({ listProcurementItems: vi.fn(async () => []) }));
+// R6 / PR-13 (SEM-008): sem Itens da contratação o Edital é fail-closed (CANONICAL_ITEMS_REQUIRED). O processo
+// deste teste tem UM item da contratação ATIVO (quantidade PREVISTA 100, decisão humana) vinculado ao Item
+// Inteligente aprovado "Papel A4" — o gate canônico compartilhado projeta a necessidade a partir dele.
+vi.mock("../../db/procurementItems", () => ({ listProcurementItems: vi.fn(async () => [{ status: "active" }]) }));
+vi.mock("../../services/canonicalContextService", () => ({
+  resolveProcurementContext: vi.fn(async () => ({
+    digest: "ctx-digest-edital-p0",
+    lots: [],
+    items: [{
+      key: "pi-papel-a4", description: { value: "Papel A4" }, unit: { value: "resma" },
+      plannedQuantity: { status: "informed", value: 100 }, lotId: null,
+      priceContext: { intelligentItemIds: ["i1"], unitReferencePriceCents: 2550 },
+    }],
+  })),
+}));
 
+// R5 — a regeneração consulta o ledger de emissão oficial (autoridade); neste teste mockado nada foi emitido.
+vi.mock("../../db/officialDocumentPromotions", () => ({ getLatestOfficialPromotion: vi.fn(async () => null), insertOfficialPromotion: vi.fn(async () => {}) }));
 vi.mock("../../db/connection", () => ({
   getDb: vi.fn(async () => ({ transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx) })),
 }));
