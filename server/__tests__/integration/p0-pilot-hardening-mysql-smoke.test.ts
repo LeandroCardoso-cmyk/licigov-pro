@@ -62,7 +62,7 @@ import {
   insertProcess, listIntelligentItems, transitionItemStatusCAS, getGeneratedDocumentByKind, listProcessTimeline,
 } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
-import { confirmCanonicalItemsFromResearch } from "../helpers/canonicalItems";
+import { confirmCanonicalItemsFromResearch, createCanonicalManualItem } from "../helpers/canonicalItems";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -501,6 +501,8 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     expect(h.map((e) => e.eventType)).toEqual(["extracted", "reviewed", "approved", "promoted"]);
     expect(h[1].content).toContain("Garantia de 12 meses.");
     let prompt = "";
+    // HD-01: o Edital NOVO exige Itens da contratação (TR importado não dispensa a decisão humana de quantidade prevista).
+    await createCanonicalManualItem({ organizationId: ORG, processId: pid, actorUserId: U1, description: "Cadeira giratória", plannedQuantity: 10 });
     await generateNotice({ organizationId: ORG, processId: pid, object: "Aquisição de cadeiras", modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "gb", idempotencyKey: `gb-ed-${pid}`, actorUserId: U2, invoke: async (p) => { prompt = p; return buildMockProviderAuthoring("edital"); } });
     expect(prompt).toContain("20 dias corridos");
     expect(prompt).toContain("Garantia de 12 meses.");

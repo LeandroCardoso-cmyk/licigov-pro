@@ -53,7 +53,7 @@ import { buildMockProviderAuthoring } from "../../services/authoring/structuredA
 import { insertProcess, getGeneratedDocumentByKind, listIntelligentItems, transitionItemStatusCAS } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { draftContentHash } from "../../domain/generatedDocument";
-import { confirmCanonicalItemsFromResearch } from "../helpers/canonicalItems";
+import { confirmCanonicalItemsFromResearch, createCanonicalManualItem } from "../helpers/canonicalItems";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -411,6 +411,8 @@ describe.skipIf(!DB)("P0 PILOTO — fundação Document Intake + Pesquisa → It
     expect((await getAuthoringSourceState({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de cadeiras" })).state).toBe("imported");
 
     let edPrompt = "";
+    // HD-01: o Edital NOVO exige Itens da contratação (TR importado não dispensa a decisão humana de quantidade prevista).
+    await createCanonicalManualItem({ organizationId: ORG, processId: pid, actorUserId: U_OPERATOR, description: "Cadeira giratória", plannedQuantity: 10 });
     await generateNotice({ organizationId: ORG, processId: pid, object: "Aquisição de cadeiras", modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "gb", idempotencyKey: "gb-ed", actorUserId: U_OTHER, invoke: async (p) => { edPrompt = p; return buildMockProviderAuthoring("edital"); } });
     expect(edPrompt).toContain("20 dias corridos");          // prazo do TR importado reaproveitado
     expect(edPrompt).toContain("[REVISAR: Documento de Formalização da Demanda (DFD) não localizado"); // ausente → sinalizado

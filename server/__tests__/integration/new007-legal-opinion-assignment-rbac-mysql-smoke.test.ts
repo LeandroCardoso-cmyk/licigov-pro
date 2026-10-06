@@ -29,7 +29,7 @@ vi.mock("../../services/aiExecutionEngine", async (orig) => {
 
 import { requestInstitutionalReview } from "../../services/institutionalRequestService";
 import {
-  LEGAL_OPINION_ASSIGNMENT_REQUIRED, LEGAL_OPINION_ALREADY_ASSIGNED, LEGAL_OPINION_MEMBERSHIP_REQUIRED,
+  LEGAL_OPINION_ASSIGNMENT_REQUIRED, LEGAL_OPINION_ALREADY_ASSIGNED, LEGAL_OPINION_MEMBERSHIP_REQUIRED, LEGAL_OPINION_RECEIVE_RESUME_UNSAFE,
 } from "../../services/legalOpinionAuthorityService";
 
 const DB = process.env.DATABASE_URL;
@@ -361,5 +361,102 @@ describe.skipIf(!DB)("NEW-007 — legalOpinionWorkspace: autoridade por ATRIBUI�
     expect(signedRows).toEqual([{ signed: 1, signed_by: U.lawyer }]);
     const ownerKeys = await one<{ n: number }>("SELECT COUNT(*) AS n FROM idempotency_keys WHERE organizationId = ? AND userId = ?", [ORG_A, U.owner]);
     expect(Number(ownerKeys[0].n)).toBe(0); // recusa não consome/grava chave
+  }, 60_000);
+  // ── F1 — recebimento CONVERGENTE: o retry do MESMO procurador retoma um recebimento parcial (MySQL real) ──────────
+  /** Rebobina o recebimento já concluído até o estado deixado por uma execução interrompida (claim persistido). */
+  async function rewindReceive(requestId: string, workspaceId: string, to: "after_claim" | "after_received_stage") {
+    await conn.query("DELETE FROM legal_opinion_history WHERE organization_id = ? AND workspace_id = ? AND event_type IN ('received', 'under_analysis')", [ORG_A, workspaceId]);
+    if (to === "after_claim") {
+      await conn.query("DELETE FROM legal_opinion_history WHERE organization_id = ? AND workspace_id = ?", [ORG_A, workspaceId]);
+      await conn.query("UPDATE legal_opinion_workspaces SET current_stage = 'INBOX', status = 'na_caixa' WHERE id = ? AND organization_id = ?", [workspaceId, ORG_A]);
+      await conn.query("DELETE FROM request_timelines WHERE organization_id = ? AND request_id = ?", [ORG_A, requestId]);
+      await conn.query("UPDATE institutional_requests SET status = 'PENDING', assigned_to = NULL WHERE id = ? AND organization_id = ?", [requestId, ORG_A]);
+    } else {
+      await conn.query("UPDATE legal_opinion_workspaces SET current_stage = 'RECEIVED', status = 'recebido' WHERE id = ? AND organization_id = ?", [workspaceId, ORG_A]);
+      await conn.query("INSERT INTO legal_opinion_history (id, organization_id, workspace_id, event_order, event_type, actor, summary, ref_id, correlation_id) VALUES (?, ?, ?, 1, 'received', ?, 'x', '', 'c') ON DUPLICATE KEY UPDATE summary = 'x'",
+        [`f1rc${RUN}${workspaceId}`.slice(0, 20), ORG_A, workspaceId, String(U.lawyer)]);
+    }
+  }
+  const state = async (requestId: string, workspaceId: string) => ({
+    ws: (await one<{ current_stage: string; assigned_lawyer: number }>("SELECT current_stage, assigned_lawyer FROM legal_opinion_workspaces WHERE id = ?", [workspaceId]))[0],
+    req: (await one<{ status: string; assigned_to: number }>("SELECT status, assigned_to FROM institutional_requests WHERE id = ? AND organization_id = ?", [requestId, ORG_A]))[0],
+    hist: (await one<{ event_type: string }>("SELECT event_type FROM legal_opinion_history WHERE workspace_id = ? ORDER BY event_order", [workspaceId])).map(h => h.event_type),
+    tl: (await one<{ event_type: string }>("SELECT event_type FROM request_timelines WHERE request_id = ? ORDER BY event_order", [requestId])).map(h => h.event_type),
+    asg: Number((await one<{ n: number }>("SELECT COUNT(*) AS n FROM lawyer_assignments WHERE workspace_id = ?", [workspaceId]))[0].n),
+  });
+
+  it("F1-M1 claim persistido e NADA mais (workspace preso em INBOX, Engine PENDING) ⇒ retry do mesmo procurador CONVERGE", async () => {
+    const req = await newRequest(ORG_A);
+    const c = await lo(U.lawyer);
+    const { workspace } = await c.receiveRequest({ requestId: req });
+    await rewindReceive(req, workspace.id, "after_claim");
+    expect((await state(req, workspace.id)).ws.current_stage).toBe("INBOX");
+
+    const again = await c.receiveRequest({ requestId: req });
+    expect(again.workspace).toMatchObject({ id: workspace.id, currentStage: "UNDER_ANALYSIS", assignedLawyer: U.lawyer });
+    const s = await state(req, workspace.id);
+    expect(s.ws).toEqual({ current_stage: "UNDER_ANALYSIS", assigned_lawyer: U.lawyer });
+    expect(s.req).toEqual({ status: "IN_PROGRESS", assigned_to: U.lawyer });
+    expect(s.hist).toEqual(["workspace_created", "received", "under_analysis"]);
+    expect(s.tl).toEqual(["received", "in_progress"]);
+    expect(s.asg).toBe(1); // atribuição preservada (não recriada)
+    // novo retry: replay sem nenhuma escrita
+    const before = await snapshot(ORG_A);
+    await c.receiveRequest({ requestId: req });
+    expect(await snapshot(ORG_A)).toEqual(before);
+  }, 60_000);
+
+  it("F1-M2 transição RECEIVED persistida (Engine já IN_PROGRESS) ⇒ retoma SÓ UNDER_ANALYSIS, sem duplicar histórico/Engine", async () => {
+    const req = await newRequest(ORG_A);
+    const c = await lo(U.lawyer);
+    const { workspace } = await c.receiveRequest({ requestId: req });
+    await rewindReceive(req, workspace.id, "after_received_stage");
+    const engineBefore = (await state(req, workspace.id)).tl;
+
+    await c.receiveRequest({ requestId: req });
+    const s = await state(req, workspace.id);
+    expect(s.ws.current_stage).toBe("UNDER_ANALYSIS");
+    expect(s.hist).toEqual(["workspace_created", "received", "under_analysis"]);
+    expect(s.tl).toEqual(engineBefore); // Engine NÃO foi reaplicado
+    expect(s.req).toEqual({ status: "IN_PROGRESS", assigned_to: U.lawyer });
+  }, 60_000);
+
+  it("F1-M3 retomadas CONCORRENTES do mesmo procurador (Promise.all) ⇒ um único estado final, sem duplicar histórico/Engine", async () => {
+    const req = await newRequest(ORG_A);
+    const c = await lo(U.lawyer);
+    const { workspace } = await c.receiveRequest({ requestId: req });
+    await rewindReceive(req, workspace.id, "after_claim");
+
+    const results = await Promise.allSettled([c.receiveRequest({ requestId: req }), c.receiveRequest({ requestId: req }), c.receiveRequest({ requestId: req })]);
+    expect(results.some(r => r.status === "fulfilled")).toBe(true);
+    await c.receiveRequest({ requestId: req }); // um retry final converge qualquer execução concorrente interrompida
+    const s = await state(req, workspace.id);
+    expect(s.ws).toEqual({ current_stage: "UNDER_ANALYSIS", assigned_lawyer: U.lawyer });
+    expect(s.req).toEqual({ status: "IN_PROGRESS", assigned_to: U.lawyer });
+    expect(s.hist).toEqual(["workspace_created", "received", "under_analysis"]);
+    expect(s.asg).toBe(1);
+    expect(s.tl.filter(e => e === "received")).toHaveLength(1);
+    expect(s.tl.filter(e => e === "in_progress")).toHaveLength(1);
+  }, 60_000);
+
+  it("F1-M4 OUTRO procurador sobre recebimento parcial ⇒ CONFLICT LEGAL_OPINION_ALREADY_ASSIGNED, nada alterado; cross-tenant ⇒ NOT_FOUND neutro", async () => {
+    const req = await newRequest(ORG_A);
+    const { workspace } = await (await lo(U.lawyer)).receiveRequest({ requestId: req });
+    await rewindReceive(req, workspace.id, "after_claim");
+    await expectDenied(async () => (await lo(U.lawyer2)).receiveRequest({ requestId: req }), "CONFLICT", LEGAL_OPINION_ALREADY_ASSIGNED);
+    await expectDenied(async () => (await lo(U.memberB)).receiveRequest({ requestId: req }), "NOT_FOUND");
+    expect((await state(req, workspace.id)).ws).toEqual({ current_stage: "INBOX", assigned_lawyer: U.lawyer });
+    await (await lo(U.lawyer)).receiveRequest({ requestId: req }); // o procurador designado ainda converge
+    expect((await state(req, workspace.id)).ws.current_stage).toBe("UNDER_ANALYSIS");
+  }, 60_000);
+
+  it("F1-M5 Engine em estado incompatível com a retomada ⇒ FAIL CLOSED (LEGAL_OPINION_RECEIVE_RESUME_UNSAFE), nada alterado", async () => {
+    const req = await newRequest(ORG_A);
+    const c = await lo(U.lawyer);
+    const { workspace } = await c.receiveRequest({ requestId: req });
+    await rewindReceive(req, workspace.id, "after_claim");
+    await conn.query("UPDATE institutional_requests SET status = 'WAITING_INFORMATION' WHERE id = ? AND organization_id = ?", [req, ORG_A]);
+    await expectDenied(async () => c.receiveRequest({ requestId: req }), "CONFLICT", LEGAL_OPINION_RECEIVE_RESUME_UNSAFE);
+    expect((await state(req, workspace.id)).ws.current_stage).toBe("INBOX");
   }, 60_000);
 });

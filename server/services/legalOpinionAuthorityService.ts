@@ -33,6 +33,8 @@ export const LEGAL_OPINION_MEMBERSHIP_REQUIRED = "LEGAL_OPINION_MEMBERSHIP_REQUI
 export const LEGAL_OPINION_ALREADY_ASSIGNED = "LEGAL_OPINION_ALREADY_ASSIGNED";
 /** A solicitação não está num estado que admita recebimento (validado antes de qualquer escrita). */
 export const LEGAL_OPINION_REQUEST_NOT_RECEIVABLE = "LEGAL_OPINION_REQUEST_NOT_RECEIVABLE";
+/** F1 — retomada de um recebimento parcial NÃO é segura (solicitação em estado/ator incompatível): falha fechada, observável. */
+export const LEGAL_OPINION_RECEIVE_RESUME_UNSAFE = "LEGAL_OPINION_RECEIVE_RESUME_UNSAFE";
 
 export const LEGAL_OPINION_ASSIGNMENT_REQUIRED_MESSAGE =
   `Somente o procurador designado para este parecer pode executar esta ação. Papel na organização não substitui a atribuição (${LEGAL_OPINION_ASSIGNMENT_REQUIRED}).`;
@@ -40,6 +42,8 @@ export const LEGAL_OPINION_MEMBERSHIP_REQUIRED_MESSAGE =
   `Receber uma solicitação de parecer exige vínculo ativo de operador (ou superior) nesta organização (${LEGAL_OPINION_MEMBERSHIP_REQUIRED}).`;
 export const LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE =
   `Esta solicitação já foi recebida por outro procurador; a atribuição existente não foi alterada (${LEGAL_OPINION_ALREADY_ASSIGNED}).`;
+export const LEGAL_OPINION_RECEIVE_RESUME_UNSAFE_MESSAGE =
+  `O recebimento anterior desta solicitação ficou incompleto e não pode ser retomado com segurança; nada foi alterado (${LEGAL_OPINION_RECEIVE_RESUME_UNSAFE}).`;
 export function legalOpinionRequestNotReceivableMessage(status: string): string {
   return `A solicitação está em "${status}" e não pode ser recebida; nada foi gravado (${LEGAL_OPINION_REQUEST_NOT_RECEIVABLE}).`;
 }
@@ -49,10 +53,11 @@ export type LegalOpinionLawyerAction = "create_draft" | "update_opinion" | "sign
 
 /** Log estruturado (sem PII/conteúdo) da trilha de atribuição — recebimento, retry e conflito. */
 export function logLegalOpinionAssignment(
-  event: "legal_opinion_workspace_assigned" | "legal_opinion_receive_replayed" | "legal_opinion_receive_conflict",
+  event: "legal_opinion_workspace_assigned" | "legal_opinion_receive_replayed" | "legal_opinion_receive_conflict"
+    | "legal_opinion_receive_resumed" | "legal_opinion_receive_resume_blocked",
   data: { organizationId: number; workspaceId: string; requestId: string; actorUserId: number; correlationId: string; created?: boolean },
 ): void {
-  if (event === "legal_opinion_receive_conflict") log.warn(event, data);
+  if (event === "legal_opinion_receive_conflict" || event === "legal_opinion_receive_resume_blocked") log.warn(event, data);
   else log.info(event, data);
 }
 

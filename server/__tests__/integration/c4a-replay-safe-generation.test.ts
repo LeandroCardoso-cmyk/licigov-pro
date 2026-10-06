@@ -105,6 +105,8 @@ vi.mock("../../services/authoring/editalContext", () => ({
     sourcesDigest: "a".repeat(64),
     sourceVersions: { dfd: { present: false, status: null, contentHash: null }, etp: { present: false, status: null, contentHash: null }, tr: { present: true, status: "aprovado", contentHash: "trhash" } },
     lineageMarkers: ["srcdigest:aaaaaaaaaaaaaaaa", "base:tr@trhash", "itens:0"],
+    // HD-01 (opção A) — a geração NOVA de TR/Edital exige Itens da contratação: contexto canônico válido (sem pendências).
+    canonical: { contextDigest: "c".repeat(64), missingPlannedQuantity: [], unlinkedApprovedItemCount: 0 }, legacyQuotedItemCount: 0,
   })),
 }));
 

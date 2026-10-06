@@ -7,7 +7,9 @@
  * `planned` mapeia descrição → quantidade prevista; ausente ⇒ a pessoa ADOTA explicitamente a quantidade da fonte
  * ("Usar N" — `adoptSourceQuantity: true`), o que é uma decisão registrada, não um fallback.
  */
-import { confirmItemCandidates, prepareItemCandidates } from "../../services/procurementItemsService";
+import { getDb } from "../../db/connection";
+import { procurementProcessesTable } from "../../../drizzle/schema";
+import { confirmItemCandidates, createManualItem, prepareItemCandidates } from "../../services/procurementItemsService";
 
 export async function confirmCanonicalItemsFromResearch(params: {
   organizationId: number;
@@ -27,5 +29,34 @@ export async function confirmCanonicalItemsFromResearch(params: {
         ? { candidateKey: c.candidateKey, action: "create" as const, plannedQuantity: q }
         : { candidateKey: c.candidateKey, action: "create" as const, adoptSourceQuantity: true };
     }),
+  });
+}
+
+/**
+ * HD-01 (opção A) — cria UM item canônico MANUAL com quantidade prevista INFORMADA (decisão humana explícita) para
+ * processos de teste que não têm Pesquisa de Preços: TR/Edital NOVOS exigem Itens da contratação (CANONICAL_ITEMS_REQUIRED),
+ * haja ou não cotação. Idempotente por processo (mesma chave ⇒ replay).
+ */
+export async function createCanonicalManualItem(params: {
+  organizationId: number;
+  processId: string;
+  actorUserId: number;
+  description?: string;
+  unit?: string;
+  plannedQuantity?: string | number;
+  /** Smokes que geram TR/Edital para um `processId` sem linha em `procurement_processes`: cria a linha mínima (idempotente). */
+  ensureProcess?: boolean;
+}): Promise<void> {
+  if (params.ensureProcess) {
+    const db = await getDb();
+    if (!db) throw new Error("DB indisponível para criar o processo de teste");
+    await db.insert(procurementProcessesTable).values({
+      id: params.processId, organizationId: params.organizationId, processNumber: params.processId, object: "Objeto de teste",
+    }).onDuplicateKeyUpdate({ set: { processNumber: params.processId } });
+  }
+  await createManualItem({
+    organizationId: params.organizationId, processId: params.processId, actorUserId: params.actorUserId,
+    correlationId: `canon-manual-${params.processId}`, description: params.description ?? "Item de teste", unit: params.unit ?? "un",
+    plannedQuantity: params.plannedQuantity ?? "1", idempotencyKey: `canon-manual-${params.processId}`,
   });
 }

@@ -30,7 +30,7 @@ import { createRequestTimelineEntry, type RequestEventType } from "../domain/req
 import {
   insertRequest, getRequest, updateRequestStatus,
   insertResponse, insertAssignment, insertRequestTimelineEntry, countTimeline,
-  insertNotification, insertDocumentReference, listDocumentReferences,
+  insertNotification, insertDocumentReference, listDocumentReferences, listRequestTimeline,
 } from "../db/institutionalRequests";
 
 /** Registra um evento na timeline da solicitação, calculando a ordem. */
@@ -40,12 +40,14 @@ async function recordEvent(params: {
   actor: string;
   summary: string;
   refId?: string;
+  /** F1 — id determinístico (eventos de ciclo de vida do recebimento): reinserção/concorrência não duplica. */
+  idKey?: string;
 }): Promise<void> {
   const order = await countTimeline(params.request.id, params.request.organizationId);
   const entry = createRequestTimelineEntry({
     requestId: params.request.id, organizationId: params.request.organizationId, order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, refId: params.refId,
-    correlationId: params.request.correlationId,
+    correlationId: params.request.correlationId, idKey: params.idKey,
   });
   await insertRequestTimelineEntry(entry);
 }
@@ -134,11 +136,58 @@ export async function receiveRequest(id: string, orgId: number, userId: number):
   if (!req) throw new Error("Solicitação não encontrada.");
   const received = assignTo(transition(req, "RECEIVED"), userId);
   await updateRequestStatus(received.id, orgId, "RECEIVED", userId, received.updatedAt);
-  await recordEvent({ request: received, eventType: "received", actor: String(userId), summary: "Solicitação recebida pelo domínio de destino." });
+  await recordEvent({ request: received, eventType: "received", actor: String(userId), summary: "Solicitação recebida pelo domínio de destino.", idKey: "lifecycle" });
   const inProgress = transition(received, "IN_PROGRESS");
   await updateRequestStatus(inProgress.id, orgId, "IN_PROGRESS", userId, inProgress.updatedAt);
-  await recordEvent({ request: inProgress, eventType: "in_progress", actor: String(userId), summary: "Em andamento." });
+  await recordEvent({ request: inProgress, eventType: "in_progress", actor: String(userId), summary: "Em andamento.", idKey: "lifecycle" });
   return inProgress;
+}
+
+/** Resultado do recebimento convergente: `received` (a chamada concluiu o recebimento), `resumed` (completou só o que
+ *  faltava), `already_received` (nada a fazer) ou `not_resumable` (estado/ator incompatível — falhar fechado). */
+export type ResumeReceiveOutcome = "received" | "resumed" | "already_received" | "not_resumable";
+
+/**
+ * F1 — recebimento CONVERGENTE e replay-safe no Engine (usado por TODOS os caminhos do recebimento do parecer).
+ * `receiveRequest` faz PENDING → RECEIVED → IN_PROGRESS em dois updates + dois eventos; uma falha no meio (ou uma
+ * execução concorrente do mesmo ator) deixa estado parcial. Esta função INSPECIONA a solicitação e a timeline e executa
+ * SOMENTE o que falta — transições em CAS (nunca regride nem repete), eventos com id determinístico (nunca duplica):
+ *   - PENDING ⇒ PENDING → RECEIVED (+ evento `received`);
+ *   - RECEIVED ⇒ evento `received` (se ausente) + RECEIVED → IN_PROGRESS (+ evento `in_progress`);
+ *   - IN_PROGRESS ⇒ completa apenas eventos ausentes;
+ *   - qualquer outro estado, ou solicitação atribuída a OUTRO usuário ⇒ `not_resumable` (sem escrita).
+ */
+export async function resumeReceiveRequest(
+  id: string, orgId: number, userId: number,
+): Promise<{ outcome: ResumeReceiveOutcome; request: InstitutionalRequest }> {
+  let req = await getRequest(id, orgId);
+  if (!req) throw new Error("Solicitação não encontrada.");
+  const originallyPending = req.status === "PENDING";
+  let touched = false;
+
+  if (req.status === "PENDING") {
+    const next = transition(assignTo(req, userId), "RECEIVED");
+    const won = await updateRequestStatus(id, orgId, "RECEIVED", userId, next.updatedAt, "PENDING");
+    if (won) { req = next; touched = true; } else req = (await getRequest(id, orgId)) ?? req; // outro executor avançou
+  }
+  if (req.status !== "RECEIVED" && req.status !== "IN_PROGRESS") return { outcome: "not_resumable", request: req };
+  if (req.assignedTo != null && req.assignedTo !== userId) return { outcome: "not_resumable", request: req };
+
+  const events = new Set((await listRequestTimeline(id, orgId)).map((e) => e.eventType));
+  if (!events.has("received")) {
+    await recordEvent({ request: assignTo(req, userId), eventType: "received", actor: String(userId), summary: "Solicitação recebida pelo domínio de destino.", idKey: "lifecycle" });
+    touched = true;
+  }
+  if (req.status === "RECEIVED") {
+    const next = transition(assignTo(req, userId), "IN_PROGRESS");
+    const won = await updateRequestStatus(id, orgId, "IN_PROGRESS", userId, next.updatedAt, "RECEIVED");
+    if (won) { req = next; touched = true; } else req = (await getRequest(id, orgId)) ?? req;
+  }
+  if (req.status === "IN_PROGRESS" && !events.has("in_progress")) {
+    await recordEvent({ request: req, eventType: "in_progress", actor: String(userId), summary: "Em andamento.", idKey: "lifecycle" });
+    touched = true;
+  }
+  return { outcome: touched ? (originallyPending ? "received" : "resumed") : "already_received", request: req };
 }
 
 /**

@@ -18,7 +18,7 @@ import { runWithIdempotency } from "./idempotencyService";
 import { computeLineageId } from "../domain/officialDocument";
 import { listVersions, getOfficialDocument } from "../db/officialDocuments";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
-import { receiveRequest as receiveInstitutionalRequest, respondRequest } from "./institutionalRequestService";
+import { resumeReceiveRequest, respondRequest } from "./institutionalRequestService";
 import { getMembership } from "./tenantService";
 import { getUserById } from "../db/users";
 import {
@@ -47,7 +47,8 @@ import {
 import { canTransition as canRequestTransition } from "../domain/institutionalRequest";
 import { claimLegalOpinionWorkspaceForLawyer } from "../db/legalOpinionAssignment";
 import {
-  LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE, legalOpinionRequestNotReceivableMessage, logLegalOpinionAssignment,
+  LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE, LEGAL_OPINION_RECEIVE_RESUME_UNSAFE_MESSAGE,
+  legalOpinionRequestNotReceivableMessage, logLegalOpinionAssignment,
 } from "./legalOpinionAuthorityService";
 import { serviceLogger } from "./observabilityService";
 
@@ -76,7 +77,10 @@ async function recordHistory(ws: LegalOpinionWorkspace, eventType: string, actor
  *
  * NEW-007 — receber = ser DESIGNADO procurador do workspace (atribuição exclusiva, auditável):
  *  - solicitação de outro tenant/inexistente ⇒ NOT_FOUND (mesma resposta; sem enumeração);
- *  - workspace já atribuído a ESTE ator ⇒ retry: devolve o existente SEM escrita alguma;
+ *  - workspace já atribuído a ESTE ator ⇒ retry CONVERGENTE (F1): se o recebimento já está completo
+ *    (UNDER_ANALYSIS em diante) devolve o existente SEM escrita; se parou no meio (INBOX/RECEIVED) INSPECIONA a
+ *    solicitação e o workspace e executa SOMENTE as etapas que faltam (sem repetir transição, sem duplicar
+ *    histórico, sem tocar a atribuição); estado/ator incompatível ⇒ CONFLICT `LEGAL_OPINION_RECEIVE_RESUME_UNSAFE`;
  *  - workspace já atribuído a OUTRO ator ⇒ CONFLICT `LEGAL_OPINION_ALREADY_ASSIGNED`, SEM escrita (nunca
  *    sobrescreve — antes, o upsert trocava o procurador silenciosamente); o modelo não tem reatribuição;
  *  - solicitação fora de estado recebível ⇒ CONFLICT `LEGAL_OPINION_REQUEST_NOT_RECEIVABLE` ANTES de escrever;
@@ -102,10 +106,13 @@ export async function openWorkspaceFromRequest(params: {
     return new TRPCError({ code: "CONFLICT", message: LEGAL_OPINION_ALREADY_ASSIGNED_MESSAGE });
   };
 
-  // 1) Leitura prévia (sem escrita): retry do mesmo procurador converge; outro ator ⇒ CONFLICT.
+  // 1) Leitura prévia (sem escrita): outro ator ⇒ CONFLICT; mesmo ator ⇒ replay (completo) ou RETOMADA (parcial).
   const existing = await getLegalOpinionWorkspaceByRequest(params.requestId, params.organizationId);
   if (existing && existing.assignedLawyer !== null) {
     if (existing.assignedLawyer !== params.lawyerId) throw conflict(existing.id);
+    if (isReceivePending(existing.currentStage)) {
+      return convergeReceive({ ...params, ws: existing, mode: "resume", created: false, trail });
+    }
     logLegalOpinionAssignment("legal_opinion_receive_replayed", { ...trail, workspaceId: existing.id });
     return existing;
   }
@@ -132,29 +139,91 @@ export async function openWorkspaceFromRequest(params: {
   const claimed = await getLegalOpinionWorkspace(candidate.id, params.organizationId);
   if (!claimed) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitação não encontrada." });
   if (claim.status === "already_assigned_to_actor") {
-    // Corrida do MESMO ator: o vencedor conduz o recebimento; este retry não escreve nada.
+    // MESMO ator já tem o claim (corrida ou execução anterior interrompida): se o recebimento já completou, replay sem
+    // escrita; se está parcial, RETOMA (nunca devolve um workspace preso em INBOX/RECEIVED).
+    if (isReceivePending(claimed.currentStage)) {
+      return convergeReceive({ ...params, ws: claimed, mode: "resume", created: false, trail });
+    }
     logLegalOpinionAssignment("legal_opinion_receive_replayed", { ...trail, workspaceId: claimed.id });
     return claimed;
   }
 
   // 4) Só o vencedor do claim: reutiliza o Engine (RECEIVED → IN_PROGRESS) e espelha o estado no workspace.
-  await receiveInstitutionalRequest(params.requestId, params.organizationId, params.lawyerId);
-  let ws = claimed;
-  if (claim.created) {
-    await recordHistory(ws, "workspace_created", String(params.lawyerId), `Trabalho aberto a partir da solicitação ${params.requestId}.`, params.requestId);
+  return convergeReceive({ ...params, ws: claimed, mode: "fresh", created: claim.created, trail });
+}
+
+/** Etapas em que o recebimento ainda não terminou (o workspace nunca deve ficar aí depois de uma chamada bem-sucedida). */
+function isReceivePending(stage: string): boolean {
+  return stage === "INBOX" || stage === "RECEIVED";
+}
+
+/**
+ * Registra um evento de CICLO DE VIDA do recebimento no histórico do parecer de forma IDEMPOTENTE: não grava se o
+ * mesmo tipo já existe (retomada nunca duplica) e usa chave determinística (PK) contra retomadas concorrentes.
+ * `onlyIfEmpty` ⇒ grava somente quando o histórico está vazio (workspace criado pelo claim sem nenhum registro).
+ */
+async function ensureLifecycleHistory(
+  ws: LegalOpinionWorkspace, eventType: string, actor: string, summary: string,
+  opts: { refId?: string; onlyIfEmpty?: boolean } = {},
+): Promise<void> {
+  const existing = await listLegalOpinionHistory(ws.id, ws.organizationId);
+  if (existing.some((h) => h.eventType === eventType)) return;
+  if (opts.onlyIfEmpty && existing.length > 0) return;
+  await insertLegalOpinionHistory({
+    organizationId: ws.organizationId, workspaceId: ws.id, order: existing.length, eventType, actor, summary,
+    refId: opts.refId, correlationId: ws.correlationId, uniqueKey: `lifecycle:${eventType}`,
+  });
+}
+
+/**
+ * Conclui (ou RETOMA) o recebimento depois do claim: Engine → histórico → INBOX → RECEIVED → UNDER_ANALYSIS.
+ * É CONVERGENTE: cada etapa só roda se ainda não foi concluída (inspeciona o Engine e o workspace), as transições do
+ * workspace são CAS (uma retomada concorrente nunca regride nem repete), o histórico é idempotente e a atribuição
+ * nunca é tocada. Se não for possível retomar com segurança ⇒ falha fechada com erro estável e log observável.
+ */
+async function convergeReceive(p: {
+  requestId: string; organizationId: number; lawyerId: number; correlationId: string;
+  ws: LegalOpinionWorkspace; mode: "fresh" | "resume"; created: boolean;
+  trail: { organizationId: number; requestId: string; actorUserId: number; correlationId: string };
+}): Promise<LegalOpinionWorkspace> {
+  const actor = String(p.lawyerId);
+  let ws = p.ws;
+
+  // (a) Engine: SEMPRE pelo recebimento convergente (executa só o que falta; em CAS; eventos idempotentes).
+  const resumed = await resumeReceiveRequest(p.requestId, p.organizationId, p.lawyerId);
+  if (resumed.outcome === "not_resumable") {
+    logLegalOpinionAssignment("legal_opinion_receive_resume_blocked", { ...p.trail, workspaceId: ws.id });
+    throw new TRPCError({ code: "CONFLICT", message: LEGAL_OPINION_RECEIVE_RESUME_UNSAFE_MESSAGE });
   }
-  if (ws.currentStage === "INBOX") {
-    // INBOX → RECEIVED → UNDER_ANALYSIS
-    ws = assignLawyer(transitionLegalStage(ws, "RECEIVED"), params.lawyerId);
-    await updateLegalOpinionWorkspaceStage(ws.id, ws.organizationId, ws.currentStage, ws.status, ws.assignedLawyer, ws.updatedAt);
-    await recordHistory(ws, "received", String(params.lawyerId), "Solicitação recebida pelo Procurador.");
-    ws = transitionLegalStage(ws, "UNDER_ANALYSIS");
-    await updateLegalOpinionWorkspaceStage(ws.id, ws.organizationId, ws.currentStage, ws.status, ws.assignedLawyer, ws.updatedAt);
-    await recordHistory(ws, "under_analysis", String(params.lawyerId), "Análise do processo iniciada.");
+
+  // (b) Histórico de abertura: no primeiro caminho quando o claim criou o workspace; na retomada, só se vazio.
+  if (p.mode === "fresh" ? p.created : true) {
+    await ensureLifecycleHistory(ws, "workspace_created", actor, `Trabalho aberto a partir da solicitação ${p.requestId}.`,
+      { refId: p.requestId, onlyIfEmpty: p.mode === "resume" });
+  }
+
+  // (c) Workspace: INBOX → RECEIVED → UNDER_ANALYSIS, cada passo em CAS e só se ainda pendente.
+  const advance = async (from: "INBOX" | "RECEIVED", to: "RECEIVED" | "UNDER_ANALYSIS"): Promise<void> => {
+    if (ws.currentStage !== from) return;
+    const next = to === "RECEIVED" ? assignLawyer(transitionLegalStage(ws, to), p.lawyerId) : transitionLegalStage(ws, to);
+    const won = await updateLegalOpinionWorkspaceStage(next.id, next.organizationId, next.currentStage, next.status, next.assignedLawyer, next.updatedAt, from);
+    ws = won ? next : ((await getLegalOpinionWorkspace(ws.id, ws.organizationId)) ?? ws);
+  };
+  if (p.mode === "fresh" && !isReceivePending(ws.currentStage)) {
+    // Workspace pré-existente fora do INBOX: só espelha o recebimento (comportamento original).
+    await ensureLifecycleHistory(ws, "received", actor, "Solicitação recebida pelo Procurador.");
   } else {
-    await recordHistory(ws, "received", String(params.lawyerId), "Solicitação recebida pelo Procurador.");
+    await advance("INBOX", "RECEIVED");
+    if (ws.currentStage === "RECEIVED" || ws.currentStage === "UNDER_ANALYSIS") {
+      await ensureLifecycleHistory(ws, "received", actor, "Solicitação recebida pelo Procurador.");
+    }
+    await advance("RECEIVED", "UNDER_ANALYSIS");
+    if (ws.currentStage === "UNDER_ANALYSIS") {
+      await ensureLifecycleHistory(ws, "under_analysis", actor, "Análise do processo iniciada.");
+    }
   }
-  logLegalOpinionAssignment("legal_opinion_workspace_assigned", { ...trail, workspaceId: ws.id, created: claim.created });
+  logLegalOpinionAssignment(p.mode === "fresh" ? "legal_opinion_workspace_assigned" : "legal_opinion_receive_resumed",
+    { ...p.trail, workspaceId: ws.id, created: p.created });
   return ws;
 }
 

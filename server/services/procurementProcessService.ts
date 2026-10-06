@@ -979,8 +979,9 @@ export async function generateDocument(params: {
 /**
  * Guarda COMPARTILHADA (TR e Edital) do modo canônico, antes de qualquer reserva de idempotência ou cognição:
  * nunca substitui a quantidade PREVISTA ausente pela da cotação, nem assume 1, nem presume que um Item
- * Inteligente sem vínculo represente a necessidade (nenhum vínculo é criado aqui). Legado (sem Itens da
- * contratação) ⇒ `canonical = null` ⇒ no-op.
+ * Inteligente sem vínculo represente a necessidade (nenhum vínculo é criado aqui). HD-01 (opção A): sem Itens da
+ * contratação (`canonical = null`) a geração NOVA de TR/Edital é SEMPRE bloqueada (`CANONICAL_ITEMS_REQUIRED`),
+ * haja ou não quantidade de cotação — a cotação é evidência, nunca necessidade.
  */
 /** R6 / PR-13 (SEM-008) — código estável do bloqueio "quantidade da cotação sem Itens da contratação". */
 export const CANONICAL_ITEMS_REQUIRED = "CANONICAL_ITEMS_REQUIRED";
@@ -993,20 +994,19 @@ function assertCanonicalQuantitiesComplete(
 ): void {
   const docName = documentKind === "tr" ? "o Termo de Referência" : "o Edital";
   if (!canonical) {
-    // R6 / PR-13 (SEM-008, INV-09) — sem Itens da contratação, a única quantidade disponível é a da COTAÇÃO
-    // (evidência), que nunca afirma a necessidade. Fail-closed ANTES de qualquer reserva/cognição; sem itens
-    // aprovados não há quantidade alguma a afirmar (o documento não traz quadro quantitativo).
-    if (legacyQuotedItemCount > 0) {
-      log.warn("document_generation_blocked_quoted_quantity_without_items", {
-        organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
-        documentKind, quotedItemCount: legacyQuotedItemCount,
-      });
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: `${CANONICAL_ITEMS_REQUIRED}: cadastre os "Itens da contratação" com a quantidade prevista antes de gerar ${docName}. A quantidade da cotação (${legacyQuotedItemCount} item(ns) da Pesquisa de Preços) é evidência de preço e não representa a necessidade.`,
-      });
-    }
-    return;
+    // R6 / PR-13 (SEM-008, INV-09) + HD-01 (opção A) — sem Itens da contratação NÃO há quantidade/necessidade a
+    // afirmar: a cotação (quando existe) é evidência de preço, nunca necessidade. Fail-closed SEMPRE (haja ou
+    // não cotação), ANTES de qualquer reserva de idempotência, cognição ou escrita.
+    log.warn("document_generation_blocked_canonical_items_required", {
+      organizationId: ids.organizationId, processId: ids.processId, correlationId: ids.correlationId,
+      documentKind, quotedItemCount: legacyQuotedItemCount,
+    });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: legacyQuotedItemCount > 0
+        ? `${CANONICAL_ITEMS_REQUIRED}: cadastre os "Itens da contratação" com a quantidade prevista antes de gerar ${docName}. A quantidade da cotação (${legacyQuotedItemCount} item(ns) da Pesquisa de Preços) é evidência de preço e não representa a necessidade.`
+        : `${CANONICAL_ITEMS_REQUIRED}: cadastre os "Itens da contratação" com a quantidade prevista antes de gerar ${docName}.`,
+    });
   }
   const { missingPlannedQuantity, unlinkedApprovedItemCount } = canonical;
   if (missingPlannedQuantity.length > 0) {

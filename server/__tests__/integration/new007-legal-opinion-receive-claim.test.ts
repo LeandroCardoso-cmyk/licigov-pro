@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../db/institutionalRequests", () => ({
   getRequest: vi.fn(), listRequestTimeline: vi.fn(async () => []), listDocumentReferences: vi.fn(async () => []),
 }));
-vi.mock("../../services/institutionalRequestService", () => ({ receiveRequest: vi.fn(async () => ({})), respondRequest: vi.fn() }));
+vi.mock("../../services/institutionalRequestService", () => ({ resumeReceiveRequest: vi.fn(async () => ({ outcome: "received", request: {} })), respondRequest: vi.fn() }));
 vi.mock("../../db/legalOpinionAssignment", () => ({ claimLegalOpinionWorkspaceForLawyer: vi.fn(), getLawyerAssignmentForWorkspace: vi.fn() }));
 vi.mock("../../db/legalOpinionWorkspace", async (orig) => {
   const actual = await orig<typeof import("../../db/legalOpinionWorkspace")>();
@@ -40,7 +40,7 @@ const open = (lawyerId: number) => openWorkspaceFromRequest({ requestId: "req-1"
 
 function expectNoWrites() {
   expect(asg.claimLegalOpinionWorkspaceForLawyer).not.toHaveBeenCalled();
-  expect(reqSvc.receiveRequest).not.toHaveBeenCalled();
+  expect(reqSvc.resumeReceiveRequest).not.toHaveBeenCalled();
   expect(wsDb.updateLegalOpinionWorkspaceStage).not.toHaveBeenCalled();
   expect(wsDb.insertLegalOpinionHistory).not.toHaveBeenCalled();
 }
@@ -79,15 +79,16 @@ describe("NEW-007 — recebimento como atribuição exclusiva", () => {
   it("perdeu a corrida do claim para OUTRO ator ⇒ CONFLICT; Engine/histórico intocados", async () => {
     vi.mocked(asg.claimLegalOpinionWorkspaceForLawyer).mockResolvedValue({ status: "assigned_to_other" });
     await expect(open(8)).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining(LEGAL_OPINION_ALREADY_ASSIGNED) });
-    expect(reqSvc.receiveRequest).not.toHaveBeenCalled();
+    expect(reqSvc.resumeReceiveRequest).not.toHaveBeenCalled();
     expect(wsDb.insertLegalOpinionHistory).not.toHaveBeenCalled();
   });
 
-  it("corrida do MESMO ator (claim já dele) ⇒ devolve sem escrever no Engine/histórico", async () => {
+  it("corrida do MESMO ator (claim já dele) com o recebimento JÁ COMPLETO ⇒ devolve sem escrever no Engine/histórico", async () => {
+    // F1: o workspace preso em INBOX/RECEIVED NÃO é replay — é retomado (ver f1-legal-opinion-receive-replay-recovery.test.ts).
     vi.mocked(asg.claimLegalOpinionWorkspaceForLawyer).mockResolvedValue({ status: "already_assigned_to_actor" });
-    vi.mocked(wsDb.getLegalOpinionWorkspace).mockResolvedValue(wsRow(7) as never);
+    vi.mocked(wsDb.getLegalOpinionWorkspace).mockResolvedValue(wsRow(7, "UNDER_ANALYSIS") as never);
     await expect(open(7)).resolves.toMatchObject({ assignedLawyer: 7 });
-    expect(reqSvc.receiveRequest).not.toHaveBeenCalled();
+    expect(reqSvc.resumeReceiveRequest).not.toHaveBeenCalled();
     expect(wsDb.insertLegalOpinionHistory).not.toHaveBeenCalled();
   });
 
@@ -100,7 +101,7 @@ describe("NEW-007 — recebimento como atribuição exclusiva", () => {
     expect(lawyerId).toBe(7);
     expect(candidate).toMatchObject({ organizationId: ORG, requestId: "req-1", assignedLawyer: 7, currentStage: "INBOX" });
     expect(assignment).toMatchObject({ organizationId: ORG, workspaceId: candidate.id, lawyerId: 7, correlationId: "corr-claim" });
-    expect(reqSvc.receiveRequest).toHaveBeenCalledWith("req-1", ORG, 7);
+    expect(reqSvc.resumeReceiveRequest).toHaveBeenCalledWith("req-1", ORG, 7);
     const events = vi.mocked(wsDb.insertLegalOpinionHistory).mock.calls.map(c => c[0].eventType);
     expect(events).toEqual(["workspace_created", "received", "under_analysis"]);
   });

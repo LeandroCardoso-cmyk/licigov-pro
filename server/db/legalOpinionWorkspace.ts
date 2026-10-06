@@ -71,12 +71,18 @@ export async function getLegalOpinionWorkspaceByRequest(requestId: string, orgId
 export async function updateLegalOpinionWorkspaceStage(
   id: string, orgId: number, stage: LegalOpinionStage, status: LegalOpinionWorkspaceStatus,
   assignedLawyer: number | null, updatedAt: string,
+  /** F1 — CAS opcional: só transiciona se a etapa atual ainda for `expectedStage` (retomada concorrente nunca regride). */
+  expectedStage?: LegalOpinionStage,
 ): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(legalOpinionWorkspacesTable).set({ currentStage: stage, status, assignedLawyer, updatedAt: toDb(updatedAt) })
-    .where(and(eq(legalOpinionWorkspacesTable.id, id), eq(legalOpinionWorkspacesTable.organizationId, orgId)));
-  return true;
+  const where = expectedStage
+    ? and(eq(legalOpinionWorkspacesTable.id, id), eq(legalOpinionWorkspacesTable.organizationId, orgId), eq(legalOpinionWorkspacesTable.currentStage, expectedStage))
+    : and(eq(legalOpinionWorkspacesTable.id, id), eq(legalOpinionWorkspacesTable.organizationId, orgId));
+  const res = await db.update(legalOpinionWorkspacesTable).set({ currentStage: stage, status, assignedLawyer, updatedAt: toDb(updatedAt) }).where(where);
+  if (!expectedStage) return true;
+  const affected = (res as unknown as Array<{ affectedRows?: number }>)[0]?.affectedRows;
+  return typeof affected === "number" ? affected > 0 : true;
 }
 
 export async function listLegalOpinionWorkspaces(
@@ -289,10 +295,15 @@ export async function countLegalOpinionHistory(workspaceId: string, orgId: numbe
 export async function insertLegalOpinionHistory(e: {
   organizationId: number; workspaceId: string; order: number; eventType: string;
   actor: string; summary: string; refId?: string; correlationId: string;
+  /** F1 — chave determinística opcional (eventos de ciclo de vida): o id deixa de depender da ordem ⇒ inserção idempotente
+   *  mesmo sob retomada concorrente (PK + ON DUPLICATE KEY). */
+  uniqueKey?: string;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const id = createHash("sha256").update(`loh:${e.organizationId}:${e.workspaceId}:${e.order}:${e.eventType}`).digest("hex").slice(0, 20);
+  const id = createHash("sha256").update(e.uniqueKey
+    ? `loh:${e.organizationId}:${e.workspaceId}:${e.uniqueKey}`
+    : `loh:${e.organizationId}:${e.workspaceId}:${e.order}:${e.eventType}`).digest("hex").slice(0, 20);
   await db.insert(legalOpinionHistoryTable).values({
     id, organizationId: e.organizationId, workspaceId: e.workspaceId, eventOrder: e.order,
     eventType: e.eventType, actor: e.actor, summary: e.summary, refId: e.refId ?? "", correlationId: e.correlationId,

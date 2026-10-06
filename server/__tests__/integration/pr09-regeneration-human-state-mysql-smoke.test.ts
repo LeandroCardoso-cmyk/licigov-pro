@@ -37,6 +37,7 @@ import {
 } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { getGeneratedDocumentByKind, getLatestDraftEdit, insertProcess } from "../../db/procurement";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { promoteOfficialDocument } from "../../services/documentPromotionService";
@@ -61,6 +62,8 @@ const EMITTER = 77; // terceiro revisor/emissor (≠ originador A, ≠ editor B)
 async function newProcess(org: number, object: string): Promise<string> {
   const p = createProcurementWorkspace({ organizationId: org, processNumber: `PR09-${Date.now()}-${++seq}`, object, startOption: "iniciar_tr", responsibleUser: A, correlationId: "pr09" });
   await insertProcess(p);
+  // HD-01: TR/Edital NOVOS exigem Itens da contratação (quantidade prevista = decisão humana).
+  await createCanonicalManualItem({ organizationId: org, processId: p.id, actorUserId: A });
   return p.id;
 }
 
@@ -97,6 +100,7 @@ async function effects(org: number, pid: string) {
 
 async function cleanup() {
   const tables: Array<[string, string]> = [
+    ["procurement_item_events", "organization_id"], ["procurement_item_source_links", "organization_id"], ["procurement_items", "organization_id"],
     ["generated_document_edits", "organization_id"], ["generated_documents", "organization_id"],
     ["official_document_timeline", "tenant_id"], ["official_document_promotions", "organization_id"], ["official_documents", "tenant_id"],
     ["process_timeline", "organization_id"], ["procurement_processes", "organization_id"], ["idempotency_keys", "organizationId"],
@@ -198,20 +202,25 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
     expect((rows[0] as any).reason).toBeNull();
   }, 120_000);
 
-  it("isolamento multi-tenant: edição humana do tenant B não bloqueia nem vaza para o tenant A (mesmo processId)", async () => {
-    const pid = "pr09-x-tenant";
-    await genTR(ORG2, pid, `seed-b-${pid}`, A);
-    await humanEdit(ORG2, pid, "tr", "# TR do tenant B editado", `edit-b-${pid}`);
-    await genTR(ORG, pid, `seed-a-${pid}`, A);
+  it("isolamento multi-tenant: edição humana do tenant B não bloqueia nem vaza para o tenant A", async () => {
+    // HD-01: TR NOVO exige o processo e os Itens da contratação NO PRÓPRIO tenant (o id do processo é PK global),
+    // então cada tenant opera o seu processo; o isolamento é provado também com o id do OUTRO tenant.
+    const pidA = await newProcess(ORG, "Serviço A");
+    const pidB = await newProcess(ORG2, "Serviço B");
+    await genTR(ORG2, pidB, `seed-b-${pidB}`, A);
+    await humanEdit(ORG2, pidB, "tr", "# TR do tenant B editado", `edit-b-${pidB}`);
+    await genTR(ORG, pidA, `seed-a-${pidA}`, A);
 
-    expect((await getLatestDraftEdit(pid, ORG, "tr"))).toBeNull();          // A não vê o ledger de B
-    expect((await getLatestDraftEdit(pid, ORG2, "tr"))!.operation).toBe("human_edit");
+    expect((await getLatestDraftEdit(pidA, ORG, "tr"))).toBeNull();          // A não vê o ledger de B
+    expect((await getLatestDraftEdit(pidB, ORG, "tr"))).toBeNull();          // nem pelo id de B
+    expect((await getGeneratedDocumentByKind(pidB, ORG, "tr"))).toBeNull();  // nem o rascunho de B
+    expect((await getLatestDraftEdit(pidB, ORG2, "tr"))!.operation).toBe("human_edit");
     // A (só IA) regenera sem confirmação; B continua protegido.
-    await expect(generateDocument({ organizationId: ORG, processId: pid, kind: "tr", object: "Outro objeto A", correlationId: "pr09", idempotencyKey: `regen-a-${pid}`, actorUserId: A, invoke: invokeFor("tr") })).resolves.toBeTruthy();
-    const bBefore = await effects(ORG2, pid);
-    await expect(genTR(ORG2, pid, `regen-b-${pid}`, A)).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^HUMAN_EDIT_WOULD_BE_OVERWRITTEN:/) });
-    expect(await effects(ORG2, pid)).toEqual(bBefore);
-    expect((await getGeneratedDocumentByKind(pid, ORG2, "tr"))!.content).toBe("# TR do tenant B editado");
+    await expect(generateDocument({ organizationId: ORG, processId: pidA, kind: "tr", object: "Outro objeto A", correlationId: "pr09", idempotencyKey: `regen-a-${pidA}`, actorUserId: A, invoke: invokeFor("tr") })).resolves.toBeTruthy();
+    const bBefore = await effects(ORG2, pidB);
+    await expect(genTR(ORG2, pidB, `regen-b-${pidB}`, A)).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^HUMAN_EDIT_WOULD_BE_OVERWRITTEN:/) });
+    expect(await effects(ORG2, pidB)).toEqual(bBefore);
+    expect((await getGeneratedDocumentByKind(pidB, ORG2, "tr"))!.content).toBe("# TR do tenant B editado");
   }, 120_000);
 
   it("Edital: parâmetros persistidos → recarga hidrata → gerar SEM proposta usa os persistidos; divergência exige troca explícita", async () => {
@@ -311,11 +320,12 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
       "SELECT id, CAST(content AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND origin = ? AND status = 'emitido'", [ORG, pid]);
     expect(off2).toEqual(off);
 
-    // A UI recebe o bloqueio (e explica o novo ciclo); outro tenant com o MESMO processId não é afetado.
+    // A UI recebe o bloqueio (e explica o novo ciclo); outro tenant (processo próprio) não é afetado.
     const read = await api.procurementProcess.reviewableDraft({ processId: pid, kind: "tr" });
     expect(read.draft!.regenerationBlock).toMatchObject({ reason: "official_emitted", officialVersion: v });
-    await genTR(ORG2, pid, `seed-b-${pid}`, A);
-    await expect(generateDocument({ organizationId: ORG2, processId: pid, kind: "tr", object: "Outro objeto B", correlationId: "pr09", idempotencyKey: `regen-b-${pid}`, actorUserId: A, invoke: invokeFor("tr") })).resolves.toBeTruthy();
+    const pidB = await newProcess(ORG2, "Serviço de vigilância"); // HD-01: o outro tenant opera o PRÓPRIO processo (id é PK global)
+    await genTR(ORG2, pidB, `seed-b-${pidB}`, A);
+    await expect(generateDocument({ organizationId: ORG2, processId: pidB, kind: "tr", object: "Outro objeto B", correlationId: "pr09", idempotencyKey: `regen-b-${pidB}`, actorUserId: A, invoke: invokeFor("tr") })).resolves.toBeTruthy();
   }, 180_000);
 
   it("R5.B — Edital oficial: nem troca de parâmetros confirmada nem confirmReplace regeneram (router real)", async () => {

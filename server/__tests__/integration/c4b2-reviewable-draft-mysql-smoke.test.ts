@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, generateNotice } from "../../services/procurementProcessService";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { getGeneratedDocumentByKind } from "../../db/procurement";
 import { draftContentHash } from "../../services/documentPromotionService";
@@ -32,6 +33,8 @@ const AUTHOR = 5;
 let conn: mysql.Connection;
 
 async function seedEtpOrTr(org: number, processId: string, kind: "etp" | "tr", object: string) {
+  // HD-01: TR NOVO exige Itens da contratação (decisão humana de quantidade prevista).
+  if (kind === "tr") await createCanonicalManualItem({ organizationId: org, processId, actorUserId: AUTHOR, ensureProcess: true });
   return generateDocument({
     organizationId: org, processId, kind, object,
     correlationId: "c4b2-smoke", idempotencyKey: `gen-${org}-${processId}-${kind}`,
@@ -40,6 +43,7 @@ async function seedEtpOrTr(org: number, processId: string, kind: "etp" | "tr", o
 }
 
 async function seedEdital(org: number, processId: string, object: string) {
+  await createCanonicalManualItem({ organizationId: org, processId, actorUserId: AUTHOR, ensureProcess: true }); // HD-01
   return generateNotice({
     organizationId: org, processId, object,
     modality: "pregao", form: "eletronico", platform: "compras_gov",
@@ -50,6 +54,7 @@ async function seedEdital(org: number, processId: string, object: string) {
 
 async function cleanup() {
   for (const org of [ORG, ORG2]) {
+    for (const tb of ["procurement_item_events", "procurement_item_source_links", "procurement_items", "procurement_processes"]) await conn.execute(`DELETE FROM \`${tb}\` WHERE organization_id = ?`, [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_promotions WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_documents WHERE tenant_id = ?", [org]).catch(() => {});

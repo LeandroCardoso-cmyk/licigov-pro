@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, generateNotice, saveReviewableDraft } from "../../services/procurementProcessService";
+import { createCanonicalManualItem } from "../helpers/canonicalItems";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 import { promoteOfficialDocument } from "../../services/documentPromotionService";
 import { draftContentHash } from "../../domain/generatedDocument";
@@ -39,9 +40,11 @@ async function seedEtp(org: number, pid: string, object: string, actor: number, 
   return generateDocument({ organizationId: org, processId: pid, kind: "etp", object, correlationId, idempotencyKey: `gen-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("etp") });
 }
 async function seedTr(org: number, pid: string, object: string, actor: number) {
+  await createCanonicalManualItem({ organizationId: org, processId: pid, actorUserId: actor, ensureProcess: true }); // HD-01
   return generateDocument({ organizationId: org, processId: pid, kind: "tr", object, correlationId: "c4b3b-seed", idempotencyKey: `gen-tr-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("tr") });
 }
 async function seedEdital(org: number, pid: string, object: string, actor: number) {
+  await createCanonicalManualItem({ organizationId: org, processId: pid, actorUserId: actor, ensureProcess: true }); // HD-01
   return generateNotice({ organizationId: org, processId: pid, object, modality: "pregao", form: "eletronico", platform: "compras_gov", correlationId: "c4b3b-seed", idempotencyKey: `gen-ed-${org}-${pid}`, actorUserId: actor, invoke: async () => buildMockProviderAuthoring("edital") });
 }
 
@@ -77,6 +80,7 @@ function emitInput(org: number, pid: string, kind: "etp" | "tr" | "edital", acto
 
 async function cleanup() {
   for (const org of [ORG, ORG2]) {
+    for (const tb of ["procurement_item_events", "procurement_item_source_links", "procurement_items", "procurement_processes"]) await conn.execute(`DELETE FROM \`${tb}\` WHERE organization_id = ?`, [org]).catch(() => {});
     await conn.execute("DELETE FROM generated_document_edits WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_promotions WHERE organization_id = ?", [org]).catch(() => {});
     await conn.execute("DELETE FROM official_document_timeline WHERE tenant_id = ?", [org]).catch(() => {});

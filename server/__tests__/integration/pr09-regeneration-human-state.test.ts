@@ -53,7 +53,7 @@ import { generateDocument, generateNotice } from "../../services/procurementProc
 import { draftContentHash } from "../../domain/generatedDocument";
 
 const HUMAN = "# TR\nSeção 5 reescrita pelo jurista (edição humana).";
-const ctx = { sourcesDigest: "d".repeat(64), lineageMarkers: [], usedSources: [], missing: [], canonical: null, quantitySource: "legacy", estimate: {}, sourceVersions: {} } as any;
+const ctx = { sourcesDigest: "d".repeat(64), lineageMarkers: [], usedSources: [], missing: [], canonical: { contextDigest: "c".repeat(64), missingPlannedQuantity: [], unlinkedApprovedItemCount: 0 }, legacyQuotedItemCount: 0, quantitySource: "canonical_planned", estimate: {}, sourceVersions: {} } as any;
 const authored = { content: "# Novo rascunho IA", groundingState: "grounded", evidences: [], evidenceComplete: true, evidenceFingerprint: "f", corpusFingerprint: "c", structured: { usedSourceIds: [] } } as any;
 
 function draftRow(content: string, extra: Record<string, unknown> = {}) {
