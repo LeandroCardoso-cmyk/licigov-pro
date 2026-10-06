@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
@@ -42,6 +43,9 @@ const menuItems = [
   { icon: ScrollText, label: "Contratos", path: "/contratos" },
   { icon: HelpCircle, label: "Tirar Dúvidas", path: "/tirar-duvidas" },
   { icon: LibraryBig, label: "Templates", path: "/templates" },
+  // Modelos Institucionais — módulo distinto do "Templates" pessoal legado; `requiresInstitutionalTemplates`: só aparece quando a
+  // flag tenant-scoped está LIGADA e o módulo está integrado (o backend reautoriza cada operação).
+  { icon: LibraryBig, label: "Modelos Institucionais", path: "/modelos-institucionais", requiresInstitutionalTemplates: true },
   // PR A.1 — gestão de membros/convites da organização. `requiresOrgAdmin`: só aparece para papel
   // organizacional admin/owner (mesmo gate do backend, orgRoleProcedure("admin")). Operador,
   // Visualizador e Gestor NÃO veem este item.
@@ -145,6 +149,8 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const { canManageUsers } = useOrgRole();
+  const templatesCaps = trpc.institutionalTemplates.getCapabilities.useQuery(undefined, { retry: false, staleTime: 5 * 60_000 });
+  const institutionalTemplatesEnabled = templatesCaps.data?.enabled === true;
   const { theme, setTheme } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -243,6 +249,7 @@ function DashboardLayoutContent({
                 .filter(item => !item.adminOnly || user?.role === "admin")
                 // PR A.1 — itens `requiresOrgAdmin` só para papel organizacional admin/owner.
                 .filter(item => !("requiresOrgAdmin" in item && item.requiresOrgAdmin) || canManageUsers)
+                .filter(item => !("requiresInstitutionalTemplates" in item && item.requiresInstitutionalTemplates) || institutionalTemplatesEnabled)
                 .map(item => {
                 const isActive = location === item.path;
                 return (

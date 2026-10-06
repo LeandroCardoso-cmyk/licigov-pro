@@ -20,6 +20,7 @@ import { catmatRouter } from "./routers/catmatRouter";
 import { taskRouter } from "./routers/taskRouter";
 import { departmentTasksRouter } from "./routers/departmentTasksRouter";
 import { templatesRouter } from "./routers/templatesRouter";
+import { institutionalTemplatesRouter } from "./routers/institutionalTemplatesRouter";
 import { aiUsageRouter } from "./routers/aiUsageRouter";
 import { platformsRouter } from "./routers/platformsRouter";
 import { downloadRouter } from "./routers/downloadRouter";
@@ -109,6 +110,8 @@ export const appRouter = router({
   tasks: taskRouter,
   departmentTasks: departmentTasksRouter,
   templates: templatesRouter,
+  // Modelos Institucionais (Lane C) — tenant-scoped, atrás da flag FF_INSTITUTIONAL_TEMPLATES_V1 (default OFF); NÃO é o `templates` legado.
+  institutionalTemplates: institutionalTemplatesRouter,
   aiUsage: aiUsageRouter,
   platforms: platformsRouter,
   downloads: downloadRouter,
