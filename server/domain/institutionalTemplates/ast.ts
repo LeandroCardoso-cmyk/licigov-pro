@@ -34,8 +34,10 @@ export interface TemplateAST {
 }
 
 /**
- * Limite estrutural de aninhamento (proteção contra abuso recursivo). Não é regra de DSL: o T1 só fixa a
- * profundidade da condição (≤ 4); este teto de nós é guarda de implementação, a confirmar no T0/ADR.
+ * Limite estrutural de aninhamento (proteção contra abuso recursivo) — decisão do owner R-6:
+ * MAX_AST_DEPTH = IMPLEMENTATION_SAFETY_LIMIT · NOT_LEGAL_RULE · NOT_INSTITUTIONAL_DECISION.
+ * Pertence ao contrato técnico versionado de `tpl-ast/1` (mudança ⇒ nova versão do schema), nunca a uma regra
+ * jurídica ou institucional. A profundidade da condição (≤ 4) é a regra da DSL do T1.
  */
 export const MAX_AST_DEPTH = 32;
 
