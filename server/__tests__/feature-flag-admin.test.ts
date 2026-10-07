@@ -23,6 +23,7 @@ import {
 } from "../services/featureFlagAdminService";
 import { FF_DIRECT_CONTRACT_SHADOW } from "../services/directContractShadowService";
 import { CANONICAL_INGESTION_FLAG } from "../services/ingestionUploadService";
+import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../services/institutionalTemplates/portsRegistry";
 import { featureFlagAdminRouter } from "../routers/featureFlagAdminRouter";
 
 const baseWrite = {
@@ -121,7 +122,7 @@ const PROD_REASON = "Piloto Moreira Sales — importação de PDF da Pesquisa de
 
 describe("Política de escrita por ambiente (pura, centralizada)", () => {
   it("produção: só o subconjunto explícito; staging/dev: allowlist geral (L — sem regressão)", () => {
-    expect(PRODUCTION_GOVERNABLE_TENANT_FLAGS).toEqual([CANONICAL_INGESTION_FLAG]);
+    expect(PRODUCTION_GOVERNABLE_TENANT_FLAGS).toEqual([CANONICAL_INGESTION_FLAG, FF_INSTITUTIONAL_TEMPLATES_V1]);
     for (const f of PRODUCTION_GOVERNABLE_TENANT_FLAGS) expect(GOVERNABLE_TENANT_FLAGS).toContain(f);
     expect(tenantFlagWritePolicy(CANONICAL_INGESTION_FLAG, true)).toBe("allowed"); // A
     expect(tenantFlagWritePolicy(FF_DIRECT_CONTRACT_SHADOW, true)).toBe("forbidden_in_production"); // C
@@ -129,6 +130,20 @@ describe("Política de escrita por ambiente (pura, centralizada)", () => {
     expect(tenantFlagWritePolicy(CANONICAL_INGESTION_FLAG, false)).toBe("allowed");
     expect(tenantFlagWritePolicy(FF_DIRECT_CONTRACT_SHADOW, false)).toBe("allowed"); // L
     expect(tenantFlagWritePolicy("FF_QUALQUER_COISA", false)).toBe("not_governable");
+  });
+
+  it("FF_INSTITUTIONAL_TEMPLATES_V1: governável e production-governable; shadow segue proibida; arbitrária recusada", () => {
+    expect(isGovernableFlag(FF_INSTITUTIONAL_TEMPLATES_V1)).toBe(true);
+    expect(isProductionGovernableFlag(FF_INSTITUTIONAL_TEMPLATES_V1)).toBe(true);
+    expect(tenantFlagWritePolicy(FF_INSTITUTIONAL_TEMPLATES_V1, true)).toBe("allowed");
+    expect(tenantFlagWritePolicy(FF_INSTITUTIONAL_TEMPLATES_V1, false)).toBe("allowed");
+    expect(tenantFlagWritePolicy(FF_DIRECT_CONTRACT_SHADOW, true)).toBe("forbidden_in_production");
+    expect(tenantFlagWritePolicy("FF_QUALQUER_COISA", true)).toBe("forbidden_in_production");
+    expect(tenantFlagWritePolicy("FF_QUALQUER_COISA", false)).toBe("not_governable");
+    for (const f of [`${FF_INSTITUTIONAL_TEMPLATES_V1}_X`, "FF_INSTITUTIONAL_TEMPLATES", "ff_institutional_templates_v1", ` ${FF_INSTITUTIONAL_TEMPLATES_V1}`, "FF_INSTITUTIONAL_*"]) {
+      expect(isProductionGovernableFlag(f)).toBe(false);
+      expect(tenantFlagWritePolicy(f, true)).toBe("forbidden_in_production");
+    }
   });
 
   it("match EXATO — sem wildcard, prefixo, sufixo ou variação de caixa/espaço", () => {
@@ -170,6 +185,17 @@ describe("Produção (IS_PRODUCTION=true): FF_CANONICAL_INGESTION tenant-scoped;
     expect(err).toBeInstanceOf(TRPCError);
     // Sem DB no unit, para em "organização não encontrada" — ou seja, a guarda de produção deixou passar.
     expect((err as TRPCError).code).toBe("NOT_FOUND");
+  });
+
+  it("FF_INSTITUTIONAL_TEMPLATES_V1 passa pela guarda de produção (tenant-scoped); sem override o default é OFF", async () => {
+    const svc = await prodService();
+    const err = await svc.setTenantFlag({ ...baseWrite, flagName: FF_INSTITUTIONAL_TEMPLATES_V1, reason: PROD_REASON }).catch((e) => e);
+    expect(err).toBeInstanceOf(TRPCError);
+    expect((err as TRPCError).code).toBe("NOT_FOUND");   // passou da guarda; só para por não haver tenant/DB no unit
+    if (!process.env.DATABASE_URL) {
+      const view = await svc.resolveTenantFlag(FF_INSTITUTIONAL_TEMPLATES_V1, 999);
+      expect([view.effectiveValue, view.origin, view.writeAllowed]).toEqual([false, "default", true]);
+    }
   });
 
   it("B/C: flag arbitrária e FF_DIRECT_CONTRACT_SHADOW continuam FORBIDDEN em produção", async () => {
