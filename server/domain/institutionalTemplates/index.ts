@@ -12,3 +12,8 @@ export * from "./revision";
 export * from "./binding";
 export * from "./manifest";
 export * from "./composerContract";
+// tpl-ast/2 · tpl-catalog/2 (paralelos ao v1; o v1 e o seu replay permanecem intactos)
+export * from "./conditionalDsl2";
+export * from "./variableCatalog2";
+export * from "./ast2";
+export * from "./astVersions";

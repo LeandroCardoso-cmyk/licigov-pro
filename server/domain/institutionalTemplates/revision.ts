@@ -10,10 +10,9 @@
  *  - Importação (Markdown/DOCX) sempre nasce DRAFT.
  *  - Revisão referenciada por manifest nunca é removida.
  */
-import { validateTemplateAst, type TemplateAST } from "./ast";
+import { validateAnyCatalog, validateAnyTemplateAst, type AnyTemplateAST, type AnyVariableCatalog } from "./astVersions";
 import { revisionSemanticHash, templateCanonicalJson } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
-import { validateVariableCatalog, type VariableCatalog } from "./variableCatalog";
 import {
   TEMPLATE_DOCUMENT_KINDS, TEMPLATE_HASH_VERSION, fail, issue, isSha256, ok,
   type HashVersion, type OrgId, type Sha256, type TemplateDocumentKind, type TemplateIssue, type TemplateResult,
@@ -38,7 +37,7 @@ export interface TemplateRevision {
   readonly organizationId: OrgId;
   readonly revision: number;
   readonly status: RevisionStatus;
-  readonly ast: TemplateAST;
+  readonly ast: AnyTemplateAST;
   readonly variableCatalogVersion: string;
   readonly semanticHash: Sha256;
   readonly hashVersion: HashVersion;
@@ -67,7 +66,7 @@ export function validateTemplateIdentity(identity: TemplateIdentity): TemplateRe
  * e hash semântico recalculado. Não confia no `semanticHash` informado.
  */
 export function validateTemplateRevision(
-  revision: TemplateRevision, identity: TemplateIdentity, catalog: VariableCatalog,
+  revision: TemplateRevision, identity: TemplateIdentity, catalog: AnyVariableCatalog,
 ): TemplateResult<TemplateRevision> {
   const issues: TemplateIssue[] = [
     ...organizationIssues(revision, "organizationId"),
@@ -77,12 +76,12 @@ export function validateTemplateRevision(
   if (revision.identityId !== identity.id) issues.push(issue("REVISION_INVALID", "identityId", "revisão não pertence à identidade"));
   if (!Number.isSafeInteger(revision.revision) || revision.revision < 1) issues.push(issue("REVISION_INVALID", "revision", "número de revisão deve ser inteiro ≥ 1"));
   if (revision.hashVersion !== TEMPLATE_HASH_VERSION) issues.push(issue("HASH_INVALID", "hashVersion", `versão de hash desconhecida: ${String(revision.hashVersion)}`));
-  const catalogCheck = validateVariableCatalog(catalog);
+  const catalogCheck = validateAnyCatalog(catalog);
   if (!catalogCheck.ok) issues.push(...catalogCheck.issues);
   if (revision.variableCatalogVersion !== catalog.version) {
     issues.push(issue("CATALOG_VERSION_MISMATCH", "variableCatalogVersion", `revisão usa ${revision.variableCatalogVersion}; catálogo informado é ${catalog.version}`));
   }
-  const astCheck = validateTemplateAst(revision.ast, catalog);
+  const astCheck = validateAnyTemplateAst(revision.ast, catalog);
   if (!astCheck.ok) issues.push(...astCheck.issues);
   if (!isSha256(revision.semanticHash) || revision.semanticHash !== revisionSemanticHash(revision)) {
     issues.push(issue("HASH_INVALID", "semanticHash", "semanticHash não corresponde ao AST canônico + catálogo"));
@@ -103,8 +102,8 @@ export interface NewRevisionInput {
   readonly id: string;
   readonly identity: TemplateIdentity;
   readonly revision: number;
-  readonly ast: TemplateAST;
-  readonly catalog: VariableCatalog;
+  readonly ast: AnyTemplateAST;
+  readonly catalog: AnyVariableCatalog;
   readonly sourceFormat: RevisionSourceFormat;
   /** Só para rejeitar explicitamente tentativas de criar fora de DRAFT (import nunca nasce publicado). */
   readonly requestedStatus?: RevisionStatus;
@@ -144,7 +143,7 @@ const ALLOWED: Record<RevisionStatus, RevisionStatus | null> = {
  * AST inválido bloqueia a submissão. Não existe transição que pule APPROVED.
  */
 export function transitionRevision(
-  revision: TemplateRevision, transition: RevisionTransition, identity: TemplateIdentity, catalog: VariableCatalog,
+  revision: TemplateRevision, transition: RevisionTransition, identity: TemplateIdentity, catalog: AnyVariableCatalog,
 ): TemplateResult<TemplateRevision> {
   if (!Object.prototype.hasOwnProperty.call(ALLOWED, revision.status) || ALLOWED[revision.status] !== transition.to) {
     return fail([issue("REVISION_TRANSITION_INVALID", "status", `transição ${revision.status} → ${transition.to} não permitida`)]);

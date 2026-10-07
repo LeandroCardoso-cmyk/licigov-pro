@@ -13,6 +13,7 @@ import type { AiNarrativeAcceptance, HumanEditLink } from "../../domain/institut
 import {
   ORG_A, ORG_B, canonicalSources, catalog, identity, narrative, publishedRevision, trPin,
 } from "../helpers/institutionalTemplatesFixture";
+import { identity2, publishedRevision2 } from "../helpers/institutionalTemplatesV2Fixture";
 
 // ─── Banco fake transacional ───────────────────────────────────────────────────────────────────────────────────────
 type Row = { table: string; row: any };
@@ -197,6 +198,20 @@ describe("Lane B — geração governada (fail-closed)", () => {
     state.sources = { ...canonicalSources(), TR: { organizationId: ORG_B, data: { object: "x" } } };
     expect((await err(generateTemplatedDocument(genParams(), makePorts())))?.message).toBe("TEMPLATE_COMPOSITION_FAILED: CROSS_TENANT_REFERENCE");
     expect(txAttempts).toBe(0);
+  });
+
+  it("revisão `tpl-ast/2` vinculada ⇒ TEMPLATE_AST_VERSION_UNSUPPORTED (falha fechada: sem fonte v1 para v2, sem escrita)", async () => {
+    const id2 = { ...identity2, id: identity.id, organizationId: ORG_A };
+    const rev2 = publishedRevision2({ identity: id2 });
+    state.bindings = [binding({ pinnedRevisionId: rev2.id })];
+    const ports = makePorts();
+    const v2Ports: TemplatePorts = {
+      ...ports,
+      repository: { ...ports.repository, getRevision: async () => rev2, listRevisions: async () => [rev2] },
+    };
+    expect((await err(generateTemplatedDocument(genParams(), v2Ports)))?.message).toMatch(/^TEMPLATE_AST_VERSION_UNSUPPORTED/);
+    expect(txAttempts).toBe(0);
+    expect(generateOfficialDocument).not.toHaveBeenCalled();
   });
 
   it("tipo oficial incompatível ou ator ausente ⇒ BAD_REQUEST", async () => {

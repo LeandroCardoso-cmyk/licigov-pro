@@ -19,7 +19,8 @@
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../db/connection";
 import type { DocumentBusinessDomain, OfficialDocumentType } from "../../domain/officialDocument";
-import { referencedVariables } from "../../domain/institutionalTemplates/ast";
+import { referencedVariables, type TemplateAST } from "../../domain/institutionalTemplates/ast";
+import { isAstV2 } from "../../domain/institutionalTemplates/astVersions";
 import { resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
 import {
   composeTemplate, templateRequirements,
@@ -43,6 +44,7 @@ export const TEMPLATE_NOT_BOUND = "TEMPLATE_NOT_BOUND";
 export const TEMPLATE_BINDING_AMBIGUOUS = "TEMPLATE_BINDING_AMBIGUOUS";
 export const TEMPLATE_BINDING_INVALID = "TEMPLATE_BINDING_INVALID";
 export const TEMPLATE_COMPOSITION_FAILED = "TEMPLATE_COMPOSITION_FAILED";
+export const TEMPLATE_AST_VERSION_UNSUPPORTED = "TEMPLATE_AST_VERSION_UNSUPPORTED";
 export const TEMPLATE_ISSUANCE_BLOCKED = "TEMPLATE_ISSUANCE_BLOCKED";
 
 /** Aviso obrigatório: todo texto composto (e toda narrativa de IA) é revisado e aceito por humano antes da emissão. */
@@ -85,7 +87,7 @@ async function assertEnabled(ports: TemplatePorts, organizationId: OrgId): Promi
 }
 
 /** Fontes canônicas consultadas pelas variáveis do AST (via catálogo). */
-function requiredSources(revision: TemplateRevision, catalog: VariableCatalog): VariableSource[] {
+function requiredSources(revision: V1Revision, catalog: VariableCatalog): VariableSource[] {
   const out = new Set<VariableSource>();
   for (const name of referencedVariables(revision.ast)) {
     const def = findVariable(catalog, name);
@@ -94,9 +96,15 @@ function requiredSources(revision: TemplateRevision, catalog: VariableCatalog): 
   return [...out].sort();
 }
 
+/** Revisão `tpl-ast/1` (a única que o serviço compõe hoje). */
+type V1Revision = TemplateRevision & { readonly ast: TemplateAST };
+function isV1Revision(r: TemplateRevision): r is V1Revision {
+  return !isAstV2(r.ast);
+}
+
 interface LoadedTemplate {
   readonly identity: TemplateIdentity;
-  readonly revision: TemplateRevision;
+  readonly revision: V1Revision;
   readonly catalog: VariableCatalog;
 }
 
@@ -109,6 +117,12 @@ async function loadExactTemplate(ports: TemplatePorts, organizationId: OrgId, id
   if (!identity || !revision || identity.organizationId !== organizationId || revision.organizationId !== organizationId
       || revision.identityId !== identityId || revision.id !== revisionId) {
     throw preconditionFailed(TEMPLATE_BINDING_INVALID, "revisão fixada não encontrada para a organização");
+  }
+  // `tpl-ast/2` compõe no domínio (composeTemplate despacha), mas as fontes canônicas v2 (orçamento, configuração do
+  // certame, política, normativo, resultado, ciclo de vida) ainda não têm adapter: geração/emissão por serviço falham
+  // FECHADAS para v2 — nunca resolvem fontes pelo caminho v1.
+  if (!isV1Revision(revision)) {
+    throw preconditionFailed(TEMPLATE_AST_VERSION_UNSUPPORTED, "revisão tpl-ast/2 ainda não é composta pelo serviço (adapters das fontes do catálogo v2 pendentes)");
   }
   const catalog = ports.catalog.byVersion(revision.variableCatalogVersion);
   if (!catalog || catalog.version !== revision.variableCatalogVersion) {

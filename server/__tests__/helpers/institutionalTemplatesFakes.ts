@@ -4,7 +4,7 @@
  */
 import { createHash } from "crypto";
 import {
-  sealGenerationManifest, type BindingResolution, type CompositionManifest, type ComposeInput, type ComposeOutcome, type TemplateBinding,
+  isAstV2, isCatalogV2, sealGenerationManifest, type BindingResolution, type CompositionManifest, type ComposeInput, type ComposeOutcome, type TemplateBinding,
   type TemplateDocumentKind, type TemplateIdentity, type TemplateNode, type TemplateRevision, type VariableCatalog, type OrgId, type Inline,
 } from "../../domain/institutionalTemplates";
 import type { InstitutionalDecision } from "../../domain/institutionalDecision";
@@ -113,6 +113,7 @@ export function fakeComposer(input: ComposeInput): ComposeOutcome {
     else if (n.t === "aiSlot") { aiKeys.push(n.slotKey); lines.push(input.aiNarratives[n.slotKey] ?? ""); }
     else if (n.t === "conditional") walk(n.then);
   });
+  if (isAstV2(input.revision.ast) || isCatalogV2(input.catalog)) return { error: "AST_INVALID" }; // stand-in só do v1
   walk(input.revision.ast.root);
   for (const v of input.catalog.vars) if (v.required && input.values[v.name] === undefined) return { error: "MISSING_REQUIRED" };
   const text = lines.join("\n");

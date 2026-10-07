@@ -18,20 +18,35 @@
 import { formatBRL } from "../money";
 import { flagUnverifiedAmounts } from "../aiNumericAuthority";
 import { sha256Hex } from "../canonicalJson";
-import { SOURCE_DIGEST_PREFIX } from "../sourceDigests";
-import { referencedVariables, type DocRefKind, type Inline, type TemplateNode } from "./ast";
+import { referencedVariables, type DocRefKind, type Inline, type TemplateNode, type TemplateAST } from "./ast";
+import { templateRequirements } from "./composerRequirements";
+import { isAstV2, isCatalogV2, type AnyVariableCatalog } from "./astVersions";
+import type { DocRefKind2 } from "./ast2";
+import { composeTemplateV2 } from "./composer2";
+import {
+  CATALOG_SOURCE_TO_MANIFEST_KEY, canonicalSourceDigest, cell, deepFreeze, firstLine, formatNumberPtBr, generationManifestId,
+  inlineText, isAbsent, manifestSourceRefs, MISSING_VALUE_MARK, narrativeWordCount, neutralizeNarrative, PENDING_AI_SLOT_MARK,
+  pinIssues, pinsAndNarrativesCheck, readCatalogPath, sealComposedManifest,
+} from "./composerShared";
 import type { ComposedContent, ComposeInput } from "./composerContract";
 import { evaluateCondition } from "./conditionalDsl";
-import {
-  manifestRevisionIssues, sealGenerationManifest, MANIFEST_SOURCE_KEYS,
-  type AiNarrativeRef, type AnnexRef, type ConditionalDecisionRef, type GenerationManifest, type ManifestSourceKey,
-  type ManifestSourceRef, type OfficialDocumentReference,
+import type {
+  AiNarrativeRef, AnnexRef, ConditionalDecisionRef, GenerationManifest, OfficialDocumentReference,
 } from "./manifest";
-import { validateTemplateRevision, TEMPLATE_ID_RE, type TemplateIdentity } from "./revision";
+import { validateTemplateRevision, type TemplateIdentity } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
-import { TEMPLATE_HASH_VERSION, isOrgId, isSha256, type OrgId, type Sha256, type TemplateIssueCode } from "./types";
+import { isOrgId, type OrgId, type Sha256, type TemplateIssueCode } from "./types";
 import { findVariable, type VariableCatalog, type VariableDef, type VariableSource } from "./variableCatalog";
+import type { VariableSource2 } from "./variableCatalog2";
+
+export { templateRequirements } from "./composerRequirements";
+
+// Reexportados: ficam em `composerShared.ts` (compartilhados com o composer v2), mas a API pública deste módulo não muda.
+export {
+  CATALOG_SOURCE_TO_MANIFEST_KEY, canonicalSourceDigest, formatNumberPtBr, generationManifestId, manifestSourceRefs,
+  MISSING_VALUE_MARK, narrativeWordCount, neutralizeNarrative, PENDING_AI_SLOT_MARK, readCatalogPath,
+};
 
 // ─── Contrato de entrada/saída ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -41,7 +56,11 @@ export type ComposeIssueCode =
   | "MISSING_REQUIRED"
   | "VALUE_TYPE_INVALID"
   | "AI_SLOT_UNKNOWN"
-  | "AI_OUTPUT_INVALID";
+  | "AI_OUTPUT_INVALID"
+  // tpl-ast/2
+  | "XREF_TARGET_NOT_RENDERED"
+  | "CHOICE_NOT_EXACTLY_ONE"
+  | "TABLE_ROWS_INVALID";
 
 export interface ComposeIssue {
   readonly code: ComposeIssueCode;
@@ -89,12 +108,14 @@ export interface AiNarrativeOutput {
  * organização, identidade, pin exato, fontes canônicas, referências oficiais, narrativas de IA e dados do M1.
  * O CONTEXTO CONDICIONAL são os próprios valores canônicos resolvidos pelo catálogo (a DSL só lê variáveis do catálogo).
  */
-export interface TemplateComposeRequest extends Omit<ComposeInput, "values" | "aiNarratives"> {
+export interface TemplateComposeRequest extends Omit<ComposeInput, "values" | "aiNarratives" | "catalog"> {
+  /** Catálogo da MESMA versão do AST da revisão (v1 com `tpl-ast/1`; v2 com `tpl-ast/2`). */
+  readonly catalog: AnyVariableCatalog;
   readonly organizationId: OrgId;
   readonly identity: TemplateIdentity;
   readonly pin: RevisionPin | null | undefined;
-  readonly sources: Partial<Readonly<Record<VariableSource, CanonicalSourceSnapshot>>>;
-  readonly officialDocuments: Partial<Readonly<Record<DocRefKind, OfficialDocumentPin>>>;
+  readonly sources: Partial<Readonly<Record<VariableSource2, CanonicalSourceSnapshot>>>;
+  readonly officialDocuments: Partial<Readonly<Record<DocRefKind2, OfficialDocumentPin>>>;
   readonly aiNarratives: readonly AiNarrativeOutput[];
   /** Fingerprint da identidade institucional vigente (= `official_document_artifacts.identity_fingerprint`). */
   readonly identityFingerprint: string;
@@ -136,33 +157,9 @@ export interface ComposedDocument {
 
 // ─── Fontes canônicas → variáveis ───────────────────────────────────────────────────────────────────────────────────
 
-/** Fonte do catálogo → chave de fonte do manifest. IDENTITY é coberta pelo `identityFingerprint`. */
-export const CATALOG_SOURCE_TO_MANIFEST_KEY: Readonly<Record<VariableSource, ManifestSourceKey | null>> = {
-  PROCESS: "processo", DFD: "dfd", ETP: "etp", TR: "tr", ITEMS: "itens", PARAMS: "parametros", IDENTITY: null,
-};
-
-const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
-const PATH_SEGMENT_RE = /^[A-Za-z0-9_]{1,64}$/;
-
-/** Leitura por caminho pontuado, só em propriedades PRÓPRIAS de objetos simples (sem protótipo, sem expressão). */
-export function readCatalogPath(data: unknown, path: string): unknown {
-  let cur: unknown = data;
-  for (const seg of path.split(".")) {
-    if (!PATH_SEGMENT_RE.test(seg) || FORBIDDEN_PATH_SEGMENTS.has(seg)) return undefined;
-    if (typeof cur !== "object" || cur === null || Array.isArray(cur)) return undefined;
-    if (!Object.prototype.hasOwnProperty.call(cur, seg)) return undefined;
-    cur = (cur as Record<string, unknown>)[seg];
-  }
-  return cur;
-}
-
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 /** Teto de magnitude para `number`: evita notação exponencial na renderização. */
 const MAX_PLAIN_NUMBER = 1e15;
-
-function isAbsent(v: unknown): boolean {
-  return v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
-}
 
 function valueTypeIssue(def: VariableDef, v: unknown): string | null {
   switch (def.type) {
@@ -226,40 +223,7 @@ export function resolveTemplateVariables(
   return { ok: true, value: { values, usedSources: [...used].sort() } };
 }
 
-/** Pin de fonte do manifest: `srcd:<chave>=<sha256 do snapshot canônico integral>` (tpl-hash/1). */
-export function canonicalSourceDigest(key: ManifestSourceKey, snapshot: CanonicalSourceSnapshot): string {
-  return `${SOURCE_DIGEST_PREFIX}${key}=${templateHash(snapshot.data ?? null)}`;
-}
-
-export function manifestSourceRefs(
-  usedSources: readonly VariableSource[],
-  sources: Partial<Readonly<Record<VariableSource, CanonicalSourceSnapshot>>>,
-): ManifestSourceRef[] {
-  const byKey = new Map<ManifestSourceKey, string>();
-  for (const src of usedSources) {
-    const key = CATALOG_SOURCE_TO_MANIFEST_KEY[src];
-    const snap = sources[src];
-    if (key && snap) byKey.set(key, canonicalSourceDigest(key, snap));
-  }
-  return MANIFEST_SOURCE_KEYS.filter((k) => byKey.has(k)).map((k) => ({ key: k, digest: byKey.get(k)! }));
-}
-
 // ─── Formatação determinística (independente de locale) ───────────────────────────────────────────────────────────
-
-function groupThousands(intDigits: string): string {
-  return intDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
-/** pt-BR determinístico: "1.234,5". */
-export function formatNumberPtBr(n: number): string {
-  const [intPart, frac] = String(Math.abs(n)).split(".");
-  return `${n < 0 ? "-" : ""}${groupThousands(intPart)}${frac ? `,${frac}` : ""}`;
-}
-
-/** Texto inline: quebras de linha viram espaço (um valor nunca cria estrutura no documento). */
-function inlineText(s: string): string {
-  return s.replace(/\s*[\r\n]+\s*/g, " ").trim();
-}
 
 export function formatCanonicalValue(def: VariableDef, v: unknown): string {
   switch (def.type) {
@@ -275,9 +239,6 @@ export function formatCanonicalValue(def: VariableDef, v: unknown): string {
       return inlineText(v as string);
   }
 }
-
-export const MISSING_VALUE_MARK = (name: string): string => `[REVISAR: ${name} não informado]`;
-export const PENDING_AI_SLOT_MARK = (slotKey: string): string => `[REVISAR: narrativa "${slotKey}" pendente de redação supervisionada]`;
 
 // ─── Renderização ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -325,28 +286,6 @@ function renderInline(i: Inline, path: string, ctx: RenderCtx): string {
 
 function renderInlines(xs: readonly Inline[], path: string, ctx: RenderCtx): string {
   return xs.map((x, k) => renderInline(x, `${path}[${k}]`, ctx)).join("");
-}
-
-/** Célula de tabela: `|` escapado e sem quebra de linha. */
-function cell(s: string): string {
-  return inlineText(s).replace(/\|/g, "\\|");
-}
-
-/** Neutraliza estrutura Markdown no início de cada linha da narrativa de IA (a IA não cria título, lista, tabela…). */
-export function neutralizeNarrative(text: string): string {
-  return text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/^(\s*)([#>|*+-]|\d+[.)]|```|---)/, "$1\\$2"))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Limite de tamanho da narrativa por slot: nº de palavras ≤ `maxTokens` (contagem determinística, sem tokenizer). */
-export function narrativeWordCount(text: string): number {
-  const t = text.trim();
-  return t ? t.split(/\s+/).length : 0;
 }
 
 function renderNodes(nodes: readonly TemplateNode[], path: string, ctx: RenderCtx): string[] {
@@ -429,14 +368,6 @@ function renderNode(n: TemplateNode, path: string, ctx: RenderCtx): string[] {
   }
 }
 
-function firstLine(blocks: readonly string[]): string | null {
-  for (const b of blocks) {
-    const line = b.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-    if (line) return line;
-  }
-  return null;
-}
-
 /** Valores monetários canônicos (centavos) que a IA pode citar sem marca. */
 function canonicalCents(catalog: VariableCatalog, values: Readonly<Record<string, unknown>>): Set<number> {
   const out = new Set<number>();
@@ -447,57 +378,22 @@ function canonicalCents(catalog: VariableCatalog, values: Readonly<Record<string
   return out;
 }
 
-/** AST: nós `docRef` e chaves de `aiSlot` (em ordem), sem renderizar. */
-export function templateRequirements(nodes: readonly TemplateNode[]): { docRefKinds: DocRefKind[]; aiSlots: string[] } {
-  const kinds = new Set<DocRefKind>();
-  const slots: string[] = [];
-  const walk = (ns: readonly TemplateNode[]): void => ns.forEach((n) => {
-    switch (n.t) {
-      case "list": n.items.forEach(walk); break;
-      case "section": walk(n.children); break;
-      case "conditional": walk(n.then); if (n.else) walk(n.else); break;
-      case "annex": walk(n.children); break;
-      case "docRef": kinds.add(n.kind); break;
-      case "aiSlot": slots.push(n.slotKey); break;
-      default: break;
-    }
-  });
-  walk(nodes);
-  return { docRefKinds: [...kinds].sort(), aiSlots: slots };
-}
-
-/** Id determinístico do M1: mesmo rascunho + mesmo conteúdo semântico ⇒ mesmo id (replay sem efeito duplicado). */
-export function generationManifestId(organizationId: OrgId, generatedDocumentId: string, manifestHash: Sha256): string {
-  return `tplm1_${sha256Hex(`m1:${organizationId}:${generatedDocumentId}:${manifestHash}`).slice(0, 18)}`;
-}
-
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const v of Object.values(value as Record<string, unknown>)) deepFreeze(v);
-  }
-  return value;
-}
-
-// ─── Composição ────────────────────────────────────────────────────────────────────────────────────────────────────
-
-function pinIssues(req: TemplateComposeRequest): ComposeIssue[] {
-  const pin = req.pin;
-  if (!pin || typeof pin.revisionId !== "string" || !pin.revisionId || pin.revisionId.toLowerCase() === "latest" || !TEMPLATE_ID_RE.test(pin.revisionId)) {
-    return [{ code: "BINDING_REVISION_NOT_PINNED", path: "pin.revisionId", message: "composição exige a revisão EXATA (resolução por 'última' é proibida)" }];
-  }
-  const out: ComposeIssue[] = [];
-  if (pin.revisionId !== req.revision.id) out.push({ code: "REFERENCE_NOT_PINNED", path: "pin.revisionId", message: "revisão informada difere da revisão fixada" });
-  if (pin.identityId !== req.revision.identityId || pin.identityId !== req.identity.id) out.push({ code: "REFERENCE_NOT_PINNED", path: "pin.identityId", message: "identidade do template difere do pin" });
-  if (!isSha256(pin.semanticHash) || pin.semanticHash !== req.revision.semanticHash) out.push({ code: "MANIFEST_HASH_MISMATCH", path: "pin.semanticHash", message: "hash semântico difere do pin" });
-  return out;
-}
-
 /**
  * Compõe o documento a partir da revisão exata e das fontes canônicas e sela o M1. Falha fechada com a lista de
  * problemas; nunca devolve conteúdo parcial.
+ *
+ * Despacha pela VERSÃO do AST da revisão: `tpl-ast/2` → `composeTemplateV2`; `tpl-ast/1` → o caminho v1 abaixo, com o
+ * comportamento de sempre (mesmo texto, mesmos hashes). AST e catálogo andam juntos (v1 com v1, v2 com v2).
  */
 export function composeTemplate(req: TemplateComposeRequest): ComposeResult<ComposedDocument> {
+  if (isAstV2(req.revision.ast)) return composeTemplateV2(req);
+  if (isCatalogV2(req.catalog)) {
+    return { ok: false, issues: [{ code: "CATALOG_FORMAT_MISMATCH", path: "catalog", message: "AST tpl-ast/1 exige catálogo v1; o informado é tpl-catalog/2" }] };
+  }
+  return composeTemplateV1(req, req.catalog, req.revision.ast);
+}
+
+function composeTemplateV1(req: TemplateComposeRequest, catalog: VariableCatalog, ast: TemplateAST): ComposeResult<ComposedDocument> {
   // 1. Tenant e pin exato — antes de qualquer leitura de conteúdo.
   const early: ComposeIssue[] = [...organizationIssues(req, "organizationId"), ...pinIssues(req)];
   if (isOrgId(req.organizationId)) {
@@ -512,76 +408,42 @@ export function composeTemplate(req: TemplateComposeRequest): ComposeResult<Comp
   if (!composable) {
     return { ok: false, issues: [{ code: "BINDING_REVISION_NOT_PUBLISHED", path: "revision.status", message: `revisão ${req.revision.status} não compõe documento (${purpose})` }] };
   }
-  const checked = validateTemplateRevision(req.revision, req.identity, req.catalog);
+  const checked = validateTemplateRevision(req.revision, req.identity, catalog);
   if (!checked.ok) return { ok: false, issues: checked.issues };
   for (const k of ["identityFingerprint", "generatedDocumentId", "createdAt"] as const) {
     if (typeof req[k] !== "string" || !req[k]) return { ok: false, issues: [{ code: "MANIFEST_INVALID", path: k, message: `${k} obrigatório` }] };
   }
 
   // 3. Valores canônicos (só pelo catálogo).
-  const resolved = resolveTemplateVariables(req.organizationId, req.catalog, referencedVariables(req.revision.ast), req.sources);
+  const resolved = resolveTemplateVariables(req.organizationId, catalog, referencedVariables(ast), req.sources);
   if (!resolved.ok) return resolved;
 
   // 4. Referências oficiais e narrativas de IA: mesmo tenant, pins completos, slots existentes no AST.
-  const issues: ComposeIssue[] = [];
-  const reqs = templateRequirements(req.revision.ast.root);
-  for (const [kind, pin] of Object.entries(req.officialDocuments) as [DocRefKind, OfficialDocumentPin | undefined][]) {
-    if (!pin) continue;
-    if (pin.organizationId !== req.organizationId) issues.push({ code: "CROSS_TENANT_REFERENCE", path: `officialDocuments.${kind}`, message: "documento oficial de outra organização" });
-    if (!pin.documentId || !pin.lineageId || !Number.isSafeInteger(pin.version) || pin.version < 1 || !isSha256(pin.contentHash) || !pin.title) {
-      issues.push({ code: "REFERENCE_NOT_PINNED", path: `officialDocuments.${kind}`, message: "pin oficial exige documentId + lineageId + version + contentHash + title" });
-    }
-  }
-  const narratives = new Map<string, AiNarrativeOutput>();
-  req.aiNarratives.forEach((a, i) => {
-    const p = `aiNarratives[${i}]`;
-    if (a.organizationId !== req.organizationId) issues.push({ code: "CROSS_TENANT_REFERENCE", path: p, message: "narrativa de IA de outra organização" });
-    if (!reqs.aiSlots.includes(a.slotKey)) issues.push({ code: "AI_SLOT_UNKNOWN", path: p, message: `slot de IA inexistente na revisão: ${String(a.slotKey)}` });
-    if (!a.executionId || typeof a.text !== "string" || !a.text.trim()) issues.push({ code: "AI_OUTPUT_INVALID", path: p, message: "narrativa exige executionId e texto" });
-    if (narratives.has(a.slotKey)) issues.push({ code: "AI_OUTPUT_INVALID", path: p, message: `mais de uma narrativa para o slot ${a.slotKey}` });
-    narratives.set(a.slotKey, a);
-  });
-  if (issues.length) return { ok: false, issues };
+  const reqs = templateRequirements(ast.root);
+  const checkedPins = pinsAndNarrativesCheck(req, reqs.aiSlots);
+  if (checkedPins.issues.length) return { ok: false, issues: checkedPins.issues };
 
   // 5. Renderização determinística.
   const ctx: RenderCtx = {
-    organizationId: req.organizationId, catalog: req.catalog, values: resolved.value.values,
-    allowedCents: canonicalCents(req.catalog, resolved.value.values), docPins: req.officialDocuments, narratives,
+    organizationId: req.organizationId, catalog, values: resolved.value.values,
+    allowedCents: canonicalCents(catalog, resolved.value.values), docPins: req.officialDocuments, narratives: checkedPins.narratives,
     record: true, issues: [], decisions: [], refs: new Map(), annexes: [], ai: [], fragments: [], blocks: [],
   };
-  const blocks = renderNodes(req.revision.ast.root, "root", ctx);
+  const blocks = renderNodes(ast.root, "root", ctx);
   if (ctx.issues.length) return { ok: false, issues: ctx.issues };
   const text = `${blocks.join("\n\n")}\n`;
   const composedOutputHash = sha256Hex(text);
 
   // 6. M1 selado (id derivado do conteúdo semântico; `createdAt` fora do hash).
-  const draft: Omit<GenerationManifest, "manifestHash"> = {
-    stage: "GENERATION",
-    id: "tplm1_pending",
-    organizationId: req.organizationId,
-    generatedDocumentId: req.generatedDocumentId,
-    templateIdentityId: req.revision.identityId,
-    templateRevisionId: req.revision.id,
-    templateSemanticHash: req.revision.semanticHash,
-    hashVersion: TEMPLATE_HASH_VERSION,
-    catalogVersion: req.catalog.version,
+  const sealed = sealComposedManifest(req, {
+    composedOutputHash,
     sources: manifestSourceRefs(resolved.value.usedSources, req.sources),
     officialDocRefs: [...ctx.refs.values()].sort((a, b) => a.order - b.order),
     conditionalDecisions: ctx.decisions,
     aiNarratives: ctx.ai,
     annexes: ctx.annexes,
-    identityFingerprint: req.identityFingerprint,
-    composedOutputHash,
-    createdAt: req.createdAt,
-  };
-  const provisional = sealGenerationManifest(draft);
-  if (!provisional.ok) return { ok: false, issues: provisional.issues };
-  const sealed = sealGenerationManifest({ ...draft, id: generationManifestId(req.organizationId, req.generatedDocumentId, provisional.value.manifestHash) });
-  if (!sealed.ok) return { ok: false, issues: sealed.issues };
-  // PREVIEW: o manifest é descartável e a revisão pode estar em qualquer estado ⇒ só o estado deixa de ser exigido.
-  const consistency = manifestRevisionIssues(sealed.value, req.revision)
-    .filter((i) => purpose !== "PREVIEW" || i.code !== "BINDING_REVISION_NOT_PUBLISHED");
-  if (consistency.length) return { ok: false, issues: consistency };
+  }, purpose);
+  if (!sealed.ok) return sealed;
 
   return {
     ok: true,
