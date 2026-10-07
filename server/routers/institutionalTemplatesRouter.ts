@@ -69,10 +69,11 @@ const lifecycleInput = z.object({
   decision: decisionSchema,
 }).strict();
 
-const publishInput = lifecycleInput.extend({
-  /** Rastro da matriz de prontidão que a pessoa viu (hash) e dos bloqueios aceitos conscientemente — informativo, não autoriza nada. */
-  readiness: z.object({ matrixHash: z.string().length(64), acceptedBlockedChecks: z.array(z.enum(READINESS_CHECK_IDS)).max(20) }).strict().optional(),
-}).strict();
+/**
+ * Publicar: NÃO existe campo para o cliente informar/aceitar matriz de prontidão — o servidor a recalcula com o estado autoritativo
+ * (`.strict()` recusa qualquer `readiness`/`acceptedBlockedChecks`). `inventory` é só DADO da fonte: autenticado pelo SHA-256 da procedência.
+ */
+const publishInput = lifecycleInput.extend({ inventory: z.unknown().refine((v) => { try { return JSON.stringify(v).length <= 1024 * 1024; } catch { return false; } }, "inventário acima do limite").optional() }).strict();
 
 const sha64 = z.string().regex(/^[0-9a-f]{64}$/);
 const declaredAuthority = z.object({
@@ -137,7 +138,7 @@ function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
     case "VALIDATION_FAILED": case "IMPORT_REJECTED": case "DECISION_REJECTED": case "BINDING_NOT_PINNED": case "SCOPE_INVALID": case "SCOPE_DIMENSION_UNSUPPORTED": return "BAD_REQUEST";
     case "CONFLICT": case "REVISION_IMMUTABLE": case "TRANSITION_INVALID": case "STALE_STATE": case "BINDING_AMBIGUOUS":
     case "BINDING_NOT_PUBLISHED": case "REVISION_PINNED_BY_BINDING": return "CONFLICT";
-    case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": return "PRECONDITION_FAILED";
+    case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": case "PUBLICATION_BLOCKED": case "READINESS_UNAVAILABLE": return "PRECONDITION_FAILED";
     default: return "INTERNAL_SERVER_ERROR";
   }
 }
@@ -147,7 +148,7 @@ function mapError(err: unknown): never {
     try { translatePersistenceError(err); } catch (translated) { if (!(translated instanceof TemplatePersistenceError)) return mapError(translated); }
   }
   if (err instanceof TemplateWorkflowError) {
-    const detail = err.issues.slice(0, 10).map((i) => `${i.code} ${i.path || "/"}: ${i.message}`).join("; ");
+    const detail = err.issues.slice(0, 15).map((i) => `${i.code} ${i.path || "/"}: ${i.message}`).join("; ");
     throw new TRPCError({ code: trpcCode(err.code), message: detail ? `${err.message} [${detail}]` : err.message, cause: err });
   }
   throw err;
@@ -258,7 +259,7 @@ export const institutionalTemplatesRouter = router({
       }))),
   }),
 
-  /** Matriz de prontidão antes de publicar (só leitura; informativa — não aprova, não publica). */
+  /** Matriz de prontidão (só leitura). Na publicação o servidor a RECALCULA e qualquer BLOCKED impede publicar. */
   readiness: router({
     evaluate: templatesProcedure("read").input(z.object({ revisionId: id, inventory: inventoryInput.optional() }).strict())
       .query(({ ctx, input }) => guarded(() => new TemplateReadinessService(ctx.ports).evaluate(ctx.wctx, input))),

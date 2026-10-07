@@ -284,8 +284,8 @@ export interface ReadinessMatrixView {
 }
 export function readinessHeadline(m: ReadinessMatrixView): string {
   return m.overall === "READY"
-    ? `Sem bloqueios (${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE). A publicação continua sendo uma decisão humana.`
-    : `${m.summary.blocked} verificação(ões) BLOCKED · ${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE. Os bloqueios não são ocultados.`;
+    ? `Sem bloqueios (${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE). A publicação continua sendo uma decisão humana distinta.`
+    : `${m.summary.blocked} verificação(ões) BLOCKED · ${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE. Os bloqueios não são ocultados e impedem a publicação.`;
 }
 
 // ─── evidência de aprovação jurídica ───────────────────────────────────────────────────

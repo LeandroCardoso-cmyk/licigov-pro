@@ -89,7 +89,7 @@ describe("ScopeFields", () => {
 });
 
 const matrix = (): ReadinessMatrixView => ({
-  revisionId: "tr1", revisionSemanticHash: H, overall: "BLOCKED", matrixHash: "d".repeat(64), summary: { pass: 1, blocked: 1, notApplicable: 1 }, notices: ["A matriz é informativa: não aprova, não publica e não altera o status da revisão."],
+  revisionId: "tr1", revisionSemanticHash: H, overall: "BLOCKED", matrixHash: "d".repeat(64), summary: { pass: 1, blocked: 1, notApplicable: 1 }, notices: ["A matriz é recalculada pelo servidor na publicação: qualquer BLOCKED impede a publicação (PUBLICATION_BLOCKED)."],
   checks: [
     { id: "SOURCE_PROVENANCE", label: "Procedência da fonte", status: "PASS", detail: "ok", findings: [], findingsTotal: 0 },
     { id: "ITEMS_BACKING", label: "Backing de ITEMS", status: "BLOCKED", detail: "sem backing", findings: ["variável ITEMS: ent.i160"], findingsTotal: 30 },
@@ -99,9 +99,9 @@ const matrix = (): ReadinessMatrixView => ({
 describe("ReadinessMatrixPanel", () => {
   it("mostra PASS, BLOCKED e NOT_APPLICABLE sem esconder bloqueios; alerta acessível e achados truncados com contagem", () => {
     const html = h(M.ReadinessMatrixPanel, { matrix: matrix() });
-    for (const t of ["PASS", "BLOCKED", "NOT_APPLICABLE", "variável ITEMS: ent.i160", "… e mais 29 achado(s)", "informativa", 'data-check="ITEMS_BACKING"']) expect(html, t).toContain(t);
+    for (const t of ["PASS", "BLOCKED", "NOT_APPLICABLE", "variável ITEMS: ent.i160", "… e mais 29 achado(s)", "PUBLICATION_BLOCKED", 'data-check="ITEMS_BACKING"']) expect(html, t).toContain(t);
     expect(html).toContain('role="alert"');
-    expect(html).toContain("Os bloqueios não são ocultados");
+    expect(html).toContain("Os bloqueios não são ocultados e impedem a publicação");
   });
 });
 

@@ -29,6 +29,7 @@ import type { AiNarrativeAcceptance, HumanEditLink, StructuralDeviationAcknowled
 import type { VariableSource } from "../../domain/institutionalTemplates/variableCatalog";
 import type { DecisionRequest, DecisionSubjectType, InstitutionalDecision } from "../../domain/institutionalDecision";
 import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
+import type { ReadinessMatrix } from "../../domain/institutionalTemplates/governance/readinessMatrix";
 import type { OfficialDocsExecutor } from "../../db/officialDocuments";
 
 /** Executor transacional (o mesmo do Document Engine/Lifecycle e dos repositórios da Lane A). */
@@ -147,6 +148,16 @@ export interface TemplateGovernancePort {
   listGovernanceDecisions(organizationId: OrgId, subjectType: DecisionSubjectType, revisionId: string): Promise<readonly InstitutionalDecision[]>;
 }
 
+/**
+ * Port ESTREITO de prontidão para a publicação. O backend recalcula a matriz com o estado AUTORITATIVO atual (revisão, procedência
+ * e evidência do ledger, capacidades do sistema) — nunca aceita matriz enviada pelo cliente. Não decide nada: devolve fatos
+ * (PASS/BLOCKED/NOT_APPLICABLE); quem bloqueia a transição APPROVED → PUBLISHED é o workflow. Ausente/indisponível ⇒ publicação falha
+ * fechada (`READINESS_UNAVAILABLE`).
+ */
+export interface TemplateReadinessPort {
+  evaluateForPublication(ctx: WorkflowContext, input: { readonly revisionId: string; readonly inventory?: unknown }): Promise<ReadinessMatrix>;
+}
+
 // ─── Manifests M1/M2 ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Manifests M1/M2 — INSERT-only; leitura tenant-scoped. */
@@ -218,6 +229,8 @@ export interface TemplateWorkflowPorts {
   readonly governance?: TemplateGovernancePort;
   /** Capacidades reais do sistema (matriz de prontidão, dimensões de escopo). Ausente ⇒ `BASELINE_CAPABILITIES_D4BB209`. */
   readonly capabilities?: TemplateCapabilities;
+  /** Prontidão para publicar. Ausente ⇒ publicar revisão de tipo sob `READINESS_GATED_KINDS` falha fechada (`READINESS_UNAVAILABLE`). */
+  readonly readiness?: TemplateReadinessPort;
 }
 
 /** Composição e emissão governadas (Lane B). */

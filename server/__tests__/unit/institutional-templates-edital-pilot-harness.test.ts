@@ -19,7 +19,7 @@ const SCOPE = { ...preset.scope, regime: "EMPREITADA_PRECO_UNITARIO", criterion:
 const HUMAN: PilotStepId[] = ["REGISTER", "LEGAL_EVIDENCE", "APPROVE", "PUBLISH", "BIND"];
 const LANE_A = { ...BASELINE_CAPABILITIES_D4BB209, scopeDimensions: SCOPE_DIMENSIONS };
 
-function build(over: { flag?: boolean; capabilities?: typeof LANE_A; items?: boolean; certame?: boolean; confirm?: PilotStepId[]; accept?: string[]; legal?: boolean; staging?: PilotInput["staging"] } = {}) {
+function build(over: { flag?: boolean; capabilities?: typeof LANE_A; items?: boolean; certame?: boolean; confirm?: PilotStepId[]; legal?: boolean; staging?: PilotInput["staging"] } = {}) {
   const opts = { withItemsTable: over.items, withCertameConfig: over.certame };
   const catalog = buildPilotCatalog(opts);
   const ast = buildPilotAst(opts);
@@ -34,7 +34,7 @@ function build(over: { flag?: boolean; capabilities?: typeof LANE_A; items?: boo
     authority: decisionInput(),
     ...(over.legal === false ? {} : { legalEvidence: { sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: pilotSourceSha256(ast) } }),
     bindingScope: SCOPE, previewContext: { scope: SCOPE, sampleValues }, inventory: buildPilotInventory(ast, opts),
-    confirmedSteps: new Set(over.confirm ?? HUMAN), acceptedBlockers: over.accept, staging: over.staging,
+    confirmedSteps: new Set(over.confirm ?? HUMAN), staging: over.staging,
   };
   return { t, input };
 }
@@ -100,20 +100,16 @@ describe("harness do piloto Edital (dry-run)", () => {
     expect(t.repo.bindings.size).toBe(0);
   });
 
-  it("matriz BLOCKED (ITEMS + CERTAME_CONFIG) trava o PUBLISH até uma pessoa aceitar os bloqueios; o aceite fica registrado na decisão", async () => {
+  it("matriz BLOCKED (ITEMS + CERTAME_CONFIG) ⇒ PUBLISH falha (PUBLICATION_BLOCKED) e NÃO existe aceite de bloqueio: revisão segue APPROVED, zero decisão de publicação", async () => {
     const blocked = build({ items: true, certame: true });
     const r1 = await runEditalPilot(blocked.input);
     expect(by(r1, "READINESS").evidence).toMatchObject({ blocked: ["ITEMS_BACKING", "CERTAME_CONFIG"] });
-    expect(by(r1, "PUBLISH").status).toBe("AWAITING_HUMAN_CONFIRMATION");
-    expect(by(r1, "PUBLISH").detail).toMatch(/ITEMS_BACKING, CERTAME_CONFIG/);
+    expect(by(r1, "PUBLISH").status).toBe("FAILED");
+    expect(by(r1, "PUBLISH").detail).toMatch(/PUBLICATION_BLOCKED/);
+    expect(by(r1, "BIND").status).toBe("SKIPPED_PRECONDITION");
     expect([...blocked.t.repo.revisions.values()][0].status).toBe("APPROVED");
-
-    const accepted = build({ items: true, certame: true, accept: ["ITEMS_BACKING", "CERTAME_CONFIG"] });
-    const r2 = await runEditalPilot(accepted.input);
-    expect(by(r2, "PUBLISH").status).toBe("DONE");
-    expect(by(r2, "PUBLISH").evidence).toMatchObject({ acceptedBlockers: ["ITEMS_BACKING", "CERTAME_CONFIG"] });
-    const publishDecision = [...accepted.t.repo.decisions.values()].find((d) => d.decisionType === "template_publication")!;
-    expect(publishDecision.evidence.join(" ")).toMatch(/readiness\.acceptedBlockers=CERTAME_CONFIG,ITEMS_BACKING/);
+    expect([...blocked.t.repo.decisions.values()].some((d) => d.decisionType === "template_publication")).toBe(false);
+    expect(Object.keys(blocked.input)).not.toContain("acceptedBlockers");
   });
 
   it("com capacidades completas a matriz fica READY e o roteiro não exige aceite de bloqueios", async () => {
@@ -121,13 +117,16 @@ describe("harness do piloto Edital (dry-run)", () => {
     const r = await runEditalPilot(input);
     expect(r.readiness?.overall).toBe("READY");
     expect(by(r, "PUBLISH").status).toBe("DONE");
+    expect(by(r, "PUBLISH").evidence).toMatchObject({ readinessEvidence: [expect.stringMatching(/^readiness\.matrixHash=/), expect.stringMatching(/^readiness\.checkedAt=/), expect.stringMatching(/^readiness\.statuses=/)] });
   });
 
-  it("evidência jurídica é OPCIONAL no roteiro: sem ela o passo é ignorado com aviso, nada é inventado e a matriz mostra a pendência", async () => {
-    const { t, input } = build({ legal: false, accept: ["LEGAL_APPROVAL_EVIDENCE"] });
+  it("sem evidência jurídica o passo é ignorado (nada é inventado) e a PUBLICAÇÃO é bloqueada pelo servidor (evidência ausente ⇒ BLOCKED)", async () => {
+    const { t, input } = build({ legal: false });
     const r = await runEditalPilot(input);
     expect(by(r, "LEGAL_EVIDENCE").detail).toMatch(/nada foi inventado/);
     expect(r.readiness?.checks.find((c) => c.id === "LEGAL_APPROVAL_EVIDENCE")!.status).toBe("BLOCKED");
+    expect(by(r, "PUBLISH").status).toBe("FAILED");
+    expect(by(r, "PUBLISH").detail).toMatch(/LEGAL_APPROVAL_EVIDENCE/);
     expect([...t.repo.decisions.values()].some((d) => d.decisionType === "template_legal_approval_evidence")).toBe(false);
   });
 
@@ -173,6 +172,7 @@ describe("CLI do harness — salvaguardas estruturais", () => {
     expect(src).toMatch(/RECUSADO: o processo/);
     expect(src).not.toMatch(/setFeatureFlag|upsertTenantFlag|tenant_feature_flags|UPDATE |INSERT |DELETE /);
     expect(src).toMatch(/parseConfirm/);
+    expect(src).not.toMatch(/accept-blockers|acceptedBlockers/);
     expect(src).toMatch(/APP_ENV=staging/);
   });
   it("a biblioteca do harness não importa banco, flag nem IA", () => {

@@ -12,7 +12,7 @@
  *  - todo acesso é tenant-scoped pelo `organizationId` do contexto autenticado (nunca do cliente).
  */
 import {
-  AUTHORITY_NOT_VALIDATED, DECISION_MESSAGES, decisionRequestHash, planDecision, validateDecisionRequest,
+  AUTHORITY_NOT_VALIDATED, DECISION_MESSAGES, decisionRequestHash, normalizeDecisionRequest, planDecision, validateDecisionRequest,
   type DecisionRequest, type InstitutionalDecision,
 } from "../../domain/institutionalDecision";
 import {
@@ -23,6 +23,7 @@ import {
   type TemplateIssue, type TemplateRevision, type VariableCatalog, validateTemplateRevision,
 } from "../../domain/institutionalTemplates";
 import { serviceLogger } from "../observabilityService";
+import type { ReadinessMatrix } from "../../domain/institutionalTemplates/governance/readinessMatrix";
 import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplates/governance/capabilities";
 import { scopeHeadline, unsupportedScopeDimensions, validateExplicitScope } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { assertHumanActor } from "./authority";
@@ -35,6 +36,11 @@ import {
 } from "./ports";
 
 const log = serviceLogger("institutionalTemplatesWorkflow");
+
+/** Tipos documentais cuja PUBLICAÇÃO exige matriz de prontidão sem BLOCKED (piloto: Edital). Estender = decisão de produto. */
+export const READINESS_GATED_KINDS: readonly TemplateDocumentKind[] = Object.freeze(["edital"] as TemplateDocumentKind[]);
+/** Prefixo das linhas de evidência ACRESCENTADAS PELO SERVIDOR à decisão de publicação. */
+export const READINESS_EVIDENCE_PREFIX = "readiness.";
 
 const toIssues = (issues: readonly TemplateIssue[]): TemplateWorkflowIssue[] => issues.map((i) => ({ code: i.code, path: i.path, message: i.message }));
 
@@ -230,17 +236,13 @@ export class InstitutionalTemplatesWorkflow {
 
   approve(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "APPROVED", input); }
   /**
-   * Publicar (decisão humana DISTINTA da aprovação). `readiness` (opcional) registra no ledger o hash da matriz de prontidão que
-   * a pessoa viu e os bloqueios que ela aceitou publicar mesmo assim — rastreabilidade, não validação: o sistema não bloqueia nem
-   * libera a publicação pela matriz (a decisão é humana; endurecer isso é decisão do owner).
+   * Publicar (decisão humana DISTINTA da aprovação). Para tipos sob `READINESS_GATED_KINDS` (Edital), ANTES da transição o BACKEND
+   * recalcula a matriz de prontidão com o estado autoritativo atual: qualquer verificação BLOCKED ⇒ `PUBLICATION_BLOCKED` (zero
+   * decisão, zero mudança de status, zero evento). Uma decisão humana NÃO substitui pré-condição estrutural/técnica ausente e não existe
+   * "aceite de bloqueio". `input.inventory` é só DADO (o inventário da fonte), autenticado pelo SHA-256 registrado na procedência —
+   * nunca uma matriz do cliente.
    */
-  publish(ctx: WorkflowContext, input: LifecycleInput & { readonly readiness?: PublishReadinessTrace }) {
-    if (input.readiness) {
-      const lines = [`readiness.matrixHash=${input.readiness.matrixHash}`, ...(input.readiness.acceptedBlockedChecks.length ? [`readiness.acceptedBlockers=${[...input.readiness.acceptedBlockedChecks].sort().join(",")}`] : [])];
-      return this.transition(ctx, "PUBLISHED", { ...input, decision: { ...input.decision, evidence: [...(input.decision.evidence ?? []), ...lines] } });
-    }
-    return this.transition(ctx, "PUBLISHED", input);
-  }
+  publish(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "PUBLISHED", input); }
   deprecate(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "DEPRECATED", input); }
 
   private async transition(ctx: WorkflowContext, to: "APPROVED" | "PUBLISHED" | "DEPRECATED", input: LifecycleInput) {
@@ -270,6 +272,9 @@ export class InstitutionalTemplatesWorkflow {
     }
     const catalog = this.catalogFor(before);
     if (!catalog) throw new TemplateWorkflowError("VALIDATION_FAILED", `catálogo de variáveis ${before.variableCatalogVersion} indisponível; a revisão não pode ser decidida`);
+    // Prontidão: recalculada AQUI, com estado autoritativo, antes de qualquer decisão/escrita. BLOCKED ⇒ nada é persistido.
+    const readinessEvidence = to === "PUBLISHED" ? await this.assertPublicationReadiness(ctx, identity, before, input.inventory) : [];
+    const planned: DecisionRequest = readinessEvidence.length ? { ...request, evidence: [...request.evidence, ...readinessEvidence] } : request;
 
     if (to === "DEPRECATED") {
       const pinning = (await this.ports.repository.listBindings(ctx.organizationId, { activeOnly: true })).filter((b) => b.pinnedRevisionId === before.id);
@@ -278,12 +283,12 @@ export class InstitutionalTemplatesWorkflow {
       }
     }
 
-    const valid = validateDecisionRequest(request);
+    const valid = validateDecisionRequest(planned);
     if (!valid.ok) {
       throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[valid.code] ?? valid.code,
         (valid.fields ?? []).map((f) => ({ code: valid.code, path: f, message: "campo obrigatório ou inválido" })));
     }
-    const plan = planDecision(request, { byIdempotencyKey: null, current: null });
+    const plan = planDecision(planned, { byIdempotencyKey: null, current: null });
     if (plan.kind !== "insert") throw new TemplateWorkflowError("DECISION_REJECTED", "decisão não pôde ser planejada");
     const decision: InstitutionalDecision = plan.decision;
 
@@ -322,8 +327,13 @@ export class InstitutionalTemplatesWorkflow {
     const prior = await this.ports.repository.getDecisionByIdempotencyKey(ctx.organizationId, request.idempotencyKey);
     if (!prior) return null;
     const target = DECISION_BY_TARGET[to];
+    // A decisão de publicação carrega linhas `readiness.*` ACRESCENTADAS PELO SERVIDOR (hash/instante/estados da matriz): o replay
+    // compara o pedido do humano com a decisão gravada SEM essas linhas e só então confere o hash com as linhas originais.
+    const humanEvidence = prior.evidence.filter((l) => !l.startsWith(READINESS_EVIDENCE_PREFIX));
+    const normalized = normalizeDecisionRequest(request).evidence;
+    const sameHumanEvidence = humanEvidence.length === normalized.length && humanEvidence.every((l, i) => l === normalized[i]);
     if (prior.subjectId !== current.id || prior.subjectType !== target.subjectType || prior.decisionType !== target.decisionType
-      || prior.requestHash !== decisionRequestHash(request)) {
+      || !sameHumanEvidence || prior.requestHash !== decisionRequestHash({ ...request, evidence: prior.evidence })) {
       throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES.DECISION_IDEMPOTENCY_CONFLICT);
     }
     if (REVISION_STATUSES.indexOf(current.status) < REVISION_STATUSES.indexOf(to)) return null;
@@ -332,6 +342,36 @@ export class InstitutionalTemplatesWorkflow {
       authorityValidation: AUTHORITY_NOT_VALIDATED, replayed: true, correlationId: ctx.correlationId,
     });
     return { revision: current, decision: prior, replayed: true };
+  }
+
+  /**
+   * Gate de prontidão da publicação. Devolve as linhas `readiness.*` (hash, instante, estados) a gravar NA decisão de publicação.
+   * Não confia em nada do cliente: a matriz é recalculada pelo port a partir do estado atual. Indisponível ⇒ falha fechada.
+   */
+  private async assertPublicationReadiness(ctx: WorkflowContext, identity: TemplateIdentity, revision: TemplateRevision, inventory: unknown): Promise<string[]> {
+    if (!READINESS_GATED_KINDS.includes(identity.documentKind)) return [];
+    const port = this.ports.readiness;
+    if (!port) throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a prontidão para publicar não pôde ser verificada (port não configurado); a publicação foi bloqueada (nada foi alterado)");
+    let matrix: ReadinessMatrix;
+    try {
+      matrix = await port.evaluateForPublication(ctx, { revisionId: revision.id, ...(inventory !== undefined ? { inventory } : {}) });
+    } catch (err) {
+      if (err instanceof TemplateWorkflowError && err.code === "NOT_FOUND") throw err;
+      throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a prontidão para publicar não pôde ser verificada; a publicação foi bloqueada (nada foi alterado)");
+    }
+    if (!matrix || matrix.revisionId !== revision.id || matrix.revisionSemanticHash !== revision.semanticHash || !Array.isArray(matrix.checks)) {
+      throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a matriz de prontidão não corresponde à revisão exata; a publicação foi bloqueada (nada foi alterado)");
+    }
+    const blocked = matrix.checks.filter((c) => c.status === "BLOCKED");
+    if (blocked.length > 0) {
+      throw new TemplateWorkflowError("PUBLICATION_BLOCKED", `a revisão não pode ser publicada: ${blocked.length} verificação(ões) de prontidão BLOCKED (matrixHash=${matrix.matrixHash}); nada foi alterado`,
+        blocked.map((c) => ({ code: c.id, path: `readiness.${c.id}`, message: `${c.label}: ${c.detail}` })));
+    }
+    return [
+      `${READINESS_EVIDENCE_PREFIX}matrixHash=${matrix.matrixHash}`,
+      `${READINESS_EVIDENCE_PREFIX}checkedAt=${this.ports.clock.now()}`,
+      `${READINESS_EVIDENCE_PREFIX}statuses=${matrix.checks.map((c) => `${c.id}:${c.status}`).join(",")}`,
+    ];
   }
 
   // ─── bindings por revisão EXATA ────────────────────────────────────────────
@@ -491,13 +531,6 @@ export class InstitutionalTemplatesWorkflow {
   }
 }
 
-export interface PublishReadinessTrace {
-  /** `ReadinessMatrix.matrixHash` que a pessoa viu na tela. */
-  readonly matrixHash: string;
-  /** Ids das verificações BLOCKED que a pessoa aceitou conscientemente (vazio = matriz sem bloqueios). */
-  readonly acceptedBlockedChecks: readonly string[];
-}
-
 export interface LifecycleInput {
   readonly revisionId: string;
   /** Estado que a pessoa viu na tela (CAS). */
@@ -505,6 +538,8 @@ export interface LifecycleInput {
   /** Confirmação humana EXPLÍCITA (literal `true`). */
   readonly confirm: boolean;
   readonly idempotencyKey: string;
+  /** Só para PUBLICAR: o inventário da fonte (dado). O servidor o autentica pelo SHA-256 da procedência e recalcula a matriz. */
+  readonly inventory?: unknown;
   readonly decision: {
     readonly decidedByName: string;
     readonly decidedByRole: string;

@@ -10,9 +10,10 @@ import {
 import type { InstitutionalDecision } from "../../domain/institutionalDecision";
 import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
 import { InMemoryGovernance } from "./institutionalTemplatesGovernanceFakes";
+import { createTemplateReadinessPort } from "../../services/institutionalTemplates/readinessService";
 import {
   DuplicateTemplateIdentityError, DuplicateTemplateRevisionError,
-  type LifecycleCommit, type LifecycleCommitResult, type TemplateRepositoryPort, type TemplateWorkflowPorts,
+  type LifecycleCommit, type LifecycleCommitResult, type TemplateReadinessPort, type TemplateRepositoryPort, type TemplateWorkflowPorts,
 } from "../../services/institutionalTemplates/ports";
 
 export const TEST_CATALOG: VariableCatalog = {
@@ -74,7 +75,9 @@ export class InMemoryTemplateRepository implements TemplateRepositoryPort {
     if (this.failNextCommit) { this.failNextCommit = false; throw new Error("falha simulada na transação"); }
     const byKey = [...this.decisions.values()].find((d) => d.organizationId === c.organizationId && d.idempotencyKey === c.decision.idempotencyKey);
     if (byKey) return byKey.requestHash === c.decision.requestHash ? { status: "REPLAYED", decision: byKey } : { status: "DECISION_IDEMPOTENCY_CONFLICT" };
-    const cur = await this.getRevision(c.organizationId, c.before.id);
+    // CAS atômico (síncrono entre a leitura e a escrita): duas transições concorrentes nunca passam ambas — como o lock do banco.
+    const cur0 = this.revisions.get(c.before.id);
+    const cur = cur0 && cur0.organizationId === c.organizationId ? cur0 : null;
     if (!cur || cur.status !== c.expectedStatus) return { status: "STALE_STATUS", currentStatus: cur?.status ?? "DEPRECATED" };
     // atômico: decisão + transição juntas
     this.decisions.set(c.decision.id, c.decision);
@@ -139,6 +142,8 @@ export interface TestPortsOptions {
   /** `false` ⇒ sem port de governança (procedência/evidência indisponíveis, fail-closed). Padrão: em memória, compartilhando o ledger do repositório. */
   governance?: boolean;
   capabilities?: TemplateCapabilities;
+  /** `false` ⇒ sem port de prontidão (publicar Edital falha fechado: READINESS_UNAVAILABLE). Padrão: o port REAL sobre os fakes. */
+  readiness?: false | TemplateReadinessPort;
   catalog?: VariableCatalog;
   resolveExactBinding?: (r: Parameters<NonNullable<TemplateWorkflowPorts["composition"]["resolveExactBinding"]>>[0]) => Promise<BindingResolution>;
 }
@@ -163,7 +168,9 @@ export function makeTestPorts(opts: TestPortsOptions = {}): { ports: TemplateWor
     ...(opts.governance === false ? {} : { governance }),
     ...(opts.capabilities ? { capabilities: opts.capabilities } : {}),
   };
-  return { ports, repo, governance, composeCalls, ticks };
+  const withReadiness: TemplateWorkflowPorts = opts.readiness === false ? ports
+    : { ...ports, readiness: opts.readiness ?? createTemplateReadinessPort(ports) };
+  return { ports: withReadiness, repo, governance, composeCalls, ticks };
 }
 
 export const decisionInput = (over: Record<string, unknown> = {}) => ({

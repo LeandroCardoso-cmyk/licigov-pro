@@ -61,13 +61,12 @@ export default function InstitutionalTemplateDetail() {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [form, setForm] = useState<DecisionFormState>(emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);
-  const [ackBlockers, setAckBlockers] = useState(false);
   const approve = trpc.institutionalTemplates.revisions.approve.useMutation({ onError });
   const publish = trpc.institutionalTemplates.revisions.publish.useMutation({ onError });
   const deprecate = trpc.institutionalTemplates.revisions.deprecate.useMutation({ onError });
 
   const startAction = (action: LifecycleAction, revision: RevisionRow) => {
-    setForm(emptyDecisionForm(today())); setShowErrors(false); setAckBlockers(false);
+    setForm(emptyDecisionForm(today())); setShowErrors(false);
     setPending({ action, revision, expectedStatus: revision.status, idempotencyKey: makeIdempotencyKey() });
   };
   const confirmAction = async () => {
@@ -78,11 +77,9 @@ export default function InstitutionalTemplateDetail() {
       revisionId: pending.revision.id, expectedStatus: pending.expectedStatus, confirm: true, idempotencyKey: pending.idempotencyKey,
       decision: { decidedByName: form.decidedByName.trim(), decidedByRole: form.decidedByRole.trim(), decidedAt: form.decidedAt, basisReference: form.basisReference.trim(), reason: form.reason.trim() },
     };
-    const matrix = readiness.data?.matrix.revisionId === pending.revision.id ? (readiness.data.matrix as unknown as ReadinessMatrixView) : null;
-    const blockedIds = matrix ? matrix.checks.filter((c) => c.status === "BLOCKED").map((c) => c.id) : [];
-    if (pending.action === "PUBLISH" && blockedIds.length > 0 && !ackBlockers) { setShowErrors(true); return; }
     try {
-      if (pending.action === "PUBLISH") await publish.mutateAsync({ ...input, ...(matrix ? { readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: blockedIds as never } } : {}) });
+      // Publicar: o servidor RECALCULA a prontidão; o cliente envia só o inventário (dado) — nunca uma matriz nem "aceite de bloqueio".
+      if (pending.action === "PUBLISH") await publish.mutateAsync({ ...input, ...(inventoryJson !== undefined && !inventoryBad ? { inventory: inventoryJson } : {}) });
       else await (pending.action === "APPROVE" ? approve : deprecate).mutateAsync(input);
       toast.success(`${ACTION_COPY[pending.action].title}: decisão registrada.`);
       setPending(null); invalidate();
@@ -312,7 +309,7 @@ export default function InstitutionalTemplateDetail() {
         <TabsContent value="prontidao" className="space-y-4 pt-4">
           {!rev ? <p className="text-sm text-muted-foreground">Selecione uma revisão na aba Revisões.</p> : (
             <>
-              <p className="text-sm text-muted-foreground">A matriz mostra o que ainda impede uma publicação bem fundamentada. É informativa: não aprova nem publica. O inventário da fonte precisa ser reenviado (só o hash fica registrado) e deve coincidir com a procedência.</p>
+              <p className="text-sm text-muted-foreground">A matriz mostra o que impede a publicação: qualquer BLOCKED a recusa no servidor (PUBLICATION_BLOCKED). Ela não aprova nem publica sozinha. O inventário da fonte precisa ser reenviado (só o hash fica registrado) e deve coincidir com a procedência.</p>
               <div className="space-y-1">
                 <Label htmlFor="inv-json">Inventário da fonte (JSON, opcional)</Label>
                 <Textarea id="inv-json" rows={5} className="font-mono text-xs" value={inventoryText} onChange={(e) => setInventoryText(e.target.value)} />
@@ -359,13 +356,12 @@ export default function InstitutionalTemplateDetail() {
             const blocked = m ? m.checks.filter((c) => c.status === "BLOCKED") : [];
             return (
               <div className="space-y-2 rounded-md border p-3 text-sm" aria-label="Prontidão para publicar">
-                {!m ? <p>A matriz de prontidão não foi avaliada nesta sessão para esta revisão. Avalie na aba Prontidão antes de publicar (a decisão continua sendo humana).</p>
-                  : blocked.length === 0 ? <p>Matriz de prontidão sem bloqueios (hash {m.matrixHash.slice(0, 12)}…).</p> : (
+                <p>O servidor recalcula a prontidão ao publicar: qualquer verificação BLOCKED impede a publicação e nenhuma decisão humana a substitui.</p>
+                {!m ? <p>A matriz ainda não foi avaliada nesta sessão; avalie na aba Prontidão (com o inventário da fonte) para ver os bloqueios antes de decidir.</p>
+                  : blocked.length === 0 ? <p>Última avaliação sem bloqueios (hash {m.matrixHash.slice(0, 12)}…).</p> : (
                     <>
-                      <p role="alert" className="font-medium text-destructive">{blocked.length} verificação(ões) BLOCKED:</p>
+                      <p role="alert" className="font-medium text-destructive">{blocked.length} verificação(ões) BLOCKED — a publicação será recusada:</p>
                       <ul className="list-disc pl-5">{blocked.map((c) => <li key={c.id}>{c.label}</li>)}</ul>
-                      <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={ackBlockers} onChange={(e) => setAckBlockers(e.target.checked)} /><span>Estou ciente dos bloqueios acima e decido publicar mesmo assim; o hash da matriz e os bloqueios aceitos serão registrados na decisão.</span></label>
-                      {showErrors && !ackBlockers && <p role="alert" className="text-xs text-destructive">Reconheça os bloqueios para publicar.</p>}
                     </>
                   )}
               </div>
@@ -374,7 +370,8 @@ export default function InstitutionalTemplateDetail() {
           {pending && <DecisionForm action={pending.action} revisionLabel={revisionLabel(pending.revision)} value={form} onChange={setForm} showErrors={showErrors} />}
           <AlertDialogFooter>
             <Button variant="outline" onClick={() => setPending(null)}>Cancelar</Button>
-            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].title : "Confirmar"}</Button>
+            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending
+              || (pending?.action === "PUBLISH" && readiness.data?.matrix.revisionId === pending.revision.id && readiness.data.matrix.overall === "BLOCKED")} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].title : "Confirmar"}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

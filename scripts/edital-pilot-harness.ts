@@ -4,7 +4,7 @@
  *   # dry-run (padrão): ports em memória + fixture SINTÉTICA; sem banco, sem rede, sem efeitos
  *   pnpm tsx scripts/edital-pilot-harness.ts --mode=dry-run --confirm=REGISTER,LEGAL_EVIDENCE,APPROVE,PUBLISH,BIND
  *   # opções de simulação (dry-run): --simulate-lane-a-scope (persistência grava forma/plataforma) · --all-capabilities ·
- *   #   --with-items (tabela dinâmica ITEMS) · --with-certame (entrada CERTAME_CONFIG) · --accept-blockers=ID1,ID2
+ *   #   --with-items (tabela dinâmica ITEMS) · --with-certame (entrada CERTAME_CONFIG)
  *
  *   # staging (ports REAIS; exige APP_ENV=staging|development, flag já LIGADA para a organização de TESTE pelo operador):
  *   APP_ENV=staging pnpm tsx scripts/edital-pilot-harness.ts --mode=staging --organization-id=<id> --actor-user-id=<id> \
@@ -71,7 +71,7 @@ async function dryRun(): Promise<PilotReport> {
     bindingScope: { ...preset.scope, regime: "EMPREITADA_PRECO_UNITARIO", criterion: "MENOR_PRECO" },
     previewContext: { scope: { ...preset.scope, regime: "EMPREITADA_PRECO_UNITARIO", criterion: "MENOR_PRECO" }, sampleValues: { "processo.numero": "TESTE/0001", ...Object.fromEntries(Array.from({ length: 48 }, (_, i) => [`ent.i${String(i + 1).padStart(3, "0")}`, i % 2 ? "SIM" : "NAO"])) } },
     inventory: buildPilotInventory(ast, opts),
-    confirmedSteps: parseConfirm(), acceptedBlockers: (arg("accept-blockers") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    confirmedSteps: parseConfirm(),
   };
   return runEditalPilot(input);
 }
@@ -107,7 +107,7 @@ async function staging(): Promise<PilotReport> {
     registration: { target: { kind: "NEW_IDENTITY", documentKind: preset.documentKind, slug: arg("slug") ?? preset.slug }, templateKey: arg("template-key") ?? preset.templateKey, displayName: arg("display-name") ?? preset.displayName, declaredScope: scope, source: { kind: "AST", ast }, sourceLogicalVersion: need("source-version"), sourceSha256: sha, ...(inventory !== undefined ? { inventory } : {}) },
     authority, ...(legal ? { legalEvidence: legal } : {}), bindingScope: scope,
     previewContext: { scope, sampleValues: JSON.parse(arg("sample-values-json") ?? "{}") as Record<string, unknown> },
-    ...(inventory !== undefined ? { inventory } : {}), confirmedSteps: parseConfirm(), acceptedBlockers: (arg("accept-blockers") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    ...(inventory !== undefined ? { inventory } : {}), confirmedSteps: parseConfirm(),
     staging: {
       compose: async ({ documentKind, scope: sc, asOf }) => {
         const r = await generateTemplatedDocument({

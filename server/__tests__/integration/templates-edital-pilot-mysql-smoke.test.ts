@@ -11,6 +11,8 @@
  *  P6  CATÁLOGO multi-modelo sobre o banco real (nome via procedência; escopo declarado; filtros)
  *  P7  FEATURE OFF: o backend bloqueia a rota direta; nenhuma linha é escrita
  *  P8  SCHEMA: o guard de FKs e o validador de boot seguem limpos (nenhuma tabela/coluna/FK nova)
+ *  P9  GATE DE PRONTIDÃO NA PUBLICAÇÃO (banco real): BLOCKED ⇒ PUBLICATION_BLOCKED com zero decisão/status/evento; cliente não força PASS;
+ *      PASS publica e grava readiness.*; replay; concorrência; cross-tenant; readiness indisponível ⇒ falha fechada
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
@@ -31,6 +33,7 @@ import { TemplateCatalogService } from "../../services/institutionalTemplates/ca
 import { TemplateGovernanceService } from "../../services/institutionalTemplates/governanceService";
 import { ModelRegistrationService } from "../../services/institutionalTemplates/modelRegistrationService";
 import { createTemplateWorkflowPorts } from "../../services/institutionalTemplates/integration";
+import { inventoryCounts, inventoryHash, type SourceInventory } from "../../domain/institutionalTemplates/governance/sourceInventory";
 import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../../services/institutionalTemplates/portsRegistry";
 import type { WorkflowContext } from "../../services/institutionalTemplates/ports";
 import { InstitutionalTemplatesWorkflow } from "../../services/institutionalTemplates/workflowService";
@@ -80,14 +83,23 @@ const AST = {
     { t: "paragraph" as const, inline: [{ t: "text" as const, v: "Modalidade: " }, { t: "var" as const, name: "edital.modalidade" }] },
   ],
 };
+// Inventário mínimo coerente com o AST acima e o catálogo REAL (2 entradas, 0 control-only, 0 condições): a matriz resulta PASS/NOT_APPLICABLE
+const SMALL_INV: SourceInventory = {
+  schema: "tpl-source-inventory/1", sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA, declared: { inputsTotal: 2, controlOnlyInputs: 0, conditionTypes: 0 },
+  inputs: [{ key: "I1", disposition: "VARIABLE", variable: "processo.numero" }, { key: "I2", disposition: "VARIABLE", variable: "edital.modalidade" }],
+  conditionTypes: [], annexes: [], crossReferences: [], aiSlots: [],
+};
 const FULL = { modality: "PREGAO", form: "ELETRONICA", platform: "BLL", regime: "EMPREITADA_PRECO_UNITARIO", criterion: "MENOR_PRECO" };
 
 async function register(org: number, slug: string, over: Record<string, unknown> = {}) {
   const ports = createTemplateWorkflowPorts();
   return new ModelRegistrationService(ports).register(ctxOf(org), {
     target: { kind: "NEW_IDENTITY", documentKind: "edital", slug }, templateKey: slug.toUpperCase().replace(/-/g, "_"), displayName: `Edital — ${slug}`, declaredScope: { ...FULL },
-    source: { kind: "AST", ast: AST }, sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA, confirm: true, idempotencyKey: key("reg"), decision: decision(), ...over,
+    source: { kind: "AST", ast: AST }, sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA, inventory: SMALL_INV, confirm: true, idempotencyKey: key("reg"), decision: decision(), ...over,
   } as never);
+}
+async function recordEvidence(org: number, revisionId: string): Promise<void> {
+  await new TemplateGovernanceService(createTemplateWorkflowPorts()).recordLegalEvidence(ctxOf(org), { revisionId, expectedVersion: 0, confirm: true, idempotencyKey: key("sev"), decision: decision(), evidence: { sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA } });
 }
 const evidence = (revisionId: string, over: Record<string, unknown> = {}, org?: number) => ({
   revisionId, expectedVersion: 0, confirm: true, idempotencyKey: key("ev"), decision: decision(),
@@ -178,8 +190,9 @@ describe.skipIf(!DB)("Piloto Edital — Lane C (MySQL real, adapters reais)", ()
     const org = await seedOrg("p5");
     const r = await register(org, "edital-binding");
     const wf = new InstitutionalTemplatesWorkflow(createTemplateWorkflowPorts());
+    await recordEvidence(org, r.revision.id);
     await wf.approve(ctxOf(org), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decision() });
-    await wf.publish(ctxOf(org), { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato 2" }) });
+    await wf.publish(ctxOf(org), { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato 2" }), inventory: SMALL_INV });
     const input = { documentKind: "edital" as const, scope: { ...FULL }, identityId: r.identity.id, pinnedRevisionId: r.revision.id, effectiveFrom: "2026-10-01T00:00:00.000Z", confirm: true };
     const viaWorkflow = await err(wf.setBinding(ctxOf(org), input));
     expect(viaWorkflow?.code).toBe("SCOPE_DIMENSION_UNSUPPORTED");
@@ -227,6 +240,71 @@ describe.skipIf(!DB)("Piloto Edital — Lane C (MySQL real, adapters reais)", ()
     for (const p of attempts) expect(await code(p)).toBe("PRECONDITION_FAILED");
     expect(await count("SELECT COUNT(*) n FROM institutional_template_identities WHERE organization_id = ?", [off])).toBe(0);
     expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [off])).toBe(0);
+  });
+
+  it("P9 — gate de prontidão na publicação (banco real): BLOCKED ⇒ nada persistido; cliente não força PASS; PASS grava readiness.*; replay; concorrência; cross-tenant; indisponível ⇒ falha fechada", async () => {
+    const org = await seedOrg("p9"); const other = await seedOrg("p9b");
+    const ports = createTemplateWorkflowPorts();
+    const wf = new InstitutionalTemplatesWorkflow(ports);
+    const r = await register(org, "edital-gate");
+    await wf.approve(ctxOf(org), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decision() });
+    const pub = (over: Record<string, unknown> = {}, c = ctxOf(org), w = wf) => w.publish(c, { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato de publicação" }), inventory: SMALL_INV, ...over } as never);
+    const snap = async () => ({
+      decisions: await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [org]),
+      events: await count("SELECT COUNT(*) n FROM institutional_template_events WHERE organization_id = ?", [org]),
+      status: (await rows("SELECT status FROM institutional_template_revisions WHERE organization_id = ? AND id = ?", [org, r.revision.id]))[0].status,
+    });
+
+    // 1+2) evidência jurídica ausente ⇒ BLOCKED ⇒ PUBLICATION_BLOCKED; zero decisão, zero evento, status intacto
+    const before = await snap();
+    const blocked = await err(pub());
+    expect(blocked?.code).toBe("PUBLICATION_BLOCKED");
+    expect(blocked?.issues.map((i: any) => i.code)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    expect(await snap()).toEqual({ ...before, status: "APPROVED" });
+
+    // 3) o cliente não força PASS: inventário adulterado segue BLOCKED (hash da procedência), mesmo após a evidência existir
+    await recordEvidence(org, r.revision.id);
+    const afterEvidence = await snap();
+    const tampered = await err(pub({ inventory: { ...SMALL_INV, declared: { ...SMALL_INV.declared, inputsTotal: 3 } } }));
+    expect(tampered?.code).toBe("PUBLICATION_BLOCKED");
+    expect(tampered.issues.map((i: any) => i.code)).toEqual(expect.arrayContaining(["INPUTS_ACCOUNTED"]));
+    expect((await err(pub({ inventory: undefined })))?.code).toBe("PUBLICATION_BLOCKED");
+    expect(await snap()).toEqual(afterEvidence);
+
+    // 9) readiness indisponível ⇒ falha fechada, nada persistido
+    const { readiness: _r, ...noReadiness } = ports;
+    expect((await err(pub({}, ctxOf(org), new InstitutionalTemplatesWorkflow(noReadiness as any))))?.code).toBe("READINESS_UNAVAILABLE");
+    expect((await err(pub({}, ctxOf(org), new InstitutionalTemplatesWorkflow({ ...ports, readiness: { evaluateForPublication: async () => { throw new Error("db down"); } } } as any))))?.code).toBe("READINESS_UNAVAILABLE");
+    expect(await snap()).toEqual(afterEvidence);
+
+    // 6) cross-tenant: outro tenant não publica (NOT_FOUND) e nada é escrito
+    expect((await err(pub({}, ctxOf(other))))?.code).toBe("NOT_FOUND");
+    expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [other])).toBe(0);
+
+    // 8) concorrência: 4 publicações simultâneas ⇒ exatamente UMA decisão de publicação e UMA transição
+    const results = await Promise.all([1, 2, 3, 4].map((n) => pub({ idempotencyKey: `pilot-race-pub-${RUN}-${n}` }, ctxOf(org, 300 + n)).then(() => "OK", (e) => String(e.message))));
+    expect(results.filter((x) => x === "OK")).toHaveLength(1);
+    for (const x of results.filter((y) => y !== "OK")) expect(x).toMatch(/STALE_STATE|DECISION_REJECTED/);
+    expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND decision_type = 'template_publication'", [org])).toBe(1);
+
+    // 4+5) PASS/NOT_APPLICABLE publicou: a decisão persistiu readiness.matrixHash/checkedAt/statuses (uma só authority)
+    const d = (await rows("SELECT evidence, subject_id, outcome FROM institutional_decisions WHERE organization_id = ? AND decision_type = 'template_publication'", [org]))[0];
+    const lines: string[] = JSON.parse(d.evidence);
+    expect(d).toMatchObject({ subject_id: r.revision.id, outcome: "publicado" });
+    expect(lines[0]).toMatch(/^readiness\.matrixHash=[0-9a-f]{64}$/);
+    expect(lines[1]).toMatch(/^readiness\.checkedAt=\d{4}-\d{2}-\d{2}T/);
+    expect(lines[2]).toMatch(/^readiness\.statuses=SOURCE_PROVENANCE:PASS,.*ITEMS_BACKING:NOT_APPLICABLE.*LEGAL_APPROVAL_EVIDENCE:PASS$/);
+    expect(lines[2]).not.toMatch(/BLOCKED/);
+    const final = await snap();
+    expect(final.status).toBe("PUBLISHED");
+
+    // 7) replay da publicação (mesma chave + mesmo pedido): converge, sem novas linhas
+    const winnerKey = (await rows("SELECT idempotency_key k FROM institutional_decisions WHERE organization_id = ? AND decision_type = 'template_publication'", [org]))[0].k as string;
+    const n = Number(winnerKey.split("-").pop());
+    const replay = await pub({ idempotencyKey: winnerKey }, ctxOf(org, 300 + n));
+    expect(replay.replayed).toBe(true);
+    expect(await snap()).toEqual(final);
+    void inventoryHash; void inventoryCounts;
   });
 
   it("P8 — schema: guard de FKs e validador de boot limpos; nenhuma tabela nova do piloto; ledger usa as colunas existentes", async () => {

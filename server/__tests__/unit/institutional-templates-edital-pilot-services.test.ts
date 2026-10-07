@@ -13,7 +13,7 @@ import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../../serv
 import { ALL_CAPABILITIES, buildPilotAst, buildPilotCatalog, buildPilotInventory, PILOT_SOURCE_LOGICAL_VERSION, pilotSourceSha256 } from "../../services/institutionalTemplates/pilot/editalPilotFixture";
 import type { WorkflowContext } from "../../services/institutionalTemplates/ports";
 import { TemplatePreviewDossierService } from "../../services/institutionalTemplates/previewDossierService";
-import { TemplateReadinessService } from "../../services/institutionalTemplates/readinessService";
+import { createTemplateReadinessPort, TemplateReadinessService } from "../../services/institutionalTemplates/readinessService";
 import { InstitutionalTemplatesWorkflow } from "../../services/institutionalTemplates/workflowService";
 import { decisionInput, makeTestPorts, simpleAst, TEST_CATALOG } from "../helpers/institutionalTemplatesFakes";
 
@@ -41,9 +41,18 @@ async function register(w: W, over: Record<string, unknown> = {}, c = ctx()) {
     confirm: true, idempotencyKey: key("reg"), decision: decisionInput(), ...over,
   } as never);
 }
+/** Prontidão satisfeita: evidência jurídica registrada + aprovação + publicação com o inventário da fonte (dado autenticado pelo hash da procedência). */
+const INVENTORY = buildPilotInventory(buildPilotAst());
+async function satisfyEvidence(w: W, revisionId: string, c = ctx()) {
+  const gov = new TemplateGovernanceService(w.ports);
+  if (!(await gov.get(c, revisionId)).legalEvidence) {
+    await gov.recordLegalEvidence(c, { revisionId, expectedVersion: 0, confirm: true, idempotencyKey: key("sev"), decision: decisionInput(), evidence: { sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: pilotSourceSha256(buildPilotAst()) } });
+  }
+}
 const publish = async (w: W, revisionId: string, c = ctx()) => {
+  await satisfyEvidence(w, revisionId, c);
   await w.wf.approve(c, { revisionId, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decisionInput() });
-  return w.wf.publish(c, { revisionId, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decisionInput() });
+  return w.wf.publish(c, { revisionId, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decisionInput(), inventory: INVENTORY });
 };
 const bind = (w: W, identityId: string, revisionId: string, scope: Record<string, string>, c = ctx()) =>
   w.wf.setBinding(c, { documentKind: "edital", scope, identityId, pinnedRevisionId: revisionId, effectiveFrom: "2026-10-01T00:00:00.000Z", confirm: true });
@@ -211,12 +220,14 @@ describe("evidência jurídica — humana, append-only, opcional, sem status", (
     expect((await err(gov.get(ctx(), rev.id)))?.message).toMatch(/PORTS_NOT_CONFIGURED/);
   });
 
-  it("o lifecycle com evidência é opcional: aprovar/publicar funcionam sem nenhuma evidência (a matriz apenas a mostra pendente)", async () => {
+  it("a evidência não é exigida para aprovar, mas a publicação do Edital a exige (LEGAL_APPROVAL_EVIDENCE BLOCKED ⇒ PUBLICATION_BLOCKED)", async () => {
     const w = world();
     const r = await register(w);
-    expect((await publish(w, r.revision.id)).revision.status).toBe("PUBLISHED");
-    const m = await new TemplateReadinessService(w.ports).evaluate(ctx(), { revisionId: r.revision.id });
-    expect(m.matrix.checks.find((c) => c.id === "LEGAL_APPROVAL_EVIDENCE")!.status).toBe("BLOCKED");
+    await w.wf.approve(ctx(), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decisionInput() });
+    const e = await err(w.wf.publish(ctx(), { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decisionInput(), inventory: INVENTORY }));
+    expect((e as { code?: string })?.code).toBe("PUBLICATION_BLOCKED");
+    expect((e as { issues?: { code: string }[] }).issues?.map((i) => i.code)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    expect((await w.ports.repository.getRevision(1, r.revision.id))!.status).toBe("APPROVED");
   });
 });
 
@@ -377,20 +388,159 @@ describe("binding com aplicabilidade explícita (fail-closed, sem escolha opaca)
   });
 });
 
-describe("publicação com rastro da matriz de prontidão (decisão humana; informativo)", () => {
-  it("o hash da matriz e os bloqueios aceitos entram na EVIDÊNCIA da decisão de publicação; sem `readiness` nada é acrescentado", async () => {
-    const w = world();
+describe("publicação — gate de prontidão recalculado NO SERVIDOR (BLOCKED ⇒ PUBLICATION_BLOCKED)", () => {
+  async function approved(w: W, over: { evidence?: boolean } = {}) {
     const r = await register(w);
-    await w.wf.approve(ctx(), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("a"), decision: decisionInput() });
-    const matrix = (await new TemplateReadinessService(w.ports).evaluate(ctx(), { revisionId: r.revision.id, inventory: buildPilotInventory(buildPilotAst()) })).matrix;
-    const out = await w.wf.publish(ctx(), {
-      revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("p"), decision: decisionInput(),
-      readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: ["ITEMS_BACKING", "CERTAME_CONFIG"] },
-    });
-    expect(out.decision.evidence).toEqual([`readiness.matrixHash=${matrix.matrixHash}`, "readiness.acceptedBlockers=CERTAME_CONFIG,ITEMS_BACKING"]);
-    const r2 = await register(w, { target: { kind: "EXISTING_IDENTITY", identityId: r.identity.id }, idempotencyKey: key("rr") });
-    const plain = await publish(w, r2.revision.id);
-    expect(plain.decision.evidence).toEqual([]);
+    if (over.evidence !== false) await satisfyEvidence(w, r.revision.id);
+    await w.wf.approve(ctx(), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decisionInput() });
+    return r;
+  }
+  const pub = (w: W, revisionId: string, over: Record<string, unknown> = {}, c = ctx()) =>
+    w.wf.publish(c, { revisionId, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decisionInput(), inventory: INVENTORY, ...over } as never);
+  const snapshot = (w: W) => ({ writes: w.repo.writes + w.governance.writes, decisions: w.repo.decisions.size });
+
+  it("1+2) BLOCKED impede publicar e NADA é persistido: zero decisão, status continua APPROVED, zero escrita/evento; os blockers são listados", async () => {
+    const w = world(BASELINE_CAPABILITIES_D4BB209 as never);
+    const r = await approved(w, { evidence: false });
+    const before = snapshot(w);
+    const e = await err(pub(w, r.revision.id));
+    expect(e?.message).toMatch(/^PUBLICATION_BLOCKED: .*1 verificação\(ões\) de prontidão BLOCKED \(matrixHash=[0-9a-f]{64}\); nada foi alterado/);
+    expect((e as { code?: string }).code).toBe("PUBLICATION_BLOCKED");
+    const issues = (e as { issues: { code: string; path: string; message: string }[] }).issues;
+    expect(issues.map((i) => i.code)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    expect(issues[0]).toMatchObject({ path: "readiness.LEGAL_APPROVAL_EVIDENCE" });
+    expect(issues[0].message).toMatch(/Evidência de aprovação jurídica externa/);
+    expect(snapshot(w)).toEqual(before);
+    expect((await w.ports.repository.getRevision(1, r.revision.id))!.status).toBe("APPROVED");
+    expect([...w.repo.decisions.values()].some((d) => d.decisionType === "template_publication")).toBe(false);
+  });
+
+  it("1) vários BLOCKED (ITEMS + CERTAME_CONFIG + evidência) aparecem todos nos blockers", async () => {
+    const opts = { withItemsTable: true, withCertameConfig: true };
+    const catalog = buildPilotCatalog(opts);
+    const t = makeTestPorts({ catalog, capabilities: BASELINE_CAPABILITIES_D4BB209 as never, composer: previewComposeOutcome });
+    const w = { ...t, catalog, wf: new InstitutionalTemplatesWorkflow(t.ports) } as unknown as W;
+    const ast = buildPilotAst(opts); const inv = buildPilotInventory(ast, opts);
+    const r = await new ModelRegistrationService(w.ports).register(ctx(), {
+      target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: "e-blk" }, templateKey: "E_BLK", displayName: "x", declaredScope: FULL, source: { kind: "AST", ast },
+      sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: pilotSourceSha256(ast), inventory: inv, confirm: true, idempotencyKey: key("rb"), decision: decisionInput(),
+    } as never);
+    await w.wf.approve(ctx(), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ab"), decision: decisionInput() });
+    const e = await err(w.wf.publish(ctx(), { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pbb"), decision: decisionInput(), inventory: inv }));
+    expect((e as { issues: { code: string }[] }).issues.map((i) => i.code)).toEqual(["ITEMS_BACKING", "CERTAME_CONFIG", "LEGAL_APPROVAL_EVIDENCE"]);
+  });
+
+  it("3) o cliente NÃO pode forçar PASS: matriz/aceite enviados são ignorados; inventário adulterado (hash ≠ procedência) segue BLOCKED; sem inventário idem", async () => {
+    const w = world();
+    const r = await approved(w);
+    const before = snapshot(w);
+    // `readiness` / `acceptedBlockedChecks` não existem no contrato: mesmo injetados, não têm efeito algum
+    const forged = { matrixHash: "f".repeat(64), acceptedBlockedChecks: ["LEGAL_APPROVAL_EVIDENCE", "INPUTS_ACCOUNTED"], matrix: { overall: "READY", checks: [] } };
+    const tampered = { ...INVENTORY, declared: { ...INVENTORY.declared, inputsTotal: 159 } };
+    for (const over of [{ readiness: forged, inventory: tampered }, { readiness: forged, inventory: undefined }, { inventory: { ...INVENTORY, annexes: [] } }]) {
+      const e = await err(pub(w, r.revision.id, over));
+      expect((e as { code?: string })?.code, JSON.stringify(Object.keys(over))).toBe("PUBLICATION_BLOCKED");
+    }
+    expect(snapshot(w)).toEqual(before);
+    expect((await w.ports.repository.getRevision(1, r.revision.id))!.status).toBe("APPROVED");
+    // o inventário correto (hash registrado) é o que libera
+    expect((await pub(w, r.revision.id)).revision.status).toBe("PUBLISHED");
+  });
+
+  it("4+5) PASS e NOT_APPLICABLE permitem publicar; a decisão grava readiness.matrixHash / checkedAt / statuses (sem segunda authority)", async () => {
+    const w = world();
+    const r = await approved(w);
+    const out = await pub(w, r.revision.id);
+    expect(out.revision.status).toBe("PUBLISHED");
+    const matrix = (await new TemplateReadinessService(w.ports).evaluate(ctx(), { revisionId: r.revision.id, inventory: INVENTORY })).matrix;
+    expect(matrix.overall).toBe("READY");
+    const lines = out.decision.evidence;
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe(`readiness.matrixHash=${matrix.matrixHash}`);
+    expect(lines[1]).toBe("readiness.checkedAt=2026-10-06T12:00:00.000Z");
+    expect(lines[2]).toBe(`readiness.statuses=${matrix.checks.map((c) => `${c.id}:${c.status}`).join(",")}`);
+    expect(lines[2]).toMatch(/ITEMS_BACKING:NOT_APPLICABLE/);   // NOT_APPLICABLE é admissível
+    expect(lines[2]).toMatch(/AI_SLOTS:PASS/);
+    expect(lines[2]).not.toMatch(/BLOCKED/);
+    // a mesma decisão do ledger existente (uma só authority): tipo template_publication
+    expect(out.decision).toMatchObject({ decisionType: "template_publication", subjectType: "institutional_template.publication", subjectId: r.revision.id });
+  });
+
+  it("outros tipos documentais não são afetados pelo gate (publicam sem matriz nem port de prontidão)", async () => {
+    const w = world(LANE_A, { readiness: false } as never);
+    const id = await w.wf.createIdentity(ctx(), { documentKind: "tr", slug: "tr-livre-pub" });
+    const rev = await w.wf.createDraft(ctx(), { identityId: id.id, ast: buildPilotAst() });
+    await w.wf.approve(ctx(), { revisionId: rev.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("a"), decision: decisionInput() });
+    const out = await w.wf.publish(ctx(), { revisionId: rev.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("p"), decision: decisionInput() });
+    expect(out.revision.status).toBe("PUBLISHED");
+    expect(out.decision.evidence).toEqual([]);
+  });
+
+  it("6) cross-tenant: outro tenant não publica (nem testa a prontidão de) revisão alheia — NOT_FOUND idêntico ao inexistente; nada escrito", async () => {
+    const w = world();
+    const r = await approved(w);
+    const before = snapshot(w);
+    const foreign = await err(pub(w, r.revision.id, {}, ctx(2, 50)));
+    const ghost = await err(pub(w, "tr_inexistente", {}, ctx(2, 50)));
+    expect(foreign?.message).toBe(ghost?.message);
+    expect((foreign as { code?: string }).code).toBe("NOT_FOUND");
+    expect(snapshot(w)).toEqual(before);
+    expect((await w.ports.repository.getRevision(1, r.revision.id))!.status).toBe("APPROVED");
+  });
+
+  it("7) replay: mesma chave + mesmo pedido converge para a decisão gravada (com as linhas readiness.*), sem nova escrita nem nova avaliação; pedido diferente ⇒ conflito", async () => {
+    const calls = { n: 0 };
+    const w0 = world();
+    const t = makeTestPorts({ catalog: w0.catalog, capabilities: LANE_A, composer: previewComposeOutcome });
+    const real = createTemplateReadinessPort(t.ports);
+    const counting = { evaluateForPublication: (...a: Parameters<typeof real.evaluateForPublication>) => { calls.n++; return real.evaluateForPublication(...a); } };
+    const ports = { ...t.ports, readiness: counting };
+    const w = { ...t, ports, catalog: w0.catalog, wf: new InstitutionalTemplatesWorkflow(ports) } as unknown as W;
+    const r = await approved(w);
+    const first = await pub(w, r.revision.id, { idempotencyKey: "replay-pub-key-1" });
+    const after = snapshot(w);
+    const evals = calls.n;
+    const again = await pub(w, r.revision.id, { idempotencyKey: "replay-pub-key-1" });
+    expect(again.replayed).toBe(true);
+    expect(again.decision.id).toBe(first.decision.id);
+    expect(again.decision.evidence).toEqual(first.decision.evidence);
+    expect(snapshot(w)).toEqual(after);
+    expect(calls.n).toBe(evals);                       // replay não recalcula nem regrava
+    const diff = await err(pub(w, r.revision.id, { idempotencyKey: "replay-pub-key-1", decision: decisionInput({ reason: "Outra justificativa distinta." }) }));
+    expect(diff?.message).toMatch(/DECISION_REJECTED/);
+  });
+
+  it("8) concorrência: duas publicações simultâneas ⇒ exatamente uma decisão/transição; a outra STALE_STATE (ou replay), nunca duas decisões", async () => {
+    const w = world();
+    const r = await approved(w);
+    const results = await Promise.all([1, 2, 3, 4].map((n) => pub(w, r.revision.id, { idempotencyKey: `race-pub-key-${n}` }).then(() => "OK", (e: Error) => e.message)));
+    expect(results.filter((x) => x === "OK")).toHaveLength(1);
+    for (const x of results.filter((y) => y !== "OK")) expect(x).toMatch(/STALE_STATE/);
+    expect([...w.repo.decisions.values()].filter((d) => d.decisionType === "template_publication")).toHaveLength(1);
+  });
+
+  it("9) readiness indisponível ⇒ falha fechada (READINESS_UNAVAILABLE): sem port, port que lança, ou matriz de OUTRA revisão; nada é persistido", async () => {
+    const base = world();
+    const mk = (readiness: unknown) => {
+      const t = makeTestPorts({ catalog: base.catalog, capabilities: LANE_A, composer: previewComposeOutcome, readiness: readiness as never });
+      return { ...t, catalog: base.catalog, wf: new InstitutionalTemplatesWorkflow(t.ports) } as unknown as W;
+    };
+    const cases: Array<[string, unknown]> = [
+      ["sem port", false],
+      ["port lança", { evaluateForPublication: async () => { throw new Error("boom: banco indisponível"); } }],
+      ["matriz de outra revisão", { evaluateForPublication: async () => ({ revisionId: "outra", revisionSemanticHash: "x", checks: [], summary: { pass: 0, blocked: 0, notApplicable: 0 }, overall: "READY", matrixHash: "h", notices: [] }) }],
+      ["matriz vazia/forjada READY sem checks de hash", { evaluateForPublication: async () => undefined }],
+    ];
+    for (const [label, readiness] of cases) {
+      const w = mk(readiness);
+      const r = await approved(w);
+      const before = snapshot(w);
+      const e = await err(pub(w, r.revision.id));
+      expect((e as { code?: string })?.code, label).toBe("READINESS_UNAVAILABLE");
+      expect(e?.message, label).not.toMatch(/banco indisponível/);   // detalhe interno não vaza
+      expect(snapshot(w), label).toEqual(before);
+      expect((await w.ports.repository.getRevision(1, r.revision.id))!.status, label).toBe("APPROVED");
+    }
   });
 });
 

@@ -89,7 +89,7 @@ describe("registro do modelo", () => {
 describe("prontidão — texto de resumo", () => {
   const m = (blocked: number): ReadinessMatrixView => ({ revisionId: "r", revisionSemanticHash: SHA, overall: blocked ? "BLOCKED" : "READY", matrixHash: SHA, summary: { pass: 9 - blocked, blocked, notApplicable: 2 }, notices: [], checks: [] });
   it("não esconde bloqueios e deixa claro que publicar continua sendo decisão humana", () => {
-    expect(readinessHeadline(m(0))).toMatch(/decisão humana/);
-    expect(readinessHeadline(m(2))).toMatch(/2 verificação\(ões\) BLOCKED.*não são ocultados/);
+    expect(readinessHeadline(m(0))).toMatch(/decisão humana distinta/);
+    expect(readinessHeadline(m(2))).toMatch(/2 verificação\(ões\) BLOCKED.*não são ocultados e impedem a publicação/);
   });
 });

@@ -2,9 +2,9 @@
  * MATRIZ DE PRONTIDÃO antes da publicação (piloto Edital) — domínio puro e determinístico (mesma entrada ⇒ mesma matriz).
  *
  * Cada verificação termina em PASS, BLOCKED ou NOT_APPLICABLE — nunca "ignorada". Nada é escondido: o que não pode ser provado
- * (inventário ausente, capacidade inexistente, evidência ausente) é BLOCKED com o motivo. A matriz é INFORMATIVA para a decisão
- * humana de publicar: ela não aprova, não publica e não muda status. (A decisão de bloquear a publicação por BLOCKED é do owner;
- * a decisão humana de publicar com bloqueios conhecidos é registrada com o hash da matriz — ver `workflowService`.)
+ * (inventário ausente, capacidade inexistente, evidência ausente) é BLOCKED com o motivo. Governança: PASS e NOT_APPLICABLE são admissíveis;
+ * QUALQUER BLOCKED ⇒ PUBLICATION_BLOCKED (o workflow recalcula a matriz no servidor antes de APPROVED → PUBLISHED). A matriz não
+ * aprova, não publica e não muda status; uma decisão humana não substitui pré-condição estrutural/técnica ausente.
  */
 import type { TemplateRevision } from "../revision";
 import { templateHash } from "../semanticHash";
@@ -242,8 +242,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
   };
   const matrixHash = templateHash({ v: "tpl-readiness/1", revision: revision.semanticHash, checks: checks.map((c) => [c.id, c.status, c.findingsTotal]) });
   const notices = [
-    "A matriz é informativa: não aprova, não publica e não altera o status da revisão.",
-    "Aprovação e publicação seguem como decisões humanas distintas, registradas no ledger institucional.",
+    "A matriz é recalculada pelo servidor na publicação: qualquer BLOCKED impede a publicação (PUBLICATION_BLOCKED) e nenhuma decisão humana a substitui.",
+    "PASS/NOT_APPLICABLE não aprovam nem publicam sozinhos: aprovação e publicação seguem como decisões humanas distintas, registradas no ledger institucional.",
   ];
   return { revisionId: revision.id, revisionSemanticHash: revision.semanticHash, checks, summary, overall: summary.blocked === 0 ? "READY" : "BLOCKED", matrixHash, notices };
 }

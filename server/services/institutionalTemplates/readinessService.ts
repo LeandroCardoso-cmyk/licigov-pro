@@ -8,7 +8,7 @@ import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplat
 import { parseSourceInventory, type SourceInventory } from "../../domain/institutionalTemplates/governance/sourceInventory";
 import { TemplateWorkflowError } from "./errors";
 import { TemplateGovernanceService } from "./governanceService";
-import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
+import type { TemplateReadinessPort, TemplateWorkflowPorts, WorkflowContext } from "./ports";
 
 export interface ReadinessResult {
   readonly matrix: ReadinessMatrix;
@@ -38,4 +38,10 @@ export class TemplateReadinessService {
     });
     return { matrix, inventory: { supplied: input.inventory !== undefined, shapeIssues }, revision: { id: revision.id, revision: revision.revision, status: revision.status, semanticHash: revision.semanticHash } };
   }
+}
+
+/** Port estreito de prontidão para a publicação, sobre o estado autoritativo (revisão, ledger, capacidades). */
+export function createTemplateReadinessPort(ports: TemplateWorkflowPorts): TemplateReadinessPort {
+  const svc = new TemplateReadinessService(ports);
+  return { evaluateForPublication: async (ctx, input) => (await svc.evaluate(ctx, input)).matrix };
 }

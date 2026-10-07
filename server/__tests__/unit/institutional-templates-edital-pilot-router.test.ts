@@ -157,17 +157,22 @@ describe("registro pelo router — nasce DRAFT; tenant nunca vem do cliente", ()
   });
 });
 
-describe("binding de escopo explícito e publicação com rastro de prontidão", () => {
-  async function publishedModel() {
+const evidenceInput = (revisionId: string) => ({ revisionId, expectedVersion: 0, confirm: true, idempotencyKey: k("evx"), decision: decisionInput(), evidence: { sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: sha } });
+const INV = buildPilotInventory(ast);
+
+describe("binding de escopo explícito e gate de prontidão na publicação", () => {
+  /** Modelo APPROVED. `ready` registra a evidência jurídica (pré-condição do Edital); sem ela a matriz fica BLOCKED. */
+  async function publishedModel(ready = true) {
     const o = as("operator");
     const reg = await o.registration.register(registerInput());
+    if (ready) await as("manager").governance.recordLegalEvidence(evidenceInput(reg.revision.id));
     await as("manager").revisions.approve(life(reg.revision.id, "DRAFT"));
     return { reg };
   }
 
   it("Edital: escopo incompleto ou dimensão sem backing ⇒ BAD_REQUEST; escopo completo ⇒ binding na revisão exata", async () => {
     const { reg } = await publishedModel();
-    const pub = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED"));
+    const pub = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV }));
     expect(pub.revision.status).toBe("PUBLISHED");
     const input = (scope: Record<string, string>) => ({ documentKind: "edital" as const, scope, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, effectiveFrom: "2026-10-01T00:00:00.000Z", confirm: true });
     expect((await trpcErr(as("manager").bindings.set(input({ modality: "PREGAO" }))))?.message).toMatch(/SCOPE_INVALID/);
@@ -178,16 +183,59 @@ describe("binding de escopo explícito e publicação com rastro de prontidão",
     expect((await as("viewer").bindings.resolve({ documentKind: "edital", scope: { ...FULL, form: "PRESENCIAL", platform: "BLL" }, asOf: "2026-10-07T00:00:00.000Z" })).status).toBe("NOT_BOUND");
   });
 
-  it("publish aceita o rastro da matriz (hash + bloqueios conhecidos) e o grava na evidência da decisão; id de verificação inválido ⇒ BAD_REQUEST", async () => {
-    const { reg } = await publishedModel();
-    const matrix = (await as("viewer").readiness.evaluate({ revisionId: reg.revision.id, inventory: buildPilotInventory(ast) })).matrix;
-    expect((await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: ["NAO_EXISTE"] } }))))?.code).toBe("BAD_REQUEST");
-    const out = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: ["LEGAL_APPROVAL_EVIDENCE"] } }));
-    expect(out.decision.evidence).toEqual([`readiness.matrixHash=${matrix.matrixHash}`, "readiness.acceptedBlockers=LEGAL_APPROVAL_EVIDENCE"]);
+  it("BLOCKED ⇒ PRECONDITION_FAILED/PUBLICATION_BLOCKED com os blockers; nada persistido; o contrato NÃO aceita matriz nem aceite de bloqueio do cliente", async () => {
+    const { reg } = await publishedModel(false);
+    const before = repo.writes + gov.writes;
+    const cast = (v: unknown) => v as never;
+    const blocked = await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV })));
+    expect(blocked?.code).toBe("PRECONDITION_FAILED");
+    expect(blocked?.message).toMatch(/PUBLICATION_BLOCKED.*LEGAL_APPROVAL_EVIDENCE/);
+    // tentativas de forçar: matriz/aceite no input são REJEITADOS pelo schema estrito (BAD_REQUEST) — não existe caminho de override
+    for (const forged of [
+      { readiness: { matrixHash: "a".repeat(64), acceptedBlockedChecks: ["LEGAL_APPROVAL_EVIDENCE"] } }, { acceptedBlockedChecks: ["LEGAL_APPROVAL_EVIDENCE"] },
+      { matrix: { overall: "READY" } }, { readinessMatrixHash: "a".repeat(64) },
+    ]) expect((await trpcErr(as("manager").revisions.publish(cast(life(reg.revision.id, "APPROVED", { inventory: INV, ...forged })))))?.code).toBe("BAD_REQUEST");
+    expect(repo.writes + gov.writes).toBe(before);
+    expect([...repo.decisions.values()].some((d) => d.decisionType === "template_publication")).toBe(false);
+    expect((await as("viewer").revisions.get({ revisionId: reg.revision.id })).revision.status).toBe("APPROVED");
+  });
+
+  it("PASS/NOT_APPLICABLE ⇒ publica; a decisão grava readiness.matrixHash/checkedAt/statuses; replay converge e viewer/operator não publicam", async () => {
+    const { reg } = await publishedModel(true);
+    expect((await trpcErr(as("operator").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV }))))?.code).toBe("FORBIDDEN");
+    const matrix = (await as("viewer").readiness.evaluate({ revisionId: reg.revision.id, inventory: INV })).matrix;
+    const pubInput = life(reg.revision.id, "APPROVED", { inventory: INV, idempotencyKey: "router-pub-key-1" });
+    const out = await as("manager").revisions.publish(pubInput);
+    expect(out.revision.status).toBe("PUBLISHED");
+    expect(out.decision.evidence[0]).toBe(`readiness.matrixHash=${matrix.matrixHash}`);
+    expect(out.decision.evidence[1]).toMatch(/^readiness\.checkedAt=\d{4}-\d{2}-\d{2}T/);
+    expect(out.decision.evidence[2]).toMatch(/^readiness\.statuses=SOURCE_PROVENANCE:PASS,.*ITEMS_BACKING:NOT_APPLICABLE/);
+    const writes = repo.writes + gov.writes;
+    const replay = await as("manager").revisions.publish(pubInput);
+    expect(replay).toMatchObject({ replayed: true });
+    expect(replay.decision.id).toBe(out.decision.id);
+    expect(repo.writes + gov.writes).toBe(writes);
+  });
+
+  it("inventário adulterado ou ausente ⇒ BLOCKED no servidor (o cliente só fornece DADO, autenticado pelo hash da procedência); FEATURE OFF bloqueia a publicação", async () => {
+    const { reg } = await publishedModel(true);
+    const tampered = { ...INV, declared: { ...INV.declared, conditionTypes: 47 } };
+    expect((await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: tampered }))))?.message).toMatch(/PUBLICATION_BLOCKED/);
+    expect((await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED"))))?.message).toMatch(/PUBLICATION_BLOCKED/);
+    flagOn = false;
+    expect((await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV }))))?.message).toMatch(/MODULE_DISABLED/);
+  });
+
+  it("cross-tenant: o tenant B não publica revisão do A (NOT_FOUND idêntico ao inexistente)", async () => {
+    const { reg } = await publishedModel(true);
+    const foreign = await trpcErr(as("manager", 2).revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV })));
+    const ghost = await trpcErr(as("manager", 2).revisions.publish(life("tr_inexistente", "APPROVED", { inventory: INV })));
+    expect(foreign?.code).toBe("NOT_FOUND");
+    expect(foreign?.message).toBe(ghost?.message);
   });
 
   it("a matriz via router espelha o domínio: evidência ausente ⇒ BLOCKED; com evidência + inventário ⇒ READY", async () => {
-    const { reg } = await publishedModel();
+    const { reg } = await publishedModel(false);
     const v = as("viewer");
     const before = (await v.readiness.evaluate({ revisionId: reg.revision.id, inventory: buildPilotInventory(ast) })).matrix;
     expect(before.checks.find((c) => c.id === "LEGAL_APPROVAL_EVIDENCE")!.status).toBe("BLOCKED");

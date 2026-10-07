@@ -204,7 +204,7 @@ describe("matriz de prontidão — todas as 11 verificações, nunca omitidas", 
     for (const id of ["SOURCE_PROVENANCE", "INPUTS_ACCOUNTED", "CONTROL_ONLY_INPUTS", "CONDITION_TYPES", "TR_EXACT_PIN", "ANNEX_MAPPING", "XREF_INTEGRITY", "AI_SLOTS", "LEGAL_APPROVAL_EVIDENCE"]) expect(status(m, id)).toBe("PASS");
     expect(status(m, "ITEMS_BACKING")).toBe("NOT_APPLICABLE");
     expect(status(m, "CERTAME_CONFIG")).toBe("NOT_APPLICABLE");
-    expect(m.notices.join(" ")).toMatch(/informativa/);
+    expect(m.notices.join(" ")).toMatch(/qualquer BLOCKED impede a publicação/);
   });
 
   it("160 entradas / 3 control-only / 48 condições: contagens conferidas contra a procedência e o AST real", () => {

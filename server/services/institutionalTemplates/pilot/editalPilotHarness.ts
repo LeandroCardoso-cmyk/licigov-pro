@@ -7,6 +7,7 @@
  * Regras (invioláveis):
  *  - NUNCA liga a feature flag, nunca toca produção, nunca toca o processo 2026/253 (a CLI recusa); se a flag da organização
  *    estiver OFF, todos os passos ficam `SKIPPED_PRECONDITION` (o backend também bloqueia).
+ *  - PUBLISH não tem "aceite de bloqueio": o backend recalcula a prontidão e qualquer BLOCKED ⇒ PUBLICATION_BLOCKED (passo FAILED).
  *  - Todo passo que muda estado institucional (REGISTER, LEGAL_EVIDENCE, APPROVE, PUBLISH, BIND) só roda se estiver em
  *    `confirmedSteps` — a confirmação é de uma PESSOA, com a autoridade que ela declarou; o harness não decide nada.
  *  - Passos 8–9 só existem com um `PilotStagingPort` (composição/manifest reais em staging); 10–12 são SEMPRE humanos
@@ -77,8 +78,6 @@ export interface PilotInput {
   readonly inventory?: unknown;
   /** Passos de decisão humana que uma PESSOA confirmou executar nesta rodada. */
   readonly confirmedSteps: ReadonlySet<PilotStepId>;
-  /** Ids de verificações BLOCKED que a pessoa aceita publicar mesmo assim (vazio = nenhum). */
-  readonly acceptedBlockers?: readonly string[];
   readonly staging?: PilotStagingPort;
 }
 
@@ -119,7 +118,7 @@ export async function runEditalPilot(input: PilotInput): Promise<PilotReport> {
   };
   const guard = async (id: PilotStepId, fn: () => Promise<{ detail: string; evidence?: Record<string, unknown> }>): Promise<void> => {
     try { const r = await fn(); push(id, "DONE", r.detail, r.evidence); }
-    catch (err) { push(id, "FAILED", err instanceof TemplateWorkflowError ? err.message : err instanceof Error ? `${err.name}: ${err.message}` : "falha desconhecida"); }
+    catch (err) { push(id, "FAILED", err instanceof TemplateWorkflowError ? `${err.message}${err.issues.length ? ` [${err.issues.map((i) => i.code).join(", ")}]` : ""}` : err instanceof Error ? `${err.name}: ${err.message}` : "falha desconhecida"); }
   };
 
   for (const id of PILOT_STEP_IDS) {
@@ -165,16 +164,15 @@ export async function runEditalPilot(input: PilotInput): Promise<PilotReport> {
         break;
       }
       case "PUBLISH": {
-        const blocked = (readiness as ReadinessMatrix | null)?.checks.filter((c) => c.status === "BLOCKED").map((c) => c.id) ?? [];
-        const unaccepted = blocked.filter((b) => !(input.acceptedBlockers ?? []).includes(b));
-        if (unaccepted.length) { push(id, "AWAITING_HUMAN_CONFIRMATION", `matriz com bloqueios não aceitos: ${unaccepted.join(", ")} — uma pessoa deve aceitá-los explicitamente ou resolvê-los; nada foi publicado`); break; }
         if (!requireConfirm(id)) break;
+        // NÃO há aceite de bloqueio: o backend recalcula a prontidão e recusa (PUBLICATION_BLOCKED) se houver QUALQUER BLOCKED.
         await guard(id, async () => {
           const r = await wf.publish(ctx, {
             revisionId, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key(id), decision: input.authority,
-            ...(readiness ? { readiness: { matrixHash: (readiness as ReadinessMatrix).matrixHash, acceptedBlockedChecks: blocked } } : {}),
+            ...(input.inventory !== undefined ? { inventory: input.inventory } : {}),
           });
-          return { detail: `revisão ${r.revision.status}`, evidence: { decisionId: r.decision.id, acceptedBlockers: blocked } };
+          const stored = r.decision.evidence.filter((l) => l.startsWith("readiness."));
+          return { detail: `revisão ${r.revision.status} (prontidão recalculada pelo servidor, sem BLOCKED)`, evidence: { decisionId: r.decision.id, readinessEvidence: stored } };
         });
         break;
       }

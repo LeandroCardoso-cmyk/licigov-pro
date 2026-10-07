@@ -12,6 +12,7 @@ import { createTemplateManifestAdapter } from "./adapters/manifestAdapter";
 import { createPreviewCompositionPort } from "./adapters/previewAdapter";
 import { createTemplateRepositoryAdapter } from "./adapters/repositoryAdapter";
 import { createTemplateReviewAdapter } from "./adapters/reviewAdapter";
+import { createTemplateReadinessPort } from "./readinessService";
 import { createVariableCatalogPort } from "./catalogRegistry";
 import type { PromotionTemplateIssuanceHook } from "./templateCompositionService";
 import { createTemplateIssuanceHook, createTemplateTransactionPort } from "./templateCompositionService";
@@ -22,7 +23,7 @@ import {
 } from "./portsRegistry";
 
 export function createTemplateWorkflowPorts(): TemplateWorkflowPorts {
-  return {
+  const base: TemplateWorkflowPorts = {
     repository: createTemplateRepositoryAdapter(),
     catalog: createVariableCatalogPort(),
     composition: createPreviewCompositionPort(),
@@ -32,6 +33,8 @@ export function createTemplateWorkflowPorts(): TemplateWorkflowPorts {
     clock: systemClock,
     ids: randomIds,
   };
+  // prontidão para publicar: mesmo estado autoritativo (repositório + ledger + catálogo + capacidades), sem segunda authority
+  return { ...base, readiness: createTemplateReadinessPort(base) };
 }
 
 export function createTemplateCompositionPorts(): TemplatePorts {
