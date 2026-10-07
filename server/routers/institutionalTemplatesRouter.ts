@@ -9,6 +9,7 @@ import { getProcess } from "../db/procurement";
 import { TemplatePersistenceError } from "../db/institutionalTemplates";
 import { translatePersistenceError } from "../services/institutionalTemplates/adapters/errors";
 import { TemplateReviewService } from "../services/institutionalTemplates/reviewService";
+import { GovernedSourceService } from "../services/institutionalTemplates/governedSourceService";
 import { generateTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { TRPCError } from "@trpc/server";
 import { orgRoleProcedure, router, tenantProcedure } from "../_core/trpc";
@@ -28,8 +29,12 @@ const STATUSES = ["DRAFT", "APPROVED", "PUBLISHED", "DEPRECATED"] as const;
 
 const id = z.string().min(1).max(24).regex(/^[A-Za-z0-9_-]+$/);
 const iso = z.string().min(20).max(30);
+const scopeSlug = z.string().min(1).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug normalizado (a-z, 0-9 e hífens)");
 const scope = z.object({
   modality: z.string().min(1).max(100).optional(),
+  /** Escopo multi-modelo: forma e plataforma como SLUG normalizado extensível (nunca enum fechado). */
+  form: scopeSlug.optional(),
+  platform: scopeSlug.optional(),
   regime: z.string().min(1).max(100).optional(),
   criterion: z.string().min(1).max(100).optional(),
 }).strict();
@@ -76,11 +81,22 @@ const acknowledgeDeviationInput = z.object({
   confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema,
 }).strict();
 
+const officialPin = z.object({ documentId: id, version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
+const expectedRevision = z.number().int().min(0).max(1_000_000);
+const actBase = { confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema, expectedRevision };
+const certameConfigInput = z.object({ processId: z.string().min(1).max(20), config: z.unknown(), ...actBase }).strict();
+const policyInput = z.object({ policyKey: z.string().min(1).max(48), payload: z.unknown(), ...actBase }).strict();
+const budgetInput = z.object({ processId: z.string().min(1).max(20), disclosure: z.enum(["publico", "sigiloso"]), ...actBase }).strict();
+const revisionRefInput = z.object({ revisionId: id }).strict();
+const legalApprovalInput = z.object({ revisionId: id, semanticHash: z.string().length(64), outcome: z.enum(["aprovado", "reprovado"]), ...actBase }).strict();
+
 const generateInput = z.object({
   processId: z.string().min(1).max(20), documentKind: z.enum(KINDS), documentType: z.enum(["dfd", "etp", "tr", "edital"]),
   scope, asOf: iso, title: z.string().min(1).max(500),
   /** Narrativas de IA entram SÓ por id de execução auditável (o texto nunca vem do cliente). */
   aiExecutionIds: z.array(z.string().min(1).max(20)).max(20).optional(),
+  /** Documento(s) oficial(is) EXATO(S) (id + versão + hash) escolhido(s) por pessoa para cada docRef — nunca "o último". */
+  officialPins: z.object({ TR: officialPin.optional(), ETP: officialPin.optional(), DFD: officialPin.optional() }).strict().optional(),
 }).strict();
 
 function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
@@ -145,7 +161,7 @@ export const institutionalTemplatesRouter = router({
       .query(({ ctx, input }) => guarded(() => ctx.wf.listIdentities(ctx.wctx, input))),
     get: templatesProcedure("read").input(z.object({ identityId: id }).strict())
       .query(({ ctx, input }) => guarded(() => ctx.wf.getIdentity(ctx.wctx, input.identityId))),
-    create: templatesProcedure("draft").input(z.object({ documentKind: z.enum(KINDS), slug: z.string().min(1).max(120) }).strict())
+    create: templatesProcedure("draft").input(z.object({ documentKind: z.enum(KINDS), slug: z.string().min(1).max(120), displayName: z.string().min(1).max(160).optional() }).strict())
       .mutation(({ ctx, input }) => guarded(() => ctx.wf.createIdentity(ctx.wctx, input))),
   }),
 
@@ -203,6 +219,23 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctx.wctx, input))),
   }),
 
+  /**
+   * Fontes governadas por DECISÃO humana do órgão (ledger institucional existente) e evidência de aprovação jurídica do
+   * modelo. Piso técnico `manager`; ator humano + confirmação explícita; sem defaults de resultado/autoridade/parecer.
+   */
+  governed: router({
+    recordCertameConfig: templatesProcedure("govern").input(certameConfigInput)
+      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService().recordCertameConfig(ctx.wctx, input))),
+    recordPolicy: templatesProcedure("govern").input(policyInput)
+      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService().recordPolicy(ctx.wctx, input))),
+    recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
+      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService().recordBudgetDisclosure(ctx.wctx, input))),
+    recordLegalApproval: templatesProcedure("govern").input(legalApprovalInput)
+      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService().recordLegalApproval(ctx.wctx, input))),
+    getLegalApproval: templatesProcedure("read").input(revisionRefInput)
+      .query(({ ctx, input }) => guarded(() => new GovernedSourceService().getLegalApprovalEvidence(ctx.wctx.organizationId, input.revisionId))),
+  }),
+
   /** Geração governada por modelo: binding exato → composição determinística → rascunho + versão `gerado` + M1 (1 transação). */
   compose: router({
     generate: templatesProcedure("generate").input(generateInput)
@@ -216,7 +249,7 @@ export const institutionalTemplatesRouter = router({
         const result = await generateTemplatedDocument({
           organizationId: ctx.wctx.organizationId, subjectId: input.processId, documentKind: input.documentKind, documentType: input.documentType,
           scope: input.scope, asOf: input.asOf, title: input.title, actorUserId: ctx.wctx.actor.userId, correlationId: ctx.wctx.correlationId,
-          aiNarratives: outputs,
+          aiNarratives: outputs, ...(input.officialPins ? { officialPins: input.officialPins } : {}),
         }, ports);
         return {
           generationManifestId: result.generationManifest.id, generatedDocumentId: result.generatedDocumentId, replayed: result.replayed,

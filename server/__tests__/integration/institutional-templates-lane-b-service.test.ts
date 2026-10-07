@@ -117,6 +117,7 @@ function makePorts(): TemplatePorts {
     canonical: {
       resolveSources: async (_org, _subject, keys) => Object.fromEntries(keys.filter((k) => state.sources[k]).map((k) => [k, state.sources[k]])),
       resolveOfficialDocuments: async () => state.docs,
+      pinOfficialDocuments: async () => state.docs,
       identityFingerprint: async () => state.fingerprint,
     },
     drafts: {

@@ -139,6 +139,7 @@ export interface ComposedDocument {
 /** Fonte do catálogo → chave de fonte do manifest. IDENTITY é coberta pelo `identityFingerprint`. */
 export const CATALOG_SOURCE_TO_MANIFEST_KEY: Readonly<Record<VariableSource, ManifestSourceKey | null>> = {
   PROCESS: "processo", DFD: "dfd", ETP: "etp", TR: "tr", ITEMS: "itens", PARAMS: "parametros", IDENTITY: null,
+  CERTAME_CONFIG: "certame", POLICY: "politica", BUDGET: "orcamento", NORMATIVE: "normativo", LIFECYCLE: "ciclo", RESULT: "resultado",
 };
 
 const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);

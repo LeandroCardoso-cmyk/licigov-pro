@@ -409,19 +409,13 @@ export function confirmedCatalogFromDecision(d: { decision: string; catmatCode: 
 }
 
 /**
- * Resolve as fontes (TENANT-SCOPED) e monta o contexto. Documento/itens de outro tenant retornam vazio
- * (tratados como ausentes, nunca vazam).
+ * Itens Inteligentes APROVADOS com a classificação CONFIRMADA por decisão humana vigente (tenant-scoped). Base única do modo
+ * canônico dos documentos (ETP/TR/Edital e das fontes dos Modelos Institucionais): quem consome nunca refaz esta leitura.
  */
-export async function resolveDocumentAuthoringContext(params: {
-  organizationId: number; processId: string; kind: ContextualKind; object: string;
-}): Promise<DocumentAuthoringContext> {
-  const [process, dfd, etp, items] = await Promise.all([
-    getProcess(params.processId, params.organizationId),
-    // R9 / SEM-039 — fonte AUTORITATIVA a montante (versão emitida quando existir; senão o rascunho, rotulado).
-    resolveAuthoritativeUpstream(params.organizationId, params.processId, "dfd"),
-    params.kind === "tr" ? resolveAuthoritativeUpstream(params.organizationId, params.processId, "etp") : Promise.resolve(null),
-    listIntelligentItems(params.processId, params.organizationId),
-  ]);
+export async function loadApprovedContextItems(params: {
+  organizationId: number; processId: string;
+}): Promise<{ approvedItems: ContextItem[]; pendingItemCount: number }> {
+  const items = await listIntelligentItems(params.processId, params.organizationId);
   const approved = items.filter((i) => i.status === "aprovado");
   const decisions = await getLatestCatmatDecisionsForItems(approved.map((i) => i.id), params.organizationId);
   const approvedItems: ContextItem[] = approved.map((i) => ({
@@ -436,13 +430,31 @@ export async function resolveDocumentAuthoringContext(params: {
       valueCents: Number(s.value) > 0 ? reaisToCents(s.value) : null,
     })),
   }));
+  return { approvedItems, pendingItemCount: items.filter((i) => i.status !== "aprovado" && i.status !== "rejeitado").length };
+}
+
+/**
+ * Resolve as fontes (TENANT-SCOPED) e monta o contexto. Documento/itens de outro tenant retornam vazio
+ * (tratados como ausentes, nunca vazam).
+ */
+export async function resolveDocumentAuthoringContext(params: {
+  organizationId: number; processId: string; kind: ContextualKind; object: string;
+}): Promise<DocumentAuthoringContext> {
+  const [process, dfd, etp, loaded] = await Promise.all([
+    getProcess(params.processId, params.organizationId),
+    // R9 / SEM-039 — fonte AUTORITATIVA a montante (versão emitida quando existir; senão o rascunho, rotulado).
+    resolveAuthoritativeUpstream(params.organizationId, params.processId, "dfd"),
+    params.kind === "tr" ? resolveAuthoritativeUpstream(params.organizationId, params.processId, "etp") : Promise.resolve(null),
+    loadApprovedContextItems(params),
+  ]);
+  const { approvedItems, pendingItemCount } = loaded;
   // Modo canônico (ETP e TR) pelo gate determinístico compartilhado; sem Itens Canônicos ⇒ legado inalterado.
   const projected = await resolveCanonicalDocumentItems(params, approvedItems);
   return buildDocumentAuthoringContext({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     object: params.object, processObject: process?.object ?? null, processNumber: process?.processNumber ?? null,
     dfd: toUpstream(dfd), etp: toUpstream(etp), approvedItems: projected?.items ?? approvedItems,
-    pendingItemCount: items.filter((i) => i.status !== "aprovado" && i.status !== "rejeitado").length,
+    pendingItemCount,
     canonical: projected?.state,
   });
 }

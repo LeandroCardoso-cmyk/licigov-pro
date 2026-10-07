@@ -204,7 +204,11 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     const e315 = journal.find((e) => e.idx === 315)!;
     expect(e316.tag).toBe(TAG);
     expect(e316.when).toBeGreaterThan(e315.when);
-    expect(journal.filter((e) => e.idx > 316)).toEqual([]);
+    // 0317 (escopo multi-modelo) é a ÚNICA migration posterior à 0316 neste contexto: aditiva, só nas tabelas do bounded context.
+    expect(journal.filter((e) => e.idx > 317)).toEqual([]);
+    const e317 = journal.find((e) => e.idx === 317)!;
+    expect(e317.tag).toBe("0317_institutional_template_multimodel_scope");
+    expect(e317.when).toBeGreaterThan(e316.when);
 
     const snap = (n: string) => JSON.parse(readFileSync(path.join(DRZ, "meta", `${n}_snapshot.json`), "utf8")) as { tables: Record<string, unknown> };
     const before = snap("0315").tables;
@@ -212,6 +216,12 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     const added = Object.keys(after).filter((k) => !(k in before)).sort();
     expect(added).toEqual([...CONTRACT.tables].sort());
     for (const k of Object.keys(before)) expect(templateCanonicalJson(after[k] as never), `tabela existente alterada: ${k}`).toBe(templateCanonicalJson(before[k] as never));
+
+    // 0317: nenhuma tabela nova/removida; só identidades e bindings (criadas na 0316) mudam; nenhuma tabela produtiva existente.
+    const after317 = snap("0317").tables;
+    expect(Object.keys(after317).sort()).toEqual(Object.keys(after).sort());
+    const changed = Object.keys(after).filter((k) => templateCanonicalJson(after317[k] as never) !== templateCanonicalJson(after[k] as never)).sort();
+    expect(changed).toEqual(["institutional_template_bindings", "institutional_template_identities"]);
   });
 });
 

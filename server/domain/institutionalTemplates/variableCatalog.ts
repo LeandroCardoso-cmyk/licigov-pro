@@ -8,10 +8,21 @@
 import { issue, type TemplateIssue, type TemplateResult, ok, fail } from "./types";
 
 export type VariableType = "string" | "number" | "money" | "date" | "enum" | "list";
-export type VariableSource = "PROCESS" | "DFD" | "ETP" | "TR" | "ITEMS" | "PARAMS" | "IDENTITY";
+/**
+ * Fontes canônicas (cada uma = UMA autoridade distinta; nada de "PARAMS genérico" escondendo autoridades):
+ *  PROCESS/IDENTITY = fatos do processo e do órgão · DFD/ETP/TR = versão OFICIAL emitida (pin exato) · ITEMS = Itens da
+ *  contratação canônicos · PARAMS = parâmetros do Edital (decisão do processo) · CERTAME_CONFIG = configuração decidida do
+ *  certame · POLICY = política institucional · BUDGET = orçamento (divulgação + estimativa) · NORMATIVE = fonte normativa
+ *  VERIFICADA (reference set governado) · LIFECYCLE = ciclo de vida do processo · RESULT = resultado do certame.
+ */
+export type VariableSource =
+  | "PROCESS" | "DFD" | "ETP" | "TR" | "ITEMS" | "PARAMS" | "IDENTITY"
+  | "CERTAME_CONFIG" | "POLICY" | "BUDGET" | "NORMATIVE" | "LIFECYCLE" | "RESULT";
 
 export const VARIABLE_TYPES: readonly VariableType[] = ["string", "number", "money", "date", "enum", "list"];
-export const VARIABLE_SOURCES: readonly VariableSource[] = ["PROCESS", "DFD", "ETP", "TR", "ITEMS", "PARAMS", "IDENTITY"];
+export const VARIABLE_SOURCES: readonly VariableSource[] = [
+  "PROCESS", "DFD", "ETP", "TR", "ITEMS", "PARAMS", "IDENTITY", "CERTAME_CONFIG", "POLICY", "BUDGET", "NORMATIVE", "LIFECYCLE", "RESULT",
+];
 
 export interface VariableDef {
   readonly name: string;

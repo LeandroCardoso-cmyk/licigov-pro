@@ -138,10 +138,11 @@ export class InstitutionalTemplatesWorkflow {
 
   // ─── identidade e revisões (DRAFT) ─────────────────────────────────────────
 
-  async createIdentity(ctx: WorkflowContext, input: { documentKind: TemplateDocumentKind; slug: string }): Promise<TemplateIdentity> {
+  async createIdentity(ctx: WorkflowContext, input: { documentKind: TemplateDocumentKind; slug: string; displayName?: string }): Promise<TemplateIdentity> {
     assertHumanActor(ctx.actor);
     const identity: TemplateIdentity = {
       id: this.ports.ids.newId("ti"), organizationId: ctx.organizationId, documentKind: input.documentKind, slug: input.slug,
+      ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       createdAt: this.ports.clock.now(), createdByUserId: ctx.actor.userId,
     };
     const valid = validateTemplateIdentity(identity);

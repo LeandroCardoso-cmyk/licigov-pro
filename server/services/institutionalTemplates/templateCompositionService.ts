@@ -34,7 +34,11 @@ import { sha256Hex } from "../../domain/canonicalJson";
 import { generateOfficialDocument } from "../documentEngineService";
 import { serviceLogger } from "../observabilityService";
 import { runTransactionWithDeadlockRetry } from "../transactionDeadlockRetry";
-import { TemplatePersistenceUnavailableError, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor } from "./ports";
+import {
+  TEMPLATE_SOURCE_UNAVAILABLE, TemplatePersistenceUnavailableError, TemplateSourceUnavailableError,
+  type RequestedOfficialPin, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor,
+} from "./ports";
+import type { DocRefKind } from "../../domain/institutionalTemplates/ast";
 
 const log = serviceLogger("TemplateCompositionService");
 
@@ -58,6 +62,12 @@ const KIND_TARGETS: Readonly<Record<TemplateDocumentKind, { readonly businessDom
   contrato: { businessDomain: "contratos", documentTypes: ["contrato"] },
   aditivo: { businessDomain: "contratos", documentTypes: ["aditivo"] },
 };
+
+/** Fonte canônica indisponível/inconsistente ⇒ recusa governada (PRECONDITION_FAILED), sem nenhum efeito. */
+function sourceUnavailableToPrecondition(err: unknown): never {
+  if (err instanceof TemplateSourceUnavailableError) throw preconditionFailed(TEMPLATE_SOURCE_UNAVAILABLE, `${err.source} — ${err.reason}: ${err.detail}`);
+  throw err;
+}
 
 function codesOf(issues: readonly { code: string }[]): string {
   return [...new Set(issues.map((i) => i.code))].join(", ");
@@ -117,12 +127,22 @@ async function loadExactTemplate(ports: TemplatePorts, organizationId: OrgId, id
   return { identity, revision, catalog };
 }
 
-/** Lê do domínio institucional tudo de que a revisão precisa (fora da transação). */
-async function loadCanonicalInputs(ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate) {
+/**
+ * Lê do domínio institucional tudo de que a revisão precisa (fora da transação).
+ *  - GERAÇÃO (`officialPins` informado, mesmo vazio): o documento oficial referenciado é o PIN EXATO escolhido por pessoa
+ *    (validado contra a versão vigente); sem pin para um `docRef` ⇒ falha fechada. Nunca "o último" decidido pelo servidor.
+ *  - REVALIDAÇÃO (`officialPins` ausente): lê a AUTORIDADE ATUAL para detectar que o documento oficial mudou (SOURCE_CHANGED).
+ */
+async function loadCanonicalInputs(
+  ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate,
+  officialPins?: Partial<Record<DocRefKind, RequestedOfficialPin>>,
+) {
   const needs = templateRequirements(t.revision.ast.root);
   const [sources, officialDocuments, identityFingerprint] = await Promise.all([
     ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog)),
-    ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
+    officialPins !== undefined
+      ? ports.canonical.pinOfficialDocuments(organizationId, subjectId, needs.docRefKinds, officialPins)
+      : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
   return { sources, officialDocuments, identityFingerprint };
@@ -144,6 +164,11 @@ export interface GenerateTemplatedDocumentParams {
   readonly correlationId: string;
   /** Narrativas de IA já produzidas para os `aiSlot` da revisão (opcional; nunca aceitas por padrão). */
   readonly aiNarratives?: readonly AiNarrativeOutput[];
+  /**
+   * Documentos oficiais EXATOS (id + versão + hash) escolhidos por pessoa para cada `docRef` da revisão (ex.: o TR). Obrigatório
+   * quando a revisão referencia documento oficial; ausente ⇒ TEMPLATE_SOURCE_UNAVAILABLE (OFFICIAL_PIN_REQUIRED).
+   */
+  readonly officialPins?: Partial<Record<DocRefKind, RequestedOfficialPin>>;
 }
 
 export interface GenerateTemplatedDocumentResult {
@@ -189,7 +214,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
 
   // 3. Fontes canônicas + rascunho de destino (fora da transação).
   const [canonical, generatedDocumentId] = await Promise.all([
-    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t),
+    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}).catch(sourceUnavailableToPrecondition),
     ports.drafts.reserveDraftId(params.organizationId, params.subjectId, params.documentType),
   ]);
 
@@ -305,7 +330,11 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
       }
 
       const [recomposition, humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
-        recompose(ports, input.organizationId, input.processId, m1, t, outputs),
+        // Fonte que deixou de estar disponível/íntegra (ex.: configuração corrompida, set normativo desativado) BLOQUEIA a emissão.
+        recompose(ports, input.organizationId, input.processId, m1, t, outputs).catch((err: unknown) => {
+          if (err instanceof TemplateSourceUnavailableError) throw blocked("SOURCE_UNAVAILABLE", `${err.source} — ${err.reason}`);
+          throw err;
+        }),
         ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
         ports.review.listAiAcceptances(input.organizationId, m1.id),
         ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),

@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { DOCUMENT_KIND_LABEL, hasRoleAtLeast } from "@/lib/institutionalTemplatesView";
+import { DOCUMENT_KIND_LABEL, hasRoleAtLeast, identityLabel } from "@/lib/institutionalTemplatesView";
 
 /**
  * Modelos Institucionais — lista. DISTINTO do menu "Templates" pessoal legado (que continua inalterado).
@@ -25,6 +25,7 @@ export default function InstitutionalTemplates() {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<string>("tr");
   const [slug, setSlug] = useState("");
+  const [displayName, setDisplayName] = useState("");
 
   const create = trpc.institutionalTemplates.identities.create.useMutation({
     onSuccess: () => { toast.success("Modelo criado. Crie ou importe a primeira revisão (rascunho)."); utils.institutionalTemplates.identities.list.invalidate(); setOpen(false); setSlug(""); },
@@ -57,7 +58,7 @@ export default function InstitutionalTemplates() {
           {list.data!.map((s) => (
             <Card key={s.identity.id}>
               <CardHeader>
-                <CardTitle className="text-base">{s.identity.slug}</CardTitle>
+                <CardTitle className="text-base">{identityLabel(s.identity)}</CardTitle>
                 <CardDescription>{DOCUMENT_KIND_LABEL[s.identity.documentKind] ?? s.identity.documentKind}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
@@ -85,12 +86,14 @@ export default function InstitutionalTemplates() {
             <div className="space-y-1">
               <Label htmlFor="tpl-slug">Identificador (slug)</Label>
               <Input id="tpl-slug" value={slug} placeholder="ex.: tr-servicos-continuos" onChange={(e) => setSlug(e.target.value)} />
+              <Label htmlFor="tpl-display">Nome de exibição (opcional)</Label>
+              <Input id="tpl-display" value={displayName} placeholder="ex.: Edital — Pregão Eletrônico — BLL" onChange={(e) => setDisplayName(e.target.value)} />
               <p className="text-xs text-muted-foreground">Minúsculas, números e hífens.</p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button disabled={create.isPending || !slug.trim()} onClick={() => create.mutate({ documentKind: kind as never, slug: slug.trim() })}>Criar modelo</Button>
+            <Button disabled={create.isPending || !slug.trim()} onClick={() => create.mutate({ documentKind: kind as never, slug: slug.trim(), ...(displayName.trim() ? { displayName: displayName.trim() } : {}) })}>Criar modelo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -23,6 +23,7 @@ import {
   ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyDecisionForm, formatIssues, hasRoleAtLeast, makeIdempotencyKey,
   revisionLabel, sampleValuesFromText, scopeLabel, STATUS_EXPLANATION, validateDecisionForm,
   type DecisionFormState, type LifecycleAction, type RevisionStatus, type ResolutionView,
+  identityLabel,
 } from "@/lib/institutionalTemplatesView";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -101,9 +102,10 @@ export default function InstitutionalTemplateDetail() {
   const setBinding = trpc.institutionalTemplates.bindings.set.useMutation({ onSuccess: () => { toast.success("Vínculo criado para a revisão exata."); invalidate(); bindings.refetch(); }, onError });
   const deactivate = trpc.institutionalTemplates.bindings.deactivate.useMutation({ onSuccess: () => { toast.success("Vínculo desativado."); bindings.refetch(); invalidate(); }, onError });
   const [bindRev, setBindRev] = useState("");
-  const [bindScope, setBindScope] = useState({ modality: "", regime: "", criterion: "" });
+  const [bindScope, setBindScope] = useState({ modality: "", form: "", platform: "", regime: "", criterion: "" });
   const [bindConfirm, setBindConfirm] = useState(false);
-  const scopeInput = { ...(bindScope.modality.trim() ? { modality: bindScope.modality.trim() } : {}), ...(bindScope.regime.trim() ? { regime: bindScope.regime.trim() } : {}), ...(bindScope.criterion.trim() ? { criterion: bindScope.criterion.trim() } : {}) };
+  const scopeInput = Object.fromEntries((["modality", "form", "platform", "regime", "criterion"] as const)
+    .map((k) => [k, bindScope[k].trim()] as const).filter(([, v]) => v !== ""));
   const resolve = trpc.institutionalTemplates.bindings.resolve.useQuery({ documentKind: detail.data?.identity.documentKind ?? "tr", scope: scopeInput }, { enabled: enabled && !!detail.data });
 
   // ── importação ──
@@ -134,8 +136,8 @@ export default function InstitutionalTemplateDetail() {
   return (
     <PageShell
       icon={LibraryBig} showBack
-      breadcrumbs={[{ label: "Modelos Institucionais", href: "/modelos-institucionais" }, { label: identity.slug }]}
-      title={identity.slug}
+      breadcrumbs={[{ label: "Modelos Institucionais", href: "/modelos-institucionais" }, { label: identityLabel(identity) }]}
+      title={identityLabel(identity)}
       description={`${DOCUMENT_KIND_LABEL[identity.documentKind] ?? identity.documentKind} — a revisão aplicada é sempre a EXATA fixada por um vínculo; não existe "última revisão" como autoridade.`}
     >
       <Tabs defaultValue="revisoes">
@@ -228,8 +230,8 @@ export default function InstitutionalTemplateDetail() {
                   <option value="">Selecione…</option>{published.map((r) => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}
                 </select></div>
               <div className="grid gap-2 sm:grid-cols-3">
-                {(["modality", "regime", "criterion"] as const).map((k) => (
-                  <div key={k} className="space-y-1"><Label htmlFor={`bind-${k}`}>{k === "modality" ? "Modalidade" : k === "regime" ? "Regime" : "Critério"} (opcional)</Label>
+                {(["modality", "form", "platform", "regime", "criterion"] as const).map((k) => (
+                  <div key={k} className="space-y-1"><Label htmlFor={`bind-${k}`}>{({ modality: "Modalidade", form: "Forma (slug)", platform: "Plataforma (slug)", regime: "Regime", criterion: "Critério" })[k]} (opcional)</Label>
                     <Input id={`bind-${k}`} value={bindScope[k]} onChange={(e) => setBindScope({ ...bindScope, [k]: e.target.value })} /></div>
                 ))}
               </div>

@@ -35,6 +35,13 @@ export const DECISION_OUTCOMES = {
   // estrutural. A IA nunca registra nenhuma delas.
   template_ai_acceptance: ["aceito"],
   template_deviation_acknowledgment: ["reconhecido"],
+  // Institutional Templates (multi-modelo) — fontes canônicas GOVERNADAS por decisão humana do órgão e a evidência da
+  // aprovação jurídica do modelo. Resultado SEMPRE explícito (nenhum padrão). O conteúdo estruturado viaja em `evidence`
+  // (ver `domain/institutionalTemplates/governedSources.ts`). Nenhum segundo ledger.
+  certame_configuration: ["configurado"],
+  institutional_policy: ["estabelecida"],
+  budget_disclosure: ["publico", "sigiloso"],
+  template_legal_approval: ["aprovado", "reprovado"],
 } as const satisfies Record<string, readonly string[]>;
 export type InstitutionalDecisionType = keyof typeof DECISION_OUTCOMES;
 
@@ -48,6 +55,11 @@ export const DECISION_SUBJECT_TYPES = [
   // O assunto é `<manifestId>:<sha256(chave)[0..16]>` (M1 + slot/bloco); o lock é do M1 (`document_composition_manifests`).
   "institutional_template.ai_acceptance",
   "institutional_template.deviation_acknowledgment",
+  // Assunto = id do PROCESSO (lock da linha do processo) / chave da política (lock da organização) / id EXATO da revisão.
+  "procurement.certame_config",
+  "procurement.budget_disclosure",
+  "institutional.policy",
+  "institutional_template.legal_approval",
 ] as const;
 export type DecisionSubjectType = (typeof DECISION_SUBJECT_TYPES)[number];
 

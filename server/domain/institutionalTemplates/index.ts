@@ -12,3 +12,4 @@ export * from "./revision";
 export * from "./binding";
 export * from "./manifest";
 export * from "./composerContract";
+export * from "./governedSources";

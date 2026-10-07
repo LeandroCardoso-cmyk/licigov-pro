@@ -14,8 +14,13 @@ import { organizationIssues, sameOrganizationIssues } from "./tenant";
 import type { TemplateRevision } from "./revision";
 import { TEMPLATE_HASH_VERSION, fail, issue, isSha256, ok, type HashVersion, type OrgId, type Sha256, type TemplateIssue, type TemplateResult } from "./types";
 
-export type ManifestSourceKey = "processo" | "dfd" | "etp" | "tr" | "itens" | "parametros";
-export const MANIFEST_SOURCE_KEYS: readonly ManifestSourceKey[] = ["processo", "dfd", "etp", "tr", "itens", "parametros"];
+export type ManifestSourceKey =
+  | "processo" | "dfd" | "etp" | "tr" | "itens" | "parametros"
+  | "certame" | "politica" | "orcamento" | "normativo" | "ciclo" | "resultado";
+/** Aditivo: as seis primeiras chaves e seus digests permanecem idênticos (manifests existentes continuam válidos). */
+export const MANIFEST_SOURCE_KEYS: readonly ManifestSourceKey[] = [
+  "processo", "dfd", "etp", "tr", "itens", "parametros", "certame", "politica", "orcamento", "normativo", "ciclo", "resultado",
+];
 
 export interface ManifestSourceRef {
   readonly key: ManifestSourceKey;

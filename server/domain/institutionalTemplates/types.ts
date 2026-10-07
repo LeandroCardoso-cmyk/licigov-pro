@@ -41,7 +41,8 @@ export type TemplateIssueCode =
   | "MANIFEST_INVALID"
   | "MANIFEST_HASH_MISMATCH"
   | "REFERENCE_NOT_PINNED"
-  | "HASH_INVALID";
+  | "HASH_INVALID"
+  | "SOURCE_PAYLOAD_INVALID";
 
 export interface TemplateIssue {
   readonly code: TemplateIssueCode;

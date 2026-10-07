@@ -98,9 +98,12 @@ export function makeIdempotencyKey(random: () => string = () => globalThis.crypt
 
 // ─── binding / resolução ────────────────────────────────────────────────────────
 
-export interface ScopeLike { modality?: string; regime?: string; criterion?: string }
+export interface ScopeLike { modality?: string; form?: string; platform?: string; regime?: string; criterion?: string }
 export function scopeLabel(scope: ScopeLike): string {
-  const parts = [scope.modality && `modalidade: ${scope.modality}`, scope.regime && `regime: ${scope.regime}`, scope.criterion && `critério: ${scope.criterion}`].filter(Boolean);
+  const parts = [
+    scope.modality && `modalidade: ${scope.modality}`, scope.form && `forma: ${scope.form}`, scope.platform && `plataforma: ${scope.platform}`,
+    scope.regime && `regime: ${scope.regime}`, scope.criterion && `critério: ${scope.criterion}`,
+  ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "qualquer escopo (sem restrição)";
 }
 
@@ -196,4 +199,9 @@ export function sampleValuesFromText(text: string): { values: Record<string, str
     values[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
   });
   return { values, errors };
+}
+
+/** Rótulo de apresentação do modelo: `displayName` quando existe; senão o slug (nunca vazio). */
+export function identityLabel(identity: { slug: string; displayName?: string | null }): string {
+  return identity.displayName && identity.displayName.trim() ? identity.displayName : identity.slug;
 }

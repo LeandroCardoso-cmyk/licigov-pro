@@ -149,12 +149,44 @@ export interface CompositionPort {
   resolveExactBinding?(request: BindingRequest): Promise<BindingResolution>;
 }
 
-/** Referências canônicas do domínio institucional (DOMAIN = TRUTH), lidas fora de transação. */
+/** Pin PEDIDO por quem gera (escolha humana do documento oficial exato): documento + versão + hash do conteúdo. */
+export interface RequestedOfficialPin {
+  readonly documentId: string;
+  readonly version: number;
+  readonly contentHash: string;
+}
+
+/**
+ * Referências canônicas do domínio institucional (DOMAIN = TRUTH), lidas fora de transação.
+ * Fonte sem backing ou fora do contrato ⇒ `TemplateSourceUnavailableError` (falha FECHADA; nunca omitida em silêncio).
+ */
 export interface CanonicalReferencePort {
   resolveSources(organizationId: OrgId, subjectId: string, sources: readonly VariableSource[]): Promise<Partial<Record<VariableSource, CanonicalSourceSnapshot>>>;
-  /** Pin exato (documento + linhagem + versão + hash) da versão oficial autoritativa de cada tipo referenciado. */
+  /**
+   * AUTORIDADE ATUAL: pin exato (documento + linhagem + versão + hash) da versão oficial EMITIDA mais recente de cada tipo.
+   * Usado pela REVALIDAÇÃO para detectar que o documento oficial referenciado mudou (SOURCE_CHANGED).
+   */
   resolveOfficialDocuments(organizationId: OrgId, subjectId: string, kinds: readonly DocRefKind[]): Promise<Partial<Record<DocRefKind, OfficialDocumentPin>>>;
+  /**
+   * GERAÇÃO: o chamador informa o documento oficial EXATO (id + versão + hash). O adapter só ACEITA o pin se ele for um
+   * documento `emitido` do MESMO tenant e da MESMA origem, com versão e hash conferidos e ainda vigente como a última versão
+   * emitida do tipo. Sem pin informado, de rascunho/`gerado`, de outra origem/tenant, divergente ou superado ⇒ falha fechada.
+   * Nunca "o último TR" escolhido pelo servidor.
+   */
+  pinOfficialDocuments(
+    organizationId: OrgId, subjectId: string, kinds: readonly DocRefKind[], requested: Partial<Record<DocRefKind, RequestedOfficialPin>>,
+  ): Promise<Partial<Record<DocRefKind, OfficialDocumentPin>>>;
   identityFingerprint(organizationId: OrgId): Promise<string>;
+}
+
+export const TEMPLATE_SOURCE_UNAVAILABLE = "TEMPLATE_SOURCE_UNAVAILABLE";
+
+/** Fonte canônica indisponível/fora do contrato (ex.: ITEMS sem Itens da contratação; NORMATIVE sem reference set ativo). */
+export class TemplateSourceUnavailableError extends Error {
+  constructor(readonly source: string, readonly reason: string, readonly detail: string) {
+    super(`${TEMPLATE_SOURCE_UNAVAILABLE}: ${source} — ${reason}: ${detail}`);
+    this.name = "TemplateSourceUnavailableError";
+  }
 }
 
 /** Rascunho operacional (`generated_documents`) que recebe o conteúdo composto. */
@@ -228,7 +260,7 @@ export function createUnavailableTemplatePorts(): TemplatePorts {
     enablement: { isEnabled: async () => false },
     repository: { getIdentity: unavailable("repository"), getRevision: unavailable("repository"), listRevisions: unavailable("repository"), listBindings: unavailable("repository") },
     catalog: { current: () => { throw new TemplatePersistenceUnavailableError("catalog"); }, byVersion: () => null },
-    canonical: { resolveSources: unavailable("canonical"), resolveOfficialDocuments: unavailable("canonical"), identityFingerprint: unavailable("canonical") },
+    canonical: { resolveSources: unavailable("canonical"), resolveOfficialDocuments: unavailable("canonical"), pinOfficialDocuments: unavailable("canonical"), identityFingerprint: unavailable("canonical") },
     drafts: { reserveDraftId: unavailable("drafts"), writeDraft: unavailable("drafts") },
     manifests: {
       getManifest: unavailable("manifests"), findGenerationManifestForDraft: unavailable("manifests"),

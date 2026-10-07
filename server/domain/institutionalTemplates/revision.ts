@@ -24,9 +24,16 @@ export interface TemplateIdentity {
   readonly organizationId: OrgId;
   readonly documentKind: TemplateDocumentKind;
   readonly slug: string;
+  /**
+   * Rótulo de APRESENTAÇÃO (ex.: "Edital — Pregão Eletrônico — BLL"). Metadado puro: não é regra jurídica, não define
+   * aplicabilidade (a autoridade é o binding), não entra em nenhum hash. Ausente ⇒ a UX usa o `slug`.
+   */
+  readonly displayName?: string;
   readonly createdAt: string;
   readonly createdByUserId: number;
 }
+
+export const DISPLAY_NAME_MAX = 160;
 
 export type RevisionStatus = "DRAFT" | "APPROVED" | "PUBLISHED" | "DEPRECATED";
 export const REVISION_STATUSES: readonly RevisionStatus[] = ["DRAFT", "APPROVED", "PUBLISHED", "DEPRECATED"];
@@ -57,6 +64,12 @@ export function validateTemplateIdentity(identity: TemplateIdentity): TemplateRe
   if (!TEMPLATE_ID_RE.test(identity.id)) issues.push(issue("REVISION_INVALID", "id", "id inválido"));
   if (!TEMPLATE_DOCUMENT_KINDS.includes(identity.documentKind)) issues.push(issue("REVISION_INVALID", "documentKind", "tipo documental fora do contrato"));
   if (!SLUG_RE.test(identity.slug) || identity.slug.length > 120) issues.push(issue("REVISION_INVALID", "slug", "slug inválido"));
+  if (identity.displayName !== undefined) {
+    const d = identity.displayName;
+    if (typeof d !== "string" || d.trim() === "" || d !== d.trim() || d.length > DISPLAY_NAME_MAX || /[\u0000-\u001f\u007f]/.test(d)) {
+      issues.push(issue("REVISION_INVALID", "displayName", `rótulo inválido (texto não vazio, sem espaços nas pontas nem controles, até ${DISPLAY_NAME_MAX} caracteres)`));
+    }
+  }
   if (!Number.isSafeInteger(identity.createdByUserId) || identity.createdByUserId <= 0) issues.push(issue("REVISION_INVALID", "createdByUserId", "autor obrigatório"));
   if (typeof identity.createdAt !== "string" || identity.createdAt === "") issues.push(issue("REVISION_INVALID", "createdAt", "createdAt é input explícito"));
   return issues.length ? fail(issues) : ok(identity);
